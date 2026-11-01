@@ -4,14 +4,18 @@ import {
   ExtractedSegment,
   compareInstants,
   composeInstant,
+  fixedOffsetPrefix,
+  localTimeZone,
   mergePlace,
-  offsetOf,
+  resolveOffset,
   segmentTypes,
   splitInstant,
+  timeZones,
+  zoneForOffset,
   type Segment,
   type SegmentType,
 } from "@travelmo/core";
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { z } from "zod";
 
 export const segmentTypeLabels: Record<SegmentType, string> = {
@@ -32,10 +36,10 @@ type Fields = {
   confirmation: string;
   startDate: string;
   startTime: string;
-  startOffset: string;
+  startZone: string;
   endDate: string;
   endTime: string;
-  endOffset: string;
+  endZone: string;
   originName: string;
   originCode: string;
   destinationName: string;
@@ -44,9 +48,10 @@ type Fields = {
 };
 
 function initialFields(segment: Segment | undefined, defaultDate: string): Fields {
+  const here = localTimeZone();
   const start = segment ? splitInstant(segment.start) : undefined;
   const end = segment?.end ? splitInstant(segment.end) : undefined;
-  const startOffset = start?.offset ?? offsetOf(new Date());
+  const startZone = start ? zoneForOffset(start.offset, start.date, start.time, here) : here;
   return {
     type: segment?.type ?? "flight",
     title: segment?.title ?? "",
@@ -54,10 +59,10 @@ function initialFields(segment: Segment | undefined, defaultDate: string): Field
     confirmation: segment?.confirmation ?? "",
     startDate: start?.date ?? defaultDate,
     startTime: start?.time ?? "09:00",
-    startOffset,
+    startZone,
     endDate: end?.date ?? "",
     endTime: end?.time ?? "",
-    endOffset: end?.offset ?? startOffset,
+    endZone: end ? zoneForOffset(end.offset, end.date, end.time, startZone.startsWith(fixedOffsetPrefix) ? here : startZone) : startZone,
     originName: segment?.origin?.name ?? "",
     originCode: segment?.origin?.code ?? "",
     destinationName: segment?.destination?.name ?? "",
@@ -72,18 +77,17 @@ const text = (value: string) => (value.trim() ? value.trim() : undefined);
 // the existing segment; what the form shows, the form decides.
 export function toExtracted(f: Fields, existing?: Segment): ExtractedSegment {
   const hasEnd = f.endDate !== "" || f.endTime !== "";
+  const startTime = f.startTime || "00:00";
+  const endDate = f.endDate || f.startDate;
+  const endTime = f.endTime || startTime;
   const candidate = {
     type: f.type,
     title: f.title.trim(),
     provider: text(f.provider),
     confirmation: text(f.confirmation),
-    start: composeInstant({ date: f.startDate, time: f.startTime || "00:00", offset: f.startOffset }),
+    start: composeInstant({ date: f.startDate, time: startTime, offset: resolveOffset(f.startZone, f.startDate, startTime) }),
     end: hasEnd
-      ? composeInstant({
-          date: f.endDate || f.startDate,
-          time: f.endTime || f.startTime || "00:00",
-          offset: f.endOffset || f.startOffset,
-        })
+      ? composeInstant({ date: endDate, time: endTime, offset: resolveOffset(f.endZone || f.startZone, endDate, endTime) })
       : undefined,
     origin: mergePlace(existing?.origin, f.originName, f.originCode),
     destination: mergePlace(existing?.destination, f.destinationName, f.destinationCode),
@@ -102,6 +106,20 @@ export function toExtracted(f: Fields, existing?: Segment): ExtractedSegment {
 const inputClass = "w-full rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
 const labelClass = "block text-xs font-medium uppercase tracking-wide text-zinc-500";
 
+function ZoneSelect({ value, onChange, zones }: { value: string; onChange: (zone: string) => void; zones: string[] }) {
+  const pinned = value.startsWith(fixedOffsetPrefix) ? value : undefined;
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} title="Time zone" className={inputClass}>
+      {pinned && <option value={pinned}>UTC{pinned.slice(fixedOffsetPrefix.length)} (as imported)</option>}
+      {zones.map((zone) => (
+        <option key={zone} value={zone}>
+          {zone.replace(/_/g, " ")}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export function SegmentForm({
   segment,
   defaultDate,
@@ -116,8 +134,10 @@ export function SegmentForm({
   const [fields, setFields] = useState<Fields>(() => initialFields(segment, defaultDate));
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const zones = useMemo(() => timeZones(), []);
   const set = (key: keyof Fields) => (event: { target: { value: string } }) =>
     setFields((f) => ({ ...f, [key]: event.target.value }));
+  const setZone = (key: "startZone" | "endZone") => (zone: string) => setFields((f) => ({ ...f, [key]: zone }));
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -133,13 +153,13 @@ export function SegmentForm({
   };
 
   const transport = fields.type !== "lodging" && fields.type !== "activity";
-  const when = (label: string, date: keyof Fields, time: keyof Fields, offset: keyof Fields, required: boolean) => (
+  const when = (label: string, date: keyof Fields, time: keyof Fields, zone: "startZone" | "endZone", required: boolean) => (
     <label className={labelClass}>
       {label}
-      <div className="grid grid-cols-[1fr_6rem_6rem] gap-2">
+      <div className="grid grid-cols-[1fr_6rem_minmax(10rem,1.2fr)] gap-2">
         <input type="date" required={required} value={fields[date]} onChange={set(date)} className={inputClass} />
         <input type="time" value={fields[time]} onChange={set(time)} className={inputClass} />
-        <input value={fields[offset]} onChange={set(offset)} placeholder="+01:00" title="UTC offset" className={inputClass} />
+        <ZoneSelect value={fields[zone]} onChange={setZone(zone)} zones={zones} />
       </div>
     </label>
   );
@@ -162,8 +182,8 @@ export function SegmentForm({
           <input required value={fields.title} onChange={set("title")} placeholder="BA 117 LHR to JFK" className={inputClass} />
         </label>
       </div>
-      {when(fields.type === "lodging" ? "Check-in (date, time, UTC offset)" : "Start (date, time, UTC offset)", "startDate", "startTime", "startOffset", true)}
-      {when(fields.type === "lodging" ? "Check-out" : "End", "endDate", "endTime", "endOffset", false)}
+      {when(fields.type === "lodging" ? "Check-in (local time)" : "Start (local time)", "startDate", "startTime", "startZone", true)}
+      {when(fields.type === "lodging" ? "Check-out (local time)" : "End (local time)", "endDate", "endTime", "endZone", false)}
       {transport ? (
         <div className="grid grid-cols-2 gap-3">
           <label className={labelClass}>

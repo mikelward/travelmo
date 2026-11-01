@@ -60,9 +60,12 @@ Schemas live in `packages/core/src/schema.ts`; paths in `paths.ts`.
 The owner and anyone the trip is shared with can add, edit and delete
 segments on a trip page; only the owner renames, shares or deletes the trip.
 A manual segment carries `source: "manual"` and the same
-shape as an imported one; the form takes a date, time and UTC offset for each
-end so the instants are stored exactly as the traveler sees them, and fields
-the form does not show (a place's city and country) survive an edit. A
+shape as an imported one; the form takes a local date, time and time zone
+for each end and stores the instant with that zone's offset on that date, so
+it reads back exactly as the traveler sees it. An imported instant carries
+only an offset, so editing one offers that offset "as imported" alongside
+the zones, and keeps it unless the editor picks a zone. Fields the form does
+not show (a place's city and country) survive an edit. A
 segment write widens the trip's bounds to include it, in a transaction so
 concurrent saves both count; bounds never shrink, here or in the parser,
 because a client transaction cannot read every segment. Deleting a trip
