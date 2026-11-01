@@ -84,6 +84,9 @@ export const GmailConnection = z.object({
 export type GmailConnection = z.infer<typeof GmailConnection>;
 
 export const UserProfile = z.object({
+  email: z.string().optional(),
+  displayName: z.string().optional(),
+  photoURL: z.string().optional(),
   gmail: GmailConnection.optional(),
 });
 export type UserProfile = z.infer<typeof UserProfile>;
