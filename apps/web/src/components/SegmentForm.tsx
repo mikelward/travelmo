@@ -106,11 +106,15 @@ export function toExtracted(f: Fields, existing?: Segment): ExtractedSegment {
 const inputClass = "w-full rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
 const labelClass = "block text-xs font-medium uppercase tracking-wide text-zinc-500";
 
+// Whatever the field holds is always an option, so the select never shows a
+// zone other than the one that will be saved.
 function ZoneSelect({ value, onChange, zones }: { value: string; onChange: (zone: string) => void; zones: string[] }) {
   const pinned = value.startsWith(fixedOffsetPrefix) ? value : undefined;
+  const unlisted = !pinned && !zones.includes(value) ? value : undefined;
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)} title="Time zone" className={inputClass}>
       {pinned && <option value={pinned}>UTC{pinned.slice(fixedOffsetPrefix.length)} (as imported)</option>}
+      {unlisted && <option value={unlisted}>{unlisted.replace(/_/g, " ")}</option>}
       {zones.map((zone) => (
         <option key={zone} value={zone}>
           {zone.replace(/_/g, " ")}
