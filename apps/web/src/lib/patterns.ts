@@ -35,3 +35,11 @@ export async function learnSender(db: Firestore, uid: string, domain: string, li
 export function isListed(patterns: SenderPatterns | undefined, domain: string, list: "allow" | "deny"): boolean {
   return patterns?.[list].some((pattern) => covers(pattern, domain)) ?? false;
 }
+
+// What the parser will do with mail from this domain: denials win, as in
+// prefilter.ts, so a child-domain denial beats a parent-domain allowance.
+export function effectiveDecision(patterns: SenderPatterns | undefined, domain: string): "allow" | "deny" | undefined {
+  if (isListed(patterns, domain, "deny")) return "deny";
+  if (isListed(patterns, domain, "allow")) return "allow";
+  return undefined;
+}

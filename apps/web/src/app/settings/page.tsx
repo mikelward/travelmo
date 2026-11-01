@@ -8,7 +8,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { SignInGate } from "@/components/SignInGate";
 import { api, type BackfillResult } from "@/lib/api";
 import { firestore } from "@/lib/firebase";
-import { domainOf, isListed, learnSender } from "@/lib/patterns";
+import { domainOf, effectiveDecision, learnSender } from "@/lib/patterns";
 import { useParsedMessages, useProfile, useSenderPatterns } from "@/lib/trips";
 
 const buttonClass =
@@ -211,6 +211,7 @@ function ReviewSection({ user }: { user: User }) {
       <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
         {toReview.map((record) => {
           const domain = record.from ? domainOf(record.from) : undefined;
+          const decision = domain ? effectiveDecision(patterns, domain) : undefined;
           return (
             <li key={record.messageId} className="py-3 text-sm">
               <p className="font-medium">{record.subject || "(no subject)"}</p>
@@ -227,7 +228,7 @@ function ReviewSection({ user }: { user: User }) {
                 >
                   Import anyway
                 </button>
-                {domain && !isListed(patterns, domain, "allow") && (
+                {domain && decision !== "allow" && (
                   <button
                     type="button"
                     disabled={busy === record.messageId}
@@ -237,7 +238,7 @@ function ReviewSection({ user }: { user: User }) {
                     Always import {domain}
                   </button>
                 )}
-                {domain && !isListed(patterns, domain, "deny") && (
+                {domain && decision !== "deny" && (
                   <button
                     type="button"
                     disabled={busy === record.messageId}

@@ -11,7 +11,7 @@ import { SegmentRow } from "@/components/SegmentRow";
 import { SignInGate } from "@/components/SignInGate";
 import { deleteSegment, deleteTrip, fitTripDates, renameTrip, saveSegment } from "@/lib/edits";
 import { firestore } from "@/lib/firebase";
-import { isListed, learnSender } from "@/lib/patterns";
+import { effectiveDecision, learnSender } from "@/lib/patterns";
 import { useSegments, useSenderPatterns, useTrip } from "@/lib/trips";
 
 const buttonClass =
@@ -232,7 +232,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   // Sender rules are the viewer's own, so the offer stands for the owner only:
   // the import ran against their mailbox.
   const learn = (segment: Segment) =>
-    isOwner && segment.sender && !isListed(patterns, segment.sender, "allow")
+    isOwner && segment.sender && effectiveDecision(patterns, segment.sender) !== "allow"
       ? () => learnSender(firestore(), user.uid, segment.sender!, "allow").catch((e: Error) => setError(e.message))
       : undefined;
 
