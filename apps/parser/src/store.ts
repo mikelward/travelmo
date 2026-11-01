@@ -1,6 +1,7 @@
 import { ParsedMessage, SenderPatterns, Trip, paths } from "@travelmo/core";
 import type { Firestore } from "firebase-admin/firestore";
 import { claimable, reclaimable, type TripStore } from "./importer";
+import { Examples, addExample, emptyExamples } from "./similarity";
 
 export function firestoreStore(db: Firestore): TripStore {
   function claimWhen(
@@ -56,6 +57,20 @@ export function firestoreStore(db: Firestore): TripStore {
     async senderPatterns(uid) {
       const snap = await db.doc(paths.senderPatterns(uid)).get();
       return snap.exists ? SenderPatterns.parse(snap.data()) : { allow: [], deny: [] };
+    },
+    async examples(uid) {
+      const snap = await db.doc(paths.examples(uid)).get();
+      return snap.exists ? Examples.parse(snap.data()) : emptyExamples();
+    },
+    async saveExample(uid, label, example) {
+      // Read-modify-write in a transaction: two imports finishing together
+      // both keep their example.
+      const ref = db.doc(paths.examples(uid));
+      await db.runTransaction(async (t) => {
+        const snap = await t.get(ref);
+        const current = snap.exists ? Examples.parse(snap.data()) : emptyExamples();
+        t.set(ref, addExample(current, label, example));
+      });
     },
     newId() {
       return db.collection(paths.trips()).doc().id;

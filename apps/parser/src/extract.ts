@@ -2,6 +2,8 @@ import { GoogleGenAI } from "@google/genai";
 import { ExtractedBooking } from "@travelmo/core";
 import { z } from "zod";
 import type { EmailMessage } from "./gmail";
+import type { Embedder } from "./importer";
+import { embeddingDimensions } from "./similarity";
 
 export type Extractor = (message: EmailMessage) => Promise<ExtractedBooking>;
 
@@ -42,6 +44,21 @@ export function geminiExtractor(client: GoogleGenAI, model: string): Extractor {
     const text = response.text;
     if (!text) throw new Error(`Gemini returned no text for message ${message.id}`);
     return parseExtraction(text, message.id);
+  };
+}
+
+// Embeddings for the similarity pre-filter (similarity.ts); truncated to a
+// few hundred dimensions, which is plenty for telling bookings from the rest.
+export function geminiEmbedder(client: GoogleGenAI, model: string): Embedder {
+  return async (text) => {
+    const response = await client.models.embedContent({
+      model,
+      contents: text,
+      config: { taskType: "CLASSIFICATION", outputDimensionality: embeddingDimensions },
+    });
+    const values = response.embeddings?.[0]?.values;
+    if (!values || values.length === 0) throw new Error("Gemini returned no embedding");
+    return values;
   };
 }
 

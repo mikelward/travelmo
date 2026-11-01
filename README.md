@@ -92,7 +92,9 @@ One Google Cloud project holds everything.
    `GOOGLE_OAUTH_REDIRECT_URL`, `INTERNAL_AUDIENCE` (the service URL),
    `INTERNAL_CALLERS`, and either `GEMINI_API_KEY` or Vertex AI access through
    the service account (`GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`).
-   `GEMINI_MODEL` defaults to `gemini-flash-lite-latest`.
+   `GEMINI_MODEL` defaults to `gemini-flash-lite-latest` and
+   `GEMINI_EMBEDDING_MODEL` to `gemini-embedding-001` (the similarity
+   pre-filter).
 4. **Push**: `PROJECT=… PARSER_URL=https://<parser> PUSH_SA=<service account>
    deploy/pubsub.sh` creates the `gmail` topic (with Gmail allowed to publish
    to it), a push subscription to `https://<parser>/internal/pubsub/gmail`

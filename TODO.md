@@ -27,10 +27,9 @@
       less than its dates.
 - [x] "Learn this sender" from a trip page and from an import review list
       in Settings, with "import anyway".
-- [ ] Embedding pre-filter: score candidate emails against bookings the
+- [x] Embedding pre-filter: score candidate emails against bookings the
       user confirmed (the review list's decisions), between the keyword
-      check and the model call. Weigh the model dependency's size on the
-      Cloud Run image first.
+      check and the model call.
 - [x] Merge trips and move bookings between them.
 - [x] Surface the next check-in, check-out, departure or arrival on the
       trip list for trips under way and the next three upcoming.
@@ -62,6 +61,17 @@ Guesses made on autopilot; change any of them freely.
   five delivery attempts before dead-lettering, a week of retention there,
   and two alert policies (watch renewal failed, dead letter present). The
   scripts have not been run against a project from this session.
+- Similarity pre-filter: Gemini's embedding API (`gemini-embedding-001`,
+  256 dimensions) rather than a local model, which would have added some
+  100 MB of ONNX runtime and weights to the Cloud Run image and slowed
+  cold starts; an embedding costs about a hundredth of an extraction.
+  Thresholds (five examples of each kind, 0.85 similarity, 0.1 margin,
+  40 examples kept per kind) are guesses to tune against real mail.
+  Examples are the model's own verdicts, not only the user's review
+  decisions, since those are rare; a review decision still teaches it.
+- Airport zones come from the OpenFlights database (ODbL) via the
+  `airport-data` package, filled from coordinates with `tz-lookup` where
+  it has none; generated and committed, not fetched at build time.
 - Offline: the service worker is Serwist's runtime caching bundled by
   esbuild (`@serwist/next` needs webpack; this app builds with Turbopack),
   caching pages, router payloads and build assets as they are used rather

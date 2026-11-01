@@ -9,6 +9,7 @@ import {
 import type { Extractor } from "./extract";
 import { isNotFound, type EmailMessage } from "./gmail";
 import { prefilter, senderDomain, type SenderPatterns } from "./prefilter";
+import { embeddingText, similarityVerdict, type Example, type ExampleLabel, type Examples } from "./similarity";
 
 export type TripBounds = Pick<Trip, "start" | "end" | "updatedAt">;
 
@@ -56,12 +57,19 @@ export type TripStore = {
   // decide to create a trip for the same dates.
   withUserLock<T>(uid: string, fn: (tx: TripTx) => Promise<T>): Promise<T>;
   senderPatterns(uid: string): Promise<SenderPatterns>;
+  // Embeddings of emails the model has judged for this user (see similarity.ts).
+  examples(uid: string): Promise<Examples>;
+  saveExample(uid: string, label: ExampleLabel, example: Example): Promise<void>;
   newId(): string;
 };
+
+export type Embedder = (text: string) => Promise<number[]>;
 
 export type ImportDeps = {
   store: TripStore;
   extract: Extractor;
+  // Without one, the similarity pre-filter is off.
+  embed?: Embedder;
   now: () => string;
   log: (event: string, fields: Record<string, unknown>) => void;
 };
@@ -107,6 +115,42 @@ export async function importMessage(
     reason = verdict.reason;
   }
 
+  // The similarity stage: an allowed sender or the user's own request goes
+  // straight to the model, but still teaches it. Embedding trouble is never
+  // a reason to drop an email.
+  let vector: number[] | undefined;
+  if (deps.embed) {
+    try {
+      vector = await deps.embed(embeddingText(message));
+    } catch (error) {
+      log("embed_failed", { uid, messageId: message.id, reason: (error as Error).message });
+    }
+  }
+  if (vector && !options.force && reason === "subject keyword") {
+    // The stage is optional: whatever goes wrong in it (the examples
+    // document, a vector of another length after a model change), the email
+    // still reaches the model rather than staying claimed and unimported.
+    let similar;
+    try {
+      similar = similarityVerdict(vector, await store.examples(uid));
+    } catch (error) {
+      log("similarity_failed", { uid, messageId: message.id, reason: (error as Error).message });
+    }
+    if (similar?.skip) {
+      await store.setParsed(record("filtered", { reason: similar.reason }));
+      log("filtered", { uid, messageId: message.id, reason: similar.reason });
+      return "filtered";
+    }
+  }
+  const learn = async (label: ExampleLabel) => {
+    if (!vector) return;
+    try {
+      await store.saveExample(uid, label, { subject: message.subject, vector });
+    } catch (error) {
+      log("example_save_failed", { uid, messageId: message.id, reason: (error as Error).message });
+    }
+  };
+
   let booking;
   try {
     booking = await deps.extract(message);
@@ -120,6 +164,7 @@ export async function importMessage(
   const range = segmentDateRange(booking.segments);
   if (!booking.isBooking || booking.segments.length === 0 || !range) {
     await store.setParsed(record("not_booking", { reason }));
+    await learn("others");
     log("not_booking", { uid, messageId: message.id });
     return "not_booking";
   }
@@ -168,6 +213,7 @@ export async function importMessage(
   });
 
   await store.setParsed(record("imported", { segmentIds, processedAt: timestamp }));
+  await learn("bookings");
   log("imported", { uid, messageId: message.id, tripId, segments: segmentIds.length });
   return "imported";
 }

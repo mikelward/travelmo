@@ -11,17 +11,20 @@ import {
   type TripStore,
   type TripTx,
 } from "./importer";
+import { addExample, emptyExamples, minExamples, type Examples } from "./similarity";
 
 type Memory = TripStore & {
   trips: Map<string, Trip>;
   segments: Map<string, Segment>;
   parsed: Map<string, ParsedMessage>;
+  examplesOf: Map<string, Examples>;
 };
 
 function memoryStore(): Memory {
   const trips = new Map<string, Trip>();
   const segments = new Map<string, Segment>();
   const parsed = new Map<string, ParsedMessage>();
+  const examplesOf = new Map<string, Examples>();
   const locks = new Map<string, Promise<unknown>>();
   let ids = 0;
   const tx: TripTx = {
@@ -41,6 +44,11 @@ function memoryStore(): Memory {
     trips,
     segments,
     parsed,
+    examplesOf,
+    examples: async (uid) => examplesOf.get(uid) ?? emptyExamples(),
+    saveExample: async (uid, label, example) => {
+      examplesOf.set(uid, addExample(examplesOf.get(uid) ?? emptyExamples(), label, example));
+    },
     claimMessage: async (uid, id, processedAt) => {
       const key = `${uid}/${id}`;
       if (!claimable(parsed.get(key), processedAt)) return false;
@@ -243,6 +251,94 @@ describe("importMessage", () => {
     const outcome = await importMessage("u1", email(), deps(store, async () => ({ isBooking: false, segments: [] })));
     expect(outcome).toBe("not_booking");
     expect(store.trips.size).toBe(0);
+  });
+
+  // Embeddings stand in for meaning: bookings point one way, newsletters another.
+  const bookingVector = [1, 0];
+  const newsletterVector = [0, 1];
+  const taught = (store: Memory, uid: string, count = minExamples) => {
+    let examples = emptyExamples();
+    for (let i = 0; i < count; i++) {
+      examples = addExample(examples, "bookings", { subject: `Booking ${i}`, vector: bookingVector });
+      examples = addExample(examples, "others", { subject: `Deals ${i}`, vector: newsletterVector });
+    }
+    store.examplesOf.set(uid, examples);
+  };
+  const promo = email({ from: "news@deals.example", subject: "Flight deals this weekend" });
+
+  it("skips an email that resembles past non-bookings without calling the model", async () => {
+    const store = memoryStore();
+    taught(store, "u1");
+    const extract = vi.fn(async () => lodging);
+    const outcome = await importMessage("u1", promo, { ...deps(store, extract), embed: async () => newsletterVector });
+    expect(outcome).toBe("filtered");
+    expect(extract).not.toHaveBeenCalled();
+    expect(store.parsed.get("u1/m1")).toMatchObject({ outcome: "filtered", reason: 'resembles "Deals 0", which was not a booking' });
+  });
+
+  it("asks the model about an email that resembles past bookings, and learns from the answer", async () => {
+    const store = memoryStore();
+    taught(store, "u1");
+    const extract = vi.fn(async () => lodging);
+    const outcome = await importMessage("u1", email(), { ...deps(store, extract), embed: async () => bookingVector });
+    expect(outcome).toBe("imported");
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect(store.examplesOf.get("u1")?.bookings).toHaveLength(minExamples + 1);
+    expect(store.examplesOf.get("u1")?.bookings.at(-1)).toEqual({ subject: email().subject, vector: bookingVector });
+  });
+
+  it("only learns until it has seen enough of both kinds", async () => {
+    const store = memoryStore();
+    taught(store, "u1", minExamples - 1);
+    const extract = vi.fn(async () => ({ isBooking: false, segments: [] }));
+    const outcome = await importMessage("u1", promo, { ...deps(store, extract), embed: async () => newsletterVector });
+    expect(outcome).toBe("not_booking");
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect(store.examplesOf.get("u1")?.others).toHaveLength(minExamples);
+  });
+
+  it("lets an allowed sender and the user's own request through, but learns from them", async () => {
+    const store = memoryStore();
+    taught(store, "u1");
+    const extract = vi.fn(async () => lodging);
+    const fromBooking = email({ from: "noreply@booking.com", subject: "Flight deals this weekend" });
+    expect(await importMessage("u1", fromBooking, { ...deps(store, extract), embed: async () => newsletterVector })).toBe("imported");
+    expect(await importMessage("u1", { ...promo, id: "m2" }, { ...deps(store, extract), embed: async () => newsletterVector }, { force: true })).toBe(
+      "imported",
+    );
+    expect(extract).toHaveBeenCalledTimes(2);
+    expect(store.examplesOf.get("u1")?.bookings).toHaveLength(minExamples + 2);
+  });
+
+  it("goes on to the model when the examples cannot be read or compared", async () => {
+    const store = memoryStore();
+    taught(store, "u1");
+    const extract = vi.fn(async () => lodging);
+    const log = vi.fn();
+    const unreadable = { ...store, examples: async () => Promise.reject(new Error("unavailable")) };
+    expect(await importMessage("u1", promo, { ...deps(unreadable, extract), log, embed: async () => newsletterVector })).toBe("imported");
+    expect(log).toHaveBeenCalledWith("similarity_failed", expect.objectContaining({ reason: "unavailable" }));
+    // A vector of another length, as after a change of embedding model.
+    expect(await importMessage("u1", { ...promo, id: "m2" }, { ...deps(store, extract), log, embed: async () => [1, 0, 0] })).toBe("imported");
+    expect(log).toHaveBeenCalledWith("similarity_failed", expect.objectContaining({ reason: expect.stringMatching(/dimensions/) }));
+    expect(extract).toHaveBeenCalledTimes(2);
+  });
+
+  it("goes on to the model when embedding fails", async () => {
+    const store = memoryStore();
+    taught(store, "u1");
+    const extract = vi.fn(async () => lodging);
+    const log = vi.fn();
+    const outcome = await importMessage("u1", promo, {
+      ...deps(store, extract),
+      log,
+      embed: async () => {
+        throw new Error("quota");
+      },
+    });
+    expect(outcome).toBe("imported");
+    expect(log).toHaveBeenCalledWith("embed_failed", expect.objectContaining({ reason: "quota" }));
+    expect(store.examplesOf.get("u1")?.bookings).toHaveLength(minExamples);
   });
 
   it("records a failure when extraction throws, so the message is not retried forever", async () => {

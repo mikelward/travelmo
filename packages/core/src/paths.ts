@@ -3,6 +3,8 @@ export const paths = {
   // Server-only: refresh tokens live here; rules deny every client read.
   gmailState: (uid: string) => `users/${uid}/private/gmail`,
   importLock: (uid: string) => `users/${uid}/private/import`,
+  // Embeddings of emails the model has judged, for the similarity pre-filter.
+  examples: (uid: string) => `users/${uid}/private/examples`,
   senderPatterns: (uid: string) => `users/${uid}/settings/patterns`,
   parsedMessage: (uid: string, messageId: string) =>
     `users/${uid}/parsedMessages/${messageId}`,

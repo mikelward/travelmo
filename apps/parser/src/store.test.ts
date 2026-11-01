@@ -47,3 +47,18 @@ describe("firestoreStore.claimMessage", () => {
     expect((await db.doc(paths.parsedMessage("u1", id)).get()).data()?.processedAt).toBe(at(claimLeaseMs + 1));
   });
 });
+
+describe("firestoreStore examples", () => {
+  it("starts empty and keeps every example saved concurrently, per kind", async () => {
+    const uid = unique();
+    expect(await store.examples(uid)).toEqual({ bookings: [], others: [] });
+    await Promise.all([
+      store.saveExample(uid, "bookings", { subject: "a", vector: [1, 0] }),
+      store.saveExample(uid, "bookings", { subject: "b", vector: [0, 1] }),
+      store.saveExample(uid, "others", { subject: "c", vector: [1, 1] }),
+    ]);
+    const examples = await store.examples(uid);
+    expect(examples.bookings.map((e) => e.subject).sort()).toEqual(["a", "b"]);
+    expect(examples.others).toEqual([{ subject: "c", vector: [1, 1] }]);
+  });
+});
