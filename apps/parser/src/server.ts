@@ -1,12 +1,13 @@
 import { serve } from "@hono/node-server";
 import { GoogleGenAI } from "@google/genai";
-import { paths } from "@travelmo/core";
+import { paths, type GmailState } from "@travelmo/core";
 import { randomBytes } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import {
   MailboxConflict,
+  OtherMailboxConnected,
   createOAuthState,
   loadState,
   mailboxOwner,
@@ -168,6 +169,9 @@ app.post("/gmail/complete", async (c) => {
     await revokeQuietly(pending.refreshToken, uid);
     throw new HTTPException(409, { message: new MailboxConflict(profile.emailAddress).message });
   }
+  // Connecting a different mailbox replaces the old one, watch and token included.
+  const previous = await loadState(db, uid);
+  if (previous && previous.emailAddress !== profile.emailAddress) await disconnect(uid, previous);
   try {
     const watched = await watch(gmail, pubsubTopic);
     await saveConnection(db, uid, {
@@ -180,25 +184,29 @@ app.post("/gmail/complete", async (c) => {
   } catch (error) {
     // The watch, if started, points at our own topic and is left alone.
     await revokeQuietly(pending.refreshToken, uid);
-    if (error instanceof MailboxConflict) throw new HTTPException(409, { message: error.message });
+    if (error instanceof MailboxConflict || error instanceof OtherMailboxConnected) {
+      throw new HTTPException(409, { message: error.message });
+    }
     throw error;
   }
   log("INFO", "gmail_connected", { uid });
   return c.json({ emailAddress: profile.emailAddress });
 });
 
+async function disconnect(uid: string, state: GmailState): Promise<void> {
+  try {
+    await stopWatch(gmailFor(oauth, state.refreshToken));
+  } catch (error) {
+    log("WARNING", "stop_watch_failed", { uid, ...errorFields(error) });
+  }
+  await revokeQuietly(state.refreshToken, uid);
+  await removeConnection(db, uid, state.emailAddress);
+}
+
 app.post("/gmail/disconnect", async (c) => {
   const uid = await requireUser(c);
   const state = await loadState(db, uid);
-  if (state) {
-    try {
-      await stopWatch(gmailFor(oauth, state.refreshToken));
-    } catch (error) {
-      log("WARNING", "stop_watch_failed", { uid, ...errorFields(error) });
-    }
-    await revokeQuietly(state.refreshToken, uid);
-    await removeConnection(db, uid, state.emailAddress);
-  }
+  if (state) await disconnect(uid, state);
   return c.body(null, 204);
 });
 
@@ -265,8 +273,8 @@ app.post("/internal/renew-watches", async (c) => {
     if (state.watchExpiration && Date.parse(state.watchExpiration) > soon) continue;
     try {
       const watched = await watch(gmailFor(oauth, state.refreshToken), pubsubTopic);
-      await updateWatch(db, uid, { ...state, watchExpiration: watched.expiration });
-      renewed += 1;
+      if (await updateWatch(db, uid, state.emailAddress, watched.expiration)) renewed += 1;
+      else log("WARNING", "renewed_watch_for_disconnected_user", { uid });
     } catch (error) {
       log("ERROR", "renew_watch_failed", { uid, ...errorFields(error) });
     }

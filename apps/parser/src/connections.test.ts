@@ -3,6 +3,7 @@ import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import {
   MailboxConflict,
+  OtherMailboxConnected,
   createOAuthState,
   oauthStateTtlMs,
   removeConnection,
@@ -86,12 +87,38 @@ describe("mailbox ownership", () => {
     expect(await accountOwner(email)).toBeUndefined();
   });
 
-  it("renewing a watch never touches the mapping", async () => {
+  it("refuses a user's second mailbox while the first is connected", async () => {
+    const [first, second] = [unique("first") + "@example.com", unique("second") + "@example.com"];
+    const a = unique("a");
+    await saveConnection(db, a, state(first));
+    await expect(saveConnection(db, a, state(second))).rejects.toBeInstanceOf(OtherMailboxConnected);
+    expect(await accountOwner(first)).toBe(a);
+    expect(await accountOwner(second)).toBeUndefined();
+    expect((await db.doc(paths.gmailState(a)).get()).data()?.emailAddress).toBe(first);
+    await removeConnection(db, a, first);
+    await saveConnection(db, a, state(second));
+    expect(await accountOwner(second)).toBe(a);
+  });
+
+  it("renewing a watch moves only the expiry of a live connection", async () => {
     const email = unique("watch") + "@example.com";
-    const [a, b] = [unique("a"), unique("b")];
+    const a = unique("a");
     await saveConnection(db, a, state(email));
-    await updateWatch(db, b, { ...state(email), watchExpiration: "2026-11-08T00:00:00.000Z" });
+    expect(await updateWatch(db, a, email, "2026-11-08T00:00:00.000Z")).toBe(true);
+    const stored = (await db.doc(paths.gmailState(a)).get()).data();
+    expect(stored).toMatchObject({ emailAddress: email, refreshToken: "rt", watchExpiration: "2026-11-08T00:00:00.000Z" });
+    expect((await db.doc(paths.user(a)).get()).data()?.gmail?.watchExpiration).toBe("2026-11-08T00:00:00.000Z");
     expect(await accountOwner(email)).toBe(a);
-    expect((await db.doc(paths.user(b)).get()).data()?.gmail?.watchExpiration).toBe("2026-11-08T00:00:00.000Z");
+  });
+
+  it("renewing after a disconnect recreates nothing", async () => {
+    const email = unique("gone") + "@example.com";
+    const a = unique("a");
+    await saveConnection(db, a, state(email));
+    await removeConnection(db, a, email);
+    expect(await updateWatch(db, a, email, "2026-11-08T00:00:00.000Z")).toBe(false);
+    expect((await db.doc(paths.gmailState(a)).get()).exists).toBe(false);
+    expect((await db.doc(paths.user(a)).get()).data()?.gmail).toBeUndefined();
+    expect(await accountOwner(email)).toBeUndefined();
   });
 });
