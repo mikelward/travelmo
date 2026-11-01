@@ -15,8 +15,27 @@ import {
   type Segment,
   type SegmentType,
 } from "@travelmo/core";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { z } from "zod";
+import { zoneOfCode, zonesFromCodes, type AirportZone, type CodeKey, type ZoneKey } from "@/lib/airportZones";
+
+// The airport table is loaded only once a form is open; codes typed before
+// it arrives are looked up then.
+function useAirportZone(): AirportZone | undefined {
+  const [lookup, setLookup] = useState<{ airportZone: AirportZone }>();
+  useEffect(() => {
+    let current = true;
+    import("@travelmo/core/airports")
+      .then((module) => {
+        if (current) setLookup({ airportZone: module.airportZone });
+      })
+      .catch((error) => console.error("Loading the airport table failed", error));
+    return () => {
+      current = false;
+    };
+  }, []);
+  return lookup?.airportZone;
+}
 
 export const segmentTypeLabels: Record<SegmentType, string> = {
   flight: "Flight",
@@ -139,9 +158,41 @@ export function SegmentForm({
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const zones = useMemo(() => timeZones(), []);
+  const airportZone = useAirportZone();
+  // Ends whose zone the user chose in the picker; a code typed afterwards
+  // chooses again, the table arriving does not.
+  const pickedZones = useRef(new Set<ZoneKey>());
+  // Codes typed in this form: the only ones the table looks up when it
+  // arrives, so an existing booking keeps its zones until its codes change.
+  const typedCodes = useRef(new Set<CodeKey>());
   const set = (key: keyof Fields) => (event: { target: { value: string } }) =>
     setFields((f) => ({ ...f, [key]: event.target.value }));
-  const setZone = (key: "startZone" | "endZone") => (zone: string) => setFields((f) => ({ ...f, [key]: zone }));
+  const setZone = (key: ZoneKey) => (zone: string) => {
+    pickedZones.current.add(key);
+    setFields((f) => ({ ...f, [key]: zone }));
+  };
+  // A known airport code also sets that end's time zone.
+  function codeTyped(key: CodeKey, code: string) {
+    typedCodes.current.add(key);
+    const zone = airportZone?.(code);
+    if (zone) pickedZones.current.delete(zoneOfCode[key]);
+    setFields((f) => ({ ...f, [key]: code, ...(zone ? { [zoneOfCode[key]]: zone } : {}) }));
+  }
+  useEffect(() => {
+    if (!airportZone) return;
+    const typed = typedCodes.current;
+    setFields((f) => ({
+      ...f,
+      ...zonesFromCodes(
+        {
+          originCode: typed.has("originCode") ? f.originCode : "",
+          destinationCode: typed.has("destinationCode") ? f.destinationCode : "",
+        },
+        airportZone,
+        pickedZones.current,
+      ),
+    }));
+  }, [airportZone]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -194,14 +245,24 @@ export function SegmentForm({
             From
             <div className="flex gap-2">
               <input value={fields.originName} onChange={set("originName")} placeholder="London Heathrow" className={inputClass} />
-              <input value={fields.originCode} onChange={set("originCode")} placeholder="LHR" className={`${inputClass} w-20`} />
+              <input
+                value={fields.originCode}
+                onChange={(e) => codeTyped("originCode", e.target.value)}
+                placeholder="LHR"
+                className={`${inputClass} w-20`}
+              />
             </div>
           </label>
           <label className={labelClass}>
             To
             <div className="flex gap-2">
               <input value={fields.destinationName} onChange={set("destinationName")} placeholder="New York JFK" className={inputClass} />
-              <input value={fields.destinationCode} onChange={set("destinationCode")} placeholder="JFK" className={`${inputClass} w-20`} />
+              <input
+                value={fields.destinationCode}
+                onChange={(e) => codeTyped("destinationCode", e.target.value)}
+                placeholder="JFK"
+                className={`${inputClass} w-20`}
+              />
             </div>
           </label>
         </div>

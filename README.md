@@ -12,7 +12,7 @@ partner by email.
 ```
 apps/web        Next.js app (Firebase Auth + Firestore, PWA) on Firebase App Hosting
 apps/parser     Cloud Run worker: Gmail OAuth, Pub/Sub push, pre-filter, Gemini extraction
-packages/core   Shared zod schemas, Firestore paths, trip grouping and formatting
+packages/core   Shared zod schemas, Firestore paths, trip grouping, formatting, airport zones
 packages/rules  Firestore security-rules tests (run against the emulator)
 firestore.rules Who may read and write what
 deploy/         gcloud scripts for the Pub/Sub subscription and the alerting policies
@@ -37,6 +37,10 @@ and Firestore emulators (`apps/web/e2e`), offline reload included:
 pnpm --filter @travelmo/web exec playwright install chromium   # once
 pnpm --filter @travelmo/web test:e2e
 ```
+
+`pnpm --filter @travelmo/core airports` regenerates the airport-to-time-zone
+table from the OpenFlights data (ODbL) packaged in `airport-data`; the result
+is committed, so a normal build needs nothing.
 
 The web app's `build` script bundles the service worker (`src/sw.ts` to
 `public/sw.js`) before `next build`; the worker registers in production

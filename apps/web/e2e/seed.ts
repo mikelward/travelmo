@@ -37,6 +37,28 @@ export async function seedTrip(ownerUid: string, tripId: string): Promise<Trip> 
   return trip;
 }
 
+// An imported flight whose stored offset is not the one its airport's zone
+// would give: an edit must keep it.
+export async function seedFlight(tripId: string): Promise<Segment> {
+  const flight: Segment = {
+    id: `${tripId}-flight`,
+    tripId,
+    type: "flight",
+    title: "XX 100 MAN to DXB",
+    start: "2026-12-13T09:00:00+05:00",
+    end: "2026-12-13T19:00:00+04:00",
+    origin: { name: "Manchester", code: "MAN", country: "GB" },
+    destination: { name: "Dubai", code: "DXB", country: "AE" },
+    source: "gmail",
+    gmailMessageIds: ["m2"],
+    sender: "airline.example",
+    createdAt: "2026-11-01T00:00:00Z",
+    updatedAt: "2026-11-01T00:00:00Z",
+  };
+  await db.doc(paths.segment(tripId, flight.id)).set(flight);
+  return flight;
+}
+
 export async function clearData(): Promise<void> {
   await db.recursiveDelete(db.collection("trips"));
   await db.recursiveDelete(db.collection("users"));

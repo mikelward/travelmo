@@ -34,6 +34,12 @@ test("the owner sees an imported trip, shares it, and the partner can add a book
   await page.getByPlaceholder("BA 117 LHR to JFK").fill("FR 123 MAN to DUB");
   const startDate = page.locator('input[type="date"]').first();
   await startDate.fill("2026-12-15");
+  // Airport codes preselect each end's time zone once the table has loaded.
+  const zone = page.getByTitle("Time zone");
+  await page.getByPlaceholder("LHR", { exact: true }).fill("MAN");
+  await expect(zone.first()).toHaveValue("Europe/London");
+  await page.getByPlaceholder("JFK", { exact: true }).fill("DUB");
+  await expect(zone.nth(1)).toHaveValue("Europe/Dublin");
   await page.getByRole("button", { name: "Add" }).click();
   await expect(page.getByText("FR 123 MAN to DUB", { exact: true })).toBeVisible();
   await expect(page.getByTestId("trip-dates")).toContainText("12–15 Dec 2026");
