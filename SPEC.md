@@ -67,8 +67,10 @@ only an offset, so editing one offers that offset "as imported" alongside
 the zones, and keeps it unless the editor picks a zone. Fields the form does
 not show (a place's city and country) survive an edit. A
 segment write widens the trip's bounds to include it, in a transaction so
-concurrent saves both count; bounds never shrink, here or in the parser,
-because a client transaction cannot read every segment. Deleting a trip
+concurrent saves both count; bounds never shrink on save, here or in the
+parser, because a client transaction cannot read every segment. When the
+bookings span less than the trip, the owner is offered "Fit dates to
+bookings", which reads every segment and sets the bounds to their span. Deleting a trip
 first sets `deleting: true` on it, which every segment writer (the web
 transaction, the parser's import transaction and the rules) refuses, then
 deletes its segments and finally the trip, since Firestore does not cascade.

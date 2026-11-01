@@ -1,6 +1,6 @@
 "use client";
 
-import { formatDate, formatDateRange, localDate, paths, type Segment, type Trip } from "@travelmo/core";
+import { formatDate, formatDateRange, localDate, paths, segmentDateRange, type Segment, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { arrayRemove, arrayUnion, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -9,7 +9,7 @@ import { Suspense, use, useState, type FormEvent } from "react";
 import { SegmentForm } from "@/components/SegmentForm";
 import { SegmentRow } from "@/components/SegmentRow";
 import { SignInGate } from "@/components/SignInGate";
-import { deleteSegment, deleteTrip, renameTrip, saveSegment } from "@/lib/edits";
+import { deleteSegment, deleteTrip, fitTripDates, renameTrip, saveSegment } from "@/lib/edits";
 import { firestore } from "@/lib/firebase";
 import { useSegments, useTrip } from "@/lib/trips";
 
@@ -76,6 +76,27 @@ function Title({ trip, canEdit }: { trip: Trip; canEdit: boolean }) {
       </button>
       {error && <span className="text-sm text-red-600">{error}</span>}
     </form>
+  );
+}
+
+// Offered only when the bookings span less than the trip, which happens after
+// deletions because saving only ever widens the dates.
+function FitDates({ trip, segments }: { trip: Trip; segments: Segment[] }) {
+  const [error, setError] = useState<string>();
+  const range = segmentDateRange(segments);
+  if (!range || (range.start === trip.start && range.end === trip.end)) return null;
+  return (
+    <>
+      {" · "}
+      <button
+        type="button"
+        onClick={() => fitTripDates(firestore(), trip.id).catch((e: Error) => setError(e.message))}
+        className="text-sm text-zinc-500 hover:underline"
+      >
+        Fit dates to bookings ({formatDateRange(range.start, range.end)})
+      </button>
+      {error && <span className="ml-2 text-sm text-red-600">{error}</span>}
+    </>
   );
 }
 
@@ -213,7 +234,10 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
         ← All trips
       </Link>
       <Title trip={trip} canEdit={canManage} />
-      <p className="mt-1 text-zinc-600 dark:text-zinc-400">{formatDateRange(trip.start, trip.end)}</p>
+      <p className="mt-1 text-zinc-600 dark:text-zinc-400">
+        {formatDateRange(trip.start, trip.end)}
+        {canManage && segments && <FitDates trip={trip} segments={segments} />}
+      </p>
       {isOwner && trip.deleting && <DangerZone trip={trip} />}
 
       {canEdit && !editing && (

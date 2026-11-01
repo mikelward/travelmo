@@ -3,7 +3,7 @@ import { paths, type ExtractedSegment, type Segment, type Trip } from "@travelmo
 import { collection, doc, getDoc, getDocs, setDoc, type Firestore } from "firebase/firestore";
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { deleteSegment, deleteTrip, renameTrip, saveSegment } from "./edits";
+import { deleteSegment, deleteTrip, fitTripDates, renameTrip, saveSegment } from "./edits";
 
 // Runs inside `firebase emulators:exec` with the real rules loaded, so these
 // workflows are exercised the way the browser runs them.
@@ -119,6 +119,30 @@ describe("deleteSegment", () => {
     await deleteSegment(asOwner(), trip.id, imported.id);
     expect((await getDoc(doc(asOwner(), paths.segment(trip.id, imported.id)))).exists()).toBe(false);
     expect(await readTrip()).toMatchObject({ start: "2026-12-12", end: "2026-12-14" });
+  });
+});
+
+describe("fitTripDates", () => {
+  it("snaps the trip back to the span of its bookings", async () => {
+    const late = await saveSegment(asOwner(), trip.id, flight("2026-12-20"));
+    expect(await readTrip()).toMatchObject({ start: "2026-12-12", end: "2026-12-20" });
+    await deleteSegment(asOwner(), trip.id, late.id);
+    expect(await readTrip()).toMatchObject({ end: "2026-12-20" });
+    expect(await fitTripDates(asOwner(), trip.id)).toBe(true);
+    expect(await readTrip()).toMatchObject({ start: "2026-12-12", end: "2026-12-14" });
+  });
+
+  it("does nothing for a trip with no bookings", async () => {
+    await deleteSegment(asOwner(), trip.id, imported.id);
+    expect(await fitTripDates(asOwner(), trip.id)).toBe(false);
+    expect(await readTrip()).toMatchObject({ start: "2026-12-12", end: "2026-12-14" });
+  });
+
+  it("is refused for a sharee when it would narrow the trip", async () => {
+    const late = await saveSegment(asOwner(), trip.id, flight("2026-12-20"));
+    await deleteSegment(asOwner(), trip.id, late.id);
+    await expect(fitTripDates(as(partner), trip.id)).rejects.toThrow();
+    expect(await readTrip()).toMatchObject({ end: "2026-12-20" });
   });
 });
 
