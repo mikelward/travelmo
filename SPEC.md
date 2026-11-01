@@ -84,9 +84,13 @@ segments on a trip page; only the owner renames, shares or deletes the trip.
 A manual segment carries `source: "manual"` and the same
 shape as an imported one; the form takes a local date, time and time zone
 for each end and stores the instant with that zone's offset on that date, so
-it reads back exactly as the traveler sees it. An imported instant carries
-only an offset, so editing one offers that offset "as imported" alongside
-the zones, and keeps it unless the editor picks a zone. Fields the form does
+it reads back exactly as the traveler sees it. Typing a known airport code
+into From or To preselects that end's zone from a generated table of IATA
+codes (`packages/core/src/airports.json`, from the OpenFlights airport
+database, loaded on demand); the picker still has the last word. An
+imported instant carries only an offset, so editing one offers that offset
+"as imported" alongside the zones, and keeps it unless the editor picks a
+zone. Fields the form does
 not show (a place's city and country) survive an edit. A
 segment write widens the trip's bounds to include it, in a transaction so
 concurrent saves both count; bounds never shrink on save, here or in the

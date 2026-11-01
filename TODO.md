@@ -21,8 +21,8 @@
 - [x] Let sharees add, edit and delete segments.
 - [x] Offer a timezone picker instead of a raw UTC offset when adding a
       booking by hand.
-- [ ] Preselect the time zone from the airport or station code typed into
-      From/To (needs an airport dataset).
+- [x] Preselect the time zone from the airport code typed into From/To.
+      Station codes are not covered: no comparable open dataset.
 - [x] "Fit dates to bookings" on a trip, offered when its bookings span
       less than its dates.
 - [x] "Learn this sender" from a trip page and from an import review list
