@@ -16,6 +16,7 @@ import {
   savePending,
   takeOAuthState,
   takePending,
+  updateHistoryId,
   updateWatch,
 } from "./connections";
 import { optionalEnv, requireEnv } from "./env";
@@ -251,11 +252,13 @@ app.post("/internal/pubsub/gmail", async (c) => {
   const result = await listAddedSince(gmail, since);
   if (result === "expired") {
     log("WARNING", "history_expired", { uid, since });
-    await db.doc(paths.gmailState(uid)).set({ historyId: String(notification.historyId) }, { merge: true });
+    await updateHistoryId(db, uid, state.emailAddress, String(notification.historyId));
     return c.body(null, 204);
   }
   const counts = await importIds(uid, gmail, result.messageIds);
-  await db.doc(paths.gmailState(uid)).set({ historyId: result.historyId }, { merge: true });
+  if (!(await updateHistoryId(db, uid, state.emailAddress, result.historyId))) {
+    log("WARNING", "notification_for_disconnected_user", { uid });
+  }
   log("INFO", "notification_processed", { uid, messages: result.messageIds.length, ...counts });
   return c.body(null, 204);
 });
