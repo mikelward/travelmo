@@ -2,7 +2,9 @@
 
 import {
   ExtractedSegment,
+  compareInstants,
   composeInstant,
+  mergePlace,
   offsetOf,
   segmentTypes,
   splitInstant,
@@ -30,9 +32,10 @@ type Fields = {
   confirmation: string;
   startDate: string;
   startTime: string;
+  startOffset: string;
   endDate: string;
   endTime: string;
-  offset: string;
+  endOffset: string;
   originName: string;
   originCode: string;
   destinationName: string;
@@ -43,6 +46,7 @@ type Fields = {
 function initialFields(segment: Segment | undefined, defaultDate: string): Fields {
   const start = segment ? splitInstant(segment.start) : undefined;
   const end = segment?.end ? splitInstant(segment.end) : undefined;
+  const startOffset = start?.offset ?? offsetOf(new Date());
   return {
     type: segment?.type ?? "flight",
     title: segment?.title ?? "",
@@ -50,9 +54,10 @@ function initialFields(segment: Segment | undefined, defaultDate: string): Field
     confirmation: segment?.confirmation ?? "",
     startDate: start?.date ?? defaultDate,
     startTime: start?.time ?? "09:00",
+    startOffset,
     endDate: end?.date ?? "",
     endTime: end?.time ?? "",
-    offset: start?.offset ?? offsetOf(new Date()),
+    endOffset: end?.offset ?? startOffset,
     originName: segment?.origin?.name ?? "",
     originCode: segment?.origin?.code ?? "",
     destinationName: segment?.destination?.name ?? "",
@@ -63,28 +68,34 @@ function initialFields(segment: Segment | undefined, defaultDate: string): Field
 
 const text = (value: string) => (value.trim() ? value.trim() : undefined);
 
-export function toExtracted(f: Fields): ExtractedSegment {
-  const place = (name: string, code: string) =>
-    text(name) ? { name: name.trim(), ...(text(code) ? { code: code.trim().toUpperCase() } : {}) } : undefined;
+// Fields the form does not edit (place city/country, source, ids) come from
+// the existing segment; what the form shows, the form decides.
+export function toExtracted(f: Fields, existing?: Segment): ExtractedSegment {
   const hasEnd = f.endDate !== "" || f.endTime !== "";
   const candidate = {
     type: f.type,
     title: f.title.trim(),
     provider: text(f.provider),
     confirmation: text(f.confirmation),
-    start: composeInstant({ date: f.startDate, time: f.startTime || "00:00", offset: f.offset }),
+    start: composeInstant({ date: f.startDate, time: f.startTime || "00:00", offset: f.startOffset }),
     end: hasEnd
-      ? composeInstant({ date: f.endDate || f.startDate, time: f.endTime || f.startTime || "00:00", offset: f.offset })
+      ? composeInstant({
+          date: f.endDate || f.startDate,
+          time: f.endTime || f.startTime || "00:00",
+          offset: f.endOffset || f.startOffset,
+        })
       : undefined,
-    origin: place(f.originName, f.originCode),
-    destination: place(f.destinationName, f.destinationCode),
+    origin: mergePlace(existing?.origin, f.originName, f.originCode),
+    destination: mergePlace(existing?.destination, f.destinationName, f.destinationCode),
     notes: text(f.notes),
   };
   // Firestore rejects undefined field values, so absent fields must be absent.
   const present = Object.fromEntries(Object.entries(candidate).filter(([, v]) => v !== undefined));
   const result = ExtractedSegment.safeParse(present);
   if (!result.success) throw new Error(z.prettifyError(result.error));
-  if (result.data.end && result.data.end < result.data.start) throw new Error("End must not be before start");
+  if (result.data.end && compareInstants(result.data.end, result.data.start) < 0) {
+    throw new Error("End must not be before start");
+  }
   return result.data;
 }
 
@@ -113,7 +124,7 @@ export function SegmentForm({
     setError(undefined);
     setBusy(true);
     try {
-      await onSave(toExtracted(fields));
+      await onSave(toExtracted(fields, segment));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -122,6 +133,17 @@ export function SegmentForm({
   };
 
   const transport = fields.type !== "lodging" && fields.type !== "activity";
+  const when = (label: string, date: keyof Fields, time: keyof Fields, offset: keyof Fields, required: boolean) => (
+    <label className={labelClass}>
+      {label}
+      <div className="grid grid-cols-[1fr_6rem_6rem] gap-2">
+        <input type="date" required={required} value={fields[date]} onChange={set(date)} className={inputClass} />
+        <input type="time" value={fields[time]} onChange={set(time)} className={inputClass} />
+        <input value={fields[offset]} onChange={set(offset)} placeholder="+01:00" title="UTC offset" className={inputClass} />
+      </div>
+    </label>
+  );
+
   return (
     <form onSubmit={submit} className="mt-4 grid gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
       <div className="grid grid-cols-[8rem_1fr] gap-3">
@@ -140,26 +162,8 @@ export function SegmentForm({
           <input required value={fields.title} onChange={set("title")} placeholder="BA 117 LHR to JFK" className={inputClass} />
         </label>
       </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-[1fr_1fr_7rem]">
-        <label className={labelClass}>
-          {fields.type === "lodging" ? "Check-in" : "Start"}
-          <div className="flex gap-2">
-            <input type="date" required value={fields.startDate} onChange={set("startDate")} className={inputClass} />
-            <input type="time" value={fields.startTime} onChange={set("startTime")} className={inputClass} />
-          </div>
-        </label>
-        <label className={labelClass}>
-          {fields.type === "lodging" ? "Check-out" : "End"}
-          <div className="flex gap-2">
-            <input type="date" value={fields.endDate} onChange={set("endDate")} className={inputClass} />
-            <input type="time" value={fields.endTime} onChange={set("endTime")} className={inputClass} />
-          </div>
-        </label>
-        <label className={labelClass}>
-          UTC offset
-          <input value={fields.offset} onChange={set("offset")} placeholder="+01:00" className={inputClass} />
-        </label>
-      </div>
+      {when(fields.type === "lodging" ? "Check-in (date, time, UTC offset)" : "Start (date, time, UTC offset)", "startDate", "startTime", "startOffset", true)}
+      {when(fields.type === "lodging" ? "Check-out" : "End", "endDate", "endTime", "endOffset", false)}
       {transport ? (
         <div className="grid grid-cols-2 gap-3">
           <label className={labelClass}>

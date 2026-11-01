@@ -1,4 +1,18 @@
-import { daysBetween, findTripForRange, groupTrips, segmentDateRange } from "./trips";
+import { daysBetween, findTripForRange, groupTrips, mergePlace, segmentDateRange } from "./trips";
+
+describe("mergePlace", () => {
+  const imported = { name: "London Heathrow", code: "LHR", city: "London", country: "GB" };
+  it("keeps city and country when only the name or code changes", () => {
+    expect(mergePlace(imported, "Heathrow", "lhr")).toEqual({ name: "Heathrow", code: "LHR", city: "London", country: "GB" });
+  });
+  it("drops the code when cleared but keeps the rest", () => {
+    expect(mergePlace(imported, "Heathrow", "")).toEqual({ name: "Heathrow", city: "London", country: "GB" });
+  });
+  it("is undefined when the name is cleared, and minimal when new", () => {
+    expect(mergePlace(imported, "  ", "LHR")).toBeUndefined();
+    expect(mergePlace(undefined, "Cove", "")).toEqual({ name: "Cove" });
+  });
+});
 import { ExtractedBooking, Trip } from "./schema";
 
 const trip = (id: string, start: string, end: string): Trip => ({

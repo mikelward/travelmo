@@ -58,11 +58,13 @@ Schemas live in `packages/core/src/schema.ts`; paths in `paths.ts`.
 
 The owner can add, edit and delete segments on a trip page, rename the trip
 and delete it. A manual segment carries `source: "manual"` and the same
-shape as an imported one; the form takes a date, time and UTC offset so the
-instant is stored exactly as the traveler sees it. Every segment write also
-moves the trip's bounds to cover all its segments; the bounds stay put when
-the last segment is removed. Deleting a trip deletes its segments first,
-since Firestore does not cascade.
+shape as an imported one; the form takes a date, time and UTC offset for each
+end so the instants are stored exactly as the traveler sees them, and fields
+the form does not show (a place's city and country) survive an edit. A
+segment write widens the trip's bounds to include it, in a transaction so
+concurrent saves both count; bounds never shrink, here or in the parser,
+because a client transaction cannot read every segment. Deleting a trip
+deletes its segments first, since Firestore does not cascade.
 
 ## Access rules
 

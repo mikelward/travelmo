@@ -17,6 +17,12 @@ export function composeInstant({ date, time, offset }: InstantParts): string {
   return `${date}T${time}:00${offset}`;
 }
 
+// Orders by the moment in time, not the local wall clock, so a flight that
+// lands on an earlier local date than it departed still reads as forward.
+export function compareInstants(a: string, b: string): number {
+  return Date.parse(a) - Date.parse(b);
+}
+
 // The viewer's current UTC offset as "+HH:MM", the usual default for a new
 // booking entered by hand.
 export function offsetOf(at: Date): string {

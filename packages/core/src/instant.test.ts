@@ -1,4 +1,11 @@
-import { composeInstant, offsetOf, splitInstant } from "./instant";
+import { compareInstants, composeInstant, offsetOf, splitInstant } from "./instant";
+
+describe("compareInstants", () => {
+  it("orders by moment, so a date-line arrival on an earlier local date is still later", () => {
+    expect(compareInstants("2026-12-02T00:30:00+09:00", "2026-12-01T12:30:00-10:00")).toBeLessThan(0);
+    expect(compareInstants("2026-12-01T12:00:00Z", "2026-12-01T12:00:00+00:00")).toBe(0);
+  });
+});
 
 describe("splitInstant", () => {
   it("separates date, time and offset", () => {
