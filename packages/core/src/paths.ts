@@ -1,8 +1,12 @@
 export const paths = {
   user: (uid: string) => `users/${uid}`,
+  // Server-only: refresh tokens live here; rules deny every client read.
   gmailState: (uid: string) => `users/${uid}/private/gmail`,
+  senderPatterns: (uid: string) => `users/${uid}/settings/patterns`,
   parsedMessage: (uid: string, messageId: string) =>
     `users/${uid}/parsedMessages/${messageId}`,
+  gmailAccount: (emailAddress: string) => `gmailAccounts/${emailAddress}`,
+  oauthState: (nonce: string) => `oauthStates/${nonce}`,
   trips: () => "trips",
   trip: (tripId: string) => `trips/${tripId}`,
   segments: (tripId: string) => `trips/${tripId}/segments`,

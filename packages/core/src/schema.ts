@@ -65,18 +65,39 @@ export const Trip = z.object({
   start: isoDate,
   end: isoDate,
   ownerUid: z.string().min(1),
+  // Lowercase email addresses. Sharing by email needs no user lookup: the
+  // partner's client queries trips containing its own verified address.
   sharedWith: z.array(z.string()).default([]),
   createdAt: isoDateTime,
   updatedAt: isoDateTime,
 });
 export type Trip = z.infer<typeof Trip>;
 
-export const GmailState = z.object({
-  historyId: z.string().optional(),
+// What the web client may see about a Gmail connection; the refresh token
+// stays in the server-only GmailState document.
+export const GmailConnection = z.object({
+  emailAddress: z.string(),
+  connectedAt: isoDateTime,
   watchExpiration: isoDateTime.optional(),
-  emailAddress: z.string().optional(),
+  historyId: z.string().optional(),
+});
+export type GmailConnection = z.infer<typeof GmailConnection>;
+
+export const UserProfile = z.object({
+  gmail: GmailConnection.optional(),
+});
+export type UserProfile = z.infer<typeof UserProfile>;
+
+export const GmailState = GmailConnection.extend({
+  refreshToken: z.string().min(1),
 });
 export type GmailState = z.infer<typeof GmailState>;
+
+export const SenderPatterns = z.object({
+  allow: z.array(z.string()).default([]),
+  deny: z.array(z.string()).default([]),
+});
+export type SenderPatterns = z.infer<typeof SenderPatterns>;
 
 export const ParsedMessage = z.object({
   messageId: z.string().min(1),
