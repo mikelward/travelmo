@@ -68,6 +68,9 @@ export const Trip = z.object({
   // Lowercase email addresses. Sharing by email needs no user lookup: the
   // partner's client queries trips containing its own verified address.
   sharedWith: z.array(z.string()).default([]),
+  // Set first when a trip is deleted; every segment writer refuses a trip
+  // carrying it, so the segment sweep that follows cannot leave orphans.
+  deleting: z.boolean().optional(),
   createdAt: isoDateTime,
   updatedAt: isoDateTime,
 });

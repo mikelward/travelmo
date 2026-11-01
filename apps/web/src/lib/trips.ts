@@ -52,7 +52,7 @@ export function useTrips(user: User): Trip[] | undefined {
     const shared = email ? sharedWithMe : [];
     if (!own || !shared) return undefined;
     const byId = new Map<string, Trip>();
-    for (const trip of [...own, ...shared]) byId.set(trip.id, trip);
+    for (const trip of [...own, ...shared]) if (!trip.deleting) byId.set(trip.id, trip);
     return [...byId.values()];
   }, [own, sharedWithMe, email]);
 }

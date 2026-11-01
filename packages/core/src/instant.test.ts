@@ -15,6 +15,14 @@ describe("splitInstant", () => {
     expect(splitInstant("2026-12-01T09:05:00Z").offset).toBe("+00:00");
     expect(splitInstant("2026-12-01T09:05:00-0500").offset).toBe("-05:00");
   });
+  it("ignores fractional seconds and tolerates missing seconds", () => {
+    expect(splitInstant("2026-12-01T09:05:00.000Z")).toEqual({ date: "2026-12-01", time: "09:05", offset: "+00:00" });
+    expect(splitInstant("2026-12-01T09:05:00.123456+05:30").offset).toBe("+05:30");
+    expect(splitInstant("2026-12-01T09:05+01:00").time).toBe("09:05");
+  });
+  it("rejects anything that is not an instant", () => {
+    expect(() => splitInstant("tomorrow")).toThrow(/ISO 8601/);
+  });
 });
 
 describe("composeInstant", () => {

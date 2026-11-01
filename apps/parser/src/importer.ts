@@ -84,7 +84,8 @@ export async function importMessage(uid: string, message: EmailMessage, deps: Im
 
   const timestamp = now();
   const { tripId, segmentIds } = await store.withUserLock(uid, async (tx) => {
-    const existing = findTripForRange(await tx.listTrips(), range);
+    const live = (await tx.listTrips()).filter((trip) => !trip.deleting);
+    const existing = findTripForRange(live, range);
     let tripId: string;
     if (existing) {
       tripId = existing.id;
