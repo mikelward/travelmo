@@ -95,7 +95,7 @@ export async function listAddedSince(gmail: Gmail, startHistoryId: string): Prom
       pageToken = data.nextPageToken ?? undefined;
     } while (pageToken);
   } catch (error) {
-    if (isStatus(error, 404)) return "expired";
+    if (isNotFound(error)) return "expired";
     throw error;
   }
   return { messageIds: [...messageIds], historyId };
@@ -120,6 +120,9 @@ export async function stopWatch(gmail: Gmail): Promise<void> {
   await gmail.users.stop({ userId: "me" });
 }
 
-function isStatus(error: unknown, status: number): boolean {
-  return typeof error === "object" && error !== null && (error as { code?: unknown }).code === status;
+// googleapis surfaces HTTP status as `status` (number) and `code` (number or string).
+export function isNotFound(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const { code, status } = error as { code?: unknown; status?: unknown };
+  return status === 404 || code === 404 || code === "404";
 }

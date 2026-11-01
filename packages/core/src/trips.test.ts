@@ -44,6 +44,13 @@ describe("segmentDateRange", () => {
     expect(range).toEqual({ start: "2026-12-01", end: "2026-12-05" });
   });
 
+  it("keeps start before end when a flight lands on an earlier local date", () => {
+    const range = segmentDateRange([
+      { type: "flight", title: "NRT-HNL", start: "2026-12-02T00:30:00+09:00", end: "2026-12-01T12:30:00-10:00" },
+    ]);
+    expect(range).toEqual({ start: "2026-12-01", end: "2026-12-02" });
+  });
+
   it("is undefined with no segments", () => {
     expect(segmentDateRange([])).toBeUndefined();
   });

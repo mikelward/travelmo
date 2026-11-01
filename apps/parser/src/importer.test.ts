@@ -1,6 +1,6 @@
 import type { ExtractedBooking, ParsedMessage, Segment, Trip } from "@travelmo/core";
 import type { EmailMessage } from "./gmail";
-import { importMessage, tripTitle, type ImportDeps, type TripStore, type TripTx } from "./importer";
+import { importMessage, importMessages, tripTitle, type ImportDeps, type TripStore, type TripTx } from "./importer";
 
 type Memory = TripStore & {
   trips: Map<string, Trip>;
@@ -175,6 +175,27 @@ describe("importMessage", () => {
     );
     expect(outcome).toBe("failed");
     expect(store.parsed.get("u1/m1")).toMatchObject({ outcome: "failed", reason: "quota" });
+  });
+});
+
+describe("importMessages", () => {
+  it("skips a message Gmail no longer has and imports the rest", async () => {
+    const store = memoryStore();
+    const fetch = async (id: string) => {
+      if (id === "gone") throw Object.assign(new Error("Requested entity was not found."), { code: 404, status: 404 });
+      return email({ id });
+    };
+    const counts = await importMessages("u1", ["gone", "m1"], fetch, deps(store, async () => lodging));
+    expect(counts).toMatchObject({ skipped: 1, imported: 1 });
+    expect(store.trips.size).toBe(1);
+  });
+
+  it("propagates other fetch failures so the delivery is retried", async () => {
+    const store = memoryStore();
+    const fetch = async () => {
+      throw Object.assign(new Error("Backend Error"), { code: 503, status: 503 });
+    };
+    await expect(importMessages("u1", ["m1"], fetch, deps(store, async () => lodging))).rejects.toThrow("Backend Error");
   });
 });
 

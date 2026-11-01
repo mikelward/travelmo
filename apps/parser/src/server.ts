@@ -21,7 +21,7 @@ import {
   watch,
   type OAuthConfig,
 } from "./gmail";
-import { importMessage, type ImportDeps, type ImportOutcome } from "./importer";
+import { importMessages, type ImportDeps } from "./importer";
 import { errorFields, log } from "./log";
 import { firestoreStore } from "./store";
 
@@ -175,16 +175,8 @@ app.post("/gmail/disconnect", async (c) => {
   return c.body(null, 204);
 });
 
-type Counts = Record<ImportOutcome, number>;
-const emptyCounts = (): Counts => ({ skipped: 0, filtered: 0, not_booking: 0, imported: 0, failed: 0 });
-
-async function importIds(uid: string, gmail: ReturnType<typeof gmailFor>, ids: readonly string[]): Promise<Counts> {
-  const counts = emptyCounts();
-  for (const id of ids) {
-    const message = await fetchMessage(gmail, id);
-    counts[await importMessage(uid, message, deps)] += 1;
-  }
-  return counts;
+function importIds(uid: string, gmail: ReturnType<typeof gmailFor>, ids: readonly string[]) {
+  return importMessages(uid, ids, (id) => fetchMessage(gmail, id), deps);
 }
 
 app.post("/gmail/backfill", async (c) => {
