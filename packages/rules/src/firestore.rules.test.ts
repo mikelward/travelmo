@@ -93,10 +93,20 @@ describe("trips", () => {
     await assertFails(getDocs(trips(as(owner))));
   });
 
-  it("owner can share and update; sharee and stranger cannot", async () => {
+  it("owner can share and update; sharee and stranger cannot change anything but the dates", async () => {
     await assertSucceeds(updateDoc(doc(as(owner), paths.trip(trip.id)), { sharedWith: [partner.email, "x@example.com"], updatedAt: "2026-11-02T00:00:00Z" }));
     await assertFails(updateDoc(doc(as(partner), paths.trip(trip.id)), { title: "Mine now" }));
+    await assertFails(updateDoc(doc(as(partner), paths.trip(trip.id)), { sharedWith: [partner.email, stranger.email] }));
+    await assertFails(updateDoc(doc(as(partner), paths.trip(trip.id)), { deleting: true }));
     await assertFails(updateDoc(doc(as(stranger), paths.trip(trip.id)), { title: "Mine now" }));
+  });
+
+  it("a sharee may widen the trip's dates but not narrow them", async () => {
+    const ref = doc(as(partner), paths.trip(trip.id));
+    await assertSucceeds(updateDoc(ref, { start: "2026-12-11", end: "2026-12-15", updatedAt: "2026-11-02T00:00:00Z" }));
+    await assertFails(updateDoc(ref, { start: "2026-12-13", updatedAt: "2026-11-02T00:00:00Z" }));
+    await assertFails(updateDoc(ref, { end: "2026-12-14", updatedAt: "2026-11-02T00:00:00Z" }));
+    await assertSucceeds(updateDoc(ref, { updatedAt: "2026-11-03T00:00:00Z" }));
   });
 
   it("owner cannot hand the trip to someone else or write bad dates", async () => {
@@ -119,21 +129,24 @@ describe("trips", () => {
 });
 
 describe("segments", () => {
-  it("follow the parent trip's access", async () => {
+  it("follow the parent trip's access, for sharees too", async () => {
     await assertSucceeds(getDoc(doc(as(owner), paths.segment(trip.id, segment.id))));
     await assertSucceeds(getDocs(collection(as(partner), paths.segments(trip.id))));
     await assertFails(getDocs(collection(as(stranger), paths.segments(trip.id))));
     await assertSucceeds(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { title: "Renamed" }));
-    await assertFails(updateDoc(doc(as(partner), paths.segment(trip.id, segment.id)), { title: "Renamed" }));
+    await assertSucceeds(updateDoc(doc(as(partner), paths.segment(trip.id, segment.id)), { title: "Renamed by partner" }));
+    await assertFails(updateDoc(doc(as(stranger), paths.segment(trip.id, segment.id)), { title: "Renamed" }));
   });
 
-  it("owner can add a well-formed manual segment and delete one", async () => {
+  it("owner and sharee can add a well-formed manual segment and delete one; a stranger cannot", async () => {
     const manual: Segment = { ...segment, id: "s2", source: "manual", gmailMessageIds: [], end: undefined } as Segment;
     delete (manual as { end?: string }).end;
     await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s2")), manual));
-    await assertFails(setDoc(doc(as(partner), paths.segment(trip.id, "s3")), { ...manual, id: "s3" }));
+    await assertSucceeds(setDoc(doc(as(partner), paths.segment(trip.id, "s3")), { ...manual, id: "s3" }));
+    await assertFails(setDoc(doc(as(stranger), paths.segment(trip.id, "s4")), { ...manual, id: "s4" }));
     await assertSucceeds(deleteDoc(doc(as(owner), paths.segment(trip.id, "s2"))));
-    await assertFails(deleteDoc(doc(as(partner), paths.segment(trip.id, segment.id))));
+    await assertSucceeds(deleteDoc(doc(as(partner), paths.segment(trip.id, "s3"))));
+    await assertFails(deleteDoc(doc(as(stranger), paths.segment(trip.id, segment.id))));
   });
 
   it("refuses new segments on a trip being deleted, but still lets the owner remove them", async () => {

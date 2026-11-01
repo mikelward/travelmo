@@ -45,6 +45,13 @@ service cloud.firestore {
         && request.resource.data.ownerUid == resource.data.ownerUid
         && request.resource.data.id == tripId
         && validTrip(request.resource.data);
+      // A sharee adding a booking may only widen the dates to hold it.
+      allow update: if signedIn()
+        && isSharee(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['start', 'end', 'updatedAt'])
+        && request.resource.data.start <= resource.data.start
+        && request.resource.data.end >= resource.data.end
+        && validTrip(request.resource.data);
       allow delete: if signedIn() && isOwner(resource.data);
 
       match /segments/{segmentId} {
@@ -66,11 +73,14 @@ service cloud.firestore {
             && segment.gmailMessageIds is list
             && segment.createdAt is string && segment.updatedAt is string;
         }
-        allow read: if signedIn() && (isOwner(trip()) || isSharee(trip()));
-        allow create, update: if signedIn() && isOwner(trip())
+        function canEdit() {
+          return signedIn() && (isOwner(trip()) || isSharee(trip()));
+        }
+        allow read: if canEdit();
+        allow create, update: if canEdit()
           && trip().get('deleting', false) == false
           && validSegment(request.resource.data);
-        allow delete: if signedIn() && isOwner(trip());
+        allow delete: if canEdit();
       }
     }
 

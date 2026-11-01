@@ -57,8 +57,9 @@ Schemas live in `packages/core/src/schema.ts`; paths in `paths.ts`.
 
 ## Editing by hand
 
-The owner can add, edit and delete segments on a trip page, rename the trip
-and delete it. A manual segment carries `source: "manual"` and the same
+The owner and anyone the trip is shared with can add, edit and delete
+segments on a trip page; only the owner renames, shares or deletes the trip.
+A manual segment carries `source: "manual"` and the same
 shape as an imported one; the form takes a date, time and UTC offset for each
 end so the instants are stored exactly as the traveler sees them, and fields
 the form does not show (a place's city and country) survive an edit. A
@@ -76,11 +77,13 @@ list as "Deleting" and the trip page offers to finish it.
 `firestore.rules`, tested in `packages/rules`:
 
 - A trip is readable by its owner and by any signed-in user whose verified
-  email is in `sharedWith`; writable and deletable by the owner only. A
-  missing trip reads as absent to any signed-in user, so a client can tell a
-  deleted trip from one it may not see.
-  Segments inherit the parent trip's access, and a written segment must have
-  the documented shape (known keys, a valid type, ISO instants, ids that
+  email is in `sharedWith`. The owner may change and delete it; a sharee may
+  only widen its `start`/`end` (and touch `updatedAt`), which is what saving
+  a booking needs. A missing trip reads as absent to any signed-in user, so a
+  client can tell a deleted trip from one it may not see.
+  Segments inherit the parent trip's access for reading and writing: owner
+  and sharees alike may add, edit and delete them, and a written segment must
+  have the documented shape (known keys, a valid type, ISO instants, ids that
   match its path).
 - A user reads and edits their own profile except the `gmail` field, owns
   their sender patterns, can read but not write their parsed-message log,
