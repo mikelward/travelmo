@@ -37,6 +37,7 @@ import {
 } from "./gmail";
 import { importMessage, importMessages, type ImportDeps } from "./importer";
 import { errorFields, log } from "./log";
+import { BadPushEnvelope, parseGmailPush, type GmailNotification } from "./pubsub";
 import { firestoreStore } from "./store";
 
 const webOrigin = requireEnv("WEB_ORIGIN");
@@ -254,39 +255,55 @@ app.post("/gmail/reimport", async (c) => {
   return c.json({ outcome });
 });
 
+// A non-2xx response makes Pub/Sub redeliver; after the subscription's
+// maximum attempts the notification lands on the dead-letter topic, which
+// is alerted on (deploy/monitoring.sh). Nothing is lost with it: the next
+// notification resumes from the stored history id.
 app.post("/internal/pubsub/gmail", async (c) => {
   await requireInternalCaller(c);
-  const envelope = (await c.req.json()) as { message?: { data?: string; messageId?: string } };
-  const data = envelope.message?.data;
-  if (!data) throw new HTTPException(400, { message: "No Pub/Sub message data" });
-  const notification = JSON.parse(Buffer.from(data, "base64").toString("utf8")) as {
-    emailAddress: string;
-    historyId: number | string;
-  };
+  let notification: GmailNotification;
+  try {
+    notification = parseGmailPush(await c.req.json());
+  } catch (error) {
+    if (error instanceof BadPushEnvelope) throw new HTTPException(400, { message: error.message });
+    throw error;
+  }
+  const { pubsubMessageId, deliveryAttempt } = notification;
 
-  const account = await db.doc(paths.gmailAccount(notification.emailAddress)).get();
-  const uid = (account.data() as { uid?: string } | undefined)?.uid;
-  if (!uid) {
-    log("WARNING", "notification_for_unknown_account", { pubsubMessageId: envelope.message?.messageId });
-    return c.body(null, 204);
-  }
-  const state = await loadState(db, uid);
-  if (!state) return c.body(null, 204);
+  try {
+    const account = await db.doc(paths.gmailAccount(notification.emailAddress)).get();
+    const uid = (account.data() as { uid?: string } | undefined)?.uid;
+    if (!uid) {
+      log("WARNING", "notification_for_unknown_account", { pubsubMessageId });
+      return c.body(null, 204);
+    }
+    const state = await loadState(db, uid);
+    if (!state) return c.body(null, 204);
 
-  const gmail = gmailFor(oauth, state.refreshToken);
-  const since = state.historyId ?? String(notification.historyId);
-  const result = await listAddedSince(gmail, since);
-  if (result === "expired") {
-    log("WARNING", "history_expired", { uid, since });
-    await updateHistoryId(db, uid, state.emailAddress, String(notification.historyId));
+    const gmail = gmailFor(oauth, state.refreshToken);
+    const since = state.historyId ?? notification.historyId;
+    const result = await listAddedSince(gmail, since);
+    if (result === "expired") {
+      log("WARNING", "history_expired", { uid, since });
+      await updateHistoryId(db, uid, state.emailAddress, notification.historyId);
+      return c.body(null, 204);
+    }
+    const counts = await importIds(uid, gmail, result.messageIds);
+    if (!(await updateHistoryId(db, uid, state.emailAddress, result.historyId))) {
+      log("WARNING", "notification_for_disconnected_user", { uid });
+    }
+    log("INFO", "notification_processed", {
+      uid,
+      pubsubMessageId,
+      deliveryAttempt,
+      messages: result.messageIds.length,
+      ...counts,
+    });
     return c.body(null, 204);
+  } catch (error) {
+    log("ERROR", "notification_failed", { pubsubMessageId, deliveryAttempt, ...errorFields(error) });
+    throw error;
   }
-  const counts = await importIds(uid, gmail, result.messageIds);
-  if (!(await updateHistoryId(db, uid, state.emailAddress, result.historyId))) {
-    log("WARNING", "notification_for_disconnected_user", { uid });
-  }
-  log("INFO", "notification_processed", { uid, messages: result.messageIds.length, ...counts });
-  return c.body(null, 204);
 });
 
 // Gmail watches last seven days; Cloud Scheduler calls this daily.
@@ -314,7 +331,7 @@ app.post("/internal/renew-watches", async (c) => {
 
 app.onError((error, c) => {
   if (error instanceof HTTPException) return error.getResponse();
-  log("ERROR", "unhandled", { path: c.req.path, ...errorFields(error) });
+  if (c.req.path !== "/internal/pubsub/gmail") log("ERROR", "unhandled", { path: c.req.path, ...errorFields(error) });
   return c.text("Internal error", 500);
 });
 
