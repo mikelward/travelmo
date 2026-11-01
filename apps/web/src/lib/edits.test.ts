@@ -138,6 +138,21 @@ describe("fitTripDates", () => {
     expect(await readTrip()).toMatchObject({ start: "2026-12-12", end: "2026-12-14" });
   });
 
+  it("re-reads when a booking lands between the read and the write", async () => {
+    const late = await saveSegment(asOwner(), trip.id, flight("2026-12-20"));
+    await deleteSegment(asOwner(), trip.id, late.id);
+    let raced = false;
+    const applied = await fitTripDates(asOwner(), trip.id, {
+      afterRead: async () => {
+        if (raced) return;
+        raced = true;
+        await saveSegment(as(partner), trip.id, flight("2026-12-25"));
+      },
+    });
+    expect(applied).toBe(true);
+    expect(await readTrip()).toMatchObject({ start: "2026-12-12", end: "2026-12-25" });
+  });
+
   it("is refused for a sharee when it would narrow the trip", async () => {
     const late = await saveSegment(asOwner(), trip.id, flight("2026-12-20"));
     await deleteSegment(asOwner(), trip.id, late.id);

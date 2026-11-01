@@ -3,6 +3,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   runTransaction,
   updateDoc,
@@ -55,18 +56,38 @@ export async function deleteSegment(db: Firestore, tripId: string, segmentId: st
 // Bounds only ever widen on save, so after deletions a trip can outgrow its
 // bookings; this snaps them back. Owner only: the rules let a sharee widen
 // but never narrow. Returns false when there is nothing to fit to.
-export async function fitTripDates(db: Firestore, tripId: string): Promise<boolean> {
-  const segments = await getDocs(collection(db, paths.segments(tripId)));
-  const range = segmentDateRange(segments.docs.map((d) => Segment.parse(d.data())));
-  if (!range) return false;
+//
+// A client transaction cannot read the segment collection, so the segments
+// are read outside it and the trip's `updatedAt`, which every segment write
+// bumps, stands in as a revision: if it moved between the read and the
+// write, the bounds are stale and the read is repeated.
+export async function fitTripDates(
+  db: Firestore,
+  tripId: string,
+  hooks: { afterRead?: () => Promise<void> } = {},
+): Promise<boolean> {
   const tripRef = doc(db, paths.trip(tripId));
-  await runTransaction(db, async (t) => {
-    const snap = await t.get(tripRef);
-    if (!snap.exists()) throw new Error("Trip no longer exists");
-    if (Trip.parse(snap.data()).deleting) throw new Error("This trip is being deleted");
-    t.update(tripRef, { start: range.start, end: range.end, updatedAt: now() });
-  });
-  return true;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const before = await getDoc(tripRef);
+    if (!before.exists()) throw new Error("Trip no longer exists");
+    const seen = Trip.parse(before.data());
+    if (seen.deleting) throw new Error("This trip is being deleted");
+    const segments = await getDocs(collection(db, paths.segments(tripId)));
+    const range = segmentDateRange(segments.docs.map((d) => Segment.parse(d.data())));
+    await hooks.afterRead?.();
+    if (!range) return false;
+    const applied = await runTransaction(db, async (t) => {
+      const snap = await t.get(tripRef);
+      if (!snap.exists()) throw new Error("Trip no longer exists");
+      const trip = Trip.parse(snap.data());
+      if (trip.deleting) throw new Error("This trip is being deleted");
+      if (trip.updatedAt !== seen.updatedAt) return false;
+      t.update(tripRef, { start: range.start, end: range.end, updatedAt: now() });
+      return true;
+    });
+    if (applied) return true;
+  }
+  throw new Error("The trip kept changing; try again");
 }
 
 export async function renameTrip(db: Firestore, tripId: string, title: string): Promise<void> {
