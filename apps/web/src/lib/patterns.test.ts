@@ -38,6 +38,16 @@ describe("learnSender", () => {
     await learnSender(db, owner.uid, "cove.example", "deny");
     expect((await getDoc(doc(db, paths.senderPatterns(owner.uid)))).data()).toEqual({ allow: [], deny: ["spam.example", "cove.example"] });
   });
+
+  it("lifts a parent-domain denial that would still block the sender being allowed", async () => {
+    const db = asOwner();
+    await learnSender(db, owner.uid, "cove.example", "deny");
+    await learnSender(db, owner.uid, "mail.cove.example", "allow");
+    expect((await getDoc(doc(db, paths.senderPatterns(owner.uid)))).data()).toEqual({ allow: ["mail.cove.example"], deny: [] });
+    await learnSender(db, owner.uid, "cove.example", "allow");
+    await learnSender(db, owner.uid, "mail.cove.example", "deny");
+    expect((await getDoc(doc(db, paths.senderPatterns(owner.uid)))).data()).toEqual({ allow: [], deny: ["mail.cove.example"] });
+  });
 });
 
 describe("isListed", () => {

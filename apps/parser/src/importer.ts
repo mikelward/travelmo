@@ -24,9 +24,18 @@ export type TripTx = {
 // the next delivery may take it over.
 export const claimLeaseMs = 15 * 60 * 1000;
 
+function leaseExpired(existing: ParsedMessage, now: string): boolean {
+  return Date.parse(now) - Date.parse(existing.processedAt) > claimLeaseMs;
+}
+
 export function claimable(existing: ParsedMessage | undefined, now: string): boolean {
   if (!existing) return true;
-  return existing.outcome === "processing" && Date.parse(now) - Date.parse(existing.processedAt) > claimLeaseMs;
+  return existing.outcome === "processing" && leaseExpired(existing, now);
+}
+
+export function reclaimable(existing: ParsedMessage | undefined, now: string): boolean {
+  if (!existing) return true;
+  return existing.outcome !== "processing" || leaseExpired(existing, now);
 }
 
 export type TripStore = {
@@ -34,10 +43,11 @@ export type TripStore = {
   // exists and is not an expired lease, so concurrent deliveries of one
   // message import it once while an abandoned claim can be retried.
   claimMessage(uid: string, messageId: string, processedAt: string): Promise<boolean>;
+  // Like claimMessage, but a finished record (any outcome) is claimed again
+  // too; only an unexpired processing claim is refused. For the user asking
+  // for another look at a message.
+  reclaimMessage(uid: string, messageId: string, processedAt: string): Promise<boolean>;
   setParsed(record: ParsedMessage): Promise<void>;
-  // Removes the record so a message the user wants another look at can be
-  // claimed again.
-  forgetMessage(uid: string, messageId: string): Promise<void>;
   // Runs fn serialized per user, so two overlapping imports cannot both
   // decide to create a trip for the same dates.
   withUserLock<T>(uid: string, fn: (tx: TripTx) => Promise<T>): Promise<T>;
@@ -57,6 +67,8 @@ export type ImportOutcome = Exclude<ParsedMessage["outcome"], "processing"> | "s
 export type ImportOptions = {
   // Skip the pre-filter: the user has asked for this message specifically.
   force?: boolean;
+  // Take another look at a message that already has an outcome.
+  reclaim?: boolean;
 };
 
 export async function importMessage(
@@ -66,7 +78,8 @@ export async function importMessage(
   options: ImportOptions = {},
 ): Promise<ImportOutcome> {
   const { store, now, log } = deps;
-  if (!(await store.claimMessage(uid, message.id, now()))) return "skipped";
+  const claim = options.reclaim ? store.reclaimMessage : store.claimMessage;
+  if (!(await claim(uid, message.id, now()))) return "skipped";
   const base = { messageId: message.id, uid, from: message.from, subject: message.subject };
   const record = (outcome: ParsedMessage["outcome"], extra: Partial<ParsedMessage> = {}): ParsedMessage => ({
     ...base,

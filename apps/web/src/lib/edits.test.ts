@@ -32,6 +32,7 @@ const imported: Segment = {
   destination: { name: "Cove Liverpool", city: "Liverpool", country: "GB" },
   source: "gmail",
   gmailMessageIds: ["m1"],
+  sender: "cove.example",
   createdAt: "2026-11-01T00:00:00Z",
   updatedAt: "2026-11-01T00:00:00Z",
 };
@@ -80,7 +81,8 @@ describe("saveSegment", () => {
 
   it("keeps an edited segment's identity and widens backwards too", async () => {
     const saved = await saveSegment(asOwner(), trip.id, { ...imported, start: "2026-12-10T15:00:00+00:00", title: "Renamed" }, imported);
-    expect(saved).toMatchObject({ id: imported.id, source: "gmail", gmailMessageIds: ["m1"], createdAt: imported.createdAt });
+    expect(saved).toMatchObject({ id: imported.id, source: "gmail", gmailMessageIds: ["m1"], sender: "cove.example", createdAt: imported.createdAt });
+    expect((await getDoc(doc(asOwner(), paths.segment(trip.id, imported.id)))).data()?.sender).toBe("cove.example");
     expect(await readTrip()).toMatchObject({ start: "2026-12-10", end: "2026-12-14" });
   });
 

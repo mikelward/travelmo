@@ -133,8 +133,11 @@ shown to the model at most once, and only when it carries a booking signal.
 The seed sender list is in `apps/parser/src/prefilter.ts`; users extend it
 from Settings, where an "Import review" list shows recent emails that did
 not become bookings with three actions: always import that sender, never
-import it, or import this one anyway (`POST /gmail/reimport`, which forgets
-the earlier record and runs the import with the pre-filter skipped). A trip
+import it, or import this one anyway (`POST /gmail/reimport`, which reclaims
+the message's record whatever its outcome, unless an import of it is live,
+and runs the import with the pre-filter skipped). Teaching a sender also
+drops any pattern on the other list that covers it, so the newest decision
+is the one the parser follows. A trip
 page offers "Always import this sender" on imported bookings. The
 embedding-based pre-filter from the original brief is a later step and
 would sit between the keyword check and the model call, seeded by those
