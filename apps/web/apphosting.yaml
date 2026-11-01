@@ -1,0 +1,29 @@
+# Firebase App Hosting backend for apps/web. Set the backend's root directory
+# to apps/web in the console; the monorepo's pnpm workspace is detected from
+# the repository root.
+runConfig:
+  minInstances: 0
+  maxInstances: 2
+  concurrency: 80
+  cpu: 1
+  memoryMiB: 512
+
+# Public Firebase web config and the parser URL are build-time inputs because
+# Next.js inlines NEXT_PUBLIC_* into the client bundle. Fill these in per
+# environment (apphosting.<env>.yaml) or in the console.
+env:
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: REPLACE_ME
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: REPLACE_ME.firebaseapp.com
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: REPLACE_ME
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: REPLACE_ME
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_PARSER_URL
+    value: https://REPLACE_ME.run.app
+    availability: [BUILD, RUNTIME]
