@@ -45,8 +45,11 @@ viewer's zone. Trip bounds are calendar dates.
 - `users/{uid}/private/gmail` — the refresh token and watch state. Server
   only. `users/{uid}/private/import` is read and written by every import
   transaction, serializing trip assignment per user.
-- `gmailAccounts/{emailAddress}` → `{uid}`; `oauthStates/{nonce}` → `{uid,
-  createdAt}`. Server only.
+- `gmailAccounts/{emailAddress}` → `{uid}`, one owner per mailbox, enforced in
+  a transaction; `oauthStates/{nonce}` → `{uid, createdAt}`;
+  `pendingConnections/{token}` → `{uid, refreshToken, createdAt}`, parked
+  tokens awaiting an authenticated completion. Server only; each redeemed
+  once, within ten minutes.
 
 Schemas live in `packages/core/src/schema.ts`; paths in `paths.ts`.
 
@@ -107,12 +110,23 @@ daily by Cloud Scheduler, renews those within two days of expiry. A history
 id that has aged out logs a warning and resets to the notification's id; the
 user can run a backfill to fill any gap.
 
+## Connecting Gmail
+
+Google returns the browser to the parser with no Travelmo credentials, so the
+callback alone cannot know who is completing the flow. The parser parks the
+tokens under a one-time code and sends the browser to the web app, which, as
+the signed-in user, redeems the code; the parser accepts only when that user
+started the flow. A link forwarded to someone else therefore cannot attach
+their mailbox to the sender's account. A mailbox connected to one user is
+refused to any other until the first disconnects.
+
 ## HTTP surface of the parser
 
 | Route | Auth | Purpose |
 |---|---|---|
 | `POST /gmail/connect` | Firebase ID token | Returns the Google OAuth URL; stores a nonce for 10 minutes |
-| `GET /gmail/callback` | OAuth state | Exchanges the code, starts the watch, stores the connection, redirects to `/settings` |
+| `GET /gmail/callback` | OAuth state | Exchanges the code, parks the refresh token under a one-time completion token, redirects to `/settings?gmail=pending&state=…` |
+| `POST /gmail/complete` | Firebase ID token | Redeems the completion token; refuses (and revokes) if the caller is not the user who started the flow or the mailbox belongs to another user; starts the watch and stores the connection |
 | `POST /gmail/backfill` | Firebase ID token | Imports past bookings; returns counts per outcome |
 | `POST /gmail/disconnect` | Firebase ID token | Stops the watch, revokes the token, deletes the connection |
 | `POST /internal/pubsub/gmail` | OIDC from `INTERNAL_CALLERS` | Pub/Sub push target |

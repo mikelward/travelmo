@@ -81,5 +81,8 @@ service cloud.firestore {
     match /oauthStates/{nonce} {
       allow read, write: if false;
     }
+    match /pendingConnections/{token} {
+      allow read, write: if false;
+    }
   }
 }

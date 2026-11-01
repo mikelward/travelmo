@@ -144,5 +144,6 @@ describe("server-only collections", () => {
   it("are unreadable and unwritable by clients", async () => {
     await assertFails(getDoc(doc(as(owner), paths.gmailAccount(owner.email))));
     await assertFails(setDoc(doc(as(owner), paths.oauthState("nonce")), { uid: owner.uid }));
+    await assertFails(getDoc(doc(as(owner), paths.pendingConnection("token"))));
   });
 });
