@@ -9,6 +9,12 @@ export class MailboxConflict extends Error {
   }
 }
 
+export class OtherMailboxConnected extends Error {
+  constructor(public readonly emailAddress: string) {
+    super(`${emailAddress} is still connected; disconnect it first`);
+  }
+}
+
 type OAuthState = { uid: string; createdAt: string };
 export type PendingConnection = { uid: string; refreshToken: string; createdAt: string };
 
@@ -59,24 +65,37 @@ function publicPart(state: GmailState): GmailConnection {
   return connection;
 }
 
-// A mailbox routes notifications to exactly one user; a second user trying
-// to connect it is refused rather than silently taking it over.
+// A mailbox routes notifications to exactly one user, and a user holds one
+// mailbox: a second user is refused rather than silently taking it over, and
+// a user with another mailbox still connected must disconnect it first (the
+// caller does that before retrying, so a concurrent completion cannot leave
+// the old mapping behind).
 export async function saveConnection(db: Firestore, uid: string, state: GmailState): Promise<void> {
   await db.runTransaction(async (t) => {
     const accountRef = db.doc(paths.gmailAccount(state.emailAddress));
-    const owner = (await t.get(accountRef)).data()?.uid as string | undefined;
+    const stateRef = db.doc(paths.gmailState(uid));
+    const [account, current] = await Promise.all([t.get(accountRef), t.get(stateRef)]);
+    const owner = account.data()?.uid as string | undefined;
     if (owner !== undefined && owner !== uid) throw new MailboxConflict(state.emailAddress);
-    t.set(db.doc(paths.gmailState(uid)), state);
+    const existing = current.exists ? GmailState.parse(current.data()) : undefined;
+    if (existing && existing.emailAddress !== state.emailAddress) throw new OtherMailboxConnected(existing.emailAddress);
+    t.set(stateRef, state);
     t.set(db.doc(paths.user(uid)), { gmail: publicPart(state) }, { merge: true });
     t.set(accountRef, { uid });
   });
 }
 
-export async function updateWatch(db: Firestore, uid: string, state: GmailState): Promise<void> {
-  const batch = db.batch();
-  batch.set(db.doc(paths.gmailState(uid)), state);
-  batch.set(db.doc(paths.user(uid)), { gmail: publicPart(state) }, { merge: true });
-  await batch.commit();
+// Renewal only moves the expiry of a connection that still exists; a user who
+// disconnected while Gmail was answering must not come back as connected.
+export async function updateWatch(db: Firestore, uid: string, emailAddress: string, watchExpiration: string): Promise<boolean> {
+  return db.runTransaction(async (t) => {
+    const stateRef = db.doc(paths.gmailState(uid));
+    const snap = await t.get(stateRef);
+    if (!snap.exists || GmailState.parse(snap.data()).emailAddress !== emailAddress) return false;
+    t.update(stateRef, { watchExpiration });
+    t.set(db.doc(paths.user(uid)), { gmail: { watchExpiration } }, { merge: true });
+    return true;
+  });
 }
 
 export async function removeConnection(db: Firestore, uid: string, emailAddress: string): Promise<void> {

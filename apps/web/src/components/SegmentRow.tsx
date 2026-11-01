@@ -1,4 +1,4 @@
-import { localTime, type Segment, type SegmentType } from "@travelmo/core";
+import { formatDate, localDate, localTime, type Segment, type SegmentType } from "@travelmo/core";
 
 const labels: Record<SegmentType, string> = {
   flight: "Flight",
@@ -16,12 +16,21 @@ function place(p: Segment["origin"]): string | undefined {
   return p.code ? `${p.code} ${p.city ?? p.name}` : p.city ?? p.name;
 }
 
+// The row sits under its start day's heading, so an end on another day
+// carries its date.
+function endLabel(segment: Segment): string | undefined {
+  if (!segment.end) return undefined;
+  const time = localTime(segment.end);
+  return localDate(segment.end) === localDate(segment.start) ? time : `${formatDate(localDate(segment.end))} ${time}`;
+}
+
 export function SegmentRow({ segment }: { segment: Segment }) {
   const route = [place(segment.origin), place(segment.destination)].filter(Boolean).join(" → ");
+  const end = endLabel(segment);
   const times =
     segment.type === "lodging"
-      ? `Check-in ${localTime(segment.start)}${segment.end ? ` · Check-out ${localTime(segment.end)}` : ""}`
-      : `${localTime(segment.start)}${segment.end ? ` – ${localTime(segment.end)}` : ""}`;
+      ? `Check-in ${localTime(segment.start)}${end ? ` · Check-out ${end}` : ""}`
+      : `${localTime(segment.start)}${end ? ` – ${end}` : ""}`;
   return (
     <li className="flex gap-4 py-3">
       <span className="w-16 shrink-0 text-xs font-medium uppercase tracking-wide text-zinc-500">{labels[segment.type]}</span>
