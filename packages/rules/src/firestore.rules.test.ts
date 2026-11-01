@@ -70,6 +70,12 @@ describe("trips", () => {
     await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), paths.trip(trip.id))));
   });
 
+  it("lets a signed-in user see that a trip is missing, but not an anonymous one", async () => {
+    const snap = await assertSucceeds(getDoc(doc(as(stranger), paths.trip("nope"))));
+    expect(snap.exists()).toBe(false);
+    await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), paths.trip("nope"))));
+  });
+
   it("sharing requires a verified email", async () => {
     await assertFails(getDoc(doc(as(partner, false), paths.trip(trip.id))));
   });

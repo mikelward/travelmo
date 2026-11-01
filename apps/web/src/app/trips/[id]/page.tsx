@@ -53,7 +53,7 @@ function Title({ trip, canEdit }: { trip: Trip; canEdit: boolean }) {
     event.preventDefault();
     if (!title.trim()) return setError("Give the trip a name");
     try {
-      await renameTrip(trip.id, title);
+      await renameTrip(firestore(), trip.id, title);
       setEditing(false);
       setError(undefined);
     } catch (e) {
@@ -135,15 +135,34 @@ function Sharing({ trip }: { trip: Trip }) {
 function DangerZone({ trip }: { trip: Trip }) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const remove = async () => {
+    setBusy(true);
     try {
-      await deleteTrip(trip.id);
+      await deleteTrip(firestore(), trip.id);
       router.replace("/");
     } catch (e) {
       setError((e as Error).message);
+      setBusy(false);
     }
   };
+  if (trip.deleting) {
+    return (
+      <section className="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-700 dark:bg-amber-950">
+        <p>Deleting this trip was interrupted. Its bookings can no longer be changed.</p>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={remove}
+          className="mt-3 rounded-lg bg-red-600 px-3 py-1.5 font-medium text-white disabled:opacity-50"
+        >
+          {busy ? "Deleting…" : "Finish deleting"}
+        </button>
+        {error && <p className="mt-2 text-red-600">{error}</p>}
+      </section>
+    );
+  }
   return (
     <section className="mt-10 border-t border-zinc-200 pt-6 dark:border-zinc-800">
       {!confirming ? (
@@ -153,8 +172,8 @@ function DangerZone({ trip }: { trip: Trip }) {
       ) : (
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <span>Delete “{trip.title}” and all its bookings? This cannot be undone.</span>
-          <button type="button" onClick={remove} className="rounded-lg bg-red-600 px-3 py-1.5 font-medium text-white">
-            Delete
+          <button type="button" disabled={busy} onClick={remove} className="rounded-lg bg-red-600 px-3 py-1.5 font-medium text-white disabled:opacity-50">
+            {busy ? "Deleting…" : "Delete"}
           </button>
           <button type="button" onClick={() => setConfirming(false)} className={buttonClass}>
             Keep
@@ -176,22 +195,25 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   if (trip === undefined) return <p className="text-zinc-500">Loading…</p>;
   if (trip === null) return <p className="text-zinc-500">This trip does not exist or is not shared with you.</p>;
   const isOwner = trip.ownerUid === user.uid;
+  const canEdit = isOwner && !trip.deleting;
 
-  const save = async (extracted: Parameters<typeof saveSegment>[1]) => {
-    await saveSegment(trip.id, extracted, editing?.kind === "edit" ? editing.segment : undefined);
+  const save = async (extracted: Parameters<typeof saveSegment>[2]) => {
+    await saveSegment(firestore(), trip.id, extracted, editing?.kind === "edit" ? editing.segment : undefined);
     setEditing(undefined);
   };
-  const remove = (segment: Segment) => deleteSegment(trip.id, segment.id).catch((e: Error) => setError(e.message));
+  const remove = (segment: Segment) =>
+    deleteSegment(firestore(), trip.id, segment.id).catch((e: Error) => setError(e.message));
 
   return (
     <>
       <Link href="/" className="text-sm text-zinc-500 hover:underline">
         ← All trips
       </Link>
-      <Title trip={trip} canEdit={isOwner} />
+      <Title trip={trip} canEdit={canEdit} />
       <p className="mt-1 text-zinc-600 dark:text-zinc-400">{formatDateRange(trip.start, trip.end)}</p>
+      {isOwner && trip.deleting && <DangerZone trip={trip} />}
 
-      {isOwner && !editing && (
+      {canEdit && !editing && (
         <button type="button" onClick={() => setEditing({ kind: "add" })} className={`${buttonClass} mt-4`}>
           Add a booking
         </button>
@@ -222,7 +244,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
                   <SegmentRow
                     key={segment.id}
                     segment={segment}
-                    {...(isOwner
+                    {...(canEdit
                       ? { onEdit: () => setEditing({ kind: "edit", segment }), onDelete: () => remove(segment) }
                       : {})}
                   />
@@ -232,8 +254,8 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
           </section>
         ))}
 
-      {isOwner && <Sharing trip={trip} />}
-      {isOwner && <DangerZone trip={trip} />}
+      {canEdit && <Sharing trip={trip} />}
+      {canEdit && <DangerZone trip={trip} />}
     </>
   );
 }

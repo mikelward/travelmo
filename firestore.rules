@@ -33,7 +33,9 @@ service cloud.firestore {
     }
 
     match /trips/{tripId} {
-      allow read: if signedIn() && (isOwner(resource.data) || isSharee(resource.data));
+      // A missing trip reads as absent rather than forbidden, so a client can
+      // tell a deleted trip from one it may not see.
+      allow read: if signedIn() && (resource == null || isOwner(resource.data) || isSharee(resource.data));
       allow create: if signedIn()
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.id == tripId
