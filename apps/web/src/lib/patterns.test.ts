@@ -3,7 +3,7 @@ import { paths } from "@travelmo/core";
 import { doc, getDoc, type Firestore } from "firebase/firestore";
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { domainOf, isListed, learnSender } from "./patterns";
+import { domainOf, effectiveDecision, isListed, learnSender } from "./patterns";
 
 let env: RulesTestEnvironment;
 const owner = { uid: "owner", email: "owner@example.com" };
@@ -47,6 +47,28 @@ describe("learnSender", () => {
     await learnSender(db, owner.uid, "cove.example", "allow");
     await learnSender(db, owner.uid, "mail.cove.example", "deny");
     expect((await getDoc(doc(db, paths.senderPatterns(owner.uid)))).data()).toEqual({ allow: [], deny: ["mail.cove.example"] });
+  });
+});
+
+describe("effectiveDecision", () => {
+  it("lets a child-domain denial beat a parent-domain allowance, as the parser does", () => {
+    const patterns = { allow: ["cove.example"], deny: ["mail.cove.example"] };
+    expect(effectiveDecision(patterns, "mail.cove.example")).toBe("deny");
+    expect(effectiveDecision(patterns, "stay.cove.example")).toBe("allow");
+    expect(effectiveDecision(patterns, "other.example")).toBeUndefined();
+    expect(effectiveDecision(undefined, "cove.example")).toBeUndefined();
+  });
+
+  it("is reversed by learning the sender again", async () => {
+    const db = asOwner();
+    await learnSender(db, owner.uid, "mail.cove.example", "deny");
+    await learnSender(db, owner.uid, "cove.example", "allow");
+    const before = (await getDoc(doc(db, paths.senderPatterns(owner.uid)))).data();
+    expect(effectiveDecision(before as never, "mail.cove.example")).toBe("deny");
+    await learnSender(db, owner.uid, "mail.cove.example", "allow");
+    const after = (await getDoc(doc(db, paths.senderPatterns(owner.uid)))).data();
+    expect(after).toEqual({ allow: ["cove.example", "mail.cove.example"], deny: [] });
+    expect(effectiveDecision(after as never, "mail.cove.example")).toBe("allow");
   });
 });
 
