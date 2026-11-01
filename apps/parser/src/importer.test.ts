@@ -1,0 +1,129 @@
+import type { ExtractedBooking, ParsedMessage, Segment, Trip } from "@travelmo/core";
+import type { EmailMessage } from "./gmail";
+import { importMessage, tripTitle, type ImportDeps, type TripStore } from "./importer";
+
+function memoryStore(): TripStore & { trips: Map<string, Trip>; segments: Map<string, Segment>; parsed: Map<string, ParsedMessage> } {
+  const trips = new Map<string, Trip>();
+  const segments = new Map<string, Segment>();
+  const parsed = new Map<string, ParsedMessage>();
+  let ids = 0;
+  return {
+    trips,
+    segments,
+    parsed,
+    getParsed: async (uid, id) => parsed.get(`${uid}/${id}`),
+    setParsed: async (r) => void parsed.set(`${r.uid}/${r.messageId}`, r),
+    listTrips: async (uid) => [...trips.values()].filter((t) => t.ownerUid === uid),
+    putTrip: async (t) => void trips.set(t.id, t),
+    putSegment: async (s) => void segments.set(s.id, s),
+    senderPatterns: async () => ({ allow: [], deny: [] }),
+    newId: () => `trip${++ids}`,
+  };
+}
+
+const email = (over: Partial<EmailMessage> = {}): EmailMessage => ({
+  id: "m1",
+  threadId: "t1",
+  from: "Cove <stay@cove.example>",
+  subject: "Your booking confirmation - Cove Liverpool",
+  date: "Mon, 1 Nov 2026 10:00:00 +0000",
+  listUnsubscribe: false,
+  text: "Check-in 12 Dec, check-out 14 Dec",
+  ...over,
+});
+
+const lodging: ExtractedBooking = {
+  isBooking: true,
+  segments: [
+    {
+      type: "lodging",
+      title: "Cove Liverpool",
+      start: "2026-12-12T15:00:00+00:00",
+      end: "2026-12-14T11:00:00+00:00",
+      destination: { name: "Cove Liverpool", city: "Liverpool", country: "GB" },
+    },
+  ],
+};
+
+function deps(store: TripStore, extract: ImportDeps["extract"]): ImportDeps {
+  return { store, extract, now: () => "2026-11-01T12:00:00Z", log: () => {} };
+}
+
+describe("importMessage", () => {
+  it("creates a trip and segment from a booking email", async () => {
+    const store = memoryStore();
+    const outcome = await importMessage("u1", email(), deps(store, async () => lodging));
+    expect(outcome).toBe("imported");
+    const trip = [...store.trips.values()][0]!;
+    expect(trip).toMatchObject({ title: "Liverpool", start: "2026-12-12", end: "2026-12-14", ownerUid: "u1" });
+    expect([...store.segments.values()][0]).toMatchObject({ id: "m1-0", tripId: trip.id, source: "gmail", gmailMessageIds: ["m1"] });
+    expect(store.parsed.get("u1/m1")).toMatchObject({ outcome: "imported", segmentIds: ["m1-0"] });
+  });
+
+  it("skips a message already processed and does not call the extractor", async () => {
+    const store = memoryStore();
+    const extract = vi.fn(async () => lodging);
+    await importMessage("u1", email(), deps(store, extract));
+    expect(await importMessage("u1", email(), deps(store, extract))).toBe("skipped");
+    expect(extract).toHaveBeenCalledTimes(1);
+  });
+
+  it("records a filtered message without calling the extractor", async () => {
+    const store = memoryStore();
+    const extract = vi.fn(async () => lodging);
+    const outcome = await importMessage("u1", email({ from: "friend@example.com", subject: "Lunch?" }), deps(store, extract));
+    expect(outcome).toBe("filtered");
+    expect(extract).not.toHaveBeenCalled();
+    expect(store.parsed.get("u1/m1")?.outcome).toBe("filtered");
+  });
+
+  it("extends an existing trip when the booking falls within its gap", async () => {
+    const store = memoryStore();
+    await importMessage("u1", email(), deps(store, async () => lodging));
+    const flight: ExtractedBooking = {
+      isBooking: true,
+      segments: [
+        {
+          type: "flight",
+          title: "FR 123 MAN to DUB",
+          start: "2026-12-15T08:00:00+00:00",
+          end: "2026-12-15T09:00:00+00:00",
+          origin: { name: "Manchester", code: "MAN", country: "GB" },
+          destination: { name: "Dublin", code: "DUB", city: "Dublin", country: "IE" },
+        },
+      ],
+    };
+    await importMessage("u1", email({ id: "m2", subject: "Your Ryanair itinerary" }), deps(store, async () => flight));
+    expect(store.trips.size).toBe(1);
+    expect([...store.trips.values()][0]).toMatchObject({ start: "2026-12-12", end: "2026-12-15" });
+    expect(store.segments.get("m2-0")?.tripId).toBe("trip1");
+  });
+
+  it("records not_booking when the model says so", async () => {
+    const store = memoryStore();
+    const outcome = await importMessage("u1", email(), deps(store, async () => ({ isBooking: false, segments: [] })));
+    expect(outcome).toBe("not_booking");
+    expect(store.trips.size).toBe(0);
+  });
+
+  it("records a failure when extraction throws, so the message is not retried forever", async () => {
+    const store = memoryStore();
+    const outcome = await importMessage(
+      "u1",
+      email(),
+      deps(store, async () => {
+        throw new Error("quota");
+      }),
+    );
+    expect(outcome).toBe("failed");
+    expect(store.parsed.get("u1/m1")).toMatchObject({ outcome: "failed", reason: "quota" });
+  });
+});
+
+describe("tripTitle", () => {
+  it("prefers the destination city, then its name, then the segment title", () => {
+    expect(tripTitle(lodging.segments)).toBe("Liverpool");
+    expect(tripTitle([{ type: "activity", title: "Museum", start: "2026-01-01T10:00:00Z", destination: { name: "Tate" } }])).toBe("Tate");
+    expect(tripTitle([{ type: "other", title: "Thing", start: "2026-01-01T10:00:00Z" }])).toBe("Thing");
+  });
+});
