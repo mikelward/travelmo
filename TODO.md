@@ -22,6 +22,8 @@
       read-only for them).
 - [ ] Offer a timezone picker instead of a raw UTC offset when adding a
       booking by hand; derive it from the airport code where possible.
+- [ ] "Fit dates to bookings" on a trip: bounds only ever widen today, so
+      deleting the last booking of a trip leaves its dates where they were.
 - [ ] Embedding pre-filter: score candidate emails against bookings the
       user confirmed, between the keyword check and the model call.
 - [ ] "Learn this sender" from a trip page, feeding the allow list; a

@@ -53,7 +53,7 @@ function Title({ trip, canEdit }: { trip: Trip; canEdit: boolean }) {
     event.preventDefault();
     if (!title.trim()) return setError("Give the trip a name");
     try {
-      await renameTrip(trip, title);
+      await renameTrip(trip.id, title);
       setEditing(false);
       setError(undefined);
     } catch (e) {
@@ -138,7 +138,7 @@ function DangerZone({ trip }: { trip: Trip }) {
   const [error, setError] = useState<string>();
   const remove = async () => {
     try {
-      await deleteTrip(trip);
+      await deleteTrip(trip.id);
       router.replace("/");
     } catch (e) {
       setError((e as Error).message);
@@ -177,12 +177,11 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   if (trip === null) return <p className="text-zinc-500">This trip does not exist or is not shared with you.</p>;
   const isOwner = trip.ownerUid === user.uid;
 
-  const save = async (extracted: Parameters<typeof saveSegment>[2]) => {
-    await saveSegment(trip, segments ?? [], extracted, editing?.kind === "edit" ? editing.segment : undefined);
+  const save = async (extracted: Parameters<typeof saveSegment>[1]) => {
+    await saveSegment(trip.id, extracted, editing?.kind === "edit" ? editing.segment : undefined);
     setEditing(undefined);
   };
-  const remove = (segment: Segment) =>
-    deleteSegment(trip, segments ?? [], segment).catch((e: Error) => setError(e.message));
+  const remove = (segment: Segment) => deleteSegment(trip.id, segment.id).catch((e: Error) => setError(e.message));
 
   return (
     <>

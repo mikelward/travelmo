@@ -1,4 +1,4 @@
-import type { ExtractedSegment, Trip } from "./schema";
+import type { ExtractedSegment, Place, Trip } from "./schema";
 
 export type TripGroups = {
   current: Trip[];
@@ -40,6 +40,16 @@ export function segmentDateRange(
     }
   }
   return start !== undefined && end !== undefined ? { start, end } : undefined;
+}
+
+// A form edits a place's name and code; whatever else an import recorded
+// about it (city, country) survives until the name is cleared.
+export function mergePlace(existing: Place | undefined, name: string, code: string): Place | undefined {
+  const trimmedName = name.trim();
+  if (!trimmedName) return undefined;
+  const trimmedCode = code.trim().toUpperCase();
+  const { code: _oldCode, ...rest } = existing ?? { name: trimmedName };
+  return { ...rest, name: trimmedName, ...(trimmedCode ? { code: trimmedCode } : {}) };
 }
 
 export function daysBetween(start: string, end: string): number {
