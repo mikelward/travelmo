@@ -24,7 +24,15 @@ function endLabel(segment: Segment): string | undefined {
   return localDate(segment.end) === localDate(segment.start) ? time : `${formatDate(localDate(segment.end))} ${time}`;
 }
 
-export function SegmentRow({ segment }: { segment: Segment }) {
+export function SegmentRow({
+  segment,
+  onEdit,
+  onDelete,
+}: {
+  segment: Segment;
+  onEdit?: () => void;
+  onDelete?: () => void;
+}) {
   const route = [place(segment.origin), place(segment.destination)].filter(Boolean).join(" → ");
   const end = endLabel(segment);
   const times =
@@ -43,7 +51,22 @@ export function SegmentRow({ segment }: { segment: Segment }) {
             {[segment.provider, segment.confirmation && `Ref ${segment.confirmation}`].filter(Boolean).join(" · ")}
           </p>
         )}
+        {segment.notes && <p className="mt-1 whitespace-pre-line text-xs text-zinc-500">{segment.notes}</p>}
       </div>
+      {(onEdit || onDelete) && (
+        <div className="flex shrink-0 gap-3 self-start text-xs text-zinc-500">
+          {onEdit && (
+            <button type="button" onClick={onEdit} className="hover:underline">
+              Edit
+            </button>
+          )}
+          {onDelete && (
+            <button type="button" onClick={onDelete} className="hover:underline">
+              Delete
+            </button>
+          )}
+        </div>
+      )}
     </li>
   );
 }

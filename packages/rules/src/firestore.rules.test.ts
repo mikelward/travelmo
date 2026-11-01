@@ -120,6 +120,25 @@ describe("segments", () => {
     await assertSucceeds(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { title: "Renamed" }));
     await assertFails(updateDoc(doc(as(partner), paths.segment(trip.id, segment.id)), { title: "Renamed" }));
   });
+
+  it("owner can add a well-formed manual segment and delete one", async () => {
+    const manual: Segment = { ...segment, id: "s2", source: "manual", gmailMessageIds: [], end: undefined } as Segment;
+    delete (manual as { end?: string }).end;
+    await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s2")), manual));
+    await assertFails(setDoc(doc(as(partner), paths.segment(trip.id, "s3")), { ...manual, id: "s3" }));
+    await assertSucceeds(deleteDoc(doc(as(owner), paths.segment(trip.id, "s2"))));
+    await assertFails(deleteDoc(doc(as(partner), paths.segment(trip.id, segment.id))));
+  });
+
+  it("rejects malformed segments", async () => {
+    const at = (id: string) => doc(as(owner), paths.segment(trip.id, id));
+    await assertFails(setDoc(at("bad1"), { ...segment, id: "bad1", type: "spaceship" }));
+    await assertFails(setDoc(at("bad2"), { ...segment, id: "other" }));
+    await assertFails(setDoc(at("bad3"), { ...segment, id: "bad3", tripId: "t9" }));
+    await assertFails(setDoc(at("bad4"), { ...segment, id: "bad4", start: "tomorrow" }));
+    await assertFails(setDoc(at("bad5"), { ...segment, id: "bad5", extra: 1 }));
+    await assertFails(setDoc(at("bad6"), { ...segment, id: "bad6", title: "" }));
+  });
 });
 
 describe("users", () => {

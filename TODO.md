@@ -17,9 +17,11 @@
 
 ## Product
 
-- [ ] Add and edit segments by hand; delete a trip; rename a trip.
+- [x] Add and edit segments by hand; delete a trip; rename a trip.
 - [ ] Let sharees add segments (rules currently make shared trips
       read-only for them).
+- [ ] Offer a timezone picker instead of a raw UTC offset when adding a
+      booking by hand; derive it from the airport code where possible.
 - [ ] Embedding pre-filter: score candidate emails against bookings the
       user confirmed, between the keyword check and the model call.
 - [ ] "Learn this sender" from a trip page, feeding the allow list; a
