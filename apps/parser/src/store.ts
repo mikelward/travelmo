@@ -17,6 +17,9 @@ export function firestoreStore(db: Firestore): TripStore {
     async setParsed(record) {
       await db.doc(paths.parsedMessage(record.uid, record.messageId)).set(record);
     },
+    async forgetMessage(uid, messageId) {
+      await db.doc(paths.parsedMessage(uid, messageId)).delete();
+    },
     async withUserLock(uid, fn) {
       // Every import reads and writes this document, so two transactions
       // for one user conflict and the later one retries against fresh trips.

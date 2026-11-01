@@ -25,10 +25,12 @@
       From/To (needs an airport dataset).
 - [x] "Fit dates to bookings" on a trip, offered when its bookings span
       less than its dates.
+- [x] "Learn this sender" from a trip page and from an import review list
+      in Settings, with "import anyway".
 - [ ] Embedding pre-filter: score candidate emails against bookings the
-      user confirmed, between the keyword check and the model call.
-- [ ] "Learn this sender" from a trip page, feeding the allow list; a
-      review queue for `not_booking` and `failed` outcomes.
+      user confirmed (the review list's decisions), between the keyword
+      check and the model call. Weigh the model dependency's size on the
+      Cloud Run image first.
 - [ ] Merge trips and move segments between them.
 - [ ] Surface check-in/check-out and boarding times on the trip list.
 - [ ] Dead-letter topic on the Pub/Sub push subscription and an alert on

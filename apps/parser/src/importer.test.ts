@@ -47,6 +47,7 @@ function memoryStore(): Memory {
       return true;
     },
     setParsed: async (r) => void parsed.set(`${r.uid}/${r.messageId}`, r),
+    forgetMessage: async (uid, id) => void parsed.delete(`${uid}/${id}`),
     withUserLock: (uid, fn) => {
       const run = (locks.get(uid) ?? Promise.resolve()).then(() => fn(tx));
       locks.set(uid, run.catch(() => undefined));
@@ -106,8 +107,31 @@ describe("importMessage", () => {
     expect(outcome).toBe("imported");
     const trip = [...store.trips.values()][0]!;
     expect(trip).toMatchObject({ title: "Liverpool", start: "2026-12-12", end: "2026-12-14", ownerUid: "u1" });
-    expect([...store.segments.values()][0]).toMatchObject({ id: "m1-0", tripId: trip.id, source: "gmail", gmailMessageIds: ["m1"] });
-    expect(store.parsed.get("u1/m1")).toMatchObject({ outcome: "imported", segmentIds: ["m1-0"] });
+    expect([...store.segments.values()][0]).toMatchObject({
+      id: "m1-0",
+      tripId: trip.id,
+      source: "gmail",
+      gmailMessageIds: ["m1"],
+      sender: "cove.example",
+    });
+    expect(store.parsed.get("u1/m1")).toMatchObject({
+      outcome: "imported",
+      segmentIds: ["m1-0"],
+      from: "Cove <stay@cove.example>",
+      subject: "Your booking confirmation - Cove Liverpool",
+    });
+  });
+
+  it("imports a filtered message when the user asks for it, after the record is forgotten", async () => {
+    const store = memoryStore();
+    const extract = vi.fn(async () => lodging);
+    const lunch = email({ from: "friend@example.com", subject: "Lunch?" });
+    expect(await importMessage("u1", lunch, deps(store, extract))).toBe("filtered");
+    expect(store.parsed.get("u1/m1")).toMatchObject({ outcome: "filtered", from: "friend@example.com", subject: "Lunch?" });
+    await store.forgetMessage("u1", "m1");
+    expect(await importMessage("u1", lunch, deps(store, extract), { force: true })).toBe("imported");
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect(store.parsed.get("u1/m1")?.outcome).toBe("imported");
   });
 
   it("skips a message already processed and does not call the extractor", async () => {

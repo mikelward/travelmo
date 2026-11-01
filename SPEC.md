@@ -32,18 +32,19 @@ viewer's zone. Trip bounds are calendar dates.
   `deleting` marks a trip whose segments are being removed.
 - `trips/{tripId}/segments/{segmentId}` — `type` (flight, train, bus, ferry,
   lodging, car_rental, activity, other), `title, provider, confirmation,
-  start, end, origin, destination, notes, source, gmailMessageIds[]`.
-  Imported segments use the id `<gmailMessageId>-<index>` so a re-import
-  overwrites rather than duplicates.
+  start, end, origin, destination, notes, source, gmailMessageIds[], sender`
+  (the booking email's domain). Imported segments use the id
+  `<gmailMessageId>-<index>` so a re-import overwrites rather than duplicates.
 - `users/{uid}` — `email, displayName, photoURL, gmail {emailAddress,
   connectedAt, watchExpiration, historyId}`. `gmail` is server-written.
 - `users/{uid}/settings/patterns` — `allow[], deny[]` sender domains.
 - `users/{uid}/parsedMessages/{gmailMessageId}` — `outcome` (processing,
-  filtered, not_booking, imported, failed), `reason, segmentIds[],
-  processedAt`. Claimed atomically as `processing` before any work, so a
-  message delivered twice is imported once; a `processing` claim older than
-  fifteen minutes is a dead worker's and may be taken over. Also the audit
-  trail of what the LLM was shown.
+  filtered, not_booking, imported, failed), `reason, from, subject,
+  segmentIds[], processedAt`. Claimed atomically as `processing` before any
+  work, so a message delivered twice is imported once; a `processing` claim
+  older than fifteen minutes is a dead worker's and may be taken over. Also
+  the audit trail of what the LLM was shown, and the source of the review
+  list in Settings.
 - `users/{uid}/private/gmail` — the refresh token and watch state. Server
   only. `users/{uid}/private/import` is read and written by every import
   transaction, serializing trip assignment per user.
@@ -130,8 +131,14 @@ Gmail ─watch─▶ Pub/Sub ─push(OIDC)─▶ parser /internal/pubsub/gmail
 Cost control is the pre-filter plus the parsed-message record: an email is
 shown to the model at most once, and only when it carries a booking signal.
 The seed sender list is in `apps/parser/src/prefilter.ts`; users extend it
-from Settings. The embedding-based pre-filter from the original brief is a
-later step and would sit between the keyword check and the model call.
+from Settings, where an "Import review" list shows recent emails that did
+not become bookings with three actions: always import that sender, never
+import it, or import this one anyway (`POST /gmail/reimport`, which forgets
+the earlier record and runs the import with the pre-filter skipped). A trip
+page offers "Always import this sender" on imported bookings. The
+embedding-based pre-filter from the original brief is a later step and
+would sit between the keyword check and the model call, seeded by those
+confirmations.
 
 Backfill (`POST /gmail/backfill`) runs the same path over a Gmail search
 limited to the last three years and booking-like subjects, capped at 300
@@ -160,6 +167,7 @@ refused to any other until the first disconnects.
 | `GET /gmail/callback` | OAuth state | Exchanges the code, parks the refresh token under a one-time completion token, redirects to `/settings?gmail=pending&state=…` |
 | `POST /gmail/complete` | Firebase ID token | Redeems the completion token; refuses (and revokes) if the caller is not the user who started the flow or the mailbox belongs to another user; starts the watch and stores the connection |
 | `POST /gmail/backfill` | Firebase ID token | Imports past bookings; returns counts per outcome |
+| `POST /gmail/reimport` | Firebase ID token | Imports one message again, skipping the pre-filter; returns its outcome |
 | `POST /gmail/disconnect` | Firebase ID token | Stops the watch, revokes the token, deletes the connection |
 | `POST /internal/pubsub/gmail` | OIDC from `INTERNAL_CALLERS` | Pub/Sub push target |
 | `POST /internal/renew-watches` | OIDC from `INTERNAL_CALLERS` | Cloud Scheduler target |

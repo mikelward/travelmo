@@ -1,10 +1,11 @@
 "use client";
 
-import { Segment, SenderPatterns, Trip, UserProfile, paths } from "@travelmo/core";
+import { ParsedMessage, Segment, SenderPatterns, Trip, UserProfile, paths } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import {
   collection,
   doc,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -103,6 +104,20 @@ export function useProfile(uid: string): UserProfile | undefined {
     );
   }, [uid]);
   return profile;
+}
+
+// The most recent import decisions, newest first; the caller filters by
+// outcome so no composite index is needed.
+export function useParsedMessages(uid: string, max = 100): ParsedMessage[] | undefined {
+  const [records, setRecords] = useState<ParsedMessage[]>();
+  useEffect(() => {
+    return onSnapshot(
+      query(collection(firestore(), `${paths.user(uid)}/parsedMessages`), orderBy("processedAt", "desc"), limit(max)),
+      (s) => setRecords(parseDocs(ParsedMessage, s)),
+      (error) => console.error("Parsed messages subscription failed", error),
+    );
+  }, [uid, max]);
+  return records;
 }
 
 export function useSenderPatterns(uid: string): SenderPatterns | undefined {

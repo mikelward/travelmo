@@ -8,7 +8,7 @@ import {
 } from "@travelmo/core";
 import type { Extractor } from "./extract";
 import { isNotFound, type EmailMessage } from "./gmail";
-import { prefilter, type SenderPatterns } from "./prefilter";
+import { prefilter, senderDomain, type SenderPatterns } from "./prefilter";
 
 export type TripBounds = Pick<Trip, "start" | "end" | "updatedAt">;
 
@@ -35,6 +35,9 @@ export type TripStore = {
   // message import it once while an abandoned claim can be retried.
   claimMessage(uid: string, messageId: string, processedAt: string): Promise<boolean>;
   setParsed(record: ParsedMessage): Promise<void>;
+  // Removes the record so a message the user wants another look at can be
+  // claimed again.
+  forgetMessage(uid: string, messageId: string): Promise<void>;
   // Runs fn serialized per user, so two overlapping imports cannot both
   // decide to create a trip for the same dates.
   withUserLock<T>(uid: string, fn: (tx: TripTx) => Promise<T>): Promise<T>;
@@ -51,38 +54,61 @@ export type ImportDeps = {
 
 export type ImportOutcome = Exclude<ParsedMessage["outcome"], "processing"> | "skipped";
 
-export async function importMessage(uid: string, message: EmailMessage, deps: ImportDeps): Promise<ImportOutcome> {
+export type ImportOptions = {
+  // Skip the pre-filter: the user has asked for this message specifically.
+  force?: boolean;
+};
+
+export async function importMessage(
+  uid: string,
+  message: EmailMessage,
+  deps: ImportDeps,
+  options: ImportOptions = {},
+): Promise<ImportOutcome> {
   const { store, now, log } = deps;
   if (!(await store.claimMessage(uid, message.id, now()))) return "skipped";
+  const base = { messageId: message.id, uid, from: message.from, subject: message.subject };
+  const record = (outcome: ParsedMessage["outcome"], extra: Partial<ParsedMessage> = {}): ParsedMessage => ({
+    ...base,
+    outcome,
+    segmentIds: [],
+    processedAt: now(),
+    ...extra,
+  });
 
-  const verdict = prefilter(
-    { from: message.from, subject: message.subject, listUnsubscribe: message.listUnsubscribe },
-    await store.senderPatterns(uid),
-  );
-  if (!verdict.pass) {
-    await store.setParsed({ messageId: message.id, uid, outcome: "filtered", reason: verdict.reason, segmentIds: [], processedAt: now() });
-    log("filtered", { uid, messageId: message.id, reason: verdict.reason });
-    return "filtered";
+  let reason = "requested by user";
+  if (!options.force) {
+    const verdict = prefilter(
+      { from: message.from, subject: message.subject, listUnsubscribe: message.listUnsubscribe },
+      await store.senderPatterns(uid),
+    );
+    if (!verdict.pass) {
+      await store.setParsed(record("filtered", { reason: verdict.reason }));
+      log("filtered", { uid, messageId: message.id, reason: verdict.reason });
+      return "filtered";
+    }
+    reason = verdict.reason;
   }
 
   let booking;
   try {
     booking = await deps.extract(message);
   } catch (error) {
-    const reason = (error as Error).message;
-    await store.setParsed({ messageId: message.id, uid, outcome: "failed", reason, segmentIds: [], processedAt: now() });
-    log("extract_failed", { uid, messageId: message.id, reason });
+    const failure = (error as Error).message;
+    await store.setParsed(record("failed", { reason: failure }));
+    log("extract_failed", { uid, messageId: message.id, reason: failure });
     return "failed";
   }
 
   const range = segmentDateRange(booking.segments);
   if (!booking.isBooking || booking.segments.length === 0 || !range) {
-    await store.setParsed({ messageId: message.id, uid, outcome: "not_booking", reason: verdict.reason, segmentIds: [], processedAt: now() });
+    await store.setParsed(record("not_booking", { reason }));
     log("not_booking", { uid, messageId: message.id });
     return "not_booking";
   }
 
   const timestamp = now();
+  const sender = senderDomain(message.from);
   const { tripId, segmentIds } = await store.withUserLock(uid, async (tx) => {
     const live = (await tx.listTrips()).filter((trip) => !trip.deleting);
     const existing = findTripForRange(live, range);
@@ -115,6 +141,7 @@ export async function importMessage(uid: string, message: EmailMessage, deps: Im
         tripId,
         source: "gmail",
         gmailMessageIds: [message.id],
+        ...(sender ? { sender } : {}),
         createdAt: timestamp,
         updatedAt: timestamp,
       });
@@ -123,7 +150,7 @@ export async function importMessage(uid: string, message: EmailMessage, deps: Im
     return { tripId, segmentIds };
   });
 
-  await store.setParsed({ messageId: message.id, uid, outcome: "imported", segmentIds, processedAt: timestamp });
+  await store.setParsed(record("imported", { segmentIds, processedAt: timestamp }));
   log("imported", { uid, messageId: message.id, tripId, segments: segmentIds.length });
   return "imported";
 }

@@ -133,7 +133,7 @@ describe("segments", () => {
     await assertSucceeds(getDoc(doc(as(owner), paths.segment(trip.id, segment.id))));
     await assertSucceeds(getDocs(collection(as(partner), paths.segments(trip.id))));
     await assertFails(getDocs(collection(as(stranger), paths.segments(trip.id))));
-    await assertSucceeds(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { title: "Renamed" }));
+    await assertSucceeds(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { title: "Renamed", sender: "cove.example" }));
     await assertSucceeds(updateDoc(doc(as(partner), paths.segment(trip.id, segment.id)), { title: "Renamed by partner" }));
     await assertFails(updateDoc(doc(as(stranger), paths.segment(trip.id, segment.id)), { title: "Renamed" }));
   });
