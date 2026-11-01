@@ -30,13 +30,17 @@ pnpm lint
 pnpm build
 ```
 
-End-to-end tests drive the web app in Chromium against the Auth and Firestore
-emulators (`apps/web/e2e`):
+End-to-end tests build the web app and drive it in Chromium against the Auth
+and Firestore emulators (`apps/web/e2e`), offline reload included:
 
 ```sh
 pnpm --filter @travelmo/web exec playwright install chromium   # once
 pnpm --filter @travelmo/web test:e2e
 ```
+
+The web app's `build` script bundles the service worker (`src/sw.ts` to
+`public/sw.js`) before `next build`; the worker registers in production
+builds only, so `next dev` runs without it.
 
 Run the web app locally against a Firebase project:
 
@@ -102,8 +106,9 @@ One Google Cloud project holds everything.
    Cloud Monitoring's alerting is free at this volume.
 7. **Web** on Firebase App Hosting: connect the repository, set the root
    directory to `apps/web`, and fill in the variables in
-   `apps/web/apphosting.yaml`. Add the App Hosting domain to Authentication's
-   authorized domains.
+   `apps/web/apphosting.yaml`, whose build command runs the app's `build`
+   script so the service worker is bundled. Add the App Hosting domain to
+   Authentication's authorized domains.
 
 ## Costs
 

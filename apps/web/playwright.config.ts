@@ -3,18 +3,22 @@ import { defineConfig } from "@playwright/test";
 const port = 3100;
 
 // Runs under `firebase emulators:exec` (see the test:e2e script), which starts
-// the Auth and Firestore emulators the dev server below is pointed at.
+// the Auth and Firestore emulators the server below is pointed at. The app is
+// built and served as in production: the service worker only registers there,
+// and offline behavior is not reliable under `next dev`.
 export default defineConfig({
   testDir: "./e2e",
   timeout: 90_000,
   retries: 0,
+  // The tests share one emulator and clear it between them.
+  workers: 1,
   reporter: process.env.CI ? "github" : "list",
   use: { baseURL: `http://localhost:${port}`, trace: "retain-on-failure" },
   webServer: {
-    command: `pnpm exec next dev --port ${port}`,
+    command: `pnpm build && pnpm exec next start --port ${port}`,
     url: `http://localhost:${port}`,
     reuseExistingServer: !process.env.CI,
-    timeout: 180_000,
+    timeout: 300_000,
     env: {
       NEXT_PUBLIC_FIREBASE_API_KEY: "fake-api-key",
       NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "demo-travelmo.firebaseapp.com",

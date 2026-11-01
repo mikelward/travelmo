@@ -62,11 +62,12 @@ Pure logic lives in `packages/core` with unit tests. The parser's import
 pipeline is tested with an in-memory store, and its Firestore store and
 connection handling against the Firestore emulator. The rules have their own
 emulator tests, and the web app's mutation workflows run against the
-emulator with the real rules loaded. An end-to-end Playwright test drives the
-web app in Chromium against the Auth and Firestore emulators; when the app is
-pointed at the Auth emulator it exposes `window.travelmoTestSignIn(email)`,
-which signs in with the fake Google credential the emulator accepts, so the
-test needs no popup.
+emulator with the real rules loaded. End-to-end Playwright tests drive a
+production build of the web app in Chromium against the Auth and Firestore
+emulators, including a reload with the network cut; when the app is pointed
+at the Auth emulator it exposes `window.travelmoTestSignIn(email)`, which
+signs in with the fake Google credential the emulator accepts, so the tests
+need no popup.
 
 ## The trip list
 
@@ -106,6 +107,34 @@ The owner can merge a trip into another: every booking moves, the target
 widens, the source is deleted, and the target keeps its own sharing list.
 Both run as transactions; the merge reads the source's bookings first and
 re-reads if the source's `updatedAt` moved in between.
+
+## Offline
+
+The app is installable, and a trip opened once stays readable with no
+network. Two caches do that:
+
+- Firestore's persistent local cache (IndexedDB, shared between tabs) keeps
+  every document a listener has seen, so the trip list and any trip page
+  opened before render from it; writes made offline queue until the
+  connection returns (transactions, such as saving a booking, do not and
+  fail with a message). The cache belongs to the browser, not the account,
+  and the rules cannot reach it, so it is cleared when a different account
+  signs in than the one whose documents it holds.
+- A service worker (`apps/web/src/sw.ts`, built with Serwist into
+  `public/sw.js` by `sw.build.mjs`, which runs before `next build`) keeps the
+  pages the user has opened, their router payloads and the hashed build
+  assets, network first with the saved copy as the fallback. Cache Components
+  serve a page as a static shell whose runtime data the browser fetches
+  separately, and a soft navigation requests no document at all, so each page
+  asks the worker on mount (`useSaveForOffline`) to save its document, the
+  runtime-data request it names, and the assets the page has loaded. A page
+  never opened shows `/offline`, which the worker precaches.
+
+Next's `experimental.useOffline` holds navigations and prefetches while the
+network is down and retries them when it returns; the banner reads that hook
+and `navigator.onLine`, so a page loaded while already offline shows it too.
+The worker registers only in production builds, where assets are hashed, so
+the end-to-end tests run against `next build && next start`.
 
 ## Access rules
 

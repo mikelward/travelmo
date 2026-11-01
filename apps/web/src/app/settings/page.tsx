@@ -8,6 +8,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { SignInGate } from "@/components/SignInGate";
 import { api, type BackfillResult } from "@/lib/api";
 import { firestore } from "@/lib/firebase";
+import { useSaveForOffline } from "@/lib/offline";
 import { domainOf, effectiveDecision, learnSender } from "@/lib/patterns";
 import { useParsedMessages, useProfile, useSenderPatterns } from "@/lib/trips";
 
@@ -259,6 +260,7 @@ function ReviewSection({ user }: { user: User }) {
 }
 
 export default function SettingsPage() {
+  useSaveForOffline();
   return (
     <SignInGate>
       {(user) => (

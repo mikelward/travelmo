@@ -36,7 +36,7 @@
       trip list for trips under way and the next three upcoming.
 - [x] Dead-letter topic on the Pub/Sub push subscription and an alert on
       `renew_watch_failed`.
-- [ ] Service worker for offline trip pages (Serwist); `useOffline`.
+- [x] Service worker for offline trip pages (Serwist); `useOffline`.
 - [x] End-to-end test: emulator-backed sign-in, seeded trips, share with
       a second user who adds a booking (Playwright).
 
@@ -62,3 +62,11 @@ Guesses made on autopilot; change any of them freely.
   five delivery attempts before dead-lettering, a week of retention there,
   and two alert policies (watch renewal failed, dead letter present). The
   scripts have not been run against a project from this session.
+- Offline: the service worker is Serwist's runtime caching bundled by
+  esbuild (`@serwist/next` needs webpack; this app builds with Turbopack),
+  caching pages, router payloads and build assets as they are used rather
+  than precaching the app; the runtime-data request of a saved page is read
+  out of Next's inline `__NEXT_CLIENT_RESUME` script, a Next internal the
+  offline end-to-end test guards. Firestore's persistent cache holds the
+  data. The end-to-end tests moved from `next dev` to a production build, so
+  CI builds the web app twice.

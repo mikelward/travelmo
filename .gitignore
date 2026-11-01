@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .next/
+apps/web/public/sw.js
 out/
 coverage/
 playwright-report/

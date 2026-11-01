@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import { Nav } from "@/components/Nav";
+import { OfflineBanner } from "@/components/OfflineBanner";
+import { ServiceWorker } from "@/components/ServiceWorker";
 import { AuthProvider } from "@/lib/auth";
 import "./globals.css";
 
@@ -24,9 +26,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" className={`${geistSans.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
         <AuthProvider>
+          <OfflineBanner />
           <Nav />
           <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">{children}</main>
         </AuthProvider>
+        <ServiceWorker />
       </body>
     </html>
   );
