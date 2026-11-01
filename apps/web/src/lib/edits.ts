@@ -92,22 +92,27 @@ export async function fitTripDates(
 }
 
 // A booking keeps its id under the new trip, so an import of the same email
-// still finds it. Both trips must exist and neither may be mid-deletion; the
-// target widens to hold it, the source's dates stay (fit them afterwards).
-export async function moveSegment(db: Firestore, segment: Segment, toTripId: string): Promise<void> {
-  if (segment.tripId === toTripId) return;
-  const range = segmentDateRange([segment]);
-  if (!range) throw new Error("Segment has no dates");
+// still finds it. The booking is read inside the transaction, so an edit or
+// deletion made meanwhile is honored rather than overwritten. Both trips must
+// exist and neither may be mid-deletion; the target widens to hold it, the
+// source's dates stay (fit them afterwards).
+export async function moveSegment(db: Firestore, fromTripId: string, segmentId: string, toTripId: string): Promise<void> {
+  if (fromTripId === toTripId) return;
   const timestamp = now();
-  const fromRef = doc(db, paths.trip(segment.tripId));
+  const fromRef = doc(db, paths.trip(fromTripId));
   const toRef = doc(db, paths.trip(toTripId));
+  const segmentRef = doc(db, paths.segment(fromTripId, segmentId));
   await runTransaction(db, async (t) => {
-    const [from, to] = await Promise.all([t.get(fromRef), t.get(toRef)]);
+    const [from, to, current] = await Promise.all([t.get(fromRef), t.get(toRef), t.get(segmentRef)]);
     if (!from.exists() || !to.exists()) throw new Error("Trip no longer exists");
+    if (!current.exists()) throw new Error("That booking is no longer in this trip");
     const target = Trip.parse(to.data());
     if (Trip.parse(from.data()).deleting || target.deleting) throw new Error("This trip is being deleted");
-    t.set(doc(db, paths.segment(toTripId, segment.id)), { ...segment, tripId: toTripId, updatedAt: timestamp });
-    t.delete(doc(db, paths.segment(segment.tripId, segment.id)));
+    const segment = Segment.parse(current.data());
+    const range = segmentDateRange([segment]);
+    if (!range) throw new Error("Segment has no dates");
+    t.set(doc(db, paths.segment(toTripId, segmentId)), { ...segment, tripId: toTripId, updatedAt: timestamp });
+    t.delete(segmentRef);
     t.update(toRef, { start: min(target.start, range.start), end: max(target.end, range.end), updatedAt: timestamp });
     t.update(fromRef, { updatedAt: timestamp });
   });
