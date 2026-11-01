@@ -1,0 +1,85 @@
+rules_version = '2';
+
+// The parser worker uses the Admin SDK and bypasses these rules; they govern
+// the web and future mobile clients only.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(trip) {
+      return trip.ownerUid == request.auth.uid;
+    }
+
+    // Sharing is by verified email so no user lookup is needed.
+    function isSharee(trip) {
+      return request.auth.token.email != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in trip.sharedWith;
+    }
+
+    function isDate(value) {
+      return value is string && value.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}');
+    }
+
+    function validTrip(trip) {
+      return trip.keys().hasOnly(['id', 'title', 'start', 'end', 'ownerUid', 'sharedWith', 'createdAt', 'updatedAt'])
+        && trip.title is string && trip.title.size() > 0 && trip.title.size() <= 200
+        && isDate(trip.start) && isDate(trip.end) && trip.start <= trip.end
+        && trip.sharedWith is list && trip.sharedWith.size() <= 20
+        && trip.createdAt is string && trip.updatedAt is string;
+    }
+
+    match /trips/{tripId} {
+      allow read: if signedIn() && (isOwner(resource.data) || isSharee(resource.data));
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.id == tripId
+        && validTrip(request.resource.data);
+      allow update: if signedIn()
+        && isOwner(resource.data)
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.id == tripId
+        && validTrip(request.resource.data);
+      allow delete: if signedIn() && isOwner(resource.data);
+
+      match /segments/{segmentId} {
+        function trip() {
+          return get(/databases/$(database)/documents/trips/$(tripId)).data;
+        }
+        allow read: if signedIn() && (isOwner(trip()) || isSharee(trip()));
+        allow write: if signedIn() && isOwner(trip());
+      }
+    }
+
+    match /users/{uid} {
+      function isSelf() {
+        return signedIn() && request.auth.uid == uid;
+      }
+      // `gmail` is written by the server; clients may not forge a connection.
+      allow read: if isSelf();
+      allow create: if isSelf() && !request.resource.data.keys().hasAny(['gmail']);
+      allow update: if isSelf()
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['gmail']);
+
+      match /settings/{document} {
+        allow read, write: if isSelf();
+      }
+      match /parsedMessages/{messageId} {
+        allow read: if isSelf();
+      }
+      // Refresh tokens live here; only the Admin SDK touches it.
+      match /private/{document} {
+        allow read, write: if false;
+      }
+    }
+
+    match /gmailAccounts/{emailAddress} {
+      allow read, write: if false;
+    }
+    match /oauthStates/{nonce} {
+      allow read, write: if false;
+    }
+  }
+}

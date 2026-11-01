@@ -1,0 +1,19 @@
+{
+  "name": "@travelmo/rules",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "firebase emulators:exec --only firestore --project demo-travelmo --config ../../firebase.json 'vitest run'"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^6.0.0",
+    "@travelmo/core": "workspace:*",
+    "@types/node": "^22",
+    "firebase": "^13.1.0",
+    "firebase-tools": "^15.34.2",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.5"
+  }
+}
