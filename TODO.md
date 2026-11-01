@@ -19,8 +19,10 @@
 
 - [x] Add and edit segments by hand; delete a trip; rename a trip.
 - [x] Let sharees add, edit and delete segments.
-- [ ] Offer a timezone picker instead of a raw UTC offset when adding a
-      booking by hand; derive it from the airport code where possible.
+- [x] Offer a timezone picker instead of a raw UTC offset when adding a
+      booking by hand.
+- [ ] Preselect the time zone from the airport or station code typed into
+      From/To (needs an airport dataset).
 - [ ] "Fit dates to bookings" on a trip: bounds only ever widen today, so
       deleting the last booking of a trip leaves its dates where they were.
 - [ ] Embedding pre-filter: score candidate emails against bookings the
