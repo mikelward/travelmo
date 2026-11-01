@@ -68,14 +68,17 @@ because a client transaction cannot read every segment. Deleting a trip
 first sets `deleting: true` on it, which every segment writer (the web
 transaction, the parser's import transaction and the rules) refuses, then
 deletes its segments and finally the trip, since Firestore does not cascade.
-The trip list hides trips carrying the marker.
+Each step is idempotent, so a deletion the browser interrupted shows in the
+list as "Deleting" and the trip page offers to finish it.
 
 ## Access rules
 
 `firestore.rules`, tested in `packages/rules`:
 
 - A trip is readable by its owner and by any signed-in user whose verified
-  email is in `sharedWith`; writable and deletable by the owner only.
+  email is in `sharedWith`; writable and deletable by the owner only. A
+  missing trip reads as absent to any signed-in user, so a client can tell a
+  deleted trip from one it may not see.
   Segments inherit the parent trip's access, and a written segment must have
   the documented shape (known keys, a valid type, ISO instants, ids that
   match its path).
