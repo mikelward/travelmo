@@ -33,8 +33,12 @@ export function claimable(existing: ParsedMessage | undefined, now: string): boo
   return existing.outcome === "processing" && leaseExpired(existing, now);
 }
 
+// An imported message stays imported: running extraction again could change
+// the set of segments, and nothing here reconciles the old ones. Edit or
+// delete those bookings on the trip page instead.
 export function reclaimable(existing: ParsedMessage | undefined, now: string): boolean {
   if (!existing) return true;
+  if (existing.outcome === "imported") return false;
   return existing.outcome !== "processing" || leaseExpired(existing, now);
 }
 
@@ -43,9 +47,9 @@ export type TripStore = {
   // exists and is not an expired lease, so concurrent deliveries of one
   // message import it once while an abandoned claim can be retried.
   claimMessage(uid: string, messageId: string, processedAt: string): Promise<boolean>;
-  // Like claimMessage, but a finished record (any outcome) is claimed again
-  // too; only an unexpired processing claim is refused. For the user asking
-  // for another look at a message.
+  // Like claimMessage, but a record that did not become a booking is claimed
+  // again too; an imported one and an unexpired processing claim are
+  // refused. For the user asking for another look at a message.
   reclaimMessage(uid: string, messageId: string, processedAt: string): Promise<boolean>;
   setParsed(record: ParsedMessage): Promise<void>;
   // Runs fn serialized per user, so two overlapping imports cannot both

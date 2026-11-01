@@ -230,8 +230,8 @@ app.post("/gmail/backfill", async (c) => {
 });
 
 // A second look at one message the user picked from the review list: the
-// pre-filter is skipped, and an earlier outcome no longer stands in the way,
-// though an import of it already under way does.
+// pre-filter is skipped, and an earlier non-booking outcome no longer stands
+// in the way. An import already under way, or already done, does.
 app.post("/gmail/reimport", async (c) => {
   const uid = await requireUser(c);
   const state = await loadState(db, uid);
@@ -248,7 +248,9 @@ app.post("/gmail/reimport", async (c) => {
   }
   const outcome = await importMessage(uid, message, deps, { force: true, reclaim: true });
   log("INFO", "reimport", { uid, messageId: message.id, outcome });
-  if (outcome === "skipped") throw new HTTPException(409, { message: "That email is being imported right now" });
+  if (outcome === "skipped") {
+    throw new HTTPException(409, { message: "That email is already imported or being imported right now" });
+  }
   return c.json({ outcome });
 });
 
