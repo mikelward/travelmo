@@ -28,6 +28,7 @@ async function post<T>(user: User, path: string, body: unknown = {}): Promise<T>
 
 export const api = {
   connectGmail: (user: User) => post<{ url: string }>(user, "/gmail/connect"),
+  completeGmail: (user: User, state: string) => post<{ emailAddress: string }>(user, "/gmail/complete", { state }),
   disconnectGmail: (user: User) => post<void>(user, "/gmail/disconnect"),
   backfill: (user: User, max?: number) => post<BackfillResult>(user, "/gmail/backfill", max ? { max } : {}),
 };

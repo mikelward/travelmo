@@ -8,6 +8,7 @@ export const paths = {
     `users/${uid}/parsedMessages/${messageId}`,
   gmailAccount: (emailAddress: string) => `gmailAccounts/${emailAddress}`,
   oauthState: (nonce: string) => `oauthStates/${nonce}`,
+  pendingConnection: (token: string) => `pendingConnections/${token}`,
   trips: () => "trips",
   trip: (tripId: string) => `trips/${tripId}`,
   segments: (tripId: string) => `trips/${tripId}/segments`,

@@ -8,7 +8,7 @@
     "build": "node build.mjs",
     "start": "node dist/server.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "firebase emulators:exec --only firestore --project demo-travelmo --config ../../firebase.json 'vitest run'"
   },
   "dependencies": {
     "@google/genai": "^2.32.0",
@@ -24,6 +24,7 @@
     "@types/html-to-text": "^9.0.4",
     "@types/node": "^22",
     "esbuild": "^0.27.0",
+    "firebase-tools": "^15.34.2",
     "tsx": "^4.23.15",
     "typescript": "^5.9.0",
     "vitest": "^5.0.5"

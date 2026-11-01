@@ -3,8 +3,8 @@
 import { paths, type SenderPatterns } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
-import { useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { SignInGate } from "@/components/SignInGate";
 import { api, type BackfillResult } from "@/lib/api";
 import { firestore } from "@/lib/firebase";
@@ -15,15 +15,34 @@ const buttonClass =
 
 function GmailSection({ user }: { user: User }) {
   const profile = useProfile(user.uid);
-  const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<BackfillResult>();
-  const status = useSearchParams().get("gmail");
-  const [notice] = useState(() => (status === "connected" ? "Gmail connected. Import your past bookings below." : undefined));
+  const params = useSearchParams();
+  const router = useRouter();
+  const status = params.get("gmail");
+  const completion = params.get("state");
+  const [busy, setBusy] = useState(status === "pending");
+  const [notice, setNotice] = useState<string>();
   const [error, setError] = useState<string | undefined>(() => {
     if (status === "denied") return "Gmail access was not granted.";
     if (status === "error") return "Connecting Gmail failed. Try again.";
     return undefined;
   });
+
+  // Google sent the browser back via the parser; finishing the connection
+  // from here proves the signed-in user is the one who started it.
+  const completed = useRef(false);
+  useEffect(() => {
+    if (status !== "pending" || !completion || completed.current) return;
+    completed.current = true;
+    api
+      .completeGmail(user, completion)
+      .then(({ emailAddress }) => setNotice(`Gmail connected as ${emailAddress}. Import your past bookings below.`))
+      .catch((e: Error) => setError(e.message))
+      .finally(() => {
+        setBusy(false);
+        router.replace("/settings");
+      });
+  }, [status, completion, user, router]);
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);

@@ -1,11 +1,21 @@
 import { serve } from "@hono/node-server";
 import { GoogleGenAI } from "@google/genai";
-import { GmailState, paths, type GmailConnection } from "@travelmo/core";
+import { paths } from "@travelmo/core";
 import { randomBytes } from "node:crypto";
-import { FieldValue } from "firebase-admin/firestore";
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
+import {
+  MailboxConflict,
+  createOAuthState,
+  loadState,
+  removeConnection,
+  saveConnection,
+  savePending,
+  takeOAuthState,
+  takePending,
+  updateWatch,
+} from "./connections";
 import { optionalEnv, requireEnv } from "./env";
 import { geminiExtractor } from "./extract";
 import { auth, db } from "./firebase";
@@ -48,7 +58,6 @@ const genai = process.env.GEMINI_API_KEY
 const backfillQuery =
   "newer_than:3y -in:spam -in:trash {subject:booking subject:reservation subject:confirmation subject:confirmed subject:itinerary subject:ticket subject:tickets subject:flight subject:hotel subject:rental subject:check-in subject:\"boarding pass\"}";
 const backfillMax = 300;
-const oauthStateTtlMs = 10 * 60 * 1000;
 
 const deps: ImportDeps = {
   store: firestoreStore(db),
@@ -64,10 +73,14 @@ app.use("/gmail/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "C
 
 app.get("/healthz", (c) => c.text("ok"));
 
-async function requireUser(c: Context<Env>): Promise<string> {
+function bearer(c: Context<Env>): string {
   const header = c.req.header("Authorization") ?? "";
-  const token = header.startsWith("Bearer ") ? header.slice(7) : undefined;
-  if (!token) throw new HTTPException(401, { message: "Missing bearer token" });
+  if (!header.startsWith("Bearer ")) throw new HTTPException(401, { message: "Missing bearer token" });
+  return header.slice(7);
+}
+
+async function requireUser(c: Context<Env>): Promise<string> {
+  const token = bearer(c);
   try {
     return (await auth.verifyIdToken(token)).uid;
   } catch (error) {
@@ -77,9 +90,7 @@ async function requireUser(c: Context<Env>): Promise<string> {
 }
 
 async function requireInternalCaller(c: Context<Env>): Promise<void> {
-  const header = c.req.header("Authorization") ?? "";
-  const token = header.startsWith("Bearer ") ? header.slice(7) : undefined;
-  if (!token) throw new HTTPException(401, { message: "Missing bearer token" });
+  const token = bearer(c);
   try {
     const ticket = await oauthClient(oauth).verifyIdToken({ idToken: token, audience: internalAudience });
     const payload = ticket.getPayload();
@@ -92,25 +103,18 @@ async function requireInternalCaller(c: Context<Env>): Promise<void> {
   }
 }
 
-async function gmailState(uid: string) {
-  const snap = await db.doc(paths.gmailState(uid)).get();
-  return snap.exists ? GmailState.parse(snap.data()) : undefined;
-}
-
-async function saveConnection(uid: string, state: GmailState): Promise<void> {
-  const { refreshToken: _token, ...publicState } = state;
-  const connection: GmailConnection = publicState;
-  const batch = db.batch();
-  batch.set(db.doc(paths.gmailState(uid)), state);
-  batch.set(db.doc(paths.user(uid)), { gmail: connection }, { merge: true });
-  batch.set(db.doc(paths.gmailAccount(state.emailAddress)), { uid });
-  await batch.commit();
+async function revokeQuietly(refreshToken: string, uid: string): Promise<void> {
+  try {
+    await oauthClient(oauth).revokeToken(refreshToken);
+  } catch (error) {
+    log("WARNING", "revoke_failed", { uid, ...errorFields(error) });
+  }
 }
 
 app.post("/gmail/connect", async (c) => {
   const uid = await requireUser(c);
   const nonce = randomBytes(24).toString("base64url");
-  await db.doc(paths.oauthState(nonce)).set({ uid, createdAt: new Date().toISOString() });
+  await createOAuthState(db, nonce, uid, new Date().toISOString());
   const url = oauthClient(oauth).generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
@@ -120,57 +124,72 @@ app.post("/gmail/connect", async (c) => {
   return c.json({ url });
 });
 
+// Google sends the browser here with no Travelmo credentials, so the tokens
+// are parked under a one-time code and the signed-in web app must claim them
+// from /gmail/complete; the claimant's uid has to match the initiator's.
 app.get("/gmail/callback", async (c) => {
   const code = c.req.query("code");
   const nonce = c.req.query("state");
-  const denied = c.req.query("error");
-  if (denied) return c.redirect(`${webOrigin}/settings?gmail=denied`);
+  if (c.req.query("error")) return c.redirect(`${webOrigin}/settings?gmail=denied`);
   if (!code || !nonce) throw new HTTPException(400, { message: "Missing code or state" });
 
-  const stateRef = db.doc(paths.oauthState(nonce));
-  const stateSnap = await stateRef.get();
-  const state = stateSnap.data() as { uid: string; createdAt: string } | undefined;
-  await stateRef.delete();
-  if (!state || Date.now() - Date.parse(state.createdAt) > oauthStateTtlMs) {
-    throw new HTTPException(400, { message: "Unknown or expired state" });
-  }
+  const state = await takeOAuthState(db, nonce, Date.now());
+  if (!state) throw new HTTPException(400, { message: "Unknown or expired state" });
 
-  const client = oauthClient(oauth);
-  const { tokens } = await client.getToken(code);
+  const { tokens } = await oauthClient(oauth).getToken(code);
   if (!tokens.refresh_token) {
     log("ERROR", "no_refresh_token", { uid: state.uid });
     return c.redirect(`${webOrigin}/settings?gmail=error`);
   }
-  const gmail = gmailFor(oauth, tokens.refresh_token);
+  const completion = randomBytes(24).toString("base64url");
+  await savePending(db, completion, { uid: state.uid, refreshToken: tokens.refresh_token, createdAt: new Date().toISOString() });
+  return c.redirect(`${webOrigin}/settings?gmail=pending&state=${completion}`);
+});
+
+app.post("/gmail/complete", async (c) => {
+  const uid = await requireUser(c);
+  const body = (await c.req.json().catch(() => ({}))) as { state?: string };
+  if (!body.state) throw new HTTPException(400, { message: "Missing state" });
+  const pending = await takePending(db, body.state, Date.now());
+  if (!pending) throw new HTTPException(400, { message: "Unknown or expired state" });
+  if (pending.uid !== uid) {
+    log("WARNING", "completion_uid_mismatch", { uid, initiator: pending.uid });
+    await revokeQuietly(pending.refreshToken, uid);
+    throw new HTTPException(403, { message: "This connection was started by a different account" });
+  }
+
+  const gmail = gmailFor(oauth, pending.refreshToken);
   const profile = await currentHistoryId(gmail);
-  const watched = await watch(gmail, pubsubTopic);
-  await saveConnection(state.uid, {
-    refreshToken: tokens.refresh_token,
-    emailAddress: profile.emailAddress,
-    connectedAt: new Date().toISOString(),
-    historyId: watched.historyId,
-    watchExpiration: watched.expiration,
-  });
-  log("INFO", "gmail_connected", { uid: state.uid });
-  return c.redirect(`${webOrigin}/settings?gmail=connected`);
+  try {
+    const watched = await watch(gmail, pubsubTopic);
+    await saveConnection(db, uid, {
+      refreshToken: pending.refreshToken,
+      emailAddress: profile.emailAddress,
+      connectedAt: new Date().toISOString(),
+      historyId: watched.historyId,
+      watchExpiration: watched.expiration,
+    });
+  } catch (error) {
+    await stopWatch(gmail).catch((e: unknown) => log("WARNING", "stop_watch_failed", { uid, ...errorFields(e) }));
+    await revokeQuietly(pending.refreshToken, uid);
+    if (error instanceof MailboxConflict) throw new HTTPException(409, { message: error.message });
+    throw error;
+  }
+  log("INFO", "gmail_connected", { uid });
+  return c.json({ emailAddress: profile.emailAddress });
 });
 
 app.post("/gmail/disconnect", async (c) => {
   const uid = await requireUser(c);
-  const state = await gmailState(uid);
+  const state = await loadState(db, uid);
   if (state) {
-    const gmail = gmailFor(oauth, state.refreshToken);
     try {
-      await stopWatch(gmail);
-      await oauthClient(oauth).revokeToken(state.refreshToken);
+      await stopWatch(gmailFor(oauth, state.refreshToken));
     } catch (error) {
-      log("WARNING", "disconnect_cleanup_failed", { uid, ...errorFields(error) });
+      log("WARNING", "stop_watch_failed", { uid, ...errorFields(error) });
     }
-    const batch = db.batch();
-    batch.delete(db.doc(paths.gmailState(uid)));
-    batch.delete(db.doc(paths.gmailAccount(state.emailAddress)));
-    batch.set(db.doc(paths.user(uid)), { gmail: FieldValue.delete() }, { merge: true });
-    await batch.commit();
+    await revokeQuietly(state.refreshToken, uid);
+    await removeConnection(db, uid, state.emailAddress);
   }
   return c.body(null, 204);
 });
@@ -181,7 +200,7 @@ function importIds(uid: string, gmail: ReturnType<typeof gmailFor>, ids: readonl
 
 app.post("/gmail/backfill", async (c) => {
   const uid = await requireUser(c);
-  const state = await gmailState(uid);
+  const state = await loadState(db, uid);
   if (!state) throw new HTTPException(409, { message: "Gmail not connected" });
   const body = (await c.req.json().catch(() => ({}))) as { query?: string; max?: number };
   const max = Math.min(backfillMax, Math.max(1, body.max ?? backfillMax));
@@ -208,7 +227,7 @@ app.post("/internal/pubsub/gmail", async (c) => {
     log("WARNING", "notification_for_unknown_account", { pubsubMessageId: envelope.message?.messageId });
     return c.body(null, 204);
   }
-  const state = await gmailState(uid);
+  const state = await loadState(db, uid);
   if (!state) return c.body(null, 204);
 
   const gmail = gmailFor(oauth, state.refreshToken);
@@ -233,12 +252,12 @@ app.post("/internal/renew-watches", async (c) => {
   let renewed = 0;
   for (const doc of accounts.docs) {
     const uid = (doc.data() as { uid: string }).uid;
-    const state = await gmailState(uid);
+    const state = await loadState(db, uid);
     if (!state) continue;
     if (state.watchExpiration && Date.parse(state.watchExpiration) > soon) continue;
     try {
       const watched = await watch(gmailFor(oauth, state.refreshToken), pubsubTopic);
-      await saveConnection(uid, { ...state, watchExpiration: watched.expiration });
+      await updateWatch(db, uid, { ...state, watchExpiration: watched.expiration });
       renewed += 1;
     } catch (error) {
       log("ERROR", "renew_watch_failed", { uid, ...errorFields(error) });
