@@ -48,8 +48,24 @@ service cloud.firestore {
         function trip() {
           return get(/databases/$(database)/documents/trips/$(tripId)).data;
         }
+        function isInstant(value) {
+          return value is string && value.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}.*');
+        }
+        function validSegment(segment) {
+          return segment.keys().hasOnly(['id', 'tripId', 'type', 'title', 'provider', 'confirmation', 'start', 'end',
+              'origin', 'destination', 'notes', 'source', 'gmailMessageIds', 'createdAt', 'updatedAt'])
+            && segment.id == segmentId && segment.tripId == tripId
+            && segment.type in ['flight', 'train', 'bus', 'ferry', 'lodging', 'car_rental', 'activity', 'other']
+            && segment.title is string && segment.title.size() > 0 && segment.title.size() <= 200
+            && isInstant(segment.start)
+            && (!('end' in segment) || isInstant(segment.end))
+            && segment.source in ['gmail', 'manual']
+            && segment.gmailMessageIds is list
+            && segment.createdAt is string && segment.updatedAt is string;
+        }
         allow read: if signedIn() && (isOwner(trip()) || isSharee(trip()));
-        allow write: if signedIn() && isOwner(trip());
+        allow create, update: if signedIn() && isOwner(trip()) && validSegment(request.resource.data);
+        allow delete: if signedIn() && isOwner(trip());
       }
     }
 

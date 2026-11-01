@@ -4,11 +4,17 @@ import { formatDate, formatDateRange, localDate, paths, type Segment, type Trip 
 import type { User } from "firebase/auth";
 import { arrayRemove, arrayUnion, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Suspense, use, useState, type FormEvent } from "react";
+import { SegmentForm } from "@/components/SegmentForm";
 import { SegmentRow } from "@/components/SegmentRow";
 import { SignInGate } from "@/components/SignInGate";
+import { deleteSegment, deleteTrip, renameTrip, saveSegment } from "@/lib/edits";
 import { firestore } from "@/lib/firebase";
 import { useSegments, useTrip } from "@/lib/trips";
+
+const buttonClass =
+  "rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
 
 function byDay(segments: Segment[]): [string, Segment[]][] {
   const days = new Map<string, Segment[]>();
@@ -17,6 +23,60 @@ function byDay(segments: Segment[]): [string, Segment[]][] {
     days.set(day, [...(days.get(day) ?? []), segment]);
   }
   return [...days.entries()].sort(([a], [b]) => a.localeCompare(b));
+}
+
+function Title({ trip, canEdit }: { trip: Trip; canEdit: boolean }) {
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(trip.title);
+  const [error, setError] = useState<string>();
+
+  if (!editing) {
+    return (
+      <div className="mt-2 flex items-baseline gap-3">
+        <h1 className="text-3xl font-semibold">{trip.title}</h1>
+        {canEdit && (
+          <button
+            type="button"
+            onClick={() => {
+              setTitle(trip.title);
+              setEditing(true);
+            }}
+            className="text-sm text-zinc-500 hover:underline"
+          >
+            Rename
+          </button>
+        )}
+      </div>
+    );
+  }
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!title.trim()) return setError("Give the trip a name");
+    try {
+      await renameTrip(trip, title);
+      setEditing(false);
+      setError(undefined);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <form onSubmit={submit} className="mt-2 flex items-center gap-2">
+      <input
+        autoFocus
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        className="flex-1 rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-2xl font-semibold dark:border-zinc-700"
+      />
+      <button type="submit" className={buttonClass}>
+        Save
+      </button>
+      <button type="button" onClick={() => setEditing(false)} className={buttonClass}>
+        Cancel
+      </button>
+      {error && <span className="text-sm text-red-600">{error}</span>}
+    </form>
+  );
 }
 
 function Sharing({ trip }: { trip: Trip }) {
@@ -63,7 +123,7 @@ function Sharing({ trip }: { trip: Trip }) {
           placeholder="partner@example.com"
           className="flex-1 rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
         />
-        <button type="submit" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900">
+        <button type="submit" className={buttonClass}>
           Share
         </button>
       </form>
@@ -72,19 +132,75 @@ function Sharing({ trip }: { trip: Trip }) {
   );
 }
 
+function DangerZone({ trip }: { trip: Trip }) {
+  const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string>();
+  const remove = async () => {
+    try {
+      await deleteTrip(trip);
+      router.replace("/");
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <section className="mt-10 border-t border-zinc-200 pt-6 dark:border-zinc-800">
+      {!confirming ? (
+        <button type="button" onClick={() => setConfirming(true)} className="text-sm text-red-600 hover:underline">
+          Delete this trip
+        </button>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <span>Delete “{trip.title}” and all its bookings? This cannot be undone.</span>
+          <button type="button" onClick={remove} className="rounded-lg bg-red-600 px-3 py-1.5 font-medium text-white">
+            Delete
+          </button>
+          <button type="button" onClick={() => setConfirming(false)} className={buttonClass}>
+            Keep
+          </button>
+        </div>
+      )}
+      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+    </section>
+  );
+}
+
+type Editing = { kind: "add" } | { kind: "edit"; segment: Segment } | undefined;
+
 function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   const trip = useTrip(tripId);
   const segments = useSegments(tripId);
+  const [editing, setEditing] = useState<Editing>();
+  const [error, setError] = useState<string>();
   if (trip === undefined) return <p className="text-zinc-500">Loading…</p>;
   if (trip === null) return <p className="text-zinc-500">This trip does not exist or is not shared with you.</p>;
+  const isOwner = trip.ownerUid === user.uid;
+
+  const save = async (extracted: Parameters<typeof saveSegment>[2]) => {
+    await saveSegment(trip, segments ?? [], extracted, editing?.kind === "edit" ? editing.segment : undefined);
+    setEditing(undefined);
+  };
+  const remove = (segment: Segment) =>
+    deleteSegment(trip, segments ?? [], segment).catch((e: Error) => setError(e.message));
 
   return (
     <>
       <Link href="/" className="text-sm text-zinc-500 hover:underline">
         ← All trips
       </Link>
-      <h1 className="mt-2 text-3xl font-semibold">{trip.title}</h1>
+      <Title trip={trip} canEdit={isOwner} />
       <p className="mt-1 text-zinc-600 dark:text-zinc-400">{formatDateRange(trip.start, trip.end)}</p>
+
+      {isOwner && !editing && (
+        <button type="button" onClick={() => setEditing({ kind: "add" })} className={`${buttonClass} mt-4`}>
+          Add a booking
+        </button>
+      )}
+      {editing?.kind === "add" && (
+        <SegmentForm defaultDate={trip.start} onSave={save} onCancel={() => setEditing(undefined)} />
+      )}
+      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
 
       {!segments && <p className="mt-8 text-zinc-500">Loading…</p>}
       {segments && segments.length === 0 && <p className="mt-8 text-zinc-500">No bookings in this trip yet.</p>}
@@ -93,14 +209,32 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
           <section key={day} className="mt-8">
             <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">{formatDate(day)}</h2>
             <ul className="mt-1 divide-y divide-zinc-200 dark:divide-zinc-800">
-              {items.map((segment) => (
-                <SegmentRow key={segment.id} segment={segment} />
-              ))}
+              {items.map((segment) =>
+                editing?.kind === "edit" && editing.segment.id === segment.id ? (
+                  <li key={segment.id} className="py-3">
+                    <SegmentForm
+                      segment={segment}
+                      defaultDate={trip.start}
+                      onSave={save}
+                      onCancel={() => setEditing(undefined)}
+                    />
+                  </li>
+                ) : (
+                  <SegmentRow
+                    key={segment.id}
+                    segment={segment}
+                    {...(isOwner
+                      ? { onEdit: () => setEditing({ kind: "edit", segment }), onDelete: () => remove(segment) }
+                      : {})}
+                  />
+                ),
+              )}
             </ul>
           </section>
         ))}
 
-      {trip.ownerUid === user.uid && <Sharing trip={trip} />}
+      {isOwner && <Sharing trip={trip} />}
+      {isOwner && <DangerZone trip={trip} />}
     </>
   );
 }

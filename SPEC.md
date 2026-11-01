@@ -54,13 +54,25 @@ viewer's zone. Trip bounds are calendar dates.
 
 Schemas live in `packages/core/src/schema.ts`; paths in `paths.ts`.
 
+## Editing by hand
+
+The owner can add, edit and delete segments on a trip page, rename the trip
+and delete it. A manual segment carries `source: "manual"` and the same
+shape as an imported one; the form takes a date, time and UTC offset so the
+instant is stored exactly as the traveler sees it. Every segment write also
+moves the trip's bounds to cover all its segments; the bounds stay put when
+the last segment is removed. Deleting a trip deletes its segments first,
+since Firestore does not cascade.
+
 ## Access rules
 
 `firestore.rules`, tested in `packages/rules`:
 
 - A trip is readable by its owner and by any signed-in user whose verified
   email is in `sharedWith`; writable and deletable by the owner only.
-  Segments inherit the parent trip's access.
+  Segments inherit the parent trip's access, and a written segment must have
+  the documented shape (known keys, a valid type, ISO instants, ids that
+  match its path).
 - A user reads and edits their own profile except the `gmail` field, owns
   their sender patterns, can read but not write their parsed-message log,
   and can never read `private`.
