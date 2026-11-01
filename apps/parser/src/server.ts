@@ -20,7 +20,7 @@ import {
   updateWatch,
 } from "./connections";
 import { optionalEnv, requireEnv } from "./env";
-import { geminiExtractor } from "./extract";
+import { geminiEmbedder, geminiExtractor } from "./extract";
 import { auth, db } from "./firebase";
 import {
   currentHistoryId,
@@ -52,6 +52,7 @@ const oauth: OAuthConfig = {
 const internalAudience = requireEnv("INTERNAL_AUDIENCE");
 const internalCallers = new Set(requireEnv("INTERNAL_CALLERS").split(",").map((s) => s.trim()));
 const geminiModel = optionalEnv("GEMINI_MODEL", "gemini-flash-lite-latest");
+const embeddingModel = optionalEnv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001");
 const genai = process.env.GEMINI_API_KEY
   ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
   : new GoogleGenAI({
@@ -67,6 +68,7 @@ const backfillMax = 300;
 const deps: ImportDeps = {
   store: firestoreStore(db),
   extract: geminiExtractor(genai, geminiModel),
+  embed: geminiEmbedder(genai, embeddingModel),
   now: () => new Date().toISOString(),
   log: (event, fields) => log("INFO", event, fields),
 };
@@ -336,4 +338,4 @@ app.onError((error, c) => {
 });
 
 const port = Number(optionalEnv("PORT", "8080"));
-serve({ fetch: app.fetch, port }, () => log("INFO", "listening", { port, geminiModel }));
+serve({ fetch: app.fetch, port }, () => log("INFO", "listening", { port, geminiModel, embeddingModel }));

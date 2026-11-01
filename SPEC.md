@@ -48,6 +48,8 @@ viewer's zone. Trip bounds are calendar dates.
 - `users/{uid}/private/gmail` — the refresh token and watch state. Server
   only. `users/{uid}/private/import` is read and written by every import
   transaction, serializing trip assignment per user.
+  `users/{uid}/private/examples` — `bookings[], others[]` of `{subject,
+  vector}`, the embeddings the similarity pre-filter compares against.
 - `gmailAccounts/{emailAddress}` → `{uid}`, one owner per mailbox, enforced in
   a transaction; `oauthStates/{nonce}` → `{uid, createdAt}`;
   `pendingConnections/{token}` → `{uid, refreshToken, createdAt}`, parked
@@ -176,11 +178,17 @@ Gmail ─watch─▶ Pub/Sub ─push(OIDC)─▶ parser /internal/pubsub/gmail
                                noise                       ── drop ─▶ record "filtered"
                                         │ pass
                                         ▼
+                               embed (Gemini); keyword passes only: nearer
+                               to this user's past non-bookings than to
+                               their bookings?              ── yes ──▶ record "filtered"
+                                        │ no, or too few examples yet
+                                        ▼
                                Gemini, JSON-schema output, validated by
                                ExtractedBooking                ── throw ─▶ record "failed"
                                         │
                                isBooking && segments?          ── no ────▶ record "not_booking"
-                                        │ yes
+                                        │              and save the embedding as a non-booking
+                                        │ yes, and save it as a booking
                                         ▼
                                transaction, serialized per user:
                                trip within 2 days of the booking's dates?
@@ -201,10 +209,22 @@ one, whose bookings are edited on the trip page, nor one whose import is
 live — and runs the import with the pre-filter skipped). Teaching a sender also
 drops any pattern on the other list that covers it, so the newest decision
 is the one the parser follows. A trip
-page offers "Always import this sender" on imported bookings. The
-embedding-based pre-filter from the original brief is a later step and
-would sit between the keyword check and the model call, seeded by those
-confirmations.
+page offers "Always import this sender" on imported bookings.
+
+The similarity pre-filter (`apps/parser/src/similarity.ts`) learns from
+the model's verdicts. Every email that reaches the model is embedded
+(sender domain, subject and the first 600 characters, with Gemini's
+embedding model truncated to 256 dimensions) and, once the model has
+judged it, saved under `users/{uid}/private/examples` as a booking or a
+non-booking, the newest 40 of each. An email that passed only on keywords
+is compared with those examples first: when the user has at least five of
+each kind, and the nearest non-booking is at least 0.85 similar and 0.1
+more similar than the nearest booking, the email is recorded as filtered
+with the subject it resembles, and the model call is saved. Emails from
+allowed senders and emails the user asks for skip the comparison but are
+still learned from, so an "import anyway" on a wrongly filtered email
+teaches the filter. An embedding failure is logged and the email goes to
+the model.
 
 Backfill (`POST /gmail/backfill`) runs the same path over a Gmail search
 limited to the last three years and booking-like subjects, capped at 300
@@ -260,8 +280,9 @@ refused to any other until the first disconnects.
 Firebase Auth, Pub/Sub, Secret Manager and the Gmail API are free at this
 scale. App Hosting and Cloud Run bill per request and idle at zero. Firestore
 is the term that grows: one listener per trip list and per open trip. Gemini
-Flash-Lite costs a fraction of a cent per booking email; a hundred users
-importing fifty bookings a month is a few dollars. The rules tests and CI run
+Flash-Lite costs a fraction of a cent per booking email, and an embedding
+of a few hundred tokens a hundredth of that; a hundred users importing
+fifty bookings a month is a few dollars. The rules tests and CI run
 on GitHub-hosted runners.
 
 ## Later
