@@ -1,0 +1,24 @@
+# Fires when the parser's daily /internal/renew-watches could not renew a
+# user's Gmail watch. Rendered by deploy/monitoring.sh.
+displayName: "Travelmo: Gmail watch renewal failed"
+documentation:
+  mimeType: text/markdown
+  content: |
+    The parser logged `renew_watch_failed` for a user. Their Gmail watch
+    expires within two days and new bookings stop importing until it is
+    renewed. The log line carries the user id and the Gmail error; a revoked
+    token means the user has to reconnect Gmail in Settings.
+combiner: OR
+conditions:
+  - displayName: "renew_watch_failed logged"
+    conditionMatchedLog:
+      filter: >-
+        resource.type="cloud_run_revision"
+        AND resource.labels.service_name="@SERVICE@"
+        AND jsonPayload.event="renew_watch_failed"
+      labelExtractors:
+        uid: EXTRACT(jsonPayload.uid)
+alertStrategy:
+  notificationRateLimit:
+    period: 3600s
+  autoClose: 604800s

@@ -130,7 +130,9 @@ re-reads if the source's `updatedAt` moved in between.
 
 ```
 Gmail ─watch─▶ Pub/Sub ─push(OIDC)─▶ parser /internal/pubsub/gmail
-                                        │ history.list since stored historyId
+                  │ 5 failures          │ history.list since stored historyId
+                  ▼                     │
+             gmail-dead-letter ─▶ alert │
                                         ▼
                                create parsedMessages/{id} as "processing"
                                         │ already exists ─▶ skip
@@ -179,6 +181,22 @@ Gmail watches expire after seven days; `/internal/renew-watches`, called
 daily by Cloud Scheduler, renews those within two days of expiry. A history
 id that has aged out logs a warning and resets to the notification's id; the
 user can run a backfill to fill any gap.
+
+## Delivery failures and alerts
+
+The push handler answers 2xx once a notification is handled, including the
+cases it deliberately ignores (unknown mailbox, disconnected user), and
+anything else makes Pub/Sub redeliver with backoff. The push subscription
+(`deploy/pubsub.sh`) has a dead-letter topic: after five failed attempts the
+notification moves to `gmail-dead-letter`, where a pull subscription keeps it
+for a week. Each failed attempt is logged as `notification_failed` with the
+Pub/Sub message id and attempt number, so the dead-lettered message can be
+matched to its errors. A dead-lettered notification loses nothing: the next
+notification for that mailbox resumes from the stored history id.
+
+Two alerting policies (`deploy/monitoring.sh`, `deploy/alerts/`) page the
+operator: a `renew_watch_failed` log line, meaning a user's imports will stop
+when their watch expires, and a message on the dead-letter subscription.
 
 ## Connecting Gmail
 

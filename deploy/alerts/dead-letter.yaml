@@ -1,0 +1,34 @@
+# Fires while a Gmail notification sits on the dead-letter subscription, that
+# is, after the parser failed every delivery attempt. Rendered by
+# deploy/monitoring.sh.
+displayName: "Travelmo: Gmail notification dead-lettered"
+documentation:
+  mimeType: text/markdown
+  content: |
+    Pub/Sub gave up delivering a Gmail notification to the parser. Look for
+    `notification_failed` in the parser's logs (the `pubsubMessageId` and
+    `deliveryAttempt` fields match the message), fix the cause, then read
+    and acknowledge the message:
+
+        gcloud pubsub subscriptions pull @DEAD_LETTER_TOPIC@ --auto-ack
+
+    Nothing is lost by dropping it: the next notification for that mailbox
+    resumes from the stored history id.
+combiner: OR
+conditions:
+  - displayName: "dead-letter subscription has messages"
+    conditionThreshold:
+      filter: >-
+        resource.type="pubsub_subscription"
+        AND resource.labels.subscription_id="@DEAD_LETTER_TOPIC@"
+        AND metric.type="pubsub.googleapis.com/subscription/num_undelivered_messages"
+      aggregations:
+        - alignmentPeriod: 60s
+          perSeriesAligner: ALIGN_MAX
+      comparison: COMPARISON_GT
+      thresholdValue: 0
+      duration: 0s
+      trigger:
+        count: 1
+alertStrategy:
+  autoClose: 1800s

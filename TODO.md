@@ -34,7 +34,7 @@
 - [x] Merge trips and move bookings between them.
 - [x] Surface the next check-in, check-out, departure or arrival on the
       trip list for trips under way and the next three upcoming.
-- [ ] Dead-letter topic on the Pub/Sub push subscription and an alert on
+- [x] Dead-letter topic on the Pub/Sub push subscription and an alert on
       `renew_watch_failed`.
 - [ ] Service worker for offline trip pages (Serwist); `useOffline`.
 - [x] End-to-end test: emulator-backed sign-in, seeded trips, share with
@@ -58,3 +58,7 @@ Guesses made on autopilot; change any of them freely.
   flow, so the web app holds no secrets and needs no server code.
 - The web app is built on the same branch and PR as the review gates
   because this session was limited to one branch.
+- Infrastructure is gcloud scripts in `deploy/` (rerunnable), not Terraform:
+  five delivery attempts before dead-lettering, a week of retention there,
+  and two alert policies (watch renewal failed, dead letter present). The
+  scripts have not been run against a project from this session.
