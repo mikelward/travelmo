@@ -56,6 +56,14 @@ viewer's zone. Trip bounds are calendar dates.
 
 Schemas live in `packages/core/src/schema.ts`; paths in `paths.ts`.
 
+## The trip list
+
+Trips are grouped into now, upcoming and past by calendar date. Trips under
+way and the next three upcoming ones also show what comes next — the soonest
+booking start still ahead, or the end of one under way (check-out, arrival,
+car return) — read from their segments with one listener each; past trips
+and further-off ones get no listener, to keep Firestore reads in check.
+
 ## Editing by hand
 
 The owner and anyone the trip is shared with can add, edit and delete

@@ -1,4 +1,32 @@
-import { daysBetween, findTripForRange, groupTrips, mergePlace, segmentDateRange } from "./trips";
+import { daysBetween, eventVerb, findTripForRange, groupTrips, mergePlace, nextEvent, segmentDateRange } from "./trips";
+
+describe("nextEvent", () => {
+  const stay = { type: "lodging" as const, title: "Cove Liverpool", start: "2026-12-12T15:00:00+00:00", end: "2026-12-14T11:00:00+00:00" };
+  const flightOut = { type: "flight" as const, title: "BA 117", start: "2026-12-12T09:00:00+00:00", end: "2026-12-12T12:00:00-05:00" };
+  const flightHome = { type: "flight" as const, title: "BA 118", start: "2026-12-14T18:00:00+00:00" };
+
+  it("picks the soonest start still ahead", () => {
+    const event = nextEvent([stay, flightOut, flightHome], "2026-12-11T20:00:00Z");
+    expect(event).toMatchObject({ segment: flightOut, kind: "start" });
+    expect(eventVerb(event!)).toBe("Departs");
+  });
+
+  it("prefers the end of a booking under way when that comes first", () => {
+    const event = nextEvent([stay, flightOut, flightHome], "2026-12-13T08:00:00Z");
+    expect(event).toMatchObject({ segment: stay, kind: "end", at: stay.end });
+    expect(eventVerb(event!)).toBe("Check-out");
+  });
+
+  it("compares by instant across offsets", () => {
+    const event = nextEvent([flightOut, stay], "2026-12-12T10:00:00Z");
+    expect(event).toMatchObject({ segment: stay, kind: "start" });
+  });
+
+  it("is undefined once everything is over", () => {
+    expect(nextEvent([stay, flightOut, flightHome], "2026-12-15T00:00:00Z")).toBeUndefined();
+    expect(nextEvent([], "2026-12-15T00:00:00Z")).toBeUndefined();
+  });
+});
 
 describe("mergePlace", () => {
   const imported = { name: "London Heathrow", code: "LHR", city: "London", country: "GB" };

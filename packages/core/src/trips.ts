@@ -1,4 +1,5 @@
-import type { ExtractedSegment, Place, Trip } from "./schema";
+import { compareInstants } from "./instant";
+import type { ExtractedSegment, Place, SegmentType, Trip } from "./schema";
 
 export type TripGroups = {
   current: Trip[];
@@ -40,6 +41,40 @@ export function segmentDateRange(
     }
   }
   return start !== undefined && end !== undefined ? { start, end } : undefined;
+}
+
+export type UpcomingEvent<S extends ExtractedSegment = ExtractedSegment> = {
+  segment: S;
+  kind: "start" | "end";
+  at: string;
+};
+
+// The soonest thing still ahead: a booking's start, or the end of one that
+// is under way (a stay's check-out, a flight's arrival).
+export function nextEvent<S extends ExtractedSegment>(segments: readonly S[], now: string): UpcomingEvent<S> | undefined {
+  let best: UpcomingEvent<S> | undefined;
+  for (const segment of segments) {
+    let candidate: UpcomingEvent<S> | undefined;
+    if (compareInstants(segment.start, now) >= 0) candidate = { segment, kind: "start", at: segment.start };
+    else if (segment.end && compareInstants(segment.end, now) >= 0) candidate = { segment, kind: "end", at: segment.end };
+    if (candidate && (!best || compareInstants(candidate.at, best.at) < 0)) best = candidate;
+  }
+  return best;
+}
+
+const eventVerbs: Record<SegmentType, { start: string; end: string }> = {
+  flight: { start: "Departs", end: "Arrives" },
+  train: { start: "Departs", end: "Arrives" },
+  bus: { start: "Departs", end: "Arrives" },
+  ferry: { start: "Departs", end: "Arrives" },
+  lodging: { start: "Check-in", end: "Check-out" },
+  car_rental: { start: "Pick up", end: "Return" },
+  activity: { start: "Starts", end: "Ends" },
+  other: { start: "Starts", end: "Ends" },
+};
+
+export function eventVerb(event: UpcomingEvent): string {
+  return eventVerbs[event.segment.type][event.kind];
 }
 
 // A form edits a place's name and code; whatever else an import recorded
