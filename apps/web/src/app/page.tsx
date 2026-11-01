@@ -5,6 +5,7 @@ import type { User } from "firebase/auth";
 import Link from "next/link";
 import { SignInGate } from "@/components/SignInGate";
 import { TripCard } from "@/components/TripCard";
+import { useSaveForOffline } from "@/lib/offline";
 import { useNow, useSegmentsOf, useTrips } from "@/lib/trips";
 
 function today(): string {
@@ -48,6 +49,7 @@ function Section({
 }
 
 function Trips({ user }: { user: User }) {
+  useSaveForOffline();
   const trips = useTrips(user);
   const groups = trips ? groupTrips(trips, today()) : undefined;
   const detailed = groups ? [...groups.current, ...groups.upcoming.slice(0, upcomingWithDetails)].map((t) => t.id) : [];

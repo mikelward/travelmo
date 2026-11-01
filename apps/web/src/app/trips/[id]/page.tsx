@@ -11,6 +11,7 @@ import { SegmentRow } from "@/components/SegmentRow";
 import { SignInGate } from "@/components/SignInGate";
 import { deleteSegment, deleteTrip, fitTripDates, mergeTrips, moveSegment, renameTrip, saveSegment } from "@/lib/edits";
 import { firestore } from "@/lib/firebase";
+import { useSaveForOffline } from "@/lib/offline";
 import { effectiveDecision, learnSender } from "@/lib/patterns";
 import { useSegments, useSenderPatterns, useTrip, useTrips } from "@/lib/trips";
 
@@ -255,6 +256,7 @@ function DangerZone({ trip }: { trip: Trip }) {
 type Editing = { kind: "add" } | { kind: "edit"; segment: Segment } | undefined;
 
 function TripDetail({ tripId, user }: { tripId: string; user: User }) {
+  useSaveForOffline();
   const trip = useTrip(tripId);
   const segments = useSegments(tripId);
   const patterns = useSenderPatterns(user.uid);

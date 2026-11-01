@@ -1,25 +1,6 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { owner, partner, signIn, signOut } from "./helpers";
 import { clearData, seedTrip } from "./seed";
-
-const owner = "owner@example.com";
-const partner = "partner@example.com";
-
-// The fixture's dates are fixed, so the browser's clock is too: before the
-// stay's check-in, so "next up" is the check-in whenever the test runs.
-// Only Date is pinned; timers keep running for Firestore and Auth.
-const frozenNow = new Date("2026-11-01T12:00:00Z");
-
-async function signIn(page: Page, email: string): Promise<string> {
-  await page.clock.setFixedTime(frozenNow);
-  await page.goto("/");
-  await page.waitForFunction(() => typeof window.travelmoTestSignIn === "function");
-  return page.evaluate((address) => window.travelmoTestSignIn!(address), email);
-}
-
-async function signOut(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
-}
 
 test.beforeEach(async () => {
   await clearData();

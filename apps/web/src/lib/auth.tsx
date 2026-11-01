@@ -11,7 +11,7 @@ import {
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { firebaseAuth, firestore } from "./firebase";
+import { adoptFirestoreCache, firebaseAuth, firestore } from "./firebase";
 
 type AuthState = {
   user: User | null | undefined;
@@ -55,7 +55,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null | undefined>(undefined);
 
   useEffect(() => {
-    return onAuthStateChanged(firebaseAuth(), (next) => {
+    return onAuthStateChanged(firebaseAuth(), async (next) => {
+      // Before anything reads Firestore for this account.
+      if (next) {
+        await adoptFirestoreCache(next.uid).catch((error) =>
+          console.error("Clearing the local cache for a new account failed", error),
+        );
+      }
       setUser(next);
       if (next) saveProfile(next).catch((error) => console.error("Saving profile failed", error));
     });
