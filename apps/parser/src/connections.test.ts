@@ -11,6 +11,7 @@ import {
   savePending,
   takeOAuthState,
   takePending,
+  updateHistoryId,
   updateWatch,
 } from "./connections";
 
@@ -109,6 +110,17 @@ describe("mailbox ownership", () => {
     expect(stored).toMatchObject({ emailAddress: email, refreshToken: "rt", watchExpiration: "2026-11-08T00:00:00.000Z" });
     expect((await db.doc(paths.user(a)).get()).data()?.gmail?.watchExpiration).toBe("2026-11-08T00:00:00.000Z");
     expect(await accountOwner(email)).toBe(a);
+  });
+
+  it("advancing the history cursor follows the same rule", async () => {
+    const email = unique("cursor") + "@example.com";
+    const a = unique("a");
+    await saveConnection(db, a, state(email));
+    expect(await updateHistoryId(db, a, email, "42")).toBe(true);
+    expect((await db.doc(paths.gmailState(a)).get()).data()).toMatchObject({ refreshToken: "rt", historyId: "42" });
+    await removeConnection(db, a, email);
+    expect(await updateHistoryId(db, a, email, "43")).toBe(false);
+    expect((await db.doc(paths.gmailState(a)).get()).exists).toBe(false);
   });
 
   it("renewing after a disconnect recreates nothing", async () => {

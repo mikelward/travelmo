@@ -85,17 +85,26 @@ export async function saveConnection(db: Firestore, uid: string, state: GmailSta
   });
 }
 
-// Renewal only moves the expiry of a connection that still exists; a user who
-// disconnected while Gmail was answering must not come back as connected.
-export async function updateWatch(db: Firestore, uid: string, emailAddress: string, watchExpiration: string): Promise<boolean> {
+// Background work only touches a connection that still exists for the same
+// mailbox; a user who disconnected while Gmail was answering must not come
+// back as connected, nor be left with a half-formed document.
+function updateLive(db: Firestore, uid: string, emailAddress: string, fields: Partial<GmailConnection>): Promise<boolean> {
   return db.runTransaction(async (t) => {
     const stateRef = db.doc(paths.gmailState(uid));
     const snap = await t.get(stateRef);
     if (!snap.exists || GmailState.parse(snap.data()).emailAddress !== emailAddress) return false;
-    t.update(stateRef, { watchExpiration });
-    t.set(db.doc(paths.user(uid)), { gmail: { watchExpiration } }, { merge: true });
+    t.update(stateRef, fields);
+    t.set(db.doc(paths.user(uid)), { gmail: fields }, { merge: true });
     return true;
   });
+}
+
+export function updateWatch(db: Firestore, uid: string, emailAddress: string, watchExpiration: string): Promise<boolean> {
+  return updateLive(db, uid, emailAddress, { watchExpiration });
+}
+
+export function updateHistoryId(db: Firestore, uid: string, emailAddress: string, historyId: string): Promise<boolean> {
+  return updateLive(db, uid, emailAddress, { historyId });
 }
 
 export async function removeConnection(db: Firestore, uid: string, emailAddress: string): Promise<void> {
