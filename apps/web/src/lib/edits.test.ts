@@ -3,7 +3,7 @@ import { paths, type ExtractedSegment, type Segment, type Trip } from "@travelmo
 import { collection, doc, getDoc, getDocs, setDoc, type Firestore } from "firebase/firestore";
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { deleteSegment, deleteTrip, fitTripDates, renameTrip, saveSegment } from "./edits";
+import { deleteSegment, deleteTrip, fitTripDates, mergeTrips, moveSegment, renameTrip, saveSegment } from "./edits";
 
 // Runs inside `firebase emulators:exec` with the real rules loaded, so these
 // workflows are exercised the way the browser runs them.
@@ -20,6 +20,15 @@ const trip: Trip = {
   sharedWith: [partner.email],
   createdAt: "2026-11-01T00:00:00Z",
   updatedAt: "2026-11-01T00:00:00Z",
+};
+
+const other: Trip = {
+  ...trip,
+  id: "t2",
+  title: "Dublin",
+  start: "2026-12-20",
+  end: "2026-12-22",
+  sharedWith: [],
 };
 
 const imported: Segment = {
@@ -66,9 +75,14 @@ beforeEach(async () => {
   await env.clearFirestore();
   await seed(async (db) => {
     await setDoc(doc(db, paths.trip(trip.id)), trip);
+    await setDoc(doc(db, paths.trip(other.id)), other);
     await setDoc(doc(db, paths.segment(trip.id, imported.id)), imported);
   });
 });
+
+const readOther = async () => (await getDoc(doc(asOwner(), paths.trip(other.id)))).data() as Trip | undefined;
+const segmentIds = async (tripId: string) =>
+  (await getDocs(collection(asOwner(), paths.segments(tripId)))).docs.map((d) => d.id).sort();
 
 describe("saveSegment", () => {
   it("adds a manual segment and widens the trip to include it", async () => {
@@ -160,6 +174,66 @@ describe("fitTripDates", () => {
     await deleteSegment(asOwner(), trip.id, late.id);
     await expect(fitTripDates(as(partner), trip.id)).rejects.toThrow();
     expect(await readTrip()).toMatchObject({ end: "2026-12-20" });
+  });
+});
+
+describe("moveSegment", () => {
+  it("moves a booking to another trip, keeping its id and widening the target", async () => {
+    await moveSegment(asOwner(), imported, other.id);
+    expect(await segmentIds(trip.id)).toEqual([]);
+    expect(await segmentIds(other.id)).toEqual([imported.id]);
+    const moved = (await getDoc(doc(asOwner(), paths.segment(other.id, imported.id)))).data();
+    expect(moved).toMatchObject({ tripId: other.id, title: imported.title, source: "gmail", sender: "cove.example" });
+    expect(await readOther()).toMatchObject({ start: "2026-12-12", end: "2026-12-22" });
+    expect(await readTrip()).toMatchObject({ start: "2026-12-12", end: "2026-12-14" });
+  });
+
+  it("refuses a target that is being deleted and leaves everything in place", async () => {
+    await seed((db) => setDoc(doc(db, paths.trip(other.id)), { ...other, deleting: true }));
+    await expect(moveSegment(asOwner(), imported, other.id)).rejects.toThrow(/being deleted/);
+    expect(await segmentIds(trip.id)).toEqual([imported.id]);
+  });
+
+  it("lets a sharee of both trips move a booking", async () => {
+    await seed((db) => setDoc(doc(db, paths.trip(other.id)), { ...other, sharedWith: [partner.email] }));
+    await moveSegment(as(partner), imported, other.id);
+    expect(await segmentIds(other.id)).toEqual([imported.id]);
+  });
+});
+
+describe("mergeTrips", () => {
+  it("moves every booking into the target, widens it and deletes the source", async () => {
+    await saveSegment(asOwner(), trip.id, flight("2026-12-10"));
+    const moved = await mergeTrips(asOwner(), trip.id, other.id);
+    expect(moved).toBe(2);
+    expect(await readTrip()).toBeUndefined();
+    expect((await segmentIds(other.id)).length).toBe(2);
+    expect(await readOther()).toMatchObject({ start: "2026-12-10", end: "2026-12-22", title: "Dublin", sharedWith: [] });
+  });
+
+  it("re-reads when a booking lands in the source between the read and the write", async () => {
+    let raced = false;
+    const moved = await mergeTrips(asOwner(), trip.id, other.id, {
+      afterRead: async () => {
+        if (raced) return;
+        raced = true;
+        await saveSegment(as(partner), trip.id, flight("2026-12-13"));
+      },
+    });
+    expect(moved).toBe(2);
+    expect((await segmentIds(other.id)).length).toBe(2);
+    expect(await readTrip()).toBeUndefined();
+  });
+
+  it("is refused for a sharee, who may not delete the source", async () => {
+    await seed((db) => setDoc(doc(db, paths.trip(other.id)), { ...other, sharedWith: [partner.email] }));
+    await expect(mergeTrips(as(partner), trip.id, other.id)).rejects.toThrow();
+    expect(await segmentIds(trip.id)).toEqual([imported.id]);
+    expect(await readTrip()).toMatchObject({ title: "Liverpool" });
+  });
+
+  it("refuses to merge a trip into itself", async () => {
+    await expect(mergeTrips(asOwner(), trip.id, trip.id)).rejects.toThrow(/different/);
   });
 });
 

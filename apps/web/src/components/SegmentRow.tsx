@@ -1,4 +1,4 @@
-import { formatDate, localDate, localTime, type Segment, type SegmentType } from "@travelmo/core";
+import { formatDate, localDate, localTime, type Segment, type SegmentType, type Trip } from "@travelmo/core";
 
 const labels: Record<SegmentType, string> = {
   flight: "Flight",
@@ -29,11 +29,15 @@ export function SegmentRow({
   onEdit,
   onDelete,
   onLearnSender,
+  moveTargets,
+  onMove,
 }: {
   segment: Segment;
   onEdit?: () => void;
   onDelete?: () => void;
   onLearnSender?: () => void;
+  moveTargets?: Trip[];
+  onMove?: (tripId: string) => void;
 }) {
   const route = [place(segment.origin), place(segment.destination)].filter(Boolean).join(" → ");
   const end = endLabel(segment);
@@ -68,8 +72,8 @@ export function SegmentRow({
           </p>
         )}
       </div>
-      {(onEdit || onDelete) && (
-        <div className="flex shrink-0 gap-3 self-start text-xs text-zinc-500">
+      {(onEdit || onDelete || (onMove && moveTargets && moveTargets.length > 0)) && (
+        <div className="flex shrink-0 flex-wrap items-center gap-3 self-start text-xs text-zinc-500">
           {onEdit && (
             <button type="button" onClick={onEdit} className="hover:underline">
               Edit
@@ -79,6 +83,21 @@ export function SegmentRow({
             <button type="button" onClick={onDelete} className="hover:underline">
               Delete
             </button>
+          )}
+          {onMove && moveTargets && moveTargets.length > 0 && (
+            <select
+              value=""
+              onChange={(e) => e.target.value && onMove(e.target.value)}
+              title="Move to another trip"
+              className="rounded border border-zinc-300 bg-transparent px-1 py-0.5 text-xs dark:border-zinc-700"
+            >
+              <option value="">Move to…</option>
+              {moveTargets.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.title}
+                </option>
+              ))}
+            </select>
           )}
         </div>
       )}
