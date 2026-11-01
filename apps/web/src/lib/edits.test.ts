@@ -9,6 +9,7 @@ import { deleteSegment, deleteTrip, renameTrip, saveSegment } from "./edits";
 // workflows are exercised the way the browser runs them.
 let env: RulesTestEnvironment;
 const owner = { uid: "owner", email: "owner@example.com" };
+const partner = { uid: "partner", email: "partner@example.com" };
 
 const trip: Trip = {
   id: "t1",
@@ -16,7 +17,7 @@ const trip: Trip = {
   start: "2026-12-12",
   end: "2026-12-14",
   ownerUid: owner.uid,
-  sharedWith: [],
+  sharedWith: [partner.email],
   createdAt: "2026-11-01T00:00:00Z",
   updatedAt: "2026-11-01T00:00:00Z",
 };
@@ -44,8 +45,9 @@ const flight = (day: string): ExtractedSegment => ({
 
 // The test environment hands out compat instances; the modular functions
 // accept them at runtime, so only the type needs persuading.
-const asOwner = () =>
-  env.authenticatedContext(owner.uid, { email: owner.email, email_verified: true }).firestore() as unknown as Firestore;
+const as = (user: { uid: string; email: string }) =>
+  env.authenticatedContext(user.uid, { email: user.email, email_verified: true }).firestore() as unknown as Firestore;
+const asOwner = () => as(owner);
 const readTrip = async () => (await getDoc(doc(asOwner(), paths.trip(trip.id)))).data() as Trip | undefined;
 const seed = (fn: (db: Firestore) => Promise<void>) =>
   env.withSecurityRulesDisabled((ctx) => fn(ctx.firestore() as unknown as Firestore));
@@ -89,6 +91,21 @@ describe("saveSegment", () => {
     ]);
     expect(await readTrip()).toMatchObject({ start: "2026-12-12", end: "2026-12-18" });
     expect((await getDocs(collection(asOwner(), paths.segments(trip.id)))).size).toBe(3);
+  });
+
+  it("lets a sharee add and edit bookings, widening the trip as needed", async () => {
+    const saved = await saveSegment(as(partner), trip.id, flight("2026-12-16"));
+    expect(await readTrip()).toMatchObject({ start: "2026-12-12", end: "2026-12-16", title: "Liverpool" });
+    await saveSegment(as(partner), trip.id, { ...flight("2026-12-16"), title: "Edited by partner" }, saved);
+    expect((await getDoc(doc(asOwner(), paths.segment(trip.id, saved.id)))).data()?.title).toBe("Edited by partner");
+    await deleteSegment(as(partner), trip.id, saved.id);
+    expect((await getDoc(doc(asOwner(), paths.segment(trip.id, saved.id)))).exists()).toBe(false);
+  });
+
+  it("keeps renaming and deleting the trip to the owner", async () => {
+    await expect(renameTrip(as(partner), trip.id, "Mine")).rejects.toThrow();
+    await expect(deleteTrip(as(partner), trip.id)).rejects.toThrow();
+    expect(await readTrip()).toMatchObject({ title: "Liverpool" });
   });
 
   it("refuses a trip that is being deleted", async () => {

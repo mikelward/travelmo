@@ -18,8 +18,7 @@
 ## Product
 
 - [x] Add and edit segments by hand; delete a trip; rename a trip.
-- [ ] Let sharees add segments (rules currently make shared trips
-      read-only for them).
+- [x] Let sharees add, edit and delete segments.
 - [ ] Offer a timezone picker instead of a raw UTC offset when adding a
       booking by hand; derive it from the airport code where possible.
 - [ ] "Fit dates to bookings" on a trip: bounds only ever widen today, so
@@ -40,8 +39,8 @@
 
 Guesses made on autopilot; change any of them freely.
 
-- Partner sharing is per trip, by email, read-only for the sharee. Not
-  whole-account sharing.
+- Partner sharing is per trip, by email. A sharee edits bookings; only the
+  owner renames, shares or deletes the trip. Not whole-account sharing.
 - Backfill at MVP: on demand from Settings, last three years, 300
   messages per call; nothing automatic at connect time.
 - Gemini is the extraction model (`gemini-flash-lite-latest` by default,
