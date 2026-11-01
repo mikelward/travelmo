@@ -130,6 +130,15 @@ describe("segments", () => {
     await assertFails(deleteDoc(doc(as(partner), paths.segment(trip.id, segment.id))));
   });
 
+  it("refuses new segments on a trip being deleted, but still lets the owner remove them", async () => {
+    await assertSucceeds(updateDoc(doc(as(owner), paths.trip(trip.id)), { deleting: true, updatedAt: "2026-11-02T00:00:00Z" }));
+    const manual = { ...segment, id: "s9", source: "manual" };
+    await assertFails(setDoc(doc(as(owner), paths.segment(trip.id, "s9")), manual));
+    await assertFails(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { title: "Late edit" }));
+    await assertSucceeds(deleteDoc(doc(as(owner), paths.segment(trip.id, segment.id))));
+    await assertSucceeds(deleteDoc(doc(as(owner), paths.trip(trip.id))));
+  });
+
   it("rejects malformed segments", async () => {
     const at = (id: string) => doc(as(owner), paths.segment(trip.id, id));
     await assertFails(setDoc(at("bad1"), { ...segment, id: "bad1", type: "spaceship" }));

@@ -24,7 +24,8 @@ service cloud.firestore {
     }
 
     function validTrip(trip) {
-      return trip.keys().hasOnly(['id', 'title', 'start', 'end', 'ownerUid', 'sharedWith', 'createdAt', 'updatedAt'])
+      return trip.keys().hasOnly(['id', 'title', 'start', 'end', 'ownerUid', 'sharedWith', 'deleting', 'createdAt', 'updatedAt'])
+        && (!('deleting' in trip) || trip.deleting is bool)
         && trip.title is string && trip.title.size() > 0 && trip.title.size() <= 200
         && isDate(trip.start) && isDate(trip.end) && trip.start <= trip.end
         && trip.sharedWith is list && trip.sharedWith.size() <= 20
@@ -64,7 +65,9 @@ service cloud.firestore {
             && segment.createdAt is string && segment.updatedAt is string;
         }
         allow read: if signedIn() && (isOwner(trip()) || isSharee(trip()));
-        allow create, update: if signedIn() && isOwner(trip()) && validSegment(request.resource.data);
+        allow create, update: if signedIn() && isOwner(trip())
+          && trip().get('deleting', false) == false
+          && validSegment(request.resource.data);
         allow delete: if signedIn() && isOwner(trip());
       }
     }

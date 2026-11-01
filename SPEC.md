@@ -27,8 +27,9 @@ reads the same document. Segment instants carry the local UTC offset of the
 place they happen in and are displayed as written, not converted to the
 viewer's zone. Trip bounds are calendar dates.
 
-- `trips/{tripId}` — `title, start, end, ownerUid, sharedWith[], createdAt,
-  updatedAt`. `sharedWith` holds lowercase email addresses.
+- `trips/{tripId}` — `title, start, end, ownerUid, sharedWith[], deleting?,
+  createdAt, updatedAt`. `sharedWith` holds lowercase email addresses;
+  `deleting` marks a trip whose segments are being removed.
 - `trips/{tripId}/segments/{segmentId}` — `type` (flight, train, bus, ferry,
   lodging, car_rental, activity, other), `title, provider, confirmation,
   start, end, origin, destination, notes, source, gmailMessageIds[]`.
@@ -64,7 +65,10 @@ the form does not show (a place's city and country) survive an edit. A
 segment write widens the trip's bounds to include it, in a transaction so
 concurrent saves both count; bounds never shrink, here or in the parser,
 because a client transaction cannot read every segment. Deleting a trip
-deletes its segments first, since Firestore does not cascade.
+first sets `deleting: true` on it, which every segment writer (the web
+transaction, the parser's import transaction and the rules) refuses, then
+deletes its segments and finally the trip, since Firestore does not cascade.
+The trip list hides trips carrying the marker.
 
 ## Access rules
 

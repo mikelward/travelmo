@@ -180,6 +180,16 @@ describe("importMessage", () => {
     expect(store.segments.get("m2-0")?.tripId).toBe(trip.id);
   });
 
+  it("never attaches a booking to a trip that is being deleted", async () => {
+    const store = memoryStore();
+    await importMessage("u1", email(), deps(store, async () => lodging));
+    const dying = [...store.trips.values()][0]!;
+    store.trips.set(dying.id, { ...dying, deleting: true });
+    await importMessage("u1", email({ id: "m2", subject: "Your Ryanair itinerary" }), deps(store, async () => flight));
+    expect(store.trips.size).toBe(2);
+    expect(store.segments.get("m2-0")?.tripId).not.toBe(dying.id);
+  });
+
   it("records not_booking when the model says so", async () => {
     const store = memoryStore();
     const outcome = await importMessage("u1", email(), deps(store, async () => ({ isBooking: false, segments: [] })));
