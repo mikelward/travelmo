@@ -7,7 +7,7 @@ import {
   type Trip,
 } from "@travelmo/core";
 import type { Extractor } from "./extract";
-import type { EmailMessage } from "./gmail";
+import { isNotFound, type EmailMessage } from "./gmail";
 import { prefilter, type SenderPatterns } from "./prefilter";
 
 export type TripBounds = Pick<Trip, "start" | "end" | "updatedAt">;
@@ -115,6 +115,35 @@ export async function importMessage(uid: string, message: EmailMessage, deps: Im
   await store.setParsed({ messageId: message.id, uid, outcome: "imported", segmentIds, processedAt: timestamp });
   log("imported", { uid, messageId: message.id, tripId, segments: segmentIds.length });
   return "imported";
+}
+
+export type ImportCounts = Record<ImportOutcome, number>;
+
+export const emptyCounts = (): ImportCounts => ({ skipped: 0, filtered: 0, not_booking: 0, imported: 0, failed: 0 });
+
+// A message deleted between Gmail's history entry and our fetch is gone for
+// good; skipping it keeps one 404 from wedging every later message in the
+// batch. Other fetch errors propagate so the delivery is retried.
+export async function importMessages(
+  uid: string,
+  ids: readonly string[],
+  fetch: (id: string) => Promise<EmailMessage>,
+  deps: ImportDeps,
+): Promise<ImportCounts> {
+  const counts = emptyCounts();
+  for (const id of ids) {
+    let message: EmailMessage;
+    try {
+      message = await fetch(id);
+    } catch (error) {
+      if (!isNotFound(error)) throw error;
+      deps.log("message_gone", { uid, messageId: id });
+      counts.skipped += 1;
+      continue;
+    }
+    counts[await importMessage(uid, message, deps)] += 1;
+  }
+  return counts;
 }
 
 export function tripTitle(segments: readonly ExtractedSegment[]): string {

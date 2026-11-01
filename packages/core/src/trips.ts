@@ -29,13 +29,15 @@ export function localDate(instant: string): string {
 export function segmentDateRange(
   segments: readonly ExtractedSegment[],
 ): { start: string; end: string } | undefined {
+  // Both endpoints feed both bounds: across the date line a flight can land
+  // on an earlier local date than it departed.
   let start: string | undefined;
   let end: string | undefined;
   for (const segment of segments) {
-    const s = localDate(segment.start);
-    const e = localDate(segment.end ?? segment.start);
-    if (start === undefined || s < start) start = s;
-    if (end === undefined || e > end) end = e;
+    for (const date of [localDate(segment.start), localDate(segment.end ?? segment.start)]) {
+      if (start === undefined || date < start) start = date;
+      if (end === undefined || date > end) end = date;
+    }
   }
   return start !== undefined && end !== undefined ? { start, end } : undefined;
 }
