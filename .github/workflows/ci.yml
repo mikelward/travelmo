@@ -24,6 +24,11 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: firebase-emulators-
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
