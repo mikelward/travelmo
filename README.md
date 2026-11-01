@@ -29,6 +29,14 @@ pnpm lint
 pnpm build
 ```
 
+End-to-end tests drive the web app in Chromium against the Auth and Firestore
+emulators (`apps/web/e2e`):
+
+```sh
+pnpm --filter @travelmo/web exec playwright install chromium   # once
+pnpm --filter @travelmo/web test:e2e
+```
+
 Run the web app locally against a Firebase project:
 
 ```sh

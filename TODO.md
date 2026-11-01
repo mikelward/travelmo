@@ -37,8 +37,8 @@
 - [ ] Dead-letter topic on the Pub/Sub push subscription and an alert on
       `renew_watch_failed`.
 - [ ] Service worker for offline trip pages (Serwist); `useOffline`.
-- [ ] End-to-end test: emulator-backed sign-in, seeded trips, share with
-      a second user (Playwright).
+- [x] End-to-end test: emulator-backed sign-in, seeded trips, share with
+      a second user who adds a booking (Playwright).
 
 ## Decisions needing review
 

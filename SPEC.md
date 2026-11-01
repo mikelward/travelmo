@@ -56,6 +56,18 @@ viewer's zone. Trip bounds are calendar dates.
 
 Schemas live in `packages/core/src/schema.ts`; paths in `paths.ts`.
 
+## Testing
+
+Pure logic lives in `packages/core` with unit tests. The parser's import
+pipeline is tested with an in-memory store, and its Firestore store and
+connection handling against the Firestore emulator. The rules have their own
+emulator tests, and the web app's mutation workflows run against the
+emulator with the real rules loaded. An end-to-end Playwright test drives the
+web app in Chromium against the Auth and Firestore emulators; when the app is
+pointed at the Auth emulator it exposes `window.travelmoTestSignIn(email)`,
+which signs in with the fake Google credential the emulator accepts, so the
+test needs no popup.
+
 ## The trip list
 
 Trips are grouped into now, upcoming and past by calendar date. Trips under

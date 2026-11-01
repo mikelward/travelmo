@@ -295,7 +295,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
         ← All trips
       </Link>
       <Title trip={trip} canEdit={canManage} />
-      <p className="mt-1 text-zinc-600 dark:text-zinc-400">
+      <p className="mt-1 text-zinc-600 dark:text-zinc-400" data-testid="trip-dates">
         {formatDateRange(trip.start, trip.end)}
         {canManage && segments && <FitDates trip={trip} segments={segments} />}
       </p>

@@ -1,7 +1,14 @@
 "use client";
 
 import { paths, type UserProfile } from "@travelmo/core";
-import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut as firebaseSignOut, type User } from "firebase/auth";
+import {
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  signInWithCredential,
+  signInWithPopup,
+  signOut as firebaseSignOut,
+  type User,
+} from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { firebaseAuth, firestore } from "./firebase";
@@ -13,6 +20,27 @@ type AuthState = {
 };
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
+
+declare global {
+  interface Window {
+    travelmoTestSignIn?: (email: string) => Promise<string>;
+  }
+}
+
+// Against the Auth emulator only: lets end-to-end tests sign in without
+// Google's popup, with the fake Google credential the emulator accepts.
+// Returns the uid so a test can seed data for that user.
+function installTestSignIn(): (() => void) | undefined {
+  if (!process.env.NEXT_PUBLIC_AUTH_EMULATOR_URL) return undefined;
+  window.travelmoTestSignIn = async (email) => {
+    const token = JSON.stringify({ sub: email, email, email_verified: true, name: email.split("@")[0] });
+    const { user } = await signInWithCredential(firebaseAuth(), GoogleAuthProvider.credential(token));
+    return user.uid;
+  };
+  return () => {
+    delete window.travelmoTestSignIn;
+  };
+}
 
 async function saveProfile(user: User): Promise<void> {
   const profile: UserProfile = {
@@ -32,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (next) saveProfile(next).catch((error) => console.error("Saving profile failed", error));
     });
   }, []);
+  useEffect(installTestSignIn, []);
 
   const value: AuthState = {
     user,
