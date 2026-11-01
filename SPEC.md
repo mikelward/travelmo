@@ -88,6 +88,13 @@ deletes its segments and finally the trip, since Firestore does not cascade.
 Each step is idempotent, so a deletion the browser interrupted shows in the
 list as "Deleting" and the trip page offers to finish it.
 
+A booking can be moved to another trip the viewer can edit: it keeps its id
+under the new trip, the target widens to hold it and the source's dates stay.
+The owner can merge a trip into another: every booking moves, the target
+widens, the source is deleted, and the target keeps its own sharing list.
+Both run as transactions; the merge reads the source's bookings first and
+re-reads if the source's `updatedAt` moved in between.
+
 ## Access rules
 
 `firestore.rules`, tested in `packages/rules`:

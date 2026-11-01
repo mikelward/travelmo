@@ -9,10 +9,10 @@ import { Suspense, use, useState, type FormEvent } from "react";
 import { SegmentForm } from "@/components/SegmentForm";
 import { SegmentRow } from "@/components/SegmentRow";
 import { SignInGate } from "@/components/SignInGate";
-import { deleteSegment, deleteTrip, fitTripDates, renameTrip, saveSegment } from "@/lib/edits";
+import { deleteSegment, deleteTrip, fitTripDates, mergeTrips, moveSegment, renameTrip, saveSegment } from "@/lib/edits";
 import { firestore } from "@/lib/firebase";
 import { effectiveDecision, learnSender } from "@/lib/patterns";
-import { useSegments, useSenderPatterns, useTrip } from "@/lib/trips";
+import { useSegments, useSenderPatterns, useTrip, useTrips } from "@/lib/trips";
 
 const buttonClass =
   "rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
@@ -154,6 +154,51 @@ function Sharing({ trip }: { trip: Trip }) {
   );
 }
 
+function MergeInto({ trip, targets }: { trip: Trip; targets: Trip[] }) {
+  const router = useRouter();
+  const [target, setTarget] = useState<Trip>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  if (targets.length === 0) return null;
+  const merge = async () => {
+    if (!target) return;
+    setBusy(true);
+    try {
+      await mergeTrips(firestore(), trip.id, target.id);
+      router.replace(`/trips/${target.id}`);
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="mt-10">
+      <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">Merge into another trip</h2>
+      <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+        Moves every booking here into the other trip and deletes this one. Who it is shared with stays as the other trip has it.
+      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <select
+          value={target?.id ?? ""}
+          onChange={(e) => setTarget(targets.find((t) => t.id === e.target.value))}
+          className="rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
+        >
+          <option value="">Choose a trip…</option>
+          {targets.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.title} ({formatDateRange(t.start, t.end)})
+            </option>
+          ))}
+        </select>
+        <button type="button" disabled={!target || busy} onClick={merge} className={buttonClass}>
+          {busy ? "Merging…" : `Merge into ${target?.title ?? "…"}`}
+        </button>
+      </div>
+      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+    </section>
+  );
+}
+
 function DangerZone({ trip }: { trip: Trip }) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
@@ -213,6 +258,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   const trip = useTrip(tripId);
   const segments = useSegments(tripId);
   const patterns = useSenderPatterns(user.uid);
+  const allTrips = useTrips(user);
   const [editing, setEditing] = useState<Editing>();
   const [error, setError] = useState<string>();
   if (trip === undefined) return <p className="text-zinc-500">Loading…</p>;
@@ -229,6 +275,13 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   };
   const remove = (segment: Segment) =>
     deleteSegment(firestore(), trip.id, segment.id).catch((e: Error) => setError(e.message));
+  // Other trips the viewer can edit, as destinations for a booking or for the
+  // whole trip; the rules decide finally, so a sharee of only one side is told.
+  const otherTrips = (allTrips ?? [])
+    .filter((t) => t.id !== trip.id && !t.deleting)
+    .sort((a, b) => a.start.localeCompare(b.start));
+  const move = (segment: Segment, toTripId: string) =>
+    moveSegment(firestore(), segment, toTripId).catch((e: Error) => setError(e.message));
   // Sender rules are the viewer's own, so the offer stands for the owner only:
   // the import ran against their mailbox.
   const learn = (segment: Segment) =>
@@ -280,7 +333,12 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
                     key={segment.id}
                     segment={segment}
                     {...(canEdit
-                      ? { onEdit: () => setEditing({ kind: "edit", segment }), onDelete: () => remove(segment) }
+                      ? {
+                          onEdit: () => setEditing({ kind: "edit", segment }),
+                          onDelete: () => remove(segment),
+                          moveTargets: otherTrips,
+                          onMove: (toTripId: string) => move(segment, toTripId),
+                        }
                       : {})}
                     {...(learn(segment) ? { onLearnSender: learn(segment) } : {})}
                   />
@@ -291,6 +349,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
         ))}
 
       {canManage && <Sharing trip={trip} />}
+      {canManage && <MergeInto trip={trip} targets={otherTrips} />}
       {canManage && <DangerZone trip={trip} />}
     </>
   );

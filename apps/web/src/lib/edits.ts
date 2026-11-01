@@ -91,6 +91,74 @@ export async function fitTripDates(
   throw new Error("The trip kept changing; try again");
 }
 
+// A booking keeps its id under the new trip, so an import of the same email
+// still finds it. Both trips must exist and neither may be mid-deletion; the
+// target widens to hold it, the source's dates stay (fit them afterwards).
+export async function moveSegment(db: Firestore, segment: Segment, toTripId: string): Promise<void> {
+  if (segment.tripId === toTripId) return;
+  const range = segmentDateRange([segment]);
+  if (!range) throw new Error("Segment has no dates");
+  const timestamp = now();
+  const fromRef = doc(db, paths.trip(segment.tripId));
+  const toRef = doc(db, paths.trip(toTripId));
+  await runTransaction(db, async (t) => {
+    const [from, to] = await Promise.all([t.get(fromRef), t.get(toRef)]);
+    if (!from.exists() || !to.exists()) throw new Error("Trip no longer exists");
+    const target = Trip.parse(to.data());
+    if (Trip.parse(from.data()).deleting || target.deleting) throw new Error("This trip is being deleted");
+    t.set(doc(db, paths.segment(toTripId, segment.id)), { ...segment, tripId: toTripId, updatedAt: timestamp });
+    t.delete(doc(db, paths.segment(segment.tripId, segment.id)));
+    t.update(toRef, { start: min(target.start, range.start), end: max(target.end, range.end), updatedAt: timestamp });
+    t.update(fromRef, { updatedAt: timestamp });
+  });
+}
+
+// Moves every booking of `sourceId` into `targetId` and deletes the source
+// (owner only: the rules reserve trip deletion for the owner). Sharing is
+// not merged; the target keeps its own list. The source's segments are read
+// outside the transaction, so its `updatedAt` stands in as a revision, as
+// in fitTripDates. Returns how many bookings moved.
+export async function mergeTrips(
+  db: Firestore,
+  sourceId: string,
+  targetId: string,
+  hooks: { afterRead?: () => Promise<void> } = {},
+): Promise<number> {
+  if (sourceId === targetId) throw new Error("Pick a different trip");
+  const sourceRef = doc(db, paths.trip(sourceId));
+  const targetRef = doc(db, paths.trip(targetId));
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const before = await getDoc(sourceRef);
+    if (!before.exists()) throw new Error("Trip no longer exists");
+    const seen = Trip.parse(before.data());
+    if (seen.deleting) throw new Error("This trip is being deleted");
+    const segments = (await getDocs(collection(db, paths.segments(sourceId)))).docs.map((d) => Segment.parse(d.data()));
+    await hooks.afterRead?.();
+    const range = segmentDateRange(segments);
+    const timestamp = now();
+    const applied = await runTransaction(db, async (t) => {
+      const [s, g] = await Promise.all([t.get(sourceRef), t.get(targetRef)]);
+      if (!s.exists() || !g.exists()) throw new Error("Trip no longer exists");
+      const source = Trip.parse(s.data());
+      const target = Trip.parse(g.data());
+      if (source.deleting || target.deleting) throw new Error("This trip is being deleted");
+      if (source.updatedAt !== seen.updatedAt) return false;
+      for (const segment of segments) {
+        t.set(doc(db, paths.segment(targetId, segment.id)), { ...segment, tripId: targetId, updatedAt: timestamp });
+        t.delete(doc(db, paths.segment(sourceId, segment.id)));
+      }
+      t.update(targetRef, {
+        ...(range ? { start: min(target.start, range.start), end: max(target.end, range.end) } : {}),
+        updatedAt: timestamp,
+      });
+      t.delete(sourceRef);
+      return true;
+    });
+    if (applied) return segments.length;
+  }
+  throw new Error("The trip kept changing; try again");
+}
+
 export async function renameTrip(db: Firestore, tripId: string, title: string): Promise<void> {
   await updateDoc(doc(db, paths.trip(tripId)), { title: title.trim(), updatedAt: now() });
 }

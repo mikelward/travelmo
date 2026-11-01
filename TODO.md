@@ -31,7 +31,7 @@
       user confirmed (the review list's decisions), between the keyword
       check and the model call. Weigh the model dependency's size on the
       Cloud Run image first.
-- [ ] Merge trips and move segments between them.
+- [x] Merge trips and move bookings between them.
 - [x] Surface the next check-in, check-out, departure or arrival on the
       trip list for trips under way and the next three upcoming.
 - [ ] Dead-letter topic on the Pub/Sub push subscription and an alert on
