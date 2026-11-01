@@ -134,8 +134,9 @@ The seed sender list is in `apps/parser/src/prefilter.ts`; users extend it
 from Settings, where an "Import review" list shows recent emails that did
 not become bookings with three actions: always import that sender, never
 import it, or import this one anyway (`POST /gmail/reimport`, which reclaims
-the message's record whatever its outcome, unless an import of it is live,
-and runs the import with the pre-filter skipped). Teaching a sender also
+the record of a message that did not become a booking — never an imported
+one, whose bookings are edited on the trip page, nor one whose import is
+live — and runs the import with the pre-filter skipped). Teaching a sender also
 drops any pattern on the other list that covers it, so the newest decision
 is the one the parser follows. A trip
 page offers "Always import this sender" on imported bookings. The

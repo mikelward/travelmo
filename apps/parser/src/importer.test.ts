@@ -149,6 +149,15 @@ describe("importMessage", () => {
     expect(reclaimable({ messageId: "m1", uid: "u1", outcome: "failed", segmentIds: [], processedAt: "2026-11-01T12:00:00Z" }, "2026-11-01T12:00:01Z")).toBe(true);
   });
 
+  it("never imports an already imported message again, so its bookings stay as edited", async () => {
+    const store = memoryStore();
+    const extract = vi.fn(async () => lodging);
+    expect(await importMessage("u1", email(), deps(store, extract))).toBe("imported");
+    expect(await importMessage("u1", email(), deps(store, extract), { force: true, reclaim: true })).toBe("skipped");
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect(store.segments.size).toBe(1);
+  });
+
   it("skips a message already processed and does not call the extractor", async () => {
     const store = memoryStore();
     const extract = vi.fn(async () => lodging);
