@@ -28,10 +28,12 @@ export function SegmentRow({
   segment,
   onEdit,
   onDelete,
+  onLearnSender,
 }: {
   segment: Segment;
   onEdit?: () => void;
   onDelete?: () => void;
+  onLearnSender?: () => void;
 }) {
   const route = [place(segment.origin), place(segment.destination)].filter(Boolean).join(" → ");
   const end = endLabel(segment);
@@ -52,6 +54,19 @@ export function SegmentRow({
           </p>
         )}
         {segment.notes && <p className="mt-1 whitespace-pre-line text-xs text-zinc-500">{segment.notes}</p>}
+        {segment.sender && (
+          <p className="mt-1 text-xs text-zinc-500">
+            From {segment.sender}
+            {onLearnSender && (
+              <>
+                {" · "}
+                <button type="button" onClick={onLearnSender} className="hover:underline">
+                  Always import this sender
+                </button>
+              </>
+            )}
+          </p>
+        )}
       </div>
       {(onEdit || onDelete) && (
         <div className="flex shrink-0 gap-3 self-start text-xs text-zinc-500">

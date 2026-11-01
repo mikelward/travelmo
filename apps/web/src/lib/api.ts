@@ -31,4 +31,5 @@ export const api = {
   completeGmail: (user: User, state: string) => post<{ emailAddress: string }>(user, "/gmail/complete", { state }),
   disconnectGmail: (user: User) => post<void>(user, "/gmail/disconnect"),
   backfill: (user: User, max?: number) => post<BackfillResult>(user, "/gmail/backfill", max ? { max } : {}),
+  reimport: (user: User, messageId: string) => post<{ outcome: string }>(user, "/gmail/reimport", { messageId }),
 };

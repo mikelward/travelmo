@@ -54,6 +54,9 @@ export const Segment = ExtractedSegment.extend({
   tripId: z.string().min(1),
   source: SegmentSource,
   gmailMessageIds: z.array(z.string()).default([]),
+  // Domain the booking email came from, so a trip page can offer to always
+  // import that sender.
+  sender: z.string().optional(),
   createdAt: isoDateTime,
   updatedAt: isoDateTime,
 });
@@ -110,6 +113,9 @@ export const ParsedMessage = z.object({
   uid: z.string().min(1),
   outcome: z.enum(["processing", "filtered", "not_booking", "imported", "failed"]),
   reason: z.string().optional(),
+  // Enough of the email to recognize it in a review list.
+  from: z.string().optional(),
+  subject: z.string().optional(),
   segmentIds: z.array(z.string()).default([]),
   processedAt: isoDateTime,
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { paths, type SenderPatterns } from "@travelmo/core";
+import { paths, type ParsedMessage, type SenderPatterns } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -8,7 +8,8 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { SignInGate } from "@/components/SignInGate";
 import { api, type BackfillResult } from "@/lib/api";
 import { firestore } from "@/lib/firebase";
-import { useProfile, useSenderPatterns } from "@/lib/trips";
+import { domainOf, isListed, learnSender } from "@/lib/patterns";
+import { useParsedMessages, useProfile, useSenderPatterns } from "@/lib/trips";
 
 const buttonClass =
   "rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
@@ -172,6 +173,90 @@ function PatternsSection({ user }: { user: User }) {
   );
 }
 
+const outcomeLabels: Record<ParsedMessage["outcome"], string> = {
+  processing: "Processing",
+  filtered: "Skipped before reading",
+  not_booking: "Read, not a booking",
+  imported: "Imported",
+  failed: "Failed",
+};
+
+function ReviewSection({ user }: { user: User }) {
+  const records = useParsedMessages(user.uid);
+  const patterns = useSenderPatterns(user.uid);
+  const [busy, setBusy] = useState<string>();
+  const [notice, setNotice] = useState<Record<string, string>>({});
+  const toReview = records?.filter((r) => r.outcome !== "imported" && r.outcome !== "processing") ?? [];
+
+  const act = async (record: ParsedMessage, action: () => Promise<string>) => {
+    setBusy(record.messageId);
+    try {
+      const result = await action();
+      setNotice((n) => ({ ...n, [record.messageId]: result }));
+    } catch (e) {
+      setNotice((n) => ({ ...n, [record.messageId]: (e as Error).message }));
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  return (
+    <section className="mt-10">
+      <h2 className="text-lg font-medium">Import review</h2>
+      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+        Recent emails that did not become bookings. Teach the importer about a sender, or import one anyway.
+      </p>
+      {records === undefined && <p className="mt-3 text-zinc-500">Loading…</p>}
+      {records && toReview.length === 0 && <p className="mt-3 text-sm text-zinc-500">Nothing to review.</p>}
+      <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
+        {toReview.map((record) => {
+          const domain = record.from ? domainOf(record.from) : undefined;
+          return (
+            <li key={record.messageId} className="py-3 text-sm">
+              <p className="font-medium">{record.subject || "(no subject)"}</p>
+              <p className="text-zinc-600 dark:text-zinc-400">
+                {record.from || "unknown sender"} · {outcomeLabels[record.outcome]}
+                {record.reason ? ` (${record.reason})` : ""}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={busy === record.messageId}
+                  className={buttonClass}
+                  onClick={() => act(record, async () => (await api.reimport(user, record.messageId)).outcome)}
+                >
+                  Import anyway
+                </button>
+                {domain && !isListed(patterns, domain, "allow") && (
+                  <button
+                    type="button"
+                    disabled={busy === record.messageId}
+                    className={buttonClass}
+                    onClick={() => act(record, async () => (await learnSender(firestore(), user.uid, domain, "allow"), `Always importing ${domain}`))}
+                  >
+                    Always import {domain}
+                  </button>
+                )}
+                {domain && !isListed(patterns, domain, "deny") && (
+                  <button
+                    type="button"
+                    disabled={busy === record.messageId}
+                    className={buttonClass}
+                    onClick={() => act(record, async () => (await learnSender(firestore(), user.uid, domain, "deny"), `Never importing ${domain}`))}
+                  >
+                    Never import {domain}
+                  </button>
+                )}
+                {notice[record.messageId] && <span className="self-center text-zinc-500">{notice[record.messageId]}</span>}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 export default function SettingsPage() {
   return (
     <SignInGate>
@@ -182,6 +267,7 @@ export default function SettingsPage() {
             <GmailSection user={user} />
           </Suspense>
           <PatternsSection user={user} />
+          <ReviewSection user={user} />
         </>
       )}
     </SignInGate>

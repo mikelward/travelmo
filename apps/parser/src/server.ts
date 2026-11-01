@@ -27,6 +27,7 @@ import {
   fetchMessage,
   gmailFor,
   gmailScopes,
+  isNotFound,
   listAddedSince,
   oauthClient,
   searchMessageIds,
@@ -34,7 +35,7 @@ import {
   watch,
   type OAuthConfig,
 } from "./gmail";
-import { importMessages, type ImportDeps } from "./importer";
+import { importMessage, importMessages, type ImportDeps } from "./importer";
 import { errorFields, log } from "./log";
 import { firestoreStore } from "./store";
 
@@ -226,6 +227,28 @@ app.post("/gmail/backfill", async (c) => {
   const counts = await importIds(uid, gmail, ids);
   log("INFO", "backfill", { uid, candidates: ids.length, ...counts });
   return c.json({ candidates: ids.length, ...counts });
+});
+
+// A second look at one message the user picked from the review list: the
+// pre-filter is skipped, and an earlier record no longer stands in the way.
+app.post("/gmail/reimport", async (c) => {
+  const uid = await requireUser(c);
+  const state = await loadState(db, uid);
+  if (!state) throw new HTTPException(409, { message: "Gmail not connected" });
+  const body = (await c.req.json().catch(() => ({}))) as { messageId?: string };
+  if (!body.messageId) throw new HTTPException(400, { message: "Missing messageId" });
+  const gmail = gmailFor(oauth, state.refreshToken);
+  let message;
+  try {
+    message = await fetchMessage(gmail, body.messageId);
+  } catch (error) {
+    if (isNotFound(error)) throw new HTTPException(404, { message: "That email is no longer in Gmail" });
+    throw error;
+  }
+  await deps.store.forgetMessage(uid, message.id);
+  const outcome = await importMessage(uid, message, deps, { force: true });
+  log("INFO", "reimport", { uid, messageId: message.id, outcome });
+  return c.json({ outcome });
 });
 
 app.post("/internal/pubsub/gmail", async (c) => {

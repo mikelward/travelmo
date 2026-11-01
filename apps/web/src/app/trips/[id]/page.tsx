@@ -11,7 +11,8 @@ import { SegmentRow } from "@/components/SegmentRow";
 import { SignInGate } from "@/components/SignInGate";
 import { deleteSegment, deleteTrip, fitTripDates, renameTrip, saveSegment } from "@/lib/edits";
 import { firestore } from "@/lib/firebase";
-import { useSegments, useTrip } from "@/lib/trips";
+import { isListed, learnSender } from "@/lib/patterns";
+import { useSegments, useSenderPatterns, useTrip } from "@/lib/trips";
 
 const buttonClass =
   "rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
@@ -211,6 +212,7 @@ type Editing = { kind: "add" } | { kind: "edit"; segment: Segment } | undefined;
 function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   const trip = useTrip(tripId);
   const segments = useSegments(tripId);
+  const patterns = useSenderPatterns(user.uid);
   const [editing, setEditing] = useState<Editing>();
   const [error, setError] = useState<string>();
   if (trip === undefined) return <p className="text-zinc-500">Loading…</p>;
@@ -227,6 +229,12 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   };
   const remove = (segment: Segment) =>
     deleteSegment(firestore(), trip.id, segment.id).catch((e: Error) => setError(e.message));
+  // Sender rules are the viewer's own, so the offer stands for the owner only:
+  // the import ran against their mailbox.
+  const learn = (segment: Segment) =>
+    isOwner && segment.sender && !isListed(patterns, segment.sender, "allow")
+      ? () => learnSender(firestore(), user.uid, segment.sender!, "allow").catch((e: Error) => setError(e.message))
+      : undefined;
 
   return (
     <>
@@ -274,6 +282,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
                     {...(canEdit
                       ? { onEdit: () => setEditing({ kind: "edit", segment }), onDelete: () => remove(segment) }
                       : {})}
+                    {...(learn(segment) ? { onLearnSender: learn(segment) } : {})}
                   />
                 ),
               )}
