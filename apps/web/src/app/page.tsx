@@ -5,7 +5,7 @@ import type { User } from "firebase/auth";
 import Link from "next/link";
 import { SignInGate } from "@/components/SignInGate";
 import { TripCard } from "@/components/TripCard";
-import { useSegmentsOf, useTrips } from "@/lib/trips";
+import { useNow, useSegmentsOf, useTrips } from "@/lib/trips";
 
 function today(): string {
   const now = new Date();
@@ -52,7 +52,7 @@ function Trips({ user }: { user: User }) {
   const groups = trips ? groupTrips(trips, today()) : undefined;
   const detailed = groups ? [...groups.current, ...groups.upcoming.slice(0, upcomingWithDetails)].map((t) => t.id) : [];
   const segmentsByTrip = useSegmentsOf(detailed);
-  const now = new Date().toISOString();
+  const now = useNow();
 
   if (!trips || !groups) return <p className="text-zinc-500">Loading trips…</p>;
   if (trips.length === 0) {

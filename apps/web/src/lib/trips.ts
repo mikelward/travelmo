@@ -91,7 +91,9 @@ export function useSegments(tripId: string): Segment[] | undefined {
 }
 
 // Segments of a few trips at once, for the list's "next up" line. One
-// listener per trip, so callers keep the set small.
+// listener per trip, so callers keep the set small. Only trips still asked
+// for are returned: a trip that dropped out of the set has no listener, so
+// its cached segments could go stale.
 export function useSegmentsOf(tripIds: readonly string[]): Record<string, Segment[]> {
   const [byTrip, setByTrip] = useState<Record<string, Segment[]>>({});
   const key = tripIds.join("\n");
@@ -106,7 +108,21 @@ export function useSegmentsOf(tripIds: readonly string[]): Record<string, Segmen
     );
     return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
   }, [key]);
-  return byTrip;
+  return useMemo(() => {
+    const ids = key ? key.split("\n") : [];
+    return Object.fromEntries(ids.flatMap((id) => (byTrip[id] ? [[id, byTrip[id]]] : [])));
+  }, [byTrip, key]);
+}
+
+// The current instant, refreshed on an interval so "next up" lines move on
+// as events pass without anything else changing.
+export function useNow(intervalMs = 60_000): string {
+  const [now, setNow] = useState(() => new Date().toISOString());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date().toISOString()), intervalMs);
+    return () => clearInterval(timer);
+  }, [intervalMs]);
+  return now;
 }
 
 export function useProfile(uid: string): UserProfile | undefined {
