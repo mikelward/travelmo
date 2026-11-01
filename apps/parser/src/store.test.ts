@@ -29,6 +29,16 @@ describe("firestoreStore.claimMessage", () => {
     expect(await store.claimMessage("u1", id, at(claimLeaseMs * 10))).toBe(false);
   });
 
+  it("reclaims a finished record but not a live claim, and one of two concurrent reclaims wins", async () => {
+    const id = unique();
+    await store.claimMessage("u1", id, at(0));
+    expect(await store.reclaimMessage("u1", id, at(1000))).toBe(false);
+    await store.setParsed({ messageId: id, uid: "u1", outcome: "filtered", segmentIds: [], processedAt: at(2000) });
+    const results = await Promise.all([store.reclaimMessage("u1", id, at(3000)), store.reclaimMessage("u1", id, at(3000))]);
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect((await db.doc(paths.parsedMessage("u1", id)).get()).data()?.outcome).toBe("processing");
+  });
+
   it("refuses a live processing claim but takes over an expired one", async () => {
     const id = unique();
     expect(await store.claimMessage("u1", id, at(0))).toBe(true);

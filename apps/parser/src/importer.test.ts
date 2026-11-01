@@ -3,6 +3,7 @@ import type { EmailMessage } from "./gmail";
 import {
   claimLeaseMs,
   claimable,
+  reclaimable,
   importMessage,
   importMessages,
   tripTitle,
@@ -46,8 +47,13 @@ function memoryStore(): Memory {
       parsed.set(key, { messageId: id, uid, outcome: "processing", segmentIds: [], processedAt });
       return true;
     },
+    reclaimMessage: async (uid, id, processedAt) => {
+      const key = `${uid}/${id}`;
+      if (!reclaimable(parsed.get(key), processedAt)) return false;
+      parsed.set(key, { messageId: id, uid, outcome: "processing", segmentIds: [], processedAt });
+      return true;
+    },
     setParsed: async (r) => void parsed.set(`${r.uid}/${r.messageId}`, r),
-    forgetMessage: async (uid, id) => void parsed.delete(`${uid}/${id}`),
     withUserLock: (uid, fn) => {
       const run = (locks.get(uid) ?? Promise.resolve()).then(() => fn(tx));
       locks.set(uid, run.catch(() => undefined));
@@ -122,16 +128,25 @@ describe("importMessage", () => {
     });
   });
 
-  it("imports a filtered message when the user asks for it, after the record is forgotten", async () => {
+  it("imports a filtered message again when the user asks for it", async () => {
     const store = memoryStore();
     const extract = vi.fn(async () => lodging);
     const lunch = email({ from: "friend@example.com", subject: "Lunch?" });
     expect(await importMessage("u1", lunch, deps(store, extract))).toBe("filtered");
     expect(store.parsed.get("u1/m1")).toMatchObject({ outcome: "filtered", from: "friend@example.com", subject: "Lunch?" });
-    await store.forgetMessage("u1", "m1");
-    expect(await importMessage("u1", lunch, deps(store, extract), { force: true })).toBe("imported");
+    expect(await importMessage("u1", lunch, deps(store, extract), { force: true, reclaim: true })).toBe("imported");
     expect(extract).toHaveBeenCalledTimes(1);
     expect(store.parsed.get("u1/m1")?.outcome).toBe("imported");
+  });
+
+  it("does not take another look while an import of the same message is live", async () => {
+    const store = memoryStore();
+    const extract = vi.fn(async () => lodging);
+    await store.claimMessage("u1", "m1", "2026-11-01T12:00:00Z");
+    expect(await importMessage("u1", email(), deps(store, extract), { force: true, reclaim: true })).toBe("skipped");
+    expect(extract).not.toHaveBeenCalled();
+    expect(reclaimable({ messageId: "m1", uid: "u1", outcome: "processing", segmentIds: [], processedAt: "2026-11-01T12:00:00Z" }, "2026-11-01T12:05:00Z")).toBe(false);
+    expect(reclaimable({ messageId: "m1", uid: "u1", outcome: "failed", segmentIds: [], processedAt: "2026-11-01T12:00:00Z" }, "2026-11-01T12:00:01Z")).toBe(true);
   });
 
   it("skips a message already processed and does not call the extractor", async () => {

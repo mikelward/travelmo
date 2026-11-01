@@ -1,24 +1,32 @@
 import { ParsedMessage, SenderPatterns, Trip, paths } from "@travelmo/core";
 import type { Firestore } from "firebase-admin/firestore";
-import { claimable, type TripStore } from "./importer";
+import { claimable, reclaimable, type TripStore } from "./importer";
 
 export function firestoreStore(db: Firestore): TripStore {
+  function claimWhen(
+    uid: string,
+    messageId: string,
+    processedAt: string,
+    allowed: (existing: ParsedMessage | undefined) => boolean,
+  ): Promise<boolean> {
+    const ref = db.doc(paths.parsedMessage(uid, messageId));
+    return db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      const existing = snap.exists ? ParsedMessage.parse(snap.data()) : undefined;
+      if (!allowed(existing)) return false;
+      t.set(ref, { messageId, uid, outcome: "processing", segmentIds: [], processedAt } satisfies ParsedMessage);
+      return true;
+    });
+  }
   return {
     claimMessage(uid, messageId, processedAt) {
-      const ref = db.doc(paths.parsedMessage(uid, messageId));
-      return db.runTransaction(async (t) => {
-        const snap = await t.get(ref);
-        const existing = snap.exists ? ParsedMessage.parse(snap.data()) : undefined;
-        if (!claimable(existing, processedAt)) return false;
-        t.set(ref, { messageId, uid, outcome: "processing", segmentIds: [], processedAt } satisfies ParsedMessage);
-        return true;
-      });
+      return claimWhen(uid, messageId, processedAt, (existing) => claimable(existing, processedAt));
+    },
+    reclaimMessage(uid, messageId, processedAt) {
+      return claimWhen(uid, messageId, processedAt, (existing) => reclaimable(existing, processedAt));
     },
     async setParsed(record) {
       await db.doc(paths.parsedMessage(record.uid, record.messageId)).set(record);
-    },
-    async forgetMessage(uid, messageId) {
-      await db.doc(paths.parsedMessage(uid, messageId)).delete();
     },
     async withUserLock(uid, fn) {
       // Every import reads and writes this document, so two transactions

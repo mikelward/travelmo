@@ -29,6 +29,7 @@ export async function saveSegment(db: Firestore, tripId: string, extracted: Extr
     tripId,
     source: existing?.source ?? "manual",
     gmailMessageIds: existing?.gmailMessageIds ?? [],
+    ...(existing?.sender ? { sender: existing.sender } : {}),
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: timestamp,
   };
