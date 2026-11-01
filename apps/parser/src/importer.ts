@@ -20,9 +20,19 @@ export type TripTx = {
   putSegment(segment: Segment): void;
 };
 
+// A claim older than this with no outcome belongs to a worker that died;
+// the next delivery may take it over.
+export const claimLeaseMs = 15 * 60 * 1000;
+
+export function claimable(existing: ParsedMessage | undefined, now: string): boolean {
+  if (!existing) return true;
+  return existing.outcome === "processing" && Date.parse(now) - Date.parse(existing.processedAt) > claimLeaseMs;
+}
+
 export type TripStore = {
-  // Atomically records the message as being processed; false if any record
-  // already exists, so concurrent deliveries of one message import it once.
+  // Atomically records the message as being processed; false if a record
+  // exists and is not an expired lease, so concurrent deliveries of one
+  // message import it once while an abandoned claim can be retried.
   claimMessage(uid: string, messageId: string, processedAt: string): Promise<boolean>;
   setParsed(record: ParsedMessage): Promise<void>;
   // Runs fn serialized per user, so two overlapping imports cannot both

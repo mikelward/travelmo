@@ -45,6 +45,10 @@ export function takePending(db: Firestore, token: string, now: number): Promise<
   return take<PendingConnection>(db, paths.pendingConnection(token), now);
 }
 
+export async function mailboxOwner(db: Firestore, emailAddress: string): Promise<string | undefined> {
+  return (await db.doc(paths.gmailAccount(emailAddress)).get()).data()?.uid as string | undefined;
+}
+
 export async function loadState(db: Firestore, uid: string): Promise<GmailState | undefined> {
   const snap = await db.doc(paths.gmailState(uid)).get();
   return snap.exists ? GmailState.parse(snap.data()) : undefined;

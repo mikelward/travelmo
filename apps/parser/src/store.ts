@@ -1,21 +1,18 @@
-import { SenderPatterns, Trip, paths } from "@travelmo/core";
+import { ParsedMessage, SenderPatterns, Trip, paths } from "@travelmo/core";
 import type { Firestore } from "firebase-admin/firestore";
-import type { TripStore } from "./importer";
-
-function isAlreadyExists(error: unknown): boolean {
-  return typeof error === "object" && error !== null && (error as { code?: unknown }).code === 6;
-}
+import { claimable, type TripStore } from "./importer";
 
 export function firestoreStore(db: Firestore): TripStore {
   return {
-    async claimMessage(uid, messageId, processedAt) {
-      try {
-        await db.doc(paths.parsedMessage(uid, messageId)).create({ messageId, uid, outcome: "processing", segmentIds: [], processedAt });
+    claimMessage(uid, messageId, processedAt) {
+      const ref = db.doc(paths.parsedMessage(uid, messageId));
+      return db.runTransaction(async (t) => {
+        const snap = await t.get(ref);
+        const existing = snap.exists ? ParsedMessage.parse(snap.data()) : undefined;
+        if (!claimable(existing, processedAt)) return false;
+        t.set(ref, { messageId, uid, outcome: "processing", segmentIds: [], processedAt } satisfies ParsedMessage);
         return true;
-      } catch (error) {
-        if (isAlreadyExists(error)) return false;
-        throw error;
-      }
+      });
     },
     async setParsed(record) {
       await db.doc(paths.parsedMessage(record.uid, record.messageId)).set(record);

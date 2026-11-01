@@ -1,6 +1,15 @@
 import type { ExtractedBooking, ParsedMessage, Segment, Trip } from "@travelmo/core";
 import type { EmailMessage } from "./gmail";
-import { importMessage, importMessages, tripTitle, type ImportDeps, type TripStore, type TripTx } from "./importer";
+import {
+  claimLeaseMs,
+  claimable,
+  importMessage,
+  importMessages,
+  tripTitle,
+  type ImportDeps,
+  type TripStore,
+  type TripTx,
+} from "./importer";
 
 type Memory = TripStore & {
   trips: Map<string, Trip>;
@@ -33,7 +42,7 @@ function memoryStore(): Memory {
     parsed,
     claimMessage: async (uid, id, processedAt) => {
       const key = `${uid}/${id}`;
-      if (parsed.has(key)) return false;
+      if (!claimable(parsed.get(key), processedAt)) return false;
       parsed.set(key, { messageId: id, uid, outcome: "processing", segmentIds: [], processedAt });
       return true;
     },
@@ -130,6 +139,20 @@ describe("importMessage", () => {
     expect(store.trips.size).toBe(1);
     expect([...store.trips.values()][0]).toMatchObject({ start: "2026-12-12", end: "2026-12-15" });
     expect(store.segments.size).toBe(2);
+  });
+
+  it("retries a message whose earlier claim was abandoned", async () => {
+    const store = memoryStore();
+    const crashing = deps(store, async () => {
+      throw new Error("boom");
+    });
+    // A crash between the claim and any outcome leaves a bare "processing" record.
+    await store.claimMessage("u1", "m1", "2026-11-01T12:00:00Z");
+    expect(await importMessage("u1", email(), crashing)).toBe("skipped");
+    const later = new Date(Date.parse("2026-11-01T12:00:00Z") + claimLeaseMs + 1000).toISOString();
+    const outcome = await importMessage("u1", email(), { ...deps(store, async () => lodging), now: () => later });
+    expect(outcome).toBe("imported");
+    expect(store.trips.size).toBe(1);
   });
 
   it("records a filtered message without calling the extractor", async () => {

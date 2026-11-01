@@ -39,9 +39,10 @@ viewer's zone. Trip bounds are calendar dates.
 - `users/{uid}/settings/patterns` — `allow[], deny[]` sender domains.
 - `users/{uid}/parsedMessages/{gmailMessageId}` — `outcome` (processing,
   filtered, not_booking, imported, failed), `reason, segmentIds[],
-  processedAt`. Created atomically as `processing` before any work, so a
-  message delivered twice is imported once; also the audit trail of what the
-  LLM was shown.
+  processedAt`. Claimed atomically as `processing` before any work, so a
+  message delivered twice is imported once; a `processing` claim older than
+  fifteen minutes is a dead worker's and may be taken over. Also the audit
+  trail of what the LLM was shown.
 - `users/{uid}/private/gmail` — the refresh token and watch state. Server
   only. `users/{uid}/private/import` is read and written by every import
   transaction, serializing trip assignment per user.
