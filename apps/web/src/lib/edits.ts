@@ -1,4 +1,4 @@
-import { Trip, paths, segmentDateRange, type ExtractedSegment, type Segment } from "@travelmo/core";
+import { Segment, Trip, paths, segmentDateRange, type ExtractedSegment } from "@travelmo/core";
 import {
   collection,
   deleteDoc,
@@ -50,6 +50,23 @@ export async function deleteSegment(db: Firestore, tripId: string, segmentId: st
   batch.delete(doc(db, paths.segment(tripId, segmentId)));
   batch.update(doc(db, paths.trip(tripId)), { updatedAt: now() });
   await batch.commit();
+}
+
+// Bounds only ever widen on save, so after deletions a trip can outgrow its
+// bookings; this snaps them back. Owner only: the rules let a sharee widen
+// but never narrow. Returns false when there is nothing to fit to.
+export async function fitTripDates(db: Firestore, tripId: string): Promise<boolean> {
+  const segments = await getDocs(collection(db, paths.segments(tripId)));
+  const range = segmentDateRange(segments.docs.map((d) => Segment.parse(d.data())));
+  if (!range) return false;
+  const tripRef = doc(db, paths.trip(tripId));
+  await runTransaction(db, async (t) => {
+    const snap = await t.get(tripRef);
+    if (!snap.exists()) throw new Error("Trip no longer exists");
+    if (Trip.parse(snap.data()).deleting) throw new Error("This trip is being deleted");
+    t.update(tripRef, { start: range.start, end: range.end, updatedAt: now() });
+  });
+  return true;
 }
 
 export async function renameTrip(db: Firestore, tripId: string, title: string): Promise<void> {

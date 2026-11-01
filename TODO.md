@@ -23,8 +23,8 @@
       booking by hand.
 - [ ] Preselect the time zone from the airport or station code typed into
       From/To (needs an airport dataset).
-- [ ] "Fit dates to bookings" on a trip: bounds only ever widen today, so
-      deleting the last booking of a trip leaves its dates where they were.
+- [x] "Fit dates to bookings" on a trip, offered when its bookings span
+      less than its dates.
 - [ ] Embedding pre-filter: score candidate emails against bookings the
       user confirmed, between the keyword check and the model call.
 - [ ] "Learn this sender" from a trip page, feeding the allow list; a
