@@ -28,6 +28,8 @@
 - [ ] Surface check-in/check-out and boarding times on the trip list.
 - [ ] Dead-letter topic on the Pub/Sub push subscription and an alert on
       `renew_watch_failed`.
+- [ ] Reclaim `parsedMessages` stuck in `processing` (a crash mid-import
+      leaves one that is never retried) after a timeout.
 - [ ] Service worker for offline trip pages (Serwist); `useOffline`.
 - [ ] End-to-end test: emulator-backed sign-in, seeded trips, share with
       a second user (Playwright).

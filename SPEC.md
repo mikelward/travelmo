@@ -37,11 +37,14 @@ viewer's zone. Trip bounds are calendar dates.
 - `users/{uid}` — `email, displayName, photoURL, gmail {emailAddress,
   connectedAt, watchExpiration, historyId}`. `gmail` is server-written.
 - `users/{uid}/settings/patterns` — `allow[], deny[]` sender domains.
-- `users/{uid}/parsedMessages/{gmailMessageId}` — `outcome` (filtered,
-  not_booking, imported, failed), `reason, segmentIds[], processedAt`.
-  The idempotency record; also the audit trail of what the LLM was shown.
+- `users/{uid}/parsedMessages/{gmailMessageId}` — `outcome` (processing,
+  filtered, not_booking, imported, failed), `reason, segmentIds[],
+  processedAt`. Created atomically as `processing` before any work, so a
+  message delivered twice is imported once; also the audit trail of what the
+  LLM was shown.
 - `users/{uid}/private/gmail` — the refresh token and watch state. Server
-  only.
+  only. `users/{uid}/private/import` is read and written by every import
+  transaction, serializing trip assignment per user.
 - `gmailAccounts/{emailAddress}` → `{uid}`; `oauthStates/{nonce}` → `{uid,
   createdAt}`. Server only.
 
@@ -66,8 +69,9 @@ Schemas live in `packages/core/src/schema.ts`; paths in `paths.ts`.
 Gmail ─watch─▶ Pub/Sub ─push(OIDC)─▶ parser /internal/pubsub/gmail
                                         │ history.list since stored historyId
                                         ▼
-                               parsedMessages/{id} exists? ── yes ─▶ skip
-                                        │ no
+                               create parsedMessages/{id} as "processing"
+                                        │ already exists ─▶ skip
+                                        │ created
                                         ▼
                                pre-filter: user deny list → user/seed allow
                                list → subject keywords, minus promotional
@@ -80,10 +84,12 @@ Gmail ─watch─▶ Pub/Sub ─push(OIDC)─▶ parser /internal/pubsub/gmail
                                isBooking && segments?          ── no ────▶ record "not_booking"
                                         │ yes
                                         ▼
+                               transaction, serialized per user:
                                trip within 2 days of the booking's dates?
-                               extend it : create one titled by destination
+                               extend its bounds only : create one titled by
+                               destination; write segments
                                         ▼
-                               write segments, record "imported"
+                               record "imported"
 ```
 
 Cost control is the pre-filter plus the parsed-message record: an email is

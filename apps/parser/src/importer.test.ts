@@ -1,21 +1,48 @@
 import type { ExtractedBooking, ParsedMessage, Segment, Trip } from "@travelmo/core";
 import type { EmailMessage } from "./gmail";
-import { importMessage, tripTitle, type ImportDeps, type TripStore } from "./importer";
+import { importMessage, tripTitle, type ImportDeps, type TripStore, type TripTx } from "./importer";
 
-function memoryStore(): TripStore & { trips: Map<string, Trip>; segments: Map<string, Segment>; parsed: Map<string, ParsedMessage> } {
+type Memory = TripStore & {
+  trips: Map<string, Trip>;
+  segments: Map<string, Segment>;
+  parsed: Map<string, ParsedMessage>;
+};
+
+function memoryStore(): Memory {
   const trips = new Map<string, Trip>();
   const segments = new Map<string, Segment>();
   const parsed = new Map<string, ParsedMessage>();
+  const locks = new Map<string, Promise<unknown>>();
   let ids = 0;
+  const tx: TripTx = {
+    listTrips: async () => [...trips.values()],
+    createTrip: (t) => {
+      if (trips.has(t.id)) throw new Error(`trip ${t.id} exists`);
+      trips.set(t.id, t);
+    },
+    extendTrip: (id, bounds) => {
+      const trip = trips.get(id);
+      if (!trip) throw new Error(`trip ${id} missing`);
+      trips.set(id, { ...trip, ...bounds });
+    },
+    putSegment: (s) => void segments.set(s.id, s),
+  };
   return {
     trips,
     segments,
     parsed,
-    getParsed: async (uid, id) => parsed.get(`${uid}/${id}`),
+    claimMessage: async (uid, id, processedAt) => {
+      const key = `${uid}/${id}`;
+      if (parsed.has(key)) return false;
+      parsed.set(key, { messageId: id, uid, outcome: "processing", segmentIds: [], processedAt });
+      return true;
+    },
     setParsed: async (r) => void parsed.set(`${r.uid}/${r.messageId}`, r),
-    listTrips: async (uid) => [...trips.values()].filter((t) => t.ownerUid === uid),
-    putTrip: async (t) => void trips.set(t.id, t),
-    putSegment: async (s) => void segments.set(s.id, s),
+    withUserLock: (uid, fn) => {
+      const run = (locks.get(uid) ?? Promise.resolve()).then(() => fn(tx));
+      locks.set(uid, run.catch(() => undefined));
+      return run;
+    },
     senderPatterns: async () => ({ allow: [], deny: [] }),
     newId: () => `trip${++ids}`,
   };
@@ -45,6 +72,20 @@ const lodging: ExtractedBooking = {
   ],
 };
 
+const flight: ExtractedBooking = {
+  isBooking: true,
+  segments: [
+    {
+      type: "flight",
+      title: "FR 123 MAN to DUB",
+      start: "2026-12-15T08:00:00+00:00",
+      end: "2026-12-15T09:00:00+00:00",
+      origin: { name: "Manchester", code: "MAN", country: "GB" },
+      destination: { name: "Dublin", code: "DUB", city: "Dublin", country: "IE" },
+    },
+  ],
+};
+
 function deps(store: TripStore, extract: ImportDeps["extract"]): ImportDeps {
   return { store, extract, now: () => "2026-11-01T12:00:00Z", log: () => {} };
 }
@@ -68,6 +109,29 @@ describe("importMessage", () => {
     expect(extract).toHaveBeenCalledTimes(1);
   });
 
+  it("imports one message delivered twice concurrently exactly once", async () => {
+    const store = memoryStore();
+    const extract = vi.fn(async () => lodging);
+    const outcomes = await Promise.all([
+      importMessage("u1", email(), deps(store, extract)),
+      importMessage("u1", email(), deps(store, extract)),
+    ]);
+    expect(outcomes.sort()).toEqual(["imported", "skipped"]);
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect(store.trips.size).toBe(1);
+  });
+
+  it("puts two overlapping bookings imported concurrently into one trip", async () => {
+    const store = memoryStore();
+    await Promise.all([
+      importMessage("u1", email(), deps(store, async () => lodging)),
+      importMessage("u1", email({ id: "m2", subject: "Your Ryanair itinerary" }), deps(store, async () => flight)),
+    ]);
+    expect(store.trips.size).toBe(1);
+    expect([...store.trips.values()][0]).toMatchObject({ start: "2026-12-12", end: "2026-12-15" });
+    expect(store.segments.size).toBe(2);
+  });
+
   it("records a filtered message without calling the extractor", async () => {
     const store = memoryStore();
     const extract = vi.fn(async () => lodging);
@@ -77,26 +141,20 @@ describe("importMessage", () => {
     expect(store.parsed.get("u1/m1")?.outcome).toBe("filtered");
   });
 
-  it("extends an existing trip when the booking falls within its gap", async () => {
+  it("extends an existing trip's bounds only, leaving sharing alone", async () => {
     const store = memoryStore();
     await importMessage("u1", email(), deps(store, async () => lodging));
-    const flight: ExtractedBooking = {
-      isBooking: true,
-      segments: [
-        {
-          type: "flight",
-          title: "FR 123 MAN to DUB",
-          start: "2026-12-15T08:00:00+00:00",
-          end: "2026-12-15T09:00:00+00:00",
-          origin: { name: "Manchester", code: "MAN", country: "GB" },
-          destination: { name: "Dublin", code: "DUB", city: "Dublin", country: "IE" },
-        },
-      ],
-    };
+    const trip = [...store.trips.values()][0]!;
+    store.trips.set(trip.id, { ...trip, sharedWith: ["partner@example.com"], title: "Liverpool weekend" });
     await importMessage("u1", email({ id: "m2", subject: "Your Ryanair itinerary" }), deps(store, async () => flight));
     expect(store.trips.size).toBe(1);
-    expect([...store.trips.values()][0]).toMatchObject({ start: "2026-12-12", end: "2026-12-15" });
-    expect(store.segments.get("m2-0")?.tripId).toBe("trip1");
+    expect(store.trips.get(trip.id)).toMatchObject({
+      start: "2026-12-12",
+      end: "2026-12-15",
+      sharedWith: ["partner@example.com"],
+      title: "Liverpool weekend",
+    });
+    expect(store.segments.get("m2-0")?.tripId).toBe(trip.id);
   });
 
   it("records not_booking when the model says so", async () => {
