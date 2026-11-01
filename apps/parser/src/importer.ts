@@ -10,12 +10,24 @@ import type { Extractor } from "./extract";
 import type { EmailMessage } from "./gmail";
 import { prefilter, type SenderPatterns } from "./prefilter";
 
+export type TripBounds = Pick<Trip, "start" | "end" | "updatedAt">;
+
+// Reads first, then writes: Firestore transactions require that order.
+export type TripTx = {
+  listTrips(): Promise<Trip[]>;
+  createTrip(trip: Trip): void;
+  extendTrip(tripId: string, bounds: TripBounds): void;
+  putSegment(segment: Segment): void;
+};
+
 export type TripStore = {
-  getParsed(uid: string, messageId: string): Promise<ParsedMessage | undefined>;
+  // Atomically records the message as being processed; false if any record
+  // already exists, so concurrent deliveries of one message import it once.
+  claimMessage(uid: string, messageId: string, processedAt: string): Promise<boolean>;
   setParsed(record: ParsedMessage): Promise<void>;
-  listTrips(uid: string): Promise<Trip[]>;
-  putTrip(trip: Trip): Promise<void>;
-  putSegment(segment: Segment): Promise<void>;
+  // Runs fn serialized per user, so two overlapping imports cannot both
+  // decide to create a trip for the same dates.
+  withUserLock<T>(uid: string, fn: (tx: TripTx) => Promise<T>): Promise<T>;
   senderPatterns(uid: string): Promise<SenderPatterns>;
   newId(): string;
 };
@@ -27,11 +39,11 @@ export type ImportDeps = {
   log: (event: string, fields: Record<string, unknown>) => void;
 };
 
-export type ImportOutcome = ParsedMessage["outcome"] | "skipped";
+export type ImportOutcome = Exclude<ParsedMessage["outcome"], "processing"> | "skipped";
 
 export async function importMessage(uid: string, message: EmailMessage, deps: ImportDeps): Promise<ImportOutcome> {
   const { store, now, log } = deps;
-  if (await store.getParsed(uid, message.id)) return "skipped";
+  if (!(await store.claimMessage(uid, message.id, now()))) return "skipped";
 
   const verdict = prefilter(
     { from: message.from, subject: message.subject, listUnsubscribe: message.listUnsubscribe },
@@ -61,41 +73,47 @@ export async function importMessage(uid: string, message: EmailMessage, deps: Im
   }
 
   const timestamp = now();
-  const trips = await store.listTrips(uid);
-  let trip = findTripForRange(trips, range);
-  if (trip) {
-    trip = { ...trip, start: min(trip.start, range.start), end: max(trip.end, range.end), updatedAt: timestamp };
-  } else {
-    trip = {
-      id: store.newId(),
-      title: tripTitle(booking.segments),
-      start: range.start,
-      end: range.end,
-      ownerUid: uid,
-      sharedWith: [],
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    };
-  }
-  await store.putTrip(trip);
+  const { tripId, segmentIds } = await store.withUserLock(uid, async (tx) => {
+    const existing = findTripForRange(await tx.listTrips(), range);
+    let tripId: string;
+    if (existing) {
+      tripId = existing.id;
+      // Only the bounds: sharing and title belong to the owner, who may be
+      // editing them right now.
+      tx.extendTrip(tripId, { start: min(existing.start, range.start), end: max(existing.end, range.end), updatedAt: timestamp });
+    } else {
+      tripId = store.newId();
+      tx.createTrip({
+        id: tripId,
+        title: tripTitle(booking.segments),
+        start: range.start,
+        end: range.end,
+        ownerUid: uid,
+        sharedWith: [],
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+    }
+    const segmentIds: string[] = [];
+    for (const [index, extracted] of booking.segments.entries()) {
+      // Deterministic ids keep a re-import of the same email from duplicating legs.
+      const id = `${message.id}-${index}`;
+      tx.putSegment({
+        ...extracted,
+        id,
+        tripId,
+        source: "gmail",
+        gmailMessageIds: [message.id],
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+      segmentIds.push(id);
+    }
+    return { tripId, segmentIds };
+  });
 
-  const segmentIds: string[] = [];
-  for (const [index, extracted] of booking.segments.entries()) {
-    // Deterministic ids keep a re-import of the same email from duplicating legs.
-    const id = `${message.id}-${index}`;
-    await store.putSegment({
-      ...extracted,
-      id,
-      tripId: trip.id,
-      source: "gmail",
-      gmailMessageIds: [message.id],
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    });
-    segmentIds.push(id);
-  }
   await store.setParsed({ messageId: message.id, uid, outcome: "imported", segmentIds, processedAt: timestamp });
-  log("imported", { uid, messageId: message.id, tripId: trip.id, segments: segmentIds.length });
+  log("imported", { uid, messageId: message.id, tripId, segments: segmentIds.length });
   return "imported";
 }
 

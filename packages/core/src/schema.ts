@@ -105,7 +105,7 @@ export type SenderPatterns = z.infer<typeof SenderPatterns>;
 export const ParsedMessage = z.object({
   messageId: z.string().min(1),
   uid: z.string().min(1),
-  outcome: z.enum(["filtered", "not_booking", "imported", "failed"]),
+  outcome: z.enum(["processing", "filtered", "not_booking", "imported", "failed"]),
   reason: z.string().optional(),
   segmentIds: z.array(z.string()).default([]),
   processedAt: isoDateTime,

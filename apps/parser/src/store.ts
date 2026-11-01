@@ -1,25 +1,49 @@
-import { ParsedMessage, SenderPatterns, Trip, paths, type Segment } from "@travelmo/core";
+import { SenderPatterns, Trip, paths } from "@travelmo/core";
 import type { Firestore } from "firebase-admin/firestore";
 import type { TripStore } from "./importer";
 
+function isAlreadyExists(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { code?: unknown }).code === 6;
+}
+
 export function firestoreStore(db: Firestore): TripStore {
   return {
-    async getParsed(uid, messageId) {
-      const snap = await db.doc(paths.parsedMessage(uid, messageId)).get();
-      return snap.exists ? ParsedMessage.parse(snap.data()) : undefined;
+    async claimMessage(uid, messageId, processedAt) {
+      try {
+        await db.doc(paths.parsedMessage(uid, messageId)).create({ messageId, uid, outcome: "processing", segmentIds: [], processedAt });
+        return true;
+      } catch (error) {
+        if (isAlreadyExists(error)) return false;
+        throw error;
+      }
     },
     async setParsed(record) {
       await db.doc(paths.parsedMessage(record.uid, record.messageId)).set(record);
     },
-    async listTrips(uid) {
-      const snap = await db.collection(paths.trips()).where("ownerUid", "==", uid).get();
-      return snap.docs.map((d) => Trip.parse(d.data()));
-    },
-    async putTrip(trip) {
-      await db.doc(paths.trip(trip.id)).set(trip);
-    },
-    async putSegment(segment: Segment) {
-      await db.doc(paths.segment(segment.tripId, segment.id)).set(segment);
+    async withUserLock(uid, fn) {
+      // Every import reads and writes this document, so two transactions
+      // for one user conflict and the later one retries against fresh trips.
+      const lock = db.doc(paths.importLock(uid));
+      return db.runTransaction(async (t) => {
+        await t.get(lock);
+        const result = await fn({
+          async listTrips() {
+            const snap = await t.get(db.collection(paths.trips()).where("ownerUid", "==", uid));
+            return snap.docs.map((d) => Trip.parse(d.data()));
+          },
+          createTrip(trip) {
+            t.create(db.doc(paths.trip(trip.id)), trip);
+          },
+          extendTrip(tripId, bounds) {
+            t.update(db.doc(paths.trip(tripId)), bounds);
+          },
+          putSegment(segment) {
+            t.set(db.doc(paths.segment(segment.tripId, segment.id)), segment);
+          },
+        });
+        t.set(lock, { lastImportAt: new Date().toISOString() });
+        return result;
+      });
     },
     async senderPatterns(uid) {
       const snap = await db.doc(paths.senderPatterns(uid)).get();

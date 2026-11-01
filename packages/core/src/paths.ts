@@ -2,6 +2,7 @@ export const paths = {
   user: (uid: string) => `users/${uid}`,
   // Server-only: refresh tokens live here; rules deny every client read.
   gmailState: (uid: string) => `users/${uid}/private/gmail`,
+  importLock: (uid: string) => `users/${uid}/private/import`,
   senderPatterns: (uid: string) => `users/${uid}/settings/patterns`,
   parsedMessage: (uid: string, messageId: string) =>
     `users/${uid}/parsedMessages/${messageId}`,
