@@ -179,7 +179,7 @@ describe("fitTripDates", () => {
 
 describe("moveSegment", () => {
   it("moves a booking to another trip, keeping its id and widening the target", async () => {
-    await moveSegment(asOwner(), imported, other.id);
+    await moveSegment(asOwner(), trip.id, imported.id, other.id);
     expect(await segmentIds(trip.id)).toEqual([]);
     expect(await segmentIds(other.id)).toEqual([imported.id]);
     const moved = (await getDoc(doc(asOwner(), paths.segment(other.id, imported.id)))).data();
@@ -188,15 +188,29 @@ describe("moveSegment", () => {
     expect(await readTrip()).toMatchObject({ start: "2026-12-12", end: "2026-12-14" });
   });
 
+  it("moves the booking as it is now, not as the page last saw it", async () => {
+    await saveSegment(asOwner(), trip.id, { ...imported, title: "Renamed meanwhile", end: "2026-12-16T11:00:00+00:00" }, imported);
+    await moveSegment(asOwner(), trip.id, imported.id, other.id);
+    const moved = (await getDoc(doc(asOwner(), paths.segment(other.id, imported.id)))).data();
+    expect(moved).toMatchObject({ title: "Renamed meanwhile", end: "2026-12-16T11:00:00+00:00" });
+    expect(await readOther()).toMatchObject({ start: "2026-12-12", end: "2026-12-22" });
+  });
+
+  it("refuses to move a booking that is gone, rather than resurrecting it", async () => {
+    await deleteSegment(asOwner(), trip.id, imported.id);
+    await expect(moveSegment(asOwner(), trip.id, imported.id, other.id)).rejects.toThrow(/no longer/);
+    expect(await segmentIds(other.id)).toEqual([]);
+  });
+
   it("refuses a target that is being deleted and leaves everything in place", async () => {
     await seed((db) => setDoc(doc(db, paths.trip(other.id)), { ...other, deleting: true }));
-    await expect(moveSegment(asOwner(), imported, other.id)).rejects.toThrow(/being deleted/);
+    await expect(moveSegment(asOwner(), trip.id, imported.id, other.id)).rejects.toThrow(/being deleted/);
     expect(await segmentIds(trip.id)).toEqual([imported.id]);
   });
 
   it("lets a sharee of both trips move a booking", async () => {
     await seed((db) => setDoc(doc(db, paths.trip(other.id)), { ...other, sharedWith: [partner.email] }));
-    await moveSegment(as(partner), imported, other.id);
+    await moveSegment(as(partner), trip.id, imported.id, other.id);
     expect(await segmentIds(other.id)).toEqual([imported.id]);
   });
 });

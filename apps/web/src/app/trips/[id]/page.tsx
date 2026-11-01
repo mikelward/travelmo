@@ -281,7 +281,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
     .filter((t) => t.id !== trip.id && !t.deleting)
     .sort((a, b) => a.start.localeCompare(b.start));
   const move = (segment: Segment, toTripId: string) =>
-    moveSegment(firestore(), segment, toTripId).catch((e: Error) => setError(e.message));
+    moveSegment(firestore(), trip.id, segment.id, toTripId).catch((e: Error) => setError(e.message));
   // Sender rules are the viewer's own, so the offer stands for the owner only:
   // the import ran against their mailbox.
   const learn = (segment: Segment) =>
