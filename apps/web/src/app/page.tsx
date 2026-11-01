@@ -1,25 +1,46 @@
 "use client";
 
-import { groupTrips, type Trip } from "@travelmo/core";
+import { groupTrips, type Segment, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
 import { SignInGate } from "@/components/SignInGate";
 import { TripCard } from "@/components/TripCard";
-import { useTrips } from "@/lib/trips";
+import { useSegmentsOf, useTrips } from "@/lib/trips";
 
 function today(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
-function Section({ title, trips, uid }: { title: string; trips: Trip[]; uid: string }) {
+// Trips whose "next up" line is worth a listener each: everything under way
+// and the few coming next.
+const upcomingWithDetails = 3;
+
+function Section({
+  title,
+  trips,
+  uid,
+  segmentsByTrip,
+  now,
+}: {
+  title: string;
+  trips: Trip[];
+  uid: string;
+  segmentsByTrip: Record<string, Segment[]>;
+  now: string;
+}) {
   if (trips.length === 0) return null;
   return (
     <section className="mt-8 first:mt-0">
       <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">{title}</h2>
       <div className="grid gap-3">
         {trips.map((trip) => (
-          <TripCard key={trip.id} trip={trip} shared={trip.ownerUid !== uid} />
+          <TripCard
+            key={trip.id}
+            trip={trip}
+            shared={trip.ownerUid !== uid}
+            {...(segmentsByTrip[trip.id] ? { segments: segmentsByTrip[trip.id], now } : {})}
+          />
         ))}
       </div>
     </section>
@@ -28,7 +49,12 @@ function Section({ title, trips, uid }: { title: string; trips: Trip[]; uid: str
 
 function Trips({ user }: { user: User }) {
   const trips = useTrips(user);
-  if (!trips) return <p className="text-zinc-500">Loading trips…</p>;
+  const groups = trips ? groupTrips(trips, today()) : undefined;
+  const detailed = groups ? [...groups.current, ...groups.upcoming.slice(0, upcomingWithDetails)].map((t) => t.id) : [];
+  const segmentsByTrip = useSegmentsOf(detailed);
+  const now = new Date().toISOString();
+
+  if (!trips || !groups) return <p className="text-zinc-500">Loading trips…</p>;
   if (trips.length === 0) {
     return (
       <div className="mt-16 text-center text-zinc-600 dark:text-zinc-400">
@@ -42,12 +68,12 @@ function Trips({ user }: { user: User }) {
       </div>
     );
   }
-  const groups = groupTrips(trips, today());
+  const sectionProps = { uid: user.uid, segmentsByTrip, now };
   return (
     <>
-      <Section title="Now" trips={groups.current} uid={user.uid} />
-      <Section title="Upcoming" trips={groups.upcoming} uid={user.uid} />
-      <Section title="Past" trips={groups.past} uid={user.uid} />
+      <Section title="Now" trips={groups.current} {...sectionProps} />
+      <Section title="Upcoming" trips={groups.upcoming} {...sectionProps} />
+      <Section title="Past" trips={groups.past} {...sectionProps} />
     </>
   );
 }

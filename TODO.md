@@ -32,7 +32,8 @@
       check and the model call. Weigh the model dependency's size on the
       Cloud Run image first.
 - [ ] Merge trips and move segments between them.
-- [ ] Surface check-in/check-out and boarding times on the trip list.
+- [x] Surface the next check-in, check-out, departure or arrival on the
+      trip list for trips under way and the next three upcoming.
 - [ ] Dead-letter topic on the Pub/Sub push subscription and an alert on
       `renew_watch_failed`.
 - [ ] Service worker for offline trip pages (Serwist); `useOffline`.

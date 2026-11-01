@@ -1,8 +1,9 @@
-import { formatDateRange, type Trip } from "@travelmo/core";
+import { eventVerb, formatDate, formatDateRange, localDate, localTime, nextEvent, type Segment, type Trip } from "@travelmo/core";
 import Link from "next/link";
 
-export function TripCard({ trip, shared }: { trip: Trip; shared: boolean }) {
+export function TripCard({ trip, shared, segments, now }: { trip: Trip; shared: boolean; segments?: Segment[]; now?: string }) {
   const badge = trip.deleting ? "Deleting" : shared ? "Shared" : undefined;
+  const event = segments && now ? nextEvent(segments, now) : undefined;
   return (
     <Link
       href={`/trips/${trip.id}`}
@@ -13,6 +14,15 @@ export function TripCard({ trip, shared }: { trip: Trip; shared: boolean }) {
         {badge && <span className="shrink-0 text-xs uppercase tracking-wide text-zinc-500">{badge}</span>}
       </div>
       <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{formatDateRange(trip.start, trip.end)}</p>
+      {event && (
+        <p className="mt-2 text-sm">
+          <span className="font-medium">{eventVerb(event)}</span> {event.segment.title}
+          <span className="text-zinc-500">
+            {" · "}
+            {formatDate(localDate(event.at))} {localTime(event.at)}
+          </span>
+        </p>
+      )}
     </Link>
   );
 }

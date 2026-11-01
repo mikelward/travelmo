@@ -90,6 +90,25 @@ export function useSegments(tripId: string): Segment[] | undefined {
   return segments;
 }
 
+// Segments of a few trips at once, for the list's "next up" line. One
+// listener per trip, so callers keep the set small.
+export function useSegmentsOf(tripIds: readonly string[]): Record<string, Segment[]> {
+  const [byTrip, setByTrip] = useState<Record<string, Segment[]>>({});
+  const key = tripIds.join("\n");
+  useEffect(() => {
+    const ids = key ? key.split("\n") : [];
+    const unsubscribes = ids.map((tripId) =>
+      onSnapshot(
+        query(collection(firestore(), paths.segments(tripId)), orderBy("start")),
+        (s) => setByTrip((current) => ({ ...current, [tripId]: parseDocs(Segment, s) })),
+        (error) => console.error(`Segments subscription failed for ${tripId}`, error),
+      ),
+    );
+    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
+  }, [key]);
+  return byTrip;
+}
+
 export function useProfile(uid: string): UserProfile | undefined {
   const [profile, setProfile] = useState<UserProfile>();
   useEffect(() => {
