@@ -9,6 +9,7 @@ import {
   MailboxConflict,
   createOAuthState,
   loadState,
+  mailboxOwner,
   removeConnection,
   saveConnection,
   savePending,
@@ -160,6 +161,13 @@ app.post("/gmail/complete", async (c) => {
 
   const gmail = gmailFor(oauth, pending.refreshToken);
   const profile = await currentHistoryId(gmail);
+  // The watch is per mailbox, not per token, so it is never touched until
+  // ownership is settled: stopping it here would silence the real owner.
+  const owner = await mailboxOwner(db, profile.emailAddress);
+  if (owner !== undefined && owner !== uid) {
+    await revokeQuietly(pending.refreshToken, uid);
+    throw new HTTPException(409, { message: new MailboxConflict(profile.emailAddress).message });
+  }
   try {
     const watched = await watch(gmail, pubsubTopic);
     await saveConnection(db, uid, {
@@ -170,7 +178,7 @@ app.post("/gmail/complete", async (c) => {
       watchExpiration: watched.expiration,
     });
   } catch (error) {
-    await stopWatch(gmail).catch((e: unknown) => log("WARNING", "stop_watch_failed", { uid, ...errorFields(e) }));
+    // The watch, if started, points at our own topic and is left alone.
     await revokeQuietly(pending.refreshToken, uid);
     if (error instanceof MailboxConflict) throw new HTTPException(409, { message: error.message });
     throw error;
