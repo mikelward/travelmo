@@ -6,6 +6,9 @@ export const paths = {
   // Embeddings of emails the model has judged, for the similarity pre-filter.
   examples: (uid: string) => `users/${uid}/private/examples`,
   senderPatterns: (uid: string) => `users/${uid}/settings/patterns`,
+  // Subscribed calendar feeds: the owner reads them; the parser writes them.
+  feeds: (uid: string) => `users/${uid}/feeds`,
+  feed: (uid: string, feedId: string) => `users/${uid}/feeds/${feedId}`,
   parsedMessage: (uid: string, messageId: string) =>
     `users/${uid}/parsedMessages/${messageId}`,
   gmailAccount: (emailAddress: string) => `gmailAccounts/${emailAddress}`,

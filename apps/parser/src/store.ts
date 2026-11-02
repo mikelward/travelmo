@@ -60,6 +60,16 @@ export function firestoreStore(db: Firestore): TripStore {
           putSegment(segment) {
             t.set(db.doc(paths.segment(segment.tripId, segment.id)), segment);
           },
+          async getSegment(tripId, segmentId) {
+            const snap = await t.get(db.doc(paths.segment(tripId, segmentId)));
+            return snap.exists ? Segment.parse(snap.data()) : undefined;
+          },
+          deleteSegment(tripId, segmentId) {
+            t.delete(db.doc(paths.segment(tripId, segmentId)));
+          },
+          touchTrip(tripId, updatedAt) {
+            t.update(db.doc(paths.trip(tripId)), { updatedAt });
+          },
           addSource(tripId, segmentId, source) {
             t.update(db.doc(paths.segment(tripId, segmentId)), { sources: FieldValue.arrayUnion(source) });
             // The trip's revision moves with any change to its bookings, so a

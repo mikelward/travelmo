@@ -15,79 +15,8 @@ import {
   type TripStore,
   type TripTx,
 } from "./importer";
-import { addExample, emptyExamples, minExamples, type Examples } from "./similarity";
-
-type Memory = TripStore & {
-  trips: Map<string, Trip>;
-  segments: Map<string, Segment>;
-  parsed: Map<string, ParsedMessage>;
-  examplesOf: Map<string, Examples>;
-};
-
-function memoryStore(): Memory {
-  const trips = new Map<string, Trip>();
-  const segments = new Map<string, Segment>();
-  const parsed = new Map<string, ParsedMessage>();
-  const examplesOf = new Map<string, Examples>();
-  const locks = new Map<string, Promise<unknown>>();
-  let ids = 0;
-  const tx: TripTx = {
-    listTrips: async () => [...trips.values()],
-    listSegments: async (tripId) => [...segments.values()].filter((s) => s.tripId === tripId),
-    createTrip: (t) => {
-      if (trips.has(t.id)) throw new Error(`trip ${t.id} exists`);
-      trips.set(t.id, t);
-    },
-    extendTrip: (id, bounds) => {
-      const trip = trips.get(id);
-      if (!trip) throw new Error(`trip ${id} missing`);
-      trips.set(id, { ...trip, ...bounds });
-    },
-    putSegment: (s) => void segments.set(s.id, s),
-    addSource: (_tripId, id, source) => {
-      const s = segments.get(id);
-      if (!s) throw new Error(`segment ${id} missing`);
-      if (!(s.sources ?? []).some((r) => r.kind === source.kind && r.id === source.id)) segments.set(id, { ...s, sources: [...(s.sources ?? []), source] });
-    },
-  };
-  return {
-    trips,
-    segments,
-    parsed,
-    examplesOf,
-    examples: async (uid) => examplesOf.get(uid) ?? emptyExamples(),
-    saveExample: async (uid, label, example) => {
-      examplesOf.set(uid, addExample(examplesOf.get(uid) ?? emptyExamples(), label, example));
-    },
-    claimMessage: async (uid, id, processedAt) => {
-      const key = `${uid}/${id}`;
-      if (!claimable(parsed.get(key), processedAt)) return false;
-      parsed.set(key, { messageId: id, uid, outcome: "processing", segmentIds: [], processedAt });
-      return true;
-    },
-    reclaimMessage: async (uid, id, processedAt) => {
-      const key = `${uid}/${id}`;
-      if (!reclaimable(parsed.get(key), processedAt)) return false;
-      parsed.set(key, { messageId: id, uid, outcome: "processing", segmentIds: [], processedAt });
-      return true;
-    },
-    retryMessage: async (uid, id, processedAt) => {
-      const key = `${uid}/${id}`;
-      if (!retryable(parsed.get(key), processedAt)) return false;
-      parsed.set(key, { messageId: id, uid, outcome: "processing", segmentIds: [], processedAt });
-      return true;
-    },
-    setParsed: async (r) => void parsed.set(`${r.uid}/${r.messageId}`, r),
-    getParsed: async (uid, id) => parsed.get(`${uid}/${id}`),
-    withUserLock: (uid, fn) => {
-      const run = (locks.get(uid) ?? Promise.resolve()).then(() => fn(tx));
-      locks.set(uid, run.catch(() => undefined));
-      return run;
-    },
-    senderPatterns: async () => ({ allow: [], deny: [] }),
-    newId: () => `trip${++ids}`,
-  };
-}
+import { addExample, emptyExamples, minExamples } from "./similarity";
+import { memoryStore, type Memory } from "./testStore";
 
 const email = (over: Partial<EmailMessage> = {}): EmailMessage => ({
   id: "m1",
@@ -736,6 +665,37 @@ describe("importCalendar", () => {
     fail = false;
     expect(await importCalendar("u1", calendar, deps(store, flaky), 100)).toMatchObject({ imported: 1, skipped: 1 });
     expect([...store.segments.values()].filter((s) => s.type === "lodging")).toHaveLength(2);
+  });
+
+  it("removes a booking whose event is later cancelled, unless it was edited or matched since", async () => {
+    const store = memoryStore();
+    const live = ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB")]);
+    await importCalendar("u1", live, deps(store, async () => flight), 100);
+    const [segment] = [...store.segments.values()];
+    expect(segment).toBeDefined();
+    const cancelled = ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB", ["STATUS:CANCELLED"])]);
+    expect(await importCalendar("u1", cancelled, deps(store, async () => flight), 100)).toMatchObject({ cancelled: 1, removed: 1 });
+    expect(store.segments.size).toBe(0);
+    expect([...store.parsed.values()][0]).toMatchObject({ outcome: "not_booking", reason: "cancelled in the calendar", segmentIds: [] });
+    // Once is enough: the record no longer holds the booking.
+    expect(await importCalendar("u1", cancelled, deps(store, async () => flight), 100)).toMatchObject({ removed: 0 });
+  });
+
+  it("keeps a cancelled event's booking that the user edited or another import matched", async () => {
+    const store = memoryStore();
+    const live = ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB"), vevent("e2", "Cove Liverpool")]);
+    await importCalendar("u1", live, deps(store, async (m) => (m.subject.startsWith("FR") ? flight : lodging)), 100);
+    const [flightSeg, staySeg] = [...store.segments.values()];
+    store.segments.set(flightSeg!.id, { ...flightSeg!, title: "Edited", updatedAt: "2026-11-05T00:00:00Z" });
+    // The confirmation email arrives later and is matched to the stay.
+    await importMessage("u1", email({ id: "m9" }), deps(store, async () => lodging));
+    expect(store.segments.get(staySeg!.id)?.sources?.map((s) => s.kind)).toEqual(["ics", "gmail"]);
+    const cancelled = ics("-//TripIt//EN", [
+      vevent("e1", "FR123 MAN to DUB", ["STATUS:CANCELLED"]),
+      vevent("e2", "Cove Liverpool", ["STATUS:CANCELLED"]),
+    ]);
+    expect(await importCalendar("u1", cancelled, deps(store, async () => flight), 100)).toMatchObject({ cancelled: 2, removed: 0 });
+    expect(store.segments.size).toBe(2);
   });
 
   it("reads every event of a TripIt calendar, whatever its title", async () => {
