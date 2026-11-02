@@ -647,6 +647,18 @@ describe("importTripIt", () => {
     expect(new Set([...store.trips.values()].map((t) => t.ownerUid))).toEqual(new Set(["u1", "u2"]));
   });
 
+  it("stops before the next item when told to, keeping what it finished", async () => {
+    const store = memoryStore();
+    let items = 0;
+    const stop = () => {
+      if (++items > 1) throw new Error("superseded");
+    };
+    await expect(importTripIt("u1", tripItExport(), deps(store, async () => lodging), { beforeEach: stop })).rejects.toThrow("superseded");
+    expect([...store.trips.values()].map((t) => t.title)).toEqual(["Dublin weekend"]);
+    const retry = await importTripIt("u1", tripItExport(), deps(store, async () => lodging));
+    expect(retry).toMatchObject({ skipped: 1, trips: 1 });
+  });
+
   it("records a trip that could not be written as failed and goes on with the rest", async () => {
     const store = memoryStore();
     let calls = 0;
