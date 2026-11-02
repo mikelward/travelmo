@@ -33,7 +33,8 @@ viewer's zone. Trip bounds are calendar dates.
 - `trips/{tripId}/segments/{segmentId}` — `type` (flight, train, bus, ferry,
   lodging, car_rental, activity, other), `title, provider, confirmation,
   start, end, origin, destination, notes, source, gmailMessageIds[], sender`
-  (the booking email's domain). `source` is `gmail`, `manual` or `tripit`.
+  (the booking email's domain). `source` is `gmail`, `manual`, `tripit` or
+  `ics`.
   Imported segments use the id `<source id>-<index>` (the Gmail message id,
   or `tripit-<key>` for a TripIt trip) so a re-import overwrites rather than
   duplicates.
@@ -42,8 +43,9 @@ viewer's zone. Trip bounds are calendar dates.
 - `users/{uid}/settings/patterns` — `allow[], deny[]` sender domains.
 - `users/{uid}/parsedMessages/{sourceId}` — `outcome` (processing,
   filtered, not_booking, imported, failed), `source` (absent for Gmail,
-  `tripit` otherwise), `reason, from, subject, segmentIds[], processedAt`,
-  one per Gmail message, TripIt trip or unfiled TripIt item. Claimed atomically as `processing` before any
+  `tripit` or `ics` otherwise), `reason, from, subject, segmentIds[],
+  processedAt`, one per Gmail message, TripIt trip, unfiled TripIt item or
+  calendar event. Claimed atomically as `processing` before any
   work, so a message delivered twice is imported once; a `processing` claim
   older than fifteen minutes is a dead worker's and may be taken over. Also
   the audit trail of what the LLM was shown, and the source of the review
@@ -242,11 +244,12 @@ dropping a real booking loses it: equal confirmation numbers when both have
 one, otherwise agreeing codes at both ends of a journey, or a distinctive
 word shared by the two titles or place names other than their city and,
 unless it is all the name there is, their chain or provider. Known cities
-and countries that differ rule a match out. In doubt, both are kept. A TripIt export is checked only against
-other sources, since it is already one list: two alike reservations in it
+and countries that differ rule a match out. In doubt, both are kept. A TripIt export or a calendar file is
+checked only against other sources, since it is already one list: two alike reservations in it
 are two. Matching is one to one: an existing booking matched once, in
 the same email or the same export, stands in for no other, and each
-TripIt item's record keeps what it matched so a retried upload counts it. A booking that
+TripIt item's or calendar event's record keeps what it matched so a retried
+upload counts it. A booking that
 matches one already on an overlapping trip is left out and counted in the
 record's reason; when all of an email's bookings are, the email is still
 recorded as imported, with none. A booking part of which matched joins the
@@ -280,6 +283,26 @@ Each TripIt trip and unfiled item is recorded under a key derived from its
 name, dates, legs and confirmation numbers (and, for unfiled items alike in
 every field, which copy it is), so uploading the same file again changes nothing, and
 one that failed is tried again.
+
+### Calendar files
+
+An `.ics` file (`packages/core/src/ics.ts`) carries text, not structure, so
+each event goes through the email path: its title is the subject, and its
+title, times, location and description are the body. Times are resolved to
+instants wherever the file names a zone (`TZID`, or UTC, or a zone the file
+defines in a `VTIMEZONE`, through its `X-LIC-LOCATION` name or its one
+offset; one with several offsets is named to the model with them), and a
+`DURATION` becomes an end, so the model is told the offset rather than left to infer it. Repeating events (`RRULE`,
+`RDATE`, overrides) and cancelled ones are skipped. With no sender to check,
+the pre-filter passes a title with a booking word, a flight or train number
+or an airport-to-airport route, and the similarity stage follows as for a
+subject keyword; every event of a TripIt calendar (its `PRODID`) goes
+straight to the model. Each event is recorded under a key from its `UID`;
+one whose import failed is read again on the next upload, and any other is
+not, and a request reads at most 100 events with the model, so a large calendar
+comes in over several uploads of the same file, each carrying on where the
+last stopped. `POST /import/ics` takes the file's text; Settings previews
+the event counts first.
 
 Backfill (`POST /gmail/backfill`) runs the same path over a Gmail search
 limited to the last three years and booking-like subjects, capped at 300
@@ -326,6 +349,7 @@ refused to any other until the first disconnects.
 | `POST /gmail/backfill` | Firebase ID token | Imports past bookings; returns counts per outcome |
 | `POST /gmail/reimport` | Firebase ID token | Imports one message again, skipping the pre-filter; returns its outcome |
 | `POST /gmail/disconnect` | Firebase ID token | Stops the watch, revokes the token, deletes the connection |
+| `POST /import/ics` | Firebase ID token | Imports an `.ics` file's text (up to 10 MB), reading at most 100 events with the model; returns counts per outcome, repeating and cancelled events skipped, and events left for the next upload |
 | `POST /import/tripit` | Firebase ID token | Imports a TripIt JSON export (up to 20 MB); returns counts of trips, bookings, duplicates, items imported before, failures and items not importable |
 | `POST /internal/pubsub/gmail` | OIDC from `INTERNAL_CALLERS` | Pub/Sub push target |
 | `POST /internal/renew-watches` | OIDC from `INTERNAL_CALLERS` | Cloud Scheduler target |
@@ -350,5 +374,4 @@ country, trips last year — via BigQuery export if Firestore aggregates get
 clumsy), country map, calendar view and export, check-in/out surfacing,
 ratings and favourites, itinerary ideas, loyalty balances, passport expiry
 and visa reminders, other mail providers and forward-to-import. Further import
-sources share the pipeline: `.ics` files and subscribed feeds, and Google
-Calendar; `IMPORT.md` compares them and maps their fields.
+sources share the pipeline: subscribed calendar feeds and Google Calendar; `IMPORT.md` compares them and maps their fields.

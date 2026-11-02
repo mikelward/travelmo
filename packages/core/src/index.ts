@@ -6,3 +6,4 @@ export * from "./instant";
 export * from "./zone";
 export * from "./tripit";
 export * from "./hash";
+export * from "./ics";

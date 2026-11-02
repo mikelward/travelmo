@@ -10,7 +10,8 @@ import { api, type BackfillResult } from "@/lib/api";
 import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
 import { domainOf, effectiveDecision, learnSender } from "@/lib/patterns";
-import { describeTripItResult, previewTripIt, type TripItPreview } from "@/lib/tripit";
+import { describeCalendarResult, previewIcs } from "@/lib/ics";
+import { describeTripItResult, previewTripIt } from "@/lib/tripit";
 import { useParsedMessages, useProfile, useSenderPatterns } from "@/lib/trips";
 
 const buttonClass =
@@ -122,8 +123,12 @@ function GmailSection({ user }: { user: User }) {
   );
 }
 
-function TripItSection({ user }: { user: User }) {
-  const [preview, setPreview] = useState<TripItPreview>();
+type FilePreview = { text: string; canImport: boolean; notImported?: { title: string; reason: string }[]; run: () => Promise<string> };
+
+// Picks a file, shows what reading it in the browser found, and sends it
+// only when the user presses Import.
+function FileImportSection(props: { title: string; blurb: string; accept: string; label: string; preview: (text: string) => FilePreview }) {
+  const [preview, setPreview] = useState<FilePreview>();
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string>();
   const [error, setError] = useState<string>();
@@ -134,7 +139,7 @@ function TripItSection({ user }: { user: User }) {
     setError(undefined);
     if (!file) return;
     try {
-      setPreview(previewTripIt(await file.text()));
+      setPreview(props.preview(await file.text()));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -145,7 +150,7 @@ function TripItSection({ user }: { user: User }) {
     setBusy(true);
     setError(undefined);
     try {
-      setResult(describeTripItResult(await api.importTripIt(user, preview.json)));
+      setResult(await preview.run());
       setPreview(undefined);
     } catch (e) {
       setError((e as Error).message);
@@ -156,27 +161,30 @@ function TripItSection({ user }: { user: User }) {
 
   return (
     <section className="mt-10">
-      <h2 className="text-lg font-medium">TripIt</h2>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-        Bring in your TripIt history from the JSON export TripIt support sends on request. You will see what is in it
-        before anything is imported; importing the same file twice changes nothing.
-      </p>
+      <h2 className="text-lg font-medium">{props.title}</h2>
+      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{props.blurb}</p>
       <input
         type="file"
-        accept=".json,application/json"
-        aria-label="TripIt export file"
+        accept={props.accept}
+        aria-label={props.label}
         disabled={busy}
         className="mt-3 block text-sm"
-        onChange={(e) => choose(e.target.files?.[0])}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          // Cleared so picking the same file again reads it again: a large
+          // calendar comes in over several uploads of one file.
+          e.target.value = "";
+          void choose(file);
+        }}
       />
       {preview && (
         <div className="mt-3 text-sm">
           <p>{preview.text}</p>
-          {preview.parsed.skipped.length > 0 && (
+          {preview.notImported && preview.notImported.length > 0 && (
             <details className="mt-2 text-zinc-600 dark:text-zinc-400">
               <summary>Not imported</summary>
               <ul className="mt-1 list-disc pl-5">
-                {preview.parsed.skipped.map((item, i) => (
+                {preview.notImported.map((item, i) => (
                   <li key={i}>
                     {item.title}: {item.reason}
                   </li>
@@ -184,12 +192,7 @@ function TripItSection({ user }: { user: User }) {
               </ul>
             </details>
           )}
-          <button
-            type="button"
-            disabled={busy || preview.parsed.trips.length + preview.parsed.unfiled.length === 0}
-            className={`${buttonClass} mt-3`}
-            onClick={importNow}
-          >
+          <button type="button" disabled={busy || !preview.canImport} className={`${buttonClass} mt-3`} onClick={importNow}>
             {busy ? "Importing…" : "Import"}
           </button>
         </div>
@@ -197,6 +200,45 @@ function TripItSection({ user }: { user: User }) {
       {result && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{result}</p>}
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
     </section>
+  );
+}
+
+function TripItSection({ user }: { user: User }) {
+  return (
+    <FileImportSection
+      title="TripIt"
+      blurb="Bring in your TripIt history from the JSON export TripIt support sends on request. You will see what is in it before anything is imported; importing the same file twice changes nothing."
+      accept=".json,application/json"
+      label="TripIt export file"
+      preview={(text) => {
+        const p = previewTripIt(text);
+        return {
+          text: p.text,
+          canImport: p.parsed.trips.length + p.parsed.unfiled.length > 0,
+          notImported: p.parsed.skipped,
+          run: async () => describeTripItResult(await api.importTripIt(user, p.json)),
+        };
+      }}
+    />
+  );
+}
+
+function CalendarSection({ user }: { user: User }) {
+  return (
+    <FileImportSection
+      title="Calendar file"
+      blurb="Import bookings from an .ics file, such as a trip exported from TripIt or a calendar app. Events that look like travel are read like booking emails; up to 100 per upload, and uploading the same file again carries on where the last one stopped."
+      accept=".ics,text/calendar"
+      label="Calendar file"
+      preview={(text) => {
+        const p = previewIcs(text);
+        return {
+          text: p.text,
+          canImport: p.importable > 0,
+          run: async () => describeCalendarResult(await api.importIcs(user, p.fileText)),
+        };
+      }}
+    />
   );
 }
 
@@ -354,6 +396,7 @@ export default function SettingsPage() {
             <GmailSection user={user} />
           </Suspense>
           <TripItSection user={user} />
+          <CalendarSection user={user} />
           <PatternsSection user={user} />
           <ReviewSection user={user} />
         </>

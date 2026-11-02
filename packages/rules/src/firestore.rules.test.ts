@@ -149,10 +149,11 @@ describe("segments", () => {
     await assertFails(deleteDoc(doc(as(stranger), paths.segment(trip.id, segment.id))));
   });
 
-  it("lets owner and sharee edit a booking imported from TripIt, but not invent a source", async () => {
+  it("lets owner and sharee edit a booking imported from TripIt or a calendar, but not invent a source", async () => {
     const imported = { ...segment, id: "s5", source: "tripit", gmailMessageIds: [] };
     await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s5")), imported));
     await assertSucceeds(updateDoc(doc(as(partner), paths.segment(trip.id, "s5")), { title: "Edited by partner" }));
+    await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s7")), { ...imported, id: "s7", source: "ics" }));
     await assertFails(setDoc(doc(as(owner), paths.segment(trip.id, "s6")), { ...imported, id: "s6", source: "carrier-pigeon" }));
   });
 

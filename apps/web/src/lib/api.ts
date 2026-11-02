@@ -1,4 +1,5 @@
 import type { User } from "firebase/auth";
+import type { CalendarResult } from "./ics";
 import type { TripItResult } from "./tripit";
 
 export type BackfillResult = {
@@ -34,4 +35,5 @@ export const api = {
   backfill: (user: User, max?: number) => post<BackfillResult>(user, "/gmail/backfill", max ? { max } : {}),
   reimport: (user: User, messageId: string) => post<{ outcome: string }>(user, "/gmail/reimport", { messageId }),
   importTripIt: (user: User, exported: unknown) => post<TripItResult>(user, "/import/tripit", { export: exported }),
+  importIcs: (user: User, text: string) => post<CalendarResult>(user, "/import/ics", { text }),
 };

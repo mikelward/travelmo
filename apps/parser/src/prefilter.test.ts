@@ -1,4 +1,4 @@
-import { prefilter, senderDomain } from "./prefilter";
+import { calendarPrefilter, prefilter, senderDomain } from "./prefilter";
 
 describe("senderDomain", () => {
   it("reads the domain from display-name and bare forms", () => {
@@ -44,5 +44,22 @@ describe("prefilter", () => {
 
   it("matches subdomains of a pattern", () => {
     expect(prefilter({ from: "no-reply@mail.hertz.com", subject: "Rental agreement" })).toMatchObject({ pass: true });
+  });
+});
+
+describe("calendarPrefilter", () => {
+  it("passes travel titles, with or without a booking word", () => {
+    expect(calendarPrefilter("XX123 LHR to CDG", false)).toEqual({ pass: true, reason: "subject keyword" });
+    expect(calendarPrefilter("BA 117", false).pass).toBe(true);
+    expect(calendarPrefilter("LHR - JFK", false).pass).toBe(true);
+    expect(calendarPrefilter("Check-in: Hotel Example", false).pass).toBe(true);
+  });
+  it("drops everyday events and promotions", () => {
+    expect(calendarPrefilter("Dentist", false)).toEqual({ pass: false, reason: "no booking signal" });
+    expect(calendarPrefilter("Lunch with Sam", false).pass).toBe(false);
+    expect(calendarPrefilter("Flight sale this weekend", false)).toEqual({ pass: false, reason: "subject looks promotional" });
+  });
+  it("lets everything from a travel calendar through", () => {
+    expect(calendarPrefilter("Dentist", true)).toEqual({ pass: true, reason: "travel calendar" });
   });
 });

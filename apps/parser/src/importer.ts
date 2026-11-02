@@ -1,5 +1,8 @@
 import {
   findTripForRange,
+  icsEventText,
+  isTravelCalendar,
+  type IcsCalendar,
   overlappingTrips,
   sameBooking,
   segmentDateRange,
@@ -13,7 +16,7 @@ import {
 } from "@travelmo/core";
 import type { Extractor } from "./extract";
 import { isNotFound, type EmailMessage } from "./gmail";
-import { prefilter, senderDomain, type SenderPatterns } from "./prefilter";
+import { calendarPrefilter, prefilter, senderDomain, type PrefilterResult, type SenderPatterns } from "./prefilter";
 import { embeddingText, similarityVerdict, type Example, type ExampleLabel, type Examples } from "./similarity";
 
 export type TripBounds = Pick<Trip, "start" | "end" | "updatedAt">;
@@ -49,6 +52,12 @@ export function reclaimable(existing: ParsedMessage | undefined, now: string): b
   return existing.outcome !== "processing" || leaseExpired(existing, now);
 }
 
+// A failed outcome may be tried again (the model was rate-limited, say);
+// anything else that finished stays as it is.
+export function retryable(existing: ParsedMessage | undefined, now: string): boolean {
+  return claimable(existing, now) || existing?.outcome === "failed";
+}
+
 export type TripStore = {
   // Atomically records the message as being processed; false if a record
   // exists and is not an expired lease, so concurrent deliveries of one
@@ -58,6 +67,9 @@ export type TripStore = {
   // again too; an imported one and an unexpired processing claim are
   // refused. For the user asking for another look at a message.
   reclaimMessage(uid: string, messageId: string, processedAt: string): Promise<boolean>;
+  // Like claimMessage, but a record whose import failed is claimed again
+  // too. For sources the user can only re-send whole, such as a file.
+  retryMessage(uid: string, messageId: string, processedAt: string): Promise<boolean>;
   setParsed(record: ParsedMessage): Promise<void>;
   getParsed(uid: string, messageId: string): Promise<ParsedMessage | undefined>;
   // Runs fn serialized per user, so two overlapping imports cannot both
@@ -88,6 +100,15 @@ export type ImportOptions = {
   force?: boolean;
   // Take another look at a message that already has an outcome.
   reclaim?: boolean;
+  // Take another look at a message whose import failed, and only then.
+  retryFailed?: boolean;
+  // Existing bookings already matched by earlier items of the same upload;
+  // this message's own matches are added to it.
+  consumed?: Set<string>;
+  // A calendar event read like an email: recorded and filed as `ics`, and
+  // checked by this instead of the sender-and-subject pre-filter.
+  source?: "gmail" | "ics";
+  prefilter?: (message: EmailMessage) => PrefilterResult;
 };
 
 export async function importMessage(
@@ -97,9 +118,16 @@ export async function importMessage(
   options: ImportOptions = {},
 ): Promise<ImportOutcome> {
   const { store, now, log } = deps;
-  const claim = options.reclaim ? store.reclaimMessage : store.claimMessage;
+  const claim = options.reclaim ? store.reclaimMessage : options.retryFailed ? store.retryMessage : store.claimMessage;
   if (!(await claim(uid, message.id, now()))) return "skipped";
-  const base = { messageId: message.id, uid, from: message.from, subject: message.subject };
+  const source = options.source ?? "gmail";
+  const base = {
+    messageId: message.id,
+    uid,
+    ...(source === "gmail" ? {} : { source }),
+    from: message.from,
+    subject: message.subject,
+  };
   const record = (outcome: ParsedMessage["outcome"], extra: Partial<ParsedMessage> = {}): ParsedMessage => ({
     ...base,
     outcome,
@@ -110,10 +138,12 @@ export async function importMessage(
 
   let reason = "requested by user";
   if (!options.force) {
-    const verdict = prefilter(
-      { from: message.from, subject: message.subject, listUnsubscribe: message.listUnsubscribe },
-      await store.senderPatterns(uid),
-    );
+    const verdict = options.prefilter
+      ? options.prefilter(message)
+      : prefilter(
+          { from: message.from, subject: message.subject, listUnsubscribe: message.listUnsubscribe },
+          await store.senderPatterns(uid),
+        );
     if (!verdict.pass) {
       await store.setParsed(record("filtered", { reason: verdict.reason }));
       log("filtered", { uid, messageId: message.id, reason: verdict.reason });
@@ -176,21 +206,32 @@ export async function importMessage(
     return "not_booking";
   }
 
-  const sender = senderDomain(message.from);
+  const sender = source === "gmail" ? senderDomain(message.from) : undefined;
   const filed = await fileBooking(
     uid,
     {
       sourceId: message.id,
-      source: "gmail",
+      source,
       segments: booking.segments,
-      gmailMessageIds: [message.id],
+      ...(source === "gmail" ? { gmailMessageIds: [message.id] } : {}),
       ...(sender ? { sender } : {}),
+      // Events of a calendar are one list with an id each: two alike are
+      // two reservations. Emails are not; one booking is often confirmed
+      // twice.
+      ...(source === "gmail" ? {} : { distinctWithinSource: true }),
+      ...(options.consumed ? { consumed: options.consumed } : {}),
     },
     deps,
   );
-  const { tripId, segmentIds, duplicates, timestamp } = filed;
+  const { tripId, segmentIds, duplicates, timestamp, matched } = filed;
+  for (const id of matched) options.consumed?.add(id);
   await store.setParsed(
-    record("imported", { segmentIds, processedAt: timestamp, ...(duplicates ? { reason: duplicateReason(duplicates) } : {}) }),
+    record("imported", {
+      segmentIds,
+      processedAt: timestamp,
+      ...(duplicates ? { reason: duplicateReason(duplicates) } : {}),
+      ...(matched.length ? { matchedSegmentIds: matched } : {}),
+    }),
   );
   await learn("bookings");
   log("imported", { uid, messageId: message.id, tripId, segments: segmentIds.length, duplicates });
@@ -494,3 +535,59 @@ export function tripTitle(segments: readonly ExtractedSegment[]): string {
 
 const min = (a: string, b: string) => (a < b ? a : b);
 const max = (a: string, b: string) => (a > b ? a : b);
+
+export type CalendarCounts = ImportCounts & { recurring: number; cancelled: number; remaining: number };
+
+export const calendarSender = "Calendar file";
+
+// Each event goes through the email path: the title is the subject, the
+// event's text (times already resolved where the file gives a zone) the
+// body. Repeating and cancelled events are not bookings. Model calls are
+// capped per request; events past the cap are left for the next upload of
+// the same file, which skips everything already read.
+export async function importCalendar(uid: string, calendar: IcsCalendar, deps: ImportDeps, maxRead: number): Promise<CalendarCounts> {
+  const counts: CalendarCounts = { ...emptyCounts(), recurring: 0, cancelled: 0, remaining: 0 };
+  const travel = isTravelCalendar(calendar);
+  let read = 0;
+  // One to one across the file, and across uploads of it: what events
+  // imported last time matched is reserved before any is read again.
+  const consumed = new Set<string>();
+  const live = calendar.events.filter((e) => !e.recurring && !e.cancelled);
+  for (const previous of await Promise.all(live.map((e) => deps.store.getParsed(uid, `ics-${e.key}`)))) {
+    if (previous?.outcome === "imported") for (const id of previous.matchedSegmentIds ?? []) consumed.add(id);
+  }
+  for (const event of calendar.events) {
+    if (event.recurring) {
+      counts.recurring += 1;
+      continue;
+    }
+    if (event.cancelled) {
+      counts.cancelled += 1;
+      continue;
+    }
+    if (read >= maxRead) {
+      counts.remaining += 1;
+      continue;
+    }
+    const message: EmailMessage = {
+      id: `ics-${event.key}`,
+      threadId: "",
+      from: calendarSender,
+      subject: event.summary,
+      date: event.stamp ?? "",
+      listUnsubscribe: false,
+      text: icsEventText(event),
+    };
+    // A failed event is read again on the next upload; one already judged
+    // is not, so a re-upload costs only what it has not done yet.
+    const outcome = await importMessage(uid, message, deps, {
+      source: "ics",
+      retryFailed: true,
+      consumed,
+      prefilter: (m) => calendarPrefilter(m.subject, travel),
+    });
+    if (outcome === "imported" || outcome === "not_booking" || outcome === "failed") read += 1;
+    counts[outcome] += 1;
+  }
+  return counts;
+}

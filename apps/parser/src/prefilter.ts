@@ -70,6 +70,21 @@ function domainMatches(domain: string, pattern: string): boolean {
   return domain === p || domain.endsWith(`.${p}`);
 }
 
+// A flight or train number ("BA 117", "XX123") or an airport-to-airport
+// route ("LHR to JFK"): what a calendar's travel events are titled with,
+// often with no booking word at all.
+const journeyPattern = /\b(?:[A-Z]{2}|[A-Z]\d|\d[A-Z]) ?\d{1,4}\b|\b[A-Z]{3} ?(?:to|-|→) ?[A-Z]{3}\b/;
+
+// Calendar events have no sender to allow or deny, only a title. A calendar
+// whose every event is travel (TripIt's) skips the check, and the
+// similarity stage with it, as an allowed sender does.
+export function calendarPrefilter(summary: string, travelCalendar: boolean): PrefilterResult {
+  if (travelCalendar) return { pass: true, reason: "travel calendar" };
+  if (subjectNoise.test(summary)) return { pass: false, reason: "subject looks promotional" };
+  if (subjectKeywords.test(summary) || journeyPattern.test(summary)) return { pass: true, reason: "subject keyword" };
+  return { pass: false, reason: "no booking signal" };
+}
+
 export function prefilter(
   message: MessageSummary,
   patterns: SenderPatterns = { allow: [], deny: [] },
