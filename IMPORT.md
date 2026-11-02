@@ -66,7 +66,9 @@ means the source has it as data.
   booking words, flight and train numbers, airport routes; a TripIt calendar skips
   it). Recurring (`RRULE`) and cancelled (`STATUS:CANCELLED`) events are skipped;
   a cancellation of an event already imported removes its booking unless the
-  user edited it or another source was matched to it.
+  user edited it or another source was matched to it, and an event whose text
+  changes (a new time, say) is read again and replaces its booking on the same
+  terms.
 - **Google Calendar** is a second consent, apart from Gmail's, and brings every
   calendar's noise with it, so the user picks calendars (none at first) and the
   pre-filter still applies. Events Gmail made from emails (`fromGmail`) are

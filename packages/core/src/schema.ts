@@ -192,6 +192,9 @@ export const ParsedMessage = z.object({
   // duplicate, so a later upload of the same export keeps matching one to
   // one even for items it skips as already imported.
   matchedSegmentIds: z.array(z.string()).optional(),
+  // For a calendar event: a hash of the text the model read, so a later
+  // change to the event (a new time, place or note) is read again.
+  revision: z.string().optional(),
   processedAt: isoDateTime,
 });
 export type ParsedMessage = z.infer<typeof ParsedMessage>;

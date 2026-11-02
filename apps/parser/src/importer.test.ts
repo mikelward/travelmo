@@ -2,6 +2,7 @@ import { parseIcs, parseTripItExport, type ExtractedBooking, type ParsedMessage,
 import type { EmailMessage } from "./gmail";
 import {
   claimLeaseMs,
+  changeClaimable,
   claimable,
   reclaimable,
   retryable,
@@ -605,6 +606,19 @@ const vevent = (uid: string, summary: string, extra: string[] = []) => [
   "END:VEVENT",
 ].join("\r\n");
 
+describe("changeClaimable", () => {
+  const seen: ParsedMessage = { messageId: "ics-1", uid: "u1", outcome: "imported", segmentIds: ["s1"], revision: "r1", processedAt: "2026-11-01T00:00:00Z" };
+  it("allows a claim only on the version the caller read, and not over a live claim", () => {
+    expect(changeClaimable(seen, seen, "2026-11-02T00:00:00Z")).toBe(true);
+    expect(changeClaimable({ ...seen, revision: "r2" }, seen, "2026-11-02T00:00:00Z")).toBe(false);
+    expect(changeClaimable({ ...seen, processedAt: "2026-11-01T01:00:00Z" }, seen, "2026-11-02T00:00:00Z")).toBe(false);
+    expect(changeClaimable(undefined, seen, "2026-11-02T00:00:00Z")).toBe(false);
+    const claim = { ...seen, outcome: "processing" as const };
+    expect(changeClaimable(claim, claim, "2026-11-01T00:05:00Z")).toBe(false);
+    expect(changeClaimable(claim, claim, "2026-11-01T00:20:00Z")).toBe(true);
+  });
+});
+
 describe("importCalendar", () => {
   it("reads travel events through the model and files them as calendar bookings", async () => {
     const store = memoryStore();
@@ -710,6 +724,218 @@ describe("importCalendar", () => {
     ]);
     expect(await importCalendar("u1", cancelled, deps(store, async () => flight), 100)).toMatchObject({ cancelled: 2, removed: 0 });
     expect(store.segments.size).toBe(2);
+  });
+
+  it("reads an event again when its text changes, replacing the booking it made, and not for a new timestamp", async () => {
+    const store = memoryStore();
+    const later = { ...flight, segments: flight.segments.map((seg) => ({ ...seg, start: "2026-12-15T18:00:00+00:00" })) };
+    let answer = flight;
+    const extract = vi.fn(async () => answer);
+    await importCalendar("u1", ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB", ["DTSTAMP:20261101T000000Z"])]), deps(store, extract), 100);
+    // Restamped on the next export, nothing else changed: not read again.
+    const restamped = ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB", ["DTSTAMP:20261102T000000Z"])]);
+    expect(await importCalendar("u1", restamped, deps(store, extract), 100)).toMatchObject({ skipped: 1, updated: 0 });
+    expect(extract).toHaveBeenCalledTimes(1);
+    answer = later;
+    const moved = ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB", ["DESCRIPTION:Moved to the evening"])]);
+    expect(await importCalendar("u1", moved, deps(store, extract), 100)).toMatchObject({ imported: 1, updated: 1 });
+    expect([...store.segments.values()].map((seg) => seg.start)).toEqual(["2026-12-15T18:00:00+00:00"]);
+    expect(await importCalendar("u1", moved, deps(store, extract), 100)).toMatchObject({ skipped: 1, updated: 0 });
+    expect(extract).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the old booking when reading a changed event fails, and tries the change again", async () => {
+    const store = memoryStore();
+    const later = { ...flight, segments: flight.segments.map((seg) => ({ ...seg, start: "2026-12-15T18:00:00+00:00" })) };
+    let down = false;
+    const extract = vi.fn(async () => {
+      if (down) throw new Error("429 rate limited");
+      return extract.mock.calls.length > 1 ? later : flight;
+    });
+    await importCalendar("u1", ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB")]), deps(store, extract), 100);
+    const before = [...store.parsed.values()][0]!;
+    down = true;
+    const moved = ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB", ["DESCRIPTION:Moved to the evening"])]);
+    expect(await importCalendar("u1", moved, deps(store, extract), 100)).toMatchObject({ failed: 1, updated: 0 });
+    expect([...store.segments.values()].map((seg) => seg.start)).toEqual([flight.segments[0]!.start]);
+    expect([...store.parsed.values()][0]).toEqual(before);
+    down = false;
+    expect(await importCalendar("u1", moved, deps(store, extract), 100)).toMatchObject({ imported: 1, updated: 1 });
+    expect([...store.segments.values()].map((seg) => seg.start)).toEqual(["2026-12-15T18:00:00+00:00"]);
+  });
+
+  it("keeps a changed event's match reserved when its new read fails", async () => {
+    const store = memoryStore();
+    await importMessage("u1", email(), deps(store, async () => lodging));
+    const rooms = (extra: string[] = []) => ics("-//TripIt//EN", [vevent("room1", "Cove Liverpool", extra), vevent("room2", "Cove Liverpool")]);
+    const calendar = rooms();
+    const room1 = `ics-${calendar.events[0]!.key}`;
+    let failing = new Set([`ics-${calendar.events[1]!.key}`]);
+    const flaky = async (m: { id: string }) => {
+      if (failing.has(m.id)) throw new Error("rate limited");
+      return lodging;
+    };
+    // room1 matches the Gmail room; room2 fails for now.
+    expect(await importCalendar("u1", calendar, deps(store, flaky), 100)).toMatchObject({ imported: 1, failed: 1 });
+    // room1 changes but its read fails; room2 now reads and must not take
+    // the Gmail room room1 still holds.
+    failing = new Set([room1]);
+    expect(await importCalendar("u1", rooms(["DESCRIPTION:Late check-in"]), deps(store, flaky), 100)).toMatchObject({ imported: 1, failed: 1 });
+    expect([...store.segments.values()].filter((seg) => seg.type === "lodging")).toHaveLength(2);
+  });
+
+  it("keeps a changed event's bookings named when removing them fails, and replaces them later", async () => {
+    const store = memoryStore();
+    const later = { ...flight, segments: flight.segments.map((seg) => ({ ...seg, start: "2026-12-15T18:00:00+00:00" })) };
+    let answer = flight;
+    await importCalendar("u1", ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB")]), deps(store, async () => answer), 100);
+    const [segment] = [...store.segments.values()];
+    answer = later;
+    // The check passes; the transaction that removes the old booking fails.
+    let locks = 0;
+    const flaky: TripStore = { ...store, withUserLock: (uid, fn) => (++locks === 2 ? Promise.reject(new Error("contention")) : store.withUserLock(uid, fn)) };
+    const moved = ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB", ["DESCRIPTION:Moved to the evening"])]);
+    await expect(importCalendar("u1", moved, deps(flaky, async () => answer), 100)).rejects.toThrow("contention");
+    expect(store.segments.has(segment!.id)).toBe(true);
+    expect([...store.parsed.values()][0]).toMatchObject({ outcome: "processing", segmentIds: [segment!.id] });
+    // Once that claim has expired, the change is made in full.
+    const afterLease = { ...deps(store, async () => answer), now: () => new Date(Date.parse("2026-11-01T12:00:00Z") + claimLeaseMs + 1).toISOString() };
+    expect(await importCalendar("u1", moved, afterLease, 100)).toMatchObject({ imported: 1, updated: 1 });
+    expect([...store.segments.values()].map((seg) => seg.start)).toEqual(["2026-12-15T18:00:00+00:00"]);
+  });
+
+  it("keeps the matches of an event mid-change reserved against an overlapping read", async () => {
+    const store = memoryStore();
+    await importMessage("u1", email(), deps(store, async () => lodging));
+    const calendar = ics("-//TripIt//EN", [vevent("room1", "Cove Liverpool")]);
+    await importCalendar("u1", calendar, deps(store, async () => lodging), 100);
+    const record = [...store.parsed.values()].find((r) => r.messageId === `ics-${calendar.events[0]!.key}`)!;
+    expect(record.matchedSegmentIds?.length).toBe(1);
+    // Another worker has claimed room1's change and not finished it.
+    await store.setParsed({ ...record, outcome: "processing", processedAt: "2026-11-01T12:00:00Z" });
+    const withRoom2 = ics("-//TripIt//EN", [vevent("room1", "Cove Liverpool"), vevent("room2", "Cove Liverpool")]);
+    expect(await importCalendar("u1", withRoom2, deps(store, async () => lodging), 100)).toMatchObject({ imported: 1 });
+    expect([...store.segments.values()].filter((seg) => seg.type === "lodging")).toHaveLength(2);
+  });
+
+  it("does not write a stale record over a change another read has made", async () => {
+    const store = memoryStore();
+    await importCalendar("u1", ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB")]), deps(store, async () => flight), 100);
+    const stale = [...store.parsed.values()][0]!;
+    // Meanwhile another read replaced the booking into another trip.
+    const [segment] = [...store.segments.values()];
+    store.segments.set(segment!.id, { ...segment!, tripId: "trip-new" });
+    const fresh = { ...stale, tripId: "trip-new", revision: "r-fresh", processedAt: "2026-11-01T12:30:00Z" };
+    await store.setParsed(fresh);
+    // A read that saw the old record finds its booking gone from the old
+    // trip, and must not put the old trip back on the record.
+    const behind: TripStore = { ...store, getParsed: async () => stale };
+    const moved = ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB", ["DESCRIPTION:Moved again"])]);
+    expect(await importCalendar("u1", moved, deps(behind, async () => flight), 100)).toMatchObject({ skipped: 1, updated: 0 });
+    expect([...store.parsed.values()][0]).toEqual(fresh);
+  });
+
+  it("recovers a dead worker's claim on a duplicate-only event without duplicating its booking", async () => {
+    const store = memoryStore();
+    await importMessage("u1", email(), deps(store, async () => lodging));
+    const calendar = ics("-//TripIt//EN", [vevent("room1", "Cove Liverpool")]);
+    await importCalendar("u1", calendar, deps(store, async () => lodging), 100);
+    const record = [...store.parsed.values()].find((r) => r.messageId === `ics-${calendar.events[0]!.key}`)!;
+    // A worker claimed a change, then died; its claim keeps the match.
+    await store.setParsed({ ...record, outcome: "processing", processedAt: "2026-11-01T12:00:00Z" });
+    const afterLease = { ...deps(store, async () => lodging), now: () => new Date(Date.parse("2026-11-01T12:00:00Z") + claimLeaseMs + 1).toISOString() };
+    const changed = ics("-//TripIt//EN", [vevent("room1", "Cove Liverpool", ["DESCRIPTION:Late check-in"])]);
+    expect(await importCalendar("u1", changed, afterLease, 100)).toMatchObject({ imported: 1, updated: 1 });
+    expect([...store.segments.values()].filter((seg) => seg.type === "lodging")).toHaveLength(1);
+  });
+
+  it("reads a changed event once when two reads of the calendar overlap", async () => {
+    const store = memoryStore();
+    const extract = vi.fn(async () => flight);
+    await importCalendar("u1", ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB")]), deps(store, extract), 100);
+    const moved = ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB", ["DESCRIPTION:Moved"])]);
+    const [a, b] = await Promise.all([importCalendar("u1", moved, deps(store, extract), 100), importCalendar("u1", moved, deps(store, extract), 100)]);
+    expect(a.updated + b.updated).toBe(1);
+    expect(extract).toHaveBeenCalledTimes(2);
+    expect(store.segments.size).toBe(1);
+  });
+
+  it("keeps an edited booking when its event changes, and notes the change once", async () => {
+    const store = memoryStore();
+    const extract = vi.fn(async () => flight);
+    await importCalendar("u1", ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB")]), deps(store, extract), 100);
+    const [segment] = [...store.segments.values()];
+    store.segments.set(segment!.id, { ...segment!, title: "Edited", updatedAt: "2026-11-05T00:00:00Z" });
+    const moved = ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB", ["DESCRIPTION:Moved"])]);
+    expect(await importCalendar("u1", moved, deps(store, extract), 100)).toMatchObject({ skipped: 1, updated: 0 });
+    expect(await importCalendar("u1", moved, deps(store, extract), 100)).toMatchObject({ skipped: 1, updated: 0 });
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect([...store.segments.values()].map((seg) => seg.title)).toEqual(["Edited"]);
+    expect([...store.parsed.values()][0]).toMatchObject({ outcome: "imported", reason: "changed in the calendar; edited or matched bookings kept" });
+  });
+
+  it("reads a changed event again when it had only matched another source's booking", async () => {
+    const store = memoryStore();
+    await importMessage("u1", email(), deps(store, async () => lodging));
+    const extract = vi.fn(async () => lodging);
+    expect(await importCalendar("u1", ics("-//TripIt//EN", [vevent("room1", "Cove Liverpool")]), deps(store, extract), 100)).toMatchObject({ imported: 1 });
+    expect(store.segments.size).toBe(1);
+    const changed = ics("-//TripIt//EN", [vevent("room1", "Cove Liverpool", ["DESCRIPTION:Late check-in"])]);
+    expect(await importCalendar("u1", changed, deps(store, extract), 100)).toMatchObject({ imported: 1, updated: 1 });
+    expect(extract).toHaveBeenCalledTimes(2);
+    // Still the one Gmail room, matched again rather than duplicated.
+    expect(store.segments.size).toBe(1);
+  });
+
+  it("keeps a booking a cancellation kept when its event comes back changed", async () => {
+    const store = memoryStore();
+    const extract = vi.fn(async () => flight);
+    await importCalendar("u1", ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB")]), deps(store, extract), 100);
+    const [segment] = [...store.segments.values()];
+    store.segments.set(segment!.id, { ...segment!, title: "Edited", updatedAt: "2026-11-05T00:00:00Z" });
+    const cancelled = ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB", ["STATUS:CANCELLED"])]);
+    expect(await importCalendar("u1", cancelled, deps(store, extract), 100)).toMatchObject({ removed: 0 });
+    const back = ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB", ["DESCRIPTION:Reinstated"])]);
+    expect(await importCalendar("u1", back, deps(store, extract), 100)).toMatchObject({ skipped: 1, updated: 0 });
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect([...store.segments.values()].map((seg) => seg.title)).toEqual(["Edited"]);
+  });
+
+  it("leaves a booking the user moved to another trip, or deleted, when its event changes", async () => {
+    const store = memoryStore();
+    const extract = vi.fn(async () => flight);
+    await importCalendar("u1", ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB")]), deps(store, extract), 100);
+    const [segment] = [...store.segments.values()];
+    // Moved: the same booking now sits in another trip.
+    store.segments.clear();
+    store.segments.set(segment!.id, { ...segment!, tripId: "elsewhere" });
+    const moved = ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB", ["DESCRIPTION:Moved"])]);
+    expect(await importCalendar("u1", moved, deps(store, extract), 100)).toMatchObject({ skipped: 1, updated: 0 });
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect([...store.segments.values()].map((seg) => seg.tripId)).toEqual(["elsewhere"]);
+    // Deleted: nothing comes back either.
+    store.segments.clear();
+    const again = ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB", ["DESCRIPTION:Moved again"])]);
+    expect(await importCalendar("u1", again, deps(store, extract), 100)).toMatchObject({ skipped: 1, updated: 0 });
+    expect(store.segments.size).toBe(0);
+    expect(extract).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads a changed event that was not a booking, and takes a record from before revisions as the baseline", async () => {
+    const store = memoryStore();
+    let answer: typeof flight | { isBooking: false; segments: [] } = { isBooking: false, segments: [] };
+    const extract = vi.fn(async () => answer);
+    await importCalendar("u1", ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB")]), deps(store, extract), 100);
+    answer = flight;
+    const confirmed = ics("-//TripIt//EN", [vevent("e1", "FR123 MAN to DUB", ["DESCRIPTION:Booking confirmed"])]);
+    expect(await importCalendar("u1", confirmed, deps(store, extract), 100)).toMatchObject({ imported: 1, updated: 1 });
+    // A record read before revisions existed is not read again for having none.
+    const record = [...store.parsed.values()][0]!;
+    const { revision: _r, ...legacy } = record;
+    await store.setParsed(legacy);
+    expect(await importCalendar("u1", confirmed, deps(store, extract), 100)).toMatchObject({ skipped: 1, updated: 0 });
+    expect([...store.parsed.values()][0]?.revision).toBe(record.revision);
+    expect(extract).toHaveBeenCalledTimes(2);
   });
 
   it("reads every event of a TripIt calendar, whatever its title", async () => {

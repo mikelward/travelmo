@@ -64,9 +64,8 @@
   - [x] `.ics` feeds: subscribe from Settings, read at once and daily
         (`deploy/scheduler.sh`), links fetched only from public addresses;
         a cancelled event removes its unedited, unmatched booking.
-  - [ ] A feed event whose details change after import (a new time) is not
-        re-read: its record stands. Re-read events whose `LAST-MODIFIED` or
-        `SEQUENCE` moved.
+  - [x] A feed event whose details change after import (a new time) is read
+        again, replacing its unedited, unmatched bookings.
   - [x] Google Calendar through the existing OAuth flow with
         `calendar.readonly` and a calendar picker.
   - [x] Backfill without the three-year cap, batched with a cursor, so a
@@ -76,7 +75,10 @@
       room can take the only existing booking a later, confirmed one would
       have matched by reference, leaving a visible extra room (never a lost
       one). Reserving exact-reference matches first, or matching the whole
-      export at once, fixes it.
+      export at once, fixes it. The same holds for a changed calendar event
+      whose earlier match moves to a different booking: an event before it
+      in the file that describes the released booking has already been
+      filed as a new one, so the result depends on event order.
 - [ ] One-to-one matching holds within one upload, not across two
       uploads of the same export running at once (each keeps its own
       `consumed` set), which can drop a room. Settings disables Import while
@@ -161,3 +163,9 @@ Guesses made on autopilot; change any of them freely.
   start unchosen (a busy work calendar costs model reads); it rides the
   daily feed poll rather than a Calendar push watch or its own scheduler
   job, so no redeploy of `deploy/scheduler.sh` is needed.
+- A changed calendar event is detected by a hash of the text the model reads,
+  not by `LAST-MODIFIED` or `SEQUENCE` as first planned: some calendars bump
+  those on every export, which would re-read every event daily at a model
+  call each, and the hash also covers Google Calendar. A change to an edited
+  or matched booking leaves it as it is rather than replacing the user's
+  version.

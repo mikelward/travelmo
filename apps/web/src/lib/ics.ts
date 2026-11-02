@@ -19,6 +19,7 @@ export function previewIcs(fileText: string): CalendarPreview {
 
 export type CalendarResult = {
   removed?: number;
+  updated?: number;
   skipped: number;
   filtered: number;
   not_booking: number;
@@ -36,6 +37,7 @@ export function describeCalendarResult(r: CalendarResult): string {
   if (r.skipped) parts.push(`${r.skipped} read before`);
   if (r.failed) parts.push(`${r.failed} failed`);
   if (r.removed) parts.push(`${r.removed} removed as cancelled`);
+  if (r.updated) parts.push(`${r.updated} read again after changing`);
   let text = `${parts.join(", ")}.`;
   if (r.remaining) text += ` ${count(r.remaining, "event is", "events are")} left: import the file again to continue.`;
   return text;

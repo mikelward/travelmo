@@ -34,6 +34,8 @@ export type TripTx = {
   addSource(tripId: string, segmentId: string, source: SourceRef): void;
   getSegment(tripId: string, segmentId: string): Promise<Segment | undefined>;
   deleteSegment(tripId: string, segmentId: string): void;
+  // Writes an import record in the same transaction as the bookings it names.
+  putParsed(record: ParsedMessage): void;
   // Moves the trip's revision, as any change to its bookings must.
   touchTrip(tripId: string, updatedAt: string): void;
 };
@@ -66,6 +68,14 @@ export function retryable(existing: ParsedMessage | undefined, now: string): boo
   return claimable(existing, now) || existing?.outcome === "failed";
 }
 
+// A changed calendar event may be claimed for another read only while its
+// record is the very version the caller saw (so two overlapping polls do not
+// both act on it), and not while another worker's claim is live.
+export function changeClaimable(existing: ParsedMessage | undefined, expected: ParsedMessage, now: string): boolean {
+  if (!existing || existing.processedAt !== expected.processedAt || existing.revision !== expected.revision) return false;
+  return existing.outcome !== "processing" || leaseExpired(existing, now);
+}
+
 export type TripStore = {
   // Atomically records the message as being processed; false if a record
   // exists and is not an expired lease, so concurrent deliveries of one
@@ -78,6 +88,13 @@ export type TripStore = {
   // Like claimMessage, but a record whose import failed is claimed again
   // too. For sources the user can only re-send whole, such as a file.
   retryMessage(uid: string, messageId: string, processedAt: string): Promise<boolean>;
+  // Claims a changed calendar event while its record is still `expected`
+  // (see changeClaimable). The claim keeps the record's bookings, so a
+  // worker that dies mid-change leaves them named for the next one.
+  claimChange(uid: string, messageId: string, processedAt: string, expected: ParsedMessage): Promise<boolean>;
+  // Writes `next` only while the record is still `expected`, on the same
+  // terms as claimChange; false when another worker got there first.
+  replaceIfUnchanged(uid: string, expected: ParsedMessage, next: ParsedMessage, now: string): Promise<boolean>;
   setParsed(record: ParsedMessage): Promise<void>;
   getParsed(uid: string, messageId: string): Promise<ParsedMessage | undefined>;
   // Runs fn serialized per user, so two overlapping imports cannot both
@@ -110,6 +127,12 @@ export type ImportOptions = {
   reclaim?: boolean;
   // Take another look at a message whose import failed, and only then.
   retryFailed?: boolean;
+  // Recorded on the outcome: what version of the item was read.
+  revision?: string;
+  // A changed calendar event: its record as last read. The new read
+  // replaces that record's bookings only once it has succeeded; a failed
+  // read leaves record and bookings as they were.
+  replacing?: ParsedMessage;
   // Existing bookings already matched by earlier items of the same upload;
   // this message's own matches are added to it.
   consumed?: Set<string>;
@@ -126,8 +149,13 @@ export async function importMessage(
   options: ImportOptions = {},
 ): Promise<ImportOutcome> {
   const { store, now, log } = deps;
-  const claim = options.reclaim ? store.reclaimMessage : options.retryFailed ? store.retryMessage : store.claimMessage;
-  if (!(await claim(uid, message.id, now()))) return "skipped";
+  const replacing = options.replacing;
+  if (replacing) {
+    if (!(await store.claimChange(uid, message.id, now(), replacing))) return "skipped";
+  } else {
+    const claim = options.reclaim ? store.reclaimMessage : options.retryFailed ? store.retryMessage : store.claimMessage;
+    if (!(await claim(uid, message.id, now()))) return "skipped";
+  }
   const source = options.source ?? "gmail";
   const base = {
     messageId: message.id,
@@ -135,6 +163,7 @@ export async function importMessage(
     ...(source === "gmail" ? {} : { source }),
     from: message.from,
     subject: message.subject,
+    ...(options.revision ? { revision: options.revision } : {}),
   };
   const record = (outcome: ParsedMessage["outcome"], extra: Partial<ParsedMessage> = {}): ParsedMessage => ({
     ...base,
@@ -143,6 +172,24 @@ export async function importMessage(
     processedAt: now(),
     ...extra,
   });
+
+  // Before a changed event's new outcome is written, its old bookings go:
+  // all of them, or, if the user edited one or another source was matched to
+  // one meanwhile, none, and the old record stands with the change noted.
+  const releaseReplaced = async (): Promise<boolean> => {
+    if (!replacing?.tripId || replacing.segmentIds.length === 0) return true;
+    // The claim stops naming the bookings in the transaction that deletes
+    // them, so a worker that dies before the new outcome leaves a claim that
+    // is simply read again once it expires: not one pointing at deleted
+    // bookings (which would read as the user's deletion and block the
+    // change), nor one that forgot bookings still there.
+    const cleared: ParsedMessage = { ...replacing, outcome: "processing", segmentIds: [], processedAt: now() };
+    const { kept } = await removeOwnBookings(uid, { ...replacing, tripId: replacing.tripId }, deps, true, cleared);
+    if (!kept.length) return true;
+    await store.setParsed({ ...replacing, ...(options.revision ? { revision: options.revision } : {}), reason: changeKeptReason });
+    log("calendar_change_kept", { uid, messageId: message.id, kept: kept.length });
+    return false;
+  };
 
   let reason = "requested by user";
   if (!options.force) {
@@ -153,6 +200,7 @@ export async function importMessage(
           await store.senderPatterns(uid),
         );
     if (!verdict.pass) {
+      if (!(await releaseReplaced())) return "skipped";
       await store.setParsed(record("filtered", { reason: verdict.reason }));
       log("filtered", { uid, messageId: message.id, reason: verdict.reason });
       return "filtered";
@@ -182,6 +230,7 @@ export async function importMessage(
       log("similarity_failed", { uid, messageId: message.id, reason: (error as Error).message });
     }
     if (similar?.skip) {
+      if (!(await releaseReplaced())) return "skipped";
       await store.setParsed(record("filtered", { reason: similar.reason }));
       log("filtered", { uid, messageId: message.id, reason: similar.reason });
       return "filtered";
@@ -201,12 +250,15 @@ export async function importMessage(
     booking = await deps.extract(message);
   } catch (error) {
     const failure = (error as Error).message;
-    await store.setParsed(record("failed", { reason: failure }));
+    // A changed event's old record comes back whole, its old revision
+    // included, so the change is tried again next time.
+    await store.setParsed(replacing ?? record("failed", { reason: failure }));
     log("extract_failed", { uid, messageId: message.id, reason: failure });
     return "failed";
   }
 
   const range = segmentDateRange(booking.segments);
+  if (!(await releaseReplaced())) return "skipped";
   if (!booking.isBooking || booking.segments.length === 0 || !range) {
     await store.setParsed(record("not_booking", { reason }));
     await learn("others");
@@ -569,34 +621,54 @@ export function tripTitle(segments: readonly ExtractedSegment[]): string {
 const min = (a: string, b: string) => (a < b ? a : b);
 const max = (a: string, b: string) => (a > b ? a : b);
 
-export type CalendarCounts = ImportCounts & { recurring: number; cancelled: number; remaining: number; removed: number };
+export type CalendarCounts = ImportCounts & { recurring: number; cancelled: number; remaining: number; removed: number; updated: number };
+
+// Deletes the bookings an imported calendar event made that are still just
+// what it made: one the user edited, or that another email or import has
+// since been matched to, is kept. With `allOrNothing`, nothing is deleted
+// unless every one can be. `then`, when given, is written in the same
+// transaction as the deletion, so a record never stops naming bookings that
+// are still there, nor names ones that are gone.
+async function removeOwnBookings(
+  uid: string,
+  record: ParsedMessage & { tripId: string },
+  deps: ImportDeps,
+  allOrNothing: boolean,
+  then?: ParsedMessage,
+): Promise<{ removed: string[]; kept: string[] }> {
+  const tripId = record.tripId;
+  const timestamp = deps.now();
+  return deps.store.withUserLock(uid, async (tx) => {
+    const segments = await Promise.all(record.segmentIds.map((id) => tx.getSegment(tripId, id)));
+    const removable: string[] = [];
+    const kept: string[] = [];
+    for (const [i, segment] of segments.entries()) {
+      if (!segment) {
+        // Gone from the trip it was filed in: the user moved it to another
+        // trip or deleted it. A replacement must not undo either.
+        if (allOrNothing) kept.push(record.segmentIds[i]!);
+        continue;
+      }
+      const others = segmentSources(segment).filter((s) => s.id !== record.messageId);
+      if (segment.updatedAt === segment.createdAt && others.length === 0) removable.push(segment.id);
+      else kept.push(segment.id);
+    }
+    if (allOrNothing && kept.length) return { removed: [], kept: [...kept, ...removable] };
+    for (const id of removable) tx.deleteSegment(tripId, id);
+    if (removable.length) tx.touchTrip(tripId, timestamp);
+    if (then) tx.putParsed(then);
+    return { removed: removable, kept };
+  });
+}
 
 // An event cancelled after it was imported takes its booking with it, but
-// only a booking that is still just what the calendar made: one the user
-// edited, or that another email or import has since been matched to, stays.
+// only a booking that is still just what the calendar made.
 export async function cancelImported(uid: string, recordId: string, deps: ImportDeps): Promise<number> {
   const { store, now, log } = deps;
   const record = await store.getParsed(uid, recordId);
   if (record?.outcome !== "imported" || !record.tripId || record.segmentIds.length === 0) return 0;
-  const tripId = record.tripId;
   const timestamp = now();
-  const { removed, kept } = await store.withUserLock(uid, async (tx) => {
-    const segments = await Promise.all(record.segmentIds.map((id) => tx.getSegment(tripId, id)));
-    const removed: string[] = [];
-    const kept: string[] = [];
-    for (const segment of segments) {
-      if (!segment) continue;
-      const others = segmentSources(segment).filter((s) => s.id !== recordId);
-      if (segment.updatedAt === segment.createdAt && others.length === 0) {
-        tx.deleteSegment(tripId, segment.id);
-        removed.push(segment.id);
-      } else {
-        kept.push(segment.id);
-      }
-    }
-    if (removed.length) tx.touchTrip(tripId, timestamp);
-    return { removed, kept };
-  });
+  const { removed, kept } = await removeOwnBookings(uid, { ...record, tripId: record.tripId }, deps, false);
   await store.setParsed({
     ...record,
     outcome: "not_booking",
@@ -608,6 +680,22 @@ export async function cancelImported(uid: string, recordId: string, deps: Import
   return removed.length;
 }
 
+const changeKeptReason = "changed in the calendar; edited or matched bookings kept";
+
+// Whether a changed event's bookings may be replaced: none edited, moved or
+// deleted by the user and none matched by another source. Checked before
+// the model is asked, and again when they are removed.
+async function replaceable(uid: string, record: ParsedMessage, deps: ImportDeps): Promise<boolean> {
+  const tripId = record.tripId;
+  if (!tripId || record.segmentIds.length === 0) return true;
+  return deps.store.withUserLock(uid, async (tx) => {
+    const segments = await Promise.all(record.segmentIds.map((id) => tx.getSegment(tripId, id)));
+    return segments.every(
+      (segment) => !!segment && segment.updatedAt === segment.createdAt && segmentSources(segment).every((s) => s.id === record.messageId),
+    );
+  });
+}
+
 export const calendarSender = "Calendar file";
 
 // Each event goes through the email path: the title is the subject, the
@@ -616,15 +704,22 @@ export const calendarSender = "Calendar file";
 // capped per request; events past the cap are left for the next upload of
 // the same file, which skips everything already read.
 export async function importCalendar(uid: string, calendar: IcsCalendar, deps: ImportDeps, maxRead: number): Promise<CalendarCounts> {
-  const counts: CalendarCounts = { ...emptyCounts(), recurring: 0, cancelled: 0, remaining: 0, removed: 0 };
+  const counts: CalendarCounts = { ...emptyCounts(), recurring: 0, cancelled: 0, remaining: 0, removed: 0, updated: 0 };
   const travel = isTravelCalendar(calendar);
   let read = 0;
   // One to one across the file, and across uploads of it: what events
   // imported last time matched is reserved before any is read again.
   const consumed = new Set<string>();
   const live = calendar.events.filter((e) => !e.recurring && !e.cancelled);
+  const previousRecords = new Map<string, ParsedMessage>();
   for (const previous of await Promise.all(live.map((e) => deps.store.getParsed(uid, `ics-${e.key}`)))) {
-    if (previous?.outcome === "imported") for (const id of previous.matchedSegmentIds ?? []) consumed.add(id);
+    if (!previous) continue;
+    previousRecords.set(previous.messageId, previous);
+    // A claim mid-change still holds its old matches until its new outcome
+    // is written; only the worker that makes the change frees them (below).
+    if (previous.outcome === "imported" || previous.outcome === "processing") {
+      for (const id of previous.matchedSegmentIds ?? []) consumed.add(id);
+    }
   }
   for (const event of calendar.events) {
     if (event.recurring) {
@@ -649,16 +744,49 @@ export async function importCalendar(uid: string, calendar: IcsCalendar, deps: I
       listUnsubscribe: false,
       text: icsEventText(event),
     };
+    // The text read, not the file's timestamps: some calendars restamp
+    // every event on each export, which would read everything daily.
+    const revision = stableHash(message.text);
+    const previous = previousRecords.get(message.id);
+    // Changed since it was read, or a change a dead worker left half done
+    // (a claim still naming its bookings or its matches).
+    const changed =
+      previous !== undefined &&
+      previous.outcome !== "failed" &&
+      (previous.outcome === "processing"
+        ? previous.segmentIds.length > 0 || (previous.matchedSegmentIds?.length ?? 0) > 0
+        : previous.revision !== revision);
+    if (changed && previous.revision === undefined && previous.outcome !== "processing") {
+      // Read before revisions were kept: this text becomes the baseline.
+      await deps.store.replaceIfUnchanged(uid, previous, { ...previous, revision }, deps.now());
+      counts.skipped += 1;
+      continue;
+    }
+    if (changed && !(await replaceable(uid, previous, deps))) {
+      // Only over the record as read: another read may have changed it since.
+      if (previous.revision !== revision) await deps.store.replaceIfUnchanged(uid, previous, { ...previous, revision, reason: changeKeptReason }, deps.now());
+      counts.skipped += 1;
+      continue;
+    }
+    // Its own earlier matches are free for the new read to take again.
+    if (changed) for (const id of previous.matchedSegmentIds ?? []) consumed.delete(id);
     // A failed event is read again on the next upload; one already judged
-    // is not, so a re-upload costs only what it has not done yet.
+    // is not, unless its text changed, so a re-upload costs only what it has
+    // not done yet.
     const outcome = await importMessage(uid, message, deps, {
       source: "ics",
       retryFailed: true,
       consumed,
+      revision,
+      ...(changed ? { replacing: previous } : {}),
       prefilter: (m) => calendarPrefilter(m.subject, travel),
     });
     if (outcome === "imported" || outcome === "not_booking" || outcome === "failed") read += 1;
     counts[outcome] += 1;
+    if (changed && outcome !== "skipped" && outcome !== "failed") counts.updated += 1;
+    // A change that failed or was not made leaves the old record, and its
+    // matches, standing: they stay reserved against the events after it.
+    if (changed && (outcome === "skipped" || outcome === "failed")) for (const id of previous.matchedSegmentIds ?? []) consumed.add(id);
   }
   return counts;
 }

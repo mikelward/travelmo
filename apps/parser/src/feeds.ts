@@ -49,6 +49,7 @@ export function feedFailure(error: unknown): string | undefined {
 export function describeFeedResult(counts: CalendarCounts): string {
   const parts = [`${counts.imported} imported`];
   if (counts.removed) parts.push(`${counts.removed} removed as cancelled`);
+  if (counts.updated) parts.push(`${counts.updated} read again after changing`);
   if (counts.remaining) parts.push(`${counts.remaining} left for the next poll`);
   if (counts.failed) parts.push(`${counts.failed} failed`);
   return parts.join(", ");
