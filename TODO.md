@@ -55,10 +55,12 @@
         holding trip, `source: "tripit"`.
   - [ ] TripIt travelers, `LoyaltyPrograms` and `TravelerProfile`: seed data
         for the later loyalty and passport features; not imported yet.
-  - [ ] `.ics` files and feeds: per-trip TripIt exports, calendar exports,
-        and a subscribed URL polled daily (the TripIt feed covers the last
-        90 days and the future). `UID` is the source id; event text goes
-        through extraction like an email.
+  - [x] `.ics` files: per-trip TripIt exports and calendar exports, read
+        like email, `UID` as the source id, recurring and cancelled events
+        skipped, 100 model reads per upload.
+  - [ ] `.ics` feeds: a subscribed URL polled daily (the TripIt feed covers
+        the last 90 days and the future), on `importCalendar`; a
+        cancellation removes the booking it imported.
   - [ ] Google Calendar through the existing OAuth flow with
         `calendar.readonly` and a calendar picker.
   - [ ] Backfill without the three-year cap, batched with a cursor, so a
@@ -147,3 +149,9 @@ Guesses made on autopilot; change any of them freely.
   nothing but shows duplicates until reviewed. Kept the dropping design,
   with stricter identity evidence and no deduplication within one TripIt
   export; switching is the maintainer's call.
+- Calendar files: an event's title is its only booking signal, so the
+  pre-filter passes booking words, flight and train numbers and airport
+  routes; a TripIt calendar (by `PRODID`) skips it. Reads per upload are
+  capped at 100, and the user uploads again to continue, rather than a
+  background job. Calendar events teach the similarity filter alongside
+  emails.

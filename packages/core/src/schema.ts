@@ -47,8 +47,9 @@ export const ExtractedBooking = z.object({
 });
 export type ExtractedBooking = z.infer<typeof ExtractedBooking>;
 
-// Where a booking came from: an email, a hand entry, or a TripIt export.
-export const SegmentSource = z.enum(["gmail", "manual", "tripit"]);
+// Where a booking came from: an email, a hand entry, a TripIt export or a
+// calendar file.
+export const SegmentSource = z.enum(["gmail", "manual", "tripit", "ics"]);
 export type SegmentSource = z.infer<typeof SegmentSource>;
 
 export const Segment = ExtractedSegment.extend({
@@ -115,7 +116,7 @@ export type SenderPatterns = z.infer<typeof SenderPatterns>;
 // with `source` saying which). A record without `source` is a Gmail one.
 export const ParsedMessage = z.object({
   messageId: z.string().min(1),
-  source: z.enum(["gmail", "tripit"]).optional(),
+  source: z.enum(["gmail", "tripit", "ics"]).optional(),
   uid: z.string().min(1),
   outcome: z.enum(["processing", "filtered", "not_booking", "imported", "failed"]),
   reason: z.string().optional(),

@@ -51,3 +51,39 @@ test("a file that is not a TripIt export is refused before anything is sent", as
   await expect(page.getByText("This file is not a TripIt export", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Import", exact: true })).toHaveCount(0);
 });
+
+test("a calendar file is previewed, then sent as text when the user imports it", async ({ page }) => {
+  await signIn(page, owner);
+  const sent: unknown[] = [];
+  await page.route("http://localhost:8080/import/ics", async (route) => {
+    sent.push(route.request().postDataJSON());
+    await route.fulfill({ json: { skipped: 0, filtered: 0, not_booking: 0, imported: 1, failed: 0, recurring: 1, cancelled: 0, remaining: 0 } });
+  });
+  await page.goto("/settings");
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "BEGIN:VEVENT",
+    "UID:a",
+    "DTSTART:20300101T090000Z",
+    "SUMMARY:XX1 AAA to BBB",
+    "END:VEVENT",
+    "BEGIN:VEVENT",
+    "UID:b",
+    "DTSTART:20300101T090000Z",
+    "RRULE:FREQ=DAILY",
+    "SUMMARY:Standup",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+  await page.getByLabel("Calendar file").setInputFiles({ name: "trip.ics", mimeType: "text/calendar", buffer: Buffer.from(ics) });
+  await expect(page.getByText("2 events; 1 will be checked for bookings. Skipping 1 repeating event.")).toBeVisible();
+  expect(sent).toHaveLength(0);
+  await page.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(page.getByText("1 event imported.")).toBeVisible();
+  expect(sent).toEqual([{ text: ics }]);
+
+  // The same file again, as the result asks when events are left over.
+  await page.getByLabel("Calendar file").setInputFiles({ name: "trip.ics", mimeType: "text/calendar", buffer: Buffer.from(ics) });
+  await page.getByRole("button", { name: "Import", exact: true }).click();
+  await expect.poll(() => sent.length).toBe(2);
+});

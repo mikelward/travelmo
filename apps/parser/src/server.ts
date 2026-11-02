@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
 import { GoogleGenAI } from "@google/genai";
-import { NotATripItExport, parseTripItExport, paths, type GmailState } from "@travelmo/core";
+import { NotACalendar, NotATripItExport, parseIcs, parseTripItExport, paths, type GmailState } from "@travelmo/core";
 import { randomBytes } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -36,7 +36,7 @@ import {
   watch,
   type OAuthConfig,
 } from "./gmail";
-import { importMessage, importMessages, importTripIt, type ImportDeps } from "./importer";
+import { importCalendar, importMessage, importMessages, importTripIt, type ImportDeps } from "./importer";
 import { errorFields, log } from "./log";
 import { BadPushEnvelope, parseGmailPush, type GmailNotification } from "./pubsub";
 import { firestoreStore } from "./store";
@@ -288,6 +288,39 @@ app.post(
     const result = { ...counts, notImported: parsed.skipped.length };
     log("INFO", "tripit_import", { uid, ...result });
     return c.json(result);
+  },
+);
+
+const icsMaxBytes = 10 * 1024 * 1024;
+// Events read by the model per request, as for a backfill: enough for a
+// trip export, and a whole calendar's history comes in over a few uploads.
+const icsMaxRead = 100;
+
+// An uploaded calendar file, read like email: each event is recorded once,
+// so uploading the same file again reads only what the last upload did not
+// reach.
+app.post(
+  "/import/ics",
+  bodyLimit({
+    maxSize: icsMaxBytes,
+    onError: () => {
+      throw new HTTPException(413, { message: "That calendar file is too large" });
+    },
+  }),
+  async (c) => {
+    const uid = await requireUser(c);
+    const body = (await c.req.json().catch(() => undefined)) as { text?: unknown } | undefined;
+    if (typeof body?.text !== "string") throw new HTTPException(400, { message: "Missing calendar text" });
+    let calendar;
+    try {
+      calendar = parseIcs(body.text);
+    } catch (error) {
+      if (error instanceof NotACalendar) throw new HTTPException(400, { message: error.message });
+      throw error;
+    }
+    const counts = await importCalendar(uid, calendar, deps, icsMaxRead);
+    log("INFO", "ics_import", { uid, events: calendar.events.length, ...counts });
+    return c.json(counts);
   },
 );
 

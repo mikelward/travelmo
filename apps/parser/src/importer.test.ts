@@ -1,9 +1,11 @@
-import { parseTripItExport, type ExtractedBooking, type ParsedMessage, type Segment, type Trip } from "@travelmo/core";
+import { parseIcs, parseTripItExport, type ExtractedBooking, type ParsedMessage, type Segment, type Trip } from "@travelmo/core";
 import type { EmailMessage } from "./gmail";
 import {
   claimLeaseMs,
   claimable,
   reclaimable,
+  retryable,
+  importCalendar,
   importMessage,
   importMessages,
   importTripIt,
@@ -61,6 +63,12 @@ function memoryStore(): Memory {
     reclaimMessage: async (uid, id, processedAt) => {
       const key = `${uid}/${id}`;
       if (!reclaimable(parsed.get(key), processedAt)) return false;
+      parsed.set(key, { messageId: id, uid, outcome: "processing", segmentIds: [], processedAt });
+      return true;
+    },
+    retryMessage: async (uid, id, processedAt) => {
+      const key = `${uid}/${id}`;
+      if (!retryable(parsed.get(key), processedAt)) return false;
       parsed.set(key, { messageId: id, uid, outcome: "processing", segmentIds: [], processedAt });
       return true;
     },
@@ -616,5 +624,101 @@ describe("importTripIt", () => {
     const retry = await importTripIt("u1", tripItExport(), deps(store, async () => lodging));
     expect(retry).toMatchObject({ trips: 1, skipped: 2, failed: 0 });
     expect([...store.trips.values()].map((t) => t.title)).toContain("Dublin weekend");
+  });
+});
+
+const ics = (prodId: string, events: string[]) =>
+  parseIcs(["BEGIN:VCALENDAR", `PRODID:${prodId}`, ...events, "END:VCALENDAR"].join("\r\n"));
+const vevent = (uid: string, summary: string, extra: string[] = []) => [
+  "BEGIN:VEVENT",
+  `UID:${uid}`,
+  "DTSTART;TZID=Europe/London:20261215T080000",
+  "DTEND;TZID=Europe/Dublin:20261215T090000",
+  `SUMMARY:${summary}`,
+  ...extra,
+  "END:VEVENT",
+].join("\r\n");
+
+describe("importCalendar", () => {
+  it("reads travel events through the model and files them as calendar bookings", async () => {
+    const store = memoryStore();
+    const seen: string[] = [];
+    const extract = vi.fn(async (m: { text: string }) => (seen.push(m.text), flight));
+    const calendar = ics("-//Example//EN", [vevent("e1", "FR123 MAN to DUB"), vevent("e2", "Dentist")]);
+    const counts = await importCalendar("u1", calendar, deps(store, extract), 100);
+    expect(counts).toMatchObject({ imported: 1, filtered: 1, recurring: 0, cancelled: 0, remaining: 0 });
+    expect(seen[0]).toContain("Starts: 2026-12-15T08:00:00+00:00 (Europe/London)");
+    const segment = [...store.segments.values()][0]!;
+    expect(segment).toMatchObject({ source: "ics", gmailMessageIds: [] });
+    expect(segment.sender).toBeUndefined();
+    const record = [...store.parsed.values()].find((r) => r.outcome === "imported")!;
+    expect(record).toMatchObject({ source: "ics", from: "Calendar file", subject: "FR123 MAN to DUB" });
+  });
+
+  it("skips repeating and cancelled events, and anything already read", async () => {
+    const store = memoryStore();
+    const extract = vi.fn(async () => flight);
+    const calendar = ics("-//Example//EN", [
+      vevent("e1", "FR123 MAN to DUB"),
+      vevent("e2", "Flight club", ["RRULE:FREQ=WEEKLY"]),
+      vevent("e3", "Flight to Dublin", ["STATUS:CANCELLED"]),
+    ]);
+    expect(await importCalendar("u1", calendar, deps(store, extract), 100)).toMatchObject({ imported: 1, recurring: 1, cancelled: 1 });
+    expect(await importCalendar("u1", calendar, deps(store, extract), 100)).toMatchObject({ imported: 0, skipped: 1 });
+    expect(extract).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops reading at the cap and picks up where it left off", async () => {
+    const store = memoryStore();
+    const extract = vi.fn(async () => ({ isBooking: false, segments: [] }));
+    const calendar = ics("-//Example//EN", [vevent("e1", "Flight one"), vevent("e2", "Flight two"), vevent("e3", "Flight three")]);
+    expect(await importCalendar("u1", calendar, deps(store, extract), 2)).toMatchObject({ not_booking: 2, remaining: 1 });
+    expect(await importCalendar("u1", calendar, deps(store, extract), 2)).toMatchObject({ not_booking: 1, skipped: 2, remaining: 0 });
+    expect(extract).toHaveBeenCalledTimes(3);
+  });
+
+  it("reads an event whose extraction failed again on the next upload, and nothing else", async () => {
+    const store = memoryStore();
+    const calendar = ics("-//Example//EN", [vevent("e1", "FR123 MAN to DUB"), vevent("e2", "Flight to nowhere")]);
+    let rateLimited = true;
+    const extract = vi.fn(async (m: { subject: string }) => {
+      if (m.subject.startsWith("FR123") && rateLimited) throw new Error("429 rate limited");
+      return m.subject.startsWith("FR123") ? flight : { isBooking: false, segments: [] };
+    });
+    expect(await importCalendar("u1", calendar, deps(store, extract), 100)).toMatchObject({ failed: 1, not_booking: 1 });
+    rateLimited = false;
+    expect(await importCalendar("u1", calendar, deps(store, extract), 100)).toMatchObject({ imported: 1, skipped: 1 });
+    expect(extract).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps two calendar events that describe alike rooms as two bookings", async () => {
+    const store = memoryStore();
+    const calendar = ics("-//TripIt//EN", [vevent("room1", "Cove Liverpool"), vevent("room2", "Cove Liverpool")]);
+    expect(await importCalendar("u1", calendar, deps(store, async () => lodging), 100)).toMatchObject({ imported: 2 });
+    expect(store.segments.size).toBe(2);
+  });
+
+  it("lets one Gmail room stand in for only one of two alike calendar room events, across uploads too", async () => {
+    const store = memoryStore();
+    await importMessage("u1", email(), deps(store, async () => lodging));
+    const calendar = ics("-//TripIt//EN", [vevent("room1", "Cove Liverpool"), vevent("room2", "Cove Liverpool")]);
+    let fail = true;
+    const flaky = async (m: { subject: string; id: string }) => {
+      if (m.id.endsWith(calendar.events[0]!.key) && fail) throw new Error("rate limited");
+      return lodging;
+    };
+    // The first event fails, the second matches the Gmail room; the retry
+    // must not let the first match it again.
+    expect(await importCalendar("u1", calendar, deps(store, flaky), 100)).toMatchObject({ failed: 1, imported: 1 });
+    fail = false;
+    expect(await importCalendar("u1", calendar, deps(store, flaky), 100)).toMatchObject({ imported: 1, skipped: 1 });
+    expect([...store.segments.values()].filter((s) => s.type === "lodging")).toHaveLength(2);
+  });
+
+  it("reads every event of a TripIt calendar, whatever its title", async () => {
+    const store = memoryStore();
+    const extract = vi.fn(async () => lodging);
+    const counts = await importCalendar("u1", ics("-//TripIt//EN", [vevent("e1", "Cove Liverpool")]), deps(store, extract), 100);
+    expect(counts.imported).toBe(1);
   });
 });

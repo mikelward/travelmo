@@ -48,6 +48,19 @@ describe("firestoreStore.claimMessage", () => {
   });
 });
 
+describe("firestoreStore.retryMessage", () => {
+  it("claims a failed record again but nothing else that finished", async () => {
+    const failed = unique();
+    await store.claimMessage("u1", failed, at(0));
+    await store.setParsed({ messageId: failed, uid: "u1", outcome: "failed", segmentIds: [], processedAt: at(1) });
+    expect(await store.retryMessage("u1", failed, at(2))).toBe(true);
+    const judged = unique();
+    await store.claimMessage("u1", judged, at(0));
+    await store.setParsed({ messageId: judged, uid: "u1", outcome: "not_booking", segmentIds: [], processedAt: at(1) });
+    expect(await store.retryMessage("u1", judged, at(2))).toBe(false);
+  });
+});
+
 describe("firestoreStore examples", () => {
   it("starts empty and keeps every example saved concurrently, per kind", async () => {
     const uid = unique();

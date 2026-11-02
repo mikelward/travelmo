@@ -14,8 +14,8 @@ is the roadmap in `TODO.md`. Every method ends in the same place: an
 | By hand | Built | One booking at a time from the trip page form | Any | Immediate | Typing | Nothing |
 | TripIt JSON export | Built | Every trip and reservation, already structured | Whole account history (a real export spanned 20 years) | One-off snapshot | Email TripIt customer service and wait for the file; no self-service export | A file upload in Settings and a mapping of TripIt's object shapes |
 | TripIt calendar feed (`.ics` URL) | Planned | Every reservation as a calendar event, text only | Last 90 days plus the future | Refreshed on each poll (daily) | Copy the feed URL from TripIt settings; official and self-service | The `.ics` importer plus a daily poller |
-| TripIt per-trip export (`.ics` file) | Planned | One trip's reservations as events | Any single trip | One-off | Website only, one trip at a time, "Export trip to calendar" | The `.ics` importer |
-| Any `.ics` file or feed | Planned | Calendar events | Whatever the calendar holds | One-off (file) or polled (URL) | Export or subscription URL from any calendar app | The `.ics` importer |
+| TripIt per-trip export (`.ics` file) | Built | One trip's reservations as events | Any single trip | One-off | Website only, one trip at a time, "Export trip to calendar" | The `.ics` importer |
+| Any `.ics` file | Built; feeds planned | Calendar events | Whatever the calendar holds | One-off (file) or polled (URL) | Export or subscription URL from any calendar app | The `.ics` importer |
 | Google Calendar | Planned | Events from chosen calendars | Unlimited | Polled or pushed (Calendar API watch) | One OAuth consent, calendar picker | The `calendar.readonly` scope added to the consent screen |
 | Forward-to-import address | Planned | Emails the user forwards | Anything the user still has | As forwarded | Forward a confirmation to an address | Inbound mail handling (a mail provider's inbound webhook or a dedicated mailbox) and sender verification |
 
@@ -62,9 +62,11 @@ means the source has it as data.
   not for history.
 - **`.ics`** in general carries text, not structure, so it runs through the same
   extraction as an email, with the summary, location and description as the body;
-  the model call costs the same, the pre-filter has less to go on. Events repeat
-  (`RRULE`) and get cancelled (`STATUS:CANCELLED`); the importer should skip
-  recurring events and honor cancellations.
+  the model call costs the same, the pre-filter has less to go on (the title only:
+  booking words, flight and train numbers, airport routes; a TripIt calendar skips
+  it). Recurring (`RRULE`) and cancelled (`STATUS:CANCELLED`) events are skipped;
+  a cancellation of an event already imported does not yet remove its booking,
+  which the feed poller will need.
 - **Google Calendar** adds a second consent scope to the same Google account the
   Gmail flow already uses and brings every calendar's noise with it, so the user
   picks calendars and the pre-filter still applies. Travel events that came from
@@ -78,5 +80,5 @@ means the source has it as data.
 ## Order of work
 
 Deploy and run on real mail first (`TODO.md`). The generic importer and the
-TripIt JSON upload are built; `.ics` files next, then the feed poller and the uncapped backfill; Google Calendar and forward-to-import after
+TripIt JSON upload and `.ics` files are built; the feed poller next and the uncapped backfill; Google Calendar and forward-to-import after
 that, as real users ask for them.
