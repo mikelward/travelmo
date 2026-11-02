@@ -35,5 +35,8 @@ describe("describeCalendarResult", () => {
     expect(describeCalendarResult({ skipped: 5, filtered: 0, not_booking: 0, imported: 1, failed: 1, recurring: 0, cancelled: 0, remaining: 40 })).toBe(
       "1 event imported, 5 read before, 1 failed. 40 events are left: import the file again to continue.",
     );
+    expect(describeCalendarResult({ skipped: 0, filtered: 0, not_booking: 0, imported: 1, failed: 0, recurring: 0, cancelled: 0, remaining: 0, updated: 1 })).toBe(
+      "1 event imported, 1 read again after changing.",
+    );
   });
 });

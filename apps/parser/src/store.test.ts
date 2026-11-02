@@ -49,6 +49,18 @@ describe("firestoreStore.claimMessage", () => {
   });
 });
 
+describe("firestoreStore.claimChange", () => {
+  it("grants one of two concurrent claims on the version read, keeping its bookings named", async () => {
+    const id = unique();
+    const seen = { messageId: id, uid: "u1", outcome: "imported" as const, segmentIds: ["s1"], tripId: "t1", revision: "r1", processedAt: at(0) };
+    await store.setParsed(seen);
+    const results = await Promise.all([store.claimChange("u1", id, at(1), seen), store.claimChange("u1", id, at(1), seen)]);
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(await store.getParsed("u1", id)).toMatchObject({ outcome: "processing", segmentIds: ["s1"], tripId: "t1", revision: "r1" });
+    expect(await store.claimChange("u1", id, at(2), seen)).toBe(false);
+  });
+});
+
 describe("firestoreStore.retryMessage", () => {
   it("claims a failed record again but nothing else that finished", async () => {
     const failed = unique();

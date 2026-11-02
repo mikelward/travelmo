@@ -1,5 +1,5 @@
 import type { ParsedMessage, Segment, Trip } from "@travelmo/core";
-import { claimable, reclaimable, retryable, type TripStore, type TripTx } from "./importer";
+import { changeClaimable, claimable, reclaimable, retryable, type TripStore, type TripTx } from "./importer";
 import { addExample, emptyExamples, type Examples } from "./similarity";
 
 // An in-memory TripStore for the pipeline's tests: the same contract as the
@@ -31,8 +31,12 @@ export function memoryStore(): Memory {
       trips.set(id, { ...trip, ...bounds });
     },
     putSegment: (s) => void segments.set(s.id, s),
-    getSegment: async (_tripId, id) => segments.get(id),
+    getSegment: async (tripId, id) => {
+      const s = segments.get(id);
+      return s?.tripId === tripId ? s : undefined;
+    },
     deleteSegment: (_tripId, id) => void segments.delete(id),
+    putParsed: (r) => void parsed.set(`${r.uid}/${r.messageId}`, r),
     touchTrip: (id, updatedAt) => {
       const trip = trips.get(id);
       if (trip) trips.set(id, { ...trip, updatedAt });
@@ -68,6 +72,18 @@ export function memoryStore(): Memory {
       const key = `${uid}/${id}`;
       if (!retryable(parsed.get(key), processedAt)) return false;
       parsed.set(key, { messageId: id, uid, outcome: "processing", segmentIds: [], processedAt });
+      return true;
+    },
+    claimChange: async (uid, id, processedAt, expected) => {
+      const key = `${uid}/${id}`;
+      const existing = parsed.get(key);
+      if (!changeClaimable(existing, expected, processedAt)) return false;
+      parsed.set(key, { ...existing!, outcome: "processing", processedAt });
+      return true;
+    },
+    replaceIfUnchanged: async (uid, expected, next, now) => {
+      if (!changeClaimable(parsed.get(`${uid}/${expected.messageId}`), expected, now)) return false;
+      parsed.set(`${uid}/${expected.messageId}`, next);
       return true;
     },
     setParsed: async (r) => void parsed.set(`${r.uid}/${r.messageId}`, r),

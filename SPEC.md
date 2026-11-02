@@ -313,9 +313,20 @@ offset; one with several offsets is named to the model with them), and a
 the pre-filter passes a title with a booking word, a flight or train number
 or an airport-to-airport route, and the similarity stage follows as for a
 subject keyword; every event of a TripIt calendar (its `PRODID`) goes
-straight to the model. Each event is recorded under a key from its `UID`;
-one whose import failed is read again on the next upload, and any other is
-not, and a request reads at most 100 events with the model, so a large calendar
+straight to the model. Each event is recorded under a key from its `UID`,
+with a hash of the text the model read (`revision`); one whose import failed
+is read again on the next upload, one whose text changed (a new time, place
+or note) is read again too, and any other is not. A changed event is
+claimed against the record version that was read (`claimChange`), so two
+overlapping polls read it once; the new read comes first, and only once it
+has succeeded do the event's own bookings go and its new outcome replace
+them. A failed read leaves the old record and bookings as they were, to be
+tried again. If the user edited, moved or deleted one of those bookings, or
+another source was matched to one, they stand as the user left them and the
+change is only noted on the record. The hash is of the text, not the file's
+`DTSTAMP`, `LAST-MODIFIED` or `SEQUENCE`, which some calendars bump on every
+export; a record from before revisions takes the current text as its
+baseline. A request reads at most 100 events with the model, so a large calendar
 comes in over several uploads of the same file, each carrying on where the
 last stopped. `POST /import/ics` takes the file's text; Settings previews
 the event counts first.

@@ -1,6 +1,6 @@
 import { ParsedMessage, Segment, SenderPatterns, Trip, paths } from "@travelmo/core";
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
-import { claimable, reclaimable, retryable, type TripStore } from "./importer";
+import { changeClaimable, claimable, reclaimable, retryable, type TripStore } from "./importer";
 import { Examples, addExample, emptyExamples } from "./similarity";
 
 export function firestoreStore(db: Firestore): TripStore {
@@ -25,6 +25,26 @@ export function firestoreStore(db: Firestore): TripStore {
     },
     reclaimMessage(uid, messageId, processedAt) {
       return claimWhen(uid, messageId, processedAt, (existing) => reclaimable(existing, processedAt));
+    },
+    claimChange(uid, messageId, processedAt, expected) {
+      const ref = db.doc(paths.parsedMessage(uid, messageId));
+      return db.runTransaction(async (t) => {
+        const snap = await t.get(ref);
+        const existing = snap.exists ? ParsedMessage.parse(snap.data()) : undefined;
+        if (!changeClaimable(existing, expected, processedAt)) return false;
+        t.set(ref, { ...existing!, outcome: "processing", processedAt } satisfies ParsedMessage);
+        return true;
+      });
+    },
+    replaceIfUnchanged(uid, expected, next, now) {
+      const ref = db.doc(paths.parsedMessage(uid, expected.messageId));
+      return db.runTransaction(async (t) => {
+        const snap = await t.get(ref);
+        const existing = snap.exists ? ParsedMessage.parse(snap.data()) : undefined;
+        if (!changeClaimable(existing, expected, now)) return false;
+        t.set(ref, next);
+        return true;
+      });
     },
     async getParsed(uid, messageId) {
       const snap = await db.doc(paths.parsedMessage(uid, messageId)).get();
@@ -63,6 +83,9 @@ export function firestoreStore(db: Firestore): TripStore {
           async getSegment(tripId, segmentId) {
             const snap = await t.get(db.doc(paths.segment(tripId, segmentId)));
             return snap.exists ? Segment.parse(snap.data()) : undefined;
+          },
+          putParsed(record) {
+            t.set(db.doc(paths.parsedMessage(record.uid, record.messageId)), record);
           },
           deleteSegment(tripId, segmentId) {
             t.delete(db.doc(paths.segment(tripId, segmentId)));
