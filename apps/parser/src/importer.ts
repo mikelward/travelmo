@@ -3,6 +3,7 @@ import {
   icsEventText,
   isTravelCalendar,
   type IcsCalendar,
+  type IcsEvent,
   overlappingTrips,
   sameBooking,
   segmentDateRange,
@@ -97,6 +98,9 @@ export type TripStore = {
   replaceIfUnchanged(uid: string, expected: ParsedMessage, next: ParsedMessage, now: string): Promise<boolean>;
   setParsed(record: ParsedMessage): Promise<void>;
   getParsed(uid: string, messageId: string): Promise<ParsedMessage | undefined>;
+  // Every booking in the user's own live trips, read outside any lock: a
+  // snapshot for planning an import, never for deciding a write.
+  listUserSegments(uid: string): Promise<Segment[]>;
   // Runs fn serialized per user, so two overlapping imports cannot both
   // decide to create a trip for the same dates.
   withUserLock<T>(uid: string, fn: (tx: TripTx) => Promise<T>): Promise<T>;
@@ -328,6 +332,10 @@ export type BookingToFile = {
   // two alike TripIt rooms against one Gmail room leaves two rooms, and
   // against two Gmail rooms, two.
   consumed?: ReadonlySet<string>;
+  // Existing segments ("tripId/segmentId") set aside for the item of the
+  // same import whose confirmation number they carry (by its source id):
+  // no other item may take them first by looking alike.
+  reserved?: ReadonlyMap<string, string>;
 };
 
 export type Filed = {
@@ -381,11 +389,20 @@ export async function fileBooking(uid: string, booking: BookingToFile, deps: Imp
     const recordSources = () => {
       for (const segment of matchedSegments) tx.addSource(segment.tripId, segment.id, ref);
     };
-    const taken = (other: Segment) => booking.consumed?.has(`${other.tripId}/${other.id}`) || matched.includes(`${other.tripId}/${other.id}`);
+    const taken = (other: Segment) => {
+      const key = `${other.tripId}/${other.id}`;
+      const owner = booking.reserved?.get(key);
+      return booking.consumed?.has(key) || matched.includes(key) || (owner !== undefined && owner !== booking.sourceId);
+    };
     const fresh = booking.segments
       .map((segment, index) => ({ segment, id: `${booking.sourceId}-${index}` }))
       .filter(({ segment, id }) => {
-        const match = existing.find((other) => other.id !== id && !taken(other) && sameBooking(other, segment));
+        const candidate = (other: Segment) => other.id !== id && !taken(other) && sameBooking(other, segment);
+        // A booking set aside for this item comes first: matching a lookalike
+        // instead would strand it, reserved for an item already done.
+        const match =
+          existing.find((other) => booking.reserved?.get(`${other.tripId}/${other.id}`) === booking.sourceId && candidate(other)) ??
+          existing.find(candidate);
         if (match) {
           matchedTrips.add(match.tripId);
           matched.push(`${match.tripId}/${match.id}`);
@@ -497,6 +514,7 @@ export async function importStructured(uid: string, item: StructuredItem, deps: 
         distinctWithinSource: true,
         ...(item.trip ? { trip: item.trip } : {}),
         ...(item.consumed ? { consumed: item.consumed } : {}),
+        ...(item.reserved ? { reserved: item.reserved } : {}),
       },
       deps,
     );
@@ -529,6 +547,34 @@ export const tripItTripId = (uid: string, key: string) => `${sourceTripPrefix}${
 export const tripItUnfiledTripId = (uid: string) => `${holdingTripPrefix}${stableHash(uid)}`;
 export const unfiledTripTitle = "Unfiled from TripIt";
 
+// Matching is one item at a time, so without this an item that only looks
+// like an existing booking (TripIt trip objects carry no confirmation
+// numbers) could take it before the item whose confirmation number it
+// carries got there. Each existing booking another source made is set aside
+// for the first item of the export whose segment matches it by reference.
+export function reserveByReference(
+  items: readonly { id: string; segments: readonly ExtractedSegment[] }[],
+  existing: readonly Segment[],
+  consumed: ReadonlySet<string>,
+): Map<string, string> {
+  const reserved = new Map<string, string>();
+  for (const item of items) {
+    for (const segment of item.segments) {
+      if (!segment.confirmation) continue;
+      const match = existing.find((other) => {
+        const key = `${other.tripId}/${other.id}`;
+        return other.confirmation && !reserved.has(key) && !consumed.has(key) && sameBooking(other, segment);
+      });
+      if (match) reserved.set(`${match.tripId}/${match.id}`, item.id);
+    }
+  }
+  return reserved;
+}
+
+async function otherSourcesSegments(uid: string, source: Segment["source"], deps: ImportDeps): Promise<Segment[]> {
+  return (await deps.store.listUserSegments(uid)).filter((segment) => segment.source !== source);
+}
+
 export async function importTripIt(uid: string, parsed: TripItImport, deps: ImportDeps): Promise<TripItCounts> {
   const counts: TripItCounts = { trips: 0, imported: 0, duplicates: 0, skipped: 0, failed: 0 };
   // Matching against other sources is one to one across the whole export:
@@ -536,9 +582,28 @@ export async function importTripIt(uid: string, parsed: TripItImport, deps: Impo
   const consumed = new Set<string>();
   // On a retried upload, what items imported last time matched is reserved
   // before any item is tried again, whatever the order of the export.
-  const ids = [...parsed.trips.map((t) => `tripit-${t.key}`), ...parsed.unfiled.map((u) => `tripit-unfiled-${u.key}`)];
-  for (const previous of await Promise.all(ids.map((id) => deps.store.getParsed(uid, id)))) {
+  const items = [
+    ...parsed.trips.map((t) => ({ id: `tripit-${t.key}`, segments: t.segments })),
+    ...parsed.unfiled.map((u) => ({ id: `tripit-unfiled-${u.key}`, segments: u.segments })),
+  ];
+  // Items this upload will skip (imported before, or being imported) plan
+  // nothing: their matches are already in `consumed`, and a reservation for
+  // them would only keep a booking from the item that needs it.
+  const settled = new Set<string>();
+  for (const previous of await Promise.all(items.map((item) => deps.store.getParsed(uid, item.id)))) {
     if (previous?.outcome === "imported") for (const id of previous.matchedSegmentIds ?? []) consumed.add(id);
+    if (previous && !reclaimable(previous, deps.now())) settled.add(previous.messageId);
+  }
+  const toFile = items.filter((item) => !settled.has(item.id));
+  let reserved = new Map<string, string>();
+  if (toFile.some((item) => item.segments.some((s) => s.confirmation))) {
+    try {
+      reserved = reserveByReference(toFile, await otherSourcesSegments(uid, "tripit", deps), consumed);
+    } catch (error) {
+      // Only the matching order depends on it: the import goes ahead, item
+      // by item, at worst keeping an extra booking.
+      deps.log("reserve_failed", { uid, reason: (error as Error).message });
+    }
   }
   const tally = (result: StructuredResult) => {
     for (const id of result.matched) consumed.add(id);
@@ -556,6 +621,7 @@ export async function importTripIt(uid: string, parsed: TripItImport, deps: Impo
         title: trip.title,
         segments: trip.segments,
         consumed,
+        reserved,
         trip: { id: tripItTripId(uid, trip.key), title: trip.title, start: trip.start, end: trip.end, joinOverlapping: true },
       },
       deps,
@@ -574,6 +640,7 @@ export async function importTripIt(uid: string, parsed: TripItImport, deps: Impo
           title: item.title,
           segments: item.segments,
           consumed,
+          reserved,
           trip: { id: tripItUnfiledTripId(uid), title: unfiledTripTitle, ...range, joinOverlapping: false },
         },
         deps,
@@ -721,7 +788,15 @@ export async function importCalendar(uid: string, calendar: IcsCalendar, deps: I
       for (const id of previous.matchedSegmentIds ?? []) consumed.add(id);
     }
   }
-  for (const event of calendar.events) {
+  // Changed events go first: one whose earlier match moves elsewhere frees
+  // that booking before a new event that describes it is matched, so the
+  // result does not depend on the order of the file.
+  const changedFirst = (event: IcsEvent) => {
+    const previous = previousRecords.get(`ics-${event.key}`);
+    return previous !== undefined && previous.revision !== undefined && previous.revision !== stableHash(icsEventText(event));
+  };
+  const ordered = [...calendar.events.filter(changedFirst), ...calendar.events.filter((e) => !changedFirst(e))];
+  for (const event of ordered) {
     if (event.recurring) {
       counts.recurring += 1;
       continue;

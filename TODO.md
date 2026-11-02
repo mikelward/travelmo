@@ -71,14 +71,9 @@
   - [x] Backfill without the three-year cap, batched with a cursor, so a
         mailbox's whole history comes in.
   - [ ] Forward-to-import address for people without Gmail.
-- [ ] Duplicate matching is greedy, item by item: an unconfirmed TripIt
-      room can take the only existing booking a later, confirmed one would
-      have matched by reference, leaving a visible extra room (never a lost
-      one). Reserving exact-reference matches first, or matching the whole
-      export at once, fixes it. The same holds for a changed calendar event
-      whose earlier match moves to a different booking: an event before it
-      in the file that describes the released booking has already been
-      filed as a new one, so the result depends on event order.
+- [x] Duplicate matching no longer depends on item order: a TripIt export
+      reserves existing bookings for the item whose confirmation number they
+      carry, and a calendar upload reads changed events before new ones.
 - [ ] One-to-one matching holds within one upload, not across two
       uploads of the same export running at once (each keeps its own
       `consumed` set), which can drop a room. Settings disables Import while

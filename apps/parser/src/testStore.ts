@@ -88,6 +88,10 @@ export function memoryStore(): Memory {
     },
     setParsed: async (r) => void parsed.set(`${r.uid}/${r.messageId}`, r),
     getParsed: async (uid, id) => parsed.get(`${uid}/${id}`),
+    listUserSegments: async (uid) => {
+      const mine = new Set([...trips.values()].filter((trip) => trip.ownerUid === uid && !trip.deleting).map((trip) => trip.id));
+      return [...segments.values()].filter((segment) => mine.has(segment.tripId));
+    },
     withUserLock: (uid, fn) => {
       const run = (locks.get(uid) ?? Promise.resolve()).then(() => fn(tx));
       locks.set(uid, run.catch(() => undefined));
