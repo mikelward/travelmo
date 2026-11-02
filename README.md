@@ -5,7 +5,8 @@ connect Gmail, and booking confirmations become trips with flights, trains,
 stays and rentals, grouped into now, upcoming and past. Share a trip with a
 partner by email.
 
-`SPEC.md` has the architecture and the reasoning behind it.
+`SPEC.md` has the architecture and the reasoning behind it; `IMPORT.md` compares
+the ways trips can come in, built and planned.
 
 ## Layout
 
