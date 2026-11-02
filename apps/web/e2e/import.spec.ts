@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { owner, signIn } from "./helpers";
-import { clearData, seedFeed } from "./seed";
+import { clearData, seedFeed, seedGmail } from "./seed";
 
 test.beforeEach(async () => {
   await clearData();
@@ -112,4 +112,78 @@ test("a calendar feed is added through the parser and listed by host, with its l
   await expect(page.getByText("feeds.example.com", { exact: true })).toBeVisible();
   await expect(page.getByText("The feed answered 404.")).toBeVisible();
   await expect(page.getByText("SECRET")).toHaveCount(0);
+});
+
+test("reading the mailbox carries on batch after batch from where it stopped", async ({ page }) => {
+  const uid = await signIn(page, owner);
+  await seedGmail(uid, {
+    emailAddress: "traveler@example.com",
+    connectedAt: "2026-11-01T00:00:00Z",
+    backfill: { cursor: "p1", scanned: 300, imported: 2, done: false, updatedAt: "2026-11-01T00:00:00Z" },
+  });
+  const sent: unknown[] = [];
+  await page.route("http://localhost:8080/gmail/backfill", async (route) => {
+    sent.push(route.request().postDataJSON());
+    const done = sent.length >= 2;
+    await route.fulfill({
+      json: { candidates: 300, skipped: 0, filtered: 0, not_booking: 0, imported: 1, failed: 0, progress: { scanned: 300 * (sent.length + 1), imported: 2 + sent.length, done, updatedAt: "2026-11-02T00:00:00Z" } },
+    });
+  });
+  await page.goto("/settings");
+  await expect(page.getByTestId("backfill-progress")).toHaveText(
+    "Stopped part way: 300 booking-like emails read, 2 bookings imported. Continue to read the rest.",
+  );
+  await page.getByRole("button", { name: "Continue reading past emails" }).click();
+  // Batches run until the parser says the mailbox is done; none restarts.
+  await expect.poll(() => sent.length).toBe(2);
+  expect(sent).toEqual([{}, {}]);
+  await expect(page.getByRole("button", { name: "Continue reading past emails" })).toBeVisible();
+});
+
+test("leaving Settings stops a mailbox reading after its current batch", async ({ page }) => {
+  const uid = await signIn(page, owner);
+  await seedGmail(uid, { emailAddress: "traveler@example.com", connectedAt: "2026-11-01T00:00:00Z" });
+  let release!: () => void;
+  const held = new Promise<void>((r) => (release = r));
+  let requests = 0;
+  let resumed = false;
+  let strays = 0;
+  await page.route("http://localhost:8080/gmail/backfill", async (route) => {
+    requests += 1;
+    if (requests === 1) await held;
+    // Anything between the first batch and the user's own Continue would be
+    // the old loop still running.
+    else if (!resumed) strays += 1;
+    await route.fulfill({
+      json: { candidates: 300, skipped: 0, filtered: 0, not_booking: 0, imported: 0, failed: 0, progress: { scanned: 300, imported: 0, done: requests > 1, updatedAt: "2026-11-02T00:00:00Z" } },
+    });
+  });
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "Import past bookings" }).click();
+  await expect.poll(() => requests).toBe(1);
+  await page.getByRole("link", { name: "Travelmo" }).first().click();
+  await expect(page).toHaveURL(/\/$/);
+  release();
+  await page.goto("/settings");
+  resumed = true;
+  await page.getByRole("button", { name: "Import past bookings" }).click();
+  await expect.poll(() => requests).toBe(2);
+  expect(strays).toBe(0);
+});
+
+test("a batch with failed imports pauses the reading and says why", async ({ page }) => {
+  const uid = await signIn(page, owner);
+  await seedGmail(uid, { emailAddress: "traveler@example.com", connectedAt: "2026-11-01T00:00:00Z" });
+  let requests = 0;
+  await page.route("http://localhost:8080/gmail/backfill", async (route) => {
+    requests += 1;
+    await route.fulfill({
+      json: { candidates: 300, skipped: 0, filtered: 0, not_booking: 0, imported: 0, failed: 3, progress: { scanned: 300, imported: 0, failed: 3, done: false, updatedAt: "2026-11-02T00:00:00Z" } },
+    });
+  });
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "Import past bookings" }).click();
+  await expect(page.getByText("Reading paused: 3 emails in the last batch could not be imported.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0);
+  expect(requests).toBe(1);
 });

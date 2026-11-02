@@ -17,6 +17,7 @@ import {
   savePending,
   takeOAuthState,
   takePending,
+  updateBackfill,
   updateHistoryId,
   updateWatch,
 } from "./connections";
@@ -31,17 +32,19 @@ import {
   isNotFound,
   listAddedSince,
   oauthClient,
-  searchMessageIds,
+  isBadRequest,
+  searchMessagePage,
   stopWatch,
   watch,
   type OAuthConfig,
 } from "./gmail";
-import { importCalendar, importMessage, importMessages, importTripIt, type ImportDeps } from "./importer";
+import { importCalendar, importMessage, importMessages, importTripIt, type ImportDeps, type ImportOptions } from "./importer";
 import { errorFields, log } from "./log";
 import { BadPushEnvelope, parseGmailPush, type GmailNotification } from "./pubsub";
 import { firestoreStore } from "./store";
 import { FeedLimitReached, addFeed, feedFailure, firestoreFeeds, pollAllFeeds, type FeedIo } from "./feeds";
 import { fetchFeed } from "./safefetch";
+import { backfillBatch, backfillQuery, runBackfillBatch } from "./backfill";
 
 const webOrigin = requireEnv("WEB_ORIGIN");
 const pubsubTopic = requireEnv("GMAIL_PUBSUB_TOPIC");
@@ -64,9 +67,6 @@ const genai = process.env.GEMINI_API_KEY
       location: optionalEnv("GOOGLE_CLOUD_LOCATION", "europe-west1"),
     });
 
-const backfillQuery =
-  "newer_than:3y -in:spam -in:trash {subject:booking subject:reservation subject:confirmation subject:confirmed subject:itinerary subject:ticket subject:tickets subject:flight subject:hotel subject:rental subject:check-in subject:\"boarding pass\"}";
-const backfillMax = 300;
 
 const deps: ImportDeps = {
   store: firestoreStore(db),
@@ -220,21 +220,34 @@ app.post("/gmail/disconnect", async (c) => {
   return c.body(null, 204);
 });
 
-function importIds(uid: string, gmail: ReturnType<typeof gmailFor>, ids: readonly string[]) {
-  return importMessages(uid, ids, (id) => fetchMessage(gmail, id), deps);
+function importIds(uid: string, gmail: ReturnType<typeof gmailFor>, ids: readonly string[], options: ImportOptions = {}) {
+  return importMessages(uid, ids, (id) => fetchMessage(gmail, id), deps, options);
 }
 
+// One batch of reading the whole mailbox: it carries on from where the last
+// batch stopped (or starts over when asked), and records how far it got on
+// the connection, where Settings shows it. The page calls this until done.
 app.post("/gmail/backfill", async (c) => {
   const uid = await requireUser(c);
   const state = await loadState(db, uid);
   if (!state) throw new HTTPException(409, { message: "Gmail not connected" });
-  const body = (await c.req.json().catch(() => ({}))) as { query?: string; max?: number };
-  const max = Math.min(backfillMax, Math.max(1, body.max ?? backfillMax));
+  const body = (await c.req.json().catch(() => ({}))) as { restart?: unknown };
   const gmail = gmailFor(oauth, state.refreshToken);
-  const ids = await searchMessageIds(gmail, body.query ?? backfillQuery, max);
-  const counts = await importIds(uid, gmail, ids);
-  log("INFO", "backfill", { uid, candidates: ids.length, ...counts });
-  return c.json({ candidates: ids.length, ...counts });
+  const batch = await runBackfillBatch(state.backfill, body.restart === true, {
+    page: (token) => searchMessagePage(gmail, backfillQuery, backfillBatch, token),
+    // An email whose import failed (the model was down, say) is read again
+    // when the reading passes it again, as after starting over.
+    importIds: (ids) => importIds(uid, gmail, ids, { retryFailed: true }),
+    isStaleCursor: isBadRequest,
+    now: () => new Date().toISOString(),
+    log: (event, fields) => log("WARNING", event, { uid, ...fields }),
+  });
+  if (!(await updateBackfill(db, uid, state.emailAddress, batch.progress))) {
+    log("WARNING", "backfill_for_disconnected_user", { uid });
+  }
+  const { cursor: _cursor, ...progress } = batch.progress;
+  log("INFO", "backfill", { uid, candidates: batch.candidates, ...batch.counts, ...progress });
+  return c.json({ candidates: batch.candidates, ...batch.counts, progress });
 });
 
 // A second look at one message the user picked from the review list: the

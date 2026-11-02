@@ -6,7 +6,8 @@ import { doc, setDoc } from "firebase/firestore";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { SignInGate } from "@/components/SignInGate";
-import { api, type BackfillResult } from "@/lib/api";
+import { api } from "@/lib/api";
+import { describeBackfill, pausedReason, readWholeMailbox } from "@/lib/backfill";
 import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
 import { domainOf, effectiveDecision, learnSender } from "@/lib/patterns";
@@ -19,7 +20,16 @@ const buttonClass =
 
 function GmailSection({ user }: { user: User }) {
   const profile = useProfile(user.uid);
-  const [result, setResult] = useState<BackfillResult>();
+  const [reading, setReading] = useState(false);
+  const stopReading = useRef(false);
+  // Leaving the page stops a reading after its current batch, as Stop does;
+  // its saved position lets it continue later.
+  useEffect(
+    () => () => {
+      stopReading.current = true;
+    },
+    [],
+  );
   const params = useSearchParams();
   const router = useRouter();
   const status = params.get("gmail");
@@ -60,7 +70,27 @@ function GmailSection({ user }: { user: User }) {
     }
   };
 
+  // Reads batch after batch; progress lands on the profile, so the line
+  // below follows it, and it survives closing the page.
+  const readMailbox = (restart: boolean) =>
+    run(async () => {
+      stopReading.current = false;
+      setReading(true);
+      try {
+        const last = await readWholeMailbox((r) => api.backfill(user, r), {
+          restart,
+          onBatch: () => {},
+          stopped: () => stopReading.current,
+        });
+        const paused = pausedReason(last);
+        if (paused) setError(paused);
+      } finally {
+        setReading(false);
+      }
+    });
+
   const gmail = profile?.gmail;
+  const progress = gmail?.backfill;
   return (
     <section>
       <h2 className="text-lg font-medium">Gmail</h2>
@@ -89,17 +119,19 @@ function GmailSection({ user }: { user: User }) {
       {gmail && (
         <>
           <p className="mt-2 text-sm">
-            Connected as <span className="font-medium">{gmail.emailAddress}</span>. New bookings import automatically.
+            Connected as <span className="font-medium">{gmail.emailAddress}</span>. New bookings import automatically;
+            past ones come in when you read your mailbox, in batches of 300 emails, as far back as it goes.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              disabled={busy}
-              className={buttonClass}
-              onClick={() => run(async () => setResult(await api.backfill(user)))}
-            >
-              {busy ? "Importing…" : "Import past bookings"}
-            </button>
+            {reading ? (
+              <button type="button" className={buttonClass} onClick={() => (stopReading.current = true)}>
+                Stop
+              </button>
+            ) : (
+              <button type="button" disabled={busy} className={buttonClass} onClick={() => readMailbox(!!progress?.done)}>
+                {!progress ? "Import past bookings" : progress.done ? "Read again from the start" : "Continue reading past emails"}
+              </button>
+            )}
             <button
               type="button"
               disabled={busy}
@@ -109,10 +141,9 @@ function GmailSection({ user }: { user: User }) {
               Disconnect
             </button>
           </div>
-          {result && (
-            <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">
-              Looked at {result.candidates} emails: {result.imported} imported, {result.not_booking} not bookings,{" "}
-              {result.filtered} filtered out, {result.skipped} already seen, {result.failed} failed.
+          {progress && (
+            <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400" data-testid="backfill-progress">
+              {describeBackfill(progress, reading)}
             </p>
           )}
         </>

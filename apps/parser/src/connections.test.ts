@@ -11,6 +11,7 @@ import {
   savePending,
   takeOAuthState,
   takePending,
+  updateBackfill,
   updateHistoryId,
   updateWatch,
 } from "./connections";
@@ -120,6 +121,18 @@ describe("mailbox ownership", () => {
     expect((await db.doc(paths.gmailState(a)).get()).data()).toMatchObject({ refreshToken: "rt", historyId: "42" });
     await removeConnection(db, a, email);
     expect(await updateHistoryId(db, a, email, "43")).toBe(false);
+    expect((await db.doc(paths.gmailState(a)).get()).exists).toBe(false);
+  });
+
+  it("records backfill progress on a live connection only, visible to its user", async () => {
+    const email = unique("backfill") + "@example.com";
+    const a = unique("a");
+    await saveConnection(db, a, state(email));
+    const progress = { cursor: "p1", scanned: 300, imported: 4, done: false, updatedAt: "2026-11-02T00:00:00Z" };
+    expect(await updateBackfill(db, a, email, progress)).toBe(true);
+    expect((await db.doc(paths.user(a)).get()).data()?.gmail?.backfill).toEqual(progress);
+    await removeConnection(db, a, email);
+    expect(await updateBackfill(db, a, email, { ...progress, scanned: 600 })).toBe(false);
     expect((await db.doc(paths.gmailState(a)).get()).exists).toBe(false);
   });
 

@@ -1,4 +1,4 @@
-import { paths, type CalendarFeed, type Segment, type Trip } from "@travelmo/core";
+import { paths, type CalendarFeed, type GmailConnection, type Segment, type Trip } from "@travelmo/core";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
@@ -65,6 +65,11 @@ export async function seedFlight(tripId: string): Promise<Segment> {
 
 export async function seedFeed(uid: string, feed: CalendarFeed): Promise<void> {
   await db.doc(paths.feed(uid, feed.id)).set(feed);
+}
+
+// The connection as the parser leaves it on the profile (no token here).
+export async function seedGmail(uid: string, gmail: GmailConnection): Promise<void> {
+  await db.doc(paths.user(uid)).set({ gmail }, { merge: true });
 }
 
 export async function clearData(): Promise<void> {
