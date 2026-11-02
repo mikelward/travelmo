@@ -263,7 +263,12 @@ checked only against other sources, since it is already one list: two alike rese
 are two. Matching is one to one: an existing booking matched once, in
 the same email or the same export, stands in for no other, and each
 TripIt item's or calendar event's record keeps what it matched so a retried
-upload counts it. A booking that
+upload counts it. Since items are matched one at a time, a TripIt export
+first sets each existing booking aside for the item whose confirmation number
+it carries, so a lookalike item without one (trip objects have none) cannot
+take it first; and a calendar upload reads its changed events before its new
+ones, so a booking a changed event no longer describes is free before a new
+event that does is matched. A booking that
 matches one already on an overlapping trip is left out and counted in the
 record's reason, and its source is added to the booking it matched, so a
 false match (a second room after all) and anything the extraction missed

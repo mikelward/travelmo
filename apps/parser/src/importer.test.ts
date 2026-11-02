@@ -10,6 +10,7 @@ import {
   importMessage,
   importMessages,
   importTripIt,
+  reserveByReference,
   tripItUnfiledTripId,
   tripTitle,
   type ImportDeps,
@@ -378,6 +379,74 @@ const tripItExport = (over: Record<string, unknown> = {}) =>
     UnfiledItems: [{ supplier_name: "Example Cars", supplier_conf_num: "ABC123", car_type: "Compact", StartDateTime: at("2025-03-01", "10:00:00"), EndDateTime: at("2025-03-02", "10:00:00") }],
     ...over,
   });
+
+describe("reserveByReference", () => {
+  it("sets an existing booking aside for the item carrying its confirmation, whatever comes first", async () => {
+    const store = memoryStore();
+    const confirmed = { ...lodging, segments: [{ ...lodging.segments[0]!, confirmation: "ABC123" }] };
+    await importMessage("u1", email(), deps(store, async () => confirmed));
+    const room = lodging.segments[0]!;
+    const parsed = {
+      // A trip object: no confirmation number, but alike the Gmail room.
+      trips: [{ key: "t1", title: "Liverpool", start: "2026-12-12", end: "2026-12-14", segments: [room] }],
+      // The unfiled item that is that Gmail room, by its reference.
+      unfiled: [{ key: "u1", title: "Cove Liverpool", segments: [{ ...room, confirmation: "abc-123" }] }],
+      skipped: [],
+    };
+    await importTripIt("u1", parsed, deps(store, async () => lodging));
+    const rooms = [...store.segments.values()].filter((seg) => seg.type === "lodging");
+    // The Gmail room, found again by the unfiled item, and the trip's own room.
+    expect(rooms).toHaveLength(2);
+    const gmailRoom = rooms.find((seg) => seg.source === "gmail")!;
+    expect(gmailRoom.sources?.map((ref) => ref.id)).toContain("tripit-unfiled-u1");
+    expect(rooms.filter((seg) => seg.confirmation)).toHaveLength(1);
+  });
+});
+
+describe("reserved matches", () => {
+  it("takes the booking set aside for an item before a lookalike, leaving the lookalike for the next", async () => {
+    const store = memoryStore();
+    const room = lodging.segments[0]!;
+    // Two alike Gmail rooms (two rooms of one stay), the second carrying the
+    // reference.
+    await importMessage("u1", email({ id: "m1" }), deps(store, async () => lodging));
+    const [first] = [...store.segments.values()];
+    store.segments.set("m2-0", { ...first!, id: "m2-0", confirmation: "ABC123", gmailMessageIds: ["m2"] });
+    const gmailRooms = [...store.segments.values()].filter((seg) => seg.source === "gmail");
+    expect(gmailRooms).toHaveLength(2);
+    // The confirmed unfiled item comes first, then an unconfirmed one.
+    const parsed = {
+      trips: [],
+      unfiled: [
+        { key: "u1", title: "Cove Liverpool", segments: [{ ...room, confirmation: "ABC123" }] },
+        { key: "u2", title: "Cove Liverpool", segments: [room] },
+      ],
+      skipped: [],
+    };
+    await importTripIt("u1", parsed, deps(store, async () => lodging));
+    // Both TripIt items were found on the two Gmail rooms: nothing new.
+    expect([...store.segments.values()].filter((seg) => seg.type === "lodging")).toHaveLength(2);
+    const confirmed = gmailRooms.find((seg) => seg.confirmation)!;
+    expect(store.segments.get(confirmed.id)?.sources?.map((ref) => ref.id)).toContain("tripit-unfiled-u1");
+  });
+});
+
+describe("reservations on a second upload", () => {
+  it("reserves nothing for items already imported, so a new item gets the free booking", async () => {
+    const store = memoryStore();
+    const room = { ...lodging.segments[0]!, confirmation: "ABC123" };
+    // Two Gmail rooms of one stay, both carrying the reference.
+    await importMessage("u1", email({ id: "m1" }), deps(store, async () => ({ ...lodging, segments: [room] })));
+    const [first] = [...store.segments.values()];
+    store.segments.set("m2-0", { ...first!, id: "m2-0", gmailMessageIds: ["m2"] });
+    const one = { key: "u1", title: "Cove Liverpool", segments: [room] };
+    await importTripIt("u1", { trips: [], unfiled: [one], skipped: [] }, deps(store, async () => lodging));
+    // The same export again, now with the second room's item.
+    const counts = await importTripIt("u1", { trips: [], unfiled: [one, { key: "u2", title: "Cove Liverpool", segments: [room] }], skipped: [] }, deps(store, async () => lodging));
+    expect(counts).toMatchObject({ skipped: 1, imported: 0, duplicates: 1 });
+    expect([...store.segments.values()].filter((seg) => seg.type === "lodging")).toHaveLength(2);
+  });
+});
 
 describe("importTripIt", () => {
   it("keeps TripIt's trips and titles, even when they are back to back", async () => {
@@ -847,6 +916,25 @@ describe("importCalendar", () => {
     const changed = ics("-//TripIt//EN", [vevent("room1", "Cove Liverpool", ["DESCRIPTION:Late check-in"])]);
     expect(await importCalendar("u1", changed, afterLease, 100)).toMatchObject({ imported: 1, updated: 1 });
     expect([...store.segments.values()].filter((seg) => seg.type === "lodging")).toHaveLength(1);
+  });
+
+  it("frees a changed event's old match before newer events are matched, whatever the file's order", async () => {
+    const store = memoryStore();
+    await importMessage("u1", email(), deps(store, async () => lodging));
+    const manchester: ExtractedBooking = {
+      isBooking: true,
+      segments: [{ type: "lodging", title: "Cove Manchester", start: "2027-01-08T15:00:00+00:00", end: "2027-01-10T11:00:00+00:00", destination: { name: "Cove Manchester", city: "Manchester", country: "GB" } }],
+    };
+    const extract = async (m: { text: string }) => (m.text.includes("Manchester") ? manchester : lodging);
+    // room1 first matches the Gmail room in Liverpool.
+    await importCalendar("u1", ics("-//TripIt//EN", [vevent("room1", "Cove Liverpool")]), deps(store, extract), 100);
+    // Then room1 moves to Manchester, and a new event before it in the file
+    // is the Liverpool stay.
+    const later = ics("-//TripIt//EN", [vevent("room0", "Cove Liverpool"), vevent("room1", "Cove Liverpool", ["DESCRIPTION:Moved to Manchester"])]);
+    expect(await importCalendar("u1", later, deps(store, extract), 100)).toMatchObject({ imported: 2, updated: 1 });
+    const rooms = [...store.segments.values()].filter((seg) => seg.type === "lodging");
+    // The Gmail room, found again by room0, and room1's Manchester stay.
+    expect(rooms.map((seg) => seg.title).sort()).toEqual(["Cove Liverpool", "Cove Manchester"]);
   });
 
   it("reads a changed event once when two reads of the calendar overlap", async () => {

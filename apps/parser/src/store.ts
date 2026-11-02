@@ -46,6 +46,12 @@ export function firestoreStore(db: Firestore): TripStore {
         return true;
       });
     },
+    async listUserSegments(uid) {
+      const trips = await db.collection(paths.trips()).where("ownerUid", "==", uid).get();
+      const live = trips.docs.map((d) => Trip.parse(d.data())).filter((trip) => !trip.deleting);
+      const lists = await Promise.all(live.map((trip) => db.collection(paths.segments(trip.id)).get()));
+      return lists.flatMap((snap) => snap.docs.map((d) => Segment.parse(d.data())));
+    },
     async getParsed(uid, messageId) {
       const snap = await db.doc(paths.parsedMessage(uid, messageId)).get();
       return snap.exists ? ParsedMessage.parse(snap.data()) : undefined;

@@ -118,6 +118,22 @@ describe("firestoreStore.withUserLock", () => {
     expect(await store.withUserLock(uid, (tx) => tx.getSegment(tripId, "s1"))).toBeUndefined();
     expect((await db.doc(paths.trip(tripId)).get()).data()?.updatedAt).toBe(at(9000));
   });
+
+  it("lists every booking of the user's own live trips, and nobody else's", async () => {
+    const uid = unique();
+    const now = at(0);
+    const trip = (id: string, ownerUid: string, deleting = false) => ({
+      id, title: "T", start: "2030-01-01", end: "2030-01-02", ownerUid, sharedWith: [], createdAt: now, updatedAt: now, ...(deleting ? { deleting } : {}),
+    });
+    const segment = (id: string, tripId: string) => ({
+      id, tripId, type: "other" as const, title: "S", start: "2030-01-01T10:00:00+00:00", source: "gmail" as const, gmailMessageIds: [], createdAt: now, updatedAt: now,
+    });
+    await store.withUserLock(uid, async (tx) => {
+      for (const t of [trip(`a-${uid}`, uid), trip(`b-${uid}`, uid), trip(`gone-${uid}`, uid, true), trip(`other-${uid}`, "someone-else")]) tx.createTrip(t);
+      for (const s of [segment("s1", `a-${uid}`), segment("s2", `b-${uid}`), segment("s3", `gone-${uid}`), segment("s4", `other-${uid}`)]) tx.putSegment(s);
+    });
+    expect((await store.listUserSegments(uid)).map((s) => s.id).sort()).toEqual(["s1", "s2"]);
+  });
 });
 
 describe("firestoreFeeds", () => {
