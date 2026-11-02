@@ -332,6 +332,20 @@ describe("importMessages", () => {
     };
     await expect(importMessages("u1", ["m1"], fetch, deps(store, async () => lodging))).rejects.toThrow("Backend Error");
   });
+
+  it("reads a failed message again only when asked to retry failures, as a mailbox reading does", async () => {
+    const store = memoryStore();
+    const fetch = async (id: string) => email({ id });
+    let down = true;
+    const extract: ImportDeps["extract"] = async () => {
+      if (down) throw new Error("quota");
+      return lodging;
+    };
+    expect(await importMessages("u1", ["m1"], fetch, deps(store, extract))).toMatchObject({ failed: 1 });
+    down = false;
+    expect(await importMessages("u1", ["m1"], fetch, deps(store, extract))).toMatchObject({ skipped: 1, imported: 0 });
+    expect(await importMessages("u1", ["m1"], fetch, deps(store, extract), { retryFailed: true })).toMatchObject({ imported: 1 });
+  });
 });
 
 describe("tripTitle", () => {

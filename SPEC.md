@@ -44,7 +44,9 @@ viewer's zone. Trip bounds are calendar dates.
   or `tripit-<key>` for a TripIt trip) so a re-import overwrites rather than
   duplicates.
 - `users/{uid}` — `email, displayName, photoURL, gmail {emailAddress,
-  connectedAt, watchExpiration, historyId}`. `gmail` is server-written.
+  connectedAt, watchExpiration, historyId, backfill}`. `gmail` is
+  server-written; `backfill` is how far a reading of the whole mailbox has
+  got (`cursor, scanned, imported, failed, done, updatedAt`).
 - `users/{uid}/settings/patterns` — `allow[], deny[]` sender domains.
 - `users/{uid}/feeds/{feedId}` — `url, label, addedAt, lastFetchedAt,
   lastResult, lastError`: subscribed calendar feeds. The owner reads them;
@@ -337,9 +339,17 @@ removes its booking, unless the user edited the booking or another email or
 import has since been matched to it; those stay. A feed that cannot be read
 keeps its bookings and shows why in Settings.
 
-Backfill (`POST /gmail/backfill`) runs the same path over a Gmail search
-limited to the last three years and booking-like subjects, capped at 300
-messages per call.
+Backfill (`POST /gmail/backfill`, `apps/parser/src/backfill.ts`) runs the
+same path over a Gmail search for booking-like subjects across the whole
+mailbox, in batches of 300 messages. Each batch carries on from Gmail's page
+cursor, which is kept with its progress (`scanned`, `imported`, `done`) on the
+connection, so Settings shows how far it has got and a stopped or closed
+reading picks up where it left off. Settings calls batch after batch until
+the mailbox is done or the user stops, or a batch has failed imports (the
+model or Gmail may be down), which pauses it with the reason shown. A
+finished reading can start over, and starting over tries failed emails again.
+A cursor Gmail no longer accepts restarts the search; messages already read
+are skipped by their claims, so only Gmail reads repeat.
 
 Gmail watches expire after seven days; `/internal/renew-watches`, called
 daily by Cloud Scheduler, renews those within two days of expiry. A history
@@ -379,7 +389,7 @@ refused to any other until the first disconnects.
 | `POST /gmail/connect` | Firebase ID token | Returns the Google OAuth URL; stores a nonce for 10 minutes |
 | `GET /gmail/callback` | OAuth state | Exchanges the code, parks the refresh token under a one-time completion token, redirects to `/settings?gmail=pending&state=…` |
 | `POST /gmail/complete` | Firebase ID token | Redeems the completion token; refuses (and revokes) if the caller is not the user who started the flow or the mailbox belongs to another user; starts the watch and stores the connection |
-| `POST /gmail/backfill` | Firebase ID token | Imports past bookings; returns counts per outcome |
+| `POST /gmail/backfill` | Firebase ID token | Reads the next batch of past emails (`restart: true` starts over); returns counts per outcome and the reading's progress |
 | `POST /gmail/reimport` | Firebase ID token | Imports one message again, skipping the pre-filter; returns its outcome |
 | `POST /gmail/disconnect` | Firebase ID token | Stops the watch, revokes the token, deletes the connection |
 | `POST /feeds/add` | Firebase ID token | Subscribes to a calendar feed after checking its address and reading it once; returns counts as for `/import/ics` |

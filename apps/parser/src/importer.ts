@@ -543,6 +543,7 @@ export async function importMessages(
   ids: readonly string[],
   fetch: (id: string) => Promise<EmailMessage>,
   deps: ImportDeps,
+  options: ImportOptions = {},
 ): Promise<ImportCounts> {
   const counts = emptyCounts();
   for (const id of ids) {
@@ -555,7 +556,7 @@ export async function importMessages(
       counts.skipped += 1;
       continue;
     }
-    counts[await importMessage(uid, message, deps)] += 1;
+    counts[await importMessage(uid, message, deps, options)] += 1;
   }
   return counts;
 }

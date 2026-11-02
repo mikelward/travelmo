@@ -1,4 +1,4 @@
-import { GmailState, paths, type GmailConnection } from "@travelmo/core";
+import { GmailState, paths, type BackfillProgress, type GmailConnection } from "@travelmo/core";
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
 
 export const oauthStateTtlMs = 10 * 60 * 1000;
@@ -101,6 +101,10 @@ function updateLive(db: Firestore, uid: string, emailAddress: string, fields: Pa
 
 export function updateWatch(db: Firestore, uid: string, emailAddress: string, watchExpiration: string): Promise<boolean> {
   return updateLive(db, uid, emailAddress, { watchExpiration });
+}
+
+export function updateBackfill(db: Firestore, uid: string, emailAddress: string, backfill: BackfillProgress): Promise<boolean> {
+  return updateLive(db, uid, emailAddress, { backfill });
 }
 
 export function updateHistoryId(db: Firestore, uid: string, emailAddress: string, historyId: string): Promise<boolean> {

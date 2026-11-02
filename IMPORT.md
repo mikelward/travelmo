@@ -10,7 +10,7 @@ is the roadmap in `TODO.md`. Every method ends in the same place: an
 | Method | Status | What arrives | How far back | Freshness | Getting it | Needs |
 |---|---|---|---|---|---|---|
 | Gmail push | Built | Each new email that passes the pre-filter, read by the model | Forward from connection | Near-realtime (Pub/Sub watch, renewed daily) | One OAuth consent in Settings | Google OAuth client with the Gmail read scope; app verification for public use |
-| Gmail backfill | Built | Past emails matching a booking-like search | Three years (`backfillQuery`), 300 messages per call; uncapped batching is on the roadmap | On demand | One tap in Settings | Same as push; model cost per email that passes the pre-filter |
+| Gmail backfill | Built | Past emails matching a booking-like search | The whole mailbox, in batches of 300 that carry on from where the last stopped | On demand | One tap in Settings, then it runs batch after batch | Same as push; model cost per email that passes the pre-filter |
 | By hand | Built | One booking at a time from the trip page form | Any | Immediate | Typing | Nothing |
 | TripIt JSON export | Built | Every trip and reservation, already structured | Whole account history (a real export spanned 20 years) | One-off snapshot | Email TripIt customer service and wait for the file; no self-service export | A file upload in Settings and a mapping of TripIt's object shapes |
 | TripIt calendar feed (`.ics` URL) | Built | Every reservation as a calendar event, text only | Last 90 days plus the future | Refreshed on each poll (daily) | Copy the feed URL from TripIt settings; official and self-service | The `.ics` importer plus a daily poller |
@@ -79,6 +79,6 @@ means the source has it as data.
 
 ## Order of work
 
-Deploy and run on real mail first (`TODO.md`). The generic importer and the
-TripIt JSON upload, `.ics` files and feeds are built; the uncapped backfill next and the uncapped backfill; Google Calendar and forward-to-import after
-that, as real users ask for them.
+Deploy and run on real mail first (`TODO.md`). The generic importer, the
+TripIt JSON upload, `.ics` files and feeds, and the uncapped backfill are
+built; Google Calendar and forward-to-import come as real users ask for them.

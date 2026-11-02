@@ -104,11 +104,25 @@ export type Trip = z.infer<typeof Trip>;
 
 // What the web client may see about a Gmail connection; the refresh token
 // stays in the server-only GmailState document.
+// How far a reading of the whole mailbox has got: it runs in batches, each
+// carrying on from Gmail's page cursor, so it survives closing the page.
+export const BackfillProgress = z.object({
+  cursor: z.string().optional(),
+  scanned: z.number().int().nonnegative(),
+  imported: z.number().int().nonnegative(),
+  // Emails whose import failed in this reading; starting over tries them again.
+  failed: z.number().int().nonnegative().optional(),
+  done: z.boolean(),
+  updatedAt: isoDateTime,
+});
+export type BackfillProgress = z.infer<typeof BackfillProgress>;
+
 export const GmailConnection = z.object({
   emailAddress: z.string(),
   connectedAt: isoDateTime,
   watchExpiration: isoDateTime.optional(),
   historyId: z.string().optional(),
+  backfill: BackfillProgress.optional(),
 });
 export type GmailConnection = z.infer<typeof GmailConnection>;
 

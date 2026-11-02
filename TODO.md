@@ -69,7 +69,7 @@
         `SEQUENCE` moved.
   - [ ] Google Calendar through the existing OAuth flow with
         `calendar.readonly` and a calendar picker.
-  - [ ] Backfill without the three-year cap, batched with a cursor, so a
+  - [x] Backfill without the three-year cap, batched with a cursor, so a
         mailbox's whole history comes in.
   - [ ] Forward-to-import address for people without Gmail.
 - [ ] Duplicate matching is greedy, item by item: an unconfirmed TripIt
@@ -94,8 +94,10 @@ Guesses made on autopilot; change any of them freely.
 
 - Partner sharing is per trip, by email. A sharee edits bookings; only the
   owner renames, shares or deletes the trip. Not whole-account sharing.
-- Backfill at MVP: on demand from Settings, last three years, 300
-  messages per call; nothing automatic at connect time.
+- Backfill: on demand from Settings, the whole mailbox in batches of 300
+  that the page keeps requesting until done (the user can stop and
+  continue later); nothing automatic at connect time, and no background job
+  driving it server-side.
 - Gemini is the extraction model (`gemini-flash-lite-latest` by default,
   configurable); Claude Haiku was the alternative.
 - Refresh tokens are stored in Firestore under `users/{uid}/private`,

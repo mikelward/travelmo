@@ -4,6 +4,7 @@ import type { TripItResult } from "./tripit";
 
 export type BackfillResult = {
   candidates: number;
+  progress: { scanned: number; imported: number; failed?: number; done: boolean; updatedAt: string };
   skipped: number;
   filtered: number;
   not_booking: number;
@@ -32,7 +33,7 @@ export const api = {
   connectGmail: (user: User) => post<{ url: string }>(user, "/gmail/connect"),
   completeGmail: (user: User, state: string) => post<{ emailAddress: string }>(user, "/gmail/complete", { state }),
   disconnectGmail: (user: User) => post<void>(user, "/gmail/disconnect"),
-  backfill: (user: User, max?: number) => post<BackfillResult>(user, "/gmail/backfill", max ? { max } : {}),
+  backfill: (user: User, restart = false) => post<BackfillResult>(user, "/gmail/backfill", restart ? { restart } : {}),
   reimport: (user: User, messageId: string) => post<{ outcome: string }>(user, "/gmail/reimport", { messageId }),
   importTripIt: (user: User, exported: unknown) => post<TripItResult>(user, "/import/tripit", { export: exported }),
   importIcs: (user: User, text: string) => post<CalendarResult>(user, "/import/ics", { text }),

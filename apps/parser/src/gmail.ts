@@ -55,21 +55,31 @@ export async function fetchMessage(gmail: Gmail, id: string): Promise<EmailMessa
   return toEmailMessage(data);
 }
 
-export async function searchMessageIds(gmail: Gmail, query: string, max: number): Promise<string[]> {
+export type MessagePage = { ids: string[]; nextPageToken?: string };
+
+// Up to `max` message ids from `pageToken` on, and where to carry on from;
+// no nextPageToken once the search is exhausted.
+export async function searchMessagePage(gmail: Gmail, query: string, max: number, pageToken?: string): Promise<MessagePage> {
   const ids: string[] = [];
-  let pageToken: string | undefined;
-  while (ids.length < max) {
+  let token = pageToken;
+  do {
     const { data } = await gmail.users.messages.list({
       userId: "me",
       q: query,
       maxResults: Math.min(100, max - ids.length),
-      ...(pageToken ? { pageToken } : {}),
+      ...(token ? { pageToken: token } : {}),
     });
     for (const m of data.messages ?? []) if (m.id) ids.push(m.id);
-    pageToken = data.nextPageToken ?? undefined;
-    if (!pageToken) break;
-  }
-  return ids;
+    token = data.nextPageToken ?? undefined;
+  } while (token && ids.length < max);
+  return { ids, ...(token ? { nextPageToken: token } : {}) };
+}
+
+// Gmail answers 400 for a page token it no longer accepts.
+export function isBadRequest(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const { code, status } = error as { code?: unknown; status?: unknown };
+  return status === 400 || code === 400 || code === "400";
 }
 
 export type HistoryResult = { messageIds: string[]; historyId: string };
