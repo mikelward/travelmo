@@ -293,4 +293,8 @@ for the port), reports (days out of
 country, trips last year — via BigQuery export if Firestore aggregates get
 clumsy), country map, calendar view and export, check-in/out surfacing,
 ratings and favourites, itinerary ideas, loyalty balances, passport expiry
-and visa reminders, other mail providers and forward-to-import.
+and visa reminders, other mail providers and forward-to-import. Import
+sources beyond Gmail share the pipeline from the pre-filter down: a TripIt
+JSON export (trips with typed-by-shape reservation objects, dates with IANA
+zones and offsets), `.ics` files and subscribed feeds, and Google Calendar;
+`IMPORT.md` compares them and maps their fields.
