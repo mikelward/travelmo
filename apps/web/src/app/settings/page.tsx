@@ -10,6 +10,7 @@ import { api, type BackfillResult } from "@/lib/api";
 import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
 import { domainOf, effectiveDecision, learnSender } from "@/lib/patterns";
+import { describeTripItResult, previewTripIt, type TripItPreview } from "@/lib/tripit";
 import { useParsedMessages, useProfile, useSenderPatterns } from "@/lib/trips";
 
 const buttonClass =
@@ -121,6 +122,84 @@ function GmailSection({ user }: { user: User }) {
   );
 }
 
+function TripItSection({ user }: { user: User }) {
+  const [preview, setPreview] = useState<TripItPreview>();
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string>();
+  const [error, setError] = useState<string>();
+
+  const choose = async (file: File | undefined) => {
+    setPreview(undefined);
+    setResult(undefined);
+    setError(undefined);
+    if (!file) return;
+    try {
+      setPreview(previewTripIt(await file.text()));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const importNow = async () => {
+    if (!preview) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      setResult(describeTripItResult(await api.importTripIt(user, preview.json)));
+      setPreview(undefined);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="mt-10">
+      <h2 className="text-lg font-medium">TripIt</h2>
+      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+        Bring in your TripIt history from the JSON export TripIt support sends on request. You will see what is in it
+        before anything is imported; importing the same file twice changes nothing.
+      </p>
+      <input
+        type="file"
+        accept=".json,application/json"
+        aria-label="TripIt export file"
+        disabled={busy}
+        className="mt-3 block text-sm"
+        onChange={(e) => choose(e.target.files?.[0])}
+      />
+      {preview && (
+        <div className="mt-3 text-sm">
+          <p>{preview.text}</p>
+          {preview.parsed.skipped.length > 0 && (
+            <details className="mt-2 text-zinc-600 dark:text-zinc-400">
+              <summary>Not imported</summary>
+              <ul className="mt-1 list-disc pl-5">
+                {preview.parsed.skipped.map((item, i) => (
+                  <li key={i}>
+                    {item.title}: {item.reason}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+          <button
+            type="button"
+            disabled={busy || preview.parsed.trips.length + preview.parsed.unfiled.length === 0}
+            className={`${buttonClass} mt-3`}
+            onClick={importNow}
+          >
+            {busy ? "Importing…" : "Import"}
+          </button>
+        </div>
+      )}
+      {result && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{result}</p>}
+      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+    </section>
+  );
+}
+
 function PatternsSection({ user }: { user: User }) {
   const saved = useSenderPatterns(user.uid);
   const [draft, setDraft] = useState<SenderPatterns>();
@@ -205,13 +284,16 @@ function ReviewSection({ user }: { user: User }) {
     <section className="mt-10">
       <h2 className="text-lg font-medium">Import review</h2>
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-        Recent emails that did not become bookings. Teach the importer about a sender, or import one anyway.
+        Recent emails and other imports that did not become bookings. Teach the importer about a sender, or import one anyway.
       </p>
       {records === undefined && <p className="mt-3 text-zinc-500">Loading…</p>}
       {records && toReview.length === 0 && <p className="mt-3 text-sm text-zinc-500">Nothing to review.</p>}
       <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
         {toReview.map((record) => {
-          const domain = record.from ? domainOf(record.from) : undefined;
+          // Records from other sources have no sender to teach and no email
+          // to read again.
+          const fromGmail = (record.source ?? "gmail") === "gmail";
+          const domain = fromGmail && record.from ? domainOf(record.from) : undefined;
           const decision = domain ? effectiveDecision(patterns, domain) : undefined;
           return (
             <li key={record.messageId} className="py-3 text-sm">
@@ -221,14 +303,16 @@ function ReviewSection({ user }: { user: User }) {
                 {record.reason ? ` (${record.reason})` : ""}
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={busy === record.messageId}
-                  className={buttonClass}
-                  onClick={() => act(record, async () => (await api.reimport(user, record.messageId)).outcome)}
-                >
-                  Import anyway
-                </button>
+                {fromGmail && (
+                  <button
+                    type="button"
+                    disabled={busy === record.messageId}
+                    className={buttonClass}
+                    onClick={() => act(record, async () => (await api.reimport(user, record.messageId)).outcome)}
+                  >
+                    Import anyway
+                  </button>
+                )}
                 {domain && decision !== "allow" && (
                   <button
                     type="button"
@@ -269,6 +353,7 @@ export default function SettingsPage() {
           <Suspense fallback={<p className="text-zinc-500">Loading…</p>}>
             <GmailSection user={user} />
           </Suspense>
+          <TripItSection user={user} />
           <PatternsSection user={user} />
           <ReviewSection user={user} />
         </>

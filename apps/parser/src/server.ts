@@ -1,8 +1,9 @@
 import { serve } from "@hono/node-server";
 import { GoogleGenAI } from "@google/genai";
-import { paths, type GmailState } from "@travelmo/core";
+import { NotATripItExport, parseTripItExport, paths, type GmailState } from "@travelmo/core";
 import { randomBytes } from "node:crypto";
 import { Hono, type Context } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import {
@@ -35,7 +36,7 @@ import {
   watch,
   type OAuthConfig,
 } from "./gmail";
-import { importMessage, importMessages, type ImportDeps } from "./importer";
+import { importMessage, importMessages, importTripIt, type ImportDeps } from "./importer";
 import { errorFields, log } from "./log";
 import { BadPushEnvelope, parseGmailPush, type GmailNotification } from "./pubsub";
 import { firestoreStore } from "./store";
@@ -77,6 +78,7 @@ type Env = { Variables: { uid: string } };
 const app = new Hono<Env>();
 
 app.use("/gmail/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
+app.use("/import/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 
 app.get("/healthz", (c) => c.text("ok"));
 
@@ -256,6 +258,38 @@ app.post("/gmail/reimport", async (c) => {
   }
   return c.json({ outcome });
 });
+
+// A whole account's history is a few megabytes of JSON; well past that is
+// not a TripIt export.
+const tripItMaxBytes = 20 * 1024 * 1024;
+
+// The Settings page has already shown the user what the file holds (the
+// same mapping, run in the browser); this writes it. Each TripIt trip is
+// recorded once, so uploading the same file again changes nothing.
+app.post(
+  "/import/tripit",
+  bodyLimit({
+    maxSize: tripItMaxBytes,
+    onError: () => {
+      throw new HTTPException(413, { message: "That file is too large to be a TripIt export" });
+    },
+  }),
+  async (c) => {
+    const uid = await requireUser(c);
+    const body = (await c.req.json().catch(() => undefined)) as { export?: unknown } | undefined;
+    let parsed;
+    try {
+      parsed = parseTripItExport(body?.export);
+    } catch (error) {
+      if (error instanceof NotATripItExport) throw new HTTPException(400, { message: error.message });
+      throw error;
+    }
+    const counts = await importTripIt(uid, parsed, deps);
+    const result = { ...counts, notImported: parsed.skipped.length };
+    log("INFO", "tripit_import", { uid, ...result });
+    return c.json(result);
+  },
+);
 
 // A non-2xx response makes Pub/Sub redeliver; after the subscription's
 // maximum attempts the notification lands on the dead-letter topic, which

@@ -33,3 +33,23 @@ export function offsetOf(at: Date): string {
   const abs = Math.abs(minutes);
   return `${sign}${String(Math.floor(abs / 60)).padStart(2, "0")}:${String(abs % 60).padStart(2, "0")}`;
 }
+
+// A real calendar date: the pattern alone lets 2030-99-99 through.
+export function isCalendarDate(date: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!m) return false;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const at = new Date(Date.UTC(y, mo - 1, d));
+  return at.getUTCFullYear() === y && at.getUTCMonth() === mo - 1 && at.getUTCDate() === d;
+}
+
+// An instant whose every part is in range: a real date, a time of day, and
+// an offset no zone exceeds (UTC-12 to UTC+14).
+export function isValidInstant(instant: string): boolean {
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?([+-])(\d{2}):(\d{2})$/.exec(instant);
+  if (!m) return false;
+  const [, date, h, mi, s, sign, oh, om] = m;
+  if (!isCalendarDate(date!) || Number(h) > 23 || Number(mi) > 59 || Number(s ?? 0) > 59) return false;
+  const offset = (Number(oh) * 60 + Number(om)) * (sign === "-" ? -1 : 1);
+  return Number(om) < 60 && offset >= -12 * 60 && offset <= 14 * 60;
+}

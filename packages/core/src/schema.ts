@@ -47,7 +47,9 @@ export const ExtractedBooking = z.object({
 });
 export type ExtractedBooking = z.infer<typeof ExtractedBooking>;
 
-export const SegmentSource = z.enum(["gmail", "manual"]);
+// Where a booking came from: an email, a hand entry, or a TripIt export.
+export const SegmentSource = z.enum(["gmail", "manual", "tripit"]);
+export type SegmentSource = z.infer<typeof SegmentSource>;
 
 export const Segment = ExtractedSegment.extend({
   id: z.string().min(1),
@@ -108,8 +110,12 @@ export const SenderPatterns = z.object({
 });
 export type SenderPatterns = z.infer<typeof SenderPatterns>;
 
+// One record per thing an import looked at: a Gmail message (keyed by its
+// id) or an item of another source (keyed by a stable id derived from it,
+// with `source` saying which). A record without `source` is a Gmail one.
 export const ParsedMessage = z.object({
   messageId: z.string().min(1),
+  source: z.enum(["gmail", "tripit"]).optional(),
   uid: z.string().min(1),
   outcome: z.enum(["processing", "filtered", "not_booking", "imported", "failed"]),
   reason: z.string().optional(),
@@ -117,6 +123,10 @@ export const ParsedMessage = z.object({
   from: z.string().optional(),
   subject: z.string().optional(),
   segmentIds: z.array(z.string()).default([]),
+  // Existing bookings ("tripId/segmentId") this item was matched to as a
+  // duplicate, so a later upload of the same export keeps matching one to
+  // one even for items it skips as already imported.
+  matchedSegmentIds: z.array(z.string()).optional(),
   processedAt: isoDateTime,
 });
 export type ParsedMessage = z.infer<typeof ParsedMessage>;

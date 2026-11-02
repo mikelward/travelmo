@@ -1,0 +1,43 @@
+import { NotATripItExport } from "@travelmo/core";
+import { describe, expect, it } from "vitest";
+import { describeTripItResult, previewTripIt } from "./tripit";
+
+const at = (date: string, time: string) => ({ date, time, timezone: "UTC", utc_offset: "+00:00" });
+const file = JSON.stringify({
+  Trips: [
+    {
+      TripData: { display_name: "Example trip" },
+      Objects: [
+        { Segment: [{ StartDateTime: at("2030-01-01", "08:00"), start_airport_code: "AAA", end_airport_code: "BBB" }] },
+        { Segment: { StartDateTime: at("2030-01-05", "08:00"), start_airport_code: "BBB", end_airport_code: "AAA" } },
+        { room_type: "Single", StartDateTime: at("2030-01-01", "15:00"), EndDateTime: at("2030-01-05", "11:00") },
+        { text: "A note" },
+      ],
+    },
+  ],
+  UnfiledItems: [{ cuisine: "Example", DateTime: at("2031-02-02", "19:00") }],
+});
+
+describe("previewTripIt", () => {
+  it("says what the file holds before anything is sent", () => {
+    expect(previewTripIt(file).text).toBe(
+      '1 trip with 4 bookings (2 flights, 1 stay, 1 activity), from 2030-01-01 to 2031-02-02. 1 booking TripIt never filed into a trip will go into "Unfiled from TripIt". 1 item can\'t be imported (listed below).',
+    );
+  });
+
+  it("refuses a file that is not JSON or not an export", () => {
+    expect(() => previewTripIt("not json")).toThrow(NotATripItExport);
+    expect(() => previewTripIt("{}")).toThrow(NotATripItExport);
+  });
+});
+
+describe("describeTripItResult", () => {
+  it("names what happened, leaving out what did not", () => {
+    expect(describeTripItResult({ trips: 1, imported: 3, duplicates: 0, skipped: 0, failed: 0, notImported: 2 })).toBe(
+      "Imported 3 bookings into 1 new or existing trip.",
+    );
+    expect(describeTripItResult({ trips: 0, imported: 0, duplicates: 1, skipped: 4, failed: 1, notImported: 0 })).toBe(
+      "Imported 0 bookings into 0 new or existing trips; 1 booking was already there; 4 items were imported before; 1 item failed; try the upload again.",
+    );
+  });
+});
