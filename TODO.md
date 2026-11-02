@@ -53,6 +53,9 @@
   - [x] TripIt JSON export: upload from Settings, dry-run summary in the
         browser, then import; TripIt's trips kept, unfiled items in a
         holding trip, `source: "tripit"`.
+  - [x] Keep dropping duplicates (maintainer, 2026-11-02), but list every
+        source of a booking on the trip page, emails linked to Gmail, so a
+        false match or a missed detail is one click away.
   - [ ] TripIt travelers, `LoyaltyPrograms` and `TravelerProfile`: seed data
         for the later loyalty and passport features; not imported yet.
   - [x] `.ics` files: per-trip TripIt exports and calendar exports, read
@@ -70,14 +73,13 @@
       room can take the only existing booking a later, confirmed one would
       have matched by reference, leaving a visible extra room (never a lost
       one). Reserving exact-reference matches first, or matching the whole
-      export at once, fixes it; moot if suspected duplicates are marked
-      rather than dropped (see *Decisions needing review*).
+      export at once, fixes it.
 - [ ] One-to-one matching holds within one upload, not across two
       uploads of the same export running at once (each keeps its own
       `consumed` set), which can drop a room. Settings disables Import while
       one runs, so it takes two tabs or a scripted client. Serialize TripIt
-      uploads per user (a lease in `users/{uid}/private`) if the dropping
-      design stays.
+      uploads per user (a lease in `users/{uid}/private`). The dropped
+      room's source still shows on the booking it matched.
 - [ ] Android mockups, round two: offline banner and page, interrupted
       deletion, loading and not-found states, the full dark set, and the
       future features from the brief (calendar, map, reports, loyalty,
@@ -142,13 +144,6 @@ Guesses made on autopilot; change any of them freely.
   objects are listed and skipped, not imported as "other"; a date-only
   activity takes noon. The mapping follows the documented shape with
   invented fixtures; it has not been run against a real export.
-- Duplicate detection drops a booking it judges already imported; eleven
-  review findings so far were cases where that lost or misfiled a real one.
-  The design alternative is to write every booking and mark suspected
-  duplicates for the user to merge or dismiss on the trip page, which loses
-  nothing but shows duplicates until reviewed. Kept the dropping design,
-  with stricter identity evidence and no deduplication within one TripIt
-  export; switching is the maintainer's call.
 - Calendar files: an event's title is its only booking signal, so the
   pre-filter passes booking words, flight and train numbers and airport
   routes; a TripIt calendar (by `PRODID`) skips it. Reads per upload are

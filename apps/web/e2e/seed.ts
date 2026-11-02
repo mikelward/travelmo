@@ -28,6 +28,10 @@ export async function seedTrip(ownerUid: string, tripId: string): Promise<Trip> 
     destination: { name: "Cove Liverpool", city: "Liverpool", country: "GB" },
     source: "gmail",
     gmailMessageIds: ["m1"],
+    sources: [
+      { kind: "gmail", id: "m1", label: "Your stay at Cove", at: "2026-11-01T00:00:00Z" },
+      { kind: "tripit", id: "tripit-example", label: "Liverpool weekend", at: "2026-11-02T00:00:00Z" },
+    ],
     sender: "cove.example",
     createdAt: trip.createdAt,
     updatedAt: trip.updatedAt,

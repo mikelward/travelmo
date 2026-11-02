@@ -1,6 +1,6 @@
 import { assertFails, initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
 import { paths, type ExtractedSegment, type Segment, type Trip } from "@travelmo/core";
-import { collection, doc, getDoc, getDocs, setDoc, type Firestore } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, type Firestore } from "firebase/firestore";
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { deleteSegment, deleteTrip, fitTripDates, mergeTrips, moveSegment, renameTrip, saveSegment } from "./edits";
@@ -98,6 +98,15 @@ describe("saveSegment", () => {
     expect(saved).toMatchObject({ id: imported.id, source: "gmail", gmailMessageIds: ["m1"], sender: "cove.example", createdAt: imported.createdAt });
     expect((await getDoc(doc(asOwner(), paths.segment(trip.id, imported.id)))).data()?.sender).toBe("cove.example");
     expect(await readTrip()).toMatchObject({ start: "2026-12-10", end: "2026-12-14" });
+  });
+
+  it("keeps a source the importer added while the booking was being edited", async () => {
+    const added = { kind: "gmail", id: "m9", label: "Your second room", at: "2026-11-02T00:00:00Z" };
+    await updateDoc(doc(asOwner(), paths.segment(trip.id, imported.id)), { sources: [added] });
+    // The form still holds the booking as it was before the import.
+    await saveSegment(asOwner(), trip.id, { ...imported, title: "Renamed" }, imported);
+    const stored = (await getDoc(doc(asOwner(), paths.segment(trip.id, imported.id)))).data();
+    expect(stored).toMatchObject({ title: "Renamed", sources: [added], gmailMessageIds: ["m1"] });
   });
 
   it("counts two concurrent saves from the same stale view", async () => {

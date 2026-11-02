@@ -32,9 +32,14 @@ viewer's zone. Trip bounds are calendar dates.
   `deleting` marks a trip whose segments are being removed.
 - `trips/{tripId}/segments/{segmentId}` — `type` (flight, train, bus, ferry,
   lodging, car_rental, activity, other), `title, provider, confirmation,
-  start, end, origin, destination, notes, source, gmailMessageIds[], sender`
-  (the booking email's domain). `source` is `gmail`, `manual`, `tripit` or
-  `ics`.
+  start, end, origin, destination, notes, source, gmailMessageIds[], sources[],
+  sender` (the booking email's domain). `source` is `gmail`, `manual`,
+  `tripit` or `ics`: where the booking first came from. `sources` lists every
+  email, TripIt item or calendar event it was read from (`kind, id, label,
+  uid, at`), including later ones dropped as duplicates of it; the trip page
+  shows them all, each email linking into Gmail for the user who imported
+  it (`uid`; the trip's owner for sources recorded without one), wherever
+  the booking has since moved.
   Imported segments use the id `<source id>-<index>` (the Gmail message id,
   or `tripit-<key>` for a TripIt trip) so a re-import overwrites rather than
   duplicates.
@@ -251,7 +256,9 @@ the same email or the same export, stands in for no other, and each
 TripIt item's or calendar event's record keeps what it matched so a retried
 upload counts it. A booking that
 matches one already on an overlapping trip is left out and counted in the
-record's reason; when all of an email's bookings are, the email is still
+record's reason, and its source is added to the booking it matched, so a
+false match (a second room after all) and anything the extraction missed
+stay one click away; when all of an email's bookings are, the email is still
 recorded as imported, with none. A booking part of which matched joins the
 trip of that match, and otherwise its whole range, new and old legs
 together, picks the trip.

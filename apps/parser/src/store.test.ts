@@ -87,5 +87,14 @@ describe("firestoreStore.withUserLock", () => {
     });
     const listed = await store.withUserLock(uid, (tx) => tx.listSegments(tripId));
     expect(listed).toMatchObject([{ id: "s1", source: "tripit" }]);
+    const ref = { kind: "gmail" as const, id: "m9", label: "Your booking", at: at(5000) };
+    await Promise.all([
+      store.withUserLock(uid, async (tx) => tx.addSource(tripId, "s1", ref)),
+      store.withUserLock(uid, async (tx) => tx.addSource(tripId, "s1", { ...ref, id: "m10" })),
+    ]);
+    const after = await store.withUserLock(uid, (tx) => tx.listSegments(tripId));
+    expect(after[0]?.sources?.map((s) => s.id).sort()).toEqual(["m10", "m9"]);
+    // The trip's revision moves too, so a merge that read the old booking retries.
+    expect((await db.doc(paths.trip(tripId)).get()).data()?.updatedAt).toBe(at(5000));
   });
 });

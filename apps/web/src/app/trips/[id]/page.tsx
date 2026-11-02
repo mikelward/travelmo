@@ -13,7 +13,7 @@ import { deleteSegment, deleteTrip, fitTripDates, mergeTrips, moveSegment, renam
 import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
 import { effectiveDecision, learnSender } from "@/lib/patterns";
-import { useSegments, useSenderPatterns, useTrip, useTrips } from "@/lib/trips";
+import { useProfile, useSegments, useSenderPatterns, useTrip, useTrips } from "@/lib/trips";
 
 const buttonClass =
   "rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
@@ -261,6 +261,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   const segments = useSegments(tripId);
   const patterns = useSenderPatterns(user.uid);
   const allTrips = useTrips(user);
+  const profile = useProfile(user.uid);
   const [editing, setEditing] = useState<Editing>();
   const [error, setError] = useState<string>();
   if (trip === undefined) return <p className="text-zinc-500">Loading…</p>;
@@ -343,6 +344,8 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
                         }
                       : {})}
                     {...(learn(segment) ? { onLearnSender: learn(segment) } : {})}
+                    // Each email links for whoever imported it, from their mailbox.
+                    emailLinks={{ uid: user.uid, account: profile?.gmail?.emailAddress, ownsTrip: isOwner }}
                   />
                 ),
               )}

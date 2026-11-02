@@ -36,12 +36,21 @@ export async function saveSegment(db: Firestore, tripId: string, extracted: Extr
   const range = segmentDateRange([segment]);
   if (!range) throw new Error("Segment has no dates");
   const tripRef = doc(db, paths.trip(tripId));
+  const segmentRef = doc(db, paths.segment(tripId, id));
   await runTransaction(db, async (t) => {
     const snap = await t.get(tripRef);
     if (!snap.exists()) throw new Error("Trip no longer exists");
     const trip = Trip.parse(snap.data());
     if (trip.deleting) throw new Error("This trip is being deleted");
-    t.set(doc(db, paths.segment(tripId, id)), segment);
+    // Sources are the importer's, not the form's: one may have been added
+    // while the form was open, so they are taken from the stored booking.
+    const stored = existing ? await t.get(segmentRef) : undefined;
+    const current = stored?.exists() ? Segment.safeParse(stored.data()) : undefined;
+    if (current?.success) {
+      segment.gmailMessageIds = current.data.gmailMessageIds;
+      if (current.data.sources) segment.sources = current.data.sources;
+    }
+    t.set(segmentRef, segment);
     t.update(tripRef, { start: min(trip.start, range.start), end: max(trip.end, range.end), updatedAt: timestamp });
   });
   return segment;

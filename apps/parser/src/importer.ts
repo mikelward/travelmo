@@ -11,6 +11,7 @@ import {
   type ParsedMessage,
   type Segment,
   type SegmentSource,
+  type SourceRef,
   type Trip,
   type TripItImport,
 } from "@travelmo/core";
@@ -28,6 +29,8 @@ export type TripTx = {
   createTrip(trip: Trip): void;
   extendTrip(tripId: string, bounds: TripBounds): void;
   putSegment(segment: Segment): void;
+  // Adds a source to a booking already filed: the same booking, found again.
+  addSource(tripId: string, segmentId: string, source: SourceRef): void;
 };
 
 // A claim older than this with no outcome belongs to a worker that died;
@@ -212,6 +215,7 @@ export async function importMessage(
     {
       sourceId: message.id,
       source,
+      label: message.subject,
       segments: booking.segments,
       ...(source === "gmail" ? { gmailMessageIds: [message.id] } : {}),
       ...(sender ? { sender } : {}),
@@ -252,7 +256,9 @@ export type TripHint = { id: string; title: string; start: string; end: string; 
 export type BookingToFile = {
   // Stable per source item, so a re-import overwrites rather than duplicates.
   sourceId: string;
-  source: SegmentSource;
+  // How the user knows the source: the email's subject, the trip's name.
+  label?: string;
+  source: Exclude<SegmentSource, "manual">;
   segments: readonly ExtractedSegment[];
   gmailMessageIds?: string[];
   sender?: string;
@@ -304,6 +310,19 @@ export async function fileBooking(uid: string, booking: BookingToFile, deps: Imp
       .filter((other) => !booking.distinctWithinSource || other.source !== booking.source);
     const matchedTrips = new Set<string>();
     const matched: string[] = [];
+    const matchedSegments: Segment[] = [];
+    const ref: SourceRef = {
+      kind: booking.source,
+      id: booking.sourceId,
+      ...(booking.label ? { label: booking.label } : {}),
+      uid,
+      at: timestamp,
+    };
+    // A booking found again keeps this source too, so nothing dropped as a
+    // duplicate is lost from view.
+    const recordSources = () => {
+      for (const segment of matchedSegments) tx.addSource(segment.tripId, segment.id, ref);
+    };
     const taken = (other: Segment) => booking.consumed?.has(`${other.tripId}/${other.id}`) || matched.includes(`${other.tripId}/${other.id}`);
     const fresh = booking.segments
       .map((segment, index) => ({ segment, id: `${booking.sourceId}-${index}` }))
@@ -312,12 +331,16 @@ export async function fileBooking(uid: string, booking: BookingToFile, deps: Imp
         if (match) {
           matchedTrips.add(match.tripId);
           matched.push(`${match.tripId}/${match.id}`);
+          matchedSegments.push(match);
         }
         return !match;
       });
     const duplicates = booking.segments.length - fresh.length;
     const freshRange = segmentDateRange(fresh.map((f) => f.segment));
-    if (!freshRange) return { segmentIds: [], duplicates, matched };
+    if (!freshRange) {
+      recordSources();
+      return { segmentIds: [], duplicates, matched };
+    }
 
     const hint = booking.trip;
     let target: Trip | undefined;
@@ -364,6 +387,7 @@ export async function fileBooking(uid: string, booking: BookingToFile, deps: Imp
         updatedAt: timestamp,
       });
     }
+    recordSources();
     for (const { segment, id } of fresh) {
       tx.putSegment({
         ...segment,
@@ -371,6 +395,7 @@ export async function fileBooking(uid: string, booking: BookingToFile, deps: Imp
         tripId,
         source: booking.source,
         gmailMessageIds: booking.gmailMessageIds ?? [],
+        sources: [ref],
         ...(booking.sender ? { sender: booking.sender } : {}),
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -409,6 +434,7 @@ export async function importStructured(uid: string, item: StructuredItem, deps: 
       {
         sourceId: item.id,
         source: item.source,
+        label: item.title,
         segments: item.segments,
         distinctWithinSource: true,
         ...(item.trip ? { trip: item.trip } : {}),
