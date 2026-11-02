@@ -16,6 +16,7 @@ packages/core   Shared zod schemas, Firestore paths, trip grouping, formatting, 
 packages/rules  Firestore security-rules tests (run against the emulator)
 firestore.rules Who may read and write what
 deploy/         gcloud scripts for the Pub/Sub subscription and the alerting policies
+design/android  Clickable Material 3 mockups of the Android app (also a Design canvas)
 ```
 
 ## Develop

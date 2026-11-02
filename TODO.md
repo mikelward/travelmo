@@ -38,6 +38,12 @@
 - [x] Service worker for offline trip pages (Serwist); `useOffline`.
 - [x] End-to-end test: emulator-backed sign-in, seeded trips, share with
       a second user who adds a booking (Playwright).
+- [x] Android mockups, round one: clickable Material 3 prototype of sign-in,
+      trip list, trip detail, booking form and settings (`design/android/`).
+- [ ] Android mockups, round two: offline banner and page, interrupted
+      deletion, loading and not-found states, the full dark set, and the
+      future features from the brief (calendar, map, reports, loyalty,
+      passport reminders) as concept screens.
 
 ## Decisions needing review
 
@@ -69,6 +75,13 @@ Guesses made on autopilot; change any of them freely.
   40 examples kept per kind) are guesses to tune against real mail.
   Examples are the model's own verdicts, not only the user's review
   decisions, since those are rare; a review decision still teaches it.
+- Android idioms in the mockups: one scrolling list with Now / Upcoming /
+  Past headers rather than tabs (empty groups hide); no bottom navigation
+  (two destinations: Settings behind a gear, Sign out in the overflow
+  menu); the booking form as a full-screen dialog; a row's actions in a
+  bottom sheet; delete trip as a dialog; pill buttons and an extended FAB
+  "Add a booking". The product's missing confirmations and the "Car" /
+  "Car rental" label mismatch are shown as they are, not fixed.
 - Airport zones come from the OpenFlights database (ODbL) via the
   `airport-data` package, filled from coordinates with `tz-lookup` where
   it has none; generated and committed, not fetched at build time.

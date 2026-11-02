@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Trip detail, shared with you</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./styles/travelmo.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+a{color:#171717}a:hover{color:#171717}
+</style>
+</helmet>
+<div class="phone" data-theme="light" style="width: 412px; height: 915px">
+  <div class="status-bar"><span>9:30</span><span class="glyphs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 22h20V2L2 22z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6c3.3 0 6.3 1.3 8.5 3.4L22 7.9C19.3 5.5 15.8 4 12 4S4.7 5.5 2 7.9l1.5 1.5C5.7 7.3 8.7 6 12 6zm0 5c1.9 0 3.6.7 4.9 1.9l1.5-1.5C16.7 9.9 14.4 9 12 9s-4.7.9-6.4 2.4l1.5 1.5C8.4 11.7 10.1 11 12 11zm0 5c.8 0 1.6.3 2.1.9L12 19l-2.1-2.1c.5-.6 1.3-.9 2.1-.9z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h-2V1h-4v2H8v18h8V3z"/></svg></span></div>
+  <header class="app-bar medium">
+    <div class="bar-row">
+      <a class="icon-button" href="TripList.dc.html" aria-label="All trips"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg></a>
+    </div>
+    <h1 class="headline" style="margin: 0; display: flex; align-items: baseline; gap: 12px">Edinburgh <span class="subheader">Shared</span></h1>
+    <p class="date-line">31 Oct – 3 Nov 2026</p>
+  </header>
+  <main class="content scrolled">
+    <h2 class="subheader list-subheader">Sat 31 Oct</h2>
+    <div class="booking">
+      <span class="overline kind">Train</span>
+      <div class="body">
+        <p class="title-medium">LNR 9S07 KGX to EDB</p>
+        <p class="variant">KGX London Kings Cross → EDB Edinburgh Waverley</p>
+        <p class="variant">09:00 – 13:20</p>
+        <p class="meta">LNER · Ref 7HK2LP</p>
+        <p class="meta">From lner.example</p>
+      </div>
+      <a class="icon-button trailing" href="BookingActions.dc.html" aria-label="Booking actions"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg></a>
+    </div>
+    <div class="booking">
+      <span class="overline kind">Stay</span>
+      <div class="body">
+        <p class="title-medium">Grassmarket Hotel</p>
+        <p class="variant">Check-in 15:00 · Check-out Tue 3 Nov 11:00</p>
+        <p class="meta">Grassmarket Hotel · Ref GM-20931</p>
+        <p class="meta">From grassmarket.example</p>
+      </div>
+      <a class="icon-button trailing" href="BookingActions.dc.html" aria-label="Booking actions"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg></a>
+    </div>
+    <h2 class="subheader list-subheader">Tue 3 Nov</h2>
+    <div class="booking">
+      <span class="overline kind">Train</span>
+      <div class="body">
+        <p class="title-medium">LNR 9E14 EDB to KGX</p>
+        <p class="variant">EDB Edinburgh Waverley → KGX London Kings Cross</p>
+        <p class="variant">14:30 – 19:05</p>
+        <p class="meta">LNER · Ref 7HK2LP</p>
+        <p class="meta">From lner.example</p>
+      </div>
+      <a class="icon-button trailing" href="BookingActions.dc.html" aria-label="Booking actions"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg></a>
+    </div>
+  </main>
+  <a class="fab" href="AddBooking.dc.html"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>Add a booking</a>
+  <div class="nav-handle"><span></span></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":412,"height":915}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
