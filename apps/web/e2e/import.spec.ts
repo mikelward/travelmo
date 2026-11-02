@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { owner, signIn } from "./helpers";
-import { clearData } from "./seed";
+import { clearData, seedFeed } from "./seed";
 
 test.beforeEach(async () => {
   await clearData();
@@ -86,4 +86,30 @@ test("a calendar file is previewed, then sent as text when the user imports it",
   await page.getByLabel("Calendar file").setInputFiles({ name: "trip.ics", mimeType: "text/calendar", buffer: Buffer.from(ics) });
   await page.getByRole("button", { name: "Import", exact: true }).click();
   await expect.poll(() => sent.length).toBe(2);
+});
+
+test("a calendar feed is added through the parser and listed by host, with its last result or error", async ({ page }) => {
+  const uid = await signIn(page, owner);
+  const sent: unknown[] = [];
+  await page.route("http://localhost:8080/feeds/add", async (route) => {
+    sent.push(route.request().postDataJSON());
+    await route.fulfill({ json: { id: "f1", skipped: 0, filtered: 0, not_booking: 0, imported: 2, failed: 0, recurring: 0, cancelled: 0, remaining: 0, removed: 0 } });
+  });
+  await page.goto("/settings");
+  await page.getByLabel("Calendar feed link").fill("webcal://feeds.example.com/ical/SECRET.ics");
+  await page.getByRole("button", { name: "Add feed" }).click();
+  await expect(page.getByText("2 events imported.")).toBeVisible();
+  expect(sent).toEqual([{ url: "webcal://feeds.example.com/ical/SECRET.ics" }]);
+
+  // The parser stores the feed; the page lists it without its secret link.
+  await seedFeed(uid, {
+    id: "f1",
+    url: "https://feeds.example.com/ical/SECRET.ics",
+    addedAt: "2026-11-01T00:00:00Z",
+    lastFetchedAt: "2026-11-02T03:00:00Z",
+    lastError: "The feed answered 404.",
+  });
+  await expect(page.getByText("feeds.example.com", { exact: true })).toBeVisible();
+  await expect(page.getByText("The feed answered 404.")).toBeVisible();
+  await expect(page.getByText("SECRET")).toHaveCount(0);
 });

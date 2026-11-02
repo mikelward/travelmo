@@ -190,6 +190,17 @@ describe("users", () => {
     await assertFails(setDoc(doc(as(stranger), paths.user(stranger.uid)), { gmail: { emailAddress: "forged@example.com" } }));
   });
 
+  it("calendar feeds are readable by their owner only and written by the parser alone", async () => {
+    const feed = { id: "f1", url: "https://www.example.com/feed/secret.ics", addedAt: "2026-11-01T00:00:00Z" };
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), paths.feed(owner.uid, "f1")), feed);
+    });
+    await assertSucceeds(getDoc(doc(as(owner), paths.feed(owner.uid, "f1"))));
+    await assertFails(getDoc(doc(as(stranger), paths.feed(owner.uid, "f1"))));
+    await assertFails(getDoc(doc(as(partner), paths.feed(owner.uid, "f1"))));
+    await assertFails(setDoc(doc(as(owner), paths.feed(owner.uid, "f2")), { ...feed, id: "f2", url: "https://169.254.169.254/" }));
+  });
+
   it("sender patterns are the user's; parsed messages read-only; private is sealed", async () => {
     await assertSucceeds(setDoc(doc(as(owner), paths.senderPatterns(owner.uid)), { allow: ["cove.example"], deny: [] }));
     await assertFails(setDoc(doc(as(stranger), paths.senderPatterns(owner.uid)), { allow: [], deny: [] }));

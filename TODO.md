@@ -61,9 +61,12 @@
   - [x] `.ics` files: per-trip TripIt exports and calendar exports, read
         like email, `UID` as the source id, recurring and cancelled events
         skipped, 100 model reads per upload.
-  - [ ] `.ics` feeds: a subscribed URL polled daily (the TripIt feed covers
-        the last 90 days and the future), on `importCalendar`; a
-        cancellation removes the booking it imported.
+  - [x] `.ics` feeds: subscribe from Settings, read at once and daily
+        (`deploy/scheduler.sh`), links fetched only from public addresses;
+        a cancelled event removes its unedited, unmatched booking.
+  - [ ] A feed event whose details change after import (a new time) is not
+        re-read: its record stands. Re-read events whose `LAST-MODIFIED` or
+        `SEQUENCE` moved.
   - [ ] Google Calendar through the existing OAuth flow with
         `calendar.readonly` and a calendar picker.
   - [ ] Backfill without the three-year cap, batched with a cursor, so a

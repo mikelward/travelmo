@@ -1,6 +1,6 @@
 "use client";
 
-import { ParsedMessage, Segment, SenderPatterns, Trip, UserProfile, paths } from "@travelmo/core";
+import { CalendarFeed, ParsedMessage, Segment, SenderPatterns, Trip, UserProfile, paths } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import {
   collection,
@@ -153,6 +153,18 @@ export function useParsedMessages(uid: string, max = 100): ParsedMessage[] | und
     );
   }, [uid, max]);
   return records;
+}
+
+export function useFeeds(uid: string): CalendarFeed[] | undefined {
+  const [feeds, setFeeds] = useState<CalendarFeed[]>();
+  useEffect(() => {
+    return onSnapshot(
+      query(collection(firestore(), paths.feeds(uid)), orderBy("addedAt")),
+      (s) => setFeeds(parseDocs(CalendarFeed, s)),
+      (error) => console.error("Feeds subscription failed", error),
+    );
+  }, [uid]);
+  return feeds;
 }
 
 export function useSenderPatterns(uid: string): SenderPatterns | undefined {

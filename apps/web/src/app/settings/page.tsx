@@ -12,7 +12,7 @@ import { useSaveForOffline } from "@/lib/offline";
 import { domainOf, effectiveDecision, learnSender } from "@/lib/patterns";
 import { describeCalendarResult, previewIcs } from "@/lib/ics";
 import { describeTripItResult, previewTripIt } from "@/lib/tripit";
-import { useParsedMessages, useProfile, useSenderPatterns } from "@/lib/trips";
+import { useFeeds, useParsedMessages, useProfile, useSenderPatterns } from "@/lib/trips";
 
 const buttonClass =
   "rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
@@ -242,6 +242,94 @@ function CalendarSection({ user }: { user: User }) {
   );
 }
 
+// The link's host, enough to recognize a feed without showing its secret.
+function feedHost(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    // Stored links were checked when added; this is only for display.
+    return url;
+  }
+}
+
+function FeedsSection({ user }: { user: User }) {
+  const feeds = useFeeds(user.uid);
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string>();
+  const [error, setError] = useState<string>();
+
+  const add = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setResult(undefined);
+    setError(undefined);
+    try {
+      setResult(describeCalendarResult(await api.addFeed(user, url)));
+      setUrl("");
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (id: string) => {
+    setError(undefined);
+    try {
+      await api.removeFeed(user, id);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  return (
+    <section className="mt-10">
+      <h2 className="text-lg font-medium">Calendar feeds</h2>
+      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+        Paste a calendar subscription link, such as the one in TripIt&apos;s settings, and Travelmo reads it every day:
+        new trips come in, and a cancelled event removes its booking unless you edited it or it also came from an
+        email. Bookings stay when you remove a feed.
+      </p>
+      <form onSubmit={add} className="mt-3 flex flex-wrap gap-2">
+        <input
+          type="url"
+          required
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="webcal://… or https://…"
+          aria-label="Calendar feed link"
+          className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
+        />
+        <button type="submit" disabled={busy || !url.trim()} className={buttonClass}>
+          {busy ? "Reading…" : "Add feed"}
+        </button>
+      </form>
+      {result && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{result}</p>}
+      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {feeds && feeds.length > 0 && (
+        <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
+          {feeds.map((feed) => (
+            <li key={feed.id} className="flex items-start justify-between gap-3 py-3 text-sm">
+              <div className="min-w-0">
+                <p className="font-medium">{feed.label ?? feedHost(feed.url)}</p>
+                <p className="text-zinc-600 dark:text-zinc-400">
+                  {feed.lastFetchedAt ? `Read ${feed.lastFetchedAt.slice(0, 10)}` : "Not read yet"}
+                  {feed.lastResult && !feed.lastError ? ` · ${feed.lastResult}` : ""}
+                </p>
+                {feed.lastError && <p className="text-red-600">{feed.lastError}</p>}
+              </div>
+              <button type="button" className={buttonClass} onClick={() => remove(feed.id)}>
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function PatternsSection({ user }: { user: User }) {
   const saved = useSenderPatterns(user.uid);
   const [draft, setDraft] = useState<SenderPatterns>();
@@ -397,6 +485,7 @@ export default function SettingsPage() {
           </Suspense>
           <TripItSection user={user} />
           <CalendarSection user={user} />
+          <FeedsSection user={user} />
           <PatternsSection user={user} />
           <ReviewSection user={user} />
         </>

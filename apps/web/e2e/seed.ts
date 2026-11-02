@@ -1,4 +1,4 @@
-import { paths, type Segment, type Trip } from "@travelmo/core";
+import { paths, type CalendarFeed, type Segment, type Trip } from "@travelmo/core";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
@@ -61,6 +61,10 @@ export async function seedFlight(tripId: string): Promise<Segment> {
   };
   await db.doc(paths.segment(tripId, flight.id)).set(flight);
   return flight;
+}
+
+export async function seedFeed(uid: string, feed: CalendarFeed): Promise<void> {
+  await db.doc(paths.feed(uid, feed.id)).set(feed);
 }
 
 export async function clearData(): Promise<void> {

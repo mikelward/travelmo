@@ -40,6 +40,8 @@ import { importCalendar, importMessage, importMessages, importTripIt, type Impor
 import { errorFields, log } from "./log";
 import { BadPushEnvelope, parseGmailPush, type GmailNotification } from "./pubsub";
 import { firestoreStore } from "./store";
+import { FeedLimitReached, addFeed, feedFailure, firestoreFeeds, pollAllFeeds, type FeedIo } from "./feeds";
+import { fetchFeed } from "./safefetch";
 
 const webOrigin = requireEnv("WEB_ORIGIN");
 const pubsubTopic = requireEnv("GMAIL_PUBSUB_TOPIC");
@@ -79,6 +81,7 @@ const app = new Hono<Env>();
 
 app.use("/gmail/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/import/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
+app.use("/feeds/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 
 app.get("/healthz", (c) => c.text("ok"));
 
@@ -323,6 +326,44 @@ app.post(
     return c.json(counts);
   },
 );
+
+const feedIo: FeedIo = { feeds: firestoreFeeds(db), fetchText: (url) => fetchFeed(url), deps };
+
+// Subscribes to a calendar feed: the link is checked (https, public
+// address) and read at once, so a wrong one is refused while the user waits.
+app.post("/feeds/add", async (c) => {
+  const uid = await requireUser(c);
+  const body = (await c.req.json().catch(() => undefined)) as { url?: unknown; label?: unknown } | undefined;
+  if (typeof body?.url !== "string") throw new HTTPException(400, { message: "Missing feed address" });
+  const label = typeof body.label === "string" ? body.label : undefined;
+  try {
+    const { feed, counts } = await addFeed(uid, body.url, label, feedIo);
+    return c.json({ id: feed.id, ...counts });
+  } catch (error) {
+    if (error instanceof FeedLimitReached) throw new HTTPException(409, { message: error.message });
+    const message = feedFailure(error);
+    if (message) throw new HTTPException(400, { message });
+    throw error;
+  }
+});
+
+// Stops polling a feed. Bookings it brought in stay.
+app.post("/feeds/remove", async (c) => {
+  const uid = await requireUser(c);
+  const body = (await c.req.json().catch(() => undefined)) as { id?: unknown } | undefined;
+  if (typeof body?.id !== "string" || !body.id) throw new HTTPException(400, { message: "Missing feed id" });
+  await feedIo.feeds.remove(uid, body.id);
+  log("INFO", "feed_removed", { uid, feedId: body.id });
+  return c.body(null, 204);
+});
+
+// Cloud Scheduler calls this daily (deploy/scheduler.sh).
+app.post("/internal/poll-feeds", async (c) => {
+  await requireInternalCaller(c);
+  const result = await pollAllFeeds(feedIo);
+  log("INFO", "feeds_polled", result);
+  return c.json(result);
+});
 
 // A non-2xx response makes Pub/Sub redeliver; after the subscription's
 // maximum attempts the notification lands on the dead-letter topic, which

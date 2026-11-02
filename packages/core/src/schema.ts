@@ -144,6 +144,8 @@ export const ParsedMessage = z.object({
   from: z.string().optional(),
   subject: z.string().optional(),
   segmentIds: z.array(z.string()).default([]),
+  // The trip the segments went into, so a later cancellation can find them.
+  tripId: z.string().optional(),
   // Existing bookings ("tripId/segmentId") this item was matched to as a
   // duplicate, so a later upload of the same export keeps matching one to
   // one even for items it skips as already imported.
@@ -151,3 +153,18 @@ export const ParsedMessage = z.object({
   processedAt: isoDateTime,
 });
 export type ParsedMessage = z.infer<typeof ParsedMessage>;
+
+// A calendar feed the parser polls daily. The URL often carries a secret
+// token (TripIt's does), so it is readable by its owner only and never
+// logged.
+export const CalendarFeed = z.object({
+  id: z.string().min(1),
+  url: z.string().url(),
+  label: z.string().optional(),
+  addedAt: isoDateTime,
+  lastFetchedAt: isoDateTime.optional(),
+  // What the last poll did, or why it failed.
+  lastResult: z.string().optional(),
+  lastError: z.string().optional(),
+});
+export type CalendarFeed = z.infer<typeof CalendarFeed>;

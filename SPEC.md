@@ -46,6 +46,9 @@ viewer's zone. Trip bounds are calendar dates.
 - `users/{uid}` — `email, displayName, photoURL, gmail {emailAddress,
   connectedAt, watchExpiration, historyId}`. `gmail` is server-written.
 - `users/{uid}/settings/patterns` — `allow[], deny[]` sender domains.
+- `users/{uid}/feeds/{feedId}` — `url, label, addedAt, lastFetchedAt,
+  lastResult, lastError`: subscribed calendar feeds. The owner reads them;
+  the parser alone writes them.
 - `users/{uid}/parsedMessages/{sourceId}` — `outcome` (processing,
   filtered, not_booking, imported, failed), `source` (absent for Gmail,
   `tripit` or `ics` otherwise), `reason, from, subject, segmentIds[],
@@ -311,6 +314,29 @@ comes in over several uploads of the same file, each carrying on where the
 last stopped. `POST /import/ics` takes the file's text; Settings previews
 the event counts first.
 
+### Calendar feeds
+
+A user can subscribe to a calendar feed (TripIt's, or any calendar's
+subscription link) from Settings; the parser reads it when it is added and
+then daily (`/internal/poll-feeds`, from Cloud Scheduler), through the same
+path as an uploaded file, at most 100 model reads per feed per day. A link
+often carries a secret token, so feeds live under `users/{uid}/feeds`,
+readable by their owner, written by the parser only, never logged (logs
+carry the feed's id, a hash of its link). At most five per user.
+
+Fetching a link a user typed in is fetching from inside our network, so
+`apps/parser/src/safefetch.ts` accepts only https (webcal is read as https)
+on the standard port with no credentials, refuses any host one of whose
+addresses is private, loopback, link-local (the metadata server) or
+otherwise reserved, connects to the address it checked so DNS cannot be
+switched in between, re-checks every redirect (three at most), and stops at
+15 seconds or 5 MB.
+
+An event cancelled after it was imported, in a feed or a re-uploaded file,
+removes its booking, unless the user edited the booking or another email or
+import has since been matched to it; those stay. A feed that cannot be read
+keeps its bookings and shows why in Settings.
+
 Backfill (`POST /gmail/backfill`) runs the same path over a Gmail search
 limited to the last three years and booking-like subjects, capped at 300
 messages per call.
@@ -356,6 +382,9 @@ refused to any other until the first disconnects.
 | `POST /gmail/backfill` | Firebase ID token | Imports past bookings; returns counts per outcome |
 | `POST /gmail/reimport` | Firebase ID token | Imports one message again, skipping the pre-filter; returns its outcome |
 | `POST /gmail/disconnect` | Firebase ID token | Stops the watch, revokes the token, deletes the connection |
+| `POST /feeds/add` | Firebase ID token | Subscribes to a calendar feed after checking its address and reading it once; returns counts as for `/import/ics` |
+| `POST /feeds/remove` | Firebase ID token | Stops polling a feed; its bookings stay |
+| `POST /internal/poll-feeds` | OIDC from `INTERNAL_CALLERS` | Cloud Scheduler target: reads every feed |
 | `POST /import/ics` | Firebase ID token | Imports an `.ics` file's text (up to 10 MB), reading at most 100 events with the model; returns counts per outcome, repeating and cancelled events skipped, and events left for the next upload |
 | `POST /import/tripit` | Firebase ID token | Imports a TripIt JSON export (up to 20 MB); returns counts of trips, bookings, duplicates, items imported before, failures and items not importable |
 | `POST /internal/pubsub/gmail` | OIDC from `INTERNAL_CALLERS` | Pub/Sub push target |
@@ -381,4 +410,4 @@ country, trips last year — via BigQuery export if Firestore aggregates get
 clumsy), country map, calendar view and export, check-in/out surfacing,
 ratings and favourites, itinerary ideas, loyalty balances, passport expiry
 and visa reminders, other mail providers and forward-to-import. Further import
-sources share the pipeline: subscribed calendar feeds and Google Calendar; `IMPORT.md` compares them and maps their fields.
+sources share the pipeline: Google Calendar; `IMPORT.md` compares them and maps their fields.

@@ -101,6 +101,12 @@ service cloud.firestore {
       match /parsedMessages/{messageId} {
         allow read: if isSelf();
       }
+      // Feed links carry secrets: the owner reads them, the parser alone
+      // writes them, after checking the address.
+      match /feeds/{feedId} {
+        allow read: if isSelf();
+        allow write: if false;
+      }
       // Refresh tokens live here; only the Admin SDK touches it.
       match /private/{document} {
         allow read, write: if false;

@@ -2,6 +2,7 @@ import { paths } from "@travelmo/core";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { claimLeaseMs } from "./importer";
+import { FeedLimitReached, firestoreFeeds } from "./feeds";
 import { firestoreStore } from "./store";
 
 // Runs inside `firebase emulators:exec`, which sets FIRESTORE_EMULATOR_HOST.
@@ -96,5 +97,45 @@ describe("firestoreStore.withUserLock", () => {
     expect(after[0]?.sources?.map((s) => s.id).sort()).toEqual(["m10", "m9"]);
     // The trip's revision moves too, so a merge that read the old booking retries.
     expect((await db.doc(paths.trip(tripId)).get()).data()?.updatedAt).toBe(at(5000));
+    // A cancellation reads the booking, deletes it and moves the trip on.
+    expect(await store.withUserLock(uid, (tx) => tx.getSegment(tripId, "s1"))).toMatchObject({ id: "s1" });
+    await store.withUserLock(uid, async (tx) => {
+      tx.deleteSegment(tripId, "s1");
+      tx.touchTrip(tripId, at(9000));
+    });
+    expect(await store.withUserLock(uid, (tx) => tx.getSegment(tripId, "s1"))).toBeUndefined();
+    expect((await db.doc(paths.trip(tripId)).get()).data()?.updatedAt).toBe(at(9000));
+  });
+});
+
+describe("firestoreFeeds", () => {
+  it("records a poll's result only for a feed that still exists", async () => {
+    const feeds = firestoreFeeds(db);
+    const uid = unique();
+    const feed = { id: "f1", url: "https://www.example.com/f.ics", addedAt: at(0) };
+    await feeds.save(uid, feed);
+    expect(await feeds.saveResult(uid, { ...feed, lastResult: "1 imported" })).toBe(true);
+    expect(await feeds.get(uid, "f1")).toMatchObject({ lastResult: "1 imported" });
+    await feeds.remove(uid, "f1");
+    expect(await feeds.saveResult(uid, { ...feed, lastResult: "2 imported" })).toBe(false);
+    expect(await feeds.get(uid, "f1")).toBeUndefined();
+    expect((await feeds.all()).some((f) => f.uid === uid)).toBe(false);
+  });
+
+  it("lets concurrent reservations past the limit only up to it", async () => {
+    const feeds = firestoreFeeds(db);
+    const uid = unique();
+    const feed = (i: number) => ({ id: `f${i}`, url: `https://www.example.com/${i}.ics`, addedAt: at(0) });
+    const results = await Promise.allSettled([0, 1, 2, 3].map((i) => feeds.reserve(uid, feed(i), 2)));
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(2);
+    expect(results.filter((r) => r.status === "rejected").every((r) => (r as PromiseRejectedResult).reason instanceof FeedLimitReached)).toBe(true);
+    const kept = await feeds.list(uid);
+    expect(kept).toHaveLength(2);
+    expect(await feeds.reserve(uid, kept[0]!, 2)).toBe("existing");
+    // A reservation is released only while unread.
+    await feeds.saveResult(uid, { ...kept[0]!, lastFetchedAt: at(1) });
+    await feeds.releaseIfUnread(uid, kept[0]!.id);
+    await feeds.releaseIfUnread(uid, kept[1]!.id);
+    expect((await feeds.list(uid)).map((f) => f.id)).toEqual([kept[0]!.id]);
   });
 });

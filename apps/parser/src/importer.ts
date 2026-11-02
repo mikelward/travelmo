@@ -6,6 +6,7 @@ import {
   overlappingTrips,
   sameBooking,
   segmentDateRange,
+  segmentSources,
   stableHash,
   type ExtractedSegment,
   type ParsedMessage,
@@ -31,6 +32,10 @@ export type TripTx = {
   putSegment(segment: Segment): void;
   // Adds a source to a booking already filed: the same booking, found again.
   addSource(tripId: string, segmentId: string, source: SourceRef): void;
+  getSegment(tripId: string, segmentId: string): Promise<Segment | undefined>;
+  deleteSegment(tripId: string, segmentId: string): void;
+  // Moves the trip's revision, as any change to its bookings must.
+  touchTrip(tripId: string, updatedAt: string): void;
 };
 
 // A claim older than this with no outcome belongs to a worker that died;
@@ -235,6 +240,7 @@ export async function importMessage(
       processedAt: timestamp,
       ...(duplicates ? { reason: duplicateReason(duplicates) } : {}),
       ...(matched.length ? { matchedSegmentIds: matched } : {}),
+      ...(tripId ? { tripId } : {}),
     }),
   );
   await learn("bookings");
@@ -562,7 +568,44 @@ export function tripTitle(segments: readonly ExtractedSegment[]): string {
 const min = (a: string, b: string) => (a < b ? a : b);
 const max = (a: string, b: string) => (a > b ? a : b);
 
-export type CalendarCounts = ImportCounts & { recurring: number; cancelled: number; remaining: number };
+export type CalendarCounts = ImportCounts & { recurring: number; cancelled: number; remaining: number; removed: number };
+
+// An event cancelled after it was imported takes its booking with it, but
+// only a booking that is still just what the calendar made: one the user
+// edited, or that another email or import has since been matched to, stays.
+export async function cancelImported(uid: string, recordId: string, deps: ImportDeps): Promise<number> {
+  const { store, now, log } = deps;
+  const record = await store.getParsed(uid, recordId);
+  if (record?.outcome !== "imported" || !record.tripId || record.segmentIds.length === 0) return 0;
+  const tripId = record.tripId;
+  const timestamp = now();
+  const { removed, kept } = await store.withUserLock(uid, async (tx) => {
+    const segments = await Promise.all(record.segmentIds.map((id) => tx.getSegment(tripId, id)));
+    const removed: string[] = [];
+    const kept: string[] = [];
+    for (const segment of segments) {
+      if (!segment) continue;
+      const others = segmentSources(segment).filter((s) => s.id !== recordId);
+      if (segment.updatedAt === segment.createdAt && others.length === 0) {
+        tx.deleteSegment(tripId, segment.id);
+        removed.push(segment.id);
+      } else {
+        kept.push(segment.id);
+      }
+    }
+    if (removed.length) tx.touchTrip(tripId, timestamp);
+    return { removed, kept };
+  });
+  await store.setParsed({
+    ...record,
+    outcome: "not_booking",
+    reason: kept.length ? "cancelled in the calendar; edited or matched bookings kept" : "cancelled in the calendar",
+    segmentIds: kept,
+    processedAt: timestamp,
+  });
+  log("cancelled", { uid, id: recordId, removed: removed.length, kept: kept.length });
+  return removed.length;
+}
 
 export const calendarSender = "Calendar file";
 
@@ -572,7 +615,7 @@ export const calendarSender = "Calendar file";
 // capped per request; events past the cap are left for the next upload of
 // the same file, which skips everything already read.
 export async function importCalendar(uid: string, calendar: IcsCalendar, deps: ImportDeps, maxRead: number): Promise<CalendarCounts> {
-  const counts: CalendarCounts = { ...emptyCounts(), recurring: 0, cancelled: 0, remaining: 0 };
+  const counts: CalendarCounts = { ...emptyCounts(), recurring: 0, cancelled: 0, remaining: 0, removed: 0 };
   const travel = isTravelCalendar(calendar);
   let read = 0;
   // One to one across the file, and across uploads of it: what events
@@ -589,6 +632,7 @@ export async function importCalendar(uid: string, calendar: IcsCalendar, deps: I
     }
     if (event.cancelled) {
       counts.cancelled += 1;
+      counts.removed += await cancelImported(uid, `ics-${event.key}`, deps);
       continue;
     }
     if (read >= maxRead) {

@@ -36,4 +36,7 @@ export const api = {
   reimport: (user: User, messageId: string) => post<{ outcome: string }>(user, "/gmail/reimport", { messageId }),
   importTripIt: (user: User, exported: unknown) => post<TripItResult>(user, "/import/tripit", { export: exported }),
   importIcs: (user: User, text: string) => post<CalendarResult>(user, "/import/ics", { text }),
+  addFeed: (user: User, url: string, label?: string) =>
+    post<CalendarResult & { id: string }>(user, "/feeds/add", { url, ...(label ? { label } : {}) }),
+  removeFeed: (user: User, id: string) => post<void>(user, "/feeds/remove", { id }),
 };
