@@ -74,12 +74,9 @@
 - [x] Duplicate matching no longer depends on item order: a TripIt export
       reserves existing bookings for the item whose confirmation number they
       carry, and a calendar upload reads changed events before new ones.
-- [ ] One-to-one matching holds within one upload, not across two
-      uploads of the same export running at once (each keeps its own
-      `consumed` set), which can drop a room. Settings disables Import while
-      one runs, so it takes two tabs or a scripted client. Serialize TripIt
-      uploads per user (a lease in `users/{uid}/private`). The dropped
-      room's source still shows on the booking it matched.
+- [x] One-to-one matching holds across TripIt uploads too: one runs at a
+      time per user (a lease in `users/{uid}/private/upload-tripit`), and a
+      second gets a 409.
 - [ ] Android mockups, round two: offline banner and page, interrupted
       deletion, loading and not-found states, the full dark set, and the
       future features from the brief (calendar, map, reports, loyalty,

@@ -7,6 +7,8 @@ export const paths = {
   // UID, for events whose UID Google does not derive from their id.
   googleCalendarAliases: (uid: string, calendarKey: string) => `users/${uid}/private/googleCalendarAliases-${calendarKey}`,
   importLock: (uid: string) => `users/${uid}/private/import`,
+  // One upload of a kind at a time per user (see apps/parser/src/leases.ts).
+  uploadLease: (uid: string, kind: string) => `users/${uid}/private/upload-${kind}`,
   // Embeddings of emails the model has judged, for the similarity pre-filter.
   examples: (uid: string) => `users/${uid}/private/examples`,
   senderPatterns: (uid: string) => `users/${uid}/settings/patterns`,

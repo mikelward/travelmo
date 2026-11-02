@@ -53,6 +53,7 @@ import { firestoreStore } from "./store";
 import { FeedLimitReached, addFeed, feedFailure, firestoreFeeds, pollAllFeeds, type FeedIo } from "./feeds";
 import { fetchFeed } from "./safefetch";
 import { backfillBatch, backfillQuery, runBackfillBatch } from "./backfill";
+import { LeaseLost, UploadRunning, withUploadLease } from "./leases";
 import {
   calendarFor,
   calendarScopes,
@@ -445,7 +446,17 @@ app.post(
       if (error instanceof NotATripItExport) throw new HTTPException(400, { message: error.message });
       throw error;
     }
-    const counts = await importTripIt(uid, parsed, deps);
+    // One TripIt upload at a time per user, so its one-to-one matching holds
+    // across them too (leases.ts); a second gets a 409 to try again.
+    let counts;
+    try {
+      counts = await withUploadLease(db, uid, "tripit", randomBytes(12).toString("base64url"), (lease) =>
+        importTripIt(uid, parsed, deps, { beforeEach: () => lease.assertHeld() }),
+      );
+    } catch (error) {
+      if (error instanceof UploadRunning || error instanceof LeaseLost) throw new HTTPException(409, { message: error.message });
+      throw error;
+    }
     const result = { ...counts, notImported: parsed.skipped.length };
     log("INFO", "tripit_import", { uid, ...result });
     return c.json(result);

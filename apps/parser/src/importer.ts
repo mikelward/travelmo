@@ -575,7 +575,14 @@ async function otherSourcesSegments(uid: string, source: Segment["source"], deps
   return (await deps.store.listUserSegments(uid)).filter((segment) => segment.source !== source);
 }
 
-export async function importTripIt(uid: string, parsed: TripItImport, deps: ImportDeps): Promise<TripItCounts> {
+export async function importTripIt(
+  uid: string,
+  parsed: TripItImport,
+  deps: ImportDeps,
+  // Called before each item; throwing stops the import there (its finished
+  // items stay recorded), as when the upload's lease was lost.
+  options: { beforeEach?: () => void } = {},
+): Promise<TripItCounts> {
   const counts: TripItCounts = { trips: 0, imported: 0, duplicates: 0, skipped: 0, failed: 0 };
   // Matching against other sources is one to one across the whole export:
   // an existing booking that one item matched cannot stand in for another.
@@ -613,6 +620,7 @@ export async function importTripIt(uid: string, parsed: TripItImport, deps: Impo
     if (result.outcome === "failed") counts.failed += 1;
   };
   for (const trip of parsed.trips) {
+    options.beforeEach?.();
     const result = await importStructured(
       uid,
       {
@@ -630,6 +638,7 @@ export async function importTripIt(uid: string, parsed: TripItImport, deps: Impo
     tally(result);
   }
   for (const item of parsed.unfiled) {
+    options.beforeEach?.();
     const range = segmentDateRange(item.segments)!;
     tally(
       await importStructured(

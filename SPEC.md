@@ -303,7 +303,14 @@ which spans whatever years they do and so is never joined by date.
 Each TripIt trip and unfiled item is recorded under a key derived from its
 name, dates, legs and confirmation numbers (and, for unfiled items alike in
 every field, which copy it is), so uploading the same file again changes nothing, and
-one that failed is tried again.
+one that failed is tried again. One TripIt upload runs at a time per user,
+under a lease in `users/{uid}/private/upload-tripit`, renewed every five
+minutes while it runs and expiring 15 minutes after the last renewal if its
+worker dies, so two uploads at once (two tabs, a script) cannot each match
+the same existing booking; the second is refused with a 409 to try again.
+An upload checks its lease before each item and stops if it was lost (a
+stalled worker whose lease another upload took over), keeping what it
+finished.
 
 ### Calendar files
 
@@ -451,7 +458,7 @@ refused to any other until the first disconnects.
 | `POST /calendar/disconnect` | Firebase ID token | Revokes the Calendar token and deletes the connection; bookings stay |
 | `POST /internal/poll-feeds` | OIDC from `INTERNAL_CALLERS` | Cloud Scheduler target: reads every feed and every chosen Google calendar |
 | `POST /import/ics` | Firebase ID token | Imports an `.ics` file's text (up to 10 MB), reading at most 100 events with the model; returns counts per outcome, repeating and cancelled events skipped, and events left for the next upload |
-| `POST /import/tripit` | Firebase ID token | Imports a TripIt JSON export (up to 20 MB); returns counts of trips, bookings, duplicates, items imported before, failures and items not importable |
+| `POST /import/tripit` | Firebase ID token | Imports a TripIt JSON export (up to 20 MB); returns counts of trips, bookings, duplicates, items imported before, failures and items not importable; 409 while another TripIt upload of the same user runs |
 | `POST /internal/pubsub/gmail` | OIDC from `INTERNAL_CALLERS` | Pub/Sub push target |
 | `POST /internal/renew-watches` | OIDC from `INTERNAL_CALLERS` | Cloud Scheduler target |
 | `GET /healthz` | none | Liveness |
