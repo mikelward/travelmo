@@ -52,11 +52,31 @@ export type ExtractedBooking = z.infer<typeof ExtractedBooking>;
 export const SegmentSource = z.enum(["gmail", "manual", "tripit", "ics"]);
 export type SegmentSource = z.infer<typeof SegmentSource>;
 
+// One place a booking came from: the email, TripIt item or calendar event
+// it was read from. A booking found again elsewhere keeps the new source
+// too, so a dropped duplicate (perhaps a second room after all) is one
+// click away, as is anything the extraction left out.
+export const SourceRef = z.object({
+  kind: z.enum(["gmail", "tripit", "ics"]),
+  // The Gmail message id, or the import record's id for the others.
+  id: z.string().min(1),
+  // What the user recognizes it by: the email's subject, the TripIt trip's
+  // name, the event's title.
+  label: z.string().optional(),
+  // Whose import it was, and so whose mailbox an email is in: a booking can
+  // move to a trip someone else owns.
+  uid: z.string().min(1).optional(),
+  at: isoDateTime,
+});
+export type SourceRef = z.infer<typeof SourceRef>;
+
 export const Segment = ExtractedSegment.extend({
   id: z.string().min(1),
   tripId: z.string().min(1),
   source: SegmentSource,
   gmailMessageIds: z.array(z.string()).default([]),
+  // Every source this booking was read from, the first one included.
+  sources: z.array(SourceRef).optional(),
   // Domain the booking email came from, so a trip page can offer to always
   // import that sender.
   sender: z.string().optional(),

@@ -17,6 +17,9 @@ test("the owner sees an imported trip, shares it, and the partner can add a book
   // Next keeps the previous page mounted but hidden across a soft navigation,
   // so text lookups must be exact or role-based to avoid matching it.
   await expect(page.getByText("Cove Liverpool", { exact: true })).toBeVisible();
+  // Every source of the booking, the email opening in Gmail for the owner.
+  await expect(page.getByTestId("segment-sources")).toHaveText("Sources (2): Email “Your stay at Cove” · TripIt “Liverpool weekend”");
+  await expect(page.getByRole("link", { name: "Email “Your stay at Cove”" })).toHaveAttribute("href", /^https:\/\/mail\.google\.com\/mail\/u\/0\/#all\/m1$/);
 
   await page.getByPlaceholder("partner@example.com").fill(partner);
   await page.getByRole("button", { name: "Share" }).click();
@@ -30,6 +33,9 @@ test("the owner sees an imported trip, shares it, and the partner can add a book
   await card.click();
 
   await expect(page.getByRole("button", { name: "Rename" })).toHaveCount(0);
+  // The email is in the owner's mailbox, so a partner sees it named, not linked.
+  await expect(page.getByTestId("segment-sources").first()).toContainText("Email “Your stay at Cove”");
+  await expect(page.getByRole("link", { name: "Email “Your stay at Cove”" })).toHaveCount(0);
   await page.getByRole("button", { name: "Add a booking" }).click();
   await page.getByPlaceholder("BA 117 LHR to JFK").fill("FR 123 MAN to DUB");
   const startDate = page.locator('input[type="date"]').first();

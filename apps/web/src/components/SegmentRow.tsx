@@ -1,4 +1,14 @@
-import { formatDate, localDate, localTime, type Segment, type SegmentType, type Trip } from "@travelmo/core";
+import { emailLinkFor, type EmailLinks } from "@/lib/sourceLinks";
+import {
+  formatDate,
+  localDate,
+  localTime,
+  segmentSources,
+  type Segment,
+  type SegmentType,
+  type SourceRef,
+  type Trip,
+} from "@travelmo/core";
 
 const labels: Record<SegmentType, string> = {
   flight: "Flight",
@@ -24,6 +34,37 @@ function endLabel(segment: Segment): string | undefined {
   return localDate(segment.end) === localDate(segment.start) ? time : `${formatDate(localDate(segment.end))} ${time}`;
 }
 
+const sourceKinds: Record<SourceRef["kind"], string> = { gmail: "Email", tripit: "TripIt", ics: "Calendar" };
+
+// Every email, TripIt trip or calendar event the booking was read from,
+// including ones dropped as duplicates of it: a second room, or a detail
+// the extraction left out, is one click away.
+function Sources({ segment, emailLinks }: { segment: Segment; emailLinks?: EmailLinks }) {
+  const sources = segmentSources(segment);
+  if (sources.length === 0) return null;
+  return (
+    <p className="mt-1 text-xs text-zinc-500" data-testid="segment-sources">
+      {sources.length === 1 ? "Source: " : `Sources (${sources.length}): `}
+      {sources.map((source, i) => {
+        const text = `${sourceKinds[source.kind]}${source.label ? ` “${source.label}”` : ""}`;
+        const href = emailLinkFor(source, emailLinks);
+        return (
+          <span key={`${source.kind}/${source.id}`}>
+            {i > 0 && " · "}
+            {href ? (
+              <a href={href} target="_blank" rel="noreferrer" className="hover:underline">
+                {text}
+              </a>
+            ) : (
+              text
+            )}
+          </span>
+        );
+      })}
+    </p>
+  );
+}
+
 export function SegmentRow({
   segment,
   onEdit,
@@ -31,6 +72,7 @@ export function SegmentRow({
   onLearnSender,
   moveTargets,
   onMove,
+  emailLinks,
 }: {
   segment: Segment;
   onEdit?: () => void;
@@ -38,6 +80,7 @@ export function SegmentRow({
   onLearnSender?: () => void;
   moveTargets?: Trip[];
   onMove?: (tripId: string) => void;
+  emailLinks?: EmailLinks;
 }) {
   const route = [place(segment.origin), place(segment.destination)].filter(Boolean).join(" → ");
   const end = endLabel(segment);
@@ -58,6 +101,7 @@ export function SegmentRow({
           </p>
         )}
         {segment.notes && <p className="mt-1 whitespace-pre-line text-xs text-zinc-500">{segment.notes}</p>}
+        <Sources segment={segment} {...(emailLinks ? { emailLinks } : {})} />
         {segment.sender && (
           <p className="mt-1 text-xs text-zinc-500">
             From {segment.sender}

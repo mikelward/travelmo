@@ -154,6 +154,10 @@ describe("segments", () => {
     await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s5")), imported));
     await assertSucceeds(updateDoc(doc(as(partner), paths.segment(trip.id, "s5")), { title: "Edited by partner" }));
     await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s7")), { ...imported, id: "s7", source: "ics" }));
+    const withSources = { ...imported, id: "s8", sources: [{ kind: "gmail", id: "m1", label: "Your booking", at: "2026-11-01T00:00:00Z" }] };
+    await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s8")), withSources));
+    await assertSucceeds(updateDoc(doc(as(partner), paths.segment(trip.id, "s8")), { title: "Edited, sources kept" }));
+    await assertFails(setDoc(doc(as(owner), paths.segment(trip.id, "s9")), { ...withSources, id: "s9", sources: "m1" }));
     await assertFails(setDoc(doc(as(owner), paths.segment(trip.id, "s6")), { ...imported, id: "s6", source: "carrier-pigeon" }));
   });
 

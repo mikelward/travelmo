@@ -1,5 +1,5 @@
 import { ParsedMessage, Segment, SenderPatterns, Trip, paths } from "@travelmo/core";
-import type { Firestore } from "firebase-admin/firestore";
+import { FieldValue, type Firestore } from "firebase-admin/firestore";
 import { claimable, reclaimable, retryable, type TripStore } from "./importer";
 import { Examples, addExample, emptyExamples } from "./similarity";
 
@@ -59,6 +59,13 @@ export function firestoreStore(db: Firestore): TripStore {
           },
           putSegment(segment) {
             t.set(db.doc(paths.segment(segment.tripId, segment.id)), segment);
+          },
+          addSource(tripId, segmentId, source) {
+            t.update(db.doc(paths.segment(tripId, segmentId)), { sources: FieldValue.arrayUnion(source) });
+            // The trip's revision moves with any change to its bookings, so a
+            // merge that read them before this retries rather than copying
+            // a stale booking over this one.
+            t.update(db.doc(paths.trip(tripId)), { updatedAt: source.at });
           },
         });
         t.set(lock, { lastImportAt: new Date().toISOString() });

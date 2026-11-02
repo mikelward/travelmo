@@ -44,6 +44,11 @@ function memoryStore(): Memory {
       trips.set(id, { ...trip, ...bounds });
     },
     putSegment: (s) => void segments.set(s.id, s),
+    addSource: (_tripId, id, source) => {
+      const s = segments.get(id);
+      if (!s) throw new Error(`segment ${id} missing`);
+      if (!(s.sources ?? []).some((r) => r.kind === source.kind && r.id === source.id)) segments.set(id, { ...s, sources: [...(s.sources ?? []), source] });
+    },
   };
   return {
     trips,
@@ -479,6 +484,24 @@ describe("importTripIt", () => {
     });
     await importTripIt("u1", wide, deps(store, async () => lodging));
     expect(store.trips.get(gmailTrip.id)).toMatchObject({ start: "2026-12-10", end: "2026-12-31" });
+  });
+
+  it("keeps the source of a booking dropped as a duplicate on the booking it matched", async () => {
+    const store = memoryStore();
+    await importMessage("u1", email({ id: "m2", subject: "Your Ryanair itinerary" }), deps(store, async () => flight));
+    expect(store.segments.get("m2-0")?.sources).toEqual([
+      { kind: "gmail", id: "m2", label: "Your Ryanair itinerary", uid: "u1", at: "2026-11-01T12:00:00Z" },
+    ]);
+    await importTripIt("u1", tripItExport(), deps(store, async () => lodging));
+    // The outbound was already there: it now lists the TripIt trip as well.
+    expect(store.segments.get("m2-0")?.sources?.map((s) => [s.kind, s.label])).toEqual([
+      ["gmail", "Your Ryanair itinerary"],
+      ["tripit", "Dublin weekend"],
+    ]);
+    // A second email confirming the same flight is listed too, not lost.
+    await importMessage("u1", email({ id: "m3", subject: "Your e-ticket" }), deps(store, async () => flight));
+    expect(store.segments.get("m2-0")?.sources?.map((s) => s.id)).toEqual(["m2", expect.stringMatching(/^tripit-/), "m3"]);
+    expect(store.segments.has("m3-0")).toBe(false);
   });
 
   it("skips a Gmail booking already imported from TripIt", async () => {
