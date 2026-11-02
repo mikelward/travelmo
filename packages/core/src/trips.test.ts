@@ -1,4 +1,4 @@
-import { daysBetween, eventVerb, findTripForRange, groupTrips, mergePlace, nextEvent, segmentDateRange } from "./trips";
+import { daysBetween, eventVerb, findTripForRange, groupTrips, mergePlace, nextEvent, overlappingTrips, sameBooking, segmentDateRange } from "./trips";
 
 describe("nextEvent", () => {
   const stay = { type: "lodging" as const, title: "Cove Liverpool", start: "2026-12-12T15:00:00+00:00", end: "2026-12-14T11:00:00+00:00" };
@@ -135,5 +135,70 @@ describe("ExtractedBooking schema", () => {
         segments: [{ type: "flight", title: "BA 117", start: "2026-12-01T09:00:00" }],
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("sameBooking", () => {
+  const flight = {
+    type: "flight" as const,
+    title: "XX 1 LHR to CDG",
+    start: "2030-05-01T08:15:00+01:00",
+    origin: { name: "London", code: "LHR" },
+    destination: { name: "Paris", code: "CDG" },
+  };
+  it("matches a journey at the same local minute and route, whatever the offset or title", () => {
+    expect(sameBooking(flight, { ...flight, title: "Flight to Paris", start: "2030-05-01T08:15:00+00:00" })).toBe(true);
+    expect(sameBooking(flight, { ...flight, destination: { name: "Paris", code: "cdg" } })).toBe(true);
+  });
+  it("tells apart other times, routes and types", () => {
+    expect(sameBooking(flight, { ...flight, start: "2030-05-01T18:15:00+01:00" })).toBe(false);
+    expect(sameBooking(flight, { ...flight, destination: { name: "Orly", code: "ORY" } })).toBe(false);
+    expect(sameBooking(flight, { ...flight, type: "train" })).toBe(false);
+  });
+  it("needs more than the time when a route is only partly known", () => {
+    expect(sameBooking(flight, { type: "flight", title: "Example Air", start: flight.start })).toBe(false);
+    expect(sameBooking(flight, { ...flight, destination: undefined })).toBe(true);
+  });
+
+  const stay = {
+    type: "lodging" as const,
+    title: "Cove Liverpool",
+    start: "2030-05-01T15:00:00+01:00",
+    end: "2030-05-08T11:00:00+01:00",
+    destination: { name: "Cove Liverpool", city: "Liverpool" },
+  };
+  it("matches a stay on the same dates under the same name, accents and guessed hours aside", () => {
+    expect(sameBooking(stay, { ...stay, title: "The Cove Apartments", start: "2030-05-01T14:00:00+01:00", destination: undefined })).toBe(true);
+    expect(sameBooking({ ...stay, title: "Hôtel Élysée" }, { ...stay, title: "Hotel Elysee Paris" })).toBe(true);
+    expect(sameBooking(stay, { ...stay, end: "2030-05-07T11:00:00+01:00" })).toBe(false);
+  });
+  it("keeps two stays of one chain apart, whether their cities are known or only named", () => {
+    const hilton = (title: string, city?: string) => ({
+      ...stay,
+      title,
+      provider: "Hilton",
+      destination: { name: title, ...(city ? { city } : {}) },
+    });
+    expect(sameBooking(hilton("Hilton London Paddington", "London"), hilton("Hilton Manchester Deansgate", "Manchester"))).toBe(false);
+    expect(sameBooking(hilton("Hilton London Paddington"), hilton("Hilton Manchester Deansgate"))).toBe(false);
+    expect(sameBooking(hilton("Hilton London Paddington", "London"), hilton("Hilton Paddington"))).toBe(true);
+  });
+
+  it("keeps two stays in one city on the same nights apart", () => {
+    expect(sameBooking(stay, { ...stay, title: "Hilton Liverpool", destination: { name: "Hilton Liverpool" } })).toBe(false);
+    expect(sameBooking(stay, { ...stay, title: "Grand Hotel", destination: undefined })).toBe(false);
+  });
+  it("lets confirmation numbers decide when both have one", () => {
+    expect(sameBooking({ ...stay, confirmation: "ab-123" }, { ...stay, confirmation: "AB123" })).toBe(true);
+    expect(sameBooking({ ...stay, confirmation: "AB123" }, { ...stay, confirmation: "XY999" })).toBe(false);
+  });
+});
+
+describe("overlappingTrips", () => {
+  it("keeps trips that share at least a day with the range", () => {
+    const trip = (id: string, start: string, end: string) =>
+      ({ id, title: id, start, end, ownerUid: "u", sharedWith: [], createdAt: "2030-01-01T00:00:00Z", updatedAt: "2030-01-01T00:00:00Z" });
+    const trips = [trip("a", "2030-05-01", "2030-05-03"), trip("b", "2030-05-04", "2030-05-06"), trip("c", "2030-05-10", "2030-05-12")];
+    expect(overlappingTrips(trips, { start: "2030-05-03", end: "2030-05-04" }).map((t) => t.id)).toEqual(["a", "b"]);
   });
 });

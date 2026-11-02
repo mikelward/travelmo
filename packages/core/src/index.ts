@@ -4,3 +4,5 @@ export * from "./paths";
 export * from "./format";
 export * from "./instant";
 export * from "./zone";
+export * from "./tripit";
+export * from "./hash";

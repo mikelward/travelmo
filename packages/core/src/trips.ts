@@ -114,3 +114,89 @@ export function findTripForRange(
       daysBetween(range.end, trip.start) <= gapDays,
   );
 }
+
+const timedTypes: ReadonlySet<SegmentType> = new Set(["flight", "train", "bus", "ferry", "activity", "other"]);
+
+// Words too common in booking titles to say two bookings are one.
+const genericWords = new Set([
+  "hotel", "hostel", "apartment", "apartments", "suite", "suites", "room", "rooms", "stay", "resort", "house", "lodge",
+  "inn", "airport", "station", "terminal", "flight", "train", "rail", "ferry", "coach", "rental", "hire", "car", "cars",
+  "booking", "reservation", "confirmation", "trip", "tour", "ticket", "tickets", "from", "with", "the", "and",
+]);
+
+function words(...texts: (string | undefined)[]): Set<string> {
+  const out = new Set<string>();
+  for (const text of texts) {
+    for (const word of (text ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().split(/[^a-z0-9]+/)) {
+      // Names of four letters or more, and numbers such as a flight's.
+      if ((word.length >= 4 || (/\d/.test(word) && word.length >= 2)) && !genericWords.has(word)) out.add(word);
+    }
+  }
+  return out;
+}
+
+const normalizeReference = (ref: string) => ref.toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+// Whether two bookings from different sources are the same reservation, for
+// imports that carry no shared reference (a TripIt export has no
+// confirmation numbers on its trips). Dropping a real booking as a
+// duplicate loses it, so beyond matching times this asks for evidence of
+// identity, and a duplicate left standing is the price of doubt.
+//
+// Times: wall clocks are compared, not instants, because the model can
+// misjudge an offset by an hour of DST. Journeys and activities must start
+// at the same local minute; stays and rentals, whose times are often
+// guessed, on the same dates. Identity, given matching times: confirmation
+// numbers decide when both have one; codes, and cities and countries, where
+// both have them, must agree, and a journey whose both ends have agreeing
+// codes on both sides is the same; otherwise the two must share a
+// distinctive word of their titles or place names, leaving out cities and
+// providers (two hotels of one chain, or in one city, on the same nights
+// are two stays).
+export function sameBooking(a: ExtractedSegment, b: ExtractedSegment): boolean {
+  if (a.type !== b.type) return false;
+  const wall = (instant: string) => instant.slice(0, 16);
+  if (timedTypes.has(a.type)) {
+    if (wall(a.start) !== wall(b.start)) return false;
+  } else {
+    if (localDate(a.start) !== localDate(b.start)) return false;
+    if (a.end && b.end && localDate(a.end) !== localDate(b.end)) return false;
+  }
+  if (a.confirmation && b.confirmation) return normalizeReference(a.confirmation) === normalizeReference(b.confirmation);
+  const codesDiffer = (x?: Place, y?: Place) =>
+    x?.code !== undefined && y?.code !== undefined && x.code.toUpperCase() !== y.code.toUpperCase();
+  if (codesDiffer(a.origin, b.origin) || codesDiffer(a.destination, b.destination)) return false;
+  // Places both sides know must agree: two stays on the same nights in
+  // London and Manchester are two, whatever the chain.
+  const known = (x?: string, y?: string) => x !== undefined && y !== undefined && x.trim().toLowerCase() !== y.trim().toLowerCase();
+  for (const [x, y] of [[a.origin, b.origin], [a.destination, b.destination]] as const) {
+    if (known(x?.city, y?.city) || known(x?.country, y?.country)) return false;
+  }
+  if (a.origin?.code && b.origin?.code && a.destination?.code && b.destination?.code) return true;
+  // A city or a chain is shared by many bookings; what is left of the
+  // names (the property, the route) says which one this is. When the
+  // provider is the property itself (an independent hotel), nothing is left
+  // without it, and its name is the evidence.
+  const cities = words(a.origin?.city, a.destination?.city, b.origin?.city, b.destination?.city);
+  const brand = words(a.provider, b.provider);
+  const names = (s: ExtractedSegment, without: Set<string>) => {
+    const found = words(s.title, s.origin?.name, s.destination?.name);
+    for (const word of without) found.delete(word);
+    return found;
+  };
+  const withoutBrand = new Set([...cities, ...brand]);
+  let ours = names(a, withoutBrand);
+  let theirs = names(b, withoutBrand);
+  if (ours.size === 0 || theirs.size === 0) {
+    ours = names(a, cities);
+    theirs = names(b, cities);
+  }
+  for (const word of ours) if (theirs.has(word)) return true;
+  return false;
+}
+
+// Trips whose dates touch the range at all (no gap allowed), the candidates
+// a booking could be a duplicate in.
+export function overlappingTrips(trips: readonly Trip[], range: { start: string; end: string }): Trip[] {
+  return trips.filter((trip) => trip.start <= range.end && trip.end >= range.start);
+}

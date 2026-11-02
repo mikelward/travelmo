@@ -12,7 +12,7 @@ is the roadmap in `TODO.md`. Every method ends in the same place: an
 | Gmail push | Built | Each new email that passes the pre-filter, read by the model | Forward from connection | Near-realtime (Pub/Sub watch, renewed daily) | One OAuth consent in Settings | Google OAuth client with the Gmail read scope; app verification for public use |
 | Gmail backfill | Built | Past emails matching a booking-like search | Three years (`backfillQuery`), 300 messages per call; uncapped batching is on the roadmap | On demand | One tap in Settings | Same as push; model cost per email that passes the pre-filter |
 | By hand | Built | One booking at a time from the trip page form | Any | Immediate | Typing | Nothing |
-| TripIt JSON export | Planned | Every trip and reservation, already structured | Whole account history (a real export spanned 20 years) | One-off snapshot | Email TripIt customer service and wait for the file; no self-service export | A file upload in Settings and a mapping of TripIt's object shapes |
+| TripIt JSON export | Built | Every trip and reservation, already structured | Whole account history (a real export spanned 20 years) | One-off snapshot | Email TripIt customer service and wait for the file; no self-service export | A file upload in Settings and a mapping of TripIt's object shapes |
 | TripIt calendar feed (`.ics` URL) | Planned | Every reservation as a calendar event, text only | Last 90 days plus the future | Refreshed on each poll (daily) | Copy the feed URL from TripIt settings; official and self-service | The `.ics` importer plus a daily poller |
 | TripIt per-trip export (`.ics` file) | Planned | One trip's reservations as events | Any single trip | One-off | Website only, one trip at a time, "Export trip to calendar" | The `.ics` importer |
 | Any `.ics` file or feed | Planned | Calendar events | Whatever the calendar holds | One-off (file) or polled (URL) | Export or subscription URL from any calendar app | The `.ics` importer |
@@ -37,7 +37,7 @@ means the source has it as data.
 | Notes | Model | `notes`, `restrictions`, `text` | `DESCRIPTION` | `description` | Typed |
 | Travelers and guests | No | `Traveler[]`, `Guest[]`, `Driver`, `ReservationHolder` | Sometimes in the description | Attendees | No |
 | Trip grouping | By dates, two-day gap | TripIt's own trips: `TripData` with name, start and end | By dates | By dates | Chosen |
-| Idempotency key | Gmail message id | None in the file: derive from trip name, dates and leg details | `UID` | Event id | Segment id |
+| Idempotency key | Gmail message id | None in the file: derived from trip name, dates and leg details | `UID` | Event id | Segment id |
 | Extra data | | `LoyaltyPrograms` (balances, status), `TravelerProfile` (documents): seeds for the loyalty and passport features | | | |
 
 ## Notes per source
@@ -49,12 +49,14 @@ means the source has it as data.
   Gmail, since TripIt only ever parsed those same emails.
 - **TripIt JSON** is the richest structured source and the hardest to obtain: there
   is no export button, the file comes from customer service on request. Reservation
-  kinds are implied by fields, not declared, so the mapper needs a fallback for
-  objects it cannot classify (a quarter of a real export: notes, and reservations
-  with empty `Segment`). Trip objects carry no confirmation numbers, so
-  deduplicating against Gmail imports goes by type, dates and route. `UnfiledItems`
-  go into a holding trip. `TripData` grouping should be kept rather than
-  re-derived from dates.
+  kinds are implied by fields, not declared, so objects the mapper cannot classify
+  (a quarter of a real export: notes, and reservations with empty `Segment`) are
+  listed as not imported rather than guessed at. Trip objects carry no
+  confirmation numbers, so deduplicating against Gmail imports goes by type, time
+  and route (`sameBooking`). `UnfiledItems` go into a holding trip. `TripData`
+  grouping is kept rather than re-derived from dates, except that a TripIt trip
+  overlapping one from another source joins it. Travelers, `LoyaltyPrograms` and
+  `TravelerProfile` are not imported yet.
 - **TripIt feed** is official and self-service but a rolling window: 90 days back
   plus future trips. Good for keeping a TripIt account in sync during a migration,
   not for history.
@@ -75,7 +77,6 @@ means the source has it as data.
 
 ## Order of work
 
-Deploy and run on real mail first (`TODO.md`). Then the generic importer with
-`.ics` files and the TripIt JSON upload, since one refactor serves both; then the
-feed poller and the uncapped backfill; Google Calendar and forward-to-import after
+Deploy and run on real mail first (`TODO.md`). The generic importer and the
+TripIt JSON upload are built; `.ics` files next, then the feed poller and the uncapped backfill; Google Calendar and forward-to-import after
 that, as real users ask for them.

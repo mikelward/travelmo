@@ -1,4 +1,5 @@
 import type { User } from "firebase/auth";
+import type { TripItResult } from "./tripit";
 
 export type BackfillResult = {
   candidates: number;
@@ -32,4 +33,5 @@ export const api = {
   disconnectGmail: (user: User) => post<void>(user, "/gmail/disconnect"),
   backfill: (user: User, max?: number) => post<BackfillResult>(user, "/gmail/backfill", max ? { max } : {}),
   reimport: (user: User, messageId: string) => post<{ outcome: string }>(user, "/gmail/reimport", { messageId }),
+  importTripIt: (user: User, exported: unknown) => post<TripItResult>(user, "/import/tripit", { export: exported }),
 };

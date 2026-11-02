@@ -3,7 +3,8 @@
 Your trips in one place, imported from your inbox. A TripIt-style planner:
 connect Gmail, and booking confirmations become trips with flights, trains,
 stays and rentals, grouped into now, upcoming and past. Share a trip with a
-partner by email.
+partner by email. A TripIt history comes in from the JSON export TripIt
+support sends on request.
 
 `SPEC.md` has the architecture and the reasoning behind it; `IMPORT.md` compares
 the ways trips can come in, built and planned.
@@ -12,8 +13,8 @@ the ways trips can come in, built and planned.
 
 ```
 apps/web        Next.js app (Firebase Auth + Firestore, PWA) on Firebase App Hosting
-apps/parser     Cloud Run worker: Gmail OAuth, Pub/Sub push, pre-filter, Gemini extraction
-packages/core   Shared zod schemas, Firestore paths, trip grouping, formatting, airport zones
+apps/parser     Cloud Run worker: Gmail OAuth, Pub/Sub push, pre-filter, Gemini extraction, TripIt import
+packages/core   Shared zod schemas, Firestore paths, trip grouping, formatting, airport zones, TripIt mapping
 packages/rules  Firestore security-rules tests (run against the emulator)
 firestore.rules Who may read and write what
 deploy/         gcloud scripts for the Pub/Sub subscription and the alerting policies

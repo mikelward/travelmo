@@ -48,26 +48,13 @@
       `importMessage` so any source hands over candidate text or a ready
       `ExtractedBooking` plus a stable source id for idempotency, and the
       same trip assignment and parsed-message record apply.
-  - [ ] TripIt JSON export (what customer service sends on request). Shape:
-        `Trips[]` of `TripData {display_name, start_date, end_date,
-        is_private}` and `Objects[]`; an object's kind is implied by its
-        fields, not declared: air has `Segment[]` with
-        `marketing_airline_code`, `marketing_flight_number`,
-        `start_airport_code`/`end_airport_code`, city and country, seats,
-        terminals; rail has `train_number` and station names; lodging has
-        `room_type`/`number_rooms`; car has `car_type` and `Driver`;
-        restaurant has `cuisine`/`number_patrons`; activity has `DateTime`
-        and `detail_type_code`; notes have `text`. Every `DateTime` carries
-        `date`, `time`, `timezone` (IANA) and `utc_offset`, which map
-        straight onto our instants; `Address.address` is a single string;
-        `booking_site_name` and `supplier_name` give the provider. Trip
-        objects carry no confirmation numbers (only `UnfiledItems` do), so
-        deduplicate against Gmail imports by type, dates and route rather
-        than by reference. Also import `UnfiledItems` into a holding trip,
-        and keep TripIt's trip grouping instead of re-grouping by dates.
-        `LoyaltyPrograms` and `TravelerProfile` are the later loyalty and
-        passport features' seed data. Upload from Settings, dry-run summary
-        first, then import; mark segments `source: "tripit"`.
+  - [x] Generalize the pipeline (`fileBooking`): duplicate check across
+        sources, trip assignment, segment ids and the parsed-message record.
+  - [x] TripIt JSON export: upload from Settings, dry-run summary in the
+        browser, then import; TripIt's trips kept, unfiled items in a
+        holding trip, `source: "tripit"`.
+  - [ ] TripIt travelers, `LoyaltyPrograms` and `TravelerProfile`: seed data
+        for the later loyalty and passport features; not imported yet.
   - [ ] `.ics` files and feeds: per-trip TripIt exports, calendar exports,
         and a subscribed URL polled daily (the TripIt feed covers the last
         90 days and the future). `UID` is the source id; event text goes
@@ -77,6 +64,18 @@
   - [ ] Backfill without the three-year cap, batched with a cursor, so a
         mailbox's whole history comes in.
   - [ ] Forward-to-import address for people without Gmail.
+- [ ] Duplicate matching is greedy, item by item: an unconfirmed TripIt
+      room can take the only existing booking a later, confirmed one would
+      have matched by reference, leaving a visible extra room (never a lost
+      one). Reserving exact-reference matches first, or matching the whole
+      export at once, fixes it; moot if suspected duplicates are marked
+      rather than dropped (see *Decisions needing review*).
+- [ ] One-to-one matching holds within one upload, not across two
+      uploads of the same export running at once (each keeps its own
+      `consumed` set), which can drop a room. Settings disables Import while
+      one runs, so it takes two tabs or a scripted client. Serialize TripIt
+      uploads per user (a lease in `users/{uid}/private`) if the dropping
+      design stays.
 - [ ] Android mockups, round two: offline banner and page, interrupted
       deletion, loading and not-found states, the full dark set, and the
       future features from the brief (calendar, map, reports, loyalty,
@@ -130,3 +129,21 @@ Guesses made on autopilot; change any of them freely.
   offline end-to-end test guards. Firestore's persistent cache holds the
   data. The end-to-end tests moved from `next dev` to a production build, so
   CI builds the web app twice.
+- TripIt import: a TripIt trip overlapping a trip from another source joins
+  it rather than standing beside it, so Gmail and TripIt copies of one
+  journey make one trip; trips from TripIt never absorb each other by
+  overlap. The alternative was always keeping TripIt's grouping. Duplicate
+  detection (`sameBooking`) applies to Gmail too: two confirmation emails for
+  one flight now make one booking. Its identity evidence (confirmation
+  numbers, codes at both ends, or a shared distinctive name word other than
+  the city) leans toward keeping a duplicate over losing a booking. Notes, empty TripIt trips and unknown
+  objects are listed and skipped, not imported as "other"; a date-only
+  activity takes noon. The mapping follows the documented shape with
+  invented fixtures; it has not been run against a real export.
+- Duplicate detection drops a booking it judges already imported; eleven
+  review findings so far were cases where that lost or misfiled a real one.
+  The design alternative is to write every booking and mark suspected
+  duplicates for the user to merge or dismiss on the trip page, which loses
+  nothing but shows duplicates until reviewed. Kept the dropping design,
+  with stricter identity evidence and no deduplication within one TripIt
+  export; switching is the maintainer's call.

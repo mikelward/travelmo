@@ -62,3 +62,17 @@ describe("firestoreStore examples", () => {
     expect(examples.others).toEqual([{ subject: "c", vector: [1, 1] }]);
   });
 });
+
+describe("firestoreStore.withUserLock", () => {
+  it("lists a trip's segments inside the transaction, as duplicate detection needs", async () => {
+    const uid = unique();
+    const tripId = `t-${uid}`;
+    const now = at(0);
+    await store.withUserLock(uid, async (tx) => {
+      tx.createTrip({ id: tripId, title: "T", start: "2030-01-01", end: "2030-01-02", ownerUid: uid, sharedWith: [], createdAt: now, updatedAt: now });
+      tx.putSegment({ id: "s1", tripId, type: "other", title: "S", start: "2030-01-01T10:00:00+00:00", source: "tripit", gmailMessageIds: [], createdAt: now, updatedAt: now });
+    });
+    const listed = await store.withUserLock(uid, (tx) => tx.listSegments(tripId));
+    expect(listed).toMatchObject([{ id: "s1", source: "tripit" }]);
+  });
+});

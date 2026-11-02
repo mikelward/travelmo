@@ -33,14 +33,17 @@ viewer's zone. Trip bounds are calendar dates.
 - `trips/{tripId}/segments/{segmentId}` — `type` (flight, train, bus, ferry,
   lodging, car_rental, activity, other), `title, provider, confirmation,
   start, end, origin, destination, notes, source, gmailMessageIds[], sender`
-  (the booking email's domain). Imported segments use the id
-  `<gmailMessageId>-<index>` so a re-import overwrites rather than duplicates.
+  (the booking email's domain). `source` is `gmail`, `manual` or `tripit`.
+  Imported segments use the id `<source id>-<index>` (the Gmail message id,
+  or `tripit-<key>` for a TripIt trip) so a re-import overwrites rather than
+  duplicates.
 - `users/{uid}` — `email, displayName, photoURL, gmail {emailAddress,
   connectedAt, watchExpiration, historyId}`. `gmail` is server-written.
 - `users/{uid}/settings/patterns` — `allow[], deny[]` sender domains.
-- `users/{uid}/parsedMessages/{gmailMessageId}` — `outcome` (processing,
-  filtered, not_booking, imported, failed), `reason, from, subject,
-  segmentIds[], processedAt`. Claimed atomically as `processing` before any
+- `users/{uid}/parsedMessages/{sourceId}` — `outcome` (processing,
+  filtered, not_booking, imported, failed), `source` (absent for Gmail,
+  `tripit` otherwise), `reason, from, subject, segmentIds[], processedAt`,
+  one per Gmail message, TripIt trip or unfiled TripIt item. Claimed atomically as `processing` before any
   work, so a message delivered twice is imported once; a `processing` claim
   older than fifteen minutes is a dead worker's and may be taken over. Also
   the audit trail of what the LLM was shown, and the source of the review
@@ -191,6 +194,8 @@ Gmail ─watch─▶ Pub/Sub ─push(OIDC)─▶ parser /internal/pubsub/gmail
                                         │ yes, and save it as a booking
                                         ▼
                                transaction, serialized per user:
+                               drop bookings already on an overlapping
+                               trip (same type, time and route);
                                trip within 2 days of the booking's dates?
                                extend its bounds only : create one titled by
                                destination; write segments
@@ -225,6 +230,56 @@ allowed senders and emails the user asks for skip the comparison but are
 still learned from, so an "import anyway" on a wrongly filtered email
 teaches the filter. An embedding failure is logged and the email goes to
 the model.
+
+Everything below the model is source-agnostic (`fileBooking` in
+`apps/parser/src/importer.ts`): a source hands over bookings and a stable
+source id, and gets the same duplicate check, trip assignment, segment ids
+and parsed-message record. Duplicates are matched across sources, since a
+TripIt export has no confirmation numbers to match on (`sameBooking`): the
+same type, the same local start minute for journeys and activities or the
+same dates for stays and rentals, and then evidence of identity, since
+dropping a real booking loses it: equal confirmation numbers when both have
+one, otherwise agreeing codes at both ends of a journey, or a distinctive
+word shared by the two titles or place names other than their city and,
+unless it is all the name there is, their chain or provider. Known cities
+and countries that differ rule a match out. In doubt, both are kept. A TripIt export is checked only against
+other sources, since it is already one list: two alike reservations in it
+are two. Matching is one to one: an existing booking matched once, in
+the same email or the same export, stands in for no other, and each
+TripIt item's record keeps what it matched so a retried upload counts it. A booking that
+matches one already on an overlapping trip is left out and counted in the
+record's reason; when all of an email's bookings are, the email is still
+recorded as imported, with none. A booking part of which matched joins the
+trip of that match, and otherwise its whole range, new and old legs
+together, picks the trip.
+
+### TripIt export
+
+TripIt has no export button; its support sends a JSON file of the whole
+account on request. `packages/core/src/tripit.ts` maps it: reservation kinds
+are told apart by their fields (airline codes on legs make a flight, train
+numbers a train, a room type a stay, a car type a rental, a cuisine a
+restaurant booking, which becomes an activity), each flight or train leg is a
+segment, and TripIt's DateTimes (date, time, IANA zone, offset) become our
+instants directly. A stay with no times takes 15:00 and 11:00, anything else
+noon; a DateTime with neither an offset nor a known zone is not guessed at.
+Notes, empty trips, objects of no known kind and legs without a usable
+date (even when the rest of their reservation imports) are listed as not
+imported.
+The Settings page runs the same mapping in the browser to show what the file
+holds before anything is sent; `POST /import/tripit` then imports it.
+
+TripIt's grouping is kept: each TripIt trip becomes a trip with its name and
+dates, under an id derived from the user and the trip's content, unless a
+trip from another source already overlaps it, which it joins instead, so a
+journey imported from Gmail and from TripIt is one trip. Trips created from
+TripIt are never joined by overlap, so back-to-back TripIt trips stay apart.
+Items TripIt never filed into a trip go into one "Unfiled from TripIt" trip,
+which spans whatever years they do and so is never joined by date.
+Each TripIt trip and unfiled item is recorded under a key derived from its
+name, dates, legs and confirmation numbers (and, for unfiled items alike in
+every field, which copy it is), so uploading the same file again changes nothing, and
+one that failed is tried again.
 
 Backfill (`POST /gmail/backfill`) runs the same path over a Gmail search
 limited to the last three years and booking-like subjects, capped at 300
@@ -271,6 +326,7 @@ refused to any other until the first disconnects.
 | `POST /gmail/backfill` | Firebase ID token | Imports past bookings; returns counts per outcome |
 | `POST /gmail/reimport` | Firebase ID token | Imports one message again, skipping the pre-filter; returns its outcome |
 | `POST /gmail/disconnect` | Firebase ID token | Stops the watch, revokes the token, deletes the connection |
+| `POST /import/tripit` | Firebase ID token | Imports a TripIt JSON export (up to 20 MB); returns counts of trips, bookings, duplicates, items imported before, failures and items not importable |
 | `POST /internal/pubsub/gmail` | OIDC from `INTERNAL_CALLERS` | Pub/Sub push target |
 | `POST /internal/renew-watches` | OIDC from `INTERNAL_CALLERS` | Cloud Scheduler target |
 | `GET /healthz` | none | Liveness |
@@ -293,8 +349,6 @@ for the port), reports (days out of
 country, trips last year — via BigQuery export if Firestore aggregates get
 clumsy), country map, calendar view and export, check-in/out surfacing,
 ratings and favourites, itinerary ideas, loyalty balances, passport expiry
-and visa reminders, other mail providers and forward-to-import. Import
-sources beyond Gmail share the pipeline from the pre-filter down: a TripIt
-JSON export (trips with typed-by-shape reservation objects, dates with IANA
-zones and offsets), `.ics` files and subscribed feeds, and Google Calendar;
-`IMPORT.md` compares them and maps their fields.
+and visa reminders, other mail providers and forward-to-import. Further import
+sources share the pipeline: `.ics` files and subscribed feeds, and Google
+Calendar; `IMPORT.md` compares them and maps their fields.

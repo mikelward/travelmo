@@ -1,4 +1,4 @@
-import type { ExtractedBooking, ParsedMessage, Segment, Trip } from "@travelmo/core";
+import { parseTripItExport, type ExtractedBooking, type ParsedMessage, type Segment, type Trip } from "@travelmo/core";
 import type { EmailMessage } from "./gmail";
 import {
   claimLeaseMs,
@@ -6,6 +6,8 @@ import {
   reclaimable,
   importMessage,
   importMessages,
+  importTripIt,
+  tripItUnfiledTripId,
   tripTitle,
   type ImportDeps,
   type TripStore,
@@ -29,6 +31,7 @@ function memoryStore(): Memory {
   let ids = 0;
   const tx: TripTx = {
     listTrips: async () => [...trips.values()],
+    listSegments: async (tripId) => [...segments.values()].filter((s) => s.tripId === tripId),
     createTrip: (t) => {
       if (trips.has(t.id)) throw new Error(`trip ${t.id} exists`);
       trips.set(t.id, t);
@@ -62,6 +65,7 @@ function memoryStore(): Memory {
       return true;
     },
     setParsed: async (r) => void parsed.set(`${r.uid}/${r.messageId}`, r),
+    getParsed: async (uid, id) => parsed.get(`${uid}/${id}`),
     withUserLock: (uid, fn) => {
       const run = (locks.get(uid) ?? Promise.resolve()).then(() => fn(tx));
       locks.set(uid, run.catch(() => undefined));
@@ -236,6 +240,18 @@ describe("importMessage", () => {
     expect(store.segments.get("m2-0")?.tripId).toBe(trip.id);
   });
 
+  it("files a return leg with the trip of an outbound already imported, however far apart", async () => {
+    const store = memoryStore();
+    const outbound = flight.segments[0]!;
+    const returnLeg = { ...outbound, title: "FR 124 DUB to MAN", start: "2026-12-29T18:00:00+00:00", end: "2026-12-29T19:00:00+00:00", origin: outbound.destination, destination: outbound.origin };
+    await importMessage("u1", email({ id: "m1", subject: "Your Ryanair itinerary" }), deps(store, async () => flight));
+    const outcome = await importMessage("u1", email({ id: "m2", subject: "Your Ryanair itinerary (updated)" }), deps(store, async () => ({ isBooking: true, segments: [outbound, returnLeg!] })));
+    expect(outcome).toBe("imported");
+    expect(store.trips.size).toBe(1);
+    expect([...store.trips.values()][0]).toMatchObject({ start: "2026-12-15", end: "2026-12-29" });
+    expect(store.parsed.get("u1/m2")).toMatchObject({ segmentIds: ["m2-1"], reason: "1 already imported from elsewhere" });
+  });
+
   it("never attaches a booking to a trip that is being deleted", async () => {
     const store = memoryStore();
     await importMessage("u1", email(), deps(store, async () => lodging));
@@ -381,5 +397,224 @@ describe("tripTitle", () => {
     expect(tripTitle(lodging.segments)).toBe("Liverpool");
     expect(tripTitle([{ type: "activity", title: "Museum", start: "2026-01-01T10:00:00Z", destination: { name: "Tate" } }])).toBe("Tate");
     expect(tripTitle([{ type: "other", title: "Thing", start: "2026-01-01T10:00:00Z" }])).toBe("Thing");
+  });
+});
+
+// Invented data in the export's shape.
+const at = (date: string, time: string) => ({ date, time, timezone: "Europe/London", utc_offset: "+00:00" });
+const tripItFlight = (date: string, number: string, from: string, to: string) => ({
+  Segment: {
+    StartDateTime: at(date, "08:00:00"),
+    EndDateTime: at(date, "09:00:00"),
+    start_airport_code: from,
+    end_airport_code: to,
+    marketing_airline_code: "FR",
+    marketing_flight_number: number,
+  },
+});
+const tripItExport = (over: Record<string, unknown> = {}) =>
+  parseTripItExport({
+    Trips: [
+      { TripData: { display_name: "Dublin weekend", start_date: "2026-12-15", end_date: "2026-12-17" }, Objects: [tripItFlight("2026-12-15", "123", "MAN", "DUB"), tripItFlight("2026-12-17", "124", "DUB", "MAN")] },
+      { TripData: { display_name: "Cork", start_date: "2026-12-18", end_date: "2026-12-19" }, Objects: [tripItFlight("2026-12-18", "200", "MAN", "ORK")] },
+    ],
+    UnfiledItems: [{ supplier_name: "Example Cars", supplier_conf_num: "ABC123", car_type: "Compact", StartDateTime: at("2025-03-01", "10:00:00"), EndDateTime: at("2025-03-02", "10:00:00") }],
+    ...over,
+  });
+
+describe("importTripIt", () => {
+  it("keeps TripIt's trips and titles, even when they are back to back", async () => {
+    const store = memoryStore();
+    const counts = await importTripIt("u1", tripItExport(), deps(store, async () => lodging));
+    expect(counts).toEqual({ trips: 2, imported: 4, duplicates: 0, skipped: 0, failed: 0 });
+    const titles = [...store.trips.values()].map((t) => [t.title, t.start, t.end]);
+    expect(titles).toEqual([
+      ["Dublin weekend", "2026-12-15", "2026-12-17"],
+      ["Cork", "2026-12-18", "2026-12-19"],
+      ["Unfiled from TripIt", "2025-03-01", "2025-03-02"],
+    ]);
+    expect([...store.segments.values()].every((s) => s.source === "tripit" && s.gmailMessageIds.length === 0)).toBe(true);
+    expect(store.trips.get(tripItUnfiledTripId("u1"))).toBeDefined();
+    const record = [...store.parsed.values()].find((r) => r.subject === "Dublin weekend");
+    expect(record).toMatchObject({ source: "tripit", from: "TripIt", outcome: "imported", segmentIds: expect.any(Array) });
+  });
+
+  it("changes nothing when the same export is imported again", async () => {
+    const store = memoryStore();
+    await importTripIt("u1", tripItExport(), deps(store, async () => lodging));
+    const before = structuredClone([...store.segments.values()]);
+    const counts = await importTripIt("u1", tripItExport(), deps(store, async () => lodging));
+    expect(counts).toEqual({ trips: 0, imported: 0, duplicates: 0, skipped: 3, failed: 0 });
+    expect([...store.segments.values()]).toEqual(before);
+    expect(store.trips.size).toBe(3);
+  });
+
+  it("files a TripIt booking already imported from Gmail once, into the Gmail trip", async () => {
+    const store = memoryStore();
+    await importMessage("u1", email({ id: "m2", subject: "Your Ryanair itinerary" }), deps(store, async () => flight));
+    const gmailTrip = [...store.trips.values()][0]!;
+    const counts = await importTripIt("u1", tripItExport(), deps(store, async () => lodging));
+    expect(counts.duplicates).toBe(1);
+    // The return leg is new and joins the trip that already covers those dates.
+    expect([...store.segments.values()].filter((s) => s.tripId === gmailTrip.id).map((s) => s.source)).toEqual(["gmail", "tripit"]);
+    expect(store.trips.get(gmailTrip.id)).toMatchObject({ start: "2026-12-15", end: "2026-12-17" });
+    expect([...store.trips.values()].map((t) => t.title)).not.toContain("Dublin weekend");
+  });
+
+  it("widens a joined trip to the TripIt trip's own dates, so later bookings within them find it", async () => {
+    const store = memoryStore();
+    await importMessage("u1", email({ id: "m2", subject: "Your Ryanair itinerary" }), deps(store, async () => flight));
+    const gmailTrip = [...store.trips.values()][0]!;
+    const wide = tripItExport({
+      Trips: [{ TripData: { display_name: "Ireland", start_date: "2026-12-10", end_date: "2026-12-31" }, Objects: [tripItFlight("2026-12-15", "123", "MAN", "DUB"), tripItFlight("2026-12-17", "124", "DUB", "MAN")] }],
+      UnfiledItems: [],
+    });
+    await importTripIt("u1", wide, deps(store, async () => lodging));
+    expect(store.trips.get(gmailTrip.id)).toMatchObject({ start: "2026-12-10", end: "2026-12-31" });
+  });
+
+  it("skips a Gmail booking already imported from TripIt", async () => {
+    const store = memoryStore();
+    await importTripIt("u1", tripItExport(), deps(store, async () => lodging));
+    const segments = store.segments.size;
+    const outcome = await importMessage("u1", email({ id: "m2", subject: "Your Ryanair itinerary" }), deps(store, async () => flight));
+    expect(outcome).toBe("imported");
+    expect(store.segments.size).toBe(segments);
+    expect(store.parsed.get("u1/m2")).toMatchObject({ segmentIds: [], reason: "1 already imported from elsewhere" });
+  });
+
+  it("never files a later email into the unfiled holding trip by its dates", async () => {
+    const store = memoryStore();
+    const holding = tripItExport({
+      Trips: [],
+      UnfiledItems: [
+        { supplier_name: "Example Cars", car_type: "Compact", StartDateTime: at("2025-03-01", "10:00:00"), EndDateTime: at("2025-03-02", "10:00:00") },
+        { supplier_name: "Other Cars", car_type: "Van", StartDateTime: at("2027-03-01", "10:00:00"), EndDateTime: at("2027-03-02", "10:00:00") },
+      ],
+    });
+    await importTripIt("u1", holding, deps(store, async () => lodging));
+    expect(store.trips.get(tripItUnfiledTripId("u1"))).toMatchObject({ start: "2025-03-01", end: "2027-03-02" });
+    await importMessage("u1", email(), deps(store, async () => lodging));
+    expect(store.segments.get("m1-0")?.tripId).not.toBe(tripItUnfiledTripId("u1"));
+    expect(store.trips.size).toBe(2);
+  });
+
+  it("imports two unfiled rooms alike in every field as two bookings", async () => {
+    const store = memoryStore();
+    const room = { supplier_name: "Hotel Example", room_type: "Double", StartDateTime: at("2025-03-01", "15:00:00"), EndDateTime: at("2025-03-02", "11:00:00") };
+    const counts = await importTripIt("u1", tripItExport({ Trips: [], UnfiledItems: [room, room] }), deps(store, async () => lodging));
+    expect(counts).toMatchObject({ imported: 2, duplicates: 0 });
+    expect(store.segments.size).toBe(2);
+  });
+
+  it("lets one booking from Gmail stand in for only one of two alike TripIt rooms", async () => {
+    const store = memoryStore();
+    await importMessage("u1", email(), deps(store, async () => lodging));
+    const room = {
+      supplier_name: "Cove Liverpool",
+      room_type: "Double",
+      StartDateTime: { date: "2026-12-12", time: "15:00", timezone: "Europe/London", utc_offset: "+00:00" },
+      EndDateTime: { date: "2026-12-14", time: "11:00", timezone: "Europe/London", utc_offset: "+00:00" },
+    };
+    const counts = await importTripIt("u1", tripItExport({ Trips: [], UnfiledItems: [room, room] }), deps(store, async () => lodging));
+    expect(counts).toMatchObject({ imported: 1, duplicates: 1 });
+    expect([...store.segments.values()].filter((s) => s.type === "lodging")).toHaveLength(2);
+  });
+
+  it("keeps matching one to one when a partly failed upload is retried", async () => {
+    const store = memoryStore();
+    await importMessage("u1", email(), deps(store, async () => lodging));
+    const room = {
+      supplier_name: "Cove Liverpool",
+      room_type: "Double",
+      StartDateTime: { date: "2026-12-12", time: "15:00", timezone: "Europe/London", utc_offset: "+00:00" },
+      EndDateTime: { date: "2026-12-14", time: "11:00", timezone: "Europe/London", utc_offset: "+00:00" },
+    };
+    const file = tripItExport({ Trips: [], UnfiledItems: [room, room] });
+    let calls = 0;
+    const flaky: TripStore = {
+      ...store,
+      withUserLock: (uid, fn) => (++calls === 2 ? Promise.reject(new Error("contention")) : store.withUserLock(uid, fn)),
+    };
+    expect(await importTripIt("u1", file, deps(flaky, async () => lodging))).toMatchObject({ duplicates: 1, failed: 1 });
+    expect(await importTripIt("u1", file, deps(store, async () => lodging))).toMatchObject({ imported: 1, skipped: 1 });
+    expect([...store.segments.values()].filter((s) => s.type === "lodging")).toHaveLength(2);
+  });
+
+  it("keeps matching one to one when the item that failed came first", async () => {
+    const store = memoryStore();
+    await importMessage("u1", email(), deps(store, async () => lodging));
+    const room = {
+      supplier_name: "Cove Liverpool",
+      room_type: "Double",
+      StartDateTime: { date: "2026-12-12", time: "15:00", timezone: "Europe/London", utc_offset: "+00:00" },
+      EndDateTime: { date: "2026-12-14", time: "11:00", timezone: "Europe/London", utc_offset: "+00:00" },
+    };
+    const file = tripItExport({ Trips: [], UnfiledItems: [room, room] });
+    let calls = 0;
+    const flaky: TripStore = {
+      ...store,
+      withUserLock: (uid, fn) => (++calls === 1 ? Promise.reject(new Error("contention")) : store.withUserLock(uid, fn)),
+    };
+    expect(await importTripIt("u1", file, deps(flaky, async () => lodging))).toMatchObject({ duplicates: 1, failed: 1 });
+    expect(await importTripIt("u1", file, deps(store, async () => lodging))).toMatchObject({ imported: 1, skipped: 1 });
+    expect([...store.segments.values()].filter((s) => s.type === "lodging")).toHaveLength(2);
+  });
+
+  it("matches two alike TripIt rooms to two Gmail rooms one to one, adding none", async () => {
+    const store = memoryStore();
+    const gmailRoom = (confirmation: string) => ({ isBooking: true, segments: [{ ...lodging.segments[0]!, confirmation }] });
+    await importMessage("u1", email({ id: "r1" }), deps(store, async () => gmailRoom("AAA111")));
+    await importMessage("u1", email({ id: "r2" }), deps(store, async () => gmailRoom("BBB222")));
+    expect(store.segments.size).toBe(2);
+    const room = {
+      supplier_name: "Cove Liverpool",
+      room_type: "Double",
+      StartDateTime: { date: "2026-12-12", time: "15:00", timezone: "Europe/London", utc_offset: "+00:00" },
+      EndDateTime: { date: "2026-12-14", time: "11:00", timezone: "Europe/London", utc_offset: "+00:00" },
+    };
+    const counts = await importTripIt("u1", tripItExport({ Trips: [], UnfiledItems: [room, room] }), deps(store, async () => lodging));
+    expect(counts).toMatchObject({ imported: 0, duplicates: 2 });
+    expect(store.segments.size).toBe(2);
+  });
+
+  it("files a TripIt trip's new legs with the trip already holding its matched ones, not any overlapping trip", async () => {
+    const store = memoryStore();
+    const barcelona = { ...lodging.segments[0]!, title: "Hotel Barcelona", start: "2026-12-05T15:00:00+01:00", end: "2026-12-06T11:00:00+01:00", destination: { name: "Hotel Barcelona", city: "Barcelona" } };
+    await importMessage("u1", email({ id: "b1" }), deps(store, async () => ({ isBooking: true, segments: [barcelona] })));
+    await importMessage("u1", email({ id: "m2", subject: "Your Ryanair itinerary" }), deps(store, async () => flight));
+    const barcelonaTrip = store.segments.get("b1-0")!.tripId;
+    const dublinTrip = store.segments.get("m2-0")!.tripId;
+    expect(barcelonaTrip).not.toBe(dublinTrip);
+    const wide = tripItExport({
+      Trips: [{ TripData: { display_name: "Dublin", start_date: "2026-12-01", end_date: "2026-12-31" }, Objects: [tripItFlight("2026-12-15", "123", "MAN", "DUB"), tripItFlight("2026-12-20", "124", "DUB", "MAN")] }],
+      UnfiledItems: [],
+    });
+    await importTripIt("u1", wide, deps(store, async () => lodging));
+    const returnLeg = [...store.segments.values()].find((s) => s.title.startsWith("FR 124"))!;
+    expect(returnLeg.tripId).toBe(dublinTrip);
+  });
+
+  it("gives two users importing the same itinerary trips of their own", async () => {
+    const store = memoryStore();
+    await importTripIt("u1", tripItExport(), deps(store, async () => lodging));
+    await importTripIt("u2", tripItExport(), deps(store, async () => lodging));
+    expect(store.trips.size).toBe(6);
+    expect(new Set([...store.trips.values()].map((t) => t.ownerUid))).toEqual(new Set(["u1", "u2"]));
+  });
+
+  it("records a trip that could not be written as failed and goes on with the rest", async () => {
+    const store = memoryStore();
+    let calls = 0;
+    const flaky: TripStore = {
+      ...store,
+      withUserLock: (uid, fn) => (++calls === 1 ? Promise.reject(new Error("contention")) : store.withUserLock(uid, fn)),
+    };
+    const counts = await importTripIt("u1", tripItExport(), deps(flaky, async () => lodging));
+    expect(counts).toMatchObject({ trips: 1, failed: 1 });
+    expect([...store.parsed.values()].find((r) => r.subject === "Dublin weekend")).toMatchObject({ outcome: "failed", reason: "contention" });
+    const retry = await importTripIt("u1", tripItExport(), deps(store, async () => lodging));
+    expect(retry).toMatchObject({ trips: 1, skipped: 2, failed: 0 });
+    expect([...store.trips.values()].map((t) => t.title)).toContain("Dublin weekend");
   });
 });

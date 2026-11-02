@@ -1,4 +1,4 @@
-import { ParsedMessage, SenderPatterns, Trip, paths } from "@travelmo/core";
+import { ParsedMessage, Segment, SenderPatterns, Trip, paths } from "@travelmo/core";
 import type { Firestore } from "firebase-admin/firestore";
 import { claimable, reclaimable, type TripStore } from "./importer";
 import { Examples, addExample, emptyExamples } from "./similarity";
@@ -26,6 +26,10 @@ export function firestoreStore(db: Firestore): TripStore {
     reclaimMessage(uid, messageId, processedAt) {
       return claimWhen(uid, messageId, processedAt, (existing) => reclaimable(existing, processedAt));
     },
+    async getParsed(uid, messageId) {
+      const snap = await db.doc(paths.parsedMessage(uid, messageId)).get();
+      return snap.exists ? ParsedMessage.parse(snap.data()) : undefined;
+    },
     async setParsed(record) {
       await db.doc(paths.parsedMessage(record.uid, record.messageId)).set(record);
     },
@@ -39,6 +43,10 @@ export function firestoreStore(db: Firestore): TripStore {
           async listTrips() {
             const snap = await t.get(db.collection(paths.trips()).where("ownerUid", "==", uid));
             return snap.docs.map((d) => Trip.parse(d.data()));
+          },
+          async listSegments(tripId) {
+            const snap = await t.get(db.collection(paths.segments(tripId)));
+            return snap.docs.map((d) => Segment.parse(d.data()));
           },
           createTrip(trip) {
             t.create(db.doc(paths.trip(trip.id)), trip);
