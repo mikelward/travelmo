@@ -283,6 +283,129 @@ function feedHost(url: string): string {
   }
 }
 
+// Google Calendar: one consent, then the user ticks the calendars that hold
+// travel; those are read at once and every day after.
+function GoogleCalendarSection({ user }: { user: User }) {
+  const connection = useProfile(user.uid)?.googleCalendar;
+  const params = useSearchParams();
+  const router = useRouter();
+  const status = params.get("calendar");
+  const completion = params.get("state");
+  const [busy, setBusy] = useState(status === "pending");
+  const [draft, setDraft] = useState<Set<string>>();
+  const [notice, setNotice] = useState<string>();
+  const [error, setError] = useState<string | undefined>(() => {
+    if (status === "denied") return "Google Calendar access was not granted.";
+    if (status === "error") return "Connecting Google Calendar failed. Try again.";
+    return undefined;
+  });
+
+  const completed = useRef(false);
+  useEffect(() => {
+    if (status !== "pending" || !completion || completed.current) return;
+    completed.current = true;
+    api
+      .completeCalendar(user, completion)
+      .then(() => setNotice("Google Calendar connected. Choose the calendars that hold your travel."))
+      .catch((e: Error) => setError(e.message))
+      .finally(() => {
+        setBusy(false);
+        router.replace("/settings");
+      });
+  }, [status, completion, user, router]);
+
+  const run = async (action: () => Promise<void>) => {
+    setBusy(true);
+    setError(undefined);
+    setNotice(undefined);
+    try {
+      await action();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saved = new Set(connection?.calendars.filter((c) => c.selected).map((c) => c.id));
+  const chosen = draft ?? saved;
+  const changed = draft !== undefined && (draft.size !== saved.size || [...draft].some((id) => !saved.has(id)));
+  const toggle = (id: string) => {
+    const next = new Set(chosen);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setDraft(next);
+  };
+
+  return (
+    <section className="mt-10">
+      <h2 className="text-lg font-medium">Google Calendar</h2>
+      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+        Travelmo reads the calendars you choose every day, like a calendar feed, with read-only access. Events Gmail
+        added from your emails are skipped when Gmail is connected to the same account.
+      </p>
+      {!connection && (
+        <button
+          type="button"
+          disabled={busy}
+          className={`${buttonClass} mt-3`}
+          onClick={() =>
+            run(async () => {
+              const { url } = await api.connectCalendar(user);
+              window.location.assign(url);
+            })
+          }
+        >
+          Connect Google Calendar
+        </button>
+      )}
+      {connection && (
+        <>
+          <p className="mt-2 text-sm">
+            Connected as <span className="font-medium">{connection.emailAddress}</span>.
+          </p>
+          <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
+            {connection.calendars.map((cal) => (
+              <li key={cal.id} className="py-2 text-sm">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={chosen.has(cal.id)} disabled={busy} onChange={() => toggle(cal.id)} />
+                  <span className="font-medium">{cal.summary}</span>
+                </label>
+                {cal.selected && (cal.lastReadAt || cal.lastError) && (
+                  <p className={`ml-6 ${cal.lastError ? "text-red-600" : "text-zinc-600 dark:text-zinc-400"}`}>
+                    {cal.lastError ?? `Read ${cal.lastReadAt!.slice(0, 10)}${cal.lastResult ? ` · ${cal.lastResult}` : ""}`}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={busy || !changed}
+              className={buttonClass}
+              onClick={() =>
+                run(async () => {
+                  const { read } = await api.selectCalendars(user, [...chosen]);
+                  setDraft(undefined);
+                  setNotice(read ? "Saved; the newly chosen calendars were read." : "Saved.");
+                })
+              }
+            >
+              {busy && changed ? "Reading…" : "Save choice"}
+            </button>
+            <button type="button" disabled={busy} className={buttonClass} onClick={() => run(() => api.disconnectCalendar(user))}>
+              Disconnect
+            </button>
+          </div>
+        </>
+      )}
+      {notice && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{notice}</p>}
+      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+    </section>
+  );
+}
+
 function FeedsSection({ user }: { user: User }) {
   const feeds = useFeeds(user.uid);
   const [url, setUrl] = useState("");
@@ -517,6 +640,9 @@ export default function SettingsPage() {
           <TripItSection user={user} />
           <CalendarSection user={user} />
           <FeedsSection user={user} />
+          <Suspense fallback={null}>
+            <GoogleCalendarSection user={user} />
+          </Suspense>
           <PatternsSection user={user} />
           <ReviewSection user={user} />
         </>

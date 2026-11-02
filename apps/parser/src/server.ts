@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
 import { GoogleGenAI } from "@google/genai";
-import { NotACalendar, NotATripItExport, parseIcs, parseTripItExport, paths, type GmailState } from "@travelmo/core";
+import { NotACalendar, NotATripItExport, parseIcs, parseTripItExport, paths, type GmailState, type GoogleCalendarChoice } from "@travelmo/core";
 import { randomBytes } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -9,15 +9,23 @@ import { HTTPException } from "hono/http-exception";
 import {
   MailboxConflict,
   OtherMailboxConnected,
+  calendarUsers,
   createOAuthState,
+  loadCalendarState,
+  loadEventAliases,
   loadState,
   mailboxOwner,
+  removeCalendarState,
   removeConnection,
+  revocable,
+  saveCalendarState,
+  saveEventAliases,
   saveConnection,
   savePending,
   takeOAuthState,
   takePending,
   updateBackfill,
+  updateCalendars,
   updateHistoryId,
   updateWatch,
 } from "./connections";
@@ -45,6 +53,17 @@ import { firestoreStore } from "./store";
 import { FeedLimitReached, addFeed, feedFailure, firestoreFeeds, pollAllFeeds, type FeedIo } from "./feeds";
 import { fetchFeed } from "./safefetch";
 import { backfillBatch, backfillQuery, runBackfillBatch } from "./backfill";
+import {
+  calendarFor,
+  calendarScopes,
+  listCalendars,
+  listEvents,
+  mergeCalendarList,
+  readCalendar,
+  sameAccount,
+  withResults,
+  type CalendarIo,
+} from "./googleCalendar";
 
 const webOrigin = requireEnv("WEB_ORIGIN");
 const pubsubTopic = requireEnv("GMAIL_PUBSUB_TOPIC");
@@ -81,6 +100,7 @@ const app = new Hono<Env>();
 
 app.use("/gmail/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/import/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
+app.use("/calendar/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/feeds/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 
 app.get("/healthz", (c) => c.text("ok"));
@@ -115,6 +135,18 @@ async function requireInternalCaller(c: Context<Env>): Promise<void> {
   }
 }
 
+// Gives up a token we will not keep. Revoking it would withdraw the user's
+// whole grant (see `revocable`), so it is revoked only when nothing else of
+// theirs uses that Google account; otherwise it is just dropped.
+async function releaseToken(refreshToken: string, uid: string, emailAddress?: string): Promise<void> {
+  const connections = await Promise.all([loadState(db, uid), loadCalendarState(db, uid)]);
+  if (!revocable(refreshToken, emailAddress, connections)) {
+    log("INFO", "revoke_skipped_shared_grant", { uid });
+    return;
+  }
+  await revokeQuietly(refreshToken, uid);
+}
+
 async function revokeQuietly(refreshToken: string, uid: string): Promise<void> {
   try {
     await oauthClient(oauth).revokeToken(refreshToken);
@@ -142,33 +174,45 @@ app.post("/gmail/connect", async (c) => {
 app.get("/gmail/callback", async (c) => {
   const code = c.req.query("code");
   const nonce = c.req.query("state");
-  if (c.req.query("error")) return c.redirect(`${webOrigin}/settings?gmail=denied`);
+  // Gmail and Calendar consents share this callback; the state says which.
+  const state = nonce ? await takeOAuthState(db, nonce, Date.now()) : undefined;
+  const purpose = state?.purpose ?? "gmail";
+  if (c.req.query("error")) return c.redirect(`${webOrigin}/settings?${purpose}=denied`);
   if (!code || !nonce) throw new HTTPException(400, { message: "Missing code or state" });
-
-  const state = await takeOAuthState(db, nonce, Date.now());
   if (!state) throw new HTTPException(400, { message: "Unknown or expired state" });
 
   const { tokens } = await oauthClient(oauth).getToken(code);
   if (!tokens.refresh_token) {
-    log("ERROR", "no_refresh_token", { uid: state.uid });
-    return c.redirect(`${webOrigin}/settings?gmail=error`);
+    log("ERROR", "no_refresh_token", { uid: state.uid, purpose });
+    return c.redirect(`${webOrigin}/settings?${purpose}=error`);
   }
   const completion = randomBytes(24).toString("base64url");
-  await savePending(db, completion, { uid: state.uid, refreshToken: tokens.refresh_token, createdAt: new Date().toISOString() });
-  return c.redirect(`${webOrigin}/settings?gmail=pending&state=${completion}`);
+  await savePending(db, completion, { uid: state.uid, refreshToken: tokens.refresh_token, createdAt: new Date().toISOString(), purpose });
+  return c.redirect(`${webOrigin}/settings?${purpose}=pending&state=${completion}`);
 });
+
+// Redeems a parked consent for the signed-in user who started it, for the
+// purpose it was granted for.
+async function claimPending(uid: string, token: string, purpose: "gmail" | "calendar") {
+  const pending = await takePending(db, token, Date.now());
+  if (!pending) throw new HTTPException(400, { message: "Unknown or expired state" });
+  if (pending.uid !== uid) {
+    log("WARNING", "completion_uid_mismatch", { uid, initiator: pending.uid });
+    await releaseToken(pending.refreshToken, pending.uid);
+    throw new HTTPException(403, { message: "This connection was started by a different account" });
+  }
+  if ((pending.purpose ?? "gmail") !== purpose) {
+    await releaseToken(pending.refreshToken, uid);
+    throw new HTTPException(400, { message: "That consent was for something else" });
+  }
+  return pending;
+}
 
 app.post("/gmail/complete", async (c) => {
   const uid = await requireUser(c);
   const body = (await c.req.json().catch(() => ({}))) as { state?: string };
   if (!body.state) throw new HTTPException(400, { message: "Missing state" });
-  const pending = await takePending(db, body.state, Date.now());
-  if (!pending) throw new HTTPException(400, { message: "Unknown or expired state" });
-  if (pending.uid !== uid) {
-    log("WARNING", "completion_uid_mismatch", { uid, initiator: pending.uid });
-    await revokeQuietly(pending.refreshToken, uid);
-    throw new HTTPException(403, { message: "This connection was started by a different account" });
-  }
+  const pending = await claimPending(uid, body.state, "gmail");
 
   const gmail = gmailFor(oauth, pending.refreshToken);
   const profile = await currentHistoryId(gmail);
@@ -176,7 +220,7 @@ app.post("/gmail/complete", async (c) => {
   // ownership is settled: stopping it here would silence the real owner.
   const owner = await mailboxOwner(db, profile.emailAddress);
   if (owner !== undefined && owner !== uid) {
-    await revokeQuietly(pending.refreshToken, uid);
+    await releaseToken(pending.refreshToken, uid, profile.emailAddress);
     throw new HTTPException(409, { message: new MailboxConflict(profile.emailAddress).message });
   }
   // Connecting a different mailbox replaces the old one, watch and token included.
@@ -193,7 +237,7 @@ app.post("/gmail/complete", async (c) => {
     });
   } catch (error) {
     // The watch, if started, points at our own topic and is left alone.
-    await revokeQuietly(pending.refreshToken, uid);
+    await releaseToken(pending.refreshToken, uid, profile.emailAddress);
     if (error instanceof MailboxConflict || error instanceof OtherMailboxConnected) {
       throw new HTTPException(409, { message: error.message });
     }
@@ -209,7 +253,7 @@ async function disconnect(uid: string, state: GmailState): Promise<void> {
   } catch (error) {
     log("WARNING", "stop_watch_failed", { uid, ...errorFields(error) });
   }
-  await revokeQuietly(state.refreshToken, uid);
+  await releaseToken(state.refreshToken, uid, state.emailAddress);
   await removeConnection(db, uid, state.emailAddress);
 }
 
@@ -273,6 +317,107 @@ app.post("/gmail/reimport", async (c) => {
     throw new HTTPException(409, { message: "That email is already imported or being imported right now" });
   }
   return c.json({ outcome });
+});
+
+function calendarIo(uid: string, refreshToken: string, mailboxImported: boolean): CalendarIo {
+  const api = calendarFor(oauth, refreshToken);
+  return {
+    events: (id) => listEvents(api, id),
+    aliases: { load: (id) => loadEventAliases(db, uid, id), save: (id, aliases) => saveEventAliases(db, uid, id, aliases) },
+    mailboxImported,
+    deps,
+  };
+}
+
+// Reads the chosen calendars of one user and records how each went; only
+// those in `only` when given.
+async function readCalendars(uid: string, only?: ReadonlySet<string>): Promise<{ read: number; failed: number }> {
+  const state = await loadCalendarState(db, uid);
+  if (!state) return { read: 0, failed: 0 };
+  const io = calendarIo(uid, state.refreshToken, sameAccount((await loadState(db, uid))?.emailAddress, state.emailAddress));
+  const results: GoogleCalendarChoice[] = [];
+  for (const choice of state.calendars) {
+    if (!choice.selected || (only && !only.has(choice.id))) continue;
+    results.push(await readCalendar(uid, choice, io));
+  }
+  if (results.length && !(await updateCalendars(db, uid, state.emailAddress, (current) => withResults(current, results)))) {
+    log("WARNING", "calendar_read_for_disconnected_user", { uid });
+  }
+  return { read: results.length, failed: results.filter((r) => r.lastError).length };
+}
+
+app.post("/calendar/connect", async (c) => {
+  const uid = await requireUser(c);
+  const nonce = randomBytes(24).toString("base64url");
+  await createOAuthState(db, nonce, uid, new Date().toISOString(), "calendar");
+  const url = oauthClient(oauth).generateAuthUrl({ access_type: "offline", prompt: "consent", scope: calendarScopes, state: nonce });
+  return c.json({ url });
+});
+
+// Lists the account's calendars, none chosen yet: the user picks which hold
+// travel, so a busy work calendar is not read unasked.
+app.post("/calendar/complete", async (c) => {
+  const uid = await requireUser(c);
+  const body = (await c.req.json().catch(() => ({}))) as { state?: string };
+  if (!body.state) throw new HTTPException(400, { message: "Missing state" });
+  const pending = await claimPending(uid, body.state, "calendar");
+  let listed;
+  try {
+    listed = await listCalendars(calendarFor(oauth, pending.refreshToken));
+  } catch (error) {
+    await releaseToken(pending.refreshToken, uid);
+    throw error;
+  }
+  const emailAddress = listed.find((l) => l.primary)?.id ?? "Google Calendar";
+  const previous = await loadCalendarState(db, uid);
+  // Connecting again keeps the choices for the same account. The old token
+  // of the same account is only dropped: revoking it would revoke the grant
+  // the new token rests on. Another account's is revoked unless Gmail uses
+  // that account.
+  if (previous && previous.refreshToken !== pending.refreshToken && previous.emailAddress !== emailAddress) {
+    await releaseToken(previous.refreshToken, uid, previous.emailAddress);
+  }
+  const kept = previous?.emailAddress === emailAddress ? previous.calendars : [];
+  await saveCalendarState(db, uid, {
+    refreshToken: pending.refreshToken,
+    emailAddress,
+    connectedAt: new Date().toISOString(),
+    calendars: mergeCalendarList(kept, listed),
+  });
+  log("INFO", "google_calendar_connected", { uid, calendars: listed.length });
+  return c.json({ emailAddress, calendars: listed.length });
+});
+
+// Sets which calendars are read, then reads the newly chosen ones at once
+// so the user sees what they hold.
+app.post("/calendar/select", async (c) => {
+  const uid = await requireUser(c);
+  const body = (await c.req.json().catch(() => ({}))) as { ids?: unknown };
+  if (!Array.isArray(body.ids) || !body.ids.every((id) => typeof id === "string")) {
+    throw new HTTPException(400, { message: "Missing calendar ids" });
+  }
+  const chosen = new Set(body.ids as string[]);
+  const state = await loadCalendarState(db, uid);
+  if (!state) throw new HTTPException(409, { message: "Google Calendar not connected" });
+  const newly = new Set(state.calendars.filter((cal) => chosen.has(cal.id) && !cal.selected).map((cal) => cal.id));
+  const saved = await updateCalendars(db, uid, state.emailAddress, (current) =>
+    current.map((cal) => ({ ...cal, selected: chosen.has(cal.id) })),
+  );
+  if (!saved) throw new HTTPException(409, { message: "Google Calendar not connected" });
+  const result = newly.size ? await readCalendars(uid, newly) : { read: 0, failed: 0 };
+  log("INFO", "google_calendars_selected", { uid, selected: chosen.size, ...result });
+  return c.json(result);
+});
+
+// Stops reading Google Calendar and withdraws the token. Bookings stay.
+app.post("/calendar/disconnect", async (c) => {
+  const uid = await requireUser(c);
+  const state = await loadCalendarState(db, uid);
+  if (state) {
+    await releaseToken(state.refreshToken, uid, state.emailAddress);
+    await removeCalendarState(db, uid, state.calendars.map((cal) => cal.id));
+  }
+  return c.body(null, 204);
 });
 
 // A whole account's history is a few megabytes of JSON; well past that is
@@ -375,7 +520,34 @@ app.post("/internal/poll-feeds", async (c) => {
   await requireInternalCaller(c);
   const result = await pollAllFeeds(feedIo);
   log("INFO", "feeds_polled", result);
-  return c.json(result);
+  // Google calendars ride the same daily job: one user's failure is logged
+  // and the rest carry on.
+  const calendars = { users: 0, read: 0, failed: 0 };
+  for (const uid of await calendarUsers(db)) {
+    try {
+      const state = await loadCalendarState(db, uid);
+      if (state) {
+        // New calendars the user made since appear in the picker. If the
+        // list cannot be had, the reads below still run and record why
+        // each chosen calendar failed, where its owner sees it.
+        try {
+          const listed = await listCalendars(calendarFor(oauth, state.refreshToken));
+          await updateCalendars(db, uid, state.emailAddress, (current) => mergeCalendarList(current, listed));
+        } catch (error) {
+          log("WARNING", "google_calendar_list_failed", { uid, ...errorFields(error) });
+        }
+      }
+      const counts = await readCalendars(uid);
+      calendars.users += 1;
+      calendars.read += counts.read;
+      calendars.failed += counts.failed;
+    } catch (error) {
+      calendars.failed += 1;
+      log("ERROR", "google_calendar_poll_failed", { uid, ...errorFields(error) });
+    }
+  }
+  log("INFO", "google_calendars_polled", calendars);
+  return c.json({ ...result, calendars });
 });
 
 // A non-2xx response makes Pub/Sub redeliver; after the subscription's

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { owner, signIn } from "./helpers";
-import { clearData, seedFeed, seedGmail } from "./seed";
+import { clearData, seedFeed, seedGmail, seedGoogleCalendar } from "./seed";
 
 test.beforeEach(async () => {
   await clearData();
@@ -186,4 +186,43 @@ test("a batch with failed imports pauses the reading and says why", async ({ pag
   await expect(page.getByText("Reading paused: 3 emails in the last batch could not be imported.", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0);
   expect(requests).toBe(1);
+});
+
+test("Google Calendar finishes connecting on return from Google, apart from Gmail", async ({ page }) => {
+  await signIn(page, owner);
+  const calls: string[] = [];
+  await page.route("http://localhost:8080/*/complete", async (route) => {
+    calls.push(new URL(route.request().url()).pathname);
+    await route.fulfill({ json: { emailAddress: "traveler@example.com", calendars: 2 } });
+  });
+  await page.goto("/settings?calendar=pending&state=abc");
+  await expect(page.getByText("Google Calendar connected. Choose the calendars that hold your travel.")).toBeVisible();
+  expect(calls).toEqual(["/calendar/complete"]);
+});
+
+test("choosing Google calendars saves the choice and shows how each was read", async ({ page }) => {
+  const uid = await signIn(page, owner);
+  await seedGoogleCalendar(uid, {
+    emailAddress: "traveler@example.com",
+    connectedAt: "2026-11-01T00:00:00Z",
+    calendars: [
+      { id: "traveler@example.com", summary: "Personal", primary: true, selected: true, lastReadAt: "2026-11-02T04:43:00Z", lastResult: "2 imported" },
+      { id: "trips@example.com", summary: "Trips", selected: false },
+      { id: "work@example.com", summary: "Work", selected: false, lastError: "never shown: not chosen" },
+    ],
+  });
+  const sent: unknown[] = [];
+  await page.route("http://localhost:8080/calendar/select", async (route) => {
+    sent.push(route.request().postDataJSON());
+    await route.fulfill({ json: { read: 1, failed: 0 } });
+  });
+  await page.goto("/settings");
+  await expect(page.getByText("Read 2026-11-02 · 2 imported")).toBeVisible();
+  await expect(page.getByText("never shown")).toHaveCount(0);
+  const save = page.getByRole("button", { name: "Save choice" });
+  await expect(save).toBeDisabled();
+  await page.getByLabel("Trips").check();
+  await save.click();
+  await expect(page.getByText("Saved; the newly chosen calendars were read.")).toBeVisible();
+  expect(sent).toEqual([{ ids: ["traveler@example.com", "trips@example.com"] }]);
 });

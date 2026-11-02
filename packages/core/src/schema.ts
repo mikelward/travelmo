@@ -126,11 +126,39 @@ export const GmailConnection = z.object({
 });
 export type GmailConnection = z.infer<typeof GmailConnection>;
 
+// One calendar of a connected Google account: whether the user chose it, and
+// what its last daily read did.
+export const GoogleCalendarChoice = z.object({
+  id: z.string().min(1),
+  summary: z.string(),
+  primary: z.boolean().optional(),
+  selected: z.boolean(),
+  lastReadAt: isoDateTime.optional(),
+  lastResult: z.string().optional(),
+  lastError: z.string().optional(),
+});
+export type GoogleCalendarChoice = z.infer<typeof GoogleCalendarChoice>;
+
+// What the web client may see about a Google Calendar connection; the
+// refresh token stays in the server-only GoogleCalendarState document.
+export const GoogleCalendarConnection = z.object({
+  emailAddress: z.string(),
+  connectedAt: isoDateTime,
+  calendars: z.array(GoogleCalendarChoice),
+});
+export type GoogleCalendarConnection = z.infer<typeof GoogleCalendarConnection>;
+
+export const GoogleCalendarState = GoogleCalendarConnection.extend({
+  refreshToken: z.string().min(1),
+});
+export type GoogleCalendarState = z.infer<typeof GoogleCalendarState>;
+
 export const UserProfile = z.object({
   email: z.string().optional(),
   displayName: z.string().optional(),
   photoURL: z.string().optional(),
   gmail: GmailConnection.optional(),
+  googleCalendar: GoogleCalendarConnection.optional(),
 });
 export type UserProfile = z.infer<typeof UserProfile>;
 

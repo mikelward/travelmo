@@ -1,10 +1,18 @@
-import { paths, type GmailState } from "@travelmo/core";
+import { paths, type GmailState, type GoogleCalendarState } from "@travelmo/core";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import {
   MailboxConflict,
   OtherMailboxConnected,
+  calendarUsers,
   createOAuthState,
+  loadCalendarState,
+  loadEventAliases,
+  removeCalendarState,
+  revocable,
+  saveCalendarState,
+  saveEventAliases,
+  updateCalendars,
   oauthStateTtlMs,
   removeConnection,
   saveConnection,
@@ -145,5 +153,63 @@ describe("mailbox ownership", () => {
     expect((await db.doc(paths.gmailState(a)).get()).exists).toBe(false);
     expect((await db.doc(paths.user(a)).get()).data()?.gmail).toBeUndefined();
     expect(await accountOwner(email)).toBeUndefined();
+  });
+});
+
+describe("Google Calendar connection", () => {
+  const calendarState = (emailAddress: string): GoogleCalendarState => ({
+    refreshToken: "rt-cal",
+    emailAddress,
+    connectedAt: iso,
+    calendars: [{ id: "a", summary: "Travel", selected: false }],
+  });
+
+  it("keeps the token server-side and the calendars on the profile", async () => {
+    const uid = unique("cal");
+    await saveCalendarState(db, uid, calendarState("me@example.com"));
+    expect((await loadCalendarState(db, uid))?.refreshToken).toBe("rt-cal");
+    const profile = (await db.doc(paths.user(uid)).get()).data()?.googleCalendar;
+    expect(profile).toEqual({ emailAddress: "me@example.com", connectedAt: iso, calendars: [{ id: "a", summary: "Travel", selected: false }] });
+    expect(await calendarUsers(db)).toContain(uid);
+  });
+
+  it("changes the calendar list only while the same account is connected", async () => {
+    const uid = unique("cal");
+    await saveCalendarState(db, uid, calendarState("me@example.com"));
+    const chosen = await updateCalendars(db, uid, "me@example.com", (current) => current.map((c) => ({ ...c, selected: true })));
+    expect(chosen?.[0]?.selected).toBe(true);
+    expect((await db.doc(paths.user(uid)).get()).data()?.googleCalendar?.calendars?.[0]?.selected).toBe(true);
+    expect(await updateCalendars(db, uid, "other@example.com", () => [])).toBeUndefined();
+    await saveEventAliases(db, uid, "a", { e1: "uid@example.com" });
+    expect(await loadEventAliases(db, uid, "a")).toEqual({ e1: "uid@example.com" });
+    await removeCalendarState(db, uid, ["a"]);
+    expect(await loadEventAliases(db, uid, "a")).toEqual({});
+    expect(await updateCalendars(db, uid, "me@example.com", () => [])).toBeUndefined();
+    expect((await db.doc(paths.googleCalendarState(uid)).get()).exists).toBe(false);
+    expect((await db.doc(paths.user(uid)).get()).data()?.googleCalendar).toBeUndefined();
+    expect(await calendarUsers(db)).not.toContain(uid);
+  });
+
+  it("records what a consent was for", async () => {
+    const nonce = unique("nonce");
+    await createOAuthState(db, nonce, "u1", iso, "calendar");
+    expect((await takeOAuthState(db, nonce, now))?.purpose).toBe("calendar");
+  });
+});
+
+describe("revocable", () => {
+  const gmail = { refreshToken: "rt-gmail", emailAddress: "me@example.com" };
+  const calendar = { refreshToken: "rt-cal", emailAddress: "me@example.com" };
+
+  it("keeps a grant another connection of the same Google account rests on", () => {
+    expect(revocable("rt-cal", "me@example.com", [gmail, calendar])).toBe(false);
+    expect(revocable("rt-gmail", "me@example.com", [gmail, calendar])).toBe(false);
+  });
+
+  it("revokes when nothing else uses that account, or the account is unknown and nothing else is connected", () => {
+    expect(revocable("rt-cal", "me@example.com", [undefined, calendar])).toBe(true);
+    expect(revocable("rt-cal", "me@example.com", [{ refreshToken: "rt-gmail", emailAddress: "other@example.com" }, calendar])).toBe(true);
+    expect(revocable("rt-new", undefined, [undefined, undefined])).toBe(true);
+    expect(revocable("rt-new", undefined, [gmail, undefined])).toBe(false);
   });
 });

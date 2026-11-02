@@ -2,6 +2,10 @@ export const paths = {
   user: (uid: string) => `users/${uid}`,
   // Server-only: refresh tokens live here; rules deny every client read.
   gmailState: (uid: string) => `users/${uid}/private/gmail`,
+  googleCalendarState: (uid: string) => `users/${uid}/private/googleCalendar`,
+  // Per chosen calendar (by a hash of its id): Google event id → iCalendar
+  // UID, for events whose UID Google does not derive from their id.
+  googleCalendarAliases: (uid: string, calendarKey: string) => `users/${uid}/private/googleCalendarAliases-${calendarKey}`,
   importLock: (uid: string) => `users/${uid}/private/import`,
   // Embeddings of emails the model has judged, for the similarity pre-filter.
   examples: (uid: string) => `users/${uid}/private/examples`,
