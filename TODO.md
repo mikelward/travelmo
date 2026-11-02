@@ -67,7 +67,7 @@
   - [ ] A feed event whose details change after import (a new time) is not
         re-read: its record stands. Re-read events whose `LAST-MODIFIED` or
         `SEQUENCE` moved.
-  - [ ] Google Calendar through the existing OAuth flow with
+  - [x] Google Calendar through the existing OAuth flow with
         `calendar.readonly` and a calendar picker.
   - [x] Backfill without the three-year cap, batched with a cursor, so a
         mailbox's whole history comes in.
@@ -155,3 +155,9 @@ Guesses made on autopilot; change any of them freely.
   capped at 100, and the user uploads again to continue, rather than a
   background job. Calendar events teach the similarity filter alongside
   emails.
+- Google Calendar was built before forward-to-import, which needs a paid
+  inbound mail service. It is a separate consent with its own token rather
+  than an extra scope on Gmail's, so either disconnects alone; calendars
+  start unchosen (a busy work calendar costs model reads); it rides the
+  daily feed poll rather than a Calendar push watch or its own scheduler
+  job, so no redeploy of `deploy/scheduler.sh` is needed.

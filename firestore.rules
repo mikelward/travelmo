@@ -89,11 +89,12 @@ service cloud.firestore {
       function isSelf() {
         return signedIn() && request.auth.uid == uid;
       }
-      // `gmail` is written by the server; clients may not forge a connection.
+      // `gmail` and `googleCalendar` are written by the server; clients may
+      // not forge a connection.
       allow read: if isSelf();
-      allow create: if isSelf() && !request.resource.data.keys().hasAny(['gmail']);
+      allow create: if isSelf() && !request.resource.data.keys().hasAny(['gmail', 'googleCalendar']);
       allow update: if isSelf()
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['gmail']);
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['gmail', 'googleCalendar']);
 
       match /settings/{document} {
         allow read, write: if isSelf();

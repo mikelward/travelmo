@@ -16,7 +16,7 @@ is the roadmap in `TODO.md`. Every method ends in the same place: an
 | TripIt calendar feed (`.ics` URL) | Built | Every reservation as a calendar event, text only | Last 90 days plus the future | Refreshed on each poll (daily) | Copy the feed URL from TripIt settings; official and self-service | The `.ics` importer plus a daily poller |
 | TripIt per-trip export (`.ics` file) | Built | One trip's reservations as events | Any single trip | One-off | Website only, one trip at a time, "Export trip to calendar" | The `.ics` importer |
 | Any `.ics` file or feed | Built | Calendar events | Whatever the calendar holds | One-off (file) or polled (URL) | Export or subscription URL from any calendar app | The `.ics` importer |
-| Google Calendar | Planned | Events from chosen calendars | Unlimited | Polled or pushed (Calendar API watch) | One OAuth consent, calendar picker | The `calendar.readonly` scope added to the consent screen |
+| Google Calendar | Built | Events from chosen calendars | Unlimited | Read when chosen, then daily | One OAuth consent, calendar picker | The `calendar.readonly` scope on the consent screen (a sensitive scope: verification for public use) |
 | Forward-to-import address | Planned | Emails the user forwards | Anything the user still has | As forwarded | Forward a confirmation to an address | Inbound mail handling (a mail provider's inbound webhook or a dedicated mailbox) and sender verification |
 
 ## What each source gives per booking
@@ -67,11 +67,13 @@ means the source has it as data.
   it). Recurring (`RRULE`) and cancelled (`STATUS:CANCELLED`) events are skipped;
   a cancellation of an event already imported removes its booking unless the
   user edited it or another source was matched to it.
-- **Google Calendar** adds a second consent scope to the same Google account the
-  Gmail flow already uses and brings every calendar's noise with it, so the user
-  picks calendars and the pre-filter still applies. Travel events that came from
-  Gmail's own "events from Gmail" feature duplicate what the Gmail import already
-  sees; skip events whose source is Gmail when the mailbox is connected.
+- **Google Calendar** is a second consent, apart from Gmail's, and brings every
+  calendar's noise with it, so the user picks calendars (none at first) and the
+  pre-filter still applies. Events Gmail made from emails (`fromGmail`) are
+  skipped when Gmail is connected to the same account, since the email itself
+  is imported.
+  Events are keyed by their iCalendar UID, so a TripIt calendar subscribed in
+  Google and also added as a feed is read once.
 - **Forward-to-import** needs inbound mail: a provider webhook (a new paid
   dependency at volume) or a mailbox the parser polls, plus proof that the forwarder
   owns the Travelmo account (a per-user address or a verified sender). It is the
@@ -80,5 +82,5 @@ means the source has it as data.
 ## Order of work
 
 Deploy and run on real mail first (`TODO.md`). The generic importer, the
-TripIt JSON upload, `.ics` files and feeds, and the uncapped backfill are
-built; Google Calendar and forward-to-import come as real users ask for them.
+TripIt JSON upload, `.ics` files and feeds, the uncapped backfill and Google
+Calendar are built; forward-to-import comes as real users ask for it.

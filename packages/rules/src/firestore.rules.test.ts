@@ -190,6 +190,13 @@ describe("users", () => {
     await assertFails(setDoc(doc(as(stranger), paths.user(stranger.uid)), { gmail: { emailAddress: "forged@example.com" } }));
   });
 
+  it("a user may not forge a Google Calendar connection or read its token", async () => {
+    const forged = { emailAddress: "forged@example.com", connectedAt: "2026-11-01T00:00:00Z", calendars: [] };
+    await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { googleCalendar: forged }, { merge: true }));
+    await assertFails(setDoc(doc(as(stranger), paths.user(stranger.uid)), { googleCalendar: forged }));
+    await assertFails(getDoc(doc(as(owner), paths.googleCalendarState(owner.uid))));
+  });
+
   it("calendar feeds are readable by their owner only and written by the parser alone", async () => {
     const feed = { id: "f1", url: "https://www.example.com/feed/secret.ics", addedAt: "2026-11-01T00:00:00Z" };
     await env.withSecurityRulesDisabled(async (ctx) => {

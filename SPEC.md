@@ -44,9 +44,11 @@ viewer's zone. Trip bounds are calendar dates.
   or `tripit-<key>` for a TripIt trip) so a re-import overwrites rather than
   duplicates.
 - `users/{uid}` — `email, displayName, photoURL, gmail {emailAddress,
-  connectedAt, watchExpiration, historyId, backfill}`. `gmail` is
+  connectedAt, watchExpiration, historyId, backfill}, googleCalendar
+  {emailAddress, connectedAt, calendars[]}`. `gmail` and `googleCalendar` are
   server-written; `backfill` is how far a reading of the whole mailbox has
-  got (`cursor, scanned, imported, failed, done, updatedAt`).
+  got (`cursor, scanned, imported, failed, done, updatedAt`); each calendar
+  is `{id, summary, primary, selected, lastReadAt, lastResult, lastError}`.
 - `users/{uid}/settings/patterns` — `allow[], deny[]` sender domains.
 - `users/{uid}/feeds/{feedId}` — `url, label, addedAt, lastFetchedAt,
   lastResult, lastError`: subscribed calendar feeds. The owner reads them;
@@ -60,8 +62,10 @@ viewer's zone. Trip bounds are calendar dates.
   older than fifteen minutes is a dead worker's and may be taken over. Also
   the audit trail of what the LLM was shown, and the source of the review
   list in Settings.
-- `users/{uid}/private/gmail` — the refresh token and watch state. Server
-  only. `users/{uid}/private/import` is read and written by every import
+- `users/{uid}/private/gmail` — the refresh token and watch state;
+  `users/{uid}/private/googleCalendar` — the Calendar refresh token and the
+  calendar list, `googleCalendarAliases-<hash>` per calendar the event ids
+  of deleted events still need. Server only. `users/{uid}/private/import` is read and written by every import
   transaction, serializing trip assignment per user.
   `users/{uid}/private/examples` — `bookings[], others[]` of `{subject,
   vector}`, the embeddings the similarity pre-filter compares against.
@@ -334,6 +338,37 @@ otherwise reserved, connects to the address it checked so DNS cannot be
 switched in between, re-checks every redirect (three at most), and stops at
 15 seconds or 5 MB.
 
+### Google Calendar
+
+A second Google consent, `calendar.readonly`, separate from Gmail's: its own
+refresh token, its own disconnect, the same OAuth client and callback (the
+OAuth state records which consent it was, and the callback sends the browser
+back with `calendar=` rather than `gmail=`). Once connected, Settings lists
+the account's calendars, none chosen: the user ticks the ones that hold
+travel, which are read at once, and all chosen calendars are read daily with
+the feeds (`/internal/poll-feeds`), at most 100 model reads per calendar per
+day. The calendar list is refreshed on each poll, new calendars unchosen.
+
+Events go through the calendar-file path (`apps/parser/src/googleCalendar.ts`
+turns them into the same events a file gives): keyed by their iCalendar UID,
+so an event already read from a feed or a file is not read again; deleted
+events (read with `showDeleted`) remove their unedited, unmatched bookings;
+repeating events, out-of-office, focus-time, working-location and birthday
+events are skipped, and so are events Gmail made from emails when Gmail is
+connected to the same Google account (so its mailbox is the one imported). A timed event is given in its own zone when it names one, else
+the calendar's. A calendar named like TripIt is read as a travel calendar.
+Logs carry a hash of a calendar's id, which is often an email address. A
+failure is shown on that calendar in Settings; a withdrawn grant says to
+reconnect. Google may send a deleted event with its event id alone, so for
+events whose UID is not Google's own (`<id>@google.com`: invited, imported
+or subscribed ones) the id-to-UID mapping is kept per calendar in
+`users/{uid}/private/googleCalendarAliases-<hash>` while Google lists them.
+
+Revoking any one token withdraws the user's whole grant to the app, every
+scope included, so a token is revoked only when no other connection of the
+user rests on the same Google account; otherwise disconnecting just drops
+it, and the grant goes when the last connection on that account does.
+
 An event cancelled after it was imported, in a feed or a re-uploaded file,
 removes its booking, unless the user edited the booking or another email or
 import has since been matched to it; those stay. A feed that cannot be read
@@ -394,7 +429,11 @@ refused to any other until the first disconnects.
 | `POST /gmail/disconnect` | Firebase ID token | Stops the watch, revokes the token, deletes the connection |
 | `POST /feeds/add` | Firebase ID token | Subscribes to a calendar feed after checking its address and reading it once; returns counts as for `/import/ics` |
 | `POST /feeds/remove` | Firebase ID token | Stops polling a feed; its bookings stay |
-| `POST /internal/poll-feeds` | OIDC from `INTERNAL_CALLERS` | Cloud Scheduler target: reads every feed |
+| `POST /calendar/connect` | Firebase ID token | Returns the Google OAuth URL for `calendar.readonly`; the callback is `/gmail/callback` |
+| `POST /calendar/complete` | Firebase ID token | Redeems a Calendar consent for the user who started it; stores the token and the calendar list, none chosen |
+| `POST /calendar/select` | Firebase ID token | Sets the chosen calendars (`ids`) and reads the newly chosen ones; returns how many were read and failed |
+| `POST /calendar/disconnect` | Firebase ID token | Revokes the Calendar token and deletes the connection; bookings stay |
+| `POST /internal/poll-feeds` | OIDC from `INTERNAL_CALLERS` | Cloud Scheduler target: reads every feed and every chosen Google calendar |
 | `POST /import/ics` | Firebase ID token | Imports an `.ics` file's text (up to 10 MB), reading at most 100 events with the model; returns counts per outcome, repeating and cancelled events skipped, and events left for the next upload |
 | `POST /import/tripit` | Firebase ID token | Imports a TripIt JSON export (up to 20 MB); returns counts of trips, bookings, duplicates, items imported before, failures and items not importable |
 | `POST /internal/pubsub/gmail` | OIDC from `INTERNAL_CALLERS` | Pub/Sub push target |

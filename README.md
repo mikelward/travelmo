@@ -82,9 +82,12 @@ One Google Cloud project holds everything.
 1. **Firebase**: create the project, enable Google sign-in in Authentication,
    create a Firestore database, then `firebase deploy --only firestore` for
    the rules.
-2. **Gmail**: enable the Gmail API. Create an OAuth client (web application)
-   whose redirect URI is `https://<parser>/gmail/callback`. Create a service
-   account for Pub/Sub to push as (it needs no roles of its own).
+2. **Gmail and Calendar**: enable the Gmail API and the Google Calendar API.
+   Create an OAuth client (web application) whose redirect URI is
+   `https://<parser>/gmail/callback` (Calendar consent returns there too), and
+   add the `gmail.readonly` and `calendar.readonly` scopes to the consent
+   screen. Create a service account for Pub/Sub to push as (it needs no roles
+   of its own).
 3. **Parser** on Cloud Run, built from the repository root:
    `gcloud run deploy parser --source . --dockerfile apps/parser/Dockerfile`
    (or build the image and deploy it). Allow unauthenticated invocations —
