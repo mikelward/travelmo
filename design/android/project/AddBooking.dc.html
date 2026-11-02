@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Add a booking</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./styles/travelmo.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+a{color:#171717}a:hover{color:#171717}
+</style>
+</helmet>
+<div class="phone" data-theme="light" style="width: 412px; height: 915px">
+  <div class="status-bar"><span>9:30</span><span class="glyphs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 22h20V2L2 22z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6c3.3 0 6.3 1.3 8.5 3.4L22 7.9C19.3 5.5 15.8 4 12 4S4.7 5.5 2 7.9l1.5 1.5C5.7 7.3 8.7 6 12 6zm0 5c1.9 0 3.6.7 4.9 1.9l1.5-1.5C16.7 9.9 14.4 9 12 9s-4.7.9-6.4 2.4l1.5 1.5C8.4 11.7 10.1 11 12 11zm0 5c.8 0 1.6.3 2.1.9L12 19l-2.1-2.1c.5-.6 1.3-.9 2.1-.9z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h-2V1h-4v2H8v18h8V3z"/></svg></span></div>
+  <header class="app-bar dialog-bar">
+    <a class="icon-button" href="TripDetail.dc.html" aria-label="Cancel"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></a>
+    <div class="bar-title">Add a booking</div>
+    <a class="btn text" href="TripDetail.dc.html" style="margin-right: 8px">Add</a>
+  </header>
+  <main class="content">
+    <form class="form" onsubmit="return false">
+      <div class="field">
+        <span class="label">Type</span>
+        <a class="select" href="EditBooking.dc.html">Flight<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z"/></svg></a>
+      </div>
+      <div class="field">
+        <label for="title">Title</label>
+        <input class="input" id="title" type="text" placeholder="BA 117 LHR to JFK">
+      </div>
+      <div class="field">
+        <span class="label">Start (local time)</span>
+        <div class="when">
+          <input class="input" type="text" value="12/12/2026" aria-label="Start date">
+          <input class="input" type="text" value="09:00" aria-label="Start time">
+          <a class="select" href="AddBooking.dc.html" aria-label="Start time zone"><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Europe/London</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z"/></svg></a>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">End (local time)</span>
+        <div class="when">
+          <input class="input" type="text" placeholder="dd/mm/yyyy" aria-label="End date">
+          <input class="input" type="text" placeholder="--:--" aria-label="End time">
+          <a class="select" href="AddBooking.dc.html" aria-label="End time zone"><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Europe/London</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z"/></svg></a>
+        </div>
+      </div>
+      <div class="two">
+        <div class="field">
+          <span class="label">From</span>
+          <div class="pair">
+            <input class="input" type="text" placeholder="London Heathrow" aria-label="From">
+            <input class="input" type="text" placeholder="LHR" aria-label="From code" style="padding-left: 10px; padding-right: 10px">
+          </div>
+        </div>
+        <div class="field">
+          <span class="label">To</span>
+          <div class="pair">
+            <input class="input" type="text" placeholder="New York JFK" aria-label="To">
+            <input class="input" type="text" placeholder="JFK" aria-label="To code" style="padding-left: 10px; padding-right: 10px">
+          </div>
+        </div>
+      </div>
+      <div class="two">
+        <div class="field">
+          <label for="provider">Provider</label>
+          <input class="input" id="provider" type="text" placeholder="British Airways">
+        </div>
+        <div class="field">
+          <label for="confirmation">Confirmation</label>
+          <input class="input" id="confirmation" type="text" placeholder="ABC123">
+        </div>
+      </div>
+      <div class="field">
+        <label for="notes">Notes</label>
+        <textarea class="textarea" id="notes" rows="2" style="font-family: inherit; font-size: 16px"></textarea>
+      </div>
+      <p class="supporting" style="padding: 0">A known airport code in From or To sets that end's time zone. Date and time open the Material pickers.</p>
+    </form>
+  </main>
+  <div class="nav-handle"><span></span></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":412,"height":915}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

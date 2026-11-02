@@ -287,7 +287,9 @@ on GitHub-hosted runners.
 
 ## Later
 
-Native apps (React Native + Expo in `apps/mobile`), reports (days out of
+Native apps (React Native + Expo in `apps/mobile`; the Android screens are
+mocked up in `design/android/`, Material 3 with this palette, as the reference
+for the port), reports (days out of
 country, trips last year — via BigQuery export if Firestore aggregates get
 clumsy), country map, calendar view and export, check-in/out surfacing,
 ratings and favourites, itinerary ideas, loyalty balances, passport expiry

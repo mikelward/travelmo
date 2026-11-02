@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Trip detail, owner</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./styles/travelmo.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+a{color:#171717}a:hover{color:#171717}
+</style>
+</helmet>
+<div class="phone" data-theme="light" style="width: 412px; height: 915px">
+  <div class="status-bar"><span>9:30</span><span class="glyphs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 22h20V2L2 22z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6c3.3 0 6.3 1.3 8.5 3.4L22 7.9C19.3 5.5 15.8 4 12 4S4.7 5.5 2 7.9l1.5 1.5C5.7 7.3 8.7 6 12 6zm0 5c1.9 0 3.6.7 4.9 1.9l1.5-1.5C16.7 9.9 14.4 9 12 9s-4.7.9-6.4 2.4l1.5 1.5C8.4 11.7 10.1 11 12 11zm0 5c.8 0 1.6.3 2.1.9L12 19l-2.1-2.1c.5-.6 1.3-.9 2.1-.9z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h-2V1h-4v2H8v18h8V3z"/></svg></span></div>
+  <header class="app-bar medium">
+    <div class="bar-row">
+      <a class="icon-button" href="TripList.dc.html" aria-label="All trips"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg></a>
+      <span style="flex: 1"></span>
+      <a class="icon-button" href="TripDetail.dc.html" aria-label="Rename"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a>
+    </div>
+    <h1 class="headline" style="margin: 0">Liverpool</h1>
+    <p class="date-line">12–14 Dec 2026 · <a href="TripDetail.dc.html" style="text-decoration: underline; text-underline-offset: 2px">Fit dates to bookings (12–13 Dec 2026)</a></p>
+  </header>
+  <main class="content scrolled">
+    <h2 class="subheader list-subheader">Sat 12 Dec</h2>
+    <div class="booking">
+      <span class="overline kind">Train</span>
+      <div class="body">
+        <p class="title-medium">Avanti to Liverpool</p>
+        <p class="variant">EUS London Euston → LIV Liverpool Lime Street</p>
+        <p class="variant">09:07 – 11:25</p>
+        <p class="meta">Avanti West Coast · Ref ABC123</p>
+        <p class="meta">From avantiwestcoast.example · <a class="link" href="TripDetail.dc.html">Always import this sender</a></p>
+      </div>
+      <a class="icon-button trailing" href="BookingActions.dc.html" aria-label="Booking actions"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg></a>
+    </div>
+    <div class="booking">
+      <span class="overline kind">Stay</span>
+      <div class="body">
+        <p class="title-medium">Cove Liverpool</p>
+        <p class="variant">Check-in 15:00 · Check-out Sun 13 Dec 11:00</p>
+        <p class="meta">Cove · Ref CV-55120</p>
+        <p class="meta">Late check-in after 22:00: call reception</p>
+        <p class="meta">From cove.example</p>
+      </div>
+      <a class="icon-button trailing" href="BookingActions.dc.html" aria-label="Booking actions"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg></a>
+    </div>
+    <h2 class="subheader list-subheader">Sun 13 Dec</h2>
+    <div class="booking">
+      <span class="overline kind">Activity</span>
+      <div class="body">
+        <p class="title-medium">Anfield stadium tour</p>
+        <p class="variant">14:00 – 15:30</p>
+        <p class="meta">Liverpool FC · Ref LFC-4471</p>
+      </div>
+      <a class="icon-button trailing" href="BookingActions.dc.html" aria-label="Booking actions"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg></a>
+    </div>
+
+    <section class="section">
+      <h2 class="subheader" style="margin-bottom: 8px">Shared with</h2>
+      <div style="display: flex; align-items: center; justify-content: space-between; min-height: 48px">
+        <span class="body-large">partner@example.com</span>
+        <a class="btn text" href="TripDetail.dc.html">Remove</a>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px">
+        <input class="input" type="email" placeholder="partner@example.com" aria-label="Email address to share with">
+        <a class="btn outlined" href="TripDetail.dc.html">Share</a>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 class="subheader" style="margin-bottom: 8px">Merge into another trip</h2>
+      <p class="help">Moves every booking here into the other trip and deletes this one. Who it is shared with stays as the other trip has it.</p>
+      <div style="display: grid; gap: 12px">
+        <a class="select" href="TripDetail.dc.html"><span class="muted">Choose a trip…</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z"/></svg></a>
+        <span class="btn filled disabled" aria-disabled="true" style="justify-self: start">Merge into …</span>
+      </div>
+    </section>
+
+    <section class="section" style="padding-bottom: 32px">
+      <div style="border-top: 1px solid var(--outline-variant); padding-top: 24px">
+        <a class="btn text error" href="DeleteTrip.dc.html" style="margin-left: -12px">Delete this trip</a>
+      </div>
+    </section>
+  </main>
+  <a class="fab" href="AddBooking.dc.html"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>Add a booking</a>
+  <div class="nav-handle"><span></span></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":412,"height":915}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
