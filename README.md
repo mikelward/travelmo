@@ -3,7 +3,8 @@
 Your trips in one place, imported from your inbox. A TripIt-style planner:
 connect Gmail, and booking confirmations become trips with flights, trains,
 stays and rentals, grouped into now, upcoming and past. Share a trip with a
-partner by email. A TripIt history comes in from the JSON export TripIt
+partner by email. Reports count the days spent in each country and the trips
+each year, on a map of where you've been. A TripIt history comes in from the JSON export TripIt
 support sends on request.
 
 `SPEC.md` has the architecture and the reasoning behind it; `IMPORT.md` compares
@@ -14,7 +15,7 @@ the ways trips can come in, built and planned.
 ```
 apps/web        Next.js app (Firebase Auth + Firestore, PWA) on Firebase App Hosting
 apps/parser     Cloud Run worker: Gmail OAuth, Pub/Sub push, pre-filter, Gemini extraction, TripIt import
-packages/core   Shared zod schemas, Firestore paths, trip grouping, formatting, airport zones, TripIt mapping
+packages/core   Shared zod schemas, Firestore paths, trip grouping, formatting, airport tables, travel reports, TripIt mapping
 packages/rules  Firestore security-rules tests (run against the emulator)
 firestore.rules Who may read and write what
 deploy/         gcloud scripts for the Pub/Sub subscription and the alerting policies
@@ -41,9 +42,11 @@ pnpm --filter @travelmo/web exec playwright install chromium   # once
 pnpm --filter @travelmo/web test:e2e
 ```
 
-`pnpm --filter @travelmo/core airports` regenerates the airport-to-time-zone
-table from the OpenFlights data (ODbL) packaged in `airport-data`; the result
-is committed, so a normal build needs nothing.
+`pnpm --filter @travelmo/core airports` regenerates the airport tables (time
+zone, and country and coordinates) from the OpenFlights data (ODbL) packaged in
+`airport-data`, and `pnpm --filter @travelmo/web worldmap` the reports page's
+world map from Natural Earth (public domain) packaged in `world-atlas`; the
+results are committed, so a normal build needs nothing.
 
 The install icons are PNGs rendered from SVGs and committed; after changing
 `apps/web/src/app/icon.svg` or `apps/web/icons/*.svg`, rerun

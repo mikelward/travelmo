@@ -102,6 +102,38 @@ booking start still ahead, or the end of one under way (check-out, arrival,
 car return) — read from their segments with one listener each; past trips
 and further-off ones get no listener, to keep Firestore reads in check.
 
+## Reports
+
+`/reports` counts, from the trips the viewer can see (their own and those
+shared with them, each once), the trips begun each year, the days away, the
+days spent in each country, and draws a world map with those countries
+filled and the airports flown through marked. A year picker narrows the
+counts and the map to one year; the trips-per-year table always shows every
+year. Trips still ahead are not counted, and a trip under way counts up to
+today.
+
+There is no geocoding: a place's country is the one its booking names, or
+for a flight the country of its airport code (`packages/core/src/airportPlaces.json`,
+generated from the same OpenFlights data as the zone table, which also gives
+the airport's coordinates for the map). Station and ferry codes are never
+read as airport codes. Each day of a trip counts for every country the
+traveler was in that day: a booking's start and end say where they were,
+and between bookings they stay where the last one (in time, not by local
+date, which differ across the date line) left them. So a travel day
+counts for both ends of the journey, an overnight flight's departure day
+counts only where it left, and a day nothing places (before a trip's first
+booking, or after one whose destination has no country) counts for no
+country. Overlapping trips count a shared day once, and each airport is
+marked in the year the traveler was at it. The page says how many
+days and bookings it could not place, rather than leaving them out silently.
+
+The page reads every trip's bookings once when it opens (one query per trip,
+not a listener each) and computes everything in the browser
+(`packages/core/src/reports.ts`). The map, Natural Earth's 1:110m countries
+in the Equal Earth projection drawn to SVG paths by
+`apps/web/scripts/worldmap.mjs` (`apps/web/src/lib/worldMap.json`, 27 KB
+compressed), and the airport table load only on this page.
+
 ## Editing by hand
 
 The owner and anyone the trip is shared with can add, edit and delete
@@ -504,7 +536,8 @@ refused to any other until the first disconnects.
 
 Firebase Auth, Pub/Sub, Secret Manager and the Gmail API are free at this
 scale. App Hosting and Cloud Run bill per request and idle at zero. Firestore
-is the term that grows: one listener per trip list and per open trip. Gemini
+is the term that grows: one listener per trip list and per open trip, and
+one read of every booking each time the reports page opens. Gemini
 Flash-Lite costs a fraction of a cent per booking email, and an embedding
 of a few hundred tokens a hundredth of that; a hundred users importing
 fifty bookings a month is a few dollars. The rules tests and CI run
@@ -514,9 +547,8 @@ on GitHub-hosted runners.
 
 Native apps (React Native + Expo in `apps/mobile`; the Android screens are
 mocked up in `design/android/`, Material 3 with this palette, as the reference
-for the port), reports (days out of
-country, trips last year — via BigQuery export if Firestore aggregates get
-clumsy), country map, calendar view and export, check-in/out surfacing,
+for the port), city-level places on the map (it knows only airports and
+countries, with no geocoding), calendar view and export, check-in/out surfacing,
 ratings and favourites, itinerary ideas, loyalty balances and passport
 expiry and visa reminders (from the travel profile), other mail providers and forward-to-import. Further import
 sources share the pipeline: Google Calendar; `IMPORT.md` compares them and maps their fields.

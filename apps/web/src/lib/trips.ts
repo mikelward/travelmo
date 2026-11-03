@@ -5,6 +5,7 @@ import type { User } from "firebase/auth";
 import {
   collection,
   doc,
+  getDocs,
   limit,
   onSnapshot,
   orderBy,
@@ -112,6 +113,46 @@ export function useSegmentsOf(tripIds: readonly string[]): Record<string, Segmen
     const ids = key ? key.split("\n") : [];
     return Object.fromEntries(ids.flatMap((id) => (byTrip[id] ? [[id, byTrip[id]]] : [])));
   }, [byTrip, key]);
+}
+
+export type AllSegments = { byTrip: Record<string, Segment[]>; failed: string[] };
+
+// Every trip's segments, read once rather than listened to: the reports
+// page reads all of them, too many for a listener each. Undefined until
+// every read has finished; a read that failed is named, not left out.
+export function useAllSegments(tripIds: readonly string[] | undefined): AllSegments | undefined {
+  const [result, setResult] = useState<{ key: string; value: AllSegments }>();
+  const key = tripIds?.join("\n");
+  useEffect(() => {
+    if (key === undefined) return;
+    let current = true;
+    const ids = key ? key.split("\n") : [];
+    Promise.all(
+      ids.map((tripId) =>
+        getDocs(query(collection(firestore(), paths.segments(tripId)), orderBy("start"))).then(
+          (s) => ({ tripId, segments: parseDocs(Segment, s) }),
+          (error: unknown) => {
+            console.error(`Reading segments failed for ${tripId}`, error);
+            return { tripId, segments: undefined };
+          },
+        ),
+      ),
+    ).then((reads) => {
+      if (!current) return;
+      const byTrip: Record<string, Segment[]> = {};
+      const failed: string[] = [];
+      for (const { tripId, segments } of reads) {
+        if (segments) byTrip[tripId] = segments;
+        else failed.push(tripId);
+      }
+      setResult({ key, value: { byTrip, failed } });
+    });
+    return () => {
+      current = false;
+    };
+  }, [key]);
+  // A result for another set of trips is not shown for this one.
+  return result && result.key === key ? result.value : undefined;
 }
 
 // The current instant, refreshed on an interval so "next up" lines move on

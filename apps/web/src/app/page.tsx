@@ -5,13 +5,9 @@ import type { User } from "firebase/auth";
 import Link from "next/link";
 import { SignInGate } from "@/components/SignInGate";
 import { TripCard } from "@/components/TripCard";
+import { localToday } from "@/lib/dates";
 import { useSaveForOffline } from "@/lib/offline";
 import { useNow, useSegmentsOf, useTrips } from "@/lib/trips";
-
-function today(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-}
 
 // Trips whose "next up" line is worth a listener each: everything under way
 // and the few coming next.
@@ -51,7 +47,7 @@ function Section({
 function Trips({ user }: { user: User }) {
   useSaveForOffline();
   const trips = useTrips(user);
-  const groups = trips ? groupTrips(trips, today()) : undefined;
+  const groups = trips ? groupTrips(trips, localToday()) : undefined;
   const detailed = groups ? [...groups.current, ...groups.upcoming.slice(0, upcomingWithDetails)].map((t) => t.id) : [];
   const segmentsByTrip = useSegmentsOf(detailed);
   const now = useNow();

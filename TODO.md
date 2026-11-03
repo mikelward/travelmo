@@ -77,6 +77,10 @@
 - [x] One-to-one matching holds across TripIt uploads too: one runs at a
       time per user (a lease in `users/{uid}/private/upload-tripit`), and a
       second gets a 409.
+- [x] Reports: days in each country, trips per year, and a map of the
+      countries visited and airports flown through (`/reports`).
+- [ ] Let the booking form set a place's country, so a booking the reports
+      can't place can be fixed by hand.
 - [ ] Android mockups, round two: offline banner and page, interrupted
       deletion, loading and not-found states, the full dark set, and the
       future features from the brief (calendar, map, reports, loyalty,
@@ -168,3 +172,12 @@ Guesses made on autopilot; change any of them freely.
   kept as a labeled string, since TripIt's profile shapes are undocumented
   and no real export with them was available; titles are guesses. Documents
   are shown folded until opened.
+- Reports count every trip the viewer can see, shared ones included (a
+  partner's shared trip is usually one they were on too), and a travel day
+  for both countries, as day-counting rules for residence usually do. Home
+  days between trips aren't counted: Travelmo doesn't know where home is.
+- The reports page computes in the browser from one read of every booking,
+  not from a server-side aggregate or BigQuery export; fine for hundreds of
+  trips, and the first thing to change if it gets slow.
+- The map knows countries and airports only (no geocoding service, so no
+  cost or key); a hotel or station shows as its country being filled.
