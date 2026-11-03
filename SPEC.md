@@ -165,6 +165,16 @@ and `navigator.onLine`, so a page loaded while already offline shows it too.
 The worker registers only in production builds, where assets are hashed, so
 the end-to-end tests run against `next build && next start`.
 
+Installing: the manifest (`app/manifest.ts`) gives a standalone window, the
+SVG icon and PNGs at 192 and 512 px plus a maskable 512 px one for Android
+launchers; iOS takes `app/apple-icon.png` (180 px, full bleed) and the
+`appleWebApp` metadata, opening without Safari's bars. `scripts/icons.mjs`
+renders the PNGs from the SVGs in `apps/web/icons` with Playwright's
+Chromium; they are committed. Settings shows an Install button where the
+browser offers its install prompt (`beforeinstallprompt`), and on iPhone and
+iPad, where Safari has none, says how to add it to the Home Screen; neither
+shows once Travelmo runs installed.
+
 ## Access rules
 
 `firestore.rules`, tested in `packages/rules`:

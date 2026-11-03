@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Full bleed for launchers that cut their own shape; the mark sits in
+       the central 80% safe zone (a 409.6 px circle). -->
+  <rect width="512" height="512" fill="#171717"/>
+  <g transform="translate(256 256) scale(0.72) translate(-256 -272)">
+    <path d="M96 288 416 128 320 416 256 304Z" fill="none" stroke="#fff" stroke-width="28" stroke-linejoin="round"/>
+    <path d="M256 304 416 128" stroke="#fff" stroke-width="28" stroke-linecap="round"/>
+  </g>
+</svg>
