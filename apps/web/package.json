@@ -10,7 +10,8 @@
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "firebase emulators:exec --only firestore --project demo-travelmo --config ../../firebase.json 'vitest run'",
-    "test:e2e": "firebase emulators:exec --only auth,firestore --project demo-travelmo --config ../../firebase.json 'playwright test'"
+    "test:e2e": "firebase emulators:exec --only auth,firestore --project demo-travelmo --config ../../firebase.json 'playwright test'",
+    "worldmap": "node scripts/worldmap.mjs"
   },
   "dependencies": {
     "@travelmo/core": "workspace:*",
@@ -32,9 +33,12 @@
     "eslint-config-next": "16.4.3",
     "firebase-admin": "^14.5.0",
     "firebase-tools": "^15.34.2",
+    "i18n-iso-countries": "7.14.0",
     "serwist": "9.5.13",
     "tailwindcss": "^4",
+    "topojson-client": "3.1.0",
     "typescript": "^5",
-    "vitest": "^5.0.5"
+    "vitest": "^5.0.5",
+    "world-atlas": "2.0.2"
   }
 }

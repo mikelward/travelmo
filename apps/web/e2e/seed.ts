@@ -63,6 +63,48 @@ export async function seedFlight(tripId: string): Promise<Segment> {
   return flight;
 }
 
+// An invented past week in Lisbon: flights known only by their airport
+// codes, and a stay that names its country.
+export async function seedLisbonTrip(ownerUid: string, tripId: string): Promise<Trip> {
+  const at = "2025-05-01T00:00:00Z";
+  const trip: Trip = { id: tripId, title: "Lisbon", start: "2025-06-10", end: "2025-06-14", ownerUid, sharedWith: [], createdAt: at, updatedAt: at };
+  const base = { tripId, source: "manual" as const, gmailMessageIds: [], createdAt: at, updatedAt: at };
+  const segments: Segment[] = [
+    {
+      ...base,
+      id: `${tripId}-out`,
+      type: "flight",
+      title: "XX 1 LHR to LIS",
+      start: "2025-06-10T08:00:00+01:00",
+      end: "2025-06-10T10:45:00+01:00",
+      origin: { name: "Heathrow", code: "LHR" },
+      destination: { name: "Lisbon", code: "LIS" },
+    },
+    {
+      ...base,
+      id: `${tripId}-stay`,
+      type: "lodging",
+      title: "Example Guesthouse",
+      start: "2025-06-10T15:00:00+01:00",
+      end: "2025-06-14T11:00:00+01:00",
+      destination: { name: "Example Guesthouse", country: "PT" },
+    },
+    {
+      ...base,
+      id: `${tripId}-back`,
+      type: "flight",
+      title: "XX 2 LIS to LHR",
+      start: "2025-06-14T13:00:00+01:00",
+      end: "2025-06-14T15:40:00+01:00",
+      origin: { name: "Lisbon", code: "LIS" },
+      destination: { name: "Heathrow", code: "LHR" },
+    },
+  ];
+  await db.doc(paths.trip(tripId)).set(trip);
+  for (const segment of segments) await db.doc(paths.segment(tripId, segment.id)).set(segment);
+  return trip;
+}
+
 export async function seedFeed(uid: string, feed: CalendarFeed): Promise<void> {
   await db.doc(paths.feed(uid, feed.id)).set(feed);
 }

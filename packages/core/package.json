@@ -5,7 +5,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./airports": "./src/airports.ts"
+    "./airports": "./src/airports.ts",
+    "./airportPlaces": "./src/airportPlaces.ts",
+    "./projection": "./src/projection.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
