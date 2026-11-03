@@ -25,6 +25,23 @@ describe("previewTripIt", () => {
     );
   });
 
+  it("says what the travel profile gets from the file", () => {
+    const withProfile = JSON.stringify({
+      ...JSON.parse(file),
+      LoyaltyPrograms: [{ name: "Example Air Miles" }, { name: "Sample Hotels" }],
+      TravelerProfile: { first_name: "Ann", Passport: { number: "X1234567" } },
+    });
+    expect(previewTripIt(withProfile).text).toMatch(/ Your travel profile gets 2 profile and document entries, 2 loyalty programs\.$/);
+    expect(previewTripIt(withProfile).hasProfile).toBe(true);
+    expect(previewTripIt(file).hasProfile).toBe(false);
+  });
+
+  it("takes an export that holds only a profile, with nothing to file into trips", () => {
+    const only = previewTripIt(JSON.stringify({ LoyaltyPrograms: [{ name: "Example Air Miles" }] }));
+    expect(only.hasProfile).toBe(true);
+    expect(only.parsed.trips).toHaveLength(0);
+  });
+
   it("refuses a file that is not JSON or not an export", () => {
     expect(() => previewTripIt("not json")).toThrow(NotATripItExport);
     expect(() => previewTripIt("{}")).toThrow(NotATripItExport);
@@ -38,6 +55,9 @@ describe("describeTripItResult", () => {
     );
     expect(describeTripItResult({ trips: 0, imported: 0, duplicates: 1, skipped: 4, failed: 1, notImported: 0 })).toBe(
       "Imported 0 bookings into 0 new or existing trips; 1 booking was already there; 4 items were imported before; 1 item failed; try the upload again.",
+    );
+    expect(describeTripItResult({ trips: 0, imported: 0, duplicates: 0, skipped: 0, failed: 0, notImported: 0, loyaltyPrograms: 2 })).toBe(
+      "Imported 0 bookings into 0 new or existing trips; your travel profile was updated (see Profile).",
     );
   });
 });

@@ -1,6 +1,17 @@
 import { serve } from "@hono/node-server";
 import { GoogleGenAI } from "@google/genai";
-import { NotACalendar, NotATripItExport, parseIcs, parseTripItExport, paths, type GmailState, type GoogleCalendarChoice } from "@travelmo/core";
+import {
+  NotACalendar,
+  NotATripItExport,
+  extractTripItProfile,
+  isEmptyProfile,
+  parseIcs,
+  parseTripItExport,
+  paths,
+  type GmailState,
+  type GoogleCalendarChoice,
+  type ImportedProfile,
+} from "@travelmo/core";
 import { randomBytes } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -54,6 +65,7 @@ import { FeedLimitReached, addFeed, feedFailure, firestoreFeeds, pollAllFeeds, t
 import { fetchFeed } from "./safefetch";
 import { backfillBatch, backfillQuery, runBackfillBatch } from "./backfill";
 import { LeaseLost, UploadRunning, withUploadLease } from "./leases";
+import { saveImportedProfile } from "./travelProfile";
 import {
   calendarFor,
   calendarScopes,
@@ -440,8 +452,10 @@ app.post(
     const uid = await requireUser(c);
     const body = (await c.req.json().catch(() => undefined)) as { export?: unknown } | undefined;
     let parsed;
+    let profile: ImportedProfile;
     try {
       parsed = parseTripItExport(body?.export);
+      profile = extractTripItProfile(body?.export);
     } catch (error) {
       if (error instanceof NotATripItExport) throw new HTTPException(400, { message: error.message });
       throw error;
@@ -450,14 +464,27 @@ app.post(
     // across them too (leases.ts); a second gets a 409 to try again.
     let counts;
     try {
-      counts = await withUploadLease(db, uid, "tripit", randomBytes(12).toString("base64url"), (lease) =>
-        importTripIt(uid, parsed, deps, { beforeEach: () => lease.assertHeld() }),
-      );
+      counts = await withUploadLease(db, uid, "tripit", randomBytes(12).toString("base64url"), async (lease) => {
+        const imported = await importTripIt(uid, parsed, deps, { beforeEach: () => lease.assertHeld() });
+        // The traveler's own details ride the same upload (travelProfile.ts).
+        if (!isEmptyProfile(profile)) {
+          lease.assertHeld();
+          await saveImportedProfile(db, uid, (await auth.getUser(uid)).email, profile, new Date().toISOString());
+        }
+        return imported;
+      });
     } catch (error) {
       if (error instanceof UploadRunning || error instanceof LeaseLost) throw new HTTPException(409, { message: error.message });
       throw error;
     }
-    const result = { ...counts, notImported: parsed.skipped.length };
+    const result = {
+      ...counts,
+      notImported: parsed.skipped.length,
+      travelers: profile.travelers.length,
+      loyaltyPrograms: profile.loyalty.length,
+      documents: profile.documents.length,
+    };
+    // Counts only: the profile's contents never reach the logs.
     log("INFO", "tripit_import", { uid, ...result });
     return c.json(result);
   },

@@ -1,4 +1,4 @@
-import { paths, type CalendarFeed, type GmailConnection, type GoogleCalendarConnection, type Segment, type Trip } from "@travelmo/core";
+import { paths, type CalendarFeed, type GmailConnection, type GoogleCalendarConnection, type TravelProfile, type Segment, type Trip } from "@travelmo/core";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
@@ -74,6 +74,10 @@ export async function seedGmail(uid: string, gmail: GmailConnection): Promise<vo
 
 export async function seedGoogleCalendar(uid: string, googleCalendar: GoogleCalendarConnection): Promise<void> {
   await db.doc(paths.user(uid)).set({ googleCalendar }, { merge: true });
+}
+
+export async function seedTravelProfile(uid: string, profile: Omit<TravelProfile, "ownerUid">): Promise<void> {
+  await db.doc(paths.travelProfile(uid)).set({ ownerUid: uid, ...profile });
 }
 
 export async function clearData(): Promise<void> {

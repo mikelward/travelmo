@@ -301,8 +301,11 @@ function mapAll(objects: Obj[], skipped: TripItSkip[]): ExtractedSegment[][] {
 }
 
 export function parseTripItExport(json: unknown): TripItImport {
-  if (!isObj(json) || !("Trips" in json || "UnfiledItems" in json)) {
-    throw new NotATripItExport("This file is not a TripIt export: it has no Trips or UnfiledItems.");
+  // An export with no travel history can still carry the traveler's
+  // profile (travelProfile.ts), so either part makes it one.
+  const parts = ["Trips", "UnfiledItems", "TravelerProfile", "Profile", "LoyaltyPrograms", "PointsPrograms", "PointsProgram"];
+  if (!isObj(json) || !parts.some((part) => part in json)) {
+    throw new NotATripItExport("This file is not a TripIt export: it has no Trips, UnfiledItems, profile or loyalty programs.");
   }
   const skipped: TripItSkip[] = [];
   const trips: TripItTrip[] = [];

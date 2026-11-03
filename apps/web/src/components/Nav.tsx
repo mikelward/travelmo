@@ -13,6 +13,9 @@ export function Nav() {
         </Link>
         {user && (
           <div className="flex items-center gap-4 text-sm">
+            <Link href="/profile" className="hover:underline">
+              Profile
+            </Link>
             <Link href="/settings" className="hover:underline">
               Settings
             </Link>

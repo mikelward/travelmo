@@ -50,6 +50,10 @@ viewer's zone. Trip bounds are calendar dates.
   got (`cursor, scanned, imported, failed, done, updatedAt`); each calendar
   is `{id, summary, primary, selected, lastReadAt, lastResult, lastError}`.
 - `users/{uid}/settings/patterns` — `allow[], deny[]` sender domains.
+- `users/{uid}/travelProfile/main` — `ownerUid, ownerEmail, trustedEmails[],
+  travelers[], loyalty[], documents[], importedAt, updatedAt`: the traveler's
+  own details from a TripIt export, each entry a `{title, fields[{label,
+  value}]}`. The parser writes the sections; the owner sets `trustedEmails`.
 - `users/{uid}/feeds/{feedId}` — `url, label, addedAt, lastFetchedAt,
   lastResult, lastError`: subscribed calendar feeds. The owner reads them;
   the parser alone writes them.
@@ -177,6 +181,12 @@ the end-to-end tests run against `next build && next start`.
 - A user reads and edits their own profile except the `gmail` field, owns
   their sender patterns, can read but not write their parsed-message log,
   and can never read `private`.
+- A travel profile is readable by its owner and by any signed-in user whose
+  verified email is in its `trustedEmails` (a collection-group query on that
+  field lists the profiles shared with someone). Only the owner writes, and
+  only `trustedEmails` (at most 20) and `updatedAt`, or starts the document
+  with those and their own uid and email; the imported sections are the
+  parser's alone.
 - `gmailAccounts` and `oauthStates` are closed to clients.
 - The worker uses the Admin SDK and bypasses rules.
 
@@ -311,6 +321,23 @@ the same existing booking; the second is refused with a 409 to try again.
 An upload checks its lease before each item and stops if it was lost (a
 stalled worker whose lease another upload took over), keeping what it
 finished.
+
+The same upload brings in the traveler's own details
+(`packages/core/src/travelProfile.ts`): the export's `TravelerProfile`
+(documents such as passports, each nested record its own entry), its loyalty
+programs, and everyone named on its reservations (`Traveler`, `Guest`,
+`Driver`, `ReservationHolder`, once each by name). TripIt does not document
+these shapes, so every value is kept, labeled by the path it was found at,
+and only entry titles are guessed from the usual names. The profile is one
+document, so it is kept within a 700 KB budget, documents first, then loyalty
+programs, then travelers, and the preview says when something was left out;
+an export with a profile but no bookings can be imported for it alone. Each
+upload replaces
+these sections and leaves the owner's sharing list as it is; their contents
+never reach the logs, only counts. The Profile page shows them, documents
+folded until opened, and lets the owner name people they trust (a spouse,
+say) by email, who then see the whole profile, read-only, under "Shared with
+you" on their own Profile page.
 
 ### Calendar files
 
@@ -480,6 +507,6 @@ mocked up in `design/android/`, Material 3 with this palette, as the reference
 for the port), reports (days out of
 country, trips last year — via BigQuery export if Firestore aggregates get
 clumsy), country map, calendar view and export, check-in/out surfacing,
-ratings and favourites, itinerary ideas, loyalty balances, passport expiry
-and visa reminders, other mail providers and forward-to-import. Further import
+ratings and favourites, itinerary ideas, loyalty balances and passport
+expiry and visa reminders (from the travel profile), other mail providers and forward-to-import. Further import
 sources share the pipeline: Google Calendar; `IMPORT.md` compares them and maps their fields.

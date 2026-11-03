@@ -8,3 +8,4 @@ export * from "./tripit";
 export * from "./hash";
 export * from "./ics";
 export * from "./sources";
+export * from "./travelProfile";

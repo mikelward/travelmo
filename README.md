@@ -81,7 +81,8 @@ One Google Cloud project holds everything.
 
 1. **Firebase**: create the project, enable Google sign-in in Authentication,
    create a Firestore database, then `firebase deploy --only firestore` for
-   the rules.
+   the rules and indexes (the shared travel profiles need a collection-group
+   index on `trustedEmails`).
 2. **Gmail and Calendar**: enable the Gmail API and the Google Calendar API.
    Create an OAuth client (web application) whose redirect URI is
    `https://<parser>/gmail/callback` (Calendar consent returns there too), and

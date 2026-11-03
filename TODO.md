@@ -56,8 +56,8 @@
   - [x] Keep dropping duplicates (maintainer, 2026-11-02), but list every
         source of a booking on the trip page, emails linked to Gmail, so a
         false match or a missed detail is one click away.
-  - [ ] TripIt travelers, `LoyaltyPrograms` and `TravelerProfile`: seed data
-        for the later loyalty and passport features; not imported yet.
+  - [x] TripIt travelers, `LoyaltyPrograms` and `TravelerProfile` imported
+        into a travel profile the owner can share with people they trust.
   - [x] `.ics` files: per-trip TripIt exports and calendar exports, read
         like email, `UID` as the source id, recurring and cancelled events
         skipped, 100 model reads per upload.
@@ -161,3 +161,10 @@ Guesses made on autopilot; change any of them freely.
   call each, and the hash also covers Google Calendar. A change to an edited
   or matched booking leaves it as it is rather than replacing the user's
   version.
+- Travel profile sharing is one list of trusted people per account, by
+  verified email, who can read the whole profile, documents included, and
+  change nothing; not per document, and not linked to trip sharing. Each
+  TripIt upload replaces the imported sections wholesale. Every value is
+  kept as a labeled string, since TripIt's profile shapes are undocumented
+  and no real export with them was available; titles are guesses. Documents
+  are shown folded until opened.

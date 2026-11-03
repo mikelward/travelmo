@@ -5,7 +5,7 @@ import {
   type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
 import { paths, type Segment, type Trip } from "@travelmo/core";
-import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from "firebase/firestore";
+import { collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from "firebase/firestore";
 import { readFileSync } from "node:fs";
 
 let env: RulesTestEnvironment;
@@ -222,5 +222,42 @@ describe("server-only collections", () => {
     await assertFails(getDoc(doc(as(owner), paths.gmailAccount(owner.email))));
     await assertFails(setDoc(doc(as(owner), paths.oauthState("nonce")), { uid: owner.uid }));
     await assertFails(getDoc(doc(as(owner), paths.pendingConnection("token"))));
+  });
+});
+
+describe("travel profiles", () => {
+  const passport = { title: "Passport", fields: [{ label: "Number", value: "X1234567" }] };
+  const seed = async (trustedEmails: string[]) => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), paths.travelProfile(owner.uid)), { ownerUid: owner.uid, ownerEmail: owner.email, trustedEmails, documents: [passport] });
+    });
+  };
+  const collectionGroupOf = (db: ReturnType<typeof as>, email: string) =>
+    query(collectionGroup(db, "travelProfile"), where("trustedEmails", "array-contains", email));
+
+  it("is readable by its owner and the people they trust, by verified email, and nobody else", async () => {
+    await seed([partner.email]);
+    await assertSucceeds(getDoc(doc(as(owner), paths.travelProfile(owner.uid))));
+    await assertSucceeds(getDoc(doc(as(partner), paths.travelProfile(owner.uid))));
+    await assertFails(getDoc(doc(as(partner, false), paths.travelProfile(owner.uid))));
+    await assertFails(getDoc(doc(as(stranger), paths.travelProfile(owner.uid))));
+    await assertSucceeds(getDocs(collectionGroupOf(as(partner), partner.email)));
+    await assertFails(getDocs(collectionGroupOf(as(stranger), partner.email)));
+    // An address signed in with capitals still finds what was shared with it.
+    const mixed = { uid: partner.uid, email: "Partner@Example.com" };
+    await assertSucceeds(getDocs(collectionGroupOf(as(mixed), partner.email)));
+    await assertSucceeds(getDoc(doc(as(mixed), paths.travelProfile(owner.uid))));
+  });
+
+  it("lets the owner choose who to trust, and nobody write the imported details", async () => {
+    // Before any import, the owner can already start a profile to share.
+    await assertSucceeds(setDoc(doc(as(owner), paths.travelProfile(owner.uid)), { ownerUid: owner.uid, ownerEmail: owner.email, trustedEmails: [partner.email] }));
+    await assertFails(setDoc(doc(as(owner), paths.travelProfile(owner.uid)), { ownerUid: owner.uid, trustedEmails: [], documents: [passport] }));
+    await seed([]);
+    await assertSucceeds(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { trustedEmails: [partner.email], updatedAt: "2026-11-03T00:00:00Z" }));
+    await assertFails(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { documents: [] }));
+    await assertFails(updateDoc(doc(as(partner), paths.travelProfile(owner.uid)), { trustedEmails: [stranger.email] }));
+    await assertFails(setDoc(doc(as(stranger), paths.travelProfile(owner.uid)), { ownerUid: owner.uid, trustedEmails: [stranger.email] }));
+    await assertFails(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { trustedEmails: Array.from({ length: 21 }, (_, i) => `p${i}@example.com`) }));
   });
 });

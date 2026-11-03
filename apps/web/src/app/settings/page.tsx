@@ -245,7 +245,7 @@ function TripItSection({ user }: { user: User }) {
         const p = previewTripIt(text);
         return {
           text: p.text,
-          canImport: p.parsed.trips.length + p.parsed.unfiled.length > 0,
+          canImport: p.parsed.trips.length + p.parsed.unfiled.length > 0 || p.hasProfile,
           notImported: p.parsed.skipped,
           run: async () => describeTripItResult(await api.importTripIt(user, p.json)),
         };
