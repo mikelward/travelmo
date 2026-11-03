@@ -56,7 +56,9 @@ means the source has it as data.
   and route (`sameBooking`). `UnfiledItems` go into a holding trip. `TripData`
   grouping is kept rather than re-derived from dates, except that a TripIt trip
   overlapping one from another source joins it. Travelers, `LoyaltyPrograms` and
-  `TravelerProfile` are not imported yet.
+  `TravelerProfile` go into the travel profile, every value kept under a label
+  from its path, since TripIt does not document their shapes; the owner can
+  share that profile with people they trust.
 - **TripIt feed** is official and self-service but a rolling window: 90 days back
   plus future trips. Good for keeping a TripIt account in sync during a migration,
   not for history.

@@ -213,3 +213,27 @@ export const CalendarFeed = z.object({
   lastError: z.string().optional(),
 });
 export type CalendarFeed = z.infer<typeof CalendarFeed>;
+
+// A traveler's own details imported from elsewhere (TripIt's profile,
+// loyalty programs and the people on its reservations), kept as labeled
+// values so that nothing the source gave is dropped, whatever its shape.
+export const ProfileField = z.object({ label: z.string(), value: z.string() });
+export type ProfileField = z.infer<typeof ProfileField>;
+
+export const ProfileEntry = z.object({ title: z.string(), fields: z.array(ProfileField) });
+export type ProfileEntry = z.infer<typeof ProfileEntry>;
+
+// users/{uid}/travelProfile/main. The parser writes the imported sections;
+// the owner alone sets who else may read it (`trustedEmails`, lowercased
+// verified emails, such as a spouse's), and nobody else writes anything.
+export const TravelProfile = z.object({
+  ownerUid: z.string().min(1),
+  ownerEmail: z.string().optional(),
+  trustedEmails: z.array(z.string()).default([]),
+  travelers: z.array(ProfileEntry).default([]),
+  loyalty: z.array(ProfileEntry).default([]),
+  documents: z.array(ProfileEntry).default([]),
+  importedAt: isoDateTime.optional(),
+  updatedAt: isoDateTime.optional(),
+});
+export type TravelProfile = z.infer<typeof TravelProfile>;

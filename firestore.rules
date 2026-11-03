@@ -19,6 +19,15 @@ service cloud.firestore {
         && request.auth.token.email.lower() in trip.sharedWith;
     }
 
+    // Someone the owner of a travel profile trusts with it, by verified email.
+    function isTrusted(profile) {
+      return signedIn()
+        && request.auth.token.email != null
+        && request.auth.token.email_verified == true
+        && profile.get('trustedEmails', []) is list
+        && request.auth.token.email.lower() in profile.get('trustedEmails', []);
+    }
+
     function isDate(value) {
       return value is string && value.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}');
     }
@@ -96,6 +105,24 @@ service cloud.firestore {
       allow update: if isSelf()
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['gmail', 'googleCalendar']);
 
+      // The traveler's profile (documents, loyalty numbers): the parser writes
+      // what was imported; the owner alone chooses, by verified email, who
+      // else may read it, and nobody else writes anything.
+      match /travelProfile/{document} {
+        function trustedList(list) {
+          return list is list && list.size() <= 20;
+        }
+        allow read: if isSelf() || isTrusted(resource.data);
+        allow create: if isSelf() && document == 'main'
+          && request.resource.data.keys().hasOnly(['ownerUid', 'ownerEmail', 'trustedEmails', 'updatedAt'])
+          && request.resource.data.ownerUid == uid
+          && (!('ownerEmail' in request.resource.data) || request.resource.data.ownerEmail == request.auth.token.email.lower())
+          && trustedList(request.resource.data.trustedEmails);
+        allow update: if isSelf()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['trustedEmails', 'updatedAt'])
+          && trustedList(request.resource.data.trustedEmails);
+      }
+
       match /settings/{document} {
         allow read, write: if isSelf();
       }
@@ -112,6 +139,17 @@ service cloud.firestore {
       match /private/{document} {
         allow read, write: if false;
       }
+    }
+
+    // Lets someone list the profiles shared with them (a collection-group
+    // query on trustedEmails); each result is checked like a direct read.
+    // Queries are checked against their filter, so this rule names the
+    // field directly; the client asks with its own (lowercase) email.
+    match /{path=**}/travelProfile/{document} {
+      allow get: if isTrusted(resource.data);
+      allow list: if signedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in resource.data.trustedEmails;
     }
 
     match /gmailAccounts/{emailAddress} {
