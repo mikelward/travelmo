@@ -23,7 +23,7 @@
   "devDependencies": {
     "@types/html-to-text": "^9.0.4",
     "@types/node": "^22",
-    "esbuild": "^0.27.0",
+    "esbuild": "^0.28.1",
     "firebase-tools": "^15.34.2",
     "tsx": "^4.23.15",
     "typescript": "^5.9.0",
