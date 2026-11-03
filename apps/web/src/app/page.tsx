@@ -6,6 +6,8 @@ import Link from "next/link";
 import { SignInGate } from "@/components/SignInGate";
 import { TripCard } from "@/components/TripCard";
 import { localToday } from "@/lib/dates";
+import type { PersonWarning } from "@travelmo/core";
+import { usePeopleDocuments, useTripWarnings } from "@/lib/documents";
 import { useSaveForOffline } from "@/lib/offline";
 import { useNow, useSegmentsOf, useTrips } from "@/lib/trips";
 
@@ -19,12 +21,16 @@ function Section({
   uid,
   segmentsByTrip,
   now,
+  warnings,
+  today,
 }: {
   title: string;
   trips: Trip[];
   uid: string;
   segmentsByTrip: Record<string, Segment[]>;
   now: string;
+  warnings: Record<string, PersonWarning[]>;
+  today: string;
 }) {
   if (trips.length === 0) return null;
   return (
@@ -37,6 +43,7 @@ function Section({
             trip={trip}
             shared={trip.ownerUid !== uid}
             {...(segmentsByTrip[trip.id] ? { segments: segmentsByTrip[trip.id], now } : {})}
+            {...(warnings[trip.id] ? { warnings: warnings[trip.id], today } : {})}
           />
         ))}
       </div>
@@ -47,10 +54,13 @@ function Section({
 function Trips({ user }: { user: User }) {
   useSaveForOffline();
   const trips = useTrips(user);
-  const groups = trips ? groupTrips(trips, localToday()) : undefined;
+  const today = localToday();
+  const groups = trips ? groupTrips(trips, today) : undefined;
   const detailed = groups ? [...groups.current, ...groups.upcoming.slice(0, upcomingWithDetails)].map((t) => t.id) : [];
   const segmentsByTrip = useSegmentsOf(detailed);
   const now = useNow();
+  const people = usePeopleDocuments(user);
+  const warnings = useTripWarnings(people, trips ?? [], segmentsByTrip, today);
 
   if (!trips || !groups) return <p className="text-zinc-500">Loading trips…</p>;
   if (trips.length === 0) {
@@ -66,7 +76,7 @@ function Trips({ user }: { user: User }) {
       </div>
     );
   }
-  const sectionProps = { uid: user.uid, segmentsByTrip, now };
+  const sectionProps = { uid: user.uid, segmentsByTrip, now, warnings, today };
   return (
     <>
       <Section title="Now" trips={groups.current} {...sectionProps} />

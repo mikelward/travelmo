@@ -194,3 +194,22 @@ function distinct(trips: readonly TripWithSegments[]): TripWithSegments[] {
   const byId = new Map(trips.map((t) => [t.trip.id, t]));
   return [...byId.values()];
 }
+
+// The countries a trip's bookings are in, and whether every place with a
+// booking has one, for deciding whether the trip crosses a border.
+export function tripPlaces(segments: readonly ExtractedSegment[], lookup?: PlaceLookup): { countries: Set<string>; complete: boolean } {
+  const countries = new Set<string>();
+  let complete = segments.length > 0;
+  for (const s of segments) {
+    const places = [s.origin, s.destination].filter((p): p is Place => Boolean(p));
+    // A journey with an end missing went somewhere unknown; a stay or
+    // activity has one place.
+    if (!places.length || (transport.has(s.type) && places.length < 2)) complete = false;
+    for (const p of places) {
+      const c = placeCountry(p, s.type, lookup);
+      if (c) countries.add(c);
+      else complete = false;
+    }
+  }
+  return { countries, complete };
+}
