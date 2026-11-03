@@ -82,7 +82,7 @@
 - [x] Passport and visa reminders: a trip warns when a document in the
       travel profile expires before it ends, or a passport within six months
       after.
-- [ ] Calendar export: a subscribable .ics link for your trips.
+- [x] Calendar export: a subscribable .ics link for your trips (Settings).
 - [ ] Let the booking form set a place's country, optional and never asked
       for, so a booking the reports can't place can be fixed by hand.
 - [ ] Consider finding a place's country from its city name (a bundled
@@ -194,3 +194,10 @@ Guesses made on autopilot; change any of them freely.
   months is the margin for every passport, rather than a per-country table
   of entry rules; visas are checked only for lasting the trip. A shared
   profile's documents count on trips its owner is on.
+- The calendar export includes trips shared with the user, and only trips
+  ending within the last year (a calendar keeps what it already showed;
+  years of history would slow every refresh). Bookings carry their
+  confirmation numbers and notes, as TripIt's export does; the link is
+  the secret, so Settings warns, and replacing it kills the old one. It is
+  served by the parser, which already holds the Admin credential, rather
+  than by the web app, which holds none.

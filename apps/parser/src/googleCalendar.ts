@@ -1,4 +1,4 @@
-import { formatOffset, stableHash, type GoogleCalendarChoice, type IcsCalendar, type IcsEvent, type IcsTime } from "@travelmo/core";
+import { formatOffset, isExportedUid, stableHash, type GoogleCalendarChoice, type IcsCalendar, type IcsEvent, type IcsTime } from "@travelmo/core";
 import { google, type calendar_v3 } from "googleapis";
 import { describeFeedResult } from "./feeds";
 import { oauthClient, type OAuthConfig } from "./gmail";
@@ -162,6 +162,7 @@ export function toIcsEvent(
     ...(event.updated ? { stamp: event.updated } : {}),
     recurring,
     cancelled,
+    ...(isExportedUid(uid) ? { exported: true } : {}),
   };
 }
 

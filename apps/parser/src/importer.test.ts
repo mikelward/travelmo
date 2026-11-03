@@ -729,6 +729,14 @@ describe("importCalendar", () => {
     expect(extract).toHaveBeenCalledTimes(1);
   });
 
+  it("never reads Travelmo's own exported events back in", async () => {
+    const store = memoryStore();
+    const extract = vi.fn(async () => flight);
+    const calendar = ics("-//Example//EN", [vevent("segment-t1-s1@export.travelmo", "FR123 MAN to DUB"), vevent("e2", "FR123 MAN to DUB")]);
+    expect(await importCalendar("u1", calendar, deps(store, extract), 100)).toMatchObject({ imported: 1, exported: 1 });
+    expect(extract).toHaveBeenCalledTimes(1);
+  });
+
   it("stops reading at the cap and picks up where it left off", async () => {
     const store = memoryStore();
     const extract = vi.fn(async () => ({ isBooking: false, segments: [] }));

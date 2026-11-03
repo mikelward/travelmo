@@ -52,6 +52,7 @@ export function describeFeedResult(counts: CalendarCounts): string {
   if (counts.updated) parts.push(`${counts.updated} read again after changing`);
   if (counts.remaining) parts.push(`${counts.remaining} left for the next poll`);
   if (counts.failed) parts.push(`${counts.failed} failed`);
+  if (counts.exported) parts.push(`${counts.exported} of Travelmo's own events skipped`);
   return parts.join(", ");
 }
 

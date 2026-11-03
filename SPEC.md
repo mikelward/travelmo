@@ -503,6 +503,28 @@ daily by Cloud Scheduler, renews those within two days of expiry. A history
 id that has aged out logs a warning and resets to the notification's id; the
 user can run a backfill to fill any gap.
 
+## Calendar export
+
+Settings offers a link that Google Calendar, Apple Calendar or Outlook
+subscribes to: an iCalendar feed (`packages/core/src/calendarExport.ts`) of
+the user's trips, their own and those shared with them, from a year back
+on. Each trip is an all-day event across its dates, and each booking a
+timed event, in UTC so every app places it alike, with the route or place
+as its location, the provider, confirmation number and notes in its
+description, and a link to the trip page. A stay or rental is marked free
+time, a journey busy. The parser serves it at `GET /cal/{token}.ics`, with
+no sign-in, since calendar apps send none: the random token (24 bytes) is
+the credential. The owner reads it from `users/{uid}/calendarExport/main`;
+the parser alone writes it, and keeps only the token's SHA-256 in
+`calendarExports/{hash}` to find whose it is. Replacing the link retires
+the old one in the same transaction; turning it off deletes both. Anyone
+with the link sees the trips, which Settings says. Responses are
+`Cache-Control: private` so no shared cache keeps them.
+
+Every exported event's UID ends in `@export.travelmo`, and every import (a
+file, a feed, Google Calendar) skips such events and counts them, so a
+subscribed copy of the export never comes back in as new bookings.
+
 ## Delivery failures and alerts
 
 The push handler answers 2xx once a notification is handled, including the
@@ -550,14 +572,19 @@ refused to any other until the first disconnects.
 | `POST /import/tripit` | Firebase ID token | Imports a TripIt JSON export (up to 20 MB); returns counts of trips, bookings, duplicates, items imported before, failures and items not importable; 409 while another TripIt upload of the same user runs |
 | `POST /internal/pubsub/gmail` | OIDC from `INTERNAL_CALLERS` | Pub/Sub push target |
 | `POST /internal/renew-watches` | OIDC from `INTERNAL_CALLERS` | Cloud Scheduler target |
+| `POST /export/calendar` | Firebase ID token | Issues the user's calendar export link, retiring any old one; returns its token |
+| `POST /export/calendar/stop` | Firebase ID token | Turns the calendar export link off |
+| `GET /cal/{token}.ics` | the token | The calendar export itself, for calendar apps; 404 for a link not in use |
 | `GET /healthz` | none | Liveness |
 
 ## Costs
 
 Firebase Auth, Pub/Sub, Secret Manager and the Gmail API are free at this
 scale. App Hosting and Cloud Run bill per request and idle at zero. Firestore
-is the term that grows: one listener per trip list and per open trip, and
-one read of every booking each time the reports page opens. Gemini
+is the term that grows: one listener per trip list and per open trip, one
+read of every booking each time the reports page opens, and one read of the
+last year's trips and bookings each time a subscribed calendar refreshes (a
+few times a day per subscriber). Gemini
 Flash-Lite costs a fraction of a cent per booking email, and an embedding
 of a few hundred tokens a hundredth of that; a hundred users importing
 fifty bookings a month is a few dollars. The rules tests and CI run
@@ -568,7 +595,7 @@ on GitHub-hosted runners.
 Native apps (React Native + Expo in `apps/mobile`; the Android screens are
 mocked up in `design/android/`, Material 3 with this palette, as the reference
 for the port), city-level places on the map (it knows only airports and
-countries, with no geocoding), calendar view and export, check-in/out surfacing,
+countries, with no geocoding), a calendar view, check-in/out surfacing,
 ratings and favourites, itinerary ideas, loyalty balances, reminders sent
 by email or push rather than shown in the app, which visas a trip needs,
 other mail providers and forward-to-import. Further import

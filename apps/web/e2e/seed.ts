@@ -105,6 +105,12 @@ export async function seedLisbonTrip(ownerUid: string, tripId: string): Promise<
   return trip;
 }
 
+export async function seedCalendarExport(uid: string, token: string | undefined): Promise<void> {
+  const ref = db.doc(paths.calendarExport(uid));
+  if (token) await ref.set({ token, createdAt: "2026-11-01T00:00:00Z" });
+  else await ref.delete();
+}
+
 export async function seedFeed(uid: string, feed: CalendarFeed): Promise<void> {
   await db.doc(paths.feed(uid, feed.id)).set(feed);
 }

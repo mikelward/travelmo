@@ -17,6 +17,11 @@ export const paths = {
   // Subscribed calendar feeds: the owner reads them; the parser writes them.
   feeds: (uid: string) => `users/${uid}/feeds`,
   feed: (uid: string, feedId: string) => `users/${uid}/feeds/${feedId}`,
+  // The owner's calendar export link: the owner reads it, the parser
+  // alone writes it.
+  calendarExport: (uid: string) => `users/${uid}/calendarExport/main`,
+  // Server-only: a hash of an export link's token, naming whose it is.
+  calendarExportToken: (tokenHash: string) => `calendarExports/${tokenHash}`,
   parsedMessage: (uid: string, messageId: string) =>
     `users/${uid}/parsedMessages/${messageId}`,
   gmailAccount: (emailAddress: string) => `gmailAccounts/${emailAddress}`,

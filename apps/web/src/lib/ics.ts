@@ -12,6 +12,7 @@ export function previewIcs(fileText: string): CalendarPreview {
   const skipped = [
     s.recurring ? count(s.recurring, "repeating event", "repeating events") : undefined,
     s.cancelled ? count(s.cancelled, "cancelled event", "cancelled events") : undefined,
+    s.exported ? count(s.exported, "event from Travelmo's own calendar", "events from Travelmo's own calendar") : undefined,
   ].filter(Boolean);
   if (skipped.length) text += ` Skipping ${skipped.join(" and ")}.`;
   return { text, fileText, importable: s.importable };
@@ -28,6 +29,7 @@ export type CalendarResult = {
   recurring: number;
   cancelled: number;
   remaining: number;
+  exported?: number;
 };
 
 export function describeCalendarResult(r: CalendarResult): string {
@@ -38,6 +40,7 @@ export function describeCalendarResult(r: CalendarResult): string {
   if (r.failed) parts.push(`${r.failed} failed`);
   if (r.removed) parts.push(`${r.removed} removed as cancelled`);
   if (r.updated) parts.push(`${r.updated} read again after changing`);
+  if (r.exported) parts.push(`${r.exported} of Travelmo's own events skipped`);
   let text = `${parts.join(", ")}.`;
   if (r.remaining) text += ` ${count(r.remaining, "event is", "events are")} left: import the file again to continue.`;
   return text;

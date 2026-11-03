@@ -103,7 +103,7 @@ describe("icsEventText", () => {
 
 describe("summarizeIcs and isTravelCalendar", () => {
   it("counts what would be read", () => {
-    expect(summarizeIcs(parseIcs(calendar))).toEqual({ events: 4, importable: 2, recurring: 1, cancelled: 1 });
+    expect(summarizeIcs(parseIcs(calendar))).toEqual({ events: 4, importable: 2, recurring: 1, cancelled: 1, exported: 0 });
   });
   it("trusts TripIt's calendars only", () => {
     expect(isTravelCalendar(parseIcs(calendar))).toBe(false);

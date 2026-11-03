@@ -135,6 +135,12 @@ service cloud.firestore {
         allow read: if isSelf();
         allow write: if false;
       }
+      // The calendar export link is a secret: the owner reads it, the parser
+      // alone issues or withdraws it.
+      match /calendarExport/{document} {
+        allow read: if isSelf();
+        allow write: if false;
+      }
       // Refresh tokens live here; only the Admin SDK touches it.
       match /private/{document} {
         allow read, write: if false;
@@ -150,6 +156,11 @@ service cloud.firestore {
       allow list: if signedIn()
         && request.auth.token.email_verified == true
         && request.auth.token.email.lower() in resource.data.trustedEmails;
+    }
+
+    // Export-link token hashes to their owner: the parser's alone.
+    match /calendarExports/{tokenHash} {
+      allow read, write: if false;
     }
 
     match /gmailAccounts/{emailAddress} {

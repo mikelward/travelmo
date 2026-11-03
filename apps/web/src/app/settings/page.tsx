@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { SignInGate } from "@/components/SignInGate";
 import { api } from "@/lib/api";
+import { exportLinks, useCalendarExport } from "@/lib/calendarExport";
 import { describeBackfill, pausedReason, readWholeMailbox } from "@/lib/backfill";
 import { firestore } from "@/lib/firebase";
 import { useInstall } from "@/lib/install";
@@ -655,6 +656,97 @@ function InstallSection() {
   );
 }
 
+function CalendarExportSection({ user }: { user: User }) {
+  const record = useCalendarExport(user.uid);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const [copied, setCopied] = useState(false);
+  const links = record ? exportLinks(record.token) : undefined;
+
+  const run = async (action: () => Promise<unknown>) => {
+    setBusy(true);
+    setError(undefined);
+    setCopied(false);
+    try {
+      await action();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const copy = async () => {
+    if (!links) return;
+    try {
+      await navigator.clipboard.writeText(links.https);
+      setCopied(true);
+    } catch (err) {
+      setError(`Couldn't copy the link: ${(err as Error).message}. Select it and copy it instead.`);
+    }
+  };
+
+  return (
+    <section className="mt-10">
+      <h2 className="text-lg font-medium">Calendar export</h2>
+      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+        Show your trips and bookings in Google Calendar, Apple Calendar or Outlook through a link they check for
+        changes, a few times a day. Anyone with the link can see your trips, confirmation numbers included, so keep it
+        to yourself; replacing it stops the old one working.
+      </p>
+      {record === null && (
+        <button type="button" disabled={busy} className={`${buttonClass} mt-3`} onClick={() => run(() => api.issueCalendarExport(user))}>
+          {busy ? "Creating…" : "Create calendar link"}
+        </button>
+      )}
+      {links && (
+        <>
+          <input
+            readOnly
+            value={links.https}
+            aria-label="Calendar link"
+            onFocus={(e) => e.target.select()}
+            className="mt-3 w-full rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
+          />
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" className={buttonClass} onClick={copy}>
+              {copied ? "Copied" : "Copy link"}
+            </button>
+            <a href={links.google} target="_blank" rel="noopener noreferrer" className={buttonClass}>
+              Add to Google Calendar
+            </a>
+            <a href={links.webcal} className={buttonClass}>
+              Open in Apple Calendar
+            </a>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              className={buttonClass}
+              onClick={() => {
+                if (confirm("Replace the link? Calendars subscribed to the old one stop updating.")) void run(() => api.issueCalendarExport(user));
+              }}
+            >
+              Replace link
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              className={buttonClass}
+              onClick={() => {
+                if (confirm("Turn off the calendar link? Calendars subscribed to it stop updating.")) void run(() => api.stopCalendarExport(user));
+              }}
+            >
+              Turn off
+            </button>
+          </div>
+        </>
+      )}
+      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+    </section>
+  );
+}
+
 export default function SettingsPage() {
   useSaveForOffline();
   return (
@@ -672,6 +764,7 @@ export default function SettingsPage() {
           <Suspense fallback={null}>
             <GoogleCalendarSection user={user} />
           </Suspense>
+          <CalendarExportSection user={user} />
           <PatternsSection user={user} />
           <ReviewSection user={user} />
         </>

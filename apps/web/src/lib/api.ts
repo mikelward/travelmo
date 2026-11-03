@@ -1,4 +1,5 @@
 import type { User } from "firebase/auth";
+import type { CalendarExport } from "@travelmo/core";
 import type { CalendarResult } from "./ics";
 import type { TripItResult } from "./tripit";
 
@@ -12,7 +13,7 @@ export type BackfillResult = {
   failed: number;
 };
 
-function parserUrl(): string {
+export function parserUrl(): string {
   const url = process.env.NEXT_PUBLIC_PARSER_URL;
   if (!url) throw new Error("Missing NEXT_PUBLIC_PARSER_URL");
   return url.replace(/\/$/, "");
@@ -45,4 +46,6 @@ export const api = {
   addFeed: (user: User, url: string, label?: string) =>
     post<CalendarResult & { id: string }>(user, "/feeds/add", { url, ...(label ? { label } : {}) }),
   removeFeed: (user: User, id: string) => post<void>(user, "/feeds/remove", { id }),
+  issueCalendarExport: (user: User) => post<CalendarExport>(user, "/export/calendar"),
+  stopCalendarExport: (user: User) => post<void>(user, "/export/calendar/stop"),
 };
