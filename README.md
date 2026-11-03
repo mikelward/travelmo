@@ -4,7 +4,8 @@ Your trips in one place, imported from your inbox. A TripIt-style planner:
 connect Gmail, and booking confirmations become trips with flights, trains,
 stays and rentals, grouped into now, upcoming and past. Share a trip with a
 partner by email, and see warnings when a passport or visa runs out too close to a trip. Reports count the days spent in each country and the trips
-each year, on a map of where you've been. A TripIt history comes in from the JSON export TripIt
+each year, on a map of where you've been, and a calendar link puts your trips
+in Google or Apple Calendar. A TripIt history comes in from the JSON export TripIt
 support sends on request.
 
 `SPEC.md` has the architecture and the reasoning behind it; `IMPORT.md` compares
@@ -89,7 +90,8 @@ One Google Cloud project holds everything.
 1. **Firebase**: create the project, enable Google sign-in in Authentication,
    create a Firestore database, then `firebase deploy --only firestore` for
    the rules and indexes (the shared travel profiles need a collection-group
-   index on `trustedEmails`).
+   index on `trustedEmails`, and the calendar export composite indexes on
+   `trips`).
 2. **Gmail and Calendar**: enable the Gmail API and the Google Calendar API.
    Create an OAuth client (web application) whose redirect URI is
    `https://<parser>/gmail/callback` (Calendar consent returns there too), and

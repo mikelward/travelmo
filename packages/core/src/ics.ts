@@ -1,3 +1,4 @@
+import { isExportedUid } from "./calendarExport";
 import { stableHash } from "./hash";
 import { isCalendarDate } from "./instant";
 import { formatOffset, zoneOffset } from "./zone";
@@ -37,6 +38,8 @@ export type IcsEvent = {
   // Repeating events and their overrides are not bookings.
   recurring: boolean;
   cancelled: boolean;
+  // One of Travelmo's own exported events, met again through a calendar.
+  exported?: boolean;
 };
 
 export type IcsCalendar = { prodId?: string; events: IcsEvent[] };
@@ -263,6 +266,7 @@ function toEvent(properties: Property[], zones: ReadonlyMap<string, IcsZone>): I
     ...(stamp ? { stamp } : {}),
     recurring: properties.some((p) => p.name === "RRULE" || p.name === "RDATE" || p.name === "RECURRENCE-ID"),
     cancelled: textOf("STATUS")?.toUpperCase() === "CANCELLED",
+    ...(isExportedUid(uid) ? { exported: true } : {}),
   };
 }
 
@@ -291,10 +295,11 @@ export function isTravelCalendar(calendar: IcsCalendar): boolean {
   return /tripit/i.test(calendar.prodId ?? "");
 }
 
-export type IcsSummary = { events: number; importable: number; recurring: number; cancelled: number };
+export type IcsSummary = { events: number; importable: number; recurring: number; cancelled: number; exported: number };
 
 export function summarizeIcs(calendar: IcsCalendar): IcsSummary {
-  const recurring = calendar.events.filter((e) => e.recurring).length;
-  const cancelled = calendar.events.filter((e) => e.cancelled && !e.recurring).length;
-  return { events: calendar.events.length, importable: calendar.events.length - recurring - cancelled, recurring, cancelled };
+  const exported = calendar.events.filter((e) => e.exported).length;
+  const recurring = calendar.events.filter((e) => e.recurring && !e.exported).length;
+  const cancelled = calendar.events.filter((e) => e.cancelled && !e.recurring && !e.exported).length;
+  return { events: calendar.events.length, importable: calendar.events.length - exported - recurring - cancelled, recurring, cancelled, exported };
 }

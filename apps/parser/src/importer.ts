@@ -697,7 +697,16 @@ export function tripTitle(segments: readonly ExtractedSegment[]): string {
 const min = (a: string, b: string) => (a < b ? a : b);
 const max = (a: string, b: string) => (a > b ? a : b);
 
-export type CalendarCounts = ImportCounts & { recurring: number; cancelled: number; remaining: number; removed: number; updated: number };
+export type CalendarCounts = ImportCounts & {
+  recurring: number;
+  cancelled: number;
+  remaining: number;
+  removed: number;
+  updated: number;
+  // Travelmo's own exported events, met again through a calendar: never
+  // read back in, or every trip would come in twice.
+  exported: number;
+};
 
 // Deletes the bookings an imported calendar event made that are still just
 // what it made: one the user edited, or that another email or import has
@@ -780,13 +789,13 @@ export const calendarSender = "Calendar file";
 // capped per request; events past the cap are left for the next upload of
 // the same file, which skips everything already read.
 export async function importCalendar(uid: string, calendar: IcsCalendar, deps: ImportDeps, maxRead: number): Promise<CalendarCounts> {
-  const counts: CalendarCounts = { ...emptyCounts(), recurring: 0, cancelled: 0, remaining: 0, removed: 0, updated: 0 };
+  const counts: CalendarCounts = { ...emptyCounts(), recurring: 0, cancelled: 0, remaining: 0, removed: 0, updated: 0, exported: 0 };
   const travel = isTravelCalendar(calendar);
   let read = 0;
   // One to one across the file, and across uploads of it: what events
   // imported last time matched is reserved before any is read again.
   const consumed = new Set<string>();
-  const live = calendar.events.filter((e) => !e.recurring && !e.cancelled);
+  const live = calendar.events.filter((e) => !e.recurring && !e.cancelled && !e.exported);
   const previousRecords = new Map<string, ParsedMessage>();
   for (const previous of await Promise.all(live.map((e) => deps.store.getParsed(uid, `ics-${e.key}`)))) {
     if (!previous) continue;
@@ -806,6 +815,10 @@ export async function importCalendar(uid: string, calendar: IcsCalendar, deps: I
   };
   const ordered = [...calendar.events.filter(changedFirst), ...calendar.events.filter((e) => !changedFirst(e))];
   for (const event of ordered) {
+    if (event.exported) {
+      counts.exported += 1;
+      continue;
+    }
     if (event.recurring) {
       counts.recurring += 1;
       continue;

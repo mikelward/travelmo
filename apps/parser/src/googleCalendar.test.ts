@@ -57,6 +57,8 @@ describe("toIcsEvent", () => {
   });
 
   it("marks repeating events and their exceptions, and keeps a deleted event with no times", () => {
+    expect(toIcsEvent(event({ iCalUID: "trip-t1@export.travelmo" }))?.exported).toBe(true);
+    expect(toIcsEvent(event())?.exported).toBeUndefined();
     expect(toIcsEvent(event({ recurrence: ["RRULE:FREQ=WEEKLY"] }))?.recurring).toBe(true);
     expect(toIcsEvent(event({ recurringEventId: "series" }))?.recurring).toBe(true);
     expect(toIcsEvent({ id: "abc", iCalUID: "uid-1@example.com", status: "cancelled" })).toMatchObject({ key: stableHash("uid-1@example.com"), cancelled: true });

@@ -208,6 +208,19 @@ describe("users", () => {
     await assertFails(setDoc(doc(as(owner), paths.feed(owner.uid, "f2")), { ...feed, id: "f2", url: "https://169.254.169.254/" }));
   });
 
+  it("the calendar export link is readable by its owner only, and its lookup by nobody", async () => {
+    const record = { token: "t".repeat(32), createdAt: "2026-11-01T00:00:00Z" };
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), paths.calendarExport(owner.uid)), record);
+      await setDoc(doc(ctx.firestore(), paths.calendarExportToken("h1")), { uid: owner.uid });
+    });
+    await assertSucceeds(getDoc(doc(as(owner), paths.calendarExport(owner.uid))));
+    await assertFails(getDoc(doc(as(partner), paths.calendarExport(owner.uid))));
+    await assertFails(setDoc(doc(as(owner), paths.calendarExport(owner.uid)), { ...record, token: "x".repeat(32) }));
+    await assertFails(getDoc(doc(as(owner), paths.calendarExportToken("h1"))));
+    await assertFails(setDoc(doc(as(owner), paths.calendarExportToken("h2")), { uid: owner.uid }));
+  });
+
   it("sender patterns are the user's; parsed messages read-only; private is sealed", async () => {
     await assertSucceeds(setDoc(doc(as(owner), paths.senderPatterns(owner.uid)), { allow: ["cove.example"], deny: [] }));
     await assertFails(setDoc(doc(as(stranger), paths.senderPatterns(owner.uid)), { allow: [], deny: [] }));

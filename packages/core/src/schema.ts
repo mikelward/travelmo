@@ -237,3 +237,11 @@ export const TravelProfile = z.object({
   updatedAt: isoDateTime.optional(),
 });
 export type TravelProfile = z.infer<typeof TravelProfile>;
+
+// A subscribable calendar of the owner's trips: anyone with the link can
+// read it, so it can be replaced (old link dead) or turned off.
+export const CalendarExport = z.object({
+  token: z.string().min(20),
+  createdAt: isoDateTime,
+});
+export type CalendarExport = z.infer<typeof CalendarExport>;

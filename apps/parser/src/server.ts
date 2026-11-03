@@ -65,6 +65,7 @@ import { FeedLimitReached, addFeed, feedFailure, firestoreFeeds, pollAllFeeds, t
 import { fetchFeed } from "./safefetch";
 import { backfillBatch, backfillQuery, runBackfillBatch } from "./backfill";
 import { LeaseLost, UploadRunning, withUploadLease } from "./leases";
+import { calendarForToken, firestoreExportIo, issueExport, stopExport } from "./calendarExport";
 import { saveImportedProfile } from "./travelProfile";
 import {
   calendarFor,
@@ -115,6 +116,7 @@ app.use("/gmail/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "C
 app.use("/import/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/calendar/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/feeds/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
+app.use("/export/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 
 app.get("/healthz", (c) => c.text("ok"));
 
@@ -551,6 +553,48 @@ app.post("/feeds/remove", async (c) => {
   await feedIo.feeds.remove(uid, body.id);
   log("INFO", "feed_removed", { uid, feedId: body.id });
   return c.body(null, 204);
+});
+
+// The calendar export: a link the owner subscribes to from Google or Apple
+// Calendar. Issuing again replaces the link; the old one stops working.
+app.post("/export/calendar", async (c) => {
+  const uid = await requireUser(c);
+  const record = await issueExport(db, uid, deps.now());
+  log("INFO", "calendar_export_issued", { uid });
+  return c.json(record);
+});
+
+app.post("/export/calendar/stop", async (c) => {
+  const uid = await requireUser(c);
+  await stopExport(db, uid);
+  log("INFO", "calendar_export_stopped", { uid });
+  return c.body(null, 204);
+});
+
+// Only a sign-in Google verified counts for the trips shared with a user,
+// as in the rules.
+async function verifiedEmail(uid: string): Promise<string | undefined> {
+  const record = await auth.getUser(uid);
+  return record.emailVerified && record.email ? record.email.toLowerCase() : undefined;
+}
+const exportIo = firestoreExportIo(db, verifiedEmail);
+
+// Fetched by calendar apps, which send no credentials: the token in the
+// link is the credential.
+app.get("/cal/:file", async (c) => {
+  const file = c.req.param("file");
+  const token = file.endsWith(".ics") ? file.slice(0, -4) : file;
+  const text = await calendarForToken(token, exportIo, { now: deps.now(), tripUrl: (id) => `${webOrigin}/trips/${id}` });
+  if (text === undefined) {
+    log("INFO", "calendar_export_unknown_link", {});
+    return c.text("This calendar link is not in use.", 404);
+  }
+  return c.body(text, 200, {
+    "Content-Type": "text/calendar; charset=utf-8",
+    "Content-Disposition": 'inline; filename="travelmo.ics"',
+    // A shared cache must never hold someone's trips.
+    "Cache-Control": "private, max-age=900",
+  });
 });
 
 // Cloud Scheduler calls this daily (deploy/scheduler.sh).
