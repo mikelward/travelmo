@@ -9,6 +9,7 @@ import { SignInGate } from "@/components/SignInGate";
 import { api } from "@/lib/api";
 import { describeBackfill, pausedReason, readWholeMailbox } from "@/lib/backfill";
 import { firestore } from "@/lib/firebase";
+import { useInstall } from "@/lib/install";
 import { useSaveForOffline } from "@/lib/offline";
 import { domainOf, effectiveDecision, learnSender } from "@/lib/patterns";
 import { describeCalendarResult, previewIcs } from "@/lib/ics";
@@ -627,6 +628,33 @@ function ReviewSection({ user }: { user: User }) {
   );
 }
 
+// Shown only where installing is possible and not yet done.
+function InstallSection() {
+  const { hint, install } = useInstall();
+  if (hint === "installed" || hint === "none") return null;
+  return (
+    <section className="mb-10">
+      <h2 className="text-lg font-medium">Install Travelmo</h2>
+      {hint === "prompt" ? (
+        <>
+          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+            Add Travelmo to your home screen or desktop: it opens in its own window, and trips you have opened stay
+            readable offline.
+          </p>
+          <button type="button" className={`${buttonClass} mt-3`} onClick={() => void install()}>
+            Install
+          </button>
+        </>
+      ) : (
+        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+          To add Travelmo to your Home Screen, tap Share in Safari, then Add to Home Screen. It then opens on its own,
+          and trips you have opened stay readable offline.
+        </p>
+      )}
+    </section>
+  );
+}
+
 export default function SettingsPage() {
   useSaveForOffline();
   return (
@@ -634,6 +662,7 @@ export default function SettingsPage() {
       {(user) => (
         <>
           <h1 className="mb-6 text-2xl font-semibold">Settings</h1>
+          <InstallSection />
           <Suspense fallback={<p className="text-zinc-500">Loading…</p>}>
             <GmailSection user={user} />
           </Suspense>

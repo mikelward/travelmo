@@ -12,6 +12,9 @@ export const metadata: Metadata = {
   title: { default: "Travelmo", template: "%s · Travelmo" },
   description: "Your trips in one place, imported from your inbox.",
   manifest: "/manifest.webmanifest",
+  // Added to the iPhone Home Screen, it opens without Safari's bars, under
+  // this name; the icon is app/apple-icon.png.
+  appleWebApp: { capable: true, title: "Travelmo", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {

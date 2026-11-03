@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "node sw.build.mjs && next build",
     "start": "next start",
+    "icons": "node scripts/icons.mjs",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "firebase emulators:exec --only firestore --project demo-travelmo --config ../../firebase.json 'vitest run'",

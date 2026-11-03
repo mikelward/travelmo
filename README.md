@@ -45,6 +45,10 @@ pnpm --filter @travelmo/web test:e2e
 table from the OpenFlights data (ODbL) packaged in `airport-data`; the result
 is committed, so a normal build needs nothing.
 
+The install icons are PNGs rendered from SVGs and committed; after changing
+`apps/web/src/app/icon.svg` or `apps/web/icons/*.svg`, rerun
+`pnpm --filter @travelmo/web icons`.
+
 The web app's `build` script bundles the service worker (`src/sw.ts` to
 `public/sw.js`) before `next build`; the worker registers in production
 builds only, so `next dev` runs without it.
