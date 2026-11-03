@@ -83,7 +83,7 @@
       travel profile expires before it ends, or a passport within six months
       after.
 - [x] Calendar export: a subscribable .ics link for your trips (Settings).
-- [ ] Let the booking form set a place's country, optional and never asked
+- [x] Let the booking form set a place's country, optional and never asked
       for, so a booking the reports can't place can be fixed by hand.
 - [ ] Consider finding a place's country from its city name (a bundled
       city table, no service), and autocomplete or address lookup in the
@@ -201,3 +201,6 @@ Guesses made on autopilot; change any of them freely.
   the secret, so Settings warns, and replacing it kills the old one. It is
   served by the parser, which already holds the Admin credential, rather
   than by the web app, which holds none.
+- The booking form's country picker is hidden for flights (the airport code
+  already says the country, and an imported one is kept); stays, activities
+  and other journeys get one per place, defaulting to none.

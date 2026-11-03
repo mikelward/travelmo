@@ -6,7 +6,7 @@ import {
   composeInstant,
   fixedOffsetPrefix,
   localTimeZone,
-  mergePlace,
+  countryCodes,
   resolveOffset,
   segmentTypes,
   splitInstant,
@@ -17,6 +17,8 @@ import {
 } from "@travelmo/core";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { z } from "zod";
+import { countryName } from "@/lib/countries";
+import { formPlace } from "@/lib/places";
 import { zoneOfCode, zonesFromCodes, type AirportZone, type CodeKey, type ZoneKey } from "@/lib/airportZones";
 
 // The airport table is loaded only once a form is open; codes typed before
@@ -63,6 +65,9 @@ type Fields = {
   originCode: string;
   destinationName: string;
   destinationCode: string;
+  // ISO codes, "" for none; not shown for a flight, whose airport says.
+  originCountry: string;
+  destinationCountry: string;
   notes: string;
 };
 
@@ -86,14 +91,18 @@ function initialFields(segment: Segment | undefined, defaultDate: string): Field
     originCode: segment?.origin?.code ?? "",
     destinationName: segment?.destination?.name ?? "",
     destinationCode: segment?.destination?.code ?? "",
+    originCountry: segment?.origin?.country ?? "",
+    destinationCountry: segment?.destination?.country ?? "",
     notes: segment?.notes ?? "",
   };
 }
 
 const text = (value: string) => (value.trim() ? value.trim() : undefined);
 
-// Fields the form does not edit (place city/country, source, ids) come from
-// the existing segment; what the form shows, the form decides.
+
+// Fields the form does not edit (place city, a flight's place country,
+// source, ids) come from the existing segment; what the form shows, the form
+// decides.
 export function toExtracted(f: Fields, existing?: Segment): ExtractedSegment {
   const hasEnd = f.endDate !== "" || f.endTime !== "";
   const startTime = f.startTime || "00:00";
@@ -108,8 +117,8 @@ export function toExtracted(f: Fields, existing?: Segment): ExtractedSegment {
     end: hasEnd
       ? composeInstant({ date: endDate, time: endTime, offset: resolveOffset(f.endZone || f.startZone, endDate, endTime) })
       : undefined,
-    origin: mergePlace(existing?.origin, f.originName, f.originCode),
-    destination: mergePlace(existing?.destination, f.destinationName, f.destinationCode),
+    origin: formPlace(existing?.origin, f.originName, f.originCode, f.type === "flight" ? undefined : f.originCountry),
+    destination: formPlace(existing?.destination, f.destinationName, f.destinationCode, f.type === "flight" ? undefined : f.destinationCountry),
     notes: text(f.notes),
   };
   // Firestore rejects undefined field values, so absent fields must be absent.
@@ -122,7 +131,10 @@ export function toExtracted(f: Fields, existing?: Segment): ExtractedSegment {
   return result.data;
 }
 
-const inputClass = "w-full rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
+// min-w-0: a grid or flex item is otherwise as wide as its longest option
+// (a time zone, a country), pushing the form past a phone's width.
+const fieldClass = "min-w-0 rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
+const inputClass = `w-full ${fieldClass}`;
 const labelClass = "block text-xs font-medium uppercase tracking-wide text-zinc-500";
 
 // Whatever the field holds is always an option, so the select never shows a
@@ -137,6 +149,26 @@ function ZoneSelect({ value, onChange, zones }: { value: string; onChange: (zone
       {zones.map((zone) => (
         <option key={zone} value={zone}>
           {zone.replace(/_/g, " ")}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+// Optional, and never asked for: most imports fill it in, and a flight's
+// airport code says it. It only helps reports place a booking.
+function CountrySelect({ value, onChange, label, wide }: { value: string; onChange: (code: string) => void; label: string; wide?: boolean }) {
+  const options = useMemo(
+    () => countryCodes.map((code) => ({ code, name: countryName(code) })).sort((a, b) => a.name.localeCompare(b.name)),
+    [],
+  );
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} aria-label={label} className={wide ? inputClass : `${fieldClass} w-32 shrink-0`}>
+      <option value="">Country</option>
+      {value && !options.some((o) => o.code === value) && <option value={value}>{value}</option>}
+      {options.map((o) => (
+        <option key={o.code} value={o.code}>
+          {o.name}
         </option>
       ))}
     </select>
@@ -208,13 +240,20 @@ export function SegmentForm({
   };
 
   const transport = fields.type !== "lodging" && fields.type !== "activity";
+  const country = (key: "originCountry" | "destinationCountry", label: string, wide = false) =>
+    fields.type === "flight" ? null : (
+      <CountrySelect value={fields[key]} onChange={(code) => setFields((f) => ({ ...f, [key]: code }))} label={label} wide={wide} />
+    );
   const when = (label: string, date: keyof Fields, time: keyof Fields, zone: "startZone" | "endZone", required: boolean) => (
     <label className={labelClass}>
       {label}
-      <div className="grid grid-cols-[1fr_6rem_minmax(10rem,1.2fr)] gap-2">
+      {/* On a phone the zone takes its own line, so the date keeps room. */}
+      <div className="grid grid-cols-[1fr_6rem] gap-2 sm:grid-cols-[1fr_6rem_minmax(10rem,1.2fr)]">
         <input type="date" required={required} value={fields[date]} onChange={set(date)} className={inputClass} />
         <input type="time" value={fields[time]} onChange={set(time)} className={inputClass} />
-        <ZoneSelect value={fields[zone]} onChange={setZone(zone)} zones={zones} />
+        <div className="col-span-2 sm:col-span-1">
+          <ZoneSelect value={fields[zone]} onChange={setZone(zone)} zones={zones} />
+        </div>
       </div>
     </label>
   );
@@ -249,7 +288,7 @@ export function SegmentForm({
                 value={fields.originCode}
                 onChange={(e) => codeTyped("originCode", e.target.value)}
                 placeholder="LHR"
-                className={`${inputClass} w-20`}
+                className={`${fieldClass} w-20 shrink-0`}
               />
             </div>
           </label>
@@ -261,7 +300,7 @@ export function SegmentForm({
                 value={fields.destinationCode}
                 onChange={(e) => codeTyped("destinationCode", e.target.value)}
                 placeholder="JFK"
-                className={`${inputClass} w-20`}
+                className={`${fieldClass} w-20 shrink-0`}
               />
             </div>
           </label>
@@ -269,8 +308,17 @@ export function SegmentForm({
       ) : (
         <label className={labelClass}>
           Where
-          <input value={fields.destinationName} onChange={set("destinationName")} placeholder="Cove Liverpool" className={inputClass} />
+          <div className="flex gap-2">
+            <input value={fields.destinationName} onChange={set("destinationName")} placeholder="Cove Liverpool" className={inputClass} />
+            {country("destinationCountry", "Country")}
+          </div>
         </label>
+      )}
+      {transport && fields.type !== "flight" && (
+        <div className="grid grid-cols-2 gap-3">
+          {country("originCountry", "From country", true)}
+          {country("destinationCountry", "To country", true)}
+        </div>
       )}
       <div className="grid grid-cols-2 gap-3">
         <label className={labelClass}>

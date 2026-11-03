@@ -33,3 +33,36 @@ test("editing an imported booking keeps its offsets although its airports have z
   await expect(zone.first()).toHaveValue("offset:+05:00");
   await expect(zone.nth(1)).toHaveValue("offset:+04:00");
 });
+
+test("a place's country can be chosen, but is never asked for, and a flight shows none", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  await seedTrip(ownerUid, "e2e-country");
+  await page.getByRole("link", { name: /Liverpool/ }).click();
+  await expect(page.getByText("Cove Liverpool", { exact: true })).toBeVisible();
+
+  // An imported stay shows the country it came with.
+  await page.getByRole("button", { name: "Edit" }).first().click();
+  await expect(page.getByRole("combobox", { name: "Country" })).toHaveValue("GB");
+  await page.getByRole("button", { name: "Cancel" }).click();
+
+  await page.getByRole("button", { name: "Add a booking" }).click();
+  // A flight's airport codes say where it is.
+  await expect(page.getByRole("combobox", { name: /country/i })).toHaveCount(0);
+  await page.getByRole("combobox", { name: "Type" }).selectOption("activity");
+  await page.getByPlaceholder("BA 117 LHR to JFK").fill("Example walking tour");
+  await page.locator('input[type="date"]').first().fill("2026-12-13");
+  // Saved without a country: nothing insists on one.
+  await page.getByRole("button", { name: "Add" }).click();
+  await expect(page.getByText("Example walking tour", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Edit" }).nth(1).click();
+  const country = page.getByRole("combobox", { name: "Country" });
+  await expect(country).toHaveValue("");
+  // A country with no place name is kept, the place named by the country.
+  await country.selectOption({ label: "Ireland" });
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Edit" }).nth(1).click();
+  await expect(page.getByRole("combobox", { name: "Country" })).toHaveValue("IE");
+  await expect(page.getByRole("textbox", { name: "Where" })).toHaveValue("Ireland");
+});
