@@ -40,6 +40,11 @@ describe("mergePlace", () => {
     expect(mergePlace(imported, "  ", "LHR")).toBeUndefined();
     expect(mergePlace(undefined, "Cove", "")).toEqual({ name: "Cove" });
   });
+  it("sets, changes or clears the country only when the form gives one", () => {
+    expect(mergePlace(undefined, "Cove", "", "gb")).toEqual({ name: "Cove", country: "GB" });
+    expect(mergePlace(imported, "Heathrow", "LHR", "IE")).toMatchObject({ country: "IE", city: "London" });
+    expect(mergePlace(imported, "Heathrow", "LHR", "")).toEqual({ name: "Heathrow", code: "LHR", city: "London" });
+  });
 });
 import { ExtractedBooking, Trip } from "./schema";
 

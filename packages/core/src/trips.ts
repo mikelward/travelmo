@@ -77,14 +77,20 @@ export function eventVerb(event: UpcomingEvent): string {
   return eventVerbs[event.segment.type][event.kind];
 }
 
-// A form edits a place's name and code; whatever else an import recorded
-// about it (city, country) survives until the name is cleared.
-export function mergePlace(existing: Place | undefined, name: string, code: string): Place | undefined {
+// A form edits a place's name and code, and its country where it shows one
+// (passing a country, "" to clear it); whatever else an import recorded
+// about it (city, and a country the form leaves alone) survives until the
+// name is cleared.
+export function mergePlace(existing: Place | undefined, name: string, code: string, country?: string): Place | undefined {
   const trimmedName = name.trim();
   if (!trimmedName) return undefined;
   const trimmedCode = code.trim().toUpperCase();
   const { code: _oldCode, ...rest } = existing ?? { name: trimmedName };
-  return { ...rest, name: trimmedName, ...(trimmedCode ? { code: trimmedCode } : {}) };
+  const place: Place = { ...rest, name: trimmedName, ...(trimmedCode ? { code: trimmedCode } : {}) };
+  if (country === undefined) return place;
+  const { country: _oldCountry, ...withoutCountry } = place;
+  const trimmedCountry = country.trim().toUpperCase();
+  return trimmedCountry ? { ...withoutCountry, country: trimmedCountry } : withoutCountry;
 }
 
 export function daysBetween(start: string, end: string): number {
