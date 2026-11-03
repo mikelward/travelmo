@@ -134,6 +134,26 @@ in the Equal Earth projection drawn to SVG paths by
 `apps/web/scripts/worldmap.mjs` (`apps/web/src/lib/worldMap.json`, 27 KB
 compressed), and the airport table load only on this page.
 
+## Document reminders
+
+A passport, visa or other document in a travel profile with an expiry date
+the page can read (a field labeled like "Expiration date" or "Valid until",
+written as an ISO date or with the month in words; all-number dates such as
+06/05/2031 are skipped, since the US and Europe read them differently) is
+checked against every trip still to come or under way. The trip page and its
+card in the list say when one runs out before the trip ends, or, for a
+passport, within six months after it, since many countries require that
+much validity. The viewer's own documents count, and those of anyone who
+shared their profile with the viewer and is on the trip (its owner, or
+someone it is shared with). A passport is not mentioned for a trip whose
+bookings all lie in the country that issued it, nor a visa for a trip known
+not to go to its country; when a booking's country is unknown, the warning
+shows anyway. Telling whether a flight crosses a border needs the airport
+table, which loads only once some trip has a document worth checking, and
+nothing shows until it has. The warning names the document's kind and date,
+never its number. The list checks the trips it already reads bookings for
+(under way and the next three); every trip page checks its own.
+
 ## Editing by hand
 
 The owner and anyone the trip is shared with can add, edit and delete
@@ -549,6 +569,7 @@ Native apps (React Native + Expo in `apps/mobile`; the Android screens are
 mocked up in `design/android/`, Material 3 with this palette, as the reference
 for the port), city-level places on the map (it knows only airports and
 countries, with no geocoding), calendar view and export, check-in/out surfacing,
-ratings and favourites, itinerary ideas, loyalty balances and passport
-expiry and visa reminders (from the travel profile), other mail providers and forward-to-import. Further import
+ratings and favourites, itinerary ideas, loyalty balances, reminders sent
+by email or push rather than shown in the app, which visas a trip needs,
+other mail providers and forward-to-import. Further import
 sources share the pipeline: Google Calendar; `IMPORT.md` compares them and maps their fields.

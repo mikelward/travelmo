@@ -10,3 +10,4 @@ export * from "./ics";
 export * from "./sources";
 export * from "./travelProfile";
 export * from "./reports";
+export * from "./documents";

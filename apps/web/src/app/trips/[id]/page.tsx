@@ -5,7 +5,7 @@ import type { User } from "firebase/auth";
 import { arrayRemove, arrayUnion, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Suspense, use, useState, type FormEvent } from "react";
+import { Suspense, use, useMemo, useState, type FormEvent } from "react";
 import { SegmentForm } from "@/components/SegmentForm";
 import { SegmentRow } from "@/components/SegmentRow";
 import { SignInGate } from "@/components/SignInGate";
@@ -13,6 +13,9 @@ import { deleteSegment, deleteTrip, fitTripDates, mergeTrips, moveSegment, renam
 import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
 import { effectiveDecision, learnSender } from "@/lib/patterns";
+import { DocumentWarnings } from "@/components/DocumentWarnings";
+import { localToday } from "@/lib/dates";
+import { usePeopleDocuments, useTripWarnings } from "@/lib/documents";
 import { useProfile, useSegments, useSenderPatterns, useTrip, useTrips } from "@/lib/trips";
 
 const buttonClass =
@@ -262,6 +265,11 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   const patterns = useSenderPatterns(user.uid);
   const allTrips = useTrips(user);
   const profile = useProfile(user.uid);
+  const people = usePeopleDocuments(user);
+  const today = localToday();
+  const tripList = useMemo(() => (trip ? [trip] : []), [trip]);
+  const segmentsOfTrip = useMemo(() => (segments ? { [tripId]: segments } : {}), [segments, tripId]);
+  const warnings = useTripWarnings(people, tripList, segmentsOfTrip, today)[tripId] ?? [];
   const [editing, setEditing] = useState<Editing>();
   const [error, setError] = useState<string>();
   if (trip === undefined) return <p className="text-zinc-500">Loading…</p>;
@@ -303,6 +311,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
         {canManage && segments && <FitDates trip={trip} segments={segments} />}
       </p>
       {isOwner && trip.deleting && <DangerZone trip={trip} />}
+      <DocumentWarnings warnings={warnings} today={today} />
 
       {canEdit && !editing && (
         <button type="button" onClick={() => setEditing({ kind: "add" })} className={`${buttonClass} mt-4`}>

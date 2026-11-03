@@ -1,7 +1,23 @@
 import { eventVerb, formatDate, formatDateRange, localDate, localTime, nextEvent, type Segment, type Trip } from "@travelmo/core";
 import Link from "next/link";
+import { DocumentWarnings } from "@/components/DocumentWarnings";
+import type { PersonWarning } from "@travelmo/core";
 
-export function TripCard({ trip, shared, segments, now }: { trip: Trip; shared: boolean; segments?: Segment[]; now?: string }) {
+export function TripCard({
+  trip,
+  shared,
+  segments,
+  now,
+  warnings,
+  today,
+}: {
+  trip: Trip;
+  shared: boolean;
+  segments?: Segment[];
+  now?: string;
+  warnings?: readonly PersonWarning[];
+  today?: string;
+}) {
   const badge = trip.deleting ? "Deleting" : shared ? "Shared" : undefined;
   const event = segments && now ? nextEvent(segments, now) : undefined;
   return (
@@ -23,6 +39,7 @@ export function TripCard({ trip, shared, segments, now }: { trip: Trip; shared: 
           </span>
         </p>
       )}
+      {warnings && today && <DocumentWarnings warnings={warnings} today={today} compact />}
     </Link>
   );
 }

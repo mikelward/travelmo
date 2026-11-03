@@ -79,8 +79,16 @@
       second gets a 409.
 - [x] Reports: days in each country, trips per year, and a map of the
       countries visited and airports flown through (`/reports`).
-- [ ] Let the booking form set a place's country, so a booking the reports
-      can't place can be fixed by hand.
+- [x] Passport and visa reminders: a trip warns when a document in the
+      travel profile expires before it ends, or a passport within six months
+      after.
+- [ ] Calendar export: a subscribable .ics link for your trips.
+- [ ] Let the booking form set a place's country, optional and never asked
+      for, so a booking the reports can't place can be fixed by hand.
+- [ ] Consider finding a place's country from its city name (a bundled
+      city table, no service), and autocomplete or address lookup in the
+      booking form (a geocoding service: cost and a key to weigh). Low
+      priority while imports fill the country in.
 - [ ] Android mockups, round two: offline banner and page, interrupted
       deletion, loading and not-found states, the full dark set, and the
       future features from the brief (calendar, map, reports, loyalty,
@@ -181,3 +189,8 @@ Guesses made on autopilot; change any of them freely.
   trips, and the first thing to change if it gets slow.
 - The map knows countries and airports only (no geocoding service, so no
   cost or key); a hotel or station shows as its country being filled.
+- Document reminders show in the app (trip page and trip card), not by
+  email or push, which would need a scheduled job and a mail service. Six
+  months is the margin for every passport, rather than a per-country table
+  of entry rules; visas are checked only for lasting the trip. A shared
+  profile's documents count on trips its owner is on.

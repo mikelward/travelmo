@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { airportPlace } from "./airportPlaces";
-import { placeCountry, travelReport, tripDays } from "./reports";
+import { placeCountry, travelReport, tripDays, tripPlaces } from "./reports";
 import type { ExtractedSegment } from "./schema";
 
 const flight = (from: string, to: string, start: string, end: string): ExtractedSegment => ({
@@ -179,5 +179,16 @@ describe("travelReport", () => {
     const bare = { trip: { id: "bare", start: "2025-03-05", end: "2025-03-05" }, segments: [{ type: "activity", title: "Tour", start: "2025-03-05T10:00:00+01:00" }] satisfies ExtractedSegment[] };
     expect(travelReport([bare], "2025-12-01").unplaced).toBe(1);
     expect(report.countries).toEqual([]);
+  });
+});
+
+describe("tripPlaces", () => {
+  it("collects the countries and says whether every place had one", () => {
+    expect(tripPlaces(paris.segments, airportPlace)).toEqual({ countries: new Set(["US", "FR", "BE"]), complete: true });
+    expect(tripPlaces(paris.segments).complete).toBe(false);
+    expect(tripPlaces([]).complete).toBe(false);
+    const oneWay = { ...flight("LHR", "LIS", "2025-06-10T08:00:00+01:00", "2025-06-10T10:45:00+01:00") };
+    delete oneWay.destination;
+    expect(tripPlaces([oneWay], airportPlace)).toEqual({ countries: new Set(["GB"]), complete: false });
   });
 });
