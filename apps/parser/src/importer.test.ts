@@ -392,6 +392,7 @@ describe("reserveByReference", () => {
       // The unfiled item that is that Gmail room, by its reference.
       unfiled: [{ key: "u1", title: "Cove Liverpool", segments: [{ ...room, confirmation: "abc-123" }] }],
       skipped: [],
+      floating: 0,
     };
     await importTripIt("u1", parsed, deps(store, async () => lodging));
     const rooms = [...store.segments.values()].filter((seg) => seg.type === "lodging");
@@ -422,6 +423,7 @@ describe("reserved matches", () => {
         { key: "u2", title: "Cove Liverpool", segments: [room] },
       ],
       skipped: [],
+      floating: 0,
     };
     await importTripIt("u1", parsed, deps(store, async () => lodging));
     // Both TripIt items were found on the two Gmail rooms: nothing new.
@@ -440,9 +442,9 @@ describe("reservations on a second upload", () => {
     const [first] = [...store.segments.values()];
     store.segments.set("m2-0", { ...first!, id: "m2-0", gmailMessageIds: ["m2"] });
     const one = { key: "u1", title: "Cove Liverpool", segments: [room] };
-    await importTripIt("u1", { trips: [], unfiled: [one], skipped: [] }, deps(store, async () => lodging));
+    await importTripIt("u1", { trips: [], unfiled: [one], skipped: [], floating: 0 }, deps(store, async () => lodging));
     // The same export again, now with the second room's item.
-    const counts = await importTripIt("u1", { trips: [], unfiled: [one, { key: "u2", title: "Cove Liverpool", segments: [room] }], skipped: [] }, deps(store, async () => lodging));
+    const counts = await importTripIt("u1", { trips: [], unfiled: [one, { key: "u2", title: "Cove Liverpool", segments: [room] }], skipped: [], floating: 0 }, deps(store, async () => lodging));
     expect(counts).toMatchObject({ skipped: 1, imported: 0, duplicates: 1 });
     expect([...store.segments.values()].filter((seg) => seg.type === "lodging")).toHaveLength(2);
   });

@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { NotATripItExport, parseTripItExport, summarizeTripIt, tripItInstant } from "./tripit";
+import {
+  NotATripItExport,
+  cleanNotes,
+  countryFromAddress,
+  floatingNote,
+  groupSkips,
+  parseTripItExport,
+  summarizeTripIt,
+  tripItDateTime,
+  tripItInstant,
+} from "./tripit";
 
 // Invented data in the export's shape; no real itinerary.
 const dt = (date: string, time: string, timezone: string, utc_offset: string) => ({ date, time, timezone, utc_offset });
@@ -82,6 +92,40 @@ describe("tripItInstant", () => {
     expect(tripItInstant({ date: "2030-07-10", time: "10:00", timezone: "Not/AZone" })).toBeUndefined();
     expect(tripItInstant({ date: "July 10", timezone: "UTC" })).toBeUndefined();
   });
+
+  it("keeps a time with no zone at all as written, marked floating", () => {
+    expect(tripItDateTime({ date: "2030-07-10", time: "10:00" })).toEqual({ instant: "2030-07-10T10:00:00+00:00", floating: true });
+    expect(tripItDateTime({ date: "2030-07-10" }, "15:00")).toEqual({ instant: "2030-07-10T15:00:00+00:00", floating: true });
+    expect(tripItDateTime(dt("2030-07-10", "10:00", "Europe/London", "+01:00"))).toEqual({ instant: "2030-07-10T10:00:00+01:00", floating: false });
+    // A zone that is named but unknown is a bad value, not a missing one.
+    expect(tripItDateTime({ date: "2030-07-10", time: "10:00", timezone: "Not/AZone" })).toBeUndefined();
+  });
+});
+
+describe("cleanNotes", () => {
+  it("drops TripIt's markers and pasted HTML, keeping the text", () => {
+    expect(cleanNotes("[[TripItALT: Gate: B12]]Gate: B12\r\nBring <b>ID</b>.<br>Thanks &amp; bye")).toBe("Gate: B12\nBring ID.\nThanks & bye");
+    expect(cleanNotes("<p>One</p><p>Two</p>\n\n\n\nThree")).toBe("One\nTwo\n\nThree");
+    expect(cleanNotes("  ")).toBeUndefined();
+    expect(cleanNotes(42)).toBe("42");
+  });
+});
+
+describe("countryFromAddress", () => {
+  it("reads the country a one-line address ends in", () => {
+    expect(countryFromAddress("1 Example St, Sydney NSW 2000, Australia")).toBe("AU");
+    expect(countryFromAddress("Rue Exemple 1, Paris, France 75001")).toBe("FR");
+    expect(countryFromAddress("12 Sample Rd, Exampleton, Scotland")).toBe("GB");
+    expect(countryFromAddress("5 Main St, Boston, MA 02116")).toBe("US");
+    expect(countryFromAddress("5 Main St, Boston, MA 02116, USA")).toBe("US");
+  });
+
+  it("gives nothing when the address stops at a city or state", () => {
+    expect(countryFromAddress("5 Main St, Exampleton")).toBeUndefined();
+    expect(countryFromAddress("Exampleton VIC 3000")).toBeUndefined();
+    expect(countryFromAddress("")).toBeUndefined();
+    expect(countryFromAddress(undefined)).toBeUndefined();
+  });
 });
 
 describe("parseTripItExport", () => {
@@ -122,8 +166,164 @@ describe("parseTripItExport", () => {
       { kind: "note", title: "(untitled)", reason: "notes are not bookings" },
       { kind: "trip", title: "Empty", reason: "nothing in it Travelmo can import" },
     ]);
-    const odd = parseTripItExport({ Trips: { Objects: [{ display_name: "Mystery", Segment: [] }] } });
+    const odd = parseTripItExport({ Trips: { Objects: [{ display_name: "Mystery", Segment: [{ gizmo: "1" }] }] } });
     expect(odd.skipped).toContainEqual({ kind: "unknown", title: "Mystery", reason: "not a kind of reservation Travelmo recognizes" });
+  });
+
+  it("says when TripIt kept only a reservation's name", () => {
+    const stripped = parseTripItExport({
+      Trips: { Objects: [{ display_name: "Old flight", Segment: [{}], is_purchased: "true" }, { display_name: "Old thing" }] },
+      UnfiledItems: [
+        { display_name: "Old stay", supplier_name: "Hotel Example", room_type: "Double", supplier_conf_num: "H1" },
+        { display_name: "Old air", Segment: [{}, {}], booking_site_conf_num: "A1" },
+      ],
+    });
+    expect(stripped.skipped).toEqual([
+      { kind: "unknown", title: "Old flight", reason: "TripIt kept only its name" },
+      { kind: "unknown", title: "Old thing", reason: "TripIt kept only its name" },
+      { kind: "trip", title: "Trip", reason: "nothing in it Travelmo can import" },
+      { kind: "lodging", title: "Old stay", reason: "TripIt kept only its name and confirmation number" },
+      { kind: "unknown", title: "Old air", reason: "TripIt kept only its name and confirmation number" },
+    ]);
+    // A stay with a date field that cannot be read is a different story.
+    const undated = parseTripItExport({ UnfiledItems: [{ supplier_name: "Hotel", room_type: "Double", StartDateTime: { date: "soon" } }] });
+    expect(undated.skipped).toEqual([{ kind: "lodging", title: "Hotel", reason: "no usable date" }]);
+  });
+
+  it("keeps a time with no zone as written and counts it", () => {
+    const zoneless = parseTripItExport({
+      Trips: [
+        {
+          TripData: { display_name: "Show", start_date: "2030-03-01", end_date: "2030-03-01" },
+          Objects: [{ display_name: "Example Theatre", detail_type_code: "H", StartDateTime: { date: "2030-03-01", time: "19:30:00" }, Address: { address: "1 Stage St, Exampleton" } }],
+        },
+      ],
+    });
+    expect(zoneless.floating).toBe(1);
+    expect(zoneless.trips[0]!.segments[0]).toEqual({
+      type: "activity",
+      title: "Example Theatre",
+      start: "2030-03-01T19:30:00+00:00",
+      destination: { name: "Example Theatre" },
+      notes: floatingNote,
+    });
+    expect(parsed.floating).toBe(0);
+  });
+
+  it("maps a transfer per leg, a ferry by its code, and a cruise as one booking over its port calls", () => {
+    const transfer = {
+      display_name: "Airport transfer",
+      supplier_name: "Example Shuttles",
+      Segment: [
+        {
+          detail_type_code: "G",
+          carrier_name: "Example Shuttles",
+          start_location_name: "Exampleville Airport",
+          StartLocationAddress: { address: "Airport Rd, Exampleville, Australia" },
+          end_location_name: "Hotel Example",
+          EndLocationAddress: { address: "1 Beach Rd, Exampleville NSW 2000, Australia" },
+          StartDateTime: dt("2030-05-02", "10:00:00", "Australia/Sydney", "+10:00"),
+          EndDateTime: dt("2030-05-02", "11:00:00", "Australia/Sydney", "+10:00"),
+          vehicle_description: "Minibus",
+        },
+        { detail_type_code: "F", start_location_name: "Pier 1", end_location_name: "Island", StartDateTime: dt("2030-05-03", "09:00:00", "Australia/Sydney", "+10:00") },
+        { start_location_name: "Island", end_location_name: "Pier 1", StartDateTime: dt("2030-05-04", "09:00:00", "Australia/Sydney", "+10:00") },
+      ],
+    };
+    const cruiseObject = {
+      display_name: "Example Seas",
+      ship_name: "MS Example",
+      cabin_type: "Balcony",
+      booking_site_name: "Example Cruises",
+      Segment: [
+        { location_name: "Port A", LocationAddress: { address: "Port A, Italy" }, StartDateTime: dt("2030-06-01", "17:00:00", "Europe/Rome", "+02:00") },
+        { detail_type_code: "P", location_name: "Port B", LocationAddress: { address: "Port B, Croatia" }, StartDateTime: dt("2030-06-02", "08:00:00", "Europe/Zagreb", "+02:00") },
+        { detail_type_code: "P", location_name: "Port C", LocationAddress: { address: "Port C, Italy" }, StartDateTime: dt("2030-06-04", "07:00:00", "Europe/Rome", "+02:00") },
+      ],
+    };
+    const result = parseTripItExport({ Trips: [{ TripData: { display_name: "Sea" }, Objects: [transfer, cruiseObject] }] });
+    expect(result.skipped).toEqual([]);
+    const [shuttle, ferry, uncoded, ...voyage] = result.trips[0]!.segments;
+    expect(shuttle).toEqual({
+      type: "bus",
+      title: "Example Shuttles Exampleville Airport to Hotel Example",
+      provider: "Example Shuttles",
+      start: "2030-05-02T10:00:00+10:00",
+      end: "2030-05-02T11:00:00+10:00",
+      origin: { name: "Exampleville Airport", country: "AU" },
+      destination: { name: "Hotel Example", country: "AU" },
+      notes: "Vehicle: Minibus",
+    });
+    expect(ferry).toMatchObject({ type: "ferry", title: "Pier 1 to Island", provider: "Example Shuttles", start: "2030-05-03T09:00:00+10:00" });
+    // No code: still a journey for the reports, so a bus, not "other".
+    expect(uncoded).toMatchObject({ type: "bus", title: "Island to Pier 1" });
+    // One sailing per pair of port calls, so the Croatian stop counts for reports.
+    expect(voyage).toEqual([
+      {
+        type: "ferry",
+        title: "Example Seas: Port A to Port B",
+        provider: "Example Cruises",
+        start: "2030-06-01T17:00:00+02:00",
+        end: "2030-06-02T08:00:00+02:00",
+        origin: { name: "Port A", country: "IT" },
+        destination: { name: "Port B", country: "HR" },
+        notes: "Ship: MS Example\nCabin: Balcony",
+      },
+      {
+        type: "ferry",
+        title: "Example Seas: Port B to Port C",
+        provider: "Example Cruises",
+        start: "2030-06-02T08:00:00+02:00",
+        end: "2030-06-04T07:00:00+02:00",
+        origin: { name: "Port B", country: "HR" },
+        destination: { name: "Port C", country: "IT" },
+        notes: "Ship: MS Example\nCabin: Balcony",
+      },
+    ]);
+    expect(result.trips[0]).toMatchObject({ start: "2030-05-02", end: "2030-06-04" });
+    const lone = parseTripItExport({ Trips: [{ Objects: [{ ...cruiseObject, Segment: cruiseObject.Segment[0] }] }] });
+    expect(lone.trips[0]!.segments).toEqual([
+      { type: "ferry", title: "Example Seas: Port A", provider: "Example Cruises", start: "2030-06-01T17:00:00+02:00", origin: { name: "Port A", country: "IT" }, notes: "Ship: MS Example\nCabin: Balcony" },
+    ]);
+    // A call without a usable date is reported, since the reports will not see its country.
+    const undated = parseTripItExport({
+      Trips: [{ Objects: [{ ...cruiseObject, Segment: [cruiseObject.Segment[0], { ...cruiseObject.Segment[1], StartDateTime: { date: "2030-06-02", timezone: "Not/AZone" } }, cruiseObject.Segment[2]] }] }],
+    });
+    expect(undated.trips[0]!.segments.map((s) => s.title)).toEqual(["Example Seas: Port A to Port C"]);
+    expect(undated.skipped).toEqual([{ kind: "leg", title: "Example Seas", reason: "1 port call without a usable date left out; the rest imported" }]);
+  });
+
+  it("orders a cruise's port calls by the moment, across the date line", () => {
+    const crossing = parseTripItExport({
+      Trips: [
+        {
+          Objects: [
+            {
+              ship_name: "MS Example",
+              Segment: [
+                { location_name: "Apia", StartDateTime: dt("2030-06-02", "08:00:00", "Pacific/Apia", "+13:00") },
+                { location_name: "Pago Pago", StartDateTime: dt("2030-06-01", "20:00:00", "Pacific/Pago_Pago", "-11:00") },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(crossing.trips[0]!.segments).toEqual([
+      {
+        type: "ferry",
+        title: "MS Example: Apia to Pago Pago",
+        start: "2030-06-02T08:00:00+13:00",
+        end: "2030-06-01T20:00:00-11:00",
+        origin: { name: "Apia" },
+        destination: { name: "Pago Pago" },
+      },
+    ]);
+  });
+
+  it("gives a stay or an activity the country its address ends in", () => {
+    const withCountry = parseTripItExport({ Trips: [{ Objects: [{ ...stay, Address: { address: "1 Rue Exemple, 75001 Paris, France" } }] }] });
+    expect(withCountry.trips[0]!.segments[0]!.destination).toEqual({ name: "Hotel Example", country: "FR" });
   });
 
   it("keeps unfiled items apart, with their confirmation numbers", () => {
@@ -146,7 +346,7 @@ describe("parseTripItExport", () => {
   });
 
   it("reports a leg left out of a reservation whose other legs import", () => {
-    const halfDated = { ...flight, Segment: [flight.Segment[0]!, { ...flight.Segment[1]!, StartDateTime: { date: "2030-05-08", time: "18:00" } }] };
+    const halfDated = { ...flight, Segment: [flight.Segment[0]!, { ...flight.Segment[1]!, StartDateTime: { date: "2030-05-08", time: "18:00", timezone: "Not/AZone" } }] };
     const partial = parseTripItExport({ Trips: [{ TripData: { display_name: "Half" }, Objects: [halfDated] }] });
     expect(partial.trips[0]!.segments).toHaveLength(1);
     expect(partial.skipped).toEqual([
@@ -184,8 +384,24 @@ describe("summarizeTripIt", () => {
       unfiled: 1,
       byType: { flight: 2, lodging: 1, car_rental: 1 },
       skipped: 2,
+      floating: 0,
       first: "2030-05-01",
       last: "2030-07-03",
     });
+  });
+});
+
+describe("groupSkips", () => {
+  it("groups by reason, the largest group first", () => {
+    const groups = groupSkips([
+      { title: "A", reason: "no usable date" },
+      { title: "B", reason: "TripIt kept only its name" },
+      { title: "C", reason: "TripIt kept only its name" },
+    ]);
+    expect(groups).toEqual([
+      { reason: "TripIt kept only its name", titles: ["B", "C"] },
+      { reason: "no usable date", titles: ["A"] },
+    ]);
+    expect(groupSkips([])).toEqual([]);
   });
 });
