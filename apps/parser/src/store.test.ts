@@ -48,6 +48,31 @@ describe("firestoreStore.claimMessage", () => {
   });
 });
 
+describe("firestoreStore reads for previews", () => {
+  it("finds the records that exist among many ids, and lists a trip's segments inside and outside a transaction", async () => {
+    const uid = unique();
+    const have = [unique(), unique()];
+    await store.setParsed({ messageId: have[0]!, uid, outcome: "imported", segmentIds: [], processedAt: at(0) });
+    await store.setParsed({ messageId: have[1]!, uid, source: "tripit", outcome: "filtered", segmentIds: [], processedAt: at(0) });
+    const ids = [have[0]!, ...Array.from({ length: 350 }, (_, i) => `missing-${i}`), have[1]!];
+    const found = await store.parsedRecords(uid, ids);
+    expect([...found.keys()].sort()).toEqual([...have].sort());
+    expect(found.get(have[1]!)?.source).toBe("tripit");
+
+    const tripId = unique();
+    const trip = { id: tripId, title: "T", start: "2026-12-12", end: "2026-12-14", ownerUid: uid, sharedWith: [], createdAt: at(0), updatedAt: at(0) };
+    const segment = { id: `${tripId}-s`, tripId, type: "lodging" as const, title: "Stay", start: "2026-12-12T15:00:00+00:00", source: "tripit" as const, gmailMessageIds: [], createdAt: at(0), updatedAt: at(0) };
+    await store.withUserLock(uid, async (tx) => {
+      tx.createTrip(trip);
+      tx.putSegment(segment);
+    });
+    expect(await store.userTrips(uid)).toHaveLength(1);
+    expect((await store.tripSegments(tripId)).map((s) => s.id)).toEqual([segment.id]);
+    const inside = await store.withUserLock(uid, (tx) => tx.listSegments(tripId));
+    expect(inside.map((s) => s.title)).toEqual(["Stay"]);
+  });
+});
+
 describe("firestoreStore examples", () => {
   it("starts empty and keeps every example saved concurrently, per kind", async () => {
     const uid = unique();

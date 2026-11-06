@@ -33,12 +33,16 @@ viewer's zone. Trip bounds are calendar dates.
 - `trips/{tripId}/segments/{segmentId}` — `type` (flight, train, bus, ferry,
   lodging, car_rental, activity, other), `title, provider, confirmation,
   start, end, origin, destination, notes, source, gmailMessageIds[], sender`
-  (the booking email's domain). Imported segments use the id
-  `<gmailMessageId>-<index>` so a re-import overwrites rather than duplicates.
+  (the booking email's domain). `source` is gmail, manual, tripit or ics.
+  Imported segments use the id `<candidate id>-<index>` (the Gmail message
+  id, or the hashed id of a file item) so a re-import overwrites rather than
+  duplicates.
 - `users/{uid}` — `email, displayName, photoURL, gmail {emailAddress,
   connectedAt, watchExpiration, historyId}`. `gmail` is server-written.
 - `users/{uid}/settings/patterns` — `allow[], deny[]` sender domains.
-- `users/{uid}/parsedMessages/{gmailMessageId}` — `outcome` (processing,
+- `users/{uid}/parsedMessages/{id}` — one per import candidate: the Gmail
+  message id, or a hashed id for an item of a TripIt or calendar file, with
+  `source` (gmail when absent, tripit, ics), `outcome` (processing,
   filtered, not_booking, imported, failed), `reason, from, subject,
   segmentIds[], processedAt`. Claimed atomically as `processing` before any
   work, so a message delivered twice is imported once; a `processing` claim
@@ -197,6 +201,23 @@ Gmail ─watch─▶ Pub/Sub ─push(OIDC)─▶ parser /internal/pubsub/gmail
                                         ▼
                                record "imported"
 ```
+
+Every source feeds the same pipeline as a *candidate*: a text candidate (an
+email, or a calendar event rendered as one) goes through the pre-filter, the
+similarity stage and the model; a structured candidate (a reservation mapped
+from a TripIt export) skips all three and arrives as an `ExtractedBooking`.
+From there the stages are shared: a claim on `parsedMessages/{id}`, trip
+assignment, the record. A candidate may carry a *trip hint*, the trip its
+source already knows (a TripIt trip): the booking then joins the live trip
+whose dates overlap the hint's the most, widened to hold it, or a new trip
+with the hint's title; a hint that merges "by title" only reuses a trip with
+exactly that title, for holding trips that must never swallow a real one. The
+candidates of one hinted trip are imported as a group: each claimed and read
+on its own, then written in one transaction per 400 segments (Firestore's
+write limit). Structured candidates are checked against the trip's existing
+bookings, and left out as "duplicates" when one of the same kind on the same
+local day shares the route by code or the title, so a file import does not
+double what Gmail already brought in.
 
 Cost control is the pre-filter plus the parsed-message record: an email is
 shown to the model at most once, and only when it carries a booking signal.
