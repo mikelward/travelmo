@@ -86,6 +86,109 @@ describe("travelerEntries", () => {
   });
 });
 
+describe("templated profiles", () => {
+  // The shape TripIt's own export uses: a list of templates by name.
+  const json = {
+    first_name: "Ann",
+    last_name: "Example",
+    home_airport_code: { code: "AAA", name: "Exampleville" },
+    home_location: "Exampleville, Australia",
+    country_code: "AU",
+    photo_url: "https://example.invalid/ann.png",
+    sms_phone_number: "+15550100",
+    EmailAddresses: [{ email_address: "ann@example.com", is_primary: "true" }, { email_address: "a.example@example.org" }],
+    LoyaltyPrograms: [
+      {
+        name: "Example Air Miles",
+        account_number: "EA123",
+        balance: "12000",
+        error_message: "",
+        Activity: [{ date: "2030-01-01", description: "Flight", base: "100", bonus: "0", total: "100" }],
+        SubAccount: [{ name: "Partner", balance: "5" }],
+      },
+    ],
+    TravelerProfile: [
+      {
+        template_name: "TravelDocumentPassport",
+        full_name: "Ann Example",
+        first_name: "Ann",
+        last_name: "Example",
+        document_number: "X1234567",
+        nationality: "Australia",
+        country_of_birth: "New Zealand",
+        date_issue: "2021-05-06",
+        date_expire: "2031-05-06",
+      },
+      { template_name: "TravelAccountAir", name: "Example Air Miles", account_number: "EA123", nickname: "Ann's" },
+      { template_name: "TravelAccountCar", name: "Example Cars Club", account_number: "C9" },
+      { template_name: "UserProfilePublic", screen_name: "ann_e", full_name: "Ann Example", company: "Example Co", photo_url: "https://example.invalid/a.png" },
+    ],
+  };
+  const profile = extractTripItProfile(json);
+
+  it("files passports as documents, titled by kind and holder", () => {
+    expect(profile.documents.map((d) => d.title)).toEqual(["Ann Example", "Passport: Ann Example"]);
+    const passport = profile.documents[1]!;
+    expect(passport.fields).toContainEqual({ label: "Date expire", value: "2031-05-06" });
+    expect(passport.fields).toContainEqual({ label: "Nationality", value: "Australia" });
+    expect(passport.fields.some((f) => f.label === "Template name")).toBe(false);
+  });
+
+  it("files loyalty accounts with the programs, adding details to a program already listed", () => {
+    expect(profile.loyalty.map((l) => l.title)).toEqual(["Example Air Miles", "Example Cars Club"]);
+    const air = profile.loyalty[0]!;
+    expect(air.fields).toContainEqual({ label: "Balance", value: "12000" });
+    expect(air.fields).toContainEqual({ label: "Nickname", value: "Ann's" });
+    expect(air.fields).toContainEqual({ label: "Sub account › Name", value: "Partner" });
+    expect(air.fields.filter((f) => f.label === "Account number")).toHaveLength(1);
+    expect(air.fields.some((f) => f.label.startsWith("Activity") || f.label === "Error message")).toBe(false);
+  });
+
+  it("keeps a second account in the same program apart, by its number", () => {
+    const two = extractTripItProfile({
+      LoyaltyPrograms: [{ name: "Example Air Miles", account_number: "ANN123", balance: "1" }],
+      TravelerProfile: [
+        { template_name: "TravelAccountAir", name: "Example Air Miles", account_number: "BOB456", nickname: "Bob's" },
+        { template_name: "TravelAccountAir", name: "Example Air Miles", account_number: "ANN123", nickname: "Ann's" },
+        { template_name: "TravelAccountAir", name: "Sample Hotels", account_number: "S1" },
+        { template_name: "TravelAccountAir", name: "Sample Hotels", account_number: "S2" },
+      ],
+    });
+    expect(two.loyalty.map((l) => [l.title, l.fields.find((f) => f.label === "Account number")?.value, l.fields.find((f) => f.label === "Nickname")?.value])).toEqual([
+      ["Example Air Miles", "ANN123", "Ann's"],
+      ["Example Air Miles", "BOB456", "Bob's"],
+      ["Sample Hotels", "S1", undefined],
+      ["Sample Hotels", "S2", undefined],
+    ]);
+  });
+
+  it("makes one entry of the traveler's own details, without photo or phone", () => {
+    const own = profile.documents[0]!;
+    expect(own.fields).toEqual([
+      { label: "Name", value: "Ann Example" },
+      { label: "Home airport code › Code", value: "AAA" },
+      { label: "Home airport code › Name", value: "Exampleville" },
+      { label: "Home location", value: "Exampleville, Australia" },
+      { label: "Country code", value: "AU" },
+      { label: "Screen name", value: "ann_e" },
+      { label: "Company", value: "Example Co" },
+      { label: "Emails", value: "ann@example.com, a.example@example.org" },
+    ]);
+  });
+
+  it("takes the owner's name from the public profile when the root has none", () => {
+    const only = extractTripItProfile({ TravelerProfile: [{ template_name: "UserProfilePublic", full_name: "Ann Example", company: "Example Co" }] });
+    expect(only.documents).toEqual([
+      { title: "Ann Example", fields: [{ label: "Name", value: "Ann Example" }, { label: "Company", value: "Example Co" }] },
+    ]);
+  });
+
+  it("leaves a profile without template names to the generic reading", () => {
+    const plain = extractTripItProfile({ TravelerProfile: { first_name: "Ann", Passport: { number: "X1" } } });
+    expect(plain.documents.map((d) => d.title)).toEqual(["Ann", "Passport"]);
+  });
+});
+
 describe("extractTripItProfile", () => {
   it("reads all three parts of an export, and nothing from an export without them", () => {
     const json = {

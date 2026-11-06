@@ -95,14 +95,101 @@ function unwrap(value: unknown): Obj[] {
   });
 }
 
+// A program's transaction log (every flight that earned points) is history,
+// not the account; `error_message` is TripIt's own fetch status.
+const programNoise = new Set(["Activity", "error_message"]);
+
+const without = (o: Obj, drop: ReadonlySet<string>): Obj => Object.fromEntries(Object.entries(o).filter(([k]) => !drop.has(k)));
+
 export function loyaltyEntries(value: unknown): ProfileEntry[] {
   return unwrap(value)
     .slice(0, maxEntries)
     .map((o, i) => ({
       title: pick(o, ["name", "program_name", "display_name", "supplier_name", "vendor", "program"]) ?? `Loyalty program ${i + 1}`,
-      fields: flatten(o),
+      fields: flatten(without(o, programNoise)),
     }))
     .filter((e) => e.fields.length);
+}
+
+// TripIt's own export writes the profile as a list of templates, each named
+// by `template_name`: TravelDocumentPassport, TravelAccountAir (a frequent
+// flyer account), TravelAccountCar, UserProfilePublic. These are sorted into
+// documents, loyalty programs and the profile's own entry; a profile without
+// template names takes the generic reading (profileEntries).
+type Templated = { documents: ProfileEntry[]; accounts: ProfileEntry[]; own: Obj };
+
+const templateName = (o: Obj) => scalar(o.template_name);
+
+export function templatedEntries(profiles: readonly Obj[]): Templated {
+  const out: Templated = { documents: [], accounts: [], own: {} };
+  for (const profile of profiles) {
+    const template = templateName(profile);
+    if (!template) continue;
+    const rest = without(profile, new Set(["template_name"]));
+    if (template.startsWith("TravelAccount")) {
+      const title = pick(rest, ["name", "program_name", "display_name"]);
+      const fields = flatten(title ? without(rest, new Set(["name"])) : rest);
+      if (fields.length) out.accounts.push({ title: title ?? humanize(template), fields });
+    } else if (template.startsWith("UserProfile")) {
+      for (const [k, v] of Object.entries(rest)) if (!/url$/i.test(k) && scalar(v) !== undefined) out.own[k] = v;
+    } else {
+      const kind = humanize(template.replace(/^TravelDocument/, "")) || "Travel document";
+      const who = personName(rest);
+      const fields = flatten(rest);
+      if (fields.length) out.documents.push({ title: who ? `${kind}: ${who}` : kind, fields });
+    }
+  }
+  return out;
+}
+
+const accountNumber = (entry: ProfileEntry) => entry.fields.find((f) => /account number|member(ship)? number|^number$/i.test(f.label))?.value.replace(/\s+/g, "");
+
+// A profile account is the same account as a listed program when the
+// program has the same name and the same number, or one of them gives no
+// number; two accounts in one program (a partner's) stay apart.
+const sameAccount = (program: ProfileEntry, account: ProfileEntry) => {
+  if (program.title.toLowerCase() !== account.title.toLowerCase()) return false;
+  const a = accountNumber(program);
+  const b = accountNumber(account);
+  return !a || !b || a === b;
+};
+
+// Loyalty accounts the profile names that the programs list already has
+// add their missing details to it; the rest stand alone.
+export function mergeAccounts(programs: ProfileEntry[], accounts: readonly ProfileEntry[]): ProfileEntry[] {
+  const merged = programs.map((p) => ({ ...p, fields: [...p.fields] }));
+  for (const account of accounts) {
+    const existing = merged.find((p) => sameAccount(p, account));
+    if (!existing) {
+      merged.push(account);
+      continue;
+    }
+    for (const field of account.fields) {
+      if (!existing.fields.some((f) => f.label === field.label) && existing.fields.length < maxFields) existing.fields.push(field);
+    }
+  }
+  return merged.slice(0, maxEntries);
+}
+
+// The traveler's own details at the top of an export (name, home airport,
+// home location, the account's emails), as one entry.
+const ownKeys = ["first_name", "middle_name", "last_name", "home_airport_code", "home_location", "country_code", "screen_name", "company"];
+
+export function ownEntry(root: Obj, extra: Obj = {}): ProfileEntry | undefined {
+  const own: Obj = {};
+  // The export's root names the account holder; the public profile template
+  // repeats the name, and is all an export without root fields has.
+  const name = personName(root) ?? personName(extra);
+  if (name) own.name = name;
+  const nameParts = new Set(["first_name", "middle_name", "last_name", "full_name"]);
+  for (const k of ownKeys) if (!nameParts.has(k) && root[k] !== undefined) own[k] = root[k];
+  for (const [k, v] of Object.entries(extra)) if (!(k in own) && !nameParts.has(k)) own[k] = v;
+  const emails = list(root.EmailAddresses)
+    .map((e) => scalar(e.email_address))
+    .filter((e): e is string => e !== undefined);
+  if (emails.length) own.emails = emails;
+  const fields = flatten(own);
+  return fields.length ? { title: name ?? "Profile", fields } : undefined;
 }
 
 // A profile's own values make one entry; each nested record (a passport, a
@@ -199,10 +286,14 @@ export function fitProfile(profile: ImportedProfile, budget = profileBudgetBytes
 // The profile parts of a TripIt export; empty lists for what it lacks.
 export function extractTripItProfile(json: unknown): ImportedProfile {
   if (!isObj(json)) return { travelers: [], loyalty: [], documents: [] };
+  const profiles = list(json.TravelerProfile ?? json.Profile);
+  const templated = templatedEntries(profiles.filter((p) => templateName(p)));
+  const generic = profileEntries(profiles.filter((p) => !templateName(p)));
+  const own = ownEntry(json, templated.own);
   return fitProfile({
     travelers: travelerEntries(json.Trips, json.UnfiledItems),
-    loyalty: loyaltyEntries(json.LoyaltyPrograms ?? json.PointsPrograms ?? json.PointsProgram),
-    documents: profileEntries(json.TravelerProfile ?? json.Profile),
+    loyalty: mergeAccounts(loyaltyEntries(json.LoyaltyPrograms ?? json.PointsPrograms ?? json.PointsProgram), templated.accounts),
+    documents: [...(own ? [own] : []), ...generic, ...templated.documents],
   });
 }
 

@@ -1,3 +1,4 @@
+import { countryCodeOf } from "./countries";
 import { daysBetween } from "./trips";
 import { tripPlaces, type PlaceLookup } from "./reports";
 import type { ExtractedSegment, ProfileEntry, TravelProfile, Trip } from "./schema";
@@ -51,16 +52,18 @@ export function parseDocumentDate(value: string): string | undefined {
 const lastPart = (label: string) => label.split(" › ").at(-1)!.toLowerCase();
 const isExpiry = (label: string) => /expir|valid (until|to|through)|valid thru/.test(lastPart(label));
 const isNationality = (label: string) => /nationality|citizenship/.test(lastPart(label));
-const isCountry = (label: string) => /country/.test(lastPart(label)) && !isNationality(label);
+// A country of birth says nothing about which country a document is for.
+const isCountry = (label: string) => /country/.test(lastPart(label)) && !/birth/.test(lastPart(label)) && !isNationality(label);
 
 // The country a document belongs to: for a passport, the one that issued it
 // (its holder's nationality is the same); for a visa, the one it admits to
 // (the country field, which is also its issuer), never its holder's
-// nationality, which says nothing of where it is valid.
+// nationality, which says nothing of where it is valid. Written as a code
+// or as a name ("Australia", as TripIt's profile has it).
 function countryOf(entry: ProfileEntry, kind: DocumentKind): string | undefined {
-  const code = (f: { value: string }) => f.value.trim().toUpperCase();
+  const code = (f: { value: string }) => countryCodeOf(f.value) ?? f.value.trim().toUpperCase();
   const pick = (test: (label: string) => boolean) => entry.fields.filter((f) => test(f.label)).map(code).find((v) => /^[A-Z]{2}$/.test(v));
-  return kind === "passport" ? (pick(isCountry) ?? pick(isNationality)) : pick(isCountry);
+  return kind === "passport" ? (pick(isNationality) ?? pick(isCountry)) : pick(isCountry);
 }
 const isType = (label: string) => /^(document )?type$/.test(lastPart(label));
 

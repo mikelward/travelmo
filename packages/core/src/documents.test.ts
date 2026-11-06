@@ -53,6 +53,22 @@ describe("travelDocuments countries", () => {
     expect(bare?.country).toBeUndefined();
     expect(passport?.country).toBe("GB");
   });
+
+  it("reads a country written as a name, and never a passport's country of birth", () => {
+    const [passport, visa] = travelDocuments([
+      {
+        title: "Passport: Ann Example",
+        fields: [
+          { label: "Country of birth", value: "New Zealand" },
+          { label: "Nationality", value: "Australia" },
+          { label: "Date expire", value: "2031-05-06" },
+        ],
+      },
+      { title: "Visa", fields: [{ label: "Country", value: "United States" }, { label: "Expiry", value: "2027-01-01" }] },
+    ]);
+    expect(passport?.country).toBe("AU");
+    expect(visa?.country).toBe("US");
+  });
 });
 
 describe("documentWarnings", () => {
