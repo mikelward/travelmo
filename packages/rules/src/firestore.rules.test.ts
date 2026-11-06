@@ -166,6 +166,13 @@ describe("segments", () => {
     await assertFails(setDoc(at("bad4"), { ...segment, id: "bad4", start: "tomorrow" }));
     await assertFails(setDoc(at("bad5"), { ...segment, id: "bad5", extra: 1 }));
     await assertFails(setDoc(at("bad6"), { ...segment, id: "bad6", title: "" }));
+    await assertFails(setDoc(at("bad7"), { ...segment, id: "bad7", source: "feed" }));
+  });
+
+  it("accepts bookings imported from a TripIt or calendar file", async () => {
+    const at = (id: string) => doc(as(owner), paths.segment(trip.id, id));
+    await assertSucceeds(setDoc(at("t1"), { ...segment, id: "t1", source: "tripit", gmailMessageIds: [] }));
+    await assertSucceeds(setDoc(at("i1"), { ...segment, id: "i1", source: "ics", gmailMessageIds: [] }));
   });
 });
 
