@@ -25,6 +25,13 @@ describe("previewTripIt", () => {
     );
   });
 
+  it("says when bookings keep a time the file gave no zone for", () => {
+    const zoneless = JSON.stringify({ Trips: [{ Objects: [{ detail_type_code: "T", display_name: "Tour", StartDateTime: { date: "2030-01-01", time: "10:00" } }] }] });
+    expect(previewTripIt(zoneless).text).toBe(
+      "1 trip with 1 booking (1 activity), from 2030-01-01 to 2030-01-01. 1 booking has no time zone in the file and will keep the time as written.",
+    );
+  });
+
   it("says what the travel profile gets from the file", () => {
     const withProfile = JSON.stringify({
       ...JSON.parse(file),

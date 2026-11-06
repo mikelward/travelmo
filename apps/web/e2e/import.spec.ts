@@ -35,8 +35,10 @@ test("a TripIt export is previewed in the browser, then sent only when the user 
     buffer: Buffer.from(JSON.stringify(exportFile)),
   });
   await expect(page.getByText("1 trip with 1 booking (1 flight), from 2030-01-01 to 2030-01-01.", { exact: false })).toBeVisible();
+  // Items not imported are grouped by reason, the names folded under each.
   await page.getByText("Not imported").click();
-  await expect(page.getByText("(untitled): notes are not bookings")).toBeVisible();
+  await page.getByText("notes are not bookings (1)").click();
+  await expect(page.getByText("(untitled)", { exact: true })).toBeVisible();
   expect(sent).toHaveLength(0);
 
   await page.getByRole("button", { name: "Import", exact: true }).click();
