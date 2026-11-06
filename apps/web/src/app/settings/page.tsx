@@ -1,6 +1,6 @@
 "use client";
 
-import { paths, type ParsedMessage, type SenderPatterns } from "@travelmo/core";
+import { groupSkips, paths, type ParsedMessage, type SenderPatterns, type SkipGroup } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -156,7 +156,7 @@ function GmailSection({ user }: { user: User }) {
   );
 }
 
-type FilePreview = { text: string; canImport: boolean; notImported?: { title: string; reason: string }[]; run: () => Promise<string> };
+type FilePreview = { text: string; canImport: boolean; notImported?: SkipGroup[]; run: () => Promise<string> };
 
 // Picks a file, shows what reading it in the browser found, and sends it
 // only when the user presses Import.
@@ -217,9 +217,19 @@ function FileImportSection(props: { title: string; blurb: string; accept: string
             <details className="mt-2 text-zinc-600 dark:text-zinc-400">
               <summary>Not imported</summary>
               <ul className="mt-1 list-disc pl-5">
-                {preview.notImported.map((item, i) => (
-                  <li key={i}>
-                    {item.title}: {item.reason}
+                {/* An old account has a hundred reservations TripIt kept only the name of: one line per reason, the names behind it. */}
+                {preview.notImported.map((group) => (
+                  <li key={group.reason}>
+                    <details>
+                      <summary>
+                        {group.reason} ({group.titles.length})
+                      </summary>
+                      <ul className="mt-1 list-[circle] pl-5">
+                        {group.titles.map((title, i) => (
+                          <li key={i}>{title}</li>
+                        ))}
+                      </ul>
+                    </details>
                   </li>
                 ))}
               </ul>
@@ -248,7 +258,7 @@ function TripItSection({ user }: { user: User }) {
         return {
           text: p.text,
           canImport: p.parsed.trips.length + p.parsed.unfiled.length > 0 || p.hasProfile,
-          notImported: p.parsed.skipped,
+          notImported: groupSkips(p.parsed.skipped),
           run: async () => describeTripItResult(await api.importTripIt(user, p.json)),
         };
       }}

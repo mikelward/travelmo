@@ -42,6 +42,7 @@ export function previewTripIt(fileText: string): TripItPreview {
   if (s.first && s.last) parts.push(`from ${s.first} to ${s.last}`);
   let text = `${parts.join(", ")}.`;
   if (s.unfiled) text += ` ${count(s.unfiled, "booking", "bookings")} TripIt never filed into a trip will go into "Unfiled from TripIt".`;
+  if (s.floating) text += ` ${count(s.floating, "booking has", "bookings have")} no time zone in the file and will keep the time as written.`;
   if (s.skipped) text += ` ${count(s.skipped, "item", "items")} can't be imported (listed below).`;
   const profile = extractTripItProfile(json);
   const profileParts = [
