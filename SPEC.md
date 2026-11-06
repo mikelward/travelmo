@@ -358,14 +358,23 @@ together, picks the trip.
 TripIt has no export button; its support sends a JSON file of the whole
 account on request. `packages/core/src/tripit.ts` maps it: reservation kinds
 are told apart by their fields (airline codes on legs make a flight, train
-numbers a train, a room type a stay, a car type a rental, a cuisine a
-restaurant booking, which becomes an activity), each flight or train leg is a
-segment, and TripIt's DateTimes (date, time, IANA zone, offset) become our
-instants directly. A stay with no times takes 15:00 and 11:00, anything else
-noon; a DateTime with neither an offset nor a known zone is not guessed at.
-Notes, empty trips, objects of no known kind and legs without a usable
+numbers a train, a carrier and pick-up place a transfer, which is a bus,
+ferry by TripIt's code `F` and otherwise a bus, a ship name or port calls a cruise, a room
+type a stay, a car type a rental, a cuisine a restaurant booking, which becomes
+an activity), each flight, train or transfer leg is a segment, a cruise is one
+ferry segment per sailing between consecutive port calls (so every port's
+country counts for reports and document checks), and
+TripIt's DateTimes (date, time, IANA zone, offset) become our instants
+directly. A stay with no times takes 15:00 and 11:00, anything else noon; a
+DateTime with neither an offset nor a zone keeps its time as written at
+`+00:00` with a note saying so (the preview counts these), while a zone that is
+named but unknown is not guessed at. A place's country comes from the end of
+its one-line address when that names a country. Notes get TripIt's `[[TripItALT…]]`
+markers and pasted HTML stripped. Notes, empty trips, reservations TripIt kept
+only the name of (an empty leg, no dates: common in an old account, and all
+of its unfiled items), objects of no known kind and legs without a usable
 date (even when the rest of their reservation imports) are listed as not
-imported.
+imported, grouped by reason.
 The Settings page runs the same mapping in the browser to show what the file
 holds before anything is sent; `POST /import/tripit` then imports it.
 
@@ -389,12 +398,17 @@ stalled worker whose lease another upload took over), keeping what it
 finished.
 
 The same upload brings in the traveler's own details
-(`packages/core/src/travelProfile.ts`): the export's `TravelerProfile`
-(documents such as passports, each nested record its own entry), its loyalty
-programs, and everyone named on its reservations (`Traveler`, `Guest`,
-`Driver`, `ReservationHolder`, once each by name). TripIt does not document
-these shapes, so every value is kept, labeled by the path it was found at,
-and only entry titles are guessed from the usual names. The profile is one
+(`packages/core/src/travelProfile.ts`): the export's `TravelerProfile`, a
+list of templates named by `template_name` (`TravelDocument*` become
+documents titled by kind and holder, `TravelAccount*` loyalty accounts that
+join a listed program of the same name, `UserProfilePublic` and the export's
+root fields the traveler's own entry: name, home airport and location, emails;
+a profile without template names is read generically, each nested record its
+own entry), its loyalty programs (less their transaction logs), and everyone
+named on its reservations (`Traveler`, `Guest`, `Driver`, `ReservationHolder`,
+once each by name). TripIt does not document these shapes, so every value is
+kept, labeled by the path it was found at, and only entry titles are guessed
+from the usual names. The profile is one
 document, so it is kept within a 700 KB budget, documents first, then loyalty
 programs, then travelers, and the preview says when something was left out;
 an export with a profile but no bookings can be imported for it alone. Each

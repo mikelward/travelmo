@@ -151,10 +151,23 @@ Guesses made on autopilot; change any of them freely.
   detection (`sameBooking`) applies to Gmail too: two confirmation emails for
   one flight now make one booking. Its identity evidence (confirmation
   numbers, codes at both ends, or a shared distinctive name word other than
-  the city) leans toward keeping a duplicate over losing a booking. Notes, empty TripIt trips and unknown
-  objects are listed and skipped, not imported as "other"; a date-only
-  activity takes noon. The mapping follows the documented shape with
-  invented fixtures; it has not been run against a real export.
+  the city) leans toward keeping a duplicate over losing a booking. Notes,
+  empty TripIt trips and unknown objects are listed and skipped, not imported
+  as "other"; a date-only activity takes noon. The mapping was tuned against
+  one real 20-year export (never committed; tests use invented fixtures of
+  the same shapes), which settled these: a time with no zone at all is kept
+  as written at `+00:00` with a note rather than dropped (it cost a trip
+  each); a cruise is a ferry booking per sailing between port calls, like a
+  flight's legs, rather than a new segment type (one booking spanning the
+  voyage would hide the ports between from the reports); a transfer with TripIt's code
+  `F` is a ferry and any other, `G` (ground transportation) or none, a bus,
+  since the reports read "other" as a stay at its destination;
+  a place's country is read off the last part of its one-line address when
+  that names a country or is a US state and ZIP, nothing otherwise; a
+  loyalty program's `Activity` list (every points transaction) is left out
+  of the profile; the export's `TravelAccount*` templates are loyalty
+  accounts, `TravelDocument*` documents, `UserProfilePublic` and the root
+  fields the traveler's own entry, and a photo URL or SMS number is dropped.
 - Calendar files: an event's title is its only booking signal, so the
   pre-filter passes booking words, flight and train numbers and airport
   routes; a TripIt calendar (by `PRODID`) skips it. Reads per upload are
@@ -177,9 +190,10 @@ Guesses made on autopilot; change any of them freely.
   verified email, who can read the whole profile, documents included, and
   change nothing; not per document, and not linked to trip sharing. Each
   TripIt upload replaces the imported sections wholesale. Every value is
-  kept as a labeled string, since TripIt's profile shapes are undocumented
-  and no real export with them was available; titles are guesses. Documents
-  are shown folded until opened.
+  kept as a labeled string, since TripIt's profile shapes are undocumented;
+  the template names a real export turned out to use are read, and anything
+  else falls back to the generic reading. Documents are shown folded until
+  opened.
 - Reports count every trip the viewer can see, shared ones included (a
   partner's shared trip is usually one they were on too), and a travel day
   for both countries, as day-counting rules for residence usually do. Home
