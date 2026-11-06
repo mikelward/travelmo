@@ -49,16 +49,25 @@ means the source has it as data.
   Gmail, since TripIt only ever parsed those same emails.
 - **TripIt JSON** is the richest structured source and the hardest to obtain: there
   is no export button, the file comes from customer service on request. Reservation
-  kinds are implied by fields, not declared, so objects the mapper cannot classify
-  (a quarter of a real export: notes, and reservations with empty `Segment`) are
-  listed as not imported rather than guessed at. Trip objects carry no
-  confirmation numbers, so deduplicating against Gmail imports goes by type, time
-  and route (`sameBooking`). `UnfiledItems` go into a holding trip. `TripData`
-  grouping is kept rather than re-derived from dates, except that a TripIt trip
-  overlapping one from another source joins it. Travelers, `LoyaltyPrograms` and
-  `TravelerProfile` go into the travel profile, every value kept under a label
-  from its path, since TripIt does not document their shapes; the owner can
-  share that profile with people they trust.
+  kinds are implied by fields, not declared: flights, trains, stays, cars,
+  restaurants, activities, transfers and ferries (`TransportObject`, one booking per
+  leg) and cruises (one sailing per pair of port calls, as a ferry). Run on a real
+  20-year export, the mapper imported some 760 bookings in 146 of 147 trips; about a
+  fifth of the file's 700 objects were reservations TripIt had stripped to a name
+  (an empty leg, no dates, all of its unfiled items among them), which are listed as
+  not imported under that reason rather than guessed at. A handful of activities
+  carried a time with no zone; they keep the time as written at `+00:00` with a
+  note, since the app shows times as written. Addresses are one line with no
+  country field, so the country is read off the line's end when it names one.
+  Trip objects carry no confirmation numbers, so deduplicating against Gmail imports
+  goes by type, time and route (`sameBooking`). `UnfiledItems` go into a holding
+  trip. `TripData` grouping is kept rather than re-derived from dates, except that a
+  TripIt trip overlapping one from another source joins it. The export's profile is a
+  list of templates (`TravelDocumentPassport`, `TravelAccountAir`, `TravelAccountCar`,
+  `UserProfilePublic`): passports become documents, the accounts join
+  `LoyaltyPrograms` (whose transaction logs are left out), and the traveler's own
+  details make one entry; every value is kept under a label from its path, and the
+  owner can share that profile with people they trust.
 - **TripIt feed** is official and self-service but a rolling window: 90 days back
   plus future trips. Good for keeping a TripIt account in sync during a migration,
   not for history.
