@@ -133,8 +133,17 @@
       travelers, sharing lists), document warnings once at the top of the
       list and on trip pages, upcoming cards kept to their dates, sources and
       sender on one line, loyalty lines on bookings.
-- [ ] Android app, next: trip edits (rename, fit dates, share, delete,
-      move and merge), reports, profile sharing, reminders settings; the shared `androidlog` and
+- [x] Android app: the owner's trip edits (rename, fit dates, share, merge,
+      delete and finish an interrupted deletion) and moving a booking to
+      another trip.
+- [ ] Android app: tests of `FirestoreTrips`' writes against the Firestore
+      emulator (the booking save, fit, move, merge, delete and an interrupted
+      deletion), as `apps/web/src/lib/edits.test.ts` has for their web twins.
+      The Firestore Android SDK does not run under Robolectric (its
+      completion listeners post to a looper the test owns), so these are
+      instrumented tests that need a device or an Android emulator, which CI
+      does not have yet.
+- [ ] Android app, next: reports, profile sharing, reminders settings; the shared `androidlog` and
       `androidzoom` libraries; release signing,
       the Play internal track and `scripts/publish-github-release.sh`
       (byte-identical across the Android apps); the weekly Gradle batch

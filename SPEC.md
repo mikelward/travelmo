@@ -788,7 +788,14 @@ fields over the stored document, so what the form does not edit (sources,
 sender, rating, favorite, a place's city and spot while its name holds)
 survives, and widens the trip's dates to hold the booking. A delete asks
 first, since a phone has no undo. A known airport code sets its end's zone,
-from the web's generated airport table read as a resource. The Profile tab
+from the web's generated airport table read as a resource. The owner's
+powers over a trip are the web page's, in its places: Rename and Fit dates
+to bookings by the dates, and at the foot who it is shared with (each
+removable, an address to add), Merge into another trip and Delete this trip
+(asking first; an interrupted deletion offers to finish), each write the
+web's transaction with the trip's `updatedAt` as a revision; anyone who may
+edit can move a booking to another trip they see. Every write runs in the
+ViewModel under a token, so a rotation keeps its outcome. The Profile tab
 shows the travel profile as `/profile` does (documents and travelers folded,
 the loyalty programs at a glance and in full, who it is shared with, and the
 profiles shared with the viewer; sharing itself stays on the web), and the
