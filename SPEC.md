@@ -112,6 +112,13 @@ way and the next three upcoming ones also show what comes next — the soonest
 booking start still ahead, or the end of one under way (check-out, arrival,
 car return) — read from their segments with one listener each; past trips
 and further-off ones get no listener, to keep Firestore reads in check.
+The same card says how soon that is when it is within a week ("in 25 min",
+"in 3 h 20 min", "tomorrow", "on Sun"), counted in the place's own offset;
+names the stay under way and when it ends; and, for the next flight, when
+online check-in opens (a day before departure, which most airlines honor,
+so the card says "usually") from a day before that, then that it is open,
+with the booking reference at hand (`packages/core/src/status.ts`). The
+clock behind these lines ticks once a minute.
 
 `/calendar` shows the same trips month by month (`packages/core/src/calendar.ts`):
 weeks run Monday to Sunday, padded with the neighboring months' days, and
@@ -751,7 +758,6 @@ on GitHub-hosted runners.
 
 Native apps (React Native + Expo in `apps/mobile`; the Android screens are
 mocked up in `design/android/`, Material 3 with this palette, as the reference
-for the port), check-in/out surfacing,
-itinerary ideas,
+for the port), itinerary ideas,
 other mail providers and forward-to-import. Further import
 sources share the pipeline: Google Calendar; `IMPORT.md` compares them and maps their fields.
