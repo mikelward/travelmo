@@ -11,14 +11,16 @@ test("the owner sees an imported trip, shares it, and the partner can add a book
   await seedTrip(ownerUid, "e2e-trip");
 
   await expect(page.getByRole("heading", { name: "Liverpool" })).toBeVisible();
-  await expect(page.getByText("Check-in Cove Liverpool", { exact: false })).toBeVisible();
+  // An upcoming trip's card says only when it is; what comes next is for a trip under way.
+  await expect(page.getByRole("link", { name: /Liverpool/ })).toContainText("12–14 Dec 2026");
+  await expect(page.getByText("Check-in Cove Liverpool", { exact: false })).toHaveCount(0);
   await page.getByRole("link", { name: /Liverpool/ }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Liverpool" })).toBeVisible();
   // Next keeps the previous page mounted but hidden across a soft navigation,
   // so text lookups must be exact or role-based to avoid matching it.
   await expect(page.getByText("Cove Liverpool", { exact: true })).toBeVisible();
   // Every source of the booking, the email opening in Gmail for the owner.
-  await expect(page.getByTestId("segment-sources")).toHaveText("Sources (2): Email “Your stay at Cove” · TripIt “Liverpool weekend”");
+  await expect(page.getByTestId("segment-sources")).toHaveText("Sources (2): Email “Your stay at Cove” · TripIt “Liverpool weekend” · From cove.example · Always import this sender");
   await expect(page.getByRole("link", { name: "Email “Your stay at Cove”" })).toHaveAttribute("href", /^https:\/\/mail\.google\.com\/mail\/u\/0\/#all\/m1$/);
 
   await page.getByPlaceholder("partner@example.com").fill(partner);

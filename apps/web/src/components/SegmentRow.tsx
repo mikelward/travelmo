@@ -93,13 +93,14 @@ function Verdict({ segment, onRate, onFavorite }: { segment: Segment; onRate?: (
 
 // Every email, TripIt trip or calendar event the booking was read from,
 // including ones dropped as duplicates of it: a second room, or a detail
-// the extraction left out, is one click away.
-function Sources({ segment, emailLinks }: { segment: Segment; emailLinks?: EmailLinks }) {
+// the extraction left out, is one click away. The sender follows on the
+// same line, with the offer to always import it.
+function Sources({ segment, emailLinks, onLearnSender }: { segment: Segment; emailLinks?: EmailLinks; onLearnSender?: () => void }) {
   const sources = segmentSources(segment);
-  if (sources.length === 0) return null;
+  if (sources.length === 0 && !segment.sender) return null;
   return (
     <p className="mt-1 text-xs text-zinc-500" data-testid="segment-sources">
-      {sources.length === 1 ? "Source: " : `Sources (${sources.length}): `}
+      {sources.length > 0 && (sources.length === 1 ? "Source: " : `Sources (${sources.length}): `)}
       {sources.map((source, i) => {
         const text = `${sourceKinds[source.kind]}${source.label ? ` “${source.label}”` : ""}`;
         const href = emailLinkFor(source, emailLinks);
@@ -116,6 +117,20 @@ function Sources({ segment, emailLinks }: { segment: Segment; emailLinks?: Email
           </span>
         );
       })}
+      {segment.sender && (
+        <>
+          {sources.length > 0 && " · "}
+          From {segment.sender}
+          {onLearnSender && (
+            <>
+              {" · "}
+              <button type="button" onClick={onLearnSender} className="hover:underline">
+                Always import this sender
+              </button>
+            </>
+          )}
+        </>
+      )}
     </p>
   );
 }
@@ -173,20 +188,7 @@ export function SegmentRow({
         )}
         {segment.notes && <p className="mt-1 whitespace-pre-line text-xs text-zinc-500">{segment.notes}</p>}
         <Verdict segment={segment} {...(onRate ? { onRate } : {})} {...(onFavorite ? { onFavorite } : {})} />
-        <Sources segment={segment} {...(emailLinks ? { emailLinks } : {})} />
-        {segment.sender && (
-          <p className="mt-1 text-xs text-zinc-500">
-            From {segment.sender}
-            {onLearnSender && (
-              <>
-                {" · "}
-                <button type="button" onClick={onLearnSender} className="hover:underline">
-                  Always import this sender
-                </button>
-              </>
-            )}
-          </p>
-        )}
+        <Sources segment={segment} {...(emailLinks ? { emailLinks } : {})} {...(onLearnSender ? { onLearnSender } : {})} />
       </div>
       {(onEdit || onDelete || (onMove && moveTargets && moveTargets.length > 0)) && (
         <div className="flex shrink-0 flex-wrap items-center gap-3 self-start text-xs text-zinc-500">

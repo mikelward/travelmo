@@ -1,23 +1,9 @@
 import { eventVerb, formatDate, formatDateRange, localDate, localTime, relativeTime, tripStatus, type Segment, type Trip } from "@travelmo/core";
 import Link from "next/link";
-import { DocumentWarnings } from "@/components/DocumentWarnings";
-import type { PersonWarning } from "@travelmo/core";
 
-export function TripCard({
-  trip,
-  shared,
-  segments,
-  now,
-  warnings,
-  today,
-}: {
-  trip: Trip;
-  shared: boolean;
-  segments?: Segment[];
-  now?: string;
-  warnings?: readonly PersonWarning[];
-  today?: string;
-}) {
+// A trip's card: the title, its dates, and for a trip under way what comes
+// next (the list's top carries the document warnings).
+export function TripCard({ trip, shared, segments, now }: { trip: Trip; shared: boolean; segments?: Segment[]; now?: string }) {
   const badge = trip.deleting ? "Deleting" : shared ? "Shared" : undefined;
   const { next: event, stay, checkIn } = segments && now ? tripStatus(segments, now) : {};
   const soon = event && now ? relativeTime(now, event.at) : undefined;
@@ -57,7 +43,6 @@ export function TripCard({
           {checkIn.segment.confirmation && ` · Ref ${checkIn.segment.confirmation}`}
         </p>
       )}
-      {warnings && today && <DocumentWarnings warnings={warnings} today={today} compact />}
     </Link>
   );
 }

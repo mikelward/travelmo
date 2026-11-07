@@ -29,10 +29,12 @@ test("a passport that runs out soon after an upcoming trip is warned of on the l
     travelers: [],
   });
 
+  // The list carries one card of warnings at its top, naming the trip and linking to it; the trip's own page says "this trip".
+  const listed = "Your passport expires on 1 Mar 2027, 2 months after Liverpool ends; many countries require six months’ validity.";
   const warning = "Your passport expires on 1 Mar 2027, 2 months after this trip ends; many countries require six months’ validity.";
-  const card = page.getByRole("link", { name: /Liverpool/ });
-  await expect(card.getByText(warning)).toBeVisible();
-  await card.click();
+  await expect(page.getByRole("list", { name: "Document warnings" })).toHaveText(listed);
+  await expect(page.getByRole("link", { name: /^Liverpool/ })).not.toContainText("passport");
+  await page.getByRole("link", { name: listed }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Liverpool" })).toBeVisible();
   await expect(page.getByRole("list", { name: "Document warnings" }).filter({ visible: true })).toHaveText(warning);
   // The number is never part of a warning.
