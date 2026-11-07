@@ -2,6 +2,7 @@ import { Segment, Trip, paths, segmentDateRange, type ExtractedSegment } from "@
 import {
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -37,23 +38,48 @@ export async function saveSegment(db: Firestore, tripId: string, extracted: Extr
   if (!range) throw new Error("Segment has no dates");
   const tripRef = doc(db, paths.trip(tripId));
   const segmentRef = doc(db, paths.segment(tripId, id));
+  let saved = segment;
   await runTransaction(db, async (t) => {
     const snap = await t.get(tripRef);
     if (!snap.exists()) throw new Error("Trip no longer exists");
     const trip = Trip.parse(snap.data());
     if (trip.deleting) throw new Error("This trip is being deleted");
-    // Sources are the importer's, not the form's: one may have been added
-    // while the form was open, so they are taken from the stored booking.
+    // Sources are the importer's, not the form's, and the rating and the
+    // favorite mark are the row's: any of them may have changed while the
+    // form was open, so they are taken from the stored booking, afresh on
+    // every attempt, since Firestore reruns this on a conflict.
     const stored = existing ? await t.get(segmentRef) : undefined;
     const current = stored?.exists() ? Segment.safeParse(stored.data()) : undefined;
+    saved = { ...segment };
     if (current?.success) {
-      segment.gmailMessageIds = current.data.gmailMessageIds;
-      if (current.data.sources) segment.sources = current.data.sources;
+      saved.gmailMessageIds = current.data.gmailMessageIds;
+      if (current.data.sources) saved.sources = current.data.sources;
+      if (current.data.rating !== undefined) saved.rating = current.data.rating;
+      if (current.data.favorite !== undefined) saved.favorite = current.data.favorite;
     }
-    t.set(segmentRef, segment);
+    t.set(segmentRef, saved);
     t.update(tripRef, { start: min(trip.start, range.start), end: max(trip.end, range.end), updatedAt: timestamp });
   });
-  return segment;
+  return saved;
+}
+
+// The traveler's verdict on a booking: stars (null clears them) or a
+// favorite mark. An edit like any other: the booking's revision moves, so
+// a calendar change no longer replaces it and the rating survives.
+export async function rateSegment(db: Firestore, tripId: string, segmentId: string, rating: number | null): Promise<void> {
+  const timestamp = now();
+  const batch = writeBatch(db);
+  batch.update(doc(db, paths.segment(tripId, segmentId)), { rating: rating === null ? deleteField() : rating, updatedAt: timestamp });
+  batch.update(doc(db, paths.trip(tripId)), { updatedAt: timestamp });
+  await batch.commit();
+}
+
+export async function favoriteSegment(db: Firestore, tripId: string, segmentId: string, favorite: boolean): Promise<void> {
+  const timestamp = now();
+  const batch = writeBatch(db);
+  batch.update(doc(db, paths.segment(tripId, segmentId)), { favorite, updatedAt: timestamp });
+  batch.update(doc(db, paths.trip(tripId)), { updatedAt: timestamp });
+  await batch.commit();
 }
 
 export async function deleteSegment(db: Firestore, tripId: string, segmentId: string): Promise<void> {

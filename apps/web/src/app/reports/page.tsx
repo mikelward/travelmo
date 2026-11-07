@@ -1,6 +1,7 @@
 "use client";
 
-import { travelReport, type PlaceLookup, type TravelReport } from "@travelmo/core";
+import { favoritePlaces, travelReport, type FavoritePlace, type PlaceLookup, type TravelReport } from "@travelmo/core";
+import Link from "next/link";
 import type { User } from "firebase/auth";
 import { useEffect, useMemo, useState } from "react";
 import { SignInGate } from "@/components/SignInGate";
@@ -66,6 +67,49 @@ function Countries({ report }: { report: TravelReport }) {
           ))}
         </tbody>
       </table>
+    </section>
+  );
+}
+
+const stars = (n: number) => "★".repeat(n) + "☆".repeat(5 - n);
+
+// The places the traveler rated or marked on their trip pages, favorites
+// first, each linking to the trips it was on.
+function Favorites({ places }: { places: readonly FavoritePlace[] }) {
+  if (!places.length) return null;
+  return (
+    <section className="mt-8">
+      <h2 className="text-lg font-medium">Favorite places</h2>
+      <ul className="mt-2 divide-y divide-zinc-200 text-sm dark:divide-zinc-800" aria-label="Favorite places">
+        {places.map((p) => (
+          <li key={`${p.name}|${p.country ?? ""}`} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2">
+            <span className="font-medium">
+              {p.favorite && (
+                <span className="mr-1 text-rose-500" aria-label="Favorite">
+                  ♥
+                </span>
+              )}
+              {p.name}
+            </span>
+            {(p.city || p.country) && <span className="text-zinc-500">{[p.city, p.country ? countryName(p.country) : undefined].filter(Boolean).join(", ")}</span>}
+            {p.rating !== undefined && (
+              <span className="text-amber-500" aria-label={`Rated ${p.rating} ${p.rating === 1 ? "star" : "stars"}`}>
+                {stars(p.rating)}
+              </span>
+            )}
+            <span className="text-zinc-500">
+              {p.trips.map((t, i) => (
+                <span key={t.id}>
+                  {i > 0 && " · "}
+                  <Link href={`/trips/${t.id}`} className="hover:underline">
+                    {t.title}
+                  </Link>
+                </span>
+              ))}
+            </span>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -174,6 +218,7 @@ function Report({ user }: { user: User }) {
         </p>
       )}
       <Countries report={report} />
+      <Favorites places={favoritePlaces(all.withSegments)} />
       <Years report={all.report} onPick={setYear} />
       {all.report.upcoming > 0 && (
         <p className="mt-6 text-sm text-zinc-500">

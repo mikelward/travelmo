@@ -9,7 +9,7 @@ import { Suspense, use, useMemo, useState, type FormEvent } from "react";
 import { SegmentForm } from "@/components/SegmentForm";
 import { SegmentRow } from "@/components/SegmentRow";
 import { SignInGate } from "@/components/SignInGate";
-import { deleteSegment, deleteTrip, fitTripDates, mergeTrips, moveSegment, renameTrip, saveSegment } from "@/lib/edits";
+import { deleteSegment, deleteTrip, favoriteSegment, fitTripDates, mergeTrips, moveSegment, rateSegment, renameTrip, saveSegment } from "@/lib/edits";
 import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
 import { effectiveDecision, learnSender } from "@/lib/patterns";
@@ -360,6 +360,12 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
                     // Each email links for whoever imported it, from their mailbox.
                     emailLinks={{ uid: user.uid, account: profile?.gmail?.emailAddress, ownsTrip: isOwner }}
                     programs={programsFor(segment.provider, loyalty)}
+                    {...(canEdit
+                      ? {
+                          onRate: (rating: number | null) => rateSegment(firestore(), trip.id, segment.id, rating).catch((e: Error) => setError(e.message)),
+                          onFavorite: (favorite: boolean) => favoriteSegment(firestore(), trip.id, segment.id, favorite).catch((e: Error) => setError(e.message)),
+                        }
+                      : {})}
                   />
                 ),
               )}

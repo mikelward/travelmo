@@ -52,7 +52,7 @@ test("a place's country can be chosen, but is never asked for, and a flight show
   await page.getByPlaceholder("BA 117 LHR to JFK").fill("Example walking tour");
   await page.locator('input[type="date"]').first().fill("2026-12-13");
   // Saved without a country: nothing insists on one.
-  await page.getByRole("button", { name: "Add" }).click();
+  await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page.getByText("Example walking tour", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Edit" }).nth(1).click();
@@ -113,7 +113,7 @@ test("typing the start of an address offers places, and picking one fills city, 
   expect(first.headers["x-goog-api-key"]).toBe("fake-maps-key");
   expect(detailed).toEqual([`https://places.googleapis.com/v1/places/p1?sessionToken=${first.body.sessionToken}`]);
 
-  await page.getByRole("button", { name: "Add" }).click();
+  await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page.getByText("10 Example Street, Exampleville EX1 2MP, UK")).toBeVisible();
   // The pick's spot is stored with the place, for the map.
   const stored = (await readSegments("e2e-address")).find((s) => s.title === "Example stay");

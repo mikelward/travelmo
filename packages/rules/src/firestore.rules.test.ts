@@ -170,6 +170,16 @@ describe("segments", () => {
     await assertSucceeds(deleteDoc(doc(as(owner), paths.trip(trip.id))));
   });
 
+  it("lets an editor rate a booking one to five stars and mark it a favorite, and nothing else", async () => {
+    await assertSucceeds(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { rating: 4, favorite: true }));
+    await assertSucceeds(updateDoc(doc(as(partner), paths.segment(trip.id, segment.id)), { rating: 1, favorite: false }));
+    await assertFails(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { rating: 6 }));
+    await assertFails(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { rating: 0 }));
+    await assertFails(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { rating: 3.5 }));
+    await assertFails(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { favorite: "yes" }));
+    await assertFails(updateDoc(doc(as(stranger), paths.segment(trip.id, segment.id)), { rating: 5 }));
+  });
+
   it("rejects malformed segments", async () => {
     const at = (id: string) => doc(as(owner), paths.segment(trip.id, id));
     await assertFails(setDoc(at("bad1"), { ...segment, id: "bad1", type: "spaceship" }));
