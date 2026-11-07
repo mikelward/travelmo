@@ -775,8 +775,9 @@ Firestore's own cache answers offline. `:core` re-implements, in Kotlin, what
 the screens need of `packages/core` (grouping, the next event, the status
 lines, date formatting); the two are kept in step by hand, with tests that
 mirror each other. The first cut is the sign-in, the trip list with its
-status lines, a read-only trip page and sign-out; the import settings stay
-on the web until they come over; a navigation bar switches between Trips,
+status lines, a read-only trip page and sign-out; Settings also turns
+reminders by email on or off (`reminders.email`, as the web's does), while
+the import settings and reminders as notifications stay on the web; a navigation bar switches between Trips,
 the Calendar (the month view of `/calendar`, with the same weeks, bars and
 lanes from `:core`), Reports and Profile. Reports counts what `/reports`
 does, from `:core`'s port of the same logic with the same tests: the trips

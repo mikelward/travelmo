@@ -146,7 +146,10 @@
 - [x] Android app: the Reports tab (summary, world map, days per country,
       favorite places, trips per year, year picker).
 - [x] Android app: share the travel profile from the Profile tab.
-- [ ] Android app, next: reminders settings; the shared `androidlog` and
+- [x] Android app: the reminders-by-email switch in Settings.
+- [ ] Android app, next: reminders as notifications (needs a push channel
+      the web's VAPID subscriptions do not give an app; Firebase Cloud
+      Messaging and a parser sender would be new); the shared `androidlog` and
       `androidzoom` libraries; release signing,
       the Play internal track and `scripts/publish-github-release.sh`
       (byte-identical across the Android apps); the weekly Gradle batch
