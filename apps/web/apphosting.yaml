@@ -31,3 +31,8 @@ env:
   - variable: NEXT_PUBLIC_PARSER_URL
     value: https://REPLACE_ME.run.app
     availability: [BUILD, RUNTIME]
+  # Optional: Places API (New) key, restricted to this app's origins, for
+  # address autocomplete in the booking form.
+  - variable: NEXT_PUBLIC_GOOGLE_MAPS_KEY
+    value: REPLACE_ME
+    availability: [BUILD, RUNTIME]
