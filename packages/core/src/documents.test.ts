@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { documentWarnings, parseDocumentDate, peopleDocuments, travelDocuments, tripWarnings, type TravelDocument } from "./documents";
+import { documentWarnings, listWarnings, parseDocumentDate, peopleDocuments, travelDocuments, tripWarnings, warningText, type PersonWarning, type TravelDocument } from "./documents";
 import type { TravelProfile, Trip } from "./schema";
 
 describe("parseDocumentDate", () => {
@@ -147,5 +147,33 @@ describe("tripWarnings", () => {
   it("counts the trip's owner as on it", () => {
     const people = peopleDocuments(null, [profile("me-too", "2026-12-20", "owner@example.com")], "viewer");
     expect(tripWarnings(people, { ...trip, ownerUid: "me-too" }, undefined, "2026-11-01")).toHaveLength(1);
+  });
+});
+
+describe("listWarnings", () => {
+  const passport: TravelDocument = { title: "Passport", kind: "passport", expires: "2027-02-01", country: "GB" };
+  const me = { uid: "me", own: true, documents: [passport] };
+  const trip = (id: string, start: string, end: string): Trip => ({ id, title: id, start, end, ownerUid: "me", sharedWith: [], createdAt: "x", updatedAt: "x" });
+  const soon = (daysAfterTrip: number): PersonWarning => ({ person: me, warning: { document: passport, when: "soon", daysAfterTrip } });
+
+  it("lists each document once, for the earliest-ending trip, named in the text", () => {
+    const dublin = trip("Dublin", "2026-11-28", "2026-12-02");
+    const liverpool = trip("Liverpool", "2026-12-12", "2026-12-14");
+    const listed = listWarnings({ Liverpool: [soon(49)], Dublin: [soon(61)] }, [liverpool, dublin]);
+    expect(listed.map((l) => l.trip.id)).toEqual(["Dublin"]);
+    expect(warningText(listed[0]!.warning, "2026-11-01", listed[0]!.trip.title)).toBe(
+      "Your passport expires on 1 Feb 2027, 2 months after Dublin ends; many countries require six months’ validity.",
+    );
+    expect(warningText(listed[0]!.warning, "2026-11-01")).toContain("after this trip ends");
+    expect(listWarnings({}, [dublin])).toEqual([]);
+  });
+
+  it("keeps two visas apart that share a title and an expiry but not a country", () => {
+    const visa = (country: string): PersonWarning => ({
+      person: me,
+      warning: { document: { title: "Visa: Ann", kind: "visa", expires: "2027-01-01", country }, when: "before", daysAfterTrip: -5 },
+    });
+    const dublin = trip("Dublin", "2026-11-28", "2026-12-02");
+    expect(listWarnings({ Dublin: [visa("US"), visa("IN")] }, [dublin]).map((l) => l.warning.warning.document.country)).toEqual(["US", "IN"]);
   });
 });

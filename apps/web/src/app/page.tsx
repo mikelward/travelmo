@@ -1,18 +1,18 @@
 "use client";
 
-import { groupTrips, type Segment, type Trip } from "@travelmo/core";
+import { groupTrips, listWarnings, type Segment, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
 import { SignInGate } from "@/components/SignInGate";
 import { TripCard } from "@/components/TripCard";
 import { localToday } from "@/lib/dates";
-import type { PersonWarning } from "@travelmo/core";
-import { usePeopleDocuments, useTripWarnings } from "@/lib/documents";
+import { usePeopleDocuments, useTripWarnings, warningText } from "@/lib/documents";
 import { useSaveForOffline } from "@/lib/offline";
 import { useNow, useSegmentsOf, useTrips } from "@/lib/trips";
 
-// Trips whose "next up" line is worth a listener each: everything under way
-// and the few coming next.
+// Trips worth a listener each: everything under way, for the "next up"
+// lines, and the few coming next, so their document warnings know where
+// they go.
 const upcomingWithDetails = 3;
 
 function Section({
@@ -21,16 +21,15 @@ function Section({
   uid,
   segmentsByTrip,
   now,
-  warnings,
-  today,
+  showNext,
 }: {
   title: string;
   trips: Trip[];
   uid: string;
   segmentsByTrip: Record<string, Segment[]>;
   now: string;
-  warnings: Record<string, PersonWarning[]>;
-  today: string;
+  // Whether the cards say what comes next: only a trip under way does.
+  showNext: boolean;
 }) {
   if (trips.length === 0) return null;
   return (
@@ -42,8 +41,7 @@ function Section({
             key={trip.id}
             trip={trip}
             shared={trip.ownerUid !== uid}
-            {...(segmentsByTrip[trip.id] ? { segments: segmentsByTrip[trip.id], now } : {})}
-            {...(warnings[trip.id] ? { warnings: warnings[trip.id], today } : {})}
+            {...(showNext && segmentsByTrip[trip.id] ? { segments: segmentsByTrip[trip.id], now } : {})}
           />
         ))}
       </div>
@@ -76,12 +74,29 @@ function Trips({ user }: { user: User }) {
       </div>
     );
   }
-  const sectionProps = { uid: user.uid, segmentsByTrip, now, warnings, today };
+  const sectionProps = { uid: user.uid, segmentsByTrip, now };
+  // Document warnings once, at the top, each for the earliest trip it bears
+  // on and linking to it, rather than repeated on every card.
+  const listed = listWarnings(warnings, trips);
   return (
     <>
-      <Section title="Now" trips={groups.current} {...sectionProps} />
-      <Section title="Upcoming" trips={groups.upcoming} {...sectionProps} />
-      <Section title="Past" trips={groups.past} {...sectionProps} />
+      {listed.length > 0 && (
+        <ul
+          className="mb-8 space-y-1 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950"
+          aria-label="Document warnings"
+        >
+          {listed.map(({ trip, warning }, i) => (
+            <li key={i} className={warning.warning.when === "before" ? "text-red-700 dark:text-red-400" : "text-amber-800 dark:text-amber-300"}>
+              <Link href={`/trips/${trip.id}`} className="hover:underline">
+                {warningText(warning, today, trip.title)}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Section title="Now" trips={groups.current} showNext {...sectionProps} />
+      <Section title="Upcoming" trips={groups.upcoming} showNext={false} {...sectionProps} />
+      <Section title="Past" trips={groups.past} showNext={false} {...sectionProps} />
     </>
   );
 }

@@ -183,17 +183,40 @@ function documentName(d: TravelDocument): string {
 }
 
 // The warning as the app and its reminders word it: whose document, which,
-// when it runs out, and how that bears on the trip. Never the number.
-export function warningText({ person, warning }: PersonWarning, today: string): string {
+// when it runs out, and how that bears on the trip ("this trip" on the
+// trip's own page, the trip by name where several are listed). Never the
+// number.
+export function warningText({ person, warning }: PersonWarning, today: string, tripTitle?: string): string {
   const whose = person.own ? "Your" : `${person.email ?? "A fellow traveler"}’s`;
+  const trip = tripTitle ?? "this trip";
   const { document: d, when, daysAfterTrip } = warning;
   const date = formatDate(d.expires, "en-GB", { weekday: undefined, year: "numeric" });
   if (when === "before") {
     return d.expires < today
       ? `${whose} ${documentName(d)} expired on ${date}.`
-      : `${whose} ${documentName(d)} expires on ${date}, before this trip ends.`;
+      : `${whose} ${documentName(d)} expires on ${date}, before ${trip} ends.`;
   }
   const months = Math.floor(daysAfterTrip / 30.44);
   const after = daysAfterTrip < 31 ? `${daysAfterTrip} day${daysAfterTrip === 1 ? "" : "s"}` : `${months} month${months === 1 ? "" : "s"}`;
-  return `${whose} ${documentName(d)} expires on ${date}, ${after} after this trip ends; many countries require six months’ validity.`;
+  return `${whose} ${documentName(d)} expires on ${date}, ${after} after ${trip} ends; many countries require six months’ validity.`;
+}
+
+export type ListWarning = { trip: Trip; warning: PersonWarning };
+
+// The warnings the trip list shows once, at its top, rather than on each
+// card: one line per person and document, for the earliest-ending trip it
+// bears on, which is the most pressing wording.
+export function listWarnings(byTrip: Readonly<Record<string, readonly PersonWarning[]>>, trips: readonly Trip[]): ListWarning[] {
+  const byKey = new Map<string, ListWarning>();
+  const ordered = [...trips].sort((a, b) => a.end.localeCompare(b.end) || a.start.localeCompare(b.start));
+  for (const trip of ordered) {
+    for (const warning of byTrip[trip.id] ?? []) {
+      // Two of a traveler's visas can share a title and an expiry (TripIt's
+      // import titles them by kind and holder), so the country tells them apart.
+      const d = warning.warning.document;
+      const key = [warning.person.uid, d.kind, d.country ?? "", d.title, d.expires].join("/");
+      if (!byKey.has(key)) byKey.set(key, { trip, warning });
+    }
+  }
+  return [...byKey.values()];
 }
