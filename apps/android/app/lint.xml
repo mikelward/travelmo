@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!--
+      Adaptive icons live in mipmap-anydpi-v26 by convention and AAPT does
+      not find them in an unqualified mipmap-anydpi, even above minSdk 26;
+      lint's suggestion to merge the folder is the one it cannot take.
+    -->
+    <issue id="ObsoleteSdkInt">
+        <ignore path="src/main/res/mipmap-anydpi-v26" />
+    </issue>
+</lint>

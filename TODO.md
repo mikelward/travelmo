@@ -120,6 +120,20 @@
 - [x] Android mockups, round three: the calendar as a fourth navigation
       destination, the loyalty table and booking line, and place dots on the
       map (`design/android/`, boards 30–31 and changes to 04, 21, 22, 26, 29).
+- [x] Android app, first cut (`apps/android`): sign in with Google, the trip
+      list with its status lines, a read-only trip page, sign out; CI job.
+- [ ] Android app, next: the booking form and trip edits, the calendar,
+      reports, the profile, reminders settings; the shared `androidlog` and
+      `androidzoom` libraries; Roborazzi screenshots in CI; release signing,
+      the Play internal track and `scripts/publish-github-release.sh`
+      (byte-identical across the Android apps); the weekly Gradle batch
+      (`mikelward/gradle-update` with `catalog: apps/android/gradle/libs.versions.toml`).
+- [ ] Android app, maintainer steps: register the Android app in the Firebase
+      project (package `app.travelmo` and `app.travelmo.debug`, the signing
+      SHA-1, Google sign-in enabled) and keep `google-services.json` out of
+      git; add `ci / android` to the ruleset's required checks; add the
+      sibling apps' `.claude/settings.json` SessionStart hook (the sandbox
+      refuses an agent writing that file) so web sessions seed the SDK.
 - [x] A second chance for places an exhausted daily geocoding budget left
       without a country or a spot: the import queues the booking and a daily
       sweep (`/internal/geocode-sweep`, the third scheduler job) asks again.
@@ -285,6 +299,16 @@ Guesses made on autopilot; change any of them freely.
   entry lines mailed are only those needing action, while the trip page
   shows every country. The job is the fourth Cloud Scheduler job (about ten
   cents a month beyond the free three) rather than a fold into another.
+- The Android app is native Kotlin and Compose in `apps/android` of this
+  repository, not the React Native port SPEC once pencilled in for
+  `apps/mobile` and not a repository of its own: native is what every other
+  Android app in the account is, so their build, test, CI and release
+  conventions carry over, and a subdirectory keeps the web app, the rules and
+  the data model beside it (a `git subtree split` can still move it out). Its
+  `:core` re-implements the shared logic in Kotlin rather than sharing code
+  with `packages/core`: the surface is small and pure, and the two test
+  suites mirror each other. `minSdk` 34, the sibling apps' floor. Navigation
+  3, as stopdash chose, so the back stack is a list the app owns.
 - The trip card's online check-in line assumes the common window, a day
   before departure until departure, since airlines differ (some open 48 or
   30 hours ahead, most close 45 to 60 minutes before) and the booking

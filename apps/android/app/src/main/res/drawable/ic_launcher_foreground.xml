@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The paper plane of the web app's icon (apps/web/src/app/icon.svg), in the adaptive icon's 66dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.125"
+        android:scaleY="0.125"
+        android:translateX="22"
+        android:translateY="22">
+        <path
+            android:pathData="M96,256 L416,112 L304,416 L256,288 Z"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="32"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M256,288 L416,112"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="32"
+            android:strokeLineCap="round" />
+    </group>
+</vector>
