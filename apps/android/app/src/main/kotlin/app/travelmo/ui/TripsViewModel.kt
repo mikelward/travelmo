@@ -2,11 +2,17 @@ package app.travelmo.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.travelmo.core.PersonDocuments
+import app.travelmo.core.ListWarning
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentDraft
+import app.travelmo.core.TravelProfile
+import app.travelmo.core.peopleDocuments
+import app.travelmo.core.tripWarnings
 import app.travelmo.core.Trip
 import app.travelmo.core.TripGroups
 import app.travelmo.core.groupTrips
+import app.travelmo.core.listWarnings
 import app.travelmo.data.TripStore
 import java.time.Instant
 import java.time.LocalDate
@@ -29,7 +35,13 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** The trip list as the screen draws it; null groups while the first answer is on its way. */
-data class TripListState(val groups: TripGroups?, val segmentsByTrip: Map<String, List<Segment>>, val now: String)
+data class TripListState(
+    val groups: TripGroups?,
+    val segmentsByTrip: Map<String, List<Segment>>,
+    val now: String,
+    /** Document warnings once, for the list's top: each document for the earliest trip it bears on. */
+    val warnings: List<ListWarning> = emptyList(),
+)
 
 /** A booking save as the form that asked for it sees it. */
 sealed interface BookingSave {
@@ -77,8 +89,23 @@ class TripsViewModel(
         }
     }
 
-    val state: StateFlow<TripListState> = combine(groups, details, now) { groups, details, now -> TripListState(groups, details, now) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TripListState(null, emptyMap(), clock().toString()))
+    /** The user's own travel profile; null while loading or when there is none. */
+    val ownProfile: StateFlow<TravelProfile?> = store.ownProfile(uid).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** The profiles shared with the user. */
+    val sharedProfiles: StateFlow<List<TravelProfile>> = store.sharedProfiles(email).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Whose documents a trip may need: the user's and those of people who shared their profile. */
+    val people: StateFlow<List<PersonDocuments>> = combine(ownProfile, sharedProfiles) { own, shared -> peopleDocuments(own, shared, uid) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val state: StateFlow<TripListState> = combine(groups, details, now, people) { groups, details, now, people ->
+        val today = today()
+        val trips = groups?.let { it.current + it.upcoming + it.past }.orEmpty()
+        val byTrip = trips.filter { it.id in details }.associate { trip -> trip.id to tripWarnings(people, trip, details[trip.id], today) }
+        TripListState(groups, details, now, listWarnings(byTrip, trips))
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TripListState(null, emptyMap(), clock().toString()))
+
 
     /** One trip, or null once the list has answered without it. */
     fun trip(id: String): Flow<Trip?> = trips.map { trips -> trips?.firstOrNull { it.id == id } }

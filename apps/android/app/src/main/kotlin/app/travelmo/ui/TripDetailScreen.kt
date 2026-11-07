@@ -42,9 +42,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.R
+import app.travelmo.core.PersonWarning
+import app.travelmo.core.ProfileEntry
 import app.travelmo.core.Segment
 import app.travelmo.core.Trip
 import app.travelmo.core.formatDate
+import app.travelmo.core.loyaltyLine
+import app.travelmo.core.programsFor
+import app.travelmo.core.tripWarnings
 import app.travelmo.core.formatDateRange
 import app.travelmo.core.referenceLine
 import app.travelmo.core.routeLine
@@ -74,6 +79,8 @@ fun TripDetailScreen(
     val trip by tripFlow.collectAsStateWithLifecycle(initialValue = null)
     val segments by segmentsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     val loaded by viewModel.state.collectAsStateWithLifecycle()
+    val people by viewModel.people.collectAsStateWithLifecycle()
+    val ownProfile by viewModel.ownProfile.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var error by remember { mutableStateOf<String?>(null) }
     var deleting by remember { mutableStateOf<Segment?>(null) }
@@ -123,6 +130,8 @@ fun TripDetailScreen(
         when {
             current != null -> TripBody(
                 current, segments, shared = current.ownerUid != uid, error = error,
+                warnings = tripWarnings(people, current, segments, viewModel.today()), today = viewModel.today(),
+                programsFor = { provider -> programsFor(provider, ownProfile?.loyalty.orEmpty()) },
                 actions = if (canEdit) BookingActions(onEdit = { onEditBooking(it.id) }, onDelete = { deleting = it }) else null,
                 modifier = Modifier.padding(padding),
             )
@@ -136,7 +145,17 @@ fun TripDetailScreen(
 class BookingActions(val onEdit: (Segment) -> Unit, val onDelete: (Segment) -> Unit)
 
 @Composable
-private fun TripBody(trip: Trip, segments: List<Segment>, shared: Boolean, error: String?, actions: BookingActions?, modifier: Modifier = Modifier) {
+private fun TripBody(
+    trip: Trip,
+    segments: List<Segment>,
+    shared: Boolean,
+    error: String?,
+    warnings: List<PersonWarning>,
+    today: String,
+    programsFor: (String?) -> List<ProfileEntry>,
+    actions: BookingActions?,
+    modifier: Modifier = Modifier,
+) {
     val days = segmentsByDay(segments)
     LazyColumn(modifier = modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp)) {
         item(key = "dates") {
@@ -148,6 +167,9 @@ private fun TripBody(trip: Trip, segments: List<Segment>, shared: Boolean, error
         if (error != null) {
             item(key = "error") { Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp)) }
         }
+        if (warnings.isNotEmpty()) {
+            item(key = "warnings") { DocumentWarnings(warnings, today) }
+        }
         if (days.isEmpty()) {
             item(key = "empty") {
                 Text(stringResource(R.string.trip_no_bookings), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 16.dp))
@@ -158,7 +180,7 @@ private fun TripBody(trip: Trip, segments: List<Segment>, shared: Boolean, error
                 Text(formatDate(date), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 20.dp, bottom = 4.dp))
             }
             items(items, key = { it.id }) { segment ->
-                SegmentRow(segment, actions)
+                SegmentRow(segment, actions, programs = programsFor(segment.provider))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
         }
@@ -173,7 +195,7 @@ private fun TripBody(trip: Trip, segments: List<Segment>, shared: Boolean, error
 
 /** One booking: its kind, title, route, times, reference, verdict, sources and sender, and its actions when the viewer may edit. */
 @Composable
-fun SegmentRow(segment: Segment, actions: BookingActions? = null) {
+fun SegmentRow(segment: Segment, actions: BookingActions? = null, programs: List<ProfileEntry> = emptyList()) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     var menu by remember { mutableStateOf(false) }
     Row(modifier = Modifier.padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -188,17 +210,19 @@ fun SegmentRow(segment: Segment, actions: BookingActions? = null) {
             routeLine(segment)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = muted) }
             Text(timesLine(segment), style = MaterialTheme.typography.bodyMedium, color = muted)
             referenceLine(segment)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp)) }
+            if (programs.isNotEmpty()) {
+                Text(programs.joinToString(" · ", transform = ::loyaltyLine), style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp))
+            }
             segment.notes?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp)) }
             Verdict(segment)
-            if (segment.sourceCount > 0) {
-                Text(
-                    pluralStringResource(R.plurals.sources, segment.sourceCount, segment.sourceCount),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = muted,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
+            // The sources and the sender share one line.
+            val provenance = listOfNotNull(
+                segment.sourceCount.takeIf { it > 0 }?.let { pluralStringResource(R.plurals.sources, it, it) },
+                segment.sender?.let { stringResource(R.string.from_sender, it) },
+            )
+            if (provenance.isNotEmpty()) {
+                Text(provenance.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp))
             }
-            segment.sender?.let { Text(stringResource(R.string.from_sender, it), style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp)) }
         }
         if (actions != null) {
             Box {

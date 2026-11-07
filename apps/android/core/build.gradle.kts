@@ -23,7 +23,7 @@ java {
 sourceSets {
     main {
         resources.srcDir(rootProject.file("../../packages/core/src"))
-        resources.include("airports.json")
+        resources.include("airports.json", "airportPlaces.json")
     }
 }
 

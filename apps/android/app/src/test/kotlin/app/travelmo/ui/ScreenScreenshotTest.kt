@@ -84,6 +84,18 @@ class ScreenScreenshotTest {
     }
 
     @Test
+    fun trip_detail_warning() {
+        val viewModel = viewModel()
+        capture("trip_detail_warning") { TripDetailScreen(viewModel = viewModel, tripId = "dublin", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}) }
+    }
+
+    @Test
+    fun profile() {
+        val viewModel = viewModel()
+        capture("profile") { ProfileScreen(viewModel = viewModel, bottomBar = { HomeNavigationBar(HomeTab.PROFILE) {} }) }
+    }
+
+    @Test
     fun trip_detail() {
         val viewModel = viewModel()
         capture("trip_detail") { TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}) }
