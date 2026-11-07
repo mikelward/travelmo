@@ -124,9 +124,12 @@
       list with its status lines, a read-only trip page, sign out; CI job.
 - [x] Android app: the navigation bar (Trips, Calendar) and the calendar's
       month view, from the same weeks, bars and lanes as the web.
+- [x] Android app: every screen rendered to a PNG under Robolectric
+      (`app/snapshots/`, Roborazzi), verified in CI so a UI change carries
+      its screenshot diff.
 - [ ] Android app, next: the booking form and trip edits,
       reports, the profile, reminders settings; the shared `androidlog` and
-      `androidzoom` libraries; Roborazzi screenshots in CI; release signing,
+      `androidzoom` libraries; release signing,
       the Play internal track and `scripts/publish-github-release.sh`
       (byte-identical across the Android apps); the weekly Gradle batch
       (`mikelward/gradle-update` with `catalog: apps/android/gradle/libs.versions.toml`).

@@ -86,5 +86,18 @@ jobs:
           fi
       - name: Unit tests, lint and a debug build
         run: ./gradlew -PtravelmoFixedVersion :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+      # The screens rendered under Robolectric against the PNGs in
+      # app/snapshots: a UI change must come with its re-recorded PNGs, so the
+      # diff is in the PR. The run above records nothing; this one compares.
+      - name: Screenshots match the recorded ones
+        run: ./gradlew -PtravelmoFixedVersion -Proborazzi.test.verify :app:testDebugUnitTest --tests app.travelmo.ui.ScreenScreenshotTest
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: android-screenshots
+          path: |
+            apps/android/app/build/outputs/roborazzi
+            apps/android/app/snapshots
+          retention-days: 7
       - name: Release build
         run: ./gradlew :app:assembleRelease
