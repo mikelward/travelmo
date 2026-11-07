@@ -270,6 +270,24 @@
    "title": "29 Reports, dark",
    "is_interactive": true,
    "radius": 24
+  },
+  "Calendar.dc.html": {
+   "x": 0,
+   "y": 6210,
+   "w": 412,
+   "h": 915,
+   "title": "30 Calendar",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "CalendarDark.dc.html": {
+   "x": 492,
+   "y": 6210,
+   "w": 412,
+   "h": 915,
+   "title": "31 Calendar, dark",
+   "is_interactive": true,
+   "radius": 24
   }
  },
  "order": [
@@ -301,7 +319,9 @@
   "TripDetailDark.dc.html",
   "AddBookingDark.dc.html",
   "SettingsDark.dc.html",
-  "ReportsDark.dc.html"
+  "ReportsDark.dc.html",
+  "Calendar.dc.html",
+  "CalendarDark.dc.html"
  ],
  "notes": {
   "row1": {
@@ -337,7 +357,7 @@
    "x": 2952,
    "y": 420,
    "w": 360,
-   "text": "Idioms: one scrolling list with Now / Upcoming / Past headers (empty groups hide, so no tabs). A navigation bar with three destinations, Trips, Reports and Profile, since the web app grew the last two; Settings stays behind the gear, Sign out in the overflow menu. Booking form is a full-screen dialog. Row ⋮ opens a bottom sheet. Delete trip is a dialog. Pill buttons and an extended FAB “Add a booking”.",
+   "text": "Idioms: one scrolling list with Now / Upcoming / Past headers (empty groups hide, so no tabs). A navigation bar with four destinations, Trips, Calendar, Reports and Profile, since the web app grew the last three; Settings stays behind the gear, Sign out in the overflow menu. Booking form is a full-screen dialog. Row ⋮ opens a bottom sheet. Delete trip is a dialog. Pill buttons and an extended FAB “Add a booking”.",
    "kind": null,
    "fill": "gray"
   },
@@ -399,6 +419,20 @@
    "w": 360,
    "fill": "gray",
    "text": "Dark set: the same theme tokens as 14, on a trip page, the booking form with address suggestions (the Where field offers places from three typed characters; Add waits while a pick’s details load), Settings and Reports."
+  },
+  "row7": {
+   "x": 0,
+   "y": 5910,
+   "text": "Calendar and at a glance",
+   "kind": "title1",
+   "maxW": 2872
+  },
+  "round3": {
+   "x": 2952,
+   "y": 5910,
+   "w": 360,
+   "fill": "blue",
+   "text": "Round three: the calendar (a month of weeks, Monday first, each trip a bar across its days, shared trips violet, a carried-over bar starts with an ellipsis, today ringed) as a fourth destination in the navigation bar; Profile leads with a table of each loyalty program’s account, balance and status, the full entries folded below; a booking shows the viewer’s program its provider belongs to under the provider line; the Reports map gains smaller dots for stays and other places whose booking knows its spot."
   }
  },
  "designSystems": []

@@ -105,6 +105,9 @@
       status) under its provider on the trip page.
 - [x] Calendar view: trips as bars on a month grid (`/calendar`), linking
       to the trip, with previous, next and today.
+- [x] Android mockups, round three: the calendar as a fourth navigation
+      destination, the loyalty table and booking line, and place dots on the
+      map (`design/android/`, boards 30–31 and changes to 04, 21, 22, 26, 29).
 - [x] A second chance for places an exhausted daily geocoding budget left
       without a country or a spot: the import queues the booking and a daily
       sweep (`/internal/geocode-sweep`, the third scheduler job) asks again.
@@ -261,6 +264,10 @@ Guesses made on autopilot; change any of them freely.
   revision is the one it read, so a hand edit is never overwritten; an entry
   older than thirty days is dropped unasked, and a lookup error keeps the
   entry for another day. The job takes the third free Cloud Scheduler slot.
+- The mockups' navigation bar grew a fourth destination, Calendar, between
+  Trips and Reports, in the web nav's order; Material 3 allows three to
+  five. Own trips use the primary color and shared ones a violet token added
+  to the theme, matching the web app's two bar colors.
 - The calendar shows trips, not bookings (a month of bars is readable; a
   month of flights and check-ins is not, and bookings would need a listener
   per trip), with weeks starting on Monday (the app's dates are en-GB) and

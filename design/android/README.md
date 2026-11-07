@@ -44,11 +44,13 @@ Sample data is fictional; the signed-in address is a placeholder.
 | `AddBookingDark.dc.html` | 27 Add a booking, dark, with address suggestions open |
 | `SettingsDark.dc.html` | 28 Settings, dark |
 | `ReportsDark.dc.html` | 29 Reports, dark |
+| `Calendar.dc.html` | 30 Calendar: a month of trips as bars |
+| `CalendarDark.dc.html` | 31 Calendar, dark |
 
 ## Tap map
 
-Sign in → trip list. The navigation bar (Trips, Reports, Profile) switches between
-02, 21 and 22; gear → Settings; ⋮ → Sign out. Edinburgh (shared) → 05, any
+Sign in → trip list. The navigation bar (Trips, Calendar, Reports, Profile) switches
+between 02, 30, 21 and 22; gear → Settings; ⋮ → Sign out. On 30 a bar opens its trip. Edinburgh (shared) → 05, any
 other card → 04. On 24 the Lisbon card → 23. On a trip: back → list, FAB → 07, a row's ⋮ → 06 (Edit → 08, a
 target under Move to… or Delete → 04), Delete this trip → 09 (Keep → 04, Delete → 02).
 Forms close with X. Settings: Connect Gmail → 11 (stands in for the OAuth round trip),
@@ -69,3 +71,11 @@ two also introduced a Material 3 navigation bar with three destinations (Trips, 
 Profile), since the app now has them; Settings stays behind the gear. Still not
 boarded: Gmail return notices, Google Calendar's calendar picker, the merge-trip sheet.
 The map on 21 is a sketch, not the real world map.
+
+Round three (boards 30–31, and changes to 04, 21, 22, 26, 29) caught up with the web
+app again: the calendar as a fourth destination in the navigation bar (a month of
+weeks, Monday first, each trip a bar across its days, shared trips violet, a
+carried-over bar starting with an ellipsis, today ringed); the loyalty table at the
+top of Profile with the full entries folded below; the viewer's matching loyalty
+program under a booking's provider line; and smaller dots on the Reports map for
+places whose booking knows its spot.
