@@ -771,7 +771,10 @@ lines, date formatting); the two are kept in step by hand, with tests that
 mirror each other. The first cut is the sign-in, the trip list with its
 status lines, a read-only trip page and sign-out; editing, the calendar,
 reports, the profile and the import settings stay on the web until each
-comes over. CI builds it beside the web app (`ci / android`).
+comes over; a navigation bar switches between Trips and the Calendar (the
+month view of `/calendar`, with the same weeks, bars and lanes from `:core`),
+and gains Reports and Profile with them. CI builds it beside the web app
+(`ci / android`).
 
 ## Later
 

@@ -122,7 +122,9 @@
       map (`design/android/`, boards 30–31 and changes to 04, 21, 22, 26, 29).
 - [x] Android app, first cut (`apps/android`): sign in with Google, the trip
       list with its status lines, a read-only trip page, sign out; CI job.
-- [ ] Android app, next: the booking form and trip edits, the calendar,
+- [x] Android app: the navigation bar (Trips, Calendar) and the calendar's
+      month view, from the same weeks, bars and lanes as the web.
+- [ ] Android app, next: the booking form and trip edits,
       reports, the profile, reminders settings; the shared `androidlog` and
       `androidzoom` libraries; Roborazzi screenshots in CI; release signing,
       the Play internal track and `scripts/publish-github-release.sh`
