@@ -55,6 +55,22 @@ val fixtureSegments: Map<String, List<Segment>> = mapOf(
         ),
         Segment("l-tour", "liverpool", SegmentType.ACTIVITY, "Anfield stadium tour", "2026-12-13T14:00:00+00:00", "2026-12-13T15:30:00+00:00", provider = "Liverpool FC", confirmation = "LFC-4471"),
     ),
+    // A past week in Lisbon, for the reports: two flights and a rated stay that knows its spot.
+    "lisbon" to listOf(
+        Segment(
+            "p-out", "lisbon", SegmentType.FLIGHT, "XX 101 LHR to LIS", "2026-09-14T08:00:00+01:00", "2026-09-14T10:45:00+01:00",
+            provider = "Example Air", confirmation = "LIS123", origin = Place("Heathrow", code = "LHR"), destination = Place("Lisbon", code = "LIS"),
+        ),
+        Segment(
+            "p-stay", "lisbon", SegmentType.LODGING, "Lisbon Example Hotel", "2026-09-14T15:00:00+01:00", "2026-09-19T11:00:00+01:00",
+            provider = "Example Hotels", confirmation = "LX-4412", rating = 5, favorite = true,
+            destination = Place("Lisbon Example Hotel", city = "Lisbon", country = "PT", lat = 38.7223, lon = -9.1393),
+        ),
+        Segment(
+            "p-back", "lisbon", SegmentType.FLIGHT, "XX 102 LIS to LHR", "2026-09-19T12:30:00+01:00", "2026-09-19T15:10:00+01:00",
+            provider = "Example Air", confirmation = "LIS123", origin = Place("Lisbon", code = "LIS"), destination = Place("Heathrow", code = "LHR"),
+        ),
+    ),
 )
 
 private fun entry(title: String, vararg fields: Pair<String, String>) = ProfileEntry(title, fields.map { ProfileField(it.first, it.second) })

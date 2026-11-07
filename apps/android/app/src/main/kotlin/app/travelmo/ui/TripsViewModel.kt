@@ -11,6 +11,7 @@ import app.travelmo.core.peopleDocuments
 import app.travelmo.core.tripWarnings
 import app.travelmo.core.Trip
 import app.travelmo.core.TripGroups
+import app.travelmo.core.TripWithSegments
 import app.travelmo.core.groupTrips
 import app.travelmo.core.listWarnings
 import app.travelmo.data.TripStore
@@ -106,6 +107,19 @@ class TripsViewModel(
         TripListState(groups, details, now, listWarnings(byTrip, trips))
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TripListState(null, emptyMap(), clock().toString()))
 
+
+    /**
+     * Every trip the viewer sees with its bookings, for the reports: one
+     * listener per trip, as the web's reports page keeps; null until the
+     * trips and each one's bookings have answered.
+     */
+    val reportTrips: StateFlow<List<TripWithSegments>?> = trips.flatMapLatest { list ->
+        when {
+            list == null -> flowOf(null)
+            list.isEmpty() -> flowOf(emptyList())
+            else -> combine(list.map { trip -> store.segments(trip.id).map { TripWithSegments(trip, it) } }) { it.toList() }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /** One trip, or null once the list has answered without it. */
     fun trip(id: String): Flow<Trip?> = trips.map { trips -> trips?.firstOrNull { it.id == id } }

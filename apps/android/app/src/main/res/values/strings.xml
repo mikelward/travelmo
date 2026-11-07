@@ -99,6 +99,50 @@
 
     <!-- Profile. -->
     <string name="nav_profile">Profile</string>
+
+    <!-- Reports. -->
+    <string name="nav_reports">Reports</string>
+    <string name="reports_title">Reports</string>
+    <string name="all_years">All years</string>
+    <string name="year">Year</string>
+    <plurals name="trips_count">
+        <item quantity="one">%1$d trip</item>
+        <item quantity="other">%1$d trips</item>
+    </plurals>
+    <plurals name="days_away">
+        <item quantity="one">%1$d day away</item>
+        <item quantity="other">%1$d days away</item>
+    </plurals>
+    <plurals name="countries_count">
+        <item quantity="one">%1$d country</item>
+        <item quantity="other">%1$d countries</item>
+    </plurals>
+    <plurals name="unknown_days">
+        <item quantity="one">%1$d day away with no country known</item>
+        <item quantity="other">%1$d days away with no country known</item>
+    </plurals>
+    <plurals name="unplaced_bookings">
+        <item quantity="one">%1$d booking with no country</item>
+        <item quantity="other">%1$d bookings with no country</item>
+    </plurals>
+    <string name="unplaced_hint">%1$s: bookings say where they are by their country, or for a flight its airport code; the map shows the places that know their spot.</string>
+    <string name="map_description">Map of the world with %1$s marked</string>
+    <string name="map_empty">Map of the world, with nowhere marked yet</string>
+    <string name="days_in_each_country">Days in each country</string>
+    <string name="col_country">Country</string>
+    <string name="col_days">Days</string>
+    <string name="col_trips">Trips</string>
+    <string name="col_year">Year</string>
+    <string name="col_countries">Countries</string>
+    <string name="favorite_places">Favorite places</string>
+    <string name="favorite_mark">Favorite</string>
+    <string name="trips_per_year">Trips per year</string>
+    <plurals name="trips_ahead">
+        <item quantity="one">%1$d trip still ahead isn\'t counted.</item>
+        <item quantity="other">%1$d trips still ahead aren\'t counted.</item>
+    </plurals>
+    <string name="no_trips_yet">No trips yet.</string>
+    <string name="reports_loading">Loading reports…</string>
     <string name="profile">Travel profile</string>
     <string name="profile_empty">Nothing here yet. Import a TripIt export on the web to fill in your documents, loyalty programs and travelers.</string>
     <string name="profile_nothing_yet">Nothing in it yet.</string>
