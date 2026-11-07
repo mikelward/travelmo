@@ -108,10 +108,13 @@ need no popup.
 ## The trip list
 
 Trips are grouped into now, upcoming and past by calendar date. Trips under
-way and the next three upcoming ones also show what comes next — the soonest
-booking start still ahead, or the end of one under way (check-out, arrival,
-car return) — read from their segments with one listener each; past trips
-and further-off ones get no listener, to keep Firestore reads in check.
+way also show what comes next — the soonest booking start still ahead, or
+the end of one under way (check-out, arrival, car return) — read from their
+segments with one listener each; the next three upcoming trips get a
+listener too, so their document warnings know where they go, but their
+cards say only the title and the dates, since what comes next is for a
+trip under way; past trips and further-off ones get no listener, to keep
+Firestore reads in check.
 The same card says how soon that is when it is within a week ("in 25 min",
 "in 3 h 20 min", "tomorrow", "on Sun"), counted in the place's own offset;
 names the stay under way and when it ends; and, for the next flight, when
@@ -199,7 +202,10 @@ shows anyway. Telling whether a flight crosses a border needs the airport
 table, which loads only once some trip has a document worth checking, and
 nothing shows until it has. The warning names the document's kind and date,
 never its number. The list checks the trips it already reads bookings for
-(under way and the next three); every trip page checks its own.
+(under way and the next three) and shows what it finds once, in one card
+at its top, each document for the earliest-ending trip it bears on, named
+and linked, rather than on every card; every trip page checks its own and
+says "this trip".
 
 The trip page also says what each traveler's passport needs to enter the
 trip's countries (`packages/core/src/visas.ts`): visa-free with the days

@@ -359,6 +359,11 @@ Guesses made on autopilot; change any of them freely.
   per trip), with weeks starting on Monday (the app's dates are en-GB) and
   the month kept in page state rather than the URL. Lanes are laid out per
   week, so a long trip may change lane from one week to the next.
+- The trip list's cards say what comes next only for a trip under way; an
+  upcoming trip's card is its title and dates (maintainer, 2026-11-07).
+  The list's document warnings sit in one card at the top, one line per
+  document for the earliest trip it bears on, rather than on every card;
+  a booking's sources and sender share one line.
 - Document reminders show in the app (trip page and trip card), not by
   email or push, which would need a scheduled job and a mail service. Six
   months is the margin for every passport, rather than a per-country table
