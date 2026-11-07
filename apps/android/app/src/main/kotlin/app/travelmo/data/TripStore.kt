@@ -41,6 +41,12 @@ interface TripStore {
     /** The profiles shared with the user's verified address, live. */
     fun sharedProfiles(email: String?): Flow<List<TravelProfile>>
 
+    /** Whether the user asked for reminders by email (`reminders.email` on their user document), live; null while it loads. */
+    fun reminderEmail(uid: String): Flow<Boolean?>
+
+    /** Turns reminders by email on or off, as the web's Settings does: a merge of `reminders.email` alone. */
+    suspend fun setReminderEmail(uid: String, on: Boolean)
+
     /** Sets who the user's travel profile is shared with, starting the profile if there is none yet ([exists] false). */
     suspend fun saveTrusted(uid: String, email: String?, exists: Boolean, emails: List<String>)
 
@@ -126,6 +132,23 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         return db.collectionGroup("travelProfile").whereArrayContains("trustedEmails", address).snapshots().orNothing("shared profiles").map { snapshot ->
             snapshot?.documents.orEmpty().mapNotNull { doc -> profileFromDocument(doc.data ?: emptyMap()) }
         }
+    }
+
+    override fun reminderEmail(uid: String): Flow<Boolean?> = callbackFlow {
+        val registration = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                Log.e(TAG, "Reading the user document failed", error)
+                trySend(null)
+                return@addSnapshotListener
+            }
+            val reminders = snapshot?.get("reminders") as? Map<*, *>
+            trySend(reminders?.get("email") == true)
+        }
+        awaitClose { registration.remove() }
+    }
+
+    override suspend fun setReminderEmail(uid: String, on: Boolean) {
+        db.collection("users").document(uid).set(mapOf("reminders" to mapOf("email" to on)), SetOptions.merge()).await()
     }
 
     /**

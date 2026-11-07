@@ -128,7 +128,7 @@ private fun SignedInApp(app: TravelmoApplication, user: SignedIn) {
                 BookingFormScreen(viewModel = viewModel, tripId = key.tripId, segmentId = key.segmentId, defaultDate = key.defaultDate, onDone = { backStack.removeLastOrNull() })
             }
             entry<Settings> {
-                SettingsScreen(account = app.account, user = user, onBack = { backStack.removeLastOrNull() })
+                SettingsScreen(account = app.account, user = user, viewModel = viewModel, onBack = { backStack.removeLastOrNull() })
             }
         },
     )
