@@ -121,6 +121,11 @@ One Google Cloud project holds everything.
    (default 300, within the API's free monthly allowance; answers are
    cached, so a place name is asked about once ever), and a place that has
    its country and wants only its spot for the map may use half of it.
+   `SMTP_HOST`, `SMTP_PORT` (default 465, TLS from the start; 587 upgrades),
+   `SMTP_USERNAME` and `SMTP_PASSWORD` (from Secret Manager) and `SMTP_FROM`
+   turn on reminders by email, sent through whatever mail service the
+   account already has; without `SMTP_HOST` the switch in Settings does
+   nothing.
 4. **Push**: `PROJECT=… PARSER_URL=https://<parser> PUSH_SA=<service account>
    deploy/pubsub.sh` creates the `gmail` topic (with Gmail allowed to publish
    to it), a push subscription to `https://<parser>/internal/pubsub/gmail`
@@ -128,13 +133,14 @@ One Google Cloud project holds everything.
    `gmail-dead-letter` topic and subscription that receive a notification the
    parser failed five times. Rerun it to change a setting.
 5. **Daily jobs**: `PROJECT=… PARSER_URL=https://<parser>
-   SCHEDULER_SA=<service account> deploy/scheduler.sh` creates three Cloud
+   SCHEDULER_SA=<service account> deploy/scheduler.sh` creates four Cloud
    Scheduler jobs that POST with an OIDC token from that service account
    (list it in `INTERNAL_CALLERS`): `/internal/renew-watches`, since Gmail
    watches expire after seven days, `/internal/poll-feeds`, which reads
-   every subscribed calendar feed, and `/internal/geocode-sweep`, which asks
-   the geocoder again about the bookings a spent daily budget put off. Three
-   jobs per account are free; these are three.
+   every subscribed calendar feed, `/internal/geocode-sweep`, which asks
+   the geocoder again about the bookings a spent daily budget put off, and
+   `/internal/reminders`, which mails the day's reminders. Three jobs per
+   billing account are free; the fourth costs about ten cents a month.
 6. **Alerts**: `PROJECT=… CHANNEL=<notification channel> deploy/monitoring.sh`
    creates two alerting policies from `deploy/alerts/`: a failed watch renewal
    (the parser's `renew_watch_failed` log line) and a dead-lettered
@@ -160,5 +166,6 @@ one cached call per new place name (a second, for its spot on the map, when
 the source named the country but not where), free up to the API's monthly allowance
 and about half a cent a call past it, with a daily cap; address autocomplete
 is billed per lookup session (the keystrokes of one field and the pick),
-free up to a monthly allowance and a fraction of a cent past it; see
-`SPEC.md`.
+free up to a monthly allowance and a fraction of a cent past it; reminders
+by email ride the account's own SMTP service and a fourth Cloud Scheduler
+job (about ten cents a month); see `SPEC.md`.

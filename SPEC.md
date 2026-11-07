@@ -46,8 +46,8 @@ viewer's zone. Trip bounds are calendar dates.
   duplicates.
 - `users/{uid}` — `email, displayName, photoURL, gmail {emailAddress,
   connectedAt, watchExpiration, historyId, backfill}, googleCalendar
-  {emailAddress, connectedAt, calendars[]}`. `gmail` and `googleCalendar` are
-  server-written; `backfill` is how far a reading of the whole mailbox has
+  {emailAddress, connectedAt, calendars[]}, reminders {email}`. `gmail` and
+  `googleCalendar` are server-written; `reminders` is the owner's choice; `backfill` is how far a reading of the whole mailbox has
   got (`cursor, scanned, imported, failed, done, updatedAt`); each calendar
   is `{id, summary, primary, selected, lastReadAt, lastResult, lastError}`.
 - `users/{uid}/settings/patterns` — `allow[], deny[]` sender domains.
@@ -206,7 +206,21 @@ needs it) and refreshed by hand: the file records the day it was fetched, the
 box shows that month and says that rules change and depend on the stay, so
 the embassy has the last word. Lines needing action (an authorization, an
 e-visa, a visa, no admission) stand out; a visa the traveler holds covers
-them. Reminders by email carry the same lines.
+them.
+
+Reminders by email carry the same lines. Whoever turns them on in Settings
+(`reminders.email` on their user document) gets, from the parser's daily
+`/internal/reminders` job, one plain-text email on any day something is new
+for a trip under way or starting within thirty days: every document warning
+and every entry requirement that needs action and no held visa covers,
+worded as the trip page words them, with a link to the trip and to Settings.
+A log per trip (`users/{uid}/reminders/{tripId}`, the parser's alone) holds
+the lines already sent, so each goes once; a line that changes (a new date)
+is a new line. Mail goes to the signed-in address when Google has verified
+it, through SMTP (`SMTP_HOST` and friends; `apps/parser/src/mail.ts`, with
+the trip title collapsed to one line before it becomes a subject), and the
+job is off without a host. A failed send is logged and tried again the next
+day, since nothing is marked sent until the mail went.
 
 ## Editing by hand
 
@@ -705,7 +719,6 @@ on GitHub-hosted runners.
 Native apps (React Native + Expo in `apps/mobile`; the Android screens are
 mocked up in `design/android/`, Material 3 with this palette, as the reference
 for the port), check-in/out surfacing,
-itinerary ideas, reminders sent
-by email or push rather than shown in the app,
+itinerary ideas, reminders by push as well as email,
 other mail providers and forward-to-import. Further import
 sources share the pipeline: Google Calendar; `IMPORT.md` compares them and maps their fields.
