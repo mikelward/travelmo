@@ -27,6 +27,9 @@ export const paths = {
   gmailAccount: (emailAddress: string) => `gmailAccounts/${emailAddress}`,
   oauthState: (nonce: string) => `oauthStates/${nonce}`,
   pendingConnection: (token: string) => `pendingConnections/${token}`,
+  // The geocoder's answers, shared by every user, and its calls per day.
+  geocode: (key: string) => `geocodes/${key}`,
+  geocodeBudget: (day: string) => `geocodeBudget/${day}`,
   trips: () => "trips",
   trip: (tripId: string) => `trips/${tripId}`,
   segments: (tripId: string) => `trips/${tripId}/segments`,

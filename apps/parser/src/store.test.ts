@@ -3,6 +3,7 @@ import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { claimLeaseMs } from "./importer";
 import { FeedLimitReached, firestoreFeeds } from "./feeds";
+import { firestoreGeocodeStore } from "./geocode";
 import { firestoreStore } from "./store";
 
 // Runs inside `firebase emulators:exec`, which sets FIRESTORE_EMULATOR_HOST.
@@ -165,5 +166,24 @@ describe("firestoreFeeds", () => {
     await feeds.releaseIfUnread(uid, kept[0]!.id);
     await feeds.releaseIfUnread(uid, kept[1]!.id);
     expect((await feeds.list(uid)).map((f) => f.id)).toEqual([kept[0]!.id]);
+  });
+});
+
+describe("firestoreGeocodeStore", () => {
+  const geocodes = firestoreGeocodeStore(db);
+
+  it("grants exactly the day's budget to concurrent reservations", async () => {
+    const day = `2026-11-${unique()}`;
+    const results = await Promise.all([geocodes.reserve(day, 2), geocodes.reserve(day, 2), geocodes.reserve(day, 2)]);
+    expect(results.filter(Boolean)).toHaveLength(2);
+    expect(await geocodes.reserve(day, 2)).toBe(false);
+    expect((await db.doc(paths.geocodeBudget(day)).get()).data()).toEqual({ calls: 2 });
+  });
+
+  it("keeps an answer, a 'none' included", async () => {
+    const key = unique();
+    expect(await geocodes.get(key)).toBeUndefined();
+    await geocodes.put(key, { query: "Nowhere Special", status: "none", at: at(0) });
+    expect(await geocodes.get(key)).toEqual({ query: "Nowhere Special", status: "none", at: at(0) });
   });
 });

@@ -235,6 +235,9 @@ describe("server-only collections", () => {
     await assertFails(getDoc(doc(as(owner), paths.gmailAccount(owner.email))));
     await assertFails(setDoc(doc(as(owner), paths.oauthState("nonce")), { uid: owner.uid }));
     await assertFails(getDoc(doc(as(owner), paths.pendingConnection("token"))));
+    await assertFails(getDoc(doc(as(owner), paths.geocode("abc"))));
+    await assertFails(setDoc(doc(as(owner), paths.geocode("abc")), { query: "x", status: "ok", country: "FR", at: "2026-11-07T00:00:00Z" }));
+    await assertFails(setDoc(doc(as(owner), paths.geocodeBudget("2026-11-07")), { calls: 0 }));
   });
 });
 

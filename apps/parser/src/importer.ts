@@ -1,4 +1,6 @@
 import {
+  enrichSegments,
+  fillAirportCountries,
   findTripForRange,
   icsEventText,
   isTravelCalendar,
@@ -10,6 +12,7 @@ import {
   segmentSources,
   stableHash,
   type ExtractedSegment,
+  type GeocodeLookup,
   type ParsedMessage,
   type Segment,
   type SegmentSource,
@@ -17,6 +20,7 @@ import {
   type Trip,
   type TripItImport,
 } from "@travelmo/core";
+import { airportPlace } from "@travelmo/core/airportPlaces";
 import type { Extractor } from "./extract";
 import { isNotFound, type EmailMessage } from "./gmail";
 import { calendarPrefilter, prefilter, senderDomain, type PrefilterResult, type SenderPatterns } from "./prefilter";
@@ -118,6 +122,9 @@ export type ImportDeps = {
   extract: Extractor;
   // Without one, the similarity pre-filter is off.
   embed?: Embedder;
+  // Fills a place's country when its source gave none (geocode.ts); without
+  // one, places stay as the source left them.
+  geocode?: GeocodeLookup;
   now: () => string;
   log: (event: string, fields: Record<string, unknown>) => void;
 };
@@ -354,14 +361,27 @@ export const sourceTripPrefix = "tripit-";
 // The one trip holding a source's unfiled items.
 const holdingTripPrefix = `${sourceTripPrefix}unfiled-`;
 
+// A place's country, before anything is written: a flight's from its airport
+// code (a table, no call), anything else's from the geocoder when there is
+// one. Network calls stay outside the transaction, which Firestore may run
+// more than once. A geocoder failure costs the country, never the booking.
+async function placeSegments(uid: string, booking: BookingToFile, deps: ImportDeps): Promise<readonly ExtractedSegment[]> {
+  const fromAirports = booking.segments.map((segment) => fillAirportCountries(segment, airportPlace));
+  if (!deps.geocode) return fromAirports;
+  const { segments, filled, failed } = await enrichSegments(fromAirports, deps.geocode);
+  if (filled || failed) deps.log("geocoded", { uid, source: booking.source, sourceId: booking.sourceId, filled, failed });
+  return segments;
+}
+
 // The part of every import after the booking is known, whatever it came
 // from: trip assignment, duplicate detection against bookings already on the
 // user's trips, and the segment writes, in one transaction serialized per
 // user. A booking that matches one already imported from elsewhere (same
 // type, time and route: sameBooking) is left out; when every one does,
 // nothing is written.
-export async function fileBooking(uid: string, booking: BookingToFile, deps: ImportDeps): Promise<Filed> {
+export async function fileBooking(uid: string, incoming: BookingToFile, deps: ImportDeps): Promise<Filed> {
   const { store } = deps;
+  const booking = { ...incoming, segments: await placeSegments(uid, incoming, deps) };
   const range = segmentDateRange(booking.segments);
   if (!range) throw new Error(`booking ${booking.sourceId} has no segments`);
   const timestamp = deps.now();
