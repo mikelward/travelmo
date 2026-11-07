@@ -1,6 +1,8 @@
 package app.travelmo.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,6 +13,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -21,7 +30,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -39,16 +51,34 @@ import app.travelmo.core.routeLine
 import app.travelmo.core.segmentsByDay
 import app.travelmo.core.timesLine
 import app.travelmo.ui.theme.SharedBadge
+import kotlinx.coroutines.launch
 
-/** A trip's bookings by day, read-only for now, as the web's trip page lists them. */
+/**
+ * A trip's bookings by day, as the web's trip page lists them. The owner and
+ * a sharee add, edit and delete bookings (the rules decide finally); only
+ * the owner's other powers (rename, share, delete the trip) stay on the web.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TripDetailScreen(viewModel: TripsViewModel, tripId: String, uid: String, onBack: () -> Unit) {
+fun TripDetailScreen(
+    viewModel: TripsViewModel,
+    tripId: String,
+    uid: String,
+    email: String?,
+    onBack: () -> Unit,
+    onAddBooking: (defaultDate: String) -> Unit,
+    onEditBooking: (segmentId: String) -> Unit,
+) {
     val tripFlow = remember(tripId) { viewModel.trip(tripId) }
     val segmentsFlow = remember(tripId) { viewModel.segments(tripId) }
     val trip by tripFlow.collectAsStateWithLifecycle(initialValue = null)
     val segments by segmentsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     val loaded by viewModel.state.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    var error by remember { mutableStateOf<String?>(null) }
+    var deleting by remember { mutableStateOf<Segment?>(null) }
+    val current = trip
+    val canEdit = current != null && !current.deleting && (current.ownerUid == uid || (email != null && current.sharedWith.contains(email)))
     Scaffold(
         topBar = {
             TopAppBar(
@@ -60,25 +90,63 @@ fun TripDetailScreen(viewModel: TripsViewModel, tripId: String, uid: String, onB
                 },
             )
         },
+        floatingActionButton = {
+            current?.takeIf { canEdit }?.let { editable ->
+                ExtendedFloatingActionButton(
+                    onClick = { onAddBooking(editable.start) },
+                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                    text = { Text(stringResource(R.string.add_booking)) },
+                )
+            }
+        },
     ) { padding ->
-        val current = trip
+        deleting?.let { segment ->
+            AlertDialog(
+                onDismissRequest = { deleting = null },
+                title = { Text(stringResource(R.string.delete_booking_title)) },
+                text = { Text(stringResource(R.string.delete_booking_text, segment.title)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        deleting = null
+                        scope.launch {
+                            try {
+                                viewModel.deleteSegment(tripId, segment.id)
+                            } catch (e: Exception) {
+                                error = e.message ?: e.javaClass.simpleName
+                            }
+                        }
+                    }) { Text(stringResource(R.string.delete)) }
+                },
+                dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.keep)) } },
+            )
+        }
         when {
-            current != null -> TripBody(current, segments, shared = current.ownerUid != uid, modifier = Modifier.padding(padding))
+            current != null -> TripBody(
+                current, segments, shared = current.ownerUid != uid, error = error,
+                actions = if (canEdit) BookingActions(onEdit = { onEditBooking(it.id) }, onDelete = { deleting = it }) else null,
+                modifier = Modifier.padding(padding),
+            )
             loaded.groups == null -> Text(stringResource(R.string.trip_loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp))
             else -> Text(stringResource(R.string.trip_not_found), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp))
         }
     }
 }
 
+/** What a viewer who may edit can do to a booking. */
+class BookingActions(val onEdit: (Segment) -> Unit, val onDelete: (Segment) -> Unit)
+
 @Composable
-private fun TripBody(trip: Trip, segments: List<Segment>, shared: Boolean, modifier: Modifier = Modifier) {
+private fun TripBody(trip: Trip, segments: List<Segment>, shared: Boolean, error: String?, actions: BookingActions?, modifier: Modifier = Modifier) {
     val days = segmentsByDay(segments)
-    LazyColumn(modifier = modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
+    LazyColumn(modifier = modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp)) {
         item(key = "dates") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(formatDateRange(trip.start, trip.end), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (shared) Text(stringResource(R.string.badge_shared).uppercase(), style = MaterialTheme.typography.labelSmall, color = SharedBadge)
             }
+        }
+        if (error != null) {
+            item(key = "error") { Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp)) }
         }
         if (days.isEmpty()) {
             item(key = "empty") {
@@ -90,7 +158,7 @@ private fun TripBody(trip: Trip, segments: List<Segment>, shared: Boolean, modif
                 Text(formatDate(date), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 20.dp, bottom = 4.dp))
             }
             items(items, key = { it.id }) { segment ->
-                SegmentRow(segment)
+                SegmentRow(segment, actions)
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
         }
@@ -103,10 +171,11 @@ private fun TripBody(trip: Trip, segments: List<Segment>, shared: Boolean, modif
     }
 }
 
-/** One booking: its kind, title, route, times, reference, verdict, sources and sender. */
+/** One booking: its kind, title, route, times, reference, verdict, sources and sender, and its actions when the viewer may edit. */
 @Composable
-fun SegmentRow(segment: Segment) {
+fun SegmentRow(segment: Segment, actions: BookingActions? = null) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    var menu by remember { mutableStateOf(false) }
     Row(modifier = Modifier.padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(
             segment.type.label.uppercase(),
@@ -130,6 +199,17 @@ fun SegmentRow(segment: Segment) {
                 )
             }
             segment.sender?.let { Text(stringResource(R.string.from_sender, it), style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp)) }
+        }
+        if (actions != null) {
+            Box {
+                IconButton(onClick = { menu = true }, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.booking_actions), tint = muted)
+                }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text(stringResource(R.string.edit)) }, onClick = { menu = false; actions.onEdit(segment) })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.delete)) }, onClick = { menu = false; actions.onDelete(segment) })
+                }
+            }
         }
     }
 }

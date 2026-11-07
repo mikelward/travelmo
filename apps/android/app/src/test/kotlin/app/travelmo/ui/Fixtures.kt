@@ -2,6 +2,7 @@ package app.travelmo.ui
 
 import app.travelmo.core.Place
 import app.travelmo.core.Segment
+import app.travelmo.core.SegmentDraft
 import app.travelmo.core.SegmentType
 import app.travelmo.core.Trip
 import app.travelmo.data.TripStore
@@ -47,12 +48,21 @@ val fixtureSegments: Map<String, List<Segment>> = mapOf(
         Segment(
             "l-stay", "liverpool", SegmentType.LODGING, "Cove Liverpool", "2026-12-12T15:00:00+00:00", "2026-12-13T11:00:00+00:00",
             provider = "Cove", confirmation = "CV-55120", notes = "Late check-in after 22:00: call reception", sender = "cove.example", sourceCount = 2, rating = 4, favorite = true,
+            destination = Place("Cove Liverpool", city = "Liverpool", country = "GB"),
         ),
         Segment("l-tour", "liverpool", SegmentType.ACTIVITY, "Anfield stadium tour", "2026-12-13T14:00:00+00:00", "2026-12-13T15:30:00+00:00", provider = "Liverpool FC", confirmation = "LFC-4471"),
     ),
 )
 
 class FakeTripStore(private val trips: List<Trip> = fixtureTrips, private val segments: Map<String, List<Segment>> = fixtureSegments) : TripStore {
+    val saved = mutableListOf<Triple<String, SegmentDraft, String?>>()
+    val deleted = mutableListOf<Pair<String, String>>()
     override fun trips(uid: String, email: String?): Flow<List<Trip>> = flowOf(trips)
     override fun segments(tripId: String): Flow<List<Segment>> = flowOf(segments[tripId].orEmpty())
+    override suspend fun saveSegment(tripId: String, draft: SegmentDraft, existingId: String?) {
+        saved += Triple(tripId, draft, existingId)
+    }
+    override suspend fun deleteSegment(tripId: String, segmentId: String) {
+        deleted += tripId to segmentId
+    }
 }

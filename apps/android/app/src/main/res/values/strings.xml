@@ -41,6 +41,42 @@
     </plurals>
     <string name="from_sender">From %1$s</string>
 
+    <!-- Booking form and actions. -->
+    <string name="add_booking">Add a booking</string>
+    <string name="edit_booking">Edit booking</string>
+    <string name="add">Add</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="ok">OK</string>
+    <string name="clear">Clear</string>
+    <string name="field_type">Type</string>
+    <string name="field_title">Title</string>
+    <string name="start_local">Start (local time)</string>
+    <string name="end_local">End (local time)</string>
+    <string name="check_in_local">Check-in (local time)</string>
+    <string name="check_out_local">Check-out (local time)</string>
+    <string name="field_date">Date</string>
+    <string name="field_time">Time</string>
+    <string name="field_zone">Time zone</string>
+    <string name="search_zones">Search zones</string>
+    <string name="field_from">From</string>
+    <string name="field_to">To</string>
+    <string name="field_where">Where</string>
+    <string name="field_code">Code</string>
+    <string name="field_country">Country</string>
+    <string name="from_country">From country</string>
+    <string name="to_country">To country</string>
+    <string name="no_country">No country</string>
+    <string name="field_provider">Provider</string>
+    <string name="field_confirmation">Confirmation</string>
+    <string name="field_notes">Notes</string>
+    <string name="booking_actions">Booking actions</string>
+    <string name="edit">Edit</string>
+    <string name="delete">Delete</string>
+    <string name="delete_booking_title">Delete this booking?</string>
+    <string name="delete_booking_text">%1$s goes from the trip; an email it came from can be imported again.</string>
+    <string name="keep">Keep</string>
+
     <!-- Settings. -->
     <string name="signed_in_as">Signed in as %1$s</string>
     <string name="sign_out">Sign out</string>
