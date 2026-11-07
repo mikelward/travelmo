@@ -178,7 +178,15 @@ codes (`packages/core/src/airports.json`, from the OpenFlights airport
 database, loaded on demand); the picker still has the last word. An
 imported instant carries only an offset, so editing one offers that offset
 "as imported" alongside the zones, and keeps it unless the editor picks a
-zone. A place's country is an optional
+zone. With a Places API (New) key (`NEXT_PUBLIC_GOOGLE_MAPS_KEY`, a browser
+key restricted to the app's origins), the From, To and Where fields offer
+places as the user types (`apps/web/src/components/PlaceInput.tsx`): three
+characters of a street, a hotel, a UK postcode or a US ZIP, debounced, under
+one session token until the pick, which fetches the place's address
+components and formatted address (the cheapest field mask) and fills the
+place's name, city, country and `address`; typing over the name afterwards
+drops the city and address again. Without a key the fields are plain inputs.
+A place's country is an optional
 picker, never required or prompted for, and not shown for a flight, whose
 airport code says it; it only helps the reports place a booking. Fields the
 form does not show (a place's city, a flight's place's country) survive an
@@ -625,7 +633,10 @@ of a few hundred tokens a hundredth of that; a hundred users importing
 fifty bookings a month is a few dollars. Geocoding is one call per place
 name Travelmo has not seen before (a 20-year export needs a few hundred),
 free up to the Geocoding API's monthly allowance and about half a cent a
-call past it, and `GEOCODE_DAILY_LIMIT` bounds the worst day. The rules tests and CI run
+call past it, and `GEOCODE_DAILY_LIMIT` bounds the worst day. Address
+autocomplete in the form is billed to the user's browser key per lookup
+session, free up to the Places API's monthly allowance; a hand-entered
+booking is a rare thing beside imports. The rules tests and CI run
 on GitHub-hosted runners.
 
 ## Later
@@ -633,8 +644,7 @@ on GitHub-hosted runners.
 Native apps (React Native + Expo in `apps/mobile`; the Android screens are
 mocked up in `design/android/`, Material 3 with this palette, as the reference
 for the port), city-level places on the map (it knows only airports and
-countries; geocoding fills countries, not coordinates), address autocomplete
-in the booking form, a calendar view, check-in/out surfacing,
+countries; geocoding fills countries, not coordinates), a calendar view, check-in/out surfacing,
 ratings and favourites, itinerary ideas, loyalty balances, reminders sent
 by email or push rather than shown in the app, which visas a trip needs,
 other mail providers and forward-to-import. Further import

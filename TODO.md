@@ -88,7 +88,7 @@
 - [x] Fill in a place's country at import when its source gave none:
       airports from the bundled table, everything else from Google's
       Geocoding API behind a shared cache and a daily cap.
-- [ ] Address autocomplete in the booking form (Places API (New) from the
+- [x] Address autocomplete in the booking form (Places API (New) from the
       browser with a referrer-restricted key): a street start, a UK postcode
       or a US ZIP+4 offers places; picking one fills name, city, country and
       address.
@@ -211,6 +211,13 @@ Guesses made on autopilot; change any of them freely.
   good, the daily cap defaults to 300 calls across all users, flights never
   cost a call (the airport table), a hand-entered booking is not geocoded,
   and `locality` (then `postal_town`, then the county) is the city.
+- Address autocomplete calls the Places API (New) from the browser with a
+  public key restricted by HTTP referrer and API, as the Firebase config is,
+  rather than through the parser (which would put the parser on every
+  keystroke); no type filter, so one request serves streets, postcodes and
+  ZIPs; the pick's name is the suggestion's main text, not the paid
+  `displayName`; a picked place's coordinates are not kept yet (the map
+  knows airports and countries only).
 - The map knows countries and airports only (no geocoding service, so no
   cost or key); a hotel or station shows as its country being filled.
 - Document reminders show in the app (trip page and trip card), not by
