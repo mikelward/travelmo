@@ -57,11 +57,11 @@ viewer's zone. Trip bounds are calendar dates.
 - `users/{uid}/feeds/{feedId}` — `url, label, addedAt, lastFetchedAt,
   lastResult, lastError`: subscribed calendar feeds. The owner reads them;
   the parser alone writes them.
-- `geocodes/{key}` — `query, status (ok | none), country, city, at`: the
-  geocoder's answer for a normalized place query (`key` is its hash), shared
-  by every user, so a name is looked up once ever; `geocodeBudget/{day}` —
-  `calls`, the day's count against `GEOCODE_DAILY_LIMIT`. Both are the
-  parser's alone.
+- `geocodes/{key}` — `query, status (ok | none), country, city, lat, lon,
+  at`: the geocoder's answer for a normalized place query (`key` is its
+  hash), shared by every user, so a name is looked up once ever;
+  `geocodeBudget/{day}` — `calls`, the day's count against
+  `GEOCODE_DAILY_LIMIT`. Both are the parser's alone.
 - `users/{uid}/parsedMessages/{sourceId}` — `outcome` (processing,
   filtered, not_booking, imported, failed), `source` (absent for Gmail,
   `tripit` or `ics` otherwise), `reason, from, subject, segmentIds[],
@@ -112,22 +112,29 @@ and further-off ones get no listener, to keep Firestore reads in check.
 `/reports` counts, from the trips the viewer can see (their own and those
 shared with them, each once), the trips begun each year, the days away, the
 days spent in each country, and draws a world map with those countries
-filled and the airports flown through marked. A year picker narrows the
+filled, the airports flown through marked, and a smaller dot for every other
+place (a stay, a station, a restaurant) whose booking knows its coordinates.
+A year picker narrows the
 counts and the map to one year; the trips-per-year table always shows every
 year. Trips still ahead are not counted, and a trip under way counts up to
 today.
 
-A place's country is the one its booking names. Imports fill it in when the
-source gave none: a flight's from its airport code
-(`packages/core/src/airportPlaces.json`, generated from the same OpenFlights
-data as the zone table, which also gives the airport's coordinates for the
-map), anything else's from Google's Geocoding API (`packages/core/src/geocode.ts`
-for what to ask and how to read the answer, `apps/parser/src/geocode.ts` for
-the call), asked once per distinct place name, cached in `geocodes`, and
-capped per day; the city is filled too when the source left it out. A name
-Google cannot place stays as it was, and a hand-entered booking is not
-geocoded (the client writes it). Station and ferry codes are never read as
-airport codes. Each day of a trip counts for every country the
+A place's country is the one its booking names, and its spot (`lat`, `lon`)
+the one its booking carries. Imports fill both in when the source gave none:
+a flight's from its airport code (`packages/core/src/airportPlaces.json`,
+generated from the same OpenFlights data as the zone table, which also gives
+the airport's coordinates for the map), anything else's from Google's
+Geocoding API (`packages/core/src/geocode.ts` for what to ask and how to read
+the answer, `apps/parser/src/geocode.ts` for the call), asked once per
+distinct place name (with the country on the end when the source named one),
+cached in `geocodes`, and capped per day; the city is filled too when the
+source left it out. A place that has its country and lacks only its spot is
+asked about as well, but may use only half the day's budget, so a backlog of
+dots never crowds out the countries the reports need. A name Google cannot
+place stays as it was, and a hand-entered booking is not geocoded (the
+client writes it), though an address pick in the form sets the spot. A
+place's own coordinates (TripIt's, or a pick's) are never overwritten.
+Station and ferry codes are never read as airport codes. Each day of a trip counts for every country the
 traveler was in that day: a booking's start and end say where they were,
 and between bookings they stay where the last one (in time, not by local
 date, which differ across the date line) left them. So a travel day
@@ -183,9 +190,9 @@ key restricted to the app's origins), the From, To and Where fields offer
 places as the user types (`apps/web/src/components/PlaceInput.tsx`): three
 characters of a street, a hotel, a UK postcode or a US ZIP, debounced, under
 one session token until the pick, which fetches the place's address
-components and formatted address (the cheapest field mask) and fills the
-place's name, city, country and `address`; typing over the name afterwards
-drops the city and address again. Without a key the fields are plain inputs.
+components, formatted address and location (all in the cheapest field mask)
+and fills the place's name, city, country, `address` and spot; typing over
+the name afterwards drops the city, address and spot again. Without a key the fields are plain inputs.
 A place's country is an optional
 picker, never required or prompted for, and not shown for a flight, whose
 airport code says it; it only helps the reports place a booking. Fields the
@@ -304,10 +311,10 @@ Gmail ─watch─▶ Pub/Sub ─push(OIDC)─▶ parser /internal/pubsub/gmail
                                         │              and save the embedding as a non-booking
                                         │ yes, and save it as a booking
                                         ▼
-                               place each origin and destination without a
-                               country: airport table, then the geocoder
-                               (cache → day's budget → Google); a miss or a
-                               failure leaves the place as it was
+                               place each origin and destination lacking a
+                               country or a spot: airport table, then the
+                               geocoder (cache → day's budget → Google); a
+                               miss or a failure leaves the place as it was
                                         ▼
                                transaction, serialized per user:
                                drop bookings already on an overlapping
@@ -631,9 +638,11 @@ few times a day per subscriber). Gemini
 Flash-Lite costs a fraction of a cent per booking email, and an embedding
 of a few hundred tokens a hundredth of that; a hundred users importing
 fifty bookings a month is a few dollars. Geocoding is one call per place
-name Travelmo has not seen before (a 20-year export needs a few hundred),
-free up to the Geocoding API's monthly allowance and about half a cent a
-call past it, and `GEOCODE_DAILY_LIMIT` bounds the worst day. Address
+name Travelmo has not seen before (a 20-year export needs a few hundred:
+about 240 for countries and 170 more for spots alone, which the daily cap
+spreads over two days), free up to the Geocoding API's monthly allowance and
+about half a cent a call past it, and `GEOCODE_DAILY_LIMIT` bounds the worst
+day. Address
 autocomplete in the form is billed to the user's browser key per lookup
 session, free up to the Places API's monthly allowance; a hand-entered
 booking is a rare thing beside imports. The rules tests and CI run
@@ -643,8 +652,8 @@ on GitHub-hosted runners.
 
 Native apps (React Native + Expo in `apps/mobile`; the Android screens are
 mocked up in `design/android/`, Material 3 with this palette, as the reference
-for the port), city-level places on the map (it knows only airports and
-countries; geocoding fills countries, not coordinates), a calendar view, check-in/out surfacing,
+for the port), a second chance for places an exhausted budget left without a
+country or a spot (a nightly sweep), a calendar view, check-in/out surfacing,
 ratings and favourites, itinerary ideas, loyalty balances, reminders sent
 by email or push rather than shown in the app, which visas a trip needs,
 other mail providers and forward-to-import. Further import

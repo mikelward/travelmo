@@ -97,6 +97,12 @@
       built since round one (reports and map, travel profile, passport
       reminders, import and calendar settings, address suggestions) as
       screens matching the web app (`design/android/`, boards 15–29).
+- [x] Places on the reports map: a stay, station or activity whose booking
+      knows its coordinates (TripIt's, a geocoder answer, or an address pick
+      in the form) is a dot, beside the airports and the filled countries.
+- [ ] A second chance for places an exhausted daily geocoding budget left
+      without a country or a spot: a nightly sweep over recent bookings, or
+      a retry on the next import of the same place.
 
 ## Decisions needing review
 
@@ -220,10 +226,19 @@ Guesses made on autopilot; change any of them freely.
   rather than through the parser (which would put the parser on every
   keystroke); no type filter, so one request serves streets, postcodes and
   ZIPs; the pick's name is the suggestion's main text, not the paid
-  `displayName`; a picked place's coordinates are not kept yet (the map
-  knows airports and countries only).
-- The map knows countries and airports only (no geocoding service, so no
-  cost or key); a hotel or station shows as its country being filled.
+  `displayName`.
+- Places on the map: `Place` carries `lat` and `lon` (both or neither), from
+  TripIt's own coordinates (a `0, 0` pair read as blank), the airport table,
+  the geocoder's answer, or the form's address pick (`location` is in the
+  same Places field-mask SKU as the address components, so it costs nothing
+  more). A place that already has a country is now geocoded too, for its
+  spot alone, with the country on the query, but such a lookup may use only
+  half the daily budget so the countries the reports need come first; on the
+  real export that is about 170 extra queries over 240, spread by the cap
+  over two days. A place the cap left without a spot gets no second chance
+  yet (new item above). Dots within about a hundred meters are one, under
+  the first booking's name. Bookings imported before this change have no
+  coordinates and stay off the map until re-imported.
 - Document reminders show in the app (trip page and trip card), not by
   email or push, which would need a scheduled job and a mail service. Six
   months is the margin for every passport, rather than a per-country table
