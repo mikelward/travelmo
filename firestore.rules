@@ -172,5 +172,12 @@ service cloud.firestore {
     match /pendingConnections/{token} {
       allow read, write: if false;
     }
+    // The geocoder's cache and daily budget: the parser's alone.
+    match /geocodes/{key} {
+      allow read, write: if false;
+    }
+    match /geocodeBudget/{day} {
+      allow read, write: if false;
+    }
   }
 }

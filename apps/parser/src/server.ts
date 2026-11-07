@@ -42,6 +42,7 @@ import {
 } from "./connections";
 import { optionalEnv, requireEnv } from "./env";
 import { geminiEmbedder, geminiExtractor } from "./extract";
+import { cachedGeocoder, defaultDailyLimit, firestoreGeocodeStore, googleGeocoder } from "./geocode";
 import { auth, db } from "./firebase";
 import {
   currentHistoryId,
@@ -101,10 +102,26 @@ const genai = process.env.GEMINI_API_KEY
     });
 
 
+// Without a Geocoding API key, places keep whatever country their source gave.
+const geocodingKey = process.env.GEOCODING_API_KEY;
+const geocodeDailyLimit = Number(optionalEnv("GEOCODE_DAILY_LIMIT", String(defaultDailyLimit)));
+if (!Number.isInteger(geocodeDailyLimit) || geocodeDailyLimit < 0) throw new Error("GEOCODE_DAILY_LIMIT must be a whole number");
+
 const deps: ImportDeps = {
   store: firestoreStore(db),
   extract: geminiExtractor(genai, geminiModel),
   embed: geminiEmbedder(genai, embeddingModel),
+  ...(geocodingKey
+    ? {
+        geocode: cachedGeocoder({
+          store: firestoreGeocodeStore(db),
+          geocoder: googleGeocoder(geocodingKey),
+          limit: geocodeDailyLimit,
+          now: () => new Date().toISOString(),
+          log: (event, fields) => log("INFO", event, fields),
+        }),
+      }
+    : {}),
   now: () => new Date().toISOString(),
   log: (event, fields) => log("INFO", event, fields),
 };

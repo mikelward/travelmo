@@ -1055,3 +1055,55 @@ describe("importCalendar", () => {
     expect(counts.imported).toBe(1);
   });
 });
+
+describe("fileBooking geocoding", () => {
+  const stay: ExtractedBooking = {
+    isBooking: true,
+    segments: [{ type: "lodging", title: "Hotel Example", start: "2026-12-12T15:00:00+00:00", end: "2026-12-14T11:00:00+00:00", destination: { name: "Hotel Example", city: "Exampleville" } }],
+  };
+  const codedFlight: ExtractedBooking = {
+    isBooking: true,
+    segments: [{ type: "flight", title: "XX 1 MAN to DUB", start: "2026-12-15T08:00:00+00:00", origin: { name: "Manchester", code: "MAN" }, destination: { name: "Dublin", code: "DUB" } }],
+  };
+
+  it("fills a place's country from the geocoder before writing, asking once per place", async () => {
+    const store = memoryStore();
+    const asked: string[] = [];
+    const d: ImportDeps = {
+      ...deps(store, async () => stay),
+      geocode: async (query) => {
+        asked.push(query);
+        return { country: "FR", city: "Exampleville" };
+      },
+    };
+    expect(await importMessage("u1", email(), d)).toBe("imported");
+    expect([...store.segments.values()][0]!.destination).toEqual({ name: "Hotel Example", city: "Exampleville", country: "FR" });
+    expect(asked).toEqual(["Hotel Example, Exampleville"]);
+  });
+
+  it("still imports when the geocoder fails, and leaves places alone without one", async () => {
+    const failing = memoryStore();
+    const d: ImportDeps = {
+      ...deps(failing, async () => stay),
+      geocode: async () => {
+        throw new Error("REQUEST_DENIED");
+      },
+    };
+    expect(await importMessage("u1", email(), d)).toBe("imported");
+    expect([...failing.segments.values()][0]!.destination).toEqual({ name: "Hotel Example", city: "Exampleville" });
+    const plain = memoryStore();
+    await importMessage("u1", email(), deps(plain, async () => stay));
+    expect([...plain.segments.values()][0]!.destination).toEqual({ name: "Hotel Example", city: "Exampleville" });
+  });
+
+  it("gives a flight's airports their country from the table without asking", async () => {
+    const store = memoryStore();
+    const asked: string[] = [];
+    const d: ImportDeps = { ...deps(store, async () => codedFlight), geocode: async (q) => (asked.push(q), "none") };
+    await importMessage("u1", email({ id: "m2", subject: "Your flight" }), d);
+    const segment = [...store.segments.values()][0]!;
+    expect(segment.origin).toEqual({ name: "Manchester", code: "MAN", country: "GB" });
+    expect(segment.destination).toEqual({ name: "Dublin", code: "DUB", country: "IE" });
+    expect(asked).toEqual([]);
+  });
+});
