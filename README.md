@@ -79,7 +79,7 @@ GMAIL_PUBSUB_TOPIC=projects/<project>/topics/gmail \
 GOOGLE_OAUTH_CLIENT_ID=... GOOGLE_OAUTH_CLIENT_SECRET=... \
 GOOGLE_OAUTH_REDIRECT_URL=http://localhost:8080/gmail/callback \
 INTERNAL_AUDIENCE=http://localhost:8080 INTERNAL_CALLERS=none \
-GEMINI_API_KEY=... \
+GEMINI_API_KEY=... GEOCODING_API_KEY=... \
 pnpm --filter @travelmo/parser dev
 ```
 
@@ -92,7 +92,8 @@ One Google Cloud project holds everything.
    the rules and indexes (the shared travel profiles need a collection-group
    index on `trustedEmails`, and the calendar export composite indexes on
    `trips`).
-2. **Gmail and Calendar**: enable the Gmail API and the Google Calendar API.
+2. **Gmail, Calendar and Geocoding**: enable the Gmail API, the Google
+   Calendar API and the Geocoding API.
    Create an OAuth client (web application) whose redirect URI is
    `https://<parser>/gmail/callback` (Calendar consent returns there too), and
    add the `gmail.readonly` and `calendar.readonly` scopes to the consent
@@ -110,7 +111,12 @@ One Google Cloud project holds everything.
    the service account (`GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`).
    `GEMINI_MODEL` defaults to `gemini-flash-lite-latest` and
    `GEMINI_EMBEDDING_MODEL` to `gemini-embedding-001` (the similarity
-   pre-filter).
+   pre-filter). `GEOCODING_API_KEY` (from Secret Manager; an API key
+   restricted to the Geocoding API) turns on filling in a place's country at
+   import; without it places keep whatever country their source gave.
+   `GEOCODE_DAILY_LIMIT` caps the calls per day across all users (default
+   300, within the API's free monthly allowance; answers are cached, so a
+   place name is asked about once ever).
 4. **Push**: `PROJECT=… PARSER_URL=https://<parser> PUSH_SA=<service account>
    deploy/pubsub.sh` creates the `gmail` topic (with Gmail allowed to publish
    to it), a push subscription to `https://<parser>/internal/pubsub/gmail`
@@ -138,5 +144,6 @@ One Google Cloud project holds everything.
 ## Costs
 
 Everything scales to zero. At a hundred users the bill is dominated by
-Firestore reads and a few cents of Gemini per imported booking; see
-`SPEC.md`.
+Firestore reads and a few cents of Gemini per imported booking; geocoding is
+one cached call per new place name, free up to the API's monthly allowance
+and about half a cent a call past it, with a daily cap; see `SPEC.md`.

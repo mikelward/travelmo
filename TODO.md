@@ -85,10 +85,13 @@
 - [x] Calendar export: a subscribable .ics link for your trips (Settings).
 - [x] Let the booking form set a place's country, optional and never asked
       for, so a booking the reports can't place can be fixed by hand.
-- [ ] Consider finding a place's country from its city name (a bundled
-      city table, no service), and autocomplete or address lookup in the
-      booking form (a geocoding service: cost and a key to weigh). Low
-      priority while imports fill the country in.
+- [x] Fill in a place's country at import when its source gave none:
+      airports from the bundled table, everything else from Google's
+      Geocoding API behind a shared cache and a daily cap.
+- [ ] Address autocomplete in the booking form (Places API (New) from the
+      browser with a referrer-restricted key): a street start, a UK postcode
+      or a US ZIP+4 offers places; picking one fills name, city, country and
+      address.
 - [ ] Android mockups, round two: offline banner and page, interrupted
       deletion, loading and not-found states, the full dark set, and the
       future features from the brief (calendar, map, reports, loyalty,
@@ -201,6 +204,13 @@ Guesses made on autopilot; change any of them freely.
 - The reports page computes in the browser from one read of every booking,
   not from a server-side aggregate or BigQuery export; fine for hundreds of
   trips, and the first thing to change if it gets slow.
+- Geocoding: Google's Geocoding API rather than a bundled city table, since
+  the project is on Google Cloud and the parser already holds secrets; the
+  volume (a few hundred distinct names for a 20-year export, then a handful
+  a month) sits inside the free allowance. Negative answers are cached for
+  good, the daily cap defaults to 300 calls across all users, flights never
+  cost a call (the airport table), a hand-entered booking is not geocoded,
+  and `locality` (then `postal_town`, then the county) is the city.
 - The map knows countries and airports only (no geocoding service, so no
   cost or key); a hotel or station shows as its country being filled.
 - Document reminders show in the app (trip page and trip card), not by
