@@ -92,10 +92,11 @@
       browser with a referrer-restricted key): a street start, a UK postcode
       or a US ZIP+4 offers places; picking one fills name, city, country and
       address.
-- [ ] Android mockups, round two: offline banner and page, interrupted
-      deletion, loading and not-found states, the full dark set, and the
-      future features from the brief (calendar, map, reports, loyalty,
-      passport reminders) as concept screens.
+- [x] Android mockups, round two: offline banner and page, interrupted
+      deletion, loading and not-found states, a dark set, and the features
+      built since round one (reports and map, travel profile, passport
+      reminders, import and calendar settings, address suggestions) as
+      screens matching the web app (`design/android/`, boards 15–29).
 
 ## Decisions needing review
 
@@ -130,12 +131,15 @@ Guesses made on autopilot; change any of them freely.
   Examples are the model's own verdicts, not only the user's review
   decisions, since those are rare; a review decision still teaches it.
 - Android idioms in the mockups: one scrolling list with Now / Upcoming /
-  Past headers rather than tabs (empty groups hide); no bottom navigation
-  (two destinations: Settings behind a gear, Sign out in the overflow
-  menu); the booking form as a full-screen dialog; a row's actions in a
-  bottom sheet; delete trip as a dialog; pill buttons and an extended FAB
-  "Add a booking". The product's missing confirmations and the "Car" /
-  "Car rental" label mismatch are shown as they are, not fixed.
+  Past headers rather than tabs (empty groups hide); round two added a
+  Material 3 navigation bar with three destinations (Trips, Reports,
+  Profile) now that the app has them, with Settings still behind a gear and
+  Sign out in the overflow menu; the booking form as a full-screen dialog;
+  a row's actions in a bottom sheet; delete trip as a dialog; pill buttons
+  and an extended FAB "Add a booking". The product's missing confirmations
+  and the "Car" / "Car rental" label mismatch are shown as they are, not
+  fixed. The reports map is a sketch; the real one would be the web app's
+  world map data.
 - Airport zones come from the OpenFlights database (ODbL) via the
   `airport-data` package, filled from coordinates with `tz-lookup` where
   it has none; generated and committed, not fetched at build time.

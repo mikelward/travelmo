@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rename trip</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./styles/travelmo.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+a{color:#171717}a:hover{color:#171717}
+</style>
+</helmet>
+<div class="phone" data-theme="light" style="width: 412px; height: 915px">
+  <div class="status-bar"><span>9:30</span><span class="glyphs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 22h20V2L2 22z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6c3.3 0 6.3 1.3 8.5 3.4L22 7.9C19.3 5.5 15.8 4 12 4S4.7 5.5 2 7.9l1.5 1.5C5.7 7.3 8.7 6 12 6zm0 5c1.9 0 3.6.7 4.9 1.9l1.5-1.5C16.7 9.9 14.4 9 12 9s-4.7.9-6.4 2.4l1.5 1.5C8.4 11.7 10.1 11 12 11zm0 5c.8 0 1.6.3 2.1.9L12 19l-2.1-2.1c.5-.6 1.3-.9 2.1-.9z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h-2V1h-4v2H8v18h8V3z"/></svg></span></div>
+<header class="app-bar medium"><div class="bar-row"><a class="icon-button" href="TripList.dc.html" aria-label="Back"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg></a><span style="flex: 1"></span><a class="icon-button" href="TripDetail.dc.html" aria-label="More options"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg></a></div><h1 class="headline" style="margin: 0">Liverpool</h1><p class="date-line">12–14 Dec 2026</p></header><main class="content scrolled"><h2 class="subheader list-subheader">Sat 12 Dec</h2><div class="booking"><span class="overline kind">Train</span><div class="body"><p class="title-medium">Avanti to Liverpool</p><p class="variant">EUS London Euston → LIV Liverpool Lime Street</p><p class="variant">09:07 – 11:25</p><p class="meta">Avanti West Coast · Ref ABC123</p><p class="meta">Source: Email “Your e-ticket for 12 Dec”</p></div></div><div class="booking"><span class="overline kind">Stay</span><div class="body"><p class="title-medium">Cove Liverpool</p><p class="variant">Check-in 15:00 · Check-out Sun 13 Dec 11:00</p><p class="meta">Cove · Ref CV-55120</p><p class="meta">Late check-in after 22:00: call reception</p><p class="meta">Source: Email “Booking confirmed”</p></div></div><h2 class="subheader list-subheader">Sun 13 Dec</h2><div class="booking"><span class="overline kind">Activity</span><div class="body"><p class="title-medium">Anfield stadium tour</p><p class="variant">14:00 – 15:30</p><p class="meta">Liverpool FC · Ref LFC-4471</p></div></div></main><a class="scrim" href="TripDetail.dc.html" aria-label="Close"></a><div class="dialog" role="dialog" aria-label="Rename trip" style="position: absolute; left: 28px; right: 28px; top: 50%; transform: translateY(-50%); width: auto"><p class="title-large">Rename trip</p><div class="field"><label for="trip-name">Name</label><input class="input" id="trip-name" type="text" value="" placeholder="Liverpool" aria-invalid="true" style="border-color: var(--error)"><p class="supporting error-text" style="padding: 0">Give the trip a name</p></div><div class="actions"><a class="btn text" href="TripDetail.dc.html">Cancel</a><span class="btn filled disabled" aria-disabled="true">Save</span></div></div>
+  <div class="nav-handle"><span></span></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":412,"height":915}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
