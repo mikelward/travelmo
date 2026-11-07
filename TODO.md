@@ -108,8 +108,8 @@
 - [x] Entry requirements on a trip page: what each traveler's passport needs
       in each country of the trip, from the Passport Index dataset
       (`packages/core/scripts/visas.mjs`, rerun by hand to refresh).
-- [ ] Reminders by email: an opt-in in Settings and a daily job that mails
-      the document and entry warnings for trips within a month.
+- [x] Reminders by email: an opt-in in Settings and a daily job that mails
+      the document and entry warnings for trips within a month, each once.
 - [ ] Reminders by web push, the same content, for people who allow them.
 - [x] Ratings and favorites: one to five stars and a heart on a booking,
       and a "Favorite places" list on Reports linking back to the trips.
@@ -272,6 +272,15 @@ Guesses made on autopilot; change any of them freely.
   revision is the one it read, so a hand edit is never overwritten; an entry
   older than thirty days is dropped unasked, and a lookup error keeps the
   entry for another day. The job takes the third free Cloud Scheduler slot.
+- Reminders by email reuse the SMTP service the operator already has (as
+  readmo's sign-up notice does) through nodemailer, rather than a mail API
+  with its own account; the parser holds the credentials. They are opt-in
+  and go to the Google-verified sign-in address only. One email a day at
+  most, with everything new across the coming month's trips; a line is sent
+  once ever per trip, keyed by its text, so a changed date reads as new. The
+  entry lines mailed are only those needing action, while the trip page
+  shows every country. The job is the fourth Cloud Scheduler job (about ten
+  cents a month beyond the free three) rather than a fold into another.
 - Entry requirements come from the Passport Index dataset on GitHub
   (imorte/passport-index-data, MIT; it is compiled from passportindex.org,
   whose own terms the dataset does not state), the only open table found
