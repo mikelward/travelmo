@@ -779,7 +779,16 @@ status lines, a read-only trip page and sign-out; editing, the calendar,
 reports, the profile and the import settings stay on the web until each
 comes over; a navigation bar switches between Trips and the Calendar (the
 month view of `/calendar`, with the same weeks, bars and lanes from `:core`),
-and gains Reports and Profile with them. CI builds it beside the web app
+and gains Reports and Profile with them. Bookings are added, edited and
+deleted on the trip page by the owner and sharees, with the web's form
+(type, title, start and end as date, time and zone with a pinned "as
+imported" offset, places with codes and countries, the reference, notes,
+the same checks) and the web's save: one transaction writes the form's
+fields over the stored document, so what the form does not edit (sources,
+sender, rating, favorite, a place's city and spot while its name holds)
+survives, and widens the trip's dates to hold the booking. A delete asks
+first, since a phone has no undo. A known airport code sets its end's zone,
+from the web's generated airport table read as a resource. CI builds it beside the web app
 (`ci / android`).
 
 ## Later

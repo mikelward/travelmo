@@ -127,8 +127,10 @@
 - [x] Android app: every screen rendered to a PNG under Robolectric
       (`app/snapshots/`, Roborazzi), verified in CI so a UI change carries
       its screenshot diff.
-- [ ] Android app, next: the booking form and trip edits,
-      reports, the profile, reminders settings; the shared `androidlog` and
+- [x] Android app: add, edit and delete a booking, with the web's form and
+      save; a delete asks first.
+- [ ] Android app, next: trip edits (rename, fit dates, share, delete,
+      move and merge), reports, the profile, reminders settings; the shared `androidlog` and
       `androidzoom` libraries; release signing,
       the Play internal track and `scripts/publish-github-release.sh`
       (byte-identical across the Android apps); the weekly Gradle batch
@@ -314,6 +316,12 @@ Guesses made on autopilot; change any of them freely.
   with `packages/core`: the surface is small and pure, and the two test
   suites mirror each other. `minSdk` 34, the sibling apps' floor. Navigation
   3, as stopdash chose, so the back stack is a list the app owns.
+- The Android booking form has no address suggestions (the Places key is
+  the web app's browser key, restricted to its origins) and so no picked
+  city, address or spot: a place keeps those while its name holds and loses
+  them when it is renamed, as the web's form does when a name is typed over
+  a pick. Deleting a booking asks first on Android, unlike the web, since
+  a tap in an overflow menu is easier to slip on than a text button.
 - The trip card's online check-in line assumes the common window, a day
   before departure until departure, since airlines differ (some open 48 or
   30 hours ahead, most close 45 to 60 minutes before) and the booking
