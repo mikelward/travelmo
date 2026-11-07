@@ -76,6 +76,26 @@
     <string name="delete_booking_title">Delete this booking?</string>
     <string name="delete_booking_text">%1$s goes from the trip; an email it came from can be imported again.</string>
     <string name="keep">Keep</string>
+    <string name="move_to">Move to another trip…</string>
+    <string name="move_booking_title">Move %1$s to</string>
+
+    <!-- The owner's trip edits. -->
+    <string name="rename">Rename</string>
+    <string name="rename_trip">Rename trip</string>
+    <string name="trip_name">Name</string>
+    <string name="fit_dates">Fit dates to bookings (%1$s)</string>
+    <string name="only_you">Only you</string>
+    <string name="share">Share</string>
+    <string name="stop_sharing_with">Stop sharing with %1$s</string>
+    <string name="merge_title">Merge into another trip</string>
+    <string name="merge_text">Moves every booking here into the other trip and deletes this one. Who it is shared with stays as the other trip has it.</string>
+    <string name="choose_trip">Choose a trip…</string>
+    <string name="merge_into">Merge into %1$s</string>
+    <string name="delete_trip">Delete this trip</string>
+    <string name="delete_trip_title">Delete this trip?</string>
+    <string name="delete_trip_text">“%1$s” and all its bookings go. This cannot be undone.</string>
+    <string name="deleting_interrupted">Deleting this trip was interrupted. Its bookings can no longer be changed.</string>
+    <string name="finish_deleting">Finish deleting</string>
 
     <!-- Profile. -->
     <string name="nav_profile">Profile</string>

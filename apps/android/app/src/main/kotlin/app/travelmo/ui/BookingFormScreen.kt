@@ -91,19 +91,19 @@ fun BookingFormScreen(viewModel: TripsViewModel, tripId: String, segmentId: Stri
     // in the ViewModel still answers to it, and a save another form started
     // does not.
     val token = rememberSaveable { UUID.randomUUID().toString() }
-    val saves by viewModel.bookingSaves.collectAsStateWithLifecycle()
+    val saves by viewModel.outcomes.collectAsStateWithLifecycle()
     val mine = saves[token]
     LaunchedEffect(mine) {
-        if (mine is BookingSave.Done) {
-            viewModel.bookingSaveSeen(token)
+        if (mine is Outcome.Done) {
+            viewModel.outcomeSeen(token)
             onDone()
         }
     }
     BookingForm(
         existing = existing,
         defaultDate = defaultDate,
-        busy = mine is BookingSave.Busy,
-        saveError = (mine as? BookingSave.Failed)?.message,
+        busy = mine is Outcome.Busy,
+        saveError = (mine as? Outcome.Failed)?.message,
         onSave = { draft -> viewModel.saveSegment(token, tripId, draft, existing?.id) },
         onDone = onDone,
     )
