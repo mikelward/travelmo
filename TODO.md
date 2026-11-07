@@ -100,6 +100,9 @@
 - [x] Places on the reports map: a stay, station or activity whose booking
       knows its coordinates (TripIt's, a geocoder answer, or an address pick
       in the form) is a dot, beside the airports and the filled countries.
+- [x] Loyalty programs at a glance: a table of account, balance and status
+      on the profile page, and a booking's matching program (number and
+      status) under its provider on the trip page.
 - [ ] A second chance for places an exhausted daily geocoding budget left
       without a country or a spot: a nightly sweep over recent bookings, or
       a retry on the next import of the same place.
@@ -239,6 +242,16 @@ Guesses made on autopilot; change any of them freely.
   yet (new item above). Dots within about a hundred meters are one, under
   the first booking's name. Bookings imported before this change have no
   coordinates and stay off the map until re-imported.
+- Loyalty at a glance reads an entry's labeled fields by their usual names
+  (account number, balance or points, elite status or tier) rather than
+  changing what the import stores, so older profiles work and odd labels
+  stay visible in the folded entry. A booking is matched to a program by a
+  shared distinctive word of the provider's name (TripIt's `supplier_code`
+  is a vendor slug, not an airline code, and Gmail bookings carry only a
+  name), which matched every program in the real export to some provider;
+  only the viewer's own programs show on a booking, not a fellow
+  traveler's. Balances are shown as imported, not fetched: TripIt's are a
+  snapshot from its last sync.
 - Document reminders show in the app (trip page and trip card), not by
   email or push, which would need a scheduled job and a mail service. Six
   months is the margin for every passport, rather than a per-country table

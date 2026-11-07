@@ -449,7 +449,15 @@ these sections and leaves the owner's sharing list as it is; their contents
 never reach the logs, only counts. The Profile page shows them, documents
 folded until opened, and lets the owner name people they trust (a spouse,
 say) by email, who then see the whole profile, read-only, under "Shared with
-you" on their own Profile page.
+you" on their own Profile page. Loyalty programs come first as a table of
+program, account number, balance and status (`packages/core/src/loyalty.ts`
+reads them from the usual labels, whatever the import called them, and
+groups a plain-number balance), with the full entries folded below. On a
+trip page, a booking whose provider shares a distinctive word with one of the
+viewer's own programs ("Example Air" and "Example Air Miles"; words like
+"air", "hotels" and "rewards" count for nothing) shows that program's name,
+number and status under the provider, so the number is at hand at check-in;
+a fellow traveler's programs are theirs alone.
 
 ### Calendar files
 
@@ -654,7 +662,7 @@ Native apps (React Native + Expo in `apps/mobile`; the Android screens are
 mocked up in `design/android/`, Material 3 with this palette, as the reference
 for the port), a second chance for places an exhausted budget left without a
 country or a spot (a nightly sweep), a calendar view, check-in/out surfacing,
-ratings and favourites, itinerary ideas, loyalty balances, reminders sent
+ratings and favourites, itinerary ideas, reminders sent
 by email or push rather than shown in the app, which visas a trip needs,
 other mail providers and forward-to-import. Further import
 sources share the pipeline: Google Calendar; `IMPORT.md` compares them and maps their fields.
