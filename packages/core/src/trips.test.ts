@@ -45,6 +45,13 @@ describe("mergePlace", () => {
     expect(mergePlace(imported, "Heathrow", "LHR", "IE")).toMatchObject({ country: "IE", city: "London" });
     expect(mergePlace(imported, "Heathrow", "LHR", "")).toEqual({ name: "Heathrow", code: "LHR", city: "London" });
   });
+  it("sets or clears the city and address only when an address pick gives them", () => {
+    const picked = { name: "Hotel Example", city: "Exampleville", address: "1 Example St, Exampleville, Exampleland" };
+    expect(mergePlace(undefined, "Hotel Example", "", "FR", { city: "Exampleville", address: "1 Example St, Exampleville, Exampleland" })).toEqual({ ...picked, country: "FR" });
+    expect(mergePlace(picked, "Hotel Example", "", undefined, {})).toEqual(picked);
+    expect(mergePlace(picked, "Hotel Sample", "", undefined, { city: "", address: "" })).toEqual({ name: "Hotel Sample" });
+    expect(mergePlace(picked, "Hotel Example", "", undefined, { address: "  " })).toEqual({ name: "Hotel Example", city: "Exampleville" });
+  });
 });
 import { ExtractedBooking, Trip } from "./schema";
 

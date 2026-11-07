@@ -25,6 +25,8 @@ export default defineConfig({
       NEXT_PUBLIC_FIREBASE_PROJECT_ID: "demo-travelmo",
       NEXT_PUBLIC_FIREBASE_APP_ID: "1:1:web:1",
       NEXT_PUBLIC_PARSER_URL: "http://localhost:8080",
+      // A fake key so the place field offers suggestions; the tests stub Google.
+      NEXT_PUBLIC_GOOGLE_MAPS_KEY: "fake-maps-key",
       NEXT_PUBLIC_AUTH_EMULATOR_URL: "http://localhost:9099",
       NEXT_PUBLIC_FIRESTORE_EMULATOR_HOST: "localhost:8081",
     },

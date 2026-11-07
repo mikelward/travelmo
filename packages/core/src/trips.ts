@@ -77,20 +77,32 @@ export function eventVerb(event: UpcomingEvent): string {
   return eventVerbs[event.segment.type][event.kind];
 }
 
+// What an address pick sets besides the name: a value sets it, "" clears
+// it, undefined (the form did not touch it) keeps what the place had.
+export type PlaceDetails = { city?: string; address?: string };
+
 // A form edits a place's name and code, and its country where it shows one
 // (passing a country, "" to clear it); whatever else an import recorded
-// about it (city, and a country the form leaves alone) survives until the
-// name is cleared.
-export function mergePlace(existing: Place | undefined, name: string, code: string, country?: string): Place | undefined {
+// about it (city, address, and a country the form leaves alone) survives
+// until the name is cleared or an address pick replaces it.
+export function mergePlace(existing: Place | undefined, name: string, code: string, country?: string, details?: PlaceDetails): Place | undefined {
   const trimmedName = name.trim();
   if (!trimmedName) return undefined;
   const trimmedCode = code.trim().toUpperCase();
   const { code: _oldCode, ...rest } = existing ?? { name: trimmedName };
-  const place: Place = { ...rest, name: trimmedName, ...(trimmedCode ? { code: trimmedCode } : {}) };
-  if (country === undefined) return place;
-  const { country: _oldCountry, ...withoutCountry } = place;
-  const trimmedCountry = country.trim().toUpperCase();
-  return trimmedCountry ? { ...withoutCountry, country: trimmedCountry } : withoutCountry;
+  let place: Place = { ...rest, name: trimmedName, ...(trimmedCode ? { code: trimmedCode } : {}) };
+  if (country !== undefined) {
+    const { country: _oldCountry, ...withoutCountry } = place;
+    const trimmedCountry = country.trim().toUpperCase();
+    place = trimmedCountry ? { ...withoutCountry, country: trimmedCountry } : withoutCountry;
+  }
+  for (const key of ["city", "address"] as const) {
+    const value = details?.[key];
+    if (value === undefined) continue;
+    const { [key]: _old, ...without } = place;
+    place = value.trim() ? { ...without, [key]: value.trim() } : without;
+  }
+  return place;
 }
 
 export function daysBetween(start: string, end: string): number {

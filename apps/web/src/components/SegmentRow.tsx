@@ -83,6 +83,8 @@ export function SegmentRow({
   emailLinks?: EmailLinks;
 }) {
   const route = [place(segment.origin), place(segment.destination)].filter(Boolean).join(" → ");
+  // Addresses an address pick recorded, under the route they belong to.
+  const addresses = [segment.origin?.address, segment.destination?.address].filter(Boolean).join(" → ");
   const end = endLabel(segment);
   const times =
     segment.type === "lodging"
@@ -95,6 +97,7 @@ export function SegmentRow({
         <p className="font-medium">{segment.title}</p>
         {route && <p className="text-sm text-zinc-600 dark:text-zinc-400">{route}</p>}
         <p className="text-sm text-zinc-600 dark:text-zinc-400">{times}</p>
+        {addresses && <p className="mt-1 text-xs text-zinc-500">{addresses}</p>}
         {(segment.confirmation || segment.provider) && (
           <p className="mt-1 text-xs text-zinc-500">
             {[segment.provider, segment.confirmation && `Ref ${segment.confirmation}`].filter(Boolean).join(" · ")}

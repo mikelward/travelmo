@@ -25,6 +25,8 @@ export const Place = z.object({
   code: z.string().min(1).optional(),
   city: z.string().min(1).optional(),
   country: z.string().length(2).optional(),
+  // One line, as a place lookup formats it; the form's address pick sets it.
+  address: z.string().min(1).optional(),
 });
 export type Place = z.infer<typeof Place>;
 

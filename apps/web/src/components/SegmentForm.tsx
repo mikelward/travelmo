@@ -18,7 +18,9 @@ import {
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { z } from "zod";
 import { countryName } from "@/lib/countries";
-import { formPlace } from "@/lib/places";
+import { formCountry, formPlace } from "@/lib/places";
+import type { PickedPlace } from "@/lib/placesApi";
+import { PlaceInput } from "./PlaceInput";
 import { zoneOfCode, zonesFromCodes, type AirportZone, type CodeKey, type ZoneKey } from "@/lib/airportZones";
 
 // The airport table is loaded only once a form is open; codes typed before
@@ -68,6 +70,17 @@ type Fields = {
   // ISO codes, "" for none; not shown for a flight, whose airport says.
   originCountry: string;
   destinationCountry: string;
+  // Set by an address pick in this form, "" once the name is typed over
+  // (the picked city and address no longer describe it); undefined keeps
+  // whatever the booking had.
+  originCity?: string;
+  originAddress?: string;
+  destinationCity?: string;
+  destinationAddress?: string;
+  // Whether an address pick set the country: a flight shows no picker, so
+  // only a pick may change its country.
+  originCountryPicked?: boolean;
+  destinationCountryPicked?: boolean;
   notes: string;
 };
 
@@ -97,7 +110,15 @@ function initialFields(segment: Segment | undefined, defaultDate: string): Field
   };
 }
 
+// The fields a text input can be bound to (the pick flags are booleans).
+type StringField = { [K in keyof Fields]-?: Fields[K] extends string ? K : never }[keyof Fields];
+
 const text = (value: string) => (value.trim() ? value.trim() : undefined);
+
+const details = (city: string | undefined, address: string | undefined) => ({
+  ...(city !== undefined ? { city } : {}),
+  ...(address !== undefined ? { address } : {}),
+});
 
 
 // Fields the form does not edit (place city, a flight's place country,
@@ -117,8 +138,14 @@ export function toExtracted(f: Fields, existing?: Segment): ExtractedSegment {
     end: hasEnd
       ? composeInstant({ date: endDate, time: endTime, offset: resolveOffset(f.endZone || f.startZone, endDate, endTime) })
       : undefined,
-    origin: formPlace(existing?.origin, f.originName, f.originCode, f.type === "flight" ? undefined : f.originCountry),
-    destination: formPlace(existing?.destination, f.destinationName, f.destinationCode, f.type === "flight" ? undefined : f.destinationCountry),
+    origin: formPlace(existing?.origin, f.originName, f.originCode, formCountry(f.type, f.originCountry, f.originCountryPicked), details(f.originCity, f.originAddress)),
+    destination: formPlace(
+      existing?.destination,
+      f.destinationName,
+      f.destinationCode,
+      formCountry(f.type, f.destinationCountry, f.destinationCountryPicked),
+      details(f.destinationCity, f.destinationAddress),
+    ),
     notes: text(f.notes),
   };
   // Firestore rejects undefined field values, so absent fields must be absent.
@@ -189,6 +216,9 @@ export function SegmentForm({
   const [fields, setFields] = useState<Fields>(() => initialFields(segment, defaultDate));
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  // Address picks whose details are still on their way: saving now would
+  // keep the name and lose the rest.
+  const [pendingPlaces, setPendingPlaces] = useState(0);
   const zones = useMemo(() => timeZones(), []);
   const airportZone = useAirportZone();
   // Ends whose zone the user chose in the picker; a code typed afterwards
@@ -240,11 +270,33 @@ export function SegmentForm({
   };
 
   const transport = fields.type !== "lodging" && fields.type !== "activity";
+  // A picked place fills the end's name, city, country and address; a name
+  // typed afterwards keeps the country (still likely, and for a flight the
+  // pick is the only way it was set) and drops the rest.
+  const placeField = (end: "origin" | "destination", label: string, placeholder: string) => (
+    <PlaceInput
+      value={fields[`${end}Name`]}
+      label={label}
+      placeholder={placeholder}
+      className={inputClass}
+      onChange={(name) => setFields((f) => ({ ...f, [`${end}Name`]: name, [`${end}City`]: "", [`${end}Address`]: "" }))}
+      onPending={(pending) => setPendingPlaces((n) => n + (pending ? 1 : -1))}
+      onPick={(place: PickedPlace) =>
+        setFields((f) => ({
+          ...f,
+          [`${end}Name`]: place.name,
+          [`${end}City`]: place.city ?? "",
+          [`${end}Address`]: place.address ?? "",
+          ...(place.country ? { [`${end}Country`]: place.country, [`${end}CountryPicked`]: true } : { [`${end}CountryPicked`]: false }),
+        }))
+      }
+    />
+  );
   const country = (key: "originCountry" | "destinationCountry", label: string, wide = false) =>
     fields.type === "flight" ? null : (
       <CountrySelect value={fields[key]} onChange={(code) => setFields((f) => ({ ...f, [key]: code }))} label={label} wide={wide} />
     );
-  const when = (label: string, date: keyof Fields, time: keyof Fields, zone: "startZone" | "endZone", required: boolean) => (
+  const when = (label: string, date: StringField, time: StringField, zone: "startZone" | "endZone", required: boolean) => (
     <label className={labelClass}>
       {label}
       {/* On a phone the zone takes its own line, so the date keeps room. */}
@@ -283,7 +335,7 @@ export function SegmentForm({
           <label className={labelClass}>
             From
             <div className="flex gap-2">
-              <input value={fields.originName} onChange={set("originName")} placeholder="London Heathrow" className={inputClass} />
+              {placeField("origin", "From", "London Heathrow")}
               <input
                 value={fields.originCode}
                 onChange={(e) => codeTyped("originCode", e.target.value)}
@@ -295,7 +347,7 @@ export function SegmentForm({
           <label className={labelClass}>
             To
             <div className="flex gap-2">
-              <input value={fields.destinationName} onChange={set("destinationName")} placeholder="New York JFK" className={inputClass} />
+              {placeField("destination", "To", "New York JFK")}
               <input
                 value={fields.destinationCode}
                 onChange={(e) => codeTyped("destinationCode", e.target.value)}
@@ -309,7 +361,7 @@ export function SegmentForm({
         <label className={labelClass}>
           Where
           <div className="flex gap-2">
-            <input value={fields.destinationName} onChange={set("destinationName")} placeholder="Cove Liverpool" className={inputClass} />
+            {placeField("destination", "Where", "Cove Liverpool")}
             {country("destinationCountry", "Country")}
           </div>
         </label>
@@ -338,7 +390,8 @@ export function SegmentForm({
       <div className="flex gap-2">
         <button
           type="submit"
-          disabled={busy}
+          disabled={busy || pendingPlaces > 0}
+          title={pendingPlaces > 0 ? "Looking up the place…" : undefined}
           className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
         >
           {segment ? "Save" : "Add"}
