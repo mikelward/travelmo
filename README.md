@@ -112,11 +112,12 @@ One Google Cloud project holds everything.
    `GEMINI_MODEL` defaults to `gemini-flash-lite-latest` and
    `GEMINI_EMBEDDING_MODEL` to `gemini-embedding-001` (the similarity
    pre-filter). `GEOCODING_API_KEY` (from Secret Manager; an API key
-   restricted to the Geocoding API) turns on filling in a place's country at
-   import; without it places keep whatever country their source gave.
-   `GEOCODE_DAILY_LIMIT` caps the calls per day across all users (default
-   300, within the API's free monthly allowance; answers are cached, so a
-   place name is asked about once ever).
+   restricted to the Geocoding API) turns on filling in a place's country
+   and coordinates at import; without it places keep whatever their source
+   gave. `GEOCODE_DAILY_LIMIT` caps the calls per day across all users
+   (default 300, within the API's free monthly allowance; answers are
+   cached, so a place name is asked about once ever), and a place that has
+   its country and wants only its spot for the map may use half of it.
 4. **Push**: `PROJECT=… PARSER_URL=https://<parser> PUSH_SA=<service account>
    deploy/pubsub.sh` creates the `gmail` topic (with Gmail allowed to publish
    to it), a push subscription to `https://<parser>/internal/pubsub/gmail`
@@ -144,13 +145,15 @@ One Google Cloud project holds everything.
    `NEXT_PUBLIC_GOOGLE_MAPS_KEY` to a browser key restricted to that API and
    to the app's origins (HTTP referrers): it ships in the client bundle like
    the Firebase config, so the restrictions are what protect it. Left unset,
-   the form's place fields are plain inputs.
+   the form's place fields are plain inputs. A picked address also puts the
+   place on the reports map.
 
 ## Costs
 
 Everything scales to zero. At a hundred users the bill is dominated by
 Firestore reads and a few cents of Gemini per imported booking; geocoding is
-one cached call per new place name, free up to the API's monthly allowance
+one cached call per new place name (a second, for its spot on the map, when
+the source named the country but not where), free up to the API's monthly allowance
 and about half a cent a call past it, with a daily cap; address autocomplete
 is billed per lookup session (the keystrokes of one field and the pick),
 free up to a monthly allowance and a fraction of a cent past it; see
