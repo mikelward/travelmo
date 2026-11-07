@@ -30,6 +30,9 @@ export const paths = {
   // The geocoder's answers, shared by every user, and its calls per day.
   geocode: (key: string) => `geocodes/${key}`,
   geocodeBudget: (day: string) => `geocodeBudget/${day}`,
+  // Bookings a spent budget left with a place to ask about another day.
+  geocodeRetries: () => "geocodeRetries",
+  geocodeRetry: (tripId: string, segmentId: string) => `geocodeRetries/${tripId}__${segmentId}`,
   trips: () => "trips",
   trip: (tripId: string) => `trips/${tripId}`,
   segments: (tripId: string) => `trips/${tripId}/segments`,

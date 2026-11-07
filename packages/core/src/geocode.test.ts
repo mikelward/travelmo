@@ -7,6 +7,7 @@ import {
   geocodeKey,
   geocodeNeed,
   geocodeQuery,
+  needsGeocoding,
   normalizeQuery,
   parseGeocodeResponse,
   placeFromComponents,
@@ -200,9 +201,21 @@ describe("enrichSegments", () => {
     expect(filled).toBe(0);
   });
 
+  it("counts the places put off to another day, and says which segments still need asking", async () => {
+    const { segments, filled, deferred, countryDeferred } = await enrichSegments([stay, flight], async () => "later");
+    expect(segments).toEqual([stay, flight]);
+    expect(filled).toBe(0);
+    expect(deferred).toBe(3);
+    // The stay and the flight's origin lack a country; its destination only its spot.
+    expect(countryDeferred).toBe(2);
+    expect(needsGeocoding(stay)).toBe(true);
+    expect(needsGeocoding({ ...stay, destination: { name: "Hotel Example", country: "FR", lat: 1, lon: 2 } })).toBe(false);
+    expect(needsGeocoding({ ...stay, destination: undefined })).toBe(false);
+  });
+
   it("leaves a place alone when the lookup finds nothing or fails", async () => {
     const none = await enrichSegments([stay], async () => "none");
-    expect(none).toEqual({ segments: [stay], filled: 0, failed: 0 });
+    expect(none).toEqual({ segments: [stay], filled: 0, failed: 0, deferred: 0, countryDeferred: 0 });
     const failing = await enrichSegments([stay, flight], async () => {
       throw new GeocodeError("REQUEST_DENIED");
     });

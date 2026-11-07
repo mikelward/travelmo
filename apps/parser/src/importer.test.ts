@@ -18,6 +18,7 @@ import {
   type TripTx,
 } from "./importer";
 import { addExample, emptyExamples, minExamples } from "./similarity";
+import { memoryRetryStore } from "./geocodeSweep";
 import { memoryStore, type Memory } from "./testStore";
 
 const email = (over: Partial<EmailMessage> = {}): EmailMessage => ({
@@ -1104,6 +1105,32 @@ describe("fileBooking geocoding", () => {
     const plain = memoryStore();
     await importMessage("u1", email(), deps(plain, async () => stay));
     expect([...plain.segments.values()][0]!.destination).toEqual({ name: "Hotel Example", city: "Exampleville" });
+  });
+
+  it("queues a booking for the daily sweep when the budget put its lookup off", async () => {
+    const store = memoryStore();
+    const retries = memoryRetryStore();
+    const d: ImportDeps = { ...deps(store, async () => stay), geocode: async () => "later", geocodeRetries: retries };
+    expect(await importMessage("u1", email(), d)).toBe("imported");
+    const segment = [...store.segments.values()][0]!;
+    expect(segment.destination).toEqual({ name: "Hotel Example", city: "Exampleville" });
+    expect([...retries.entries.values()]).toEqual([{ uid: "u1", tripId: segment.tripId, segmentId: segment.id, at: "2026-11-01T12:00:00Z" }]);
+    // Answered, nothing is queued; nor without a queue.
+    const answered = memoryStore();
+    const none = memoryRetryStore();
+    await importMessage("u1", email({ id: "m3" }), { ...deps(answered, async () => stay), geocode: async () => "none", geocodeRetries: none });
+    expect(none.entries.size).toBe(0);
+  });
+
+  it("still counts the import as done when the retry queue cannot be written, and logs why", async () => {
+    const store = memoryStore();
+    const logs: [string, Record<string, unknown>][] = [];
+    const broken = { ...memoryRetryStore(), put: async () => Promise.reject(new Error("queue unavailable")) };
+    const d: ImportDeps = { ...deps(store, async () => stay), geocode: async () => "later", geocodeRetries: broken, log: (e, f) => logs.push([e, f]) };
+    expect(await importMessage("u1", email(), d)).toBe("imported");
+    expect(store.segments.size).toBe(1);
+    expect(store.parsed.get("u1/m1")?.outcome).toBe("imported");
+    expect(logs.find(([e]) => e === "geocode_retry_queue_failed")?.[1]).toMatchObject({ uid: "u1", reason: "queue unavailable" });
   });
 
   it("gives a flight's airports their country and spot from the table without asking", async () => {

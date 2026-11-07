@@ -179,5 +179,8 @@ service cloud.firestore {
     match /geocodeBudget/{day} {
       allow read, write: if false;
     }
+    match /geocodeRetries/{id} {
+      allow read, write: if false;
+    }
   }
 }

@@ -86,11 +86,11 @@ describe("cachedGeocoder", () => {
     expect(calls).toEqual([]);
   });
 
-  it("stops calling when the day's budget is spent, saying so once, and caches nothing then", async () => {
+  it("puts a lookup off when the day's budget is spent, saying so once, and caches nothing then", async () => {
     const { lookup, calls, logs, store } = options(async () => ok("FR"), 1);
     expect(await lookup("Hotel Example", "country")).toEqual({ country: "FR", city: "Exampleland", ...spot });
-    expect(await lookup("Hotel Sample", "country")).toBe("none");
-    expect(await lookup("Hotel Other", "country")).toBe("none");
+    expect(await lookup("Hotel Sample", "country")).toBe("later");
+    expect(await lookup("Hotel Other", "country")).toBe("later");
     expect(calls).toEqual(["Hotel Example"]);
     expect(logs).toEqual([["geocode_budget_exhausted", { day: "2026-11-07", need: "country", limit: 1 }]]);
     expect(store.entries.size).toBe(1);
@@ -103,11 +103,11 @@ describe("cachedGeocoder", () => {
     expect(locationShare(4)).toBe(2);
     expect(await lookup("Hotel A", "location")).toMatchObject(spot);
     expect(await lookup("Hotel B", "location")).toMatchObject(spot);
-    expect(await lookup("Hotel C", "location")).toBe("none");
-    expect(await lookup("Hotel D", "location")).toBe("none");
+    expect(await lookup("Hotel C", "location")).toBe("later");
+    expect(await lookup("Hotel D", "location")).toBe("later");
     expect(await lookup("Hotel E", "country")).toMatchObject({ country: "FR" });
     expect(await lookup("Hotel F", "country")).toMatchObject({ country: "FR" });
-    expect(await lookup("Hotel G", "country")).toBe("none");
+    expect(await lookup("Hotel G", "country")).toBe("later");
     expect(calls).toEqual(["Hotel A", "Hotel B", "Hotel E", "Hotel F"]);
     expect(logs).toEqual([
       ["geocode_budget_exhausted", { day: "2026-11-07", need: "location", limit: 2 }],

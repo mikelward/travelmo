@@ -83,8 +83,9 @@ const fromEntry = (cached: GeocodeEntry): GeocodeResult | "none" =>
     : "none";
 
 // Cache first (a "none" is an answer too), then one of the day's calls, then
-// Google. A spent budget answers "none" without caching, so tomorrow's import
-// asks again; a failure is thrown for the caller to log and move past.
+// Google. A spent budget answers "later" without caching, so the daily sweep
+// (geocodeSweep.ts) asks again; a failure is thrown for the caller to log
+// and move past.
 export function cachedGeocoder({ store, geocoder, limit, now, log }: CachedGeocoderOptions): GeocodeLookup {
   const exhausted = new Map<GeocodeNeed, string>();
   return async (query, need) => {
@@ -98,7 +99,7 @@ export function cachedGeocoder({ store, geocoder, limit, now, log }: CachedGeoco
         exhausted.set(need, day);
         log("geocode_budget_exhausted", { day, need, limit: allowed });
       }
-      return "none";
+      return "later";
     }
     try {
       const result = await geocoder(query);

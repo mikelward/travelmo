@@ -52,6 +52,10 @@ export function firestoreStore(db: Firestore): TripStore {
       const lists = await Promise.all(live.map((trip) => db.collection(paths.segments(trip.id)).get()));
       return lists.flatMap((snap) => snap.docs.map((d) => Segment.parse(d.data())));
     },
+    async readSegment(tripId, segmentId) {
+      const snap = await db.doc(paths.segment(tripId, segmentId)).get();
+      return snap.exists ? Segment.parse(snap.data()) : undefined;
+    },
     async getParsed(uid, messageId) {
       const snap = await db.doc(paths.parsedMessage(uid, messageId)).get();
       return snap.exists ? ParsedMessage.parse(snap.data()) : undefined;

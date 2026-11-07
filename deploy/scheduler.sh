@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Creates the parser's daily Cloud Scheduler jobs: Gmail watch renewal and
-# the calendar feed poll. Each POSTs to an /internal route with an OIDC token
-# from SCHEDULER_SA. Idempotent: rerun after changing a value.
+# Creates the parser's daily Cloud Scheduler jobs: Gmail watch renewal, the
+# calendar feed poll and the geocoding sweep. Each POSTs to an /internal
+# route with an OIDC token from SCHEDULER_SA. Idempotent: rerun after
+# changing a value.
 #
 #   PROJECT=my-project PARSER_URL=https://parser-xyz.a.run.app \
 #   SCHEDULER_SA=scheduler@my-project.iam.gserviceaccount.com deploy/scheduler.sh
@@ -36,3 +37,5 @@ ensure_job() {
 
 ensure_job renew-gmail-watches "17 3 * * *" /internal/renew-watches
 ensure_job poll-calendar-feeds "43 4 * * *" /internal/poll-feeds
+# Early in the UTC day, when the geocoding budget is fresh.
+ensure_job geocode-sweep "11 1 * * *" /internal/geocode-sweep

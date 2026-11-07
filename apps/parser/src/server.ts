@@ -43,6 +43,7 @@ import {
 import { optionalEnv, requireEnv } from "./env";
 import { geminiEmbedder, geminiExtractor } from "./extract";
 import { cachedGeocoder, defaultDailyLimit, firestoreGeocodeStore, googleGeocoder } from "./geocode";
+import { firestoreRetryStore, sweepGeocodeRetries } from "./geocodeSweep";
 import { auth, db } from "./firebase";
 import {
   currentHistoryId,
@@ -120,6 +121,7 @@ const deps: ImportDeps = {
           now: () => new Date().toISOString(),
           log: (event, fields) => log("INFO", event, fields),
         }),
+        geocodeRetries: firestoreRetryStore(db),
       }
     : {}),
   now: () => new Date().toISOString(),
@@ -647,6 +649,15 @@ app.post("/internal/poll-feeds", async (c) => {
   }
   log("INFO", "google_calendars_polled", calendars);
   return c.json({ ...result, calendars });
+});
+
+// Cloud Scheduler calls this daily (deploy/scheduler.sh): the places a spent
+// geocoding budget put off get their second chance.
+app.post("/internal/geocode-sweep", async (c) => {
+  await requireInternalCaller(c);
+  const result = await sweepGeocodeRetries(deps);
+  log("INFO", "geocode_sweep", { ...result, enabled: Boolean(deps.geocode) });
+  return c.json(result);
 });
 
 // A non-2xx response makes Pub/Sub redeliver; after the subscription's
