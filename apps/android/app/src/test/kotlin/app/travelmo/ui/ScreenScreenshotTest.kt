@@ -148,6 +148,18 @@ class ScreenScreenshotTest {
     }
 
     @Test
+    fun reports() {
+        val viewModel = viewModel()
+        capture("reports") { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, bottomBar = { HomeNavigationBar(HomeTab.REPORTS) {} }) }
+    }
+
+    @Test
+    fun reports_dark() {
+        val viewModel = viewModel()
+        capture("reports_dark", dark = true) { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, bottomBar = { HomeNavigationBar(HomeTab.REPORTS) {} }) }
+    }
+
+    @Test
     fun settings() = capture("settings") {
         SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, onBack = {})
     }

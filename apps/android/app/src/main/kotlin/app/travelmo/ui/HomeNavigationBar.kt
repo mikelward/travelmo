@@ -3,6 +3,7 @@ package app.travelmo.ui
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -14,8 +15,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import app.travelmo.R
 
-/** The destinations the navigation bar switches between; Reports and Profile join as they come over from the web. */
-enum class HomeTab { TRIPS, CALENDAR, PROFILE }
+/** The destinations the navigation bar switches between, as the web's navigation has them. */
+enum class HomeTab { TRIPS, CALENDAR, REPORTS, PROFILE }
 
 @Composable
 fun HomeNavigationBar(selected: HomeTab, onSelect: (HomeTab) -> Unit) {
@@ -38,6 +39,13 @@ fun HomeNavigationBar(selected: HomeTab, onSelect: (HomeTab) -> Unit) {
             onClick = { onSelect(HomeTab.CALENDAR) },
             icon = { Icon(Icons.Filled.DateRange, contentDescription = null) },
             label = { Text(stringResource(R.string.nav_calendar)) },
+            colors = colors,
+        )
+        NavigationBarItem(
+            selected = selected == HomeTab.REPORTS,
+            onClick = { onSelect(HomeTab.REPORTS) },
+            icon = { Icon(Icons.Filled.Place, contentDescription = null) },
+            label = { Text(stringResource(R.string.nav_reports)) },
             colors = colors,
         )
         NavigationBarItem(

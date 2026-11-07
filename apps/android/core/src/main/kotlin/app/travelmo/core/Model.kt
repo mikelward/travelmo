@@ -27,6 +27,9 @@ data class Place(
     val city: String? = null,
     val country: String? = null,
     val address: String? = null,
+    /** The spot on the map, when the booking's source or a geocode gave one. */
+    val lat: Double? = null,
+    val lon: Double? = null,
 )
 
 data class Segment(

@@ -41,7 +41,10 @@ fun tripFromDocument(id: String, data: Map<String, Any?>): Trip? {
 
 fun placeFromDocument(data: Map<String, Any?>?): Place? {
     val name = data?.text("name") ?: return null
-    return Place(name, code = data.text("code"), city = data.text("city"), country = data.text("country"), address = data.text("address"))
+    return Place(
+        name, code = data.text("code"), city = data.text("city"), country = data.text("country"), address = data.text("address"),
+        lat = (data["lat"] as? Number)?.toDouble(), lon = (data["lon"] as? Number)?.toDouble(),
+    )
 }
 
 fun segmentFromDocument(id: String, tripId: String, data: Map<String, Any?>): Segment? {
