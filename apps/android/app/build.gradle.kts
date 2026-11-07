@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.roborazzi)
 }
 
 // Firebase's plugin is applied only when app/google-services.json is present
@@ -53,8 +54,11 @@ val gitShortSha: String = gitOutput("rev-parse", "--short", "HEAD", fallback = "
     if (it == "unknown") versionProblems += "the commit hash could not be read"
 }
 // CI's test and lint runs set -PtravelmoFixedVersion so a per-commit version
-// does not miss the build cache for every task that reads the manifest.
-val fixedTestVersion: Boolean = providers.gradleProperty("travelmoFixedVersion").isPresent
+// does not miss the build cache for every task that reads the manifest. A
+// screenshot run fixes it too, whichever way it is started: Settings shows
+// the version, so a recording made with the real one would never match CI.
+val fixedTestVersion: Boolean = listOf("travelmoFixedVersion", "roborazzi.test.record", "roborazzi.test.verify")
+    .any { providers.gradleProperty(it).isPresent }
 
 android {
     namespace = "app.travelmo"
@@ -91,7 +95,24 @@ android {
     }
 
     testOptions {
-        unitTests.all { it.useJUnitPlatform() }
+        unitTests.all {
+            it.useJUnitPlatform()
+            // The screenshot tests (ScreenScreenshotTest) render each screen to
+            // a PNG under app/snapshots/, which is under source control so a UI
+            // change shows as an image diff in the PR. `-Proborazzi.test.record`
+            // rewrites them; `-Proborazzi.test.verify` (CI) fails on a change.
+            it.systemProperty("roborazzi.output.dir", file("snapshots").absolutePath)
+            if (project.hasProperty("roborazzi.test.record")) it.systemProperty("roborazzi.test.record", "true")
+            if (project.hasProperty("roborazzi.test.verify")) it.systemProperty("roborazzi.test.verify", "true")
+            // Robolectric's SDK sandbox reads FileDescriptor internals through
+            // jdk.internal.access.SharedSecrets, which java.base does not export.
+            it.jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
+        }
+        // Coroutines' Android dispatcher asks for the main Looper at class
+        // load; with defaults it gets null and steps aside for the test one.
+        unitTests.isReturnDefaultValues = true
+        // Roborazzi needs the real resources (strings, themes) to render.
+        unitTests.isIncludeAndroidResources = true
     }
 
     lint {
@@ -152,4 +173,14 @@ dependencies {
     testRuntimeOnly(libs.junit.platform.launcher)
     testImplementation(libs.kotest.assertions.core)
     testImplementation(libs.kotlinx.coroutines.test)
+    // Screenshot tests: JUnit 4 under Vintage for Robolectric's runner.
+    testImplementation(libs.junit4)
+    testRuntimeOnly(libs.junit.vintage.engine)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.androidx.test.ext.junit)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

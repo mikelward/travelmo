@@ -42,7 +42,6 @@ import app.travelmo.R
 import app.travelmo.core.Trip
 import app.travelmo.core.TripBar
 import app.travelmo.core.addMonths
-import app.travelmo.core.localToday
 import app.travelmo.core.monthLabel
 import app.travelmo.core.monthOf
 import app.travelmo.core.monthWeeks
@@ -67,7 +66,7 @@ fun CalendarScreen(
     bottomBar: @Composable () -> Unit,
 ) {
     val trips by viewModel.trips.collectAsStateWithLifecycle()
-    val today = localToday()
+    val today = viewModel.today()
     val month = month ?: monthOf(today)
     Scaffold(
         topBar = {

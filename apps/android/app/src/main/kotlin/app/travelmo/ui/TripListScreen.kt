@@ -27,7 +27,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -145,16 +148,19 @@ private fun StatusLines(segments: List<Segment>, now: String) {
     }
     status.next?.let { event ->
         val soon = relativeTime(now, event.at)?.let { " · $it" } ?: ""
-        Row(modifier = Modifier.padding(top = 8.dp)) {
-            Text(eventVerb(event), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-            Text(
-                " ${event.segment.title} · ${formatDate(localDate(event.at))} ${localTime(event.at)}$soon",
-                style = MaterialTheme.typography.bodyMedium,
-                color = muted,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+        // One text, so a long line wraps as prose: the verb in the surface
+        // color and weight, the rest muted.
+        Text(
+            buildAnnotatedString {
+                withStyle(SpanStyle(fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)) { append(eventVerb(event)) }
+                append(" ${event.segment.title}")
+                withStyle(SpanStyle(color = muted)) { append(" · ${formatDate(localDate(event.at))} ${localTime(event.at)}$soon") }
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 8.dp),
+        )
     }
     status.checkIn?.let { checkIn ->
         Text(
