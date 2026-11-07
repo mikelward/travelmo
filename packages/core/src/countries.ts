@@ -56,3 +56,15 @@ export function countryCodeOf(name: string): string | undefined {
   if (!key) return undefined;
   return byName.get(key) ?? byName.get(key.replace(/^the /, ""));
 }
+
+const regionNames = new Intl.DisplayNames("en", { type: "region" });
+
+// A country's English name from its ISO code; a code Intl does not know
+// (an import may hold any two letters) is shown as it is.
+export function countryName(code: string): string {
+  try {
+    return regionNames.of(code.toUpperCase()) ?? code;
+  } catch {
+    return code;
+  }
+}

@@ -1,45 +1,25 @@
 "use client";
 
 import {
-  formatDate,
   peopleDocuments,
   tripWarnings,
   type ExtractedSegment,
   type PersonDocuments,
   type PersonWarning,
   type PlaceLookup,
-  type TravelDocument,
   type Trip,
 } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { useEffect, useMemo, useState } from "react";
-import { countryName } from "./countries";
 import { useSharedProfiles, useTravelProfile } from "./travelProfile";
+
+export { warningText } from "@travelmo/core";
 
 
 export function usePeopleDocuments(user: User): readonly PersonDocuments[] | undefined {
   const own = useTravelProfile(user.uid);
   const shared = useSharedProfiles(user);
   return useMemo(() => (own === undefined || !shared ? undefined : peopleDocuments(own, shared, user.uid)), [own, shared, user.uid]);
-}
-
-function documentName(d: TravelDocument): string {
-  if (d.kind === "passport") return "passport";
-  if (d.kind === "visa") return d.country ? `${countryName(d.country)} visa` : "visa";
-  return `“${d.title}”`;
-}
-
-export function warningText({ person, warning }: PersonWarning, today: string): string {
-  const whose = person.own ? "Your" : `${person.email ?? "A fellow traveler"}’s`;
-  const { document: d, when, daysAfterTrip } = warning;
-  const date = formatDate(d.expires, "en-GB", { weekday: undefined, year: "numeric" });
-  if (when === "before") {
-    return d.expires < today
-      ? `${whose} ${documentName(d)} expired on ${date}.`
-      : `${whose} ${documentName(d)} expires on ${date}, before this trip ends.`;
-  }
-  const after = daysAfterTrip < 31 ? `${daysAfterTrip} day${daysAfterTrip === 1 ? "" : "s"}` : `${Math.floor(daysAfterTrip / 30.44)} month${Math.floor(daysAfterTrip / 30.44) === 1 ? "" : "s"}`;
-  return `${whose} ${documentName(d)} expires on ${date}, ${after} after this trip ends; many countries require six months’ validity.`;
 }
 
 // Warnings for each trip, by id. The airport table, needed to tell whether a

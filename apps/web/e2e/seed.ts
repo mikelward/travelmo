@@ -1,4 +1,4 @@
-import { paths, type CalendarFeed, type GmailConnection, type GoogleCalendarConnection, type TravelProfile, type Segment, type Trip } from "@travelmo/core";
+import { paths, type CalendarFeed, type GmailConnection, type GoogleCalendarConnection, type TravelProfile, type Segment, type Trip, type UserProfile } from "@travelmo/core";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
@@ -127,6 +127,12 @@ export async function seedGoogleCalendar(uid: string, googleCalendar: GoogleCale
 
 export async function seedTravelProfile(uid: string, profile: Omit<TravelProfile, "ownerUid">): Promise<void> {
   await db.doc(paths.travelProfile(uid)).set({ ownerUid: uid, ...profile });
+}
+
+// The user's own document, for settings the page writes.
+export async function readUser(uid: string): Promise<UserProfile | undefined> {
+  const snap = await db.doc(paths.user(uid)).get();
+  return snap.exists ? (snap.data() as UserProfile) : undefined;
 }
 
 // A change made elsewhere (another tab, a sharee) while a page is open.
