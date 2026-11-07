@@ -42,3 +42,49 @@ jobs:
           name: playwright-report
           path: apps/web/playwright-report
           retention-days: 7
+  # The Android app (apps/android): a Gradle build of its own. The commit
+  # count is the app's versionCode, so the checkout is unshallow; the test
+  # and lint runs fix the version so a per-commit manifest never misses the
+  # build cache. The sibling Android apps' CI has the same shape.
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/android
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-read-only: ${{ github.event_name != 'push' }}
+      - name: Test the shallow-clone deepener
+        working-directory: .
+        run: python3 scripts/unshallow_test.py
+      - name: Check the core module stays free of Android
+        run: ./gradlew :core:verifyNoAndroid :core:test
+      - name: Prove that guard actually fails
+        run: |
+          set +e
+          output=$(GRADLE_ACTIONS_SKIP_BUILD_RESULT_CAPTURE=true ./gradlew :core:verifyNoAndroid -PverifyNoAndroidSelfTest 2>&1)
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo "$output"
+            echo "::error::verifyNoAndroid passed with an Android dependency on :core, so it proves nothing."
+            exit 1
+          fi
+          if ! printf '%s' "$output" | grep -q 'androidx.core:core-ktx'; then
+            echo "$output"
+            echo "::error::verifyNoAndroid failed, but without naming the injected dependency."
+            exit 1
+          fi
+      - name: Unit tests, lint and a debug build
+        run: ./gradlew -PtravelmoFixedVersion :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+      - name: Release build
+        run: ./gradlew :app:assembleRelease

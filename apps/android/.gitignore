@@ -1,0 +1,16 @@
+# Every module's build output and Gradle's own state.
+build/
+.gradle/
+.kotlin/
+local.properties
+*.iml
+.idea/
+
+# Signing material, never committed.
+*.keystore
+*.jks
+
+# The Firebase config that names the project a build talks to
+# (README "Android"). Untracked on purpose: a fresh clone builds with
+# Firebase dormant rather than pointed somewhere, and CI carries none.
+/app/google-services.json
