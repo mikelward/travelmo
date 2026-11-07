@@ -151,6 +151,8 @@
     <string name="loyalty_details">Loyalty program details</string>
     <string name="travelers">Travelers</string>
     <string name="shared_with_you">Shared with you</string>
+    <string name="enter_email">Enter an email address.</string>
+    <string name="share_profile_hint">People you trust, such as a partner, can see everything here, documents included, when signed in with that email address. They can\'t change it.</string>
     <string name="someone_who_trusts_you">someone who trusts you</string>
     <string name="col_program">Program</string>
     <string name="col_account">Account</string>

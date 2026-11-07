@@ -14,6 +14,7 @@ import app.travelmo.core.TripGroups
 import app.travelmo.core.TripWithSegments
 import app.travelmo.core.groupTrips
 import app.travelmo.core.listWarnings
+import app.travelmo.data.OwnProfile
 import app.travelmo.data.TripStore
 import java.time.Instant
 import java.time.LocalDate
@@ -91,7 +92,14 @@ class TripsViewModel(
     }
 
     /** The user's own travel profile; null while loading or when there is none. */
-    val ownProfile: StateFlow<TravelProfile?> = store.ownProfile(uid).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    /** The profile document's answer; null until it has answered once. */
+    private val ownProfileAnswer: StateFlow<OwnProfile?> = store.ownProfile(uid).map<OwnProfile, OwnProfile?> { it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val ownProfile: StateFlow<TravelProfile?> = ownProfileAnswer.map { it?.profile }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Whether the profile document has answered, so sharing knows what list it is replacing. */
+    val profileLoaded: StateFlow<Boolean> = ownProfileAnswer.map { it != null }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     /** The profiles shared with the user. */
     val sharedProfiles: StateFlow<List<TravelProfile>> = store.sharedProfiles(email).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -179,4 +187,10 @@ class TripsViewModel(
     fun deleteTrip(token: String, tripId: String) = run(token) { store.deleteTrip(tripId) }
 
     fun mergeTrips(token: String, sourceId: String, targetId: String) = run(token) { store.mergeTrips(sourceId, targetId) }
+
+    /** Who the user's travel profile is shared with; the profile is started if none has arrived yet. */
+    fun saveTrusted(token: String, emails: List<String>) = run(token) {
+        val answer = ownProfileAnswer.value ?: throw IllegalStateException("The profile is still loading; try again")
+        store.saveTrusted(uid, email, exists = answer.profile != null, emails = emails)
+    }
 }

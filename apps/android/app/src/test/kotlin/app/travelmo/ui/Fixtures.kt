@@ -8,6 +8,7 @@ import app.travelmo.core.Segment
 import app.travelmo.core.SegmentDraft
 import app.travelmo.core.SegmentType
 import app.travelmo.core.Trip
+import app.travelmo.data.OwnProfile
 import app.travelmo.data.TripStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -103,7 +104,7 @@ class FakeTripStore(
     private val profile: TravelProfile? = fixtureProfile,
     private val shared: List<TravelProfile> = listOf(fixtureSharedProfile),
 ) : TripStore {
-    override fun ownProfile(uid: String): Flow<TravelProfile?> = flowOf(profile)
+    override fun ownProfile(uid: String): Flow<OwnProfile> = flowOf(OwnProfile(profile))
     override fun sharedProfiles(email: String?): Flow<List<TravelProfile>> = flowOf(shared)
     val saved = mutableListOf<Triple<String, SegmentDraft, String?>>()
     val deleted = mutableListOf<Pair<String, String>>()
@@ -114,6 +115,10 @@ class FakeTripStore(
     }
     override suspend fun deleteSegment(tripId: String, segmentId: String) {
         deleted += tripId to segmentId
+    }
+    val trusted = mutableListOf<Triple<String, Boolean, List<String>>>()
+    override suspend fun saveTrusted(uid: String, email: String?, exists: Boolean, emails: List<String>) {
+        trusted += Triple(uid, exists, emails)
     }
     val renamed = mutableListOf<Pair<String, String>>()
     val fitted = mutableListOf<String>()
