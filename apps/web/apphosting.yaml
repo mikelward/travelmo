@@ -36,3 +36,8 @@ env:
   - variable: NEXT_PUBLIC_GOOGLE_MAPS_KEY
     value: REPLACE_ME
     availability: [BUILD, RUNTIME]
+  # Optional: the public half of the parser's VAPID key pair, for reminders
+  # as notifications in the browser.
+  - variable: NEXT_PUBLIC_VAPID_PUBLIC_KEY
+    value: REPLACE_ME
+    availability: [BUILD, RUNTIME]

@@ -108,9 +108,24 @@ service cloud.firestore {
       allow update: if isSelf()
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['gmail', 'googleCalendar']);
 
-      // What the parser has mailed as reminders: nobody's to read or write.
+      // What the parser has sent as reminders: nobody's to read or write.
       match /reminders/{tripId} {
         allow read, write: if false;
+      }
+
+      // A browser's push subscription, written by that browser: the
+      // endpoint the push service gave it and the keys that encrypt to it.
+      match /pushSubscriptions/{id} {
+        allow read, delete: if isSelf();
+        allow create, update: if isSelf()
+          && request.resource.data.keys().hasOnly(['endpoint', 'keys', 'createdAt'])
+          && request.resource.data.endpoint is string
+          && request.resource.data.endpoint.matches('https://.*')
+          && request.resource.data.endpoint.size() <= 2048
+          && request.resource.data.keys.keys().hasOnly(['p256dh', 'auth'])
+          && request.resource.data.keys.p256dh is string
+          && request.resource.data.keys.auth is string
+          && request.resource.data.createdAt is string;
       }
 
       // The traveler's profile (documents, loyalty numbers): the parser writes

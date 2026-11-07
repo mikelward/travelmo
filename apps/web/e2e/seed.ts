@@ -150,3 +150,7 @@ export async function clearData(): Promise<void> {
   await db.recursiveDelete(db.collection("trips"));
   await db.recursiveDelete(db.collection("users"));
 }
+
+export async function readPushSubscriptions(uid: string): Promise<PushSubscription[]> {
+  return (await db.collection(paths.pushSubscriptions(uid)).get()).docs.map((d) => d.data() as PushSubscription);
+}

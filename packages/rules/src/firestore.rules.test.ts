@@ -206,6 +206,19 @@ describe("users", () => {
     await assertFails(setDoc(doc(as(owner), paths.reminderLog(owner.uid, "t1")), { sent: [], at: "2026-11-07T00:00:00Z" }));
   });
 
+  it("a user keeps their own browsers' push subscriptions, whole, and nobody else's", async () => {
+    const subscription = { endpoint: "https://push.example/s/1", keys: { p256dh: "p", auth: "a" }, createdAt: "2026-11-07T00:00:00Z" };
+    const ref = doc(as(owner), paths.pushSubscription(owner.uid, "s1"));
+    await assertSucceeds(setDoc(ref, subscription));
+    await assertSucceeds(getDoc(ref));
+    await assertFails(setDoc(doc(as(owner), paths.pushSubscription(owner.uid, "s2")), { ...subscription, endpoint: "http://push.example/s/2" }));
+    await assertFails(setDoc(doc(as(owner), paths.pushSubscription(owner.uid, "s3")), { ...subscription, keys: { p256dh: "p" } }));
+    await assertFails(setDoc(doc(as(owner), paths.pushSubscription(owner.uid, "s4")), { ...subscription, extra: 1 }));
+    await assertFails(getDoc(doc(as(partner), paths.pushSubscription(owner.uid, "s1"))));
+    await assertFails(setDoc(doc(as(partner), paths.pushSubscription(owner.uid, "s5")), subscription));
+    await assertSucceeds(deleteDoc(ref));
+  });
+
   it("a user may not forge a Google Calendar connection or read its token", async () => {
     const forged = { emailAddress: "forged@example.com", connectedAt: "2026-11-01T00:00:00Z", calendars: [] };
     await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { googleCalendar: forged }, { merge: true }));

@@ -164,8 +164,19 @@ export const GoogleCalendarState = GoogleCalendarConnection.extend({
 export type GoogleCalendarState = z.infer<typeof GoogleCalendarState>;
 
 // How the user wants reminders before a trip; the owner sets it in Settings.
-export const ReminderSettings = z.object({ email: z.boolean() });
+// `push` is on while any browser of theirs holds a push subscription.
+export const ReminderSettings = z.object({ email: z.boolean().optional(), push: z.boolean().optional() });
 export type ReminderSettings = z.infer<typeof ReminderSettings>;
+
+// A browser's push subscription, as the Push API hands it out, stored under
+// the user by that browser (users/{uid}/pushSubscriptions/{id}); the parser
+// sends reminders to it and drops it once the push service says it is gone.
+export const PushSubscription = z.object({
+  endpoint: z.string().url(),
+  keys: z.object({ p256dh: z.string().min(1), auth: z.string().min(1) }),
+  createdAt: z.string(),
+});
+export type PushSubscription = z.infer<typeof PushSubscription>;
 
 export const UserProfile = z.object({
   email: z.string().optional(),
