@@ -61,7 +61,9 @@ viewer's zone. Trip bounds are calendar dates.
   at`: the geocoder's answer for a normalized place query (`key` is its
   hash), shared by every user, so a name is looked up once ever;
   `geocodeBudget/{day}` — `calls`, the day's count against
-  `GEOCODE_DAILY_LIMIT`. Both are the parser's alone.
+  `GEOCODE_DAILY_LIMIT`; `geocodeRetries/{tripId__segmentId}` — `uid,
+  tripId, segmentId, at`, a booking a spent budget left with a place to ask
+  about another day. All three are the parser's alone.
 - `users/{uid}/parsedMessages/{sourceId}` — `outcome` (processing,
   filtered, not_booking, imported, failed), `source` (absent for Gmail,
   `tripit` or `ics` otherwise), `reason, from, subject, segmentIds[],
@@ -143,6 +145,13 @@ dots never crowds out the countries the reports need. A name Google cannot
 place stays as it was, and a hand-entered booking is not geocoded (the
 client writes it), though an address pick in the form sets the spot. A
 place's own coordinates (TripIt's, or a pick's) are never overwritten.
+A booking the spent budget put off is queued in `geocodeRetries` and asked
+about again by the daily sweep (`/internal/geocode-sweep`, from Cloud
+Scheduler early in the UTC day, `apps/parser/src/geocodeSweep.ts`): oldest
+first, up to 200 a day, writing what it learns under the user's import lock
+only if the booking has not been edited since, dropping an entry once it is
+answered (a "none" included), its booking is gone, or it is thirty days old,
+and stopping for the day when the budget runs out again.
 Station and ferry codes are never read as airport codes. Each day of a trip counts for every country the
 traveler was in that day: a booking's start and end say where they were,
 and between bookings they stay where the last one (in time, not by local
@@ -323,7 +332,8 @@ Gmail ─watch─▶ Pub/Sub ─push(OIDC)─▶ parser /internal/pubsub/gmail
                                place each origin and destination lacking a
                                country or a spot: airport table, then the
                                geocoder (cache → day's budget → Google); a
-                               miss or a failure leaves the place as it was
+                               miss or a failure leaves the place as it was,
+                               a spent budget queues it for the daily sweep
                                         ▼
                                transaction, serialized per user:
                                drop bookings already on an overlapping
@@ -669,8 +679,7 @@ on GitHub-hosted runners.
 
 Native apps (React Native + Expo in `apps/mobile`; the Android screens are
 mocked up in `design/android/`, Material 3 with this palette, as the reference
-for the port), a second chance for places an exhausted budget left without a
-country or a spot (a nightly sweep), check-in/out surfacing,
+for the port), check-in/out surfacing,
 ratings and favourites, itinerary ideas, reminders sent
 by email or push rather than shown in the app, which visas a trip needs,
 other mail providers and forward-to-import. Further import
