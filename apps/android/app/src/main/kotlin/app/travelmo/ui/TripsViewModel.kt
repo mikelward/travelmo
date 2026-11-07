@@ -37,7 +37,9 @@ class TripsViewModel(private val store: TripStore, private val uid: String, priv
         }
     }
 
-    private val trips: Flow<List<Trip>?> = store.trips(uid, email).map<List<Trip>, List<Trip>?> { it }
+    /** Every trip of the user's, own and shared; null until the first answer. */
+    val trips: StateFlow<List<Trip>?> = store.trips(uid, email).map<List<Trip>, List<Trip>?> { it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val groups: Flow<TripGroups?> = combine(trips, now) { trips, _ -> trips?.let { groupTrips(it, LocalDate.now().toString()) } }
 

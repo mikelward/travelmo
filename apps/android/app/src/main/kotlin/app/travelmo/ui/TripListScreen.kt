@@ -47,7 +47,7 @@ import app.travelmo.ui.theme.SharedBadge
 /** Now, Upcoming and Past, each card with what comes next (SPEC.md "The trip list"). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) -> Unit, onOpenSettings: () -> Unit) {
+fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) -> Unit, onOpenSettings: () -> Unit, bottomBar: @Composable () -> Unit = {}) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     Scaffold(
         topBar = {
@@ -60,6 +60,7 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
                 },
             )
         },
+        bottomBar = bottomBar,
     ) { padding ->
         val groups = state.groups
         when {
