@@ -70,7 +70,7 @@ Gradle). `:core` is plain Kotlin with the models and the logic the web's
 formatting), tested without an SDK and kept free of Android by
 `:core:verifyNoAndroid`; `:app` is the Compose app: sign-in, the trip list,
 a trip's bookings with adding, editing and deleting, the calendar's month
-view, and sign-out so far.
+view, the travel profile with its document warnings, and sign-out so far.
 
 ```sh
 cd apps/android
