@@ -33,6 +33,9 @@
 - [x] Merge trips and move bookings between them.
 - [x] Surface the next check-in, check-out, departure or arrival on the
       trip list for trips under way and the next three upcoming.
+- [x] Say how soon that is, name the stay under way, and show when the next
+      flight's online check-in opens and that it is open, with the booking
+      reference, on the same card.
 - [x] Dead-letter topic on the Pub/Sub push subscription and an alert on
       `renew_watch_failed`.
 - [x] Service worker for offline trip pages (Serwist); `useOffline`.
@@ -282,6 +285,13 @@ Guesses made on autopilot; change any of them freely.
   entry lines mailed are only those needing action, while the trip page
   shows every country. The job is the fourth Cloud Scheduler job (about ten
   cents a month beyond the free three) rather than a fold into another.
+- The trip card's online check-in line assumes the common window, a day
+  before departure until departure, since airlines differ (some open 48 or
+  30 hours ahead, most close 45 to 60 minutes before) and the booking
+  carries no airline rule; the line says "usually" and is a nudge, not a
+  promise. The countdown stops a week out, where a date says more than a
+  count of days. The stay line names lodging only; a rental car under way
+  is not a place one is at.
 - Reminders by push use the Web Push standard (VAPID keys the parser holds,
   the browsers' own push services, which charge nothing) through the
   `web-push` library (MPL-2.0, file-level copyleft, used unmodified) rather

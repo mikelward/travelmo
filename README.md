@@ -2,7 +2,8 @@
 
 Your trips in one place, imported from your inbox. A TripIt-style planner:
 connect Gmail, and booking confirmations become trips with flights, trains,
-stays and rentals, grouped into now, upcoming and past. Share a trip with a
+stays and rentals, grouped into now, upcoming and past, each card saying
+what comes next, how soon, and when online check-in opens. Share a trip with a
 partner by email, see them month by month on a calendar, rate the places you stayed and mark favorites, see what each country of a trip asks of your passport, and see warnings when a passport or visa runs out too close to a trip, by email or as a notification if you like. Reports count the days spent in each country and the trips
 each year, on a map of where you've been, and a calendar link puts your trips
 in Google or Apple Calendar. A TripIt history comes in from the JSON export TripIt
