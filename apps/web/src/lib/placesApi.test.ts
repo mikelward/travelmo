@@ -53,11 +53,17 @@ describe("placeDetails", () => {
           { longText: "Exampleville", shortText: "Exampleville", types: ["postal_town"] },
           { longText: "Exampleland", shortText: "GB", types: ["country", "political"] },
         ],
+        location: { latitude: 51.5, longitude: -0.25 },
       }),
     );
-    expect(details).toEqual({ address: "10 Example Street, Exampleville EX1 2MP, Exampleland", city: "Exampleville", country: "GB" });
+    expect(details).toEqual({
+      address: "10 Example Street, Exampleville EX1 2MP, Exampleland",
+      city: "Exampleville",
+      country: "GB",
+      location: { lat: 51.5, lon: -0.25 },
+    });
     expect(calls[0]!.url).toBe("https://places.googleapis.com/v1/places/p1?sessionToken=session-1");
-    expect(calls[0]!.init?.headers).toEqual({ "X-Goog-Api-Key": "public-key", "X-Goog-FieldMask": "addressComponents,formattedAddress" });
+    expect(calls[0]!.init?.headers).toEqual({ "X-Goog-Api-Key": "public-key", "X-Goog-FieldMask": "addressComponents,formattedAddress,location" });
   });
 
   it("gives only what the answer holds", async () => {

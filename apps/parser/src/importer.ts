@@ -1,6 +1,6 @@
 import {
   enrichSegments,
-  fillAirportCountries,
+  fillAirports,
   findTripForRange,
   icsEventText,
   isTravelCalendar,
@@ -361,12 +361,13 @@ export const sourceTripPrefix = "tripit-";
 // The one trip holding a source's unfiled items.
 const holdingTripPrefix = `${sourceTripPrefix}unfiled-`;
 
-// A place's country, before anything is written: a flight's from its airport
-// code (a table, no call), anything else's from the geocoder when there is
-// one. Network calls stay outside the transaction, which Firestore may run
-// more than once. A geocoder failure costs the country, never the booking.
+// A place's country and coordinates, before anything is written: a flight's
+// from its airport code (a table, no call), anything else's from the
+// geocoder when there is one. Network calls stay outside the transaction,
+// which Firestore may run more than once. A geocoder failure costs the
+// country, never the booking.
 async function placeSegments(uid: string, booking: BookingToFile, deps: ImportDeps): Promise<readonly ExtractedSegment[]> {
-  const fromAirports = booking.segments.map((segment) => fillAirportCountries(segment, airportPlace));
+  const fromAirports = booking.segments.map((segment) => fillAirports(segment, airportPlace));
   if (!deps.geocode) return fromAirports;
   const { segments, filled, failed } = await enrichSegments(fromAirports, deps.geocode);
   if (filled || failed) deps.log("geocoded", { uid, source: booking.source, sourceId: booking.sourceId, filled, failed });

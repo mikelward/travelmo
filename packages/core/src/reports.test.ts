@@ -133,8 +133,49 @@ describe("travelReport", () => {
       ["CDG", "FR"],
       ["JFK", "US"],
     ]);
+    expect(report.places).toEqual([]);
     expect(report.unknownDays).toBe(0);
     expect(report.unplaced).toBe(0);
+  });
+
+  it("lists the places that know their spot once each, for the map", () => {
+    const hotel = { name: "Hotel Example", city: "Exampleville", country: "FR", lat: 48.8567, lon: 2.3508 };
+    const station = { name: "Exampleville Nord", country: "FR", lat: 48.8809, lon: 2.3553 };
+    const trip = {
+      trip: { id: "spots", start: "2025-05-01", end: "2025-05-03" },
+      segments: [
+        { type: "lodging", title: "Hotel Example", start: "2025-05-01T15:00:00+02:00", end: "2025-05-03T11:00:00+02:00", destination: hotel },
+        // The same hotel named by its street, a few meters away: one dot.
+        { type: "activity", title: "Dinner", start: "2025-05-02T20:00:00+02:00", destination: { ...hotel, name: "1 Rue Exemple", lat: 48.8569 } },
+        { type: "train", title: "Out", start: "2025-05-03T12:00:00+02:00", end: "2025-05-03T14:00:00+02:00", origin: station, destination: { name: "Elsewhere", country: "BE" } },
+        // A flight whose airport the table does not know but whose source placed it.
+        { type: "flight", title: "XX 9", start: "2025-05-03T16:00:00+02:00", origin: { name: "Example Field", code: "ZZZ", country: "BE", lat: 50.9, lon: 4.5 }, destination: { name: "Home", code: "JFK" } },
+      ] satisfies ExtractedSegment[],
+    };
+    const report = travelReport([trip], "2025-11-01", { lookup: airportPlace });
+    expect(report.places).toEqual([
+      { name: "Example Field", country: "BE", lat: 50.9, lon: 4.5 },
+      { name: "Exampleville Nord", country: "FR", lat: 48.8809, lon: 2.3553 },
+      { name: "Hotel Example", city: "Exampleville", country: "FR", lat: 48.8567, lon: 2.3508 },
+    ]);
+    expect(report.airports.map((a) => a.code)).toEqual(["JFK"]);
+    // Narrowed to a year without the trip, the map is empty.
+    expect(travelReport([trip], "2025-11-01", { year: "2024", lookup: airportPlace }).places).toEqual([]);
+  });
+
+  it("keeps a stay's place on the map for every day of the stay", () => {
+    const ryokan = { name: "Ryokan Example", country: "JP", lat: 35.0, lon: 135.8 };
+    const newYear = {
+      trip: { id: "ny", start: "2024-12-30", end: "2025-01-02" },
+      segments: [{ type: "lodging", title: "Ryokan Example", start: "2024-12-30T15:00:00+09:00", end: "2025-01-02T10:00:00+09:00", destination: ryokan }] satisfies ExtractedSegment[],
+    };
+    const names = (today: string, year?: string) => travelReport([newYear], today, { ...(year ? { year } : {}), lookup: airportPlace }).places.map((p) => p.name);
+    // Both years' maps, and the map while the stay is under way.
+    expect(names("2025-11-01", "2024")).toEqual(["Ryokan Example"]);
+    expect(names("2025-11-01", "2025")).toEqual(["Ryokan Example"]);
+    expect(names("2024-12-31")).toEqual(["Ryokan Example"]);
+    expect(names("2024-12-31", "2025")).toEqual([]);
+    expect(names("2024-12-29")).toEqual([]);
   });
 
   it("narrows to one year by the days spent in it", () => {

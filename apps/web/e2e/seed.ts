@@ -64,7 +64,7 @@ export async function seedFlight(tripId: string): Promise<Segment> {
 }
 
 // An invented past week in Lisbon: flights known only by their airport
-// codes, and a stay that names its country.
+// codes, and a stay that names its country and its spot.
 export async function seedLisbonTrip(ownerUid: string, tripId: string): Promise<Trip> {
   const at = "2025-05-01T00:00:00Z";
   const trip: Trip = { id: tripId, title: "Lisbon", start: "2025-06-10", end: "2025-06-14", ownerUid, sharedWith: [], createdAt: at, updatedAt: at };
@@ -87,7 +87,7 @@ export async function seedLisbonTrip(ownerUid: string, tripId: string): Promise<
       title: "Example Guesthouse",
       start: "2025-06-10T15:00:00+01:00",
       end: "2025-06-14T11:00:00+01:00",
-      destination: { name: "Example Guesthouse", country: "PT" },
+      destination: { name: "Example Guesthouse", city: "Lisbon", country: "PT", lat: 38.71, lon: -9.14 },
     },
     {
       ...base,
@@ -126,6 +126,12 @@ export async function seedGoogleCalendar(uid: string, googleCalendar: GoogleCale
 
 export async function seedTravelProfile(uid: string, profile: Omit<TravelProfile, "ownerUid">): Promise<void> {
   await db.doc(paths.travelProfile(uid)).set({ ownerUid: uid, ...profile });
+}
+
+// A trip's bookings as stored, for what the page does not show.
+export async function readSegments(tripId: string): Promise<Segment[]> {
+  const snap = await db.collection(paths.segments(tripId)).orderBy("start").get();
+  return snap.docs.map((d) => d.data() as Segment);
 }
 
 export async function clearData(): Promise<void> {

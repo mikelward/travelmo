@@ -1,3 +1,4 @@
+import type { Location } from "./geocode";
 import { compareInstants } from "./instant";
 import type { ExtractedSegment, Place, SegmentType, Trip } from "./schema";
 
@@ -77,9 +78,10 @@ export function eventVerb(event: UpcomingEvent): string {
   return eventVerbs[event.segment.type][event.kind];
 }
 
-// What an address pick sets besides the name: a value sets it, "" clears
-// it, undefined (the form did not touch it) keeps what the place had.
-export type PlaceDetails = { city?: string; address?: string };
+// What an address pick sets besides the name: a value sets it, "" (or null
+// for the location) clears it, undefined (the form did not touch it) keeps
+// what the place had.
+export type PlaceDetails = { city?: string; address?: string; location?: Location | null };
 
 // A form edits a place's name and code, and its country where it shows one
 // (passing a country, "" to clear it); whatever else an import recorded
@@ -101,6 +103,10 @@ export function mergePlace(existing: Place | undefined, name: string, code: stri
     if (value === undefined) continue;
     const { [key]: _old, ...without } = place;
     place = value.trim() ? { ...without, [key]: value.trim() } : without;
+  }
+  if (details?.location !== undefined) {
+    const { lat: _lat, lon: _lon, ...without } = place;
+    place = details.location ? { ...without, lat: details.location.lat, lon: details.location.lon } : without;
   }
   return place;
 }

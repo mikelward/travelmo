@@ -1,4 +1,4 @@
-import { GeocodeError, geocodeKey, parseGeocodeResponse, paths, type GeocodeLookup, type GeocodeResult } from "@travelmo/core";
+import { GeocodeError, geocodeKey, parseGeocodeResponse, paths, type GeocodeLookup, type GeocodeNeed, type GeocodeResult } from "@travelmo/core";
 import type { Firestore } from "firebase-admin/firestore";
 
 // Google's Geocoding API behind a shared cache and a daily budget: an import
@@ -27,7 +27,7 @@ export function googleGeocoder(key: string, fetchFn: typeof fetch = fetch): Geoc
   };
 }
 
-export type GeocodeEntry = { query: string; status: "ok" | "none"; country?: string; city?: string; at: string };
+export type GeocodeEntry = { query: string; status: "ok" | "none"; country?: string; city?: string; lat?: number; lon?: number; at: string };
 
 export type GeocodeStore = {
   get(key: string): Promise<GeocodeEntry | undefined>;
@@ -60,7 +60,8 @@ export function firestoreGeocodeStore(db: Firestore): GeocodeStore {
 export type CachedGeocoderOptions = {
   store: GeocodeStore;
   geocoder: Geocoder;
-  // Calls a day across every user; the free allowance is monthly.
+  // Calls a day across every user; the free allowance is monthly. A place
+  // that has its country and wants only coordinates may use half of it.
   limit: number;
   now: () => string;
   log: (event: string, fields: Record<string, unknown>) => void;
@@ -68,20 +69,34 @@ export type CachedGeocoderOptions = {
 
 export const defaultDailyLimit = 300;
 
+// What a place lacking only coordinates may spend of the day's calls, so
+// the countries the reports need are never crowded out by dots on the map.
+export const locationShare = (limit: number) => Math.ceil(limit / 2);
+
+const fromEntry = (cached: GeocodeEntry): GeocodeResult | "none" =>
+  cached.status === "ok" && cached.country
+    ? {
+        country: cached.country,
+        ...(cached.city ? { city: cached.city } : {}),
+        ...(cached.lat !== undefined && cached.lon !== undefined ? { lat: cached.lat, lon: cached.lon } : {}),
+      }
+    : "none";
+
 // Cache first (a "none" is an answer too), then one of the day's calls, then
 // Google. A spent budget answers "none" without caching, so tomorrow's import
 // asks again; a failure is thrown for the caller to log and move past.
 export function cachedGeocoder({ store, geocoder, limit, now, log }: CachedGeocoderOptions): GeocodeLookup {
-  let exhaustedDay: string | undefined;
-  return async (query) => {
+  const exhausted = new Map<GeocodeNeed, string>();
+  return async (query, need) => {
     const key = geocodeKey(query);
     const cached = await store.get(key);
-    if (cached) return cached.status === "ok" && cached.country ? { country: cached.country, ...(cached.city ? { city: cached.city } : {}) } : "none";
+    if (cached) return fromEntry(cached);
     const day = now().slice(0, 10);
-    if (!(await store.reserve(day, limit))) {
-      if (exhaustedDay !== day) {
-        exhaustedDay = day;
-        log("geocode_budget_exhausted", { day, limit });
+    const allowed = need === "location" ? locationShare(limit) : limit;
+    if (!(await store.reserve(day, allowed))) {
+      if (exhausted.get(need) !== day) {
+        exhausted.set(need, day);
+        log("geocode_budget_exhausted", { day, need, limit: allowed });
       }
       return "none";
     }

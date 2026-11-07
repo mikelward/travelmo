@@ -1,10 +1,12 @@
+import { hasLocation } from "./geocode";
 import { compareInstants } from "./instant";
 import type { ExtractedSegment, Place, SegmentType, Trip } from "./schema";
 import { localDate } from "./trips";
 
 // Where the user has been, worked out from their trips' bookings alone: no
-// geocoding, so a place is known by the country its booking names, or for a
-// flight by its airport code.
+// lookups here, so a place is known by the country its booking names, or
+// for a flight by its airport code, and sits on the map where its booking
+// says it is.
 
 export type PlaceLookup = (code: string) => { country: string; lat: number; lon: number } | undefined;
 
@@ -79,6 +81,8 @@ export function tripDays(
 export type CountryReport = { country: string; days: number; trips: number };
 export type YearReport = { year: string; trips: number; days: number; countries: number };
 export type AirportVisit = { code: string; country: string; lat: number; lon: number };
+// A place other than an airport whose booking says where it is.
+export type PlaceVisit = { name: string; city?: string; country?: string; lat: number; lon: number };
 
 export type TravelReport = {
   // Trips begun by today, in the year asked for (or ever).
@@ -91,6 +95,8 @@ export type TravelReport = {
   years: YearReport[];
   // Airports flown from or to, for the map.
   airports: AirportVisit[];
+  // Stays, stations and the rest with coordinates, for the map, one per spot.
+  places: PlaceVisit[];
   // Trip days whose country no booking says.
   unknownDays: number;
   // Bookings whose places no country could be found for.
@@ -113,6 +119,7 @@ export function travelReport(
   const yearDays = new Map<string, Map<string, Set<string>>>();
   const yearTrips = new Map<string, number>();
   const airports = new Map<string, AirportVisit>();
+  const places = new Map<string, PlaceVisit>();
   let trips = 0;
   let unplaced = 0;
   let upcoming = 0;
@@ -139,19 +146,24 @@ export function travelReport(
     for (const s of segments) {
       const counted = (date: string) => date <= today && inYear(date);
       if (counted(localDate(s.start))) {
-        const places = [s.origin, s.destination].filter((p): p is Place => Boolean(p));
-        if (places.every((p) => !placeCountry(p, s.type, lookup))) unplaced += 1;
+        const ends = [s.origin, s.destination].filter((p): p is Place => Boolean(p));
+        if (ends.every((p) => !placeCountry(p, s.type, lookup))) unplaced += 1;
       }
-      if (s.type !== "flight") continue;
-      // Each airport on the date the traveler was there: a flight over New
-      // Year lands in the next year's map.
-      const ends: [Place | undefined, string][] = [
-        [s.origin, s.start],
-        [s.destination, s.end ?? s.start],
-      ];
-      for (const [p, at] of ends) {
-        const found = p?.code && counted(localDate(at)) ? lookup?.(p.code) : undefined;
-        if (found && p?.code) airports.set(p.code.toUpperCase(), { code: p.code.toUpperCase(), ...found });
+      // Each place on the dates the traveler was there: a journey's ends on
+      // the dates it left and arrived (a flight over New Year lands in the
+      // next year's map), a stay's place on every day of the stay.
+      const occupied = (from: string, to: string) => from <= today && (!year || (from.slice(0, 4) <= year && year <= (to < today ? to : today).slice(0, 4)));
+      const ends: [Place | undefined, boolean][] = transport.has(s.type)
+        ? [
+            [s.origin, counted(localDate(s.start))],
+            [s.destination, counted(localDate(s.end ?? s.start))],
+          ]
+        : [[s.destination ?? s.origin, occupied(localDate(s.start), localDate(s.end ?? s.start))]];
+      for (const [p, there] of ends) {
+        if (!p || !there) continue;
+        const found = s.type === "flight" && p.code ? lookup?.(p.code) : undefined;
+        if (found && p.code) airports.set(p.code.toUpperCase(), { code: p.code.toUpperCase(), ...found });
+        else if (hasLocation(p) && !places.has(spot(p))) places.set(spot(p), placeVisit(p));
       }
     }
   }
@@ -183,11 +195,24 @@ export function travelReport(
       .sort((a, b) => b.days - a.days || a.country.localeCompare(b.country)),
     years,
     airports: [...airports.values()].sort((a, b) => a.code.localeCompare(b.code)),
+    places: [...places.values()].sort((a, b) => a.name.localeCompare(b.name) || a.lat - b.lat || a.lon - b.lon),
     unknownDays,
     unplaced,
     upcoming,
   };
 }
+
+// Two bookings within about a hundred meters are one spot on the map: the
+// same hotel named two ways is one dot, under the first name.
+const spot = (p: Place & { lat: number; lon: number }) => `${p.lat.toFixed(3)},${p.lon.toFixed(3)}`;
+
+const placeVisit = (p: Place & { lat: number; lon: number }): PlaceVisit => ({
+  name: p.name,
+  ...(p.city ? { city: p.city } : {}),
+  ...(p.country ? { country: p.country.toUpperCase() } : {}),
+  lat: p.lat,
+  lon: p.lon,
+});
 
 // The same trip listed twice (owned and shared) counts once.
 function distinct(trips: readonly TripWithSegments[]): TripWithSegments[] {

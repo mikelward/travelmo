@@ -27,6 +27,10 @@ export const Place = z.object({
   country: z.string().length(2).optional(),
   // One line, as a place lookup formats it; the form's address pick sets it.
   address: z.string().min(1).optional(),
+  // Where it is, for the map: from the source, the airport table or the
+  // geocoder; always both or neither.
+  lat: z.number().min(-90).max(90).optional(),
+  lon: z.number().min(-180).max(180).optional(),
 });
 export type Place = z.infer<typeof Place>;
 

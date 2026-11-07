@@ -1066,19 +1066,29 @@ describe("fileBooking geocoding", () => {
     segments: [{ type: "flight", title: "XX 1 MAN to DUB", start: "2026-12-15T08:00:00+00:00", origin: { name: "Manchester", code: "MAN" }, destination: { name: "Dublin", code: "DUB" } }],
   };
 
-  it("fills a place's country from the geocoder before writing, asking once per place", async () => {
+  it("fills a place's country and spot from the geocoder before writing, asking once per place", async () => {
     const store = memoryStore();
-    const asked: string[] = [];
+    const asked: [string, string][] = [];
     const d: ImportDeps = {
       ...deps(store, async () => stay),
-      geocode: async (query) => {
-        asked.push(query);
-        return { country: "FR", city: "Exampleville" };
+      geocode: async (query, need) => {
+        asked.push([query, need]);
+        return { country: "FR", city: "Exampleville", lat: 48.5, lon: 2.25 };
       },
     };
     expect(await importMessage("u1", email(), d)).toBe("imported");
-    expect([...store.segments.values()][0]!.destination).toEqual({ name: "Hotel Example", city: "Exampleville", country: "FR" });
-    expect(asked).toEqual(["Hotel Example, Exampleville"]);
+    expect([...store.segments.values()][0]!.destination).toEqual({ name: "Hotel Example", city: "Exampleville", country: "FR", lat: 48.5, lon: 2.25 });
+    expect(asked).toEqual([["Hotel Example, Exampleville", "country"]]);
+  });
+
+  it("asks only where a place is when its source named the country", async () => {
+    const store = memoryStore();
+    const asked: [string, string][] = [];
+    const placed: ExtractedBooking = { isBooking: true, segments: [{ ...stay.segments[0]!, destination: { name: "Hotel Example", city: "Exampleville", country: "FR" } }] };
+    const d: ImportDeps = { ...deps(store, async () => placed), geocode: async (query, need) => (asked.push([query, need]), { country: "FR", lat: 48.5, lon: 2.25 }) };
+    expect(await importMessage("u1", email(), d)).toBe("imported");
+    expect([...store.segments.values()][0]!.destination).toEqual({ name: "Hotel Example", city: "Exampleville", country: "FR", lat: 48.5, lon: 2.25 });
+    expect(asked).toEqual([["Hotel Example, Exampleville, FR", "location"]]);
   });
 
   it("still imports when the geocoder fails, and leaves places alone without one", async () => {
@@ -1096,14 +1106,18 @@ describe("fileBooking geocoding", () => {
     expect([...plain.segments.values()][0]!.destination).toEqual({ name: "Hotel Example", city: "Exampleville" });
   });
 
-  it("gives a flight's airports their country from the table without asking", async () => {
+  it("gives a flight's airports their country and spot from the table without asking", async () => {
     const store = memoryStore();
     const asked: string[] = [];
     const d: ImportDeps = { ...deps(store, async () => codedFlight), geocode: async (q) => (asked.push(q), "none") };
     await importMessage("u1", email({ id: "m2", subject: "Your flight" }), d);
     const segment = [...store.segments.values()][0]!;
-    expect(segment.origin).toEqual({ name: "Manchester", code: "MAN", country: "GB" });
-    expect(segment.destination).toEqual({ name: "Dublin", code: "DUB", country: "IE" });
+    expect(segment.origin).toMatchObject({ name: "Manchester", code: "MAN", country: "GB" });
+    expect(segment.destination).toMatchObject({ name: "Dublin", code: "DUB", country: "IE" });
+    for (const p of [segment.origin!, segment.destination!]) {
+      expect(typeof p.lat).toBe("number");
+      expect(typeof p.lon).toBe("number");
+    }
     expect(asked).toEqual([]);
   });
 });

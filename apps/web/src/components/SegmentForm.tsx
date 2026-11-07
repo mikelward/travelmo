@@ -12,6 +12,8 @@ import {
   splitInstant,
   timeZones,
   zoneForOffset,
+  type Location,
+  type PlaceDetails,
   type Segment,
   type SegmentType,
 } from "@travelmo/core";
@@ -70,13 +72,15 @@ type Fields = {
   // ISO codes, "" for none; not shown for a flight, whose airport says.
   originCountry: string;
   destinationCountry: string;
-  // Set by an address pick in this form, "" once the name is typed over
-  // (the picked city and address no longer describe it); undefined keeps
-  // whatever the booking had.
+  // Set by an address pick in this form, "" (null for the location) once the
+  // name is typed over (the picked city, address and spot no longer describe
+  // it); undefined keeps whatever the booking had.
   originCity?: string;
   originAddress?: string;
+  originLocation?: Location | null;
   destinationCity?: string;
   destinationAddress?: string;
+  destinationLocation?: Location | null;
   // Whether an address pick set the country: a flight shows no picker, so
   // only a pick may change its country.
   originCountryPicked?: boolean;
@@ -115,9 +119,10 @@ type StringField = { [K in keyof Fields]-?: Fields[K] extends string ? K : never
 
 const text = (value: string) => (value.trim() ? value.trim() : undefined);
 
-const details = (city: string | undefined, address: string | undefined) => ({
+const details = (city: string | undefined, address: string | undefined, location: Location | null | undefined): PlaceDetails => ({
   ...(city !== undefined ? { city } : {}),
   ...(address !== undefined ? { address } : {}),
+  ...(location !== undefined ? { location } : {}),
 });
 
 
@@ -138,13 +143,13 @@ export function toExtracted(f: Fields, existing?: Segment): ExtractedSegment {
     end: hasEnd
       ? composeInstant({ date: endDate, time: endTime, offset: resolveOffset(f.endZone || f.startZone, endDate, endTime) })
       : undefined,
-    origin: formPlace(existing?.origin, f.originName, f.originCode, formCountry(f.type, f.originCountry, f.originCountryPicked), details(f.originCity, f.originAddress)),
+    origin: formPlace(existing?.origin, f.originName, f.originCode, formCountry(f.type, f.originCountry, f.originCountryPicked), details(f.originCity, f.originAddress, f.originLocation)),
     destination: formPlace(
       existing?.destination,
       f.destinationName,
       f.destinationCode,
       formCountry(f.type, f.destinationCountry, f.destinationCountryPicked),
-      details(f.destinationCity, f.destinationAddress),
+      details(f.destinationCity, f.destinationAddress, f.destinationLocation),
     ),
     notes: text(f.notes),
   };
@@ -270,16 +275,16 @@ export function SegmentForm({
   };
 
   const transport = fields.type !== "lodging" && fields.type !== "activity";
-  // A picked place fills the end's name, city, country and address; a name
-  // typed afterwards keeps the country (still likely, and for a flight the
-  // pick is the only way it was set) and drops the rest.
+  // A picked place fills the end's name, city, country, address and spot; a
+  // name typed afterwards keeps the country (still likely, and for a flight
+  // the pick is the only way it was set) and drops the rest.
   const placeField = (end: "origin" | "destination", label: string, placeholder: string) => (
     <PlaceInput
       value={fields[`${end}Name`]}
       label={label}
       placeholder={placeholder}
       className={inputClass}
-      onChange={(name) => setFields((f) => ({ ...f, [`${end}Name`]: name, [`${end}City`]: "", [`${end}Address`]: "" }))}
+      onChange={(name) => setFields((f) => ({ ...f, [`${end}Name`]: name, [`${end}City`]: "", [`${end}Address`]: "", [`${end}Location`]: null }))}
       onPending={(pending) => setPendingPlaces((n) => n + (pending ? 1 : -1))}
       onPick={(place: PickedPlace) =>
         setFields((f) => ({
@@ -287,6 +292,7 @@ export function SegmentForm({
           [`${end}Name`]: place.name,
           [`${end}City`]: place.city ?? "",
           [`${end}Address`]: place.address ?? "",
+          [`${end}Location`]: place.location ?? null,
           ...(place.country ? { [`${end}Country`]: place.country, [`${end}CountryPicked`]: true } : { [`${end}CountryPicked`]: false }),
         }))
       }
