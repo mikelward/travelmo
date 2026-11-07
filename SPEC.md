@@ -46,10 +46,13 @@ viewer's zone. Trip bounds are calendar dates.
   duplicates.
 - `users/{uid}` — `email, displayName, photoURL, gmail {emailAddress,
   connectedAt, watchExpiration, historyId, backfill}, googleCalendar
-  {emailAddress, connectedAt, calendars[]}, reminders {email}`. `gmail` and
+  {emailAddress, connectedAt, calendars[]}, reminders {email, push}`. `gmail` and
   `googleCalendar` are server-written; `reminders` is the owner's choice; `backfill` is how far a reading of the whole mailbox has
   got (`cursor, scanned, imported, failed, done, updatedAt`); each calendar
   is `{id, summary, primary, selected, lastReadAt, lastResult, lastError}`.
+- `users/{uid}/pushSubscriptions/{id}` — `endpoint, keys {p256dh, auth},
+  createdAt`: one per browser that asked for notifications, written by that
+  browser, read and pruned by the parser.
 - `users/{uid}/settings/patterns` — `allow[], deny[]` sender domains.
 - `users/{uid}/travelProfile/main` — `ownerUid, ownerEmail, trustedEmails[],
   travelers[], loyalty[], documents[], importedAt, updatedAt`: the traveler's
@@ -221,6 +224,33 @@ it, through SMTP (`SMTP_HOST` and friends; `apps/parser/src/mail.ts`, with
 the trip title collapsed to one line before it becomes a subject), and the
 job is off without a host. A failed send is logged and tried again the next
 day, since nothing is marked sent until the mail went.
+
+Reminders as notifications carry the same news to the browsers that asked.
+The switch in Settings is per browser: it asks the browser's permission,
+subscribes through the service worker with the app's VAPID public key
+(`NEXT_PUBLIC_VAPID_PUBLIC_KEY`) and writes the subscription under the user
+(`users/{uid}/pushSubscriptions/{id}`, the id a hash of the endpoint), and
+sets `reminders.push`, which the last browser to unsubscribe clears. The
+same daily job sends one notification per trip (`reminderNotifications` in
+core: the title, when the trip starts, the lines, the trip's URL as the tap
+target, a tag per trip so a later one replaces it) to every subscription,
+signed with the private key the parser holds (`VAPID_PRIVATE_KEY`,
+`VAPID_PUBLIC_KEY`, `VAPID_SUBJECT`; `apps/parser/src/push.ts`, the
+`web-push` library) with a day to live; the worker (`src/sw.ts`) shows it
+and opens the trip on a tap. An endpoint is whatever the browser wrote, so
+it is held to the calendar-feed rule (https on the standard port, public
+addresses only, checked at the connection) and one that fails is dropped
+like one the push service reports gone. The switch reads as on only when
+the browser's subscription is recorded under the signed-in account, so a
+second account on the same browser starts off, and turning it off forgets
+the browser for that account alone, leaving the browser's subscription to
+any other account that recorded it. Lines are marked sent once every channel the person turned on
+has taken them, so a failure on one keeps the day's news for tomorrow on
+both, as does a day on which no browser was left to take them. A
+notification is kept within the payload a push service guarantees to carry
+(3993 bytes, RFC 8291): a trip with more news than fits says how many more
+lines wait on its page. Each send has a socket timeout, so one quiet
+endpoint cannot stall the run for everyone after it.
 
 ## Editing by hand
 
@@ -711,7 +741,10 @@ about half a cent a call past it, and `GEOCODE_DAILY_LIMIT` bounds the worst
 day. Address
 autocomplete in the form is billed to the user's browser key per lookup
 session, free up to the Places API's monthly allowance; a hand-entered
-booking is a rare thing beside imports. The rules tests and CI run
+booking is a rare thing beside imports. Reminders by email ride the
+operator's SMTP service, and by push the browsers' own push services, which
+are free; the daily job is the fourth Cloud Scheduler job, about ten cents
+a month. The rules tests and CI run
 on GitHub-hosted runners.
 
 ## Later
@@ -719,6 +752,6 @@ on GitHub-hosted runners.
 Native apps (React Native + Expo in `apps/mobile`; the Android screens are
 mocked up in `design/android/`, Material 3 with this palette, as the reference
 for the port), check-in/out surfacing,
-itinerary ideas, reminders by push as well as email,
+itinerary ideas,
 other mail providers and forward-to-import. Further import
 sources share the pipeline: Google Calendar; `IMPORT.md` compares them and maps their fields.

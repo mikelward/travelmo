@@ -3,7 +3,7 @@
 Your trips in one place, imported from your inbox. A TripIt-style planner:
 connect Gmail, and booking confirmations become trips with flights, trains,
 stays and rentals, grouped into now, upcoming and past. Share a trip with a
-partner by email, see them month by month on a calendar, rate the places you stayed and mark favorites, see what each country of a trip asks of your passport, and see warnings when a passport or visa runs out too close to a trip. Reports count the days spent in each country and the trips
+partner by email, see them month by month on a calendar, rate the places you stayed and mark favorites, see what each country of a trip asks of your passport, and see warnings when a passport or visa runs out too close to a trip, by email or as a notification if you like. Reports count the days spent in each country and the trips
 each year, on a map of where you've been, and a calendar link puts your trips
 in Google or Apple Calendar. A TripIt history comes in from the JSON export TripIt
 support sends on request.
@@ -125,7 +125,11 @@ One Google Cloud project holds everything.
    `SMTP_USERNAME` and `SMTP_PASSWORD` (from Secret Manager) and `SMTP_FROM`
    turn on reminders by email, sent through whatever mail service the
    account already has; without `SMTP_HOST` the switch in Settings does
-   nothing.
+   nothing. `VAPID_PRIVATE_KEY` (from Secret Manager), `VAPID_PUBLIC_KEY`
+   and `VAPID_SUBJECT` (a `mailto:` or `https:` URL the push services may
+   contact) turn on reminders as browser notifications; make the pair once
+   with `pnpm --filter @travelmo/parser exec web-push generate-vapid-keys`
+   and keep it, since a new pair orphans every subscription.
 4. **Push**: `PROJECT=… PARSER_URL=https://<parser> PUSH_SA=<service account>
    deploy/pubsub.sh` creates the `gmail` topic (with Gmail allowed to publish
    to it), a push subscription to `https://<parser>/internal/pubsub/gmail`
@@ -139,8 +143,9 @@ One Google Cloud project holds everything.
    watches expire after seven days, `/internal/poll-feeds`, which reads
    every subscribed calendar feed, `/internal/geocode-sweep`, which asks
    the geocoder again about the bookings a spent daily budget put off, and
-   `/internal/reminders`, which mails the day's reminders. Three jobs per
-   billing account are free; the fourth costs about ten cents a month.
+   `/internal/reminders`, which sends the day's reminders by email and
+   push. Three jobs per billing account are free; the fourth costs about
+   ten cents a month.
 6. **Alerts**: `PROJECT=… CHANNEL=<notification channel> deploy/monitoring.sh`
    creates two alerting policies from `deploy/alerts/`: a failed watch renewal
    (the parser's `renew_watch_failed` log line) and a dead-lettered
@@ -156,7 +161,9 @@ One Google Cloud project holds everything.
    to the app's origins (HTTP referrers): it ships in the client bundle like
    the Firebase config, so the restrictions are what protect it. Left unset,
    the form's place fields are plain inputs. A picked address also puts the
-   place on the reports map.
+   place on the reports map. `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, the public half
+   of the parser's pair, lets Settings offer reminders as notifications in
+   the browser; left unset, the switch is hidden.
 
 ## Costs
 
@@ -167,5 +174,6 @@ the source named the country but not where), free up to the API's monthly allowa
 and about half a cent a call past it, with a daily cap; address autocomplete
 is billed per lookup session (the keystrokes of one field and the pick),
 free up to a monthly allowance and a fraction of a cent past it; reminders
-by email ride the account's own SMTP service and a fourth Cloud Scheduler
-job (about ten cents a month); see `SPEC.md`.
+by email ride the account's own SMTP service, by push the browsers' own
+push services (free), and both a fourth Cloud Scheduler job (about ten
+cents a month); see `SPEC.md`.
