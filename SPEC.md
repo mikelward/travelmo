@@ -107,6 +107,15 @@ booking start still ahead, or the end of one under way (check-out, arrival,
 car return) — read from their segments with one listener each; past trips
 and further-off ones get no listener, to keep Firestore reads in check.
 
+`/calendar` shows the same trips month by month (`packages/core/src/calendar.ts`):
+weeks run Monday to Sunday, padded with the neighboring months' days, and
+each trip is a bar across the days it covers, clipped at the week's edges
+with an ellipsis where it carries over, stacked into lanes so overlapping
+trips never share a row, and linking to the trip; a trip shared with the
+viewer is a different color. Previous, next and today move between months.
+It reads the trip list it already has and nothing more: no bookings, so no
+listener per trip.
+
 ## Reports
 
 `/reports` counts, from the trips the viewer can see (their own and those
@@ -661,7 +670,7 @@ on GitHub-hosted runners.
 Native apps (React Native + Expo in `apps/mobile`; the Android screens are
 mocked up in `design/android/`, Material 3 with this palette, as the reference
 for the port), a second chance for places an exhausted budget left without a
-country or a spot (a nightly sweep), a calendar view, check-in/out surfacing,
+country or a spot (a nightly sweep), check-in/out surfacing,
 ratings and favourites, itinerary ideas, reminders sent
 by email or push rather than shown in the app, which visas a trip needs,
 other mail providers and forward-to-import. Further import
