@@ -41,13 +41,13 @@ class TripsViewModelTest {
         val store = GatedStore()
         val viewModel = TripsViewModel(store, OWNER, null)
         viewModel.saveSegment("form-1", "liverpool", draft, null)
-        viewModel.bookingSaves.value shouldBe mapOf("form-1" to BookingSave.Busy)
+        viewModel.outcomes.value shouldBe mapOf("form-1" to Outcome.Busy)
         viewModel.saveSegment("form-1", "liverpool", draft, null)
         store.saves shouldBe 1
         store.gate.complete(Unit)
-        viewModel.bookingSaves.value shouldBe mapOf("form-1" to BookingSave.Done)
-        viewModel.bookingSaveSeen("form-1")
-        viewModel.bookingSaves.value shouldBe emptyMap()
+        viewModel.outcomes.value shouldBe mapOf("form-1" to Outcome.Done)
+        viewModel.outcomeSeen("form-1")
+        viewModel.outcomes.value shouldBe emptyMap()
     }
 
     @Test
@@ -57,9 +57,24 @@ class TripsViewModelTest {
         viewModel.saveSegment("form-1", "liverpool", draft, null)
         viewModel.saveSegment("form-2", "liverpool", draft, "l-stay")
         store.saves shouldBe 2
-        viewModel.bookingSaves.value shouldBe mapOf("form-1" to BookingSave.Busy, "form-2" to BookingSave.Busy)
+        viewModel.outcomes.value shouldBe mapOf("form-1" to Outcome.Busy, "form-2" to Outcome.Busy)
         store.gate.complete(Unit)
-        viewModel.bookingSaves.value shouldBe mapOf("form-1" to BookingSave.Done, "form-2" to BookingSave.Done)
+        viewModel.outcomes.value shouldBe mapOf("form-1" to Outcome.Done, "form-2" to Outcome.Done)
+    }
+
+    @Test
+    fun `a trip edit runs the same way, and a blank name is refused before the store sees it`() = runTest {
+        val store = FakeTripStore()
+        val viewModel = TripsViewModel(store, OWNER, null)
+        viewModel.renameTrip("rename", "liverpool", "  ")
+        viewModel.outcomes.value shouldBe mapOf("rename" to Outcome.Failed("Give the trip a name"))
+        viewModel.renameTrip("rename", "liverpool", "Merseyside")
+        viewModel.outcomes.value shouldBe mapOf("rename" to Outcome.Done)
+        store.renamed shouldBe listOf("liverpool" to "Merseyside")
+        viewModel.mergeTrips("merge", "dublin", "liverpool")
+        viewModel.deleteTrip("delete", "paris")
+        store.merged shouldBe listOf("dublin" to "liverpool")
+        store.deletedTrips shouldBe listOf("paris")
     }
 
     @Test
@@ -68,6 +83,6 @@ class TripsViewModelTest {
         val viewModel = TripsViewModel(store, OWNER, null)
         viewModel.saveSegment("form-2", "liverpool", draft, "l-stay")
         store.gate.complete(Unit)
-        viewModel.bookingSaves.value shouldBe mapOf("form-2" to BookingSave.Failed("Trip no longer exists"))
+        viewModel.outcomes.value shouldBe mapOf("form-2" to Outcome.Failed("Trip no longer exists"))
     }
 }

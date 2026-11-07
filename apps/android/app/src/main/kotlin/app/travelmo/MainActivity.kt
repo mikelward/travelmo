@@ -115,6 +115,11 @@ private fun SignedInApp(app: TravelmoApplication, user: SignedIn) {
                     onBack = { backStack.removeLastOrNull() },
                     onAddBooking = { defaultDate -> backStack.add(BookingForm(key.tripId, null, defaultDate)) },
                     onEditBooking = { segmentId -> backStack.add(BookingForm(key.tripId, segmentId, "")) },
+                    // A merge lands on the trip the bookings went to, in place of the one that is gone.
+                    onMerged = { targetId ->
+                        backStack.removeLastOrNull()
+                        backStack.add(TripDetail(targetId))
+                    },
                 )
             }
             entry<BookingForm> { key ->

@@ -70,4 +70,27 @@ class TripsTest {
         formatDateRange("2026-12-30", "2027-01-02") shouldBe "30 Dec 2026 – 2 Jan 2027"
         formatDateRange("2026-12-12", "2026-12-12") shouldBe "12 Dec 2026"
     }
+
+    @Test
+    fun `the bookings' span feeds both bounds from both ends, and fitting is offered only when it differs`() {
+        val trip = Trip("t", "T", "2026-12-10", "2026-12-20", "u")
+        val flight = Segment("f", "t", SegmentType.FLIGHT, "Home", "2026-12-15T23:30:00+13:00", "2026-12-15T09:00:00-08:00")
+        val stay = Segment("s", "t", SegmentType.LODGING, "Stay", "2026-12-12T15:00:00+00:00", "2026-12-14T11:00:00+00:00")
+        segmentDateRange(listOf(flight, stay)) shouldBe ("2026-12-12" to "2026-12-15")
+        segmentDateRange(emptyList()) shouldBe null
+        fittedRange(trip, listOf(flight, stay)) shouldBe ("2026-12-12" to "2026-12-15")
+        fittedRange(trip.copy(start = "2026-12-12", end = "2026-12-15"), listOf(flight, stay)) shouldBe null
+        fittedRange(trip, emptyList()) shouldBe null
+    }
+
+    @Test
+    fun `other trips leave out this one and any being deleted, by start`() {
+        val trips = listOf(
+            Trip("b", "B", "2026-12-01", "2026-12-02", "u"),
+            Trip("a", "A", "2026-11-01", "2026-11-02", "u"),
+            Trip("gone", "Gone", "2026-10-01", "2026-10-02", "u", deleting = true),
+            Trip("me", "Me", "2026-09-01", "2026-09-02", "u"),
+        )
+        otherTrips(trips, "me").map { it.id } shouldBe listOf("a", "b")
+    }
 }

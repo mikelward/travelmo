@@ -86,7 +86,7 @@ class ScreenScreenshotTest {
     @Test
     fun trip_detail_warning() {
         val viewModel = viewModel()
-        capture("trip_detail_warning") { TripDetailScreen(viewModel = viewModel, tripId = "dublin", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}) }
+        capture("trip_detail_warning") { TripDetailScreen(viewModel = viewModel, tripId = "dublin", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
     @Test
@@ -98,13 +98,25 @@ class ScreenScreenshotTest {
     @Test
     fun trip_detail() {
         val viewModel = viewModel()
-        capture("trip_detail") { TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}) }
+        capture("trip_detail") { TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+    }
+
+    @Test
+    fun trip_manage() {
+        val viewModel = viewModel()
+        capture("trip_manage") { TripDetailScreen(viewModel = viewModel, tripId = "paris", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+    }
+
+    @Test
+    fun trip_deleting() {
+        val viewModel = viewModel()
+        capture("trip_deleting") { TripDetailScreen(viewModel = viewModel, tripId = "cornwall", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
     @Test
     fun trip_detail_shared() {
         val viewModel = viewModel()
-        capture("trip_detail_shared") { TripDetailScreen(viewModel = viewModel, tripId = "edinburgh", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}) }
+        capture("trip_detail_shared") { TripDetailScreen(viewModel = viewModel, tripId = "edinburgh", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
     @Test

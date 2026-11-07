@@ -43,13 +43,13 @@ data class TripListState(
     val warnings: List<ListWarning> = emptyList(),
 )
 
-/** A booking save as the form that asked for it sees it. */
-sealed interface BookingSave {
-    data object Busy : BookingSave
+/** How a write asked for by a screen is going, as that screen sees it. */
+sealed interface Outcome {
+    data object Busy : Outcome
 
-    data object Done : BookingSave
+    data object Done : Outcome
 
-    data class Failed(val message: String) : BookingSave
+    data class Failed(val message: String) : Outcome
 }
 
 /** How many upcoming trips get a segment listener for their "next up" line, as on the web. */
@@ -112,38 +112,57 @@ class TripsViewModel(
 
     fun segments(tripId: String): Flow<List<Segment>> = store.segments(tripId)
 
-    private val _bookingSaves = MutableStateFlow<Map<String, BookingSave>>(emptyMap())
+    private val _outcomes = MutableStateFlow<Map<String, Outcome>>(emptyMap())
 
-    /** Each form's booking save, by the form's token, until that form has seen its outcome. */
-    val bookingSaves: StateFlow<Map<String, BookingSave>> = _bookingSaves.asStateFlow()
+    /** Each write asked for by a screen, by the token it chose, until that screen has seen the outcome. */
+    val outcomes: StateFlow<Map<String, Outcome>> = _outcomes.asStateFlow()
 
     /**
-     * Saves a booking for the form with `token`, in this scope rather than
-     * the form's: a rotation mid-save recreates the form but not this, so the
-     * outcome still reaches it, and a second tap on that form while its save
-     * is in flight does nothing rather than write a second booking. Saves are
-     * kept per form, so one form's pending save never swallows another's.
+     * Runs a write in this scope rather than the screen's: a rotation
+     * recreates the screen but not this, so the outcome still reaches it
+     * under its token, and a second tap while the write is in flight does
+     * nothing rather than write twice. Outcomes are kept per token, so one
+     * screen's pending write never swallows another's.
      */
-    fun saveSegment(token: String, tripId: String, draft: SegmentDraft, existingId: String?) {
-        if (_bookingSaves.value[token] is BookingSave.Busy) return
-        _bookingSaves.update { it + (token to BookingSave.Busy) }
+    private fun run(token: String, block: suspend () -> Unit) {
+        if (_outcomes.value[token] is Outcome.Busy) return
+        _outcomes.update { it + (token to Outcome.Busy) }
         viewModelScope.launch {
             val outcome = try {
-                store.saveSegment(tripId, draft, existingId)
-                BookingSave.Done
+                block()
+                Outcome.Done
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                BookingSave.Failed(e.message ?: e.javaClass.simpleName)
+                Outcome.Failed(e.message ?: e.javaClass.simpleName)
             }
-            _bookingSaves.update { it + (token to outcome) }
+            _outcomes.update { it + (token to outcome) }
         }
     }
 
-    /** The form with `token` has acted on its save's outcome. */
-    fun bookingSaveSeen(token: String) {
-        _bookingSaves.update { it - token }
+    /** The screen with `token` has acted on its write's outcome. */
+    fun outcomeSeen(token: String) {
+        _outcomes.update { it - token }
     }
 
-    suspend fun deleteSegment(tripId: String, segmentId: String) = store.deleteSegment(tripId, segmentId)
+    fun saveSegment(token: String, tripId: String, draft: SegmentDraft, existingId: String?) = run(token) { store.saveSegment(tripId, draft, existingId) }
+
+    fun deleteSegment(token: String, tripId: String, segmentId: String) = run(token) { store.deleteSegment(tripId, segmentId) }
+
+    fun moveSegment(token: String, fromTripId: String, segmentId: String, toTripId: String) = run(token) { store.moveSegment(fromTripId, segmentId, toTripId) }
+
+    fun renameTrip(token: String, tripId: String, title: String) = run(token) {
+        if (title.isBlank()) throw IllegalArgumentException("Give the trip a name")
+        store.renameTrip(tripId, title)
+    }
+
+    fun fitTripDates(token: String, tripId: String) = run(token) { store.fitTripDates(tripId) }
+
+    fun shareTrip(token: String, tripId: String, email: String) = run(token) { store.shareTrip(tripId, email) }
+
+    fun unshareTrip(token: String, tripId: String, email: String) = run(token) { store.unshareTrip(tripId, email) }
+
+    fun deleteTrip(token: String, tripId: String) = run(token) { store.deleteTrip(tripId) }
+
+    fun mergeTrips(token: String, sourceId: String, targetId: String) = run(token) { store.mergeTrips(sourceId, targetId) }
 }

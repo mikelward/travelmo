@@ -80,3 +80,28 @@ fun timesLine(segment: Segment): String {
 /** "Avanti West Coast · Ref ABC123", or nothing. */
 fun referenceLine(segment: Segment): String? =
     listOfNotNull(segment.provider, segment.confirmation?.let { "Ref $it" }).takeIf { it.isNotEmpty() }?.joinToString(" · ")
+
+/**
+ * The calendar span of these bookings, both endpoints feeding both bounds
+ * (across the date line a flight can land on an earlier local date than it
+ * departed); null when there are none.
+ */
+fun segmentDateRange(segments: List<Segment>): Pair<String, String>? {
+    var start: String? = null
+    var end: String? = null
+    for (segment in segments) {
+        for (date in listOf(localDate(segment.start), localDate(segment.end ?: segment.start))) {
+            if (start == null || date < start) start = date
+            if (end == null || date > end) end = date
+        }
+    }
+    return if (start == null || end == null) null else start to end
+}
+
+/** Whether "Fit dates to bookings" has anything to do: the bookings span less than the trip. */
+fun fittedRange(trip: Trip, segments: List<Segment>): Pair<String, String>? =
+    segmentDateRange(segments)?.takeIf { it.first != trip.start || it.second != trip.end }
+
+/** The other trips a booking, or a whole trip, can move to: every other trip the viewer sees that is not being deleted, by start. */
+fun otherTrips(trips: List<Trip>, tripId: String): List<Trip> =
+    trips.filter { it.id != tripId && !it.deleting }.sortedBy { it.start }

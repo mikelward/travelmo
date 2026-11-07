@@ -99,4 +99,34 @@ class FakeTripStore(
     override suspend fun deleteSegment(tripId: String, segmentId: String) {
         deleted += tripId to segmentId
     }
+    val renamed = mutableListOf<Pair<String, String>>()
+    val fitted = mutableListOf<String>()
+    val sharedWith = mutableListOf<Pair<String, String>>()
+    val unshared = mutableListOf<Pair<String, String>>()
+    val deletedTrips = mutableListOf<String>()
+    val moved = mutableListOf<Triple<String, String, String>>()
+    val merged = mutableListOf<Pair<String, String>>()
+    override suspend fun renameTrip(tripId: String, title: String) {
+        renamed += tripId to title
+    }
+    override suspend fun fitTripDates(tripId: String): Boolean {
+        fitted += tripId
+        return true
+    }
+    override suspend fun shareTrip(tripId: String, email: String) {
+        sharedWith += tripId to email
+    }
+    override suspend fun unshareTrip(tripId: String, email: String) {
+        unshared += tripId to email
+    }
+    override suspend fun deleteTrip(tripId: String) {
+        deletedTrips += tripId
+    }
+    override suspend fun moveSegment(fromTripId: String, segmentId: String, toTripId: String) {
+        moved += Triple(fromTripId, segmentId, toTripId)
+    }
+    override suspend fun mergeTrips(sourceId: String, targetId: String): Int {
+        merged += sourceId to targetId
+        return segments[sourceId].orEmpty().size
+    }
 }
