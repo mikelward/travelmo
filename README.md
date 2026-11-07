@@ -77,6 +77,17 @@ cd apps/android
 ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
+Every screen is rendered under Robolectric to `apps/android/app/snapshots/`
+by `ScreenScreenshotTest` (fixtures, a clock stopped at 1 November 2026, a
+phone's size, light and dark), and CI fails when a render differs from the
+committed PNG, so a UI change ships with its re-recorded screenshots and
+the diff shows in the PR (a screenshot run builds with the fixed test
+version CI uses, so the Settings screen reads the same on both):
+
+```sh
+./gradlew :app:testDebugUnitTest --tests app.travelmo.ui.ScreenScreenshotTest -Proborazzi.test.record
+```
+
 The app signs in with Google through Firebase Auth, so it needs the Firebase
 project's Android app: in the Firebase console add an Android app with the
 package `app.travelmo` (and `app.travelmo.debug` for debug builds) and the
