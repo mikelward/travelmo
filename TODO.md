@@ -110,7 +110,8 @@
       (`packages/core/scripts/visas.mjs`, rerun by hand to refresh).
 - [x] Reminders by email: an opt-in in Settings and a daily job that mails
       the document and entry warnings for trips within a month, each once.
-- [ ] Reminders by web push, the same content, for people who allow them.
+- [x] Reminders by web push: a switch per browser in Settings, the same
+      news as notifications, one per trip, from the same daily job.
 - [x] Ratings and favorites: one to five stars and a heart on a booking,
       and a "Favorite places" list on Reports linking back to the trips.
 - [x] Android mockups, round three: the calendar as a fourth navigation
@@ -281,6 +282,18 @@ Guesses made on autopilot; change any of them freely.
   entry lines mailed are only those needing action, while the trip page
   shows every country. The job is the fourth Cloud Scheduler job (about ten
   cents a month beyond the free three) rather than a fold into another.
+- Reminders by push use the Web Push standard (VAPID keys the parser holds,
+  the browsers' own push services, which charge nothing) through the
+  `web-push` library (MPL-2.0, file-level copyleft, used unmodified) rather
+  than Firebase Cloud Messaging, which would add an SDK and a project key to
+  the client for the same delivery. A subscription is per browser, written
+  by that browser under the user, and the switch in Settings is per browser
+  too; `reminders.push` on the user document follows the last browser out.
+  Both channels send the same lines, a line is marked sent only once every
+  channel that day took it, so a failed push after a sent email repeats the
+  email tomorrow rather than losing the notification; a subscription the
+  push service calls gone is dropped on the spot. One notification per trip,
+  tagged by trip so a later one replaces it, with a day to live.
 - Entry requirements come from the Passport Index dataset on GitHub
   (imorte/passport-index-data, MIT; it is compiled from passportindex.org,
   whose own terms the dataset does not state), the only open table found
