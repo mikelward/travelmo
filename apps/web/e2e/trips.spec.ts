@@ -46,7 +46,7 @@ test("the owner sees an imported trip, shares it, and the partner can add a book
   await expect(zone.first()).toHaveValue("Europe/London");
   await page.getByPlaceholder("JFK", { exact: true }).fill("DUB");
   await expect(zone.nth(1)).toHaveValue("Europe/Dublin");
-  await page.getByRole("button", { name: "Add" }).click();
+  await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page.getByText("FR 123 MAN to DUB", { exact: true })).toBeVisible();
   await expect(page.getByTestId("trip-dates")).toContainText("12–15 Dec 2026");
 });

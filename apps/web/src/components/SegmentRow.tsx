@@ -38,6 +38,59 @@ function endLabel(segment: Segment): string | undefined {
 
 const sourceKinds: Record<SourceRef["kind"], string> = { gmail: "Email", tripit: "TripIt", ics: "Calendar" };
 
+const plural = (n: number) => (n === 1 ? "1 star" : `${n} stars`);
+
+// The traveler's verdict: one to five stars (tapping the current rating
+// clears it) and a heart for a favorite. Read-only for a viewer who cannot
+// edit, and absent when there is nothing to show them.
+function Verdict({ segment, onRate, onFavorite }: { segment: Segment; onRate?: (rating: number | null) => void; onFavorite?: (favorite: boolean) => void }) {
+  const rating = segment.rating ?? 0;
+  const favorite = segment.favorite === true;
+  if (!onRate && !onFavorite && !rating && !favorite) return null;
+  const starClass = (n: number) => (n <= rating ? "text-amber-500" : "text-zinc-300 dark:text-zinc-700");
+  return (
+    <p className="mt-1 flex items-center gap-1 text-sm" data-testid="segment-verdict">
+      <span role="group" aria-label={rating ? `Rated ${plural(rating)}` : "Not rated"} className="flex">
+        {[1, 2, 3, 4, 5].map((n) =>
+          onRate ? (
+            <button
+              key={n}
+              type="button"
+              aria-label={n === rating ? `Clear the rating` : `Rate ${plural(n)}`}
+              aria-pressed={n <= rating}
+              onClick={() => onRate(n === rating ? null : n)}
+              className={`${starClass(n)} hover:text-amber-600`}
+            >
+              ★
+            </button>
+          ) : (
+            <span key={n} aria-hidden className={starClass(n)}>
+              ★
+            </span>
+          ),
+        )}
+      </span>
+      {onFavorite ? (
+        <button
+          type="button"
+          aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
+          aria-pressed={favorite}
+          onClick={() => onFavorite(!favorite)}
+          className={`ml-1 ${favorite ? "text-rose-500" : "text-zinc-300 hover:text-rose-400 dark:text-zinc-700"}`}
+        >
+          ♥
+        </button>
+      ) : (
+        favorite && (
+          <span className="ml-1 text-rose-500" aria-label="Favorite">
+            ♥
+          </span>
+        )
+      )}
+    </p>
+  );
+}
+
 // Every email, TripIt trip or calendar event the booking was read from,
 // including ones dropped as duplicates of it: a second room, or a detail
 // the extraction left out, is one click away.
@@ -76,6 +129,8 @@ export function SegmentRow({
   onMove,
   emailLinks,
   programs,
+  onRate,
+  onFavorite,
 }: {
   segment: Segment;
   onEdit?: () => void;
@@ -86,6 +141,9 @@ export function SegmentRow({
   emailLinks?: EmailLinks;
   // The viewer's loyalty programs this booking's provider belongs to.
   programs?: readonly ProfileEntry[];
+  // Stars and the favorite mark; without these the row only shows them.
+  onRate?: (rating: number | null) => void;
+  onFavorite?: (favorite: boolean) => void;
 }) {
   const route = [place(segment.origin), place(segment.destination)].filter(Boolean).join(" → ");
   // Addresses an address pick recorded, under the route they belong to.
@@ -114,6 +172,7 @@ export function SegmentRow({
           </p>
         )}
         {segment.notes && <p className="mt-1 whitespace-pre-line text-xs text-zinc-500">{segment.notes}</p>}
+        <Verdict segment={segment} {...(onRate ? { onRate } : {})} {...(onFavorite ? { onFavorite } : {})} />
         <Sources segment={segment} {...(emailLinks ? { emailLinks } : {})} />
         {segment.sender && (
           <p className="mt-1 text-xs text-zinc-500">

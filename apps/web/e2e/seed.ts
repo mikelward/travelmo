@@ -129,6 +129,11 @@ export async function seedTravelProfile(uid: string, profile: Omit<TravelProfile
   await db.doc(paths.travelProfile(uid)).set({ ownerUid: uid, ...profile });
 }
 
+// A change made elsewhere (another tab, a sharee) while a page is open.
+export async function updateSegment(tripId: string, segmentId: string, data: Partial<Segment>): Promise<void> {
+  await db.doc(paths.segment(tripId, segmentId)).update(data);
+}
+
 // A trip's bookings as stored, for what the page does not show.
 export async function readSegments(tripId: string): Promise<Segment[]> {
   const snap = await db.collection(paths.segments(tripId)).orderBy("start").get();

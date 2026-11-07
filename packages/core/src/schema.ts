@@ -86,6 +86,10 @@ export const Segment = ExtractedSegment.extend({
   // Domain the booking email came from, so a trip page can offer to always
   // import that sender.
   sender: z.string().optional(),
+  // The traveler's own verdict, set on the trip page: one to five stars,
+  // and whether the place is a favorite. Never set by an import.
+  rating: z.number().int().min(1).max(5).optional(),
+  favorite: z.boolean().optional(),
   createdAt: isoDateTime,
   updatedAt: isoDateTime,
 });
