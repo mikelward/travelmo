@@ -44,7 +44,7 @@ export async function seedTrip(ownerUid: string, tripId: string, stayExtra: Part
 
 // An imported flight whose stored offset is not the one its airport's zone
 // would give: an edit must keep it.
-export async function seedFlight(tripId: string): Promise<Segment> {
+export async function seedFlight(tripId: string, extra: Partial<Segment> = {}): Promise<Segment> {
   const flight: Segment = {
     id: `${tripId}-flight`,
     tripId,
@@ -59,6 +59,7 @@ export async function seedFlight(tripId: string): Promise<Segment> {
     sender: "airline.example",
     createdAt: "2026-11-01T00:00:00Z",
     updatedAt: "2026-11-01T00:00:00Z",
+    ...extra,
   };
   await db.doc(paths.segment(tripId, flight.id)).set(flight);
   return flight;
