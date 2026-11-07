@@ -20,6 +20,8 @@
   --scrim: rgba(0, 0, 0, 0.32);
   --inverse-surface: #18181b;
   --inverse-on-surface: #fafafa;
+  --shared: #7c3aed;
+  --place: #e11d48;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
   --font: "Geist", Inter, Roboto, system-ui, sans-serif;
   position: relative;
@@ -55,6 +57,8 @@
   --scrim: rgba(0, 0, 0, 0.5);
   --inverse-surface: #e4e4e7;
   --inverse-on-surface: #18181b;
+  --shared: #a78bfa;
+  --place: #fb7185;
 }
 .phone * { box-sizing: border-box; }
 .phone a { color: inherit; text-decoration: none; }
@@ -385,7 +389,7 @@
 .nav-bar {
   flex: none;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   height: 80px;
   padding: 12px 8px 16px;
   background: var(--surface-container);
@@ -412,6 +416,8 @@
 .table th { text-align: left; font-weight: 400; color: var(--on-surface-variant); padding: 4px 0; border-bottom: 1px solid var(--outline-variant); }
 .table th.num, .table td.num { text-align: right; }
 .table td { padding: 8px 0; border-bottom: 1px solid var(--outline-variant); }
+.table th + th, .table td + td { padding-left: 12px; }
+.table .nowrap { white-space: nowrap; }
 .table tr:last-child td { border-bottom: 0; }
 .warning { font-size: 14px; line-height: 20px; color: var(--tertiary); }
 .warning.before { color: var(--error); }
@@ -445,3 +451,15 @@
 .option { padding: 10px 16px; display: grid; gap: 2px; }
 .option.active { background: var(--surface-container); }
 .option .secondary { font-size: 12px; line-height: 16px; color: var(--muted); }
+
+/* Calendar: a month of weeks, Monday first, each trip a bar across its days. */
+.month { margin: 12px 16px 0; border: 1px solid var(--outline-variant); border-radius: 12px; overflow: hidden; }
+.weekdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); text-align: center; font-size: 11px; line-height: 16px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--on-surface-variant); padding: 6px 0; }
+.week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-auto-rows: min-content; border-top: 1px solid var(--outline-variant); min-height: 92px; padding-bottom: 6px; row-gap: 2px; }
+.week .day { grid-row: 1; font-size: 12px; line-height: 16px; padding: 6px 6px 2px; }
+.week .day.out { color: var(--muted); }
+.week .day .today { display: inline-block; border-radius: 999px; background: var(--primary); color: var(--on-primary); padding: 0 6px; font-weight: 500; }
+.week .bar { grid-row: 2; margin: 0 1px; padding: 2px 6px; border-radius: 6px; font-size: 12px; line-height: 16px; color: var(--on-primary); background: var(--primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.week .bar.shared { background: var(--shared); color: #ffffff; }
+.week .bar.before { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.week .bar.after { border-top-right-radius: 0; border-bottom-right-radius: 0; }
