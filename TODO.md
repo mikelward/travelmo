@@ -105,6 +105,12 @@
       status) under its provider on the trip page.
 - [x] Calendar view: trips as bars on a month grid (`/calendar`), linking
       to the trip, with previous, next and today.
+- [x] Entry requirements on a trip page: what each traveler's passport needs
+      in each country of the trip, from the Passport Index dataset
+      (`packages/core/scripts/visas.mjs`, rerun by hand to refresh).
+- [ ] Reminders by email: an opt-in in Settings and a daily job that mails
+      the document and entry warnings for trips within a month.
+- [ ] Reminders by web push, the same content, for people who allow them.
 - [x] Ratings and favorites: one to five stars and a heart on a booking,
       and a "Favorite places" list on Reports linking back to the trips.
 - [x] Android mockups, round three: the calendar as a fourth navigation
@@ -266,6 +272,17 @@ Guesses made on autopilot; change any of them freely.
   revision is the one it read, so a hand edit is never overwritten; an entry
   older than thirty days is dropped unasked, and a lookup error keeps the
   entry for another day. The job takes the third free Cloud Scheduler slot.
+- Entry requirements come from the Passport Index dataset on GitHub
+  (imorte/passport-index-data, MIT; it is compiled from passportindex.org,
+  whose own terms the dataset does not state), the only open table found
+  that covers every passport and destination; the datahub.io set (CC BY) was
+  not checked. It is fetched into a committed 42 KB table rather than read
+  live, so the page works offline and never calls out, and refreshed by hand
+  with `pnpm --filter @travelmo/core visas` (the upstream updates about
+  monthly; a quarterly rerun is enough, and the box shows the month). The
+  easiest of a traveler's passports is chosen; a held visa that lasts the
+  trip counts as covering the country; the purpose and length of stay are
+  not modeled, which the box says.
 - Ratings and favorites live on the booking (the stay, the tour, the
   flight), not on a separate place record: there is no place entity, and
   the booking is where the traveler was. Anyone who can edit the trip can

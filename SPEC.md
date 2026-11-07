@@ -191,6 +191,23 @@ nothing shows until it has. The warning names the document's kind and date,
 never its number. The list checks the trips it already reads bookings for
 (under way and the next three); every trip page checks its own.
 
+The trip page also says what each traveler's passport needs to enter the
+trip's countries (`packages/core/src/visas.ts`): visa-free with the days
+allowed, visa on arrival, an electronic travel authorization, an e-visa, a
+visa, or no admission, for every country of the trip but the passport's own,
+with the easiest of the traveler's valid passports chosen (more visa-free
+days first) and a visa the profile holds for the country noted when it lasts
+the trip. The rules are the Passport Index dataset
+(https://github.com/imorte/passport-index-data, MIT, compiled from
+passportindex.org), generated into `packages/core/src/visaRules.json` by
+`packages/core/scripts/visas.mjs` as one character per passport and
+destination (42 KB, loaded with the airport table only by a trip page that
+needs it) and refreshed by hand: the file records the day it was fetched, the
+box shows that month and says that rules change and depend on the stay, so
+the embassy has the last word. Lines needing action (an authorization, an
+e-visa, a visa, no admission) stand out; a visa the traveler holds covers
+them. Reminders by email carry the same lines.
+
 ## Editing by hand
 
 The owner and anyone the trip is shared with can add, edit and delete
@@ -689,6 +706,6 @@ Native apps (React Native + Expo in `apps/mobile`; the Android screens are
 mocked up in `design/android/`, Material 3 with this palette, as the reference
 for the port), check-in/out surfacing,
 itinerary ideas, reminders sent
-by email or push rather than shown in the app, which visas a trip needs,
+by email or push rather than shown in the app,
 other mail providers and forward-to-import. Further import
 sources share the pipeline: Google Calendar; `IMPORT.md` compares them and maps their fields.
