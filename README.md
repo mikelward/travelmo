@@ -3,7 +3,7 @@
 Your trips in one place, imported from your inbox. A TripIt-style planner:
 connect Gmail, and booking confirmations become trips with flights, trains,
 stays and rentals, grouped into now, upcoming and past. Share a trip with a
-partner by email, see them month by month on a calendar, rate the places you stayed and mark favorites, and see warnings when a passport or visa runs out too close to a trip. Reports count the days spent in each country and the trips
+partner by email, see them month by month on a calendar, rate the places you stayed and mark favorites, see what each country of a trip asks of your passport, and see warnings when a passport or visa runs out too close to a trip. Reports count the days spent in each country and the trips
 each year, on a map of where you've been, and a calendar link puts your trips
 in Google or Apple Calendar. A TripIt history comes in from the JSON export TripIt
 support sends on request.
@@ -45,7 +45,10 @@ pnpm --filter @travelmo/web test:e2e
 
 `pnpm --filter @travelmo/core airports` regenerates the airport tables (time
 zone, and country and coordinates) from the OpenFlights data (ODbL) packaged in
-`airport-data`, and `pnpm --filter @travelmo/web worldmap` the reports page's
+`airport-data`, `pnpm --filter @travelmo/core visas` the entry-requirements
+table from the Passport Index dataset (MIT, fetched from GitHub; rerun it now
+and then, since rules change and the trip page shows the month it was
+fetched), and `pnpm --filter @travelmo/web worldmap` the reports page's
 world map from Natural Earth (public domain) packaged in `world-atlas`; the
 results are committed, so a normal build needs nothing.
 
