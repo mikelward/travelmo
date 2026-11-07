@@ -1,5 +1,4 @@
-import { entryLabel, formatDate, needsAction, type VisaTable } from "@travelmo/core";
-import { countryName } from "@/lib/countries";
+import { entryLine, needsAction, type VisaTable } from "@travelmo/core";
 import type { PersonEntry } from "@/lib/visas";
 
 const monthYear = (date: string) => new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`));
@@ -14,21 +13,15 @@ export function EntryRequirements({ entries, fetched }: { entries: readonly Pers
       {entries.map(({ person, entry }) => (
         <ul key={person.uid} className="mt-2 space-y-1">
           {entry.needs.map((need) => {
-            const whose = person.own ? "your" : `${person.email ?? "a fellow traveler"}’s`;
-            const action = needsAction(need.best.rule.kind);
-            const covered = need.visa !== undefined;
+            const action = needsAction(need.best.rule.kind) && !need.visa;
             return (
               <li
                 key={need.country}
-                className={action && !covered ? "text-amber-800 dark:text-amber-300" : "text-zinc-600 dark:text-zinc-400"}
+                className={action ? "text-amber-800 dark:text-amber-300" : "text-zinc-600 dark:text-zinc-400"}
                 data-country={need.country}
                 data-kind={need.best.rule.kind}
               >
-                <span className="font-medium">{countryName(need.country)}</span>: {entryLabel(need.best.rule).toLowerCase()} with {whose}{" "}
-                {countryName(need.best.passport)} passport
-                {covered &&
-                  need.visa &&
-                  ` · ${person.own ? "you hold" : `${person.email ?? "they"} holds`} a visa until ${formatDate(need.visa.expires, "en-GB", { weekday: undefined, year: "numeric" })}`}
+                {entryLine(person, need)}
               </li>
             );
           })}

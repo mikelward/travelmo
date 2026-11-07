@@ -549,6 +549,43 @@ function PatternsSection({ user }: { user: User }) {
   );
 }
 
+// Reminders by email before a trip: an opt-in, mailed to the signed-in
+// address by the parser's daily job.
+function RemindersSection({ user }: { user: User }) {
+  const profile = useProfile(user.uid);
+  const [status, setStatus] = useState<string>();
+  // The box follows the tap at once; the stored value catches up.
+  const [chosen, setChosen] = useState<boolean>();
+  const on = chosen ?? profile?.reminders?.email === true;
+  const toggle = async (email: boolean) => {
+    setStatus(undefined);
+    setChosen(email);
+    try {
+      await setDoc(doc(firestore(), paths.user(user.uid)), { reminders: { email } }, { merge: true });
+      setStatus(email ? "On" : "Off");
+    } catch (e) {
+      setChosen(undefined);
+      setStatus((e as Error).message);
+    }
+  };
+  return (
+    <section className="mt-10">
+      <h2 className="text-lg font-medium">Reminders</h2>
+      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+        A month before a trip, and as things change, an email about passports or visas that run out too soon and what each
+        country asks of your passport: the same warnings the trip page shows, each sent once.
+      </p>
+      <label className="mt-3 flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={on} onChange={(e) => void toggle(e.target.checked)} />
+        <span>
+          Email me before a trip{user.email ? <span className="text-zinc-500"> (to {user.email})</span> : null}
+        </span>
+      </label>
+      {status && <p className="mt-2 text-sm text-zinc-500">{status}</p>}
+    </section>
+  );
+}
+
 const outcomeLabels: Record<ParsedMessage["outcome"], string> = {
   processing: "Processing",
   filtered: "Skipped before reading",
@@ -775,6 +812,7 @@ export default function SettingsPage() {
             <GoogleCalendarSection user={user} />
           </Suspense>
           <CalendarExportSection user={user} />
+          <RemindersSection user={user} />
           <PatternsSection user={user} />
           <ReviewSection user={user} />
         </>

@@ -200,6 +200,12 @@ describe("users", () => {
     await assertFails(setDoc(doc(as(stranger), paths.user(stranger.uid)), { gmail: { emailAddress: "forged@example.com" } }));
   });
 
+  it("a user may turn reminders on, but not read or write what was mailed", async () => {
+    await assertSucceeds(setDoc(doc(as(owner), paths.user(owner.uid)), { reminders: { email: true } }, { merge: true }));
+    await assertFails(getDoc(doc(as(owner), paths.reminderLog(owner.uid, "t1"))));
+    await assertFails(setDoc(doc(as(owner), paths.reminderLog(owner.uid, "t1")), { sent: [], at: "2026-11-07T00:00:00Z" }));
+  });
+
   it("a user may not forge a Google Calendar connection or read its token", async () => {
     const forged = { emailAddress: "forged@example.com", connectedAt: "2026-11-01T00:00:00Z", calendars: [] };
     await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { googleCalendar: forged }, { merge: true }));

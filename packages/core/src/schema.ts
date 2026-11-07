@@ -163,12 +163,17 @@ export const GoogleCalendarState = GoogleCalendarConnection.extend({
 });
 export type GoogleCalendarState = z.infer<typeof GoogleCalendarState>;
 
+// How the user wants reminders before a trip; the owner sets it in Settings.
+export const ReminderSettings = z.object({ email: z.boolean() });
+export type ReminderSettings = z.infer<typeof ReminderSettings>;
+
 export const UserProfile = z.object({
   email: z.string().optional(),
   displayName: z.string().optional(),
   photoURL: z.string().optional(),
   gmail: GmailConnection.optional(),
   googleCalendar: GoogleCalendarConnection.optional(),
+  reminders: ReminderSettings.optional(),
 });
 export type UserProfile = z.infer<typeof UserProfile>;
 

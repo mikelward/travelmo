@@ -1,4 +1,5 @@
-import { countryCodeOf } from "./countries";
+import { countryCodeOf, countryName } from "./countries";
+import { formatDate } from "./format";
 import { daysBetween } from "./trips";
 import { tripPlaces, type PlaceLookup } from "./reports";
 import type { ExtractedSegment, ProfileEntry, TravelProfile, Trip } from "./schema";
@@ -173,4 +174,26 @@ export function tripWarnings(
   return people
     .filter((p) => onTrip(p, trip))
     .flatMap((person) => documentWarnings(person.documents, trip, today, places).map((warning) => ({ person, warning })));
+}
+
+function documentName(d: TravelDocument): string {
+  if (d.kind === "passport") return "passport";
+  if (d.kind === "visa") return d.country ? `${countryName(d.country)} visa` : "visa";
+  return `“${d.title}”`;
+}
+
+// The warning as the app and its reminders word it: whose document, which,
+// when it runs out, and how that bears on the trip. Never the number.
+export function warningText({ person, warning }: PersonWarning, today: string): string {
+  const whose = person.own ? "Your" : `${person.email ?? "A fellow traveler"}’s`;
+  const { document: d, when, daysAfterTrip } = warning;
+  const date = formatDate(d.expires, "en-GB", { weekday: undefined, year: "numeric" });
+  if (when === "before") {
+    return d.expires < today
+      ? `${whose} ${documentName(d)} expired on ${date}.`
+      : `${whose} ${documentName(d)} expires on ${date}, before this trip ends.`;
+  }
+  const months = Math.floor(daysAfterTrip / 30.44);
+  const after = daysAfterTrip < 31 ? `${daysAfterTrip} day${daysAfterTrip === 1 ? "" : "s"}` : `${months} month${months === 1 ? "" : "s"}`;
+  return `${whose} ${documentName(d)} expires on ${date}, ${after} after this trip ends; many countries require six months’ validity.`;
 }
