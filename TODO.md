@@ -129,8 +129,12 @@
       its screenshot diff.
 - [x] Android app: add, edit and delete a booking, with the web's form and
       save; a delete asks first.
+- [x] Android app: the Profile tab (documents, loyalty table and details,
+      travelers, sharing lists), document warnings once at the top of the
+      list and on trip pages, upcoming cards kept to their dates, sources and
+      sender on one line, loyalty lines on bookings.
 - [ ] Android app, next: trip edits (rename, fit dates, share, delete,
-      move and merge), reports, the profile, reminders settings; the shared `androidlog` and
+      move and merge), reports, profile sharing, reminders settings; the shared `androidlog` and
       `androidzoom` libraries; release signing,
       the Play internal track and `scripts/publish-github-release.sh`
       (byte-identical across the Android apps); the weekly Gradle batch

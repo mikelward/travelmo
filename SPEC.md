@@ -788,7 +788,15 @@ fields over the stored document, so what the form does not edit (sources,
 sender, rating, favorite, a place's city and spot while its name holds)
 survives, and widens the trip's dates to hold the booking. A delete asks
 first, since a phone has no undo. A known airport code sets its end's zone,
-from the web's generated airport table read as a resource. CI builds it beside the web app
+from the web's generated airport table read as a resource. The Profile tab
+shows the travel profile as `/profile` does (documents and travelers folded,
+the loyalty programs at a glance and in full, who it is shared with, and the
+profiles shared with the viewer; sharing itself stays on the web), and the
+same document warnings as the web stand in one card at the top of the trip
+list and on trip pages, from the same logic in `:core` with the
+airport-country table read as a resource; as on the web, an upcoming card is
+its title and dates, and a booking row's sources and sender share a line; a
+booking row carries the viewer's matching loyalty programs. CI builds it beside the web app
 (`ci / android`).
 
 ## Later
