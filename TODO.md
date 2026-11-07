@@ -103,6 +103,8 @@
 - [x] Loyalty programs at a glance: a table of account, balance and status
       on the profile page, and a booking's matching program (number and
       status) under its provider on the trip page.
+- [x] Calendar view: trips as bars on a month grid (`/calendar`), linking
+      to the trip, with previous, next and today.
 - [ ] A second chance for places an exhausted daily geocoding budget left
       without a country or a spot: a nightly sweep over recent bookings, or
       a retry on the next import of the same place.
@@ -252,6 +254,11 @@ Guesses made on autopilot; change any of them freely.
   only the viewer's own programs show on a booking, not a fellow
   traveler's. Balances are shown as imported, not fetched: TripIt's are a
   snapshot from its last sync.
+- The calendar shows trips, not bookings (a month of bars is readable; a
+  month of flights and check-ins is not, and bookings would need a listener
+  per trip), with weeks starting on Monday (the app's dates are en-GB) and
+  the month kept in page state rather than the URL. Lanes are laid out per
+  week, so a long trip may change lane from one week to the next.
 - Document reminders show in the app (trip page and trip card), not by
   email or push, which would need a scheduled job and a mail service. Six
   months is the margin for every passport, rather than a per-country table
