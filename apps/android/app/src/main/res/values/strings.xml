@@ -21,6 +21,14 @@
     <string name="staying_at">Staying at %1$s</string>
     <string name="settings">Settings</string>
 
+    <!-- Navigation bar and the calendar. -->
+    <string name="nav_trips">Trips</string>
+    <string name="nav_calendar">Calendar</string>
+    <string name="previous_month">Previous month</string>
+    <string name="next_month">Next month</string>
+    <string name="today">Today</string>
+    <string name="no_trips_in">No trips in %1$s.</string>
+
     <!-- Trip detail. -->
     <string name="back">Back</string>
     <string name="trip_loading">Loading…</string>
