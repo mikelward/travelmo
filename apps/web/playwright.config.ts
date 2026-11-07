@@ -13,6 +13,11 @@ export default defineConfig({
   // The tests share one emulator and clear it between them.
   workers: 1,
   reporter: process.env.CI ? "github" : "list",
+  // An assertion waits for a page that reads Firestore right after sign-in;
+  // on a shared CI runner that has taken over five seconds twice, for pages
+  // the change under test never touched. Fifteen is a wait for the same
+  // condition, not a retry: a wrong page still fails.
+  expect: { timeout: 15_000 },
   use: { baseURL: `http://localhost:${port}`, trace: "retain-on-failure" },
   webServer: {
     command: `pnpm build && pnpm exec next start --port ${port}`,
