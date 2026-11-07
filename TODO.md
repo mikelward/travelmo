@@ -105,9 +105,9 @@
       status) under its provider on the trip page.
 - [x] Calendar view: trips as bars on a month grid (`/calendar`), linking
       to the trip, with previous, next and today.
-- [ ] A second chance for places an exhausted daily geocoding budget left
-      without a country or a spot: a nightly sweep over recent bookings, or
-      a retry on the next import of the same place.
+- [x] A second chance for places an exhausted daily geocoding budget left
+      without a country or a spot: the import queues the booking and a daily
+      sweep (`/internal/geocode-sweep`, the third scheduler job) asks again.
 
 ## Decisions needing review
 
@@ -240,8 +240,8 @@ Guesses made on autopilot; change any of them freely.
   spot alone, with the country on the query, but such a lookup may use only
   half the daily budget so the countries the reports need come first; on the
   real export that is about 170 extra queries over 240, spread by the cap
-  over two days. A place the cap left without a spot gets no second chance
-  yet (new item above). Dots within about a hundred meters are one, under
+  over two days. A place the cap left without a spot is queued for the
+  daily sweep. Dots within about a hundred meters are one, under
   the first booking's name. Bookings imported before this change have no
   coordinates and stay off the map until re-imported.
 - Loyalty at a glance reads an entry's labeled fields by their usual names
@@ -254,6 +254,13 @@ Guesses made on autopilot; change any of them freely.
   only the viewer's own programs show on a booking, not a fellow
   traveler's. Balances are shown as imported, not fetched: TripIt's are a
   snapshot from its last sync.
+- The geocoding sweep is a queue the import writes to (one small document
+  per put-off booking), not a scan of every booking for missing fields,
+  which Firestore cannot query for and which would read everything daily.
+  It writes under the user's import lock and only when the booking's
+  revision is the one it read, so a hand edit is never overwritten; an entry
+  older than thirty days is dropped unasked, and a lookup error keeps the
+  entry for another day. The job takes the third free Cloud Scheduler slot.
 - The calendar shows trips, not bookings (a month of bars is readable; a
   month of flights and check-ins is not, and bookings would need a listener
   per trip), with weeks starting on Monday (the app's dates are en-GB) and

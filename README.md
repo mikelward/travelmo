@@ -125,12 +125,13 @@ One Google Cloud project holds everything.
    `gmail-dead-letter` topic and subscription that receive a notification the
    parser failed five times. Rerun it to change a setting.
 5. **Daily jobs**: `PROJECT=… PARSER_URL=https://<parser>
-   SCHEDULER_SA=<service account> deploy/scheduler.sh` creates two Cloud
+   SCHEDULER_SA=<service account> deploy/scheduler.sh` creates three Cloud
    Scheduler jobs that POST with an OIDC token from that service account
    (list it in `INTERNAL_CALLERS`): `/internal/renew-watches`, since Gmail
-   watches expire after seven days, and `/internal/poll-feeds`, which reads
-   every subscribed calendar feed. Three jobs per account are free; these are
-   two.
+   watches expire after seven days, `/internal/poll-feeds`, which reads
+   every subscribed calendar feed, and `/internal/geocode-sweep`, which asks
+   the geocoder again about the bookings a spent daily budget put off. Three
+   jobs per account are free; these are three.
 6. **Alerts**: `PROJECT=… CHANNEL=<notification channel> deploy/monitoring.sh`
    creates two alerting policies from `deploy/alerts/`: a failed watch renewal
    (the parser's `renew_watch_failed` log line) and a dead-lettered
