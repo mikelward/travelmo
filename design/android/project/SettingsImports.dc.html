@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings, imports and calendar</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./styles/travelmo.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+a{color:#171717}a:hover{color:#171717}
+</style>
+</helmet>
+<div class="phone" data-theme="light" style="width: 412px; height: 915px">
+  <div class="status-bar"><span>9:30</span><span class="glyphs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 22h20V2L2 22z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6c3.3 0 6.3 1.3 8.5 3.4L22 7.9C19.3 5.5 15.8 4 12 4S4.7 5.5 2 7.9l1.5 1.5C5.7 7.3 8.7 6 12 6zm0 5c1.9 0 3.6.7 4.9 1.9l1.5-1.5C16.7 9.9 14.4 9 12 9s-4.7.9-6.4 2.4l1.5 1.5C8.4 11.7 10.1 11 12 11zm0 5c.8 0 1.6.3 2.1.9L12 19l-2.1-2.1c.5-.6 1.3-.9 2.1-.9z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h-2V1h-4v2H8v18h8V3z"/></svg></span></div>
+<header class="app-bar"><div style="display:flex;align-items:center;gap:4px;flex:1"><a class="icon-button" href="TripList.dc.html" aria-label="Back"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg></a><div class="bar-title">Settings</div></div></header><main class="content"><section class="section"><h2 class="section-title">TripIt</h2><p class="help">Bring in your TripIt history from the JSON export TripIt support sends on request. You will see what is in it before anything is imported; importing the same file twice changes nothing.</p><a class="btn outlined" href="SettingsImports.dc.html">Choose file</a><p class="body-medium" style="margin-top: 12px">147 trips with 774 bookings (289 flights, 239 activities, 158 stays, 50 car rentals, 26 trains, 10 ferries, 2 buses), from 2006-05-02 to 2026-11-01. 9 bookings have no time zone in the file and will keep the time as written. 136 items can’t be imported (listed below).</p><div class="entry" style="margin-top: 4px"><span class="body-medium">Not imported</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg></div><div class="kv" style="grid-template-columns: 1fr auto"><span>TripIt kept only its name</span><span class="k">86</span><span>TripIt kept only its name and confirmation number</span><span class="k">32</span><span>notes are not bookings</span><span class="k">14</span><span>nothing in it Travelmo can import</span><span class="k">2</span></div><a class="btn filled" href="SettingsImports.dc.html" style="justify-self: start">Import</a></section><section class="section"><h2 class="section-title">Calendar file</h2><p class="help">Import bookings from an .ics file, such as a trip exported from TripIt or a calendar app. Events that look like travel are read like booking emails; up to 100 per upload.</p><a class="btn outlined" href="SettingsImports.dc.html">Choose file</a></section><section class="section"><h2 class="section-title">Calendar feeds</h2><p class="help">Paste a calendar subscription link, such as the one in TripIt’s settings, and Travelmo reads it every day.</p><div class="entry"><div><p class="body-large">feeds.example.com</p><p class="body-small muted">Read today · 2 imported</p></div><a class="btn text" href="SettingsImports.dc.html">Remove</a></div><div style="display: flex; gap: 8px; align-items: center; margin-top: 12px"><input class="input" type="url" placeholder="webcal://… or https://…" aria-label="Calendar feed link"><a class="btn outlined" href="SettingsImports.dc.html">Add feed</a></div></section><section class="section"><h2 class="section-title">Google Calendar</h2><p class="help">Travelmo reads the calendars you choose every day, like a calendar feed, with read-only access.</p><a class="btn outlined" href="SettingsImports.dc.html">Connect Google Calendar</a></section><section class="section" style="padding-bottom: 32px"><h2 class="section-title">Calendar link</h2><p class="help">Show your trips and bookings in Google Calendar, Apple Calendar or Outlook through a link they check for changes. Anyone with the link can read your trips.</p><a class="btn filled" href="SettingsImports.dc.html">Create calendar link</a></section></main>
+  <div class="nav-handle"><span></span></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":412,"height":915}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

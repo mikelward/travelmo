@@ -1,50 +1,405 @@
 {
-  "v": 3,
-  "createdOnFiles": { "v": 1, "at": "2026-11-02T00:10:00Z" },
-  "title": "Travelmo Android",
-  "launch": { "view": "canvas" },
-  "pages": [],
-  "boards": {
-    "Main.dc.html": { "x": 0, "y": 0, "w": 412, "h": 915, "title": "01 Sign-in", "is_interactive": true, "radius": 24 },
-    "SignInError.dc.html": { "x": 492, "y": 0, "w": 412, "h": 915, "title": "01b Sign-in, error", "is_interactive": true, "radius": 24 },
-    "TripList.dc.html": { "x": 984, "y": 0, "w": 412, "h": 915, "title": "02 Trip list", "is_interactive": true, "radius": 24 },
-    "TripListMenu.dc.html": { "x": 1476, "y": 0, "w": 412, "h": 915, "title": "02b Trip list, menu", "is_interactive": true, "radius": 24 },
-    "TripListEmpty.dc.html": { "x": 1968, "y": 0, "w": 412, "h": 915, "title": "03 Trip list, empty", "is_interactive": true, "radius": 24 },
-    "TripListDark.dc.html": { "x": 2460, "y": 0, "w": 412, "h": 915, "title": "14 Trip list, dark", "is_interactive": true, "radius": 24 },
-    "TripDetail.dc.html": { "x": 0, "y": 1035, "w": 412, "h": 915, "title": "04 Trip detail, owner", "is_interactive": true, "radius": 24 },
-    "TripDetailShared.dc.html": { "x": 492, "y": 1035, "w": 412, "h": 915, "title": "05 Trip detail, sharee", "is_interactive": true, "radius": 24 },
-    "BookingActions.dc.html": { "x": 984, "y": 1035, "w": 412, "h": 915, "title": "06 Booking actions", "is_interactive": true, "radius": 24 },
-    "DeleteTrip.dc.html": { "x": 1476, "y": 1035, "w": 412, "h": 915, "title": "09 Delete trip", "is_interactive": true, "radius": 24 },
-    "AddBooking.dc.html": { "x": 1968, "y": 1035, "w": 412, "h": 915, "title": "07 Add a booking", "is_interactive": true, "radius": 24 },
-    "EditBooking.dc.html": { "x": 2460, "y": 1035, "w": 412, "h": 915, "title": "08 Edit booking, error", "is_interactive": true, "radius": 24 },
-    "SettingsNew.dc.html": { "x": 0, "y": 2070, "w": 412, "h": 915, "title": "10 Settings, not connected", "is_interactive": true, "radius": 24 },
-    "SettingsConnected.dc.html": { "x": 492, "y": 2070, "w": 412, "h": 915, "title": "11 Settings, connected", "is_interactive": true, "radius": 24 }
+ "v": 3,
+ "createdOnFiles": {
+  "v": 1,
+  "at": "2026-11-02T00:10:00Z"
+ },
+ "title": "Travelmo Android",
+ "launch": {
+  "view": "canvas"
+ },
+ "pages": [],
+ "boards": {
+  "Main.dc.html": {
+   "x": 0,
+   "y": 0,
+   "w": 412,
+   "h": 915,
+   "title": "01 Sign-in",
+   "is_interactive": true,
+   "radius": 24
   },
-  "order": [
-    "Main.dc.html",
-    "SignInError.dc.html",
-    "TripList.dc.html",
-    "TripListMenu.dc.html",
-    "TripListEmpty.dc.html",
-    "TripListDark.dc.html",
-    "TripDetail.dc.html",
-    "TripDetailShared.dc.html",
-    "BookingActions.dc.html",
-    "DeleteTrip.dc.html",
-    "AddBooking.dc.html",
-    "EditBooking.dc.html",
-    "SettingsNew.dc.html",
-    "SettingsConnected.dc.html"
-  ],
-  "notes": {
-    "row1": { "x": 0, "y": -300, "text": "Sign in and trips", "kind": "title1", "maxW": 2872 },
-    "row2": { "x": 0, "y": 735, "text": "Trip detail and bookings", "kind": "title1", "maxW": 2872 },
-    "row3": { "x": 0, "y": 1770, "text": "Settings and import", "kind": "title1", "maxW": 2872 },
-    "flow": { "x": 2952, "y": 0, "w": 360, "text": "Tap through: Sign in → trip list. Gear → Settings. ⋮ → Sign out. A card → its trip (Edinburgh is a trip shared with you; Liverpool is your own). Back arrows return; system back does the same. Dialogs close via X.", "kind": null, "fill": "blue" },
-    "idioms": { "x": 2952, "y": 420, "w": 360, "text": "Idioms: one scrolling list with Now / Upcoming / Past headers (empty groups hide, so no tabs). No bottom navigation: only Trips and Settings. Booking form is a full-screen dialog. Row ⋮ opens a bottom sheet. Snackbars only for short confirmations.", "kind": null, "fill": "gray" },
-    "states": { "x": 2952, "y": 1035, "w": 360, "text": "Not boarded, same as the web app: \"Loading…\", \"This trip does not exist or is not shared with you.\", Rename as a text-field dialog (error \"Give the trip a name\"), share error \"Enter an email address\", Gmail return notices (green \"Gmail connected as …\", red \"Gmail access was not granted.\" / \"Connecting Gmail failed. Try again.\"), \"Importing…\" with a linear progress bar, the offline banner.", "kind": null, "fill": "gray" },
-    "gaps": { "x": 2952, "y": 1455, "w": 360, "text": "Shown as the product is, not fixed: no way to add a trip (trips come from imports and merges); booking Delete, Merge, Disconnect and Sign out have no confirmation; rows say \"Car\", the form says \"Car rental\"; \"Import anyway\" reports a raw outcome token; sign-in errors show raw Firebase text; a sharee never sees who owns the trip.", "kind": null, "fill": "orange" },
-    "theme": { "x": 2952, "y": 2070, "w": 360, "text": "Theme: Material 3 roles from the web app's zinc palette; primary zinc-900 (zinc-100 in dark), amber tertiary for warnings, red error. Geist with system fallback. Pill buttons and FAB, 12px cards, 28px sheets and dialogs. Launcher icon is adaptive: dark square background, white paper plane foreground.", "kind": null, "fill": "gray" }
+  "SignInError.dc.html": {
+   "x": 492,
+   "y": 0,
+   "w": 412,
+   "h": 915,
+   "title": "01b Sign-in, error",
+   "is_interactive": true,
+   "radius": 24
   },
-  "designSystems": []
+  "TripList.dc.html": {
+   "x": 984,
+   "y": 0,
+   "w": 412,
+   "h": 915,
+   "title": "02 Trip list",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "TripListMenu.dc.html": {
+   "x": 1476,
+   "y": 0,
+   "w": 412,
+   "h": 915,
+   "title": "02b Trip list, menu",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "TripListEmpty.dc.html": {
+   "x": 1968,
+   "y": 0,
+   "w": 412,
+   "h": 915,
+   "title": "03 Trip list, empty",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "TripListDark.dc.html": {
+   "x": 2460,
+   "y": 0,
+   "w": 412,
+   "h": 915,
+   "title": "14 Trip list, dark",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "TripDetail.dc.html": {
+   "x": 0,
+   "y": 1035,
+   "w": 412,
+   "h": 915,
+   "title": "04 Trip detail, owner",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "TripDetailShared.dc.html": {
+   "x": 492,
+   "y": 1035,
+   "w": 412,
+   "h": 915,
+   "title": "05 Trip detail, sharee",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "BookingActions.dc.html": {
+   "x": 984,
+   "y": 1035,
+   "w": 412,
+   "h": 915,
+   "title": "06 Booking actions",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "DeleteTrip.dc.html": {
+   "x": 1476,
+   "y": 1035,
+   "w": 412,
+   "h": 915,
+   "title": "09 Delete trip",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "AddBooking.dc.html": {
+   "x": 1968,
+   "y": 1035,
+   "w": 412,
+   "h": 915,
+   "title": "07 Add a booking",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "EditBooking.dc.html": {
+   "x": 2460,
+   "y": 1035,
+   "w": 412,
+   "h": 915,
+   "title": "08 Edit booking, error",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "SettingsNew.dc.html": {
+   "x": 0,
+   "y": 2070,
+   "w": 412,
+   "h": 915,
+   "title": "10 Settings, not connected",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "SettingsConnected.dc.html": {
+   "x": 492,
+   "y": 2070,
+   "w": 412,
+   "h": 915,
+   "title": "11 Settings, connected",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "Offline.dc.html": {
+   "x": 0,
+   "y": 3105,
+   "w": 412,
+   "h": 915,
+   "title": "15 Trip list, offline",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "OfflinePage.dc.html": {
+   "x": 492,
+   "y": 3105,
+   "w": 412,
+   "h": 915,
+   "title": "16 Offline page",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "Loading.dc.html": {
+   "x": 984,
+   "y": 3105,
+   "w": 412,
+   "h": 915,
+   "title": "17 Trip detail, loading",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "NotFound.dc.html": {
+   "x": 1476,
+   "y": 3105,
+   "w": 412,
+   "h": 915,
+   "title": "18 Trip not found",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "DeletingTrip.dc.html": {
+   "x": 1968,
+   "y": 3105,
+   "w": 412,
+   "h": 915,
+   "title": "19 Interrupted deletion",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "RenameTrip.dc.html": {
+   "x": 2460,
+   "y": 3105,
+   "w": 412,
+   "h": 915,
+   "title": "20 Rename trip",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "Reports.dc.html": {
+   "x": 0,
+   "y": 4140,
+   "w": 412,
+   "h": 915,
+   "title": "21 Reports",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "Profile.dc.html": {
+   "x": 492,
+   "y": 4140,
+   "w": 412,
+   "h": 915,
+   "title": "22 Travel profile",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "TripDetailWarning.dc.html": {
+   "x": 984,
+   "y": 4140,
+   "w": 412,
+   "h": 915,
+   "title": "23 Document reminders",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "TripListWarning.dc.html": {
+   "x": 1476,
+   "y": 4140,
+   "w": 412,
+   "h": 915,
+   "title": "24 Trip list, reminder",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "SettingsImports.dc.html": {
+   "x": 1968,
+   "y": 4140,
+   "w": 412,
+   "h": 915,
+   "title": "25 Settings, imports and calendar",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "TripDetailDark.dc.html": {
+   "x": 0,
+   "y": 5175,
+   "w": 412,
+   "h": 915,
+   "title": "26 Trip detail, dark",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "AddBookingDark.dc.html": {
+   "x": 492,
+   "y": 5175,
+   "w": 412,
+   "h": 915,
+   "title": "27 Add a booking, dark, suggestions",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "SettingsDark.dc.html": {
+   "x": 984,
+   "y": 5175,
+   "w": 412,
+   "h": 915,
+   "title": "28 Settings, dark",
+   "is_interactive": true,
+   "radius": 24
+  },
+  "ReportsDark.dc.html": {
+   "x": 1476,
+   "y": 5175,
+   "w": 412,
+   "h": 915,
+   "title": "29 Reports, dark",
+   "is_interactive": true,
+   "radius": 24
+  }
+ },
+ "order": [
+  "Main.dc.html",
+  "SignInError.dc.html",
+  "TripList.dc.html",
+  "TripListMenu.dc.html",
+  "TripListEmpty.dc.html",
+  "TripListDark.dc.html",
+  "TripDetail.dc.html",
+  "TripDetailShared.dc.html",
+  "BookingActions.dc.html",
+  "DeleteTrip.dc.html",
+  "AddBooking.dc.html",
+  "EditBooking.dc.html",
+  "SettingsNew.dc.html",
+  "SettingsConnected.dc.html",
+  "Offline.dc.html",
+  "OfflinePage.dc.html",
+  "Loading.dc.html",
+  "NotFound.dc.html",
+  "DeletingTrip.dc.html",
+  "RenameTrip.dc.html",
+  "Reports.dc.html",
+  "Profile.dc.html",
+  "TripDetailWarning.dc.html",
+  "TripListWarning.dc.html",
+  "SettingsImports.dc.html",
+  "TripDetailDark.dc.html",
+  "AddBookingDark.dc.html",
+  "SettingsDark.dc.html",
+  "ReportsDark.dc.html"
+ ],
+ "notes": {
+  "row1": {
+   "x": 0,
+   "y": -300,
+   "text": "Sign in and trips",
+   "kind": "title1",
+   "maxW": 2872
+  },
+  "row2": {
+   "x": 0,
+   "y": 735,
+   "text": "Trip detail and bookings",
+   "kind": "title1",
+   "maxW": 2872
+  },
+  "row3": {
+   "x": 0,
+   "y": 1770,
+   "text": "Settings and import",
+   "kind": "title1",
+   "maxW": 2872
+  },
+  "flow": {
+   "x": 2952,
+   "y": 0,
+   "w": 360,
+   "text": "Tap through: Sign in → trip list. Gear → Settings. ⋮ → Sign out. A card → its trip (Edinburgh is a trip shared with you; Liverpool is your own). Back arrows return; system back does the same. Dialogs close via X.",
+   "kind": null,
+   "fill": "blue"
+  },
+  "idioms": {
+   "x": 2952,
+   "y": 420,
+   "w": 360,
+   "text": "Idioms: one scrolling list with Now / Upcoming / Past headers (empty groups hide, so no tabs). A navigation bar with three destinations, Trips, Reports and Profile, since the web app grew the last two; Settings stays behind the gear, Sign out in the overflow menu. Booking form is a full-screen dialog. Row ⋮ opens a bottom sheet. Delete trip is a dialog. Pill buttons and an extended FAB “Add a booking”.",
+   "kind": null,
+   "fill": "gray"
+  },
+  "states": {
+   "x": 2952,
+   "y": 1035,
+   "w": 360,
+   "text": "Round two boards the states: offline banner (amber, same words as the web app) and the offline page the service worker serves; a loading trip with its skeleton; the not-found text; a trip whose deletion was interrupted (amber callout, no booking actions); Rename as a text-field dialog with its one error, “Give the trip a name”.",
+   "kind": null,
+   "fill": "gray"
+  },
+  "gaps": {
+   "x": 2952,
+   "y": 1455,
+   "w": 360,
+   "text": "Shown as the product is, not fixed: no way to add a trip (trips come from imports and merges); booking Delete, Merge, Disconnect and Sign out have no confirmation; rows say \"Car\", the form says \"Car rental\"; \"Import anyway\" reports a raw outcome token; sign-in errors show raw Firebase text; a sharee never sees who owns the trip.",
+   "kind": null,
+   "fill": "orange"
+  },
+  "theme": {
+   "x": 2952,
+   "y": 2070,
+   "w": 360,
+   "text": "Theme: Material 3 roles from the web app's zinc palette; primary zinc-900 (zinc-100 in dark), amber tertiary for warnings, red error. Geist with system fallback. Pill buttons and FAB, 12px cards, 28px sheets and dialogs. Launcher icon is adaptive: dark square background, white paper plane foreground.",
+   "kind": null,
+   "fill": "gray"
+  },
+  "row4": {
+   "x": 0,
+   "y": 2805,
+   "text": "States and edge cases",
+   "kind": "title1",
+   "maxW": 2872
+  },
+  "row5": {
+   "x": 0,
+   "y": 3840,
+   "text": "Reports, profile and reminders",
+   "kind": "title1",
+   "maxW": 2872
+  },
+  "row6": {
+   "x": 0,
+   "y": 4875,
+   "text": "Dark set",
+   "kind": "title1",
+   "maxW": 2872
+  },
+  "features": {
+   "x": 2952,
+   "y": 3840,
+   "w": 360,
+   "fill": "blue",
+   "text": "Reports, Profile and reminders mirror the web app as built: days per country and trips per year, a map of countries and airports (a sketch here), the travel profile with documents folded and loyalty open, passport and visa reminders in red (before the trip ends) or amber (within six months after), and Settings’ import sections: TripIt preview with reasons grouped, calendar files and feeds, Google Calendar, the calendar link."
+  },
+  "dark": {
+   "x": 2952,
+   "y": 4875,
+   "w": 360,
+   "fill": "gray",
+   "text": "Dark set: the same theme tokens as 14, on a trip page, the booking form with address suggestions (the Where field offers places from three typed characters; Add waits while a pick’s details load), Settings and Reports."
+  }
+ },
+ "designSystems": []
 }
