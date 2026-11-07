@@ -68,7 +68,8 @@ builds only, so `next dev` runs without it.
 Gradle). `:core` is plain Kotlin with the models and the logic the web's
 `packages/core` has (grouping, what comes next, the status lines, date
 formatting), tested without an SDK and kept free of Android by
-`:core:verifyNoAndroid`; `:app` is the Compose app.
+`:core:verifyNoAndroid`; `:app` is the Compose app: sign-in, the trip list,
+a trip's bookings, the calendar's month view, and sign-out so far.
 
 ```sh
 cd apps/android
