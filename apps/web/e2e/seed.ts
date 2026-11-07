@@ -7,7 +7,7 @@ import { getFirestore } from "firebase-admin/firestore";
 const app = getApps()[0] ?? initializeApp({ projectId: "demo-travelmo" });
 const db = getFirestore(app);
 
-export async function seedTrip(ownerUid: string, tripId: string): Promise<Trip> {
+export async function seedTrip(ownerUid: string, tripId: string, stayExtra: Partial<Segment> = {}): Promise<Trip> {
   const trip: Trip = {
     id: tripId,
     title: "Liverpool",
@@ -35,6 +35,7 @@ export async function seedTrip(ownerUid: string, tripId: string): Promise<Trip> 
     sender: "cove.example",
     createdAt: trip.createdAt,
     updatedAt: trip.updatedAt,
+    ...stayExtra,
   };
   await db.doc(paths.trip(tripId)).set(trip);
   await db.doc(paths.segment(tripId, stay.id)).set(stay);

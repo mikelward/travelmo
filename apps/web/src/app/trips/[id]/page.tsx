@@ -1,6 +1,6 @@
 "use client";
 
-import { formatDate, formatDateRange, localDate, paths, segmentDateRange, type Segment, type Trip } from "@travelmo/core";
+import { formatDate, formatDateRange, localDate, paths, programsFor, segmentDateRange, type Segment, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { arrayRemove, arrayUnion, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -16,6 +16,7 @@ import { effectiveDecision, learnSender } from "@/lib/patterns";
 import { DocumentWarnings } from "@/components/DocumentWarnings";
 import { localToday } from "@/lib/dates";
 import { usePeopleDocuments, useTripWarnings } from "@/lib/documents";
+import { useTravelProfile } from "@/lib/travelProfile";
 import { useProfile, useSegments, useSenderPatterns, useTrip, useTrips } from "@/lib/trips";
 
 const buttonClass =
@@ -266,6 +267,9 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   const allTrips = useTrips(user);
   const profile = useProfile(user.uid);
   const people = usePeopleDocuments(user);
+  // The viewer's own programs, for the number at check-in; a fellow
+  // traveler's are theirs.
+  const loyalty = useTravelProfile(user.uid)?.loyalty ?? [];
   const today = localToday();
   const tripList = useMemo(() => (trip ? [trip] : []), [trip]);
   const segmentsOfTrip = useMemo(() => (segments ? { [tripId]: segments } : {}), [segments, tripId]);
@@ -355,6 +359,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
                     {...(learn(segment) ? { onLearnSender: learn(segment) } : {})}
                     // Each email links for whoever imported it, from their mailbox.
                     emailLinks={{ uid: user.uid, account: profile?.gmail?.emailAddress, ownsTrip: isOwner }}
+                    programs={programsFor(segment.provider, loyalty)}
                   />
                 ),
               )}

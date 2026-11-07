@@ -1,6 +1,6 @@
 "use client";
 
-import type { ProfileEntry, TravelProfile } from "@travelmo/core";
+import { loyaltySummary, type ProfileEntry, type TravelProfile } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
 import { useState } from "react";
@@ -39,11 +39,44 @@ function Entries({ title, entries, open }: { title: string; entries: ProfileEntr
   );
 }
 
+// Every program at a glance: the number, the balance and the status, read
+// from whatever labels the import gave them; the full entries fold below.
+function LoyaltyTable({ entries }: { entries: ProfileEntry[] }) {
+  if (!entries.length) return null;
+  const rows = entries.map(loyaltySummary);
+  return (
+    <section className="mt-6">
+      <h3 className="font-medium">Loyalty programs</h3>
+      <table className="mt-2 w-full text-sm" aria-label="Loyalty programs">
+        <thead className="text-left text-zinc-500">
+          <tr>
+            <th className="py-1 font-normal">Program</th>
+            <th className="py-1 font-normal">Account</th>
+            <th className="py-1 text-right font-normal">Balance</th>
+            <th className="py-1 font-normal">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={`${r.title}-${i}`} className="border-t border-zinc-200 dark:border-zinc-800">
+              <td className="py-1 pr-2">{r.title}</td>
+              <td className="py-1 pr-2 break-all">{r.account ?? ""}</td>
+              <td className="py-1 pr-2 text-right tabular-nums">{r.balance ?? ""}</td>
+              <td className="py-1">{r.nextStatus && r.status ? `${r.status} (next: ${r.nextStatus})` : (r.status ?? "")}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
 function ProfileSections({ profile }: { profile: TravelProfile }) {
   return (
     <>
       <Entries title="Documents" entries={profile.documents} open={false} />
-      <Entries title="Loyalty programs" entries={profile.loyalty} open />
+      <LoyaltyTable entries={profile.loyalty} />
+      <Entries title="Loyalty program details" entries={profile.loyalty} open={false} />
       <Entries title="Travelers" entries={profile.travelers} open={false} />
     </>
   );

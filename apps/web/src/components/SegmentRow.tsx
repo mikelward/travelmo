@@ -3,7 +3,9 @@ import {
   formatDate,
   localDate,
   localTime,
+  loyaltyLine,
   segmentSources,
+  type ProfileEntry,
   type Segment,
   type SegmentType,
   type SourceRef,
@@ -73,6 +75,7 @@ export function SegmentRow({
   moveTargets,
   onMove,
   emailLinks,
+  programs,
 }: {
   segment: Segment;
   onEdit?: () => void;
@@ -81,6 +84,8 @@ export function SegmentRow({
   moveTargets?: Trip[];
   onMove?: (tripId: string) => void;
   emailLinks?: EmailLinks;
+  // The viewer's loyalty programs this booking's provider belongs to.
+  programs?: readonly ProfileEntry[];
 }) {
   const route = [place(segment.origin), place(segment.destination)].filter(Boolean).join(" → ");
   // Addresses an address pick recorded, under the route they belong to.
@@ -101,6 +106,11 @@ export function SegmentRow({
         {(segment.confirmation || segment.provider) && (
           <p className="mt-1 text-xs text-zinc-500">
             {[segment.provider, segment.confirmation && `Ref ${segment.confirmation}`].filter(Boolean).join(" · ")}
+          </p>
+        )}
+        {programs && programs.length > 0 && (
+          <p className="mt-1 text-xs text-zinc-500" data-testid="segment-loyalty">
+            {programs.map(loyaltyLine).join(" · ")}
           </p>
         )}
         {segment.notes && <p className="mt-1 whitespace-pre-line text-xs text-zinc-500">{segment.notes}</p>}
