@@ -6,7 +6,9 @@ import app.travelmo.core.SegmentDraft
 import app.travelmo.core.localDate
 import app.travelmo.core.TravelProfile
 import app.travelmo.core.Trip
+import app.travelmo.core.MAX_TRUSTED
 import app.travelmo.core.normalizeEmail
+import app.travelmo.core.normalizeTrusted
 import app.travelmo.core.segmentDateRange
 import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.DocumentSnapshot
@@ -14,6 +16,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.QuerySnapshot
+import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -32,11 +35,14 @@ interface TripStore {
     /** One trip's bookings, live; empty while it loads. */
     fun segments(tripId: String): Flow<List<Segment>>
 
-    /** The user's own travel profile, live; null while it loads or when there is none. */
-    fun ownProfile(uid: String): Flow<TravelProfile?>
+    /** The user's own travel profile, live, from its first answer on: an answer with no profile is one too. A read that fails is logged and keeps the caller waiting. */
+    fun ownProfile(uid: String): Flow<OwnProfile>
 
     /** The profiles shared with the user's verified address, live. */
     fun sharedProfiles(email: String?): Flow<List<TravelProfile>>
+
+    /** Sets who the user's travel profile is shared with, starting the profile if there is none yet ([exists] false). */
+    suspend fun saveTrusted(uid: String, email: String?, exists: Boolean, emails: List<String>)
 
     /** Writes a booking, new ([existingId] null) or edited, widening the trip's dates to hold it. */
     suspend fun saveSegment(tripId: String, draft: SegmentDraft, existingId: String?)
@@ -65,6 +71,9 @@ interface TripStore {
 }
 
 class TripGoneException(message: String) : Exception(message)
+
+/** What the profile document answered: the profile, or none yet. Distinct from not having answered at all. */
+data class OwnProfile(val profile: TravelProfile?)
 
 /**
  * The same queries the web app makes (SPEC.md "The trip list"), each a
@@ -99,14 +108,15 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             }
         }
 
-    override fun ownProfile(uid: String): Flow<TravelProfile?> = callbackFlow {
+    override fun ownProfile(uid: String): Flow<OwnProfile> = callbackFlow {
         val registration = db.collection("users").document(uid).collection("travelProfile").document("main").addSnapshotListener { snapshot, error ->
             if (error != null) {
+                // Nothing is sent: a profile that could not be read is not one
+                // that is absent, and sharing must not start a new one over it.
                 Log.e(TAG, "Reading the travel profile failed", error)
-                trySend(null)
                 return@addSnapshotListener
             }
-            trySend(snapshot?.data?.let(::profileFromDocument))
+            trySend(OwnProfile(snapshot?.data?.let(::profileFromDocument)))
         }
         awaitClose { registration.remove() }
     }
@@ -116,6 +126,24 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         return db.collectionGroup("travelProfile").whereArrayContains("trustedEmails", address).snapshots().orNothing("shared profiles").map { snapshot ->
             snapshot?.documents.orEmpty().mapNotNull { doc -> profileFromDocument(doc.data ?: emptyMap()) }
         }
+    }
+
+    /**
+     * As the web's saveTrusted: a merge, so it starts a profile before any
+     * import and, on one that exists, touches only the list (the rules
+     * refuse anything else).
+     */
+    override suspend fun saveTrusted(uid: String, email: String?, exists: Boolean, emails: List<String>) {
+        val trusted = normalizeTrusted(emails, email)
+        if (trusted.size > MAX_TRUSTED) throw IllegalArgumentException("Share with at most $MAX_TRUSTED people.")
+        val doc = LinkedHashMap<String, Any>()
+        if (!exists) {
+            doc["ownerUid"] = uid
+            normalizeEmail(email)?.let { doc["ownerEmail"] = it }
+        }
+        doc["trustedEmails"] = trusted
+        doc["updatedAt"] = Instant.now().toString()
+        db.collection("users").document(uid).collection("travelProfile").document("main").set(doc, SetOptions.merge()).await()
     }
 
     /**

@@ -7,8 +7,10 @@ import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
@@ -75,6 +77,23 @@ class TripsViewModelTest {
         viewModel.deleteTrip("delete", "paris")
         store.merged shouldBe listOf("dublin" to "liverpool")
         store.deletedTrips shouldBe listOf("paris")
+    }
+
+    @Test
+    fun `sharing the profile says whether it exists yet, and waits until that is known`() = runTest {
+        val store = FakeTripStore(profile = null)
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL)
+        // Before the profile document has answered, nothing is written.
+        viewModel.saveTrusted("share", listOf("partner@example.com"))
+        store.trusted shouldBe emptyList()
+        viewModel.outcomes.value shouldBe mapOf("share" to Outcome.Failed("The profile is still loading; try again"))
+        val watching = backgroundScope.launch { viewModel.profileLoaded.collect {} }
+        runCurrent()
+        viewModel.profileLoaded.value shouldBe true
+        viewModel.saveTrusted("share", listOf("partner@example.com"))
+        store.trusted shouldBe listOf(Triple(OWNER, false, listOf("partner@example.com")))
+        viewModel.outcomes.value shouldBe mapOf("share" to Outcome.Done)
+        watching.cancel()
     }
 
     @Test

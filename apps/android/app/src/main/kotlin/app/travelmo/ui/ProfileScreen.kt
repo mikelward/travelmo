@@ -23,6 +23,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
+import app.travelmo.core.MAX_TRUSTED
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -45,6 +54,10 @@ import app.travelmo.core.loyaltySummary
 fun ProfileScreen(viewModel: TripsViewModel, bottomBar: @Composable () -> Unit) {
     val profile by viewModel.ownProfile.collectAsStateWithLifecycle()
     val shared by viewModel.sharedProfiles.collectAsStateWithLifecycle()
+    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val loaded by viewModel.profileLoaded.collectAsStateWithLifecycle()
+    // A finished share is acknowledged so a later one starts afresh.
+    LaunchedEffect(outcomes[SHARE_TOKEN]) { if (outcomes[SHARE_TOKEN] is Outcome.Done) viewModel.outcomeSeen(SHARE_TOKEN) }
     Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.profile)) }) }, bottomBar = bottomBar) { padding ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
             val own = profile
@@ -55,11 +68,16 @@ fun ProfileScreen(viewModel: TripsViewModel, bottomBar: @Composable () -> Unit) 
             } else {
                 profileSections(own, prefix = "own")
             }
-            if (own != null && own.trustedEmails.isNotEmpty()) {
-                item(key = "shared-with") { SectionTitle(stringResource(R.string.shared_with)) }
-                item(key = "shared-with-list") {
-                    Column { for (email in own.trustedEmails) Text(email, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 2.dp)) }
-                }
+            item(key = "shared-with") { SectionTitle(stringResource(R.string.shared_with)) }
+            item(key = "sharing") {
+                // Until the profile has answered, the list it would replace is
+                // unknown, so nothing can be shared or removed yet.
+                Sharing(
+                    trusted = own?.trustedEmails.orEmpty(),
+                    busy = !loaded || outcomes[SHARE_TOKEN] is Outcome.Busy,
+                    error = (outcomes[SHARE_TOKEN] as? Outcome.Failed)?.message,
+                    onSave = { viewModel.saveTrusted(SHARE_TOKEN, it) },
+                )
             }
             val others = shared.filter { it.ownerUid != own?.ownerUid }
             if (others.isNotEmpty()) {
@@ -93,6 +111,57 @@ private fun LazyListScope.entries(stringResource: Int, entries: List<ProfileEntr
     item(key = "$prefix-title") { SectionTitle(stringResource(stringResource)) }
     for ((i, entry) in entries.withIndex()) {
         item(key = "$prefix-$i") { FoldingEntry(entry) }
+    }
+}
+
+private const val SHARE_TOKEN = "profile/share"
+
+/**
+ * Who the profile is shared with, as the web's page has it: each address
+ * removable, an address to add, and what sharing means. Sharing is kept
+ * on the server by the list alone, so a change is the whole list again.
+ */
+@Composable
+private fun Sharing(trusted: List<String>, busy: Boolean, error: String?, onSave: (List<String>) -> Unit) {
+    var address by rememberSaveable { mutableStateOf("") }
+    // An address the form itself refuses, kept in the field to be corrected; a refusal from the write comes from the caller.
+    var formError by rememberSaveable { mutableStateOf<String?>(null) }
+    val notAnAddress = stringResource(R.string.enter_email)
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(stringResource(R.string.share_profile_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (trusted.isEmpty()) {
+            Text(stringResource(R.string.only_you), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+        }
+        for (email in trusted) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(email, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                IconButton(onClick = { onSave(trusted - email) }, enabled = !busy) {
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.stop_sharing_with, email))
+                }
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+            OutlinedTextField(
+                value = address,
+                onValueChange = { address = it },
+                placeholder = { Text("name@example.com") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+            Button(
+                onClick = {
+                    if (address.contains("@")) {
+                        formError = null
+                        onSave(trusted + address)
+                        address = ""
+                    } else {
+                        formError = notAnAddress
+                    }
+                },
+                enabled = !busy && address.isNotBlank() && trusted.size < MAX_TRUSTED,
+            ) { Text(stringResource(R.string.share)) }
+        }
+        (formError ?: error)?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp)) }
     }
 }
 
