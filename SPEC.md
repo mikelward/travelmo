@@ -33,7 +33,8 @@ viewer's zone. Trip bounds are calendar dates.
 - `trips/{tripId}/segments/{segmentId}` — `type` (flight, train, bus, ferry,
   lodging, car_rental, activity, other), `title, provider, confirmation,
   start, end, origin, destination, notes, source, gmailMessageIds[], sources[],
-  sender` (the booking email's domain). `source` is `gmail`, `manual`,
+  sender` (the booking email's domain), `rating` (one to five) and
+  `favorite`, the traveler's own verdict. `source` is `gmail`, `manual`,
   `tripit` or `ics`: where the booking first came from. `sources` lists every
   email, TripIt item or calendar event it was read from (`kind, id, label,
   uid, at`), including later ones dropped as duplicates of it; the trip page
@@ -194,6 +195,13 @@ never its number. The list checks the trips it already reads bookings for
 
 The owner and anyone the trip is shared with can add, edit and delete
 segments on a trip page; only the owner renames, shares or deletes the trip.
+The same people can rate a booking one to five stars and mark it a favorite
+(`rating`, `favorite` on the segment; tapping the current star clears the
+rating): an edit like any other, moving the booking's revision, so a calendar
+change no longer replaces it and the verdict survives. Reports lists the
+places rated or marked, favorites first with the best rating given, each
+linking to the trips it was on (`packages/core/src/favorites.ts`: a place is
+where a journey ends or where a stay is, by name and country).
 A manual segment carries `source: "manual"` and the same
 shape as an imported one; the form takes a local date, time and time zone
 for each end and stores the instant with that zone's offset on that date, so
@@ -680,7 +688,7 @@ on GitHub-hosted runners.
 Native apps (React Native + Expo in `apps/mobile`; the Android screens are
 mocked up in `design/android/`, Material 3 with this palette, as the reference
 for the port), check-in/out surfacing,
-ratings and favourites, itinerary ideas, reminders sent
+itinerary ideas, reminders sent
 by email or push rather than shown in the app, which visas a trip needs,
 other mail providers and forward-to-import. Further import
 sources share the pipeline: Google Calendar; `IMPORT.md` compares them and maps their fields.
