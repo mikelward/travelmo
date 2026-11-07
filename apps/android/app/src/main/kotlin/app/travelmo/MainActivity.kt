@@ -19,6 +19,7 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import app.travelmo.auth.SignedIn
+import app.travelmo.ui.BookingFormScreen
 import app.travelmo.ui.CalendarScreen
 import app.travelmo.ui.HomeNavigationBar
 import app.travelmo.ui.HomeTab
@@ -41,6 +42,9 @@ private data class TripDetail(val tripId: String) : NavKey
 
 @Serializable
 private data object Settings : NavKey
+
+@Serializable
+private data class BookingForm(val tripId: String, val segmentId: String?, val defaultDate: String) : NavKey
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -101,7 +105,18 @@ private fun SignedInApp(app: TravelmoApplication, user: SignedIn) {
                 }
             }
             entry<TripDetail> { key ->
-                TripDetailScreen(viewModel = viewModel, tripId = key.tripId, uid = user.uid, onBack = { backStack.removeLastOrNull() })
+                TripDetailScreen(
+                    viewModel = viewModel,
+                    tripId = key.tripId,
+                    uid = user.uid,
+                    email = user.email,
+                    onBack = { backStack.removeLastOrNull() },
+                    onAddBooking = { defaultDate -> backStack.add(BookingForm(key.tripId, null, defaultDate)) },
+                    onEditBooking = { segmentId -> backStack.add(BookingForm(key.tripId, segmentId, "")) },
+                )
+            }
+            entry<BookingForm> { key ->
+                BookingFormScreen(viewModel = viewModel, tripId = key.tripId, segmentId = key.segmentId, defaultDate = key.defaultDate, onDone = { backStack.removeLastOrNull() })
             }
             entry<Settings> {
                 SettingsScreen(account = app.account, user = user, onBack = { backStack.removeLastOrNull() })

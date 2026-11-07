@@ -1,7 +1,9 @@
 package app.travelmo.data
 
 import app.travelmo.core.Place
+import app.travelmo.core.PlaceDraft
 import app.travelmo.core.Segment
+import app.travelmo.core.SegmentDraft
 import app.travelmo.core.SegmentType
 import app.travelmo.core.Trip
 
@@ -64,4 +66,48 @@ fun segmentFromDocument(id: String, tripId: String, data: Map<String, Any?>): Se
         // only list their Gmail message ids.
         sourceCount = if (sources > 0) sources else gmailIds,
     )
+}
+
+/**
+ * A place as the form leaves it, over the stored one: while the name holds,
+ * whatever an import recorded besides (city, address, the spot on the map)
+ * survives; a new name drops them, as the web's form does.
+ */
+fun placeToDocument(draft: PlaceDraft?, stored: Map<String, Any?>?): Map<String, Any?>? {
+    if (draft == null) return null
+    val kept = if (stored != null && stored["name"] == draft.name) stored else emptyMap()
+    val place = LinkedHashMap(kept)
+    place["name"] = draft.name
+    if (draft.code != null) place["code"] = draft.code else place.remove("code")
+    if (draft.country != null) place["country"] = draft.country else place.remove("country")
+    return place
+}
+
+/**
+ * The booking document a save writes: the stored document with the form's
+ * fields over it, so what the form does not edit (sources, the sender, the
+ * rating and the favorite mark, places' details) stays. A new booking is
+ * manual, with no sources. Absent values are absent, never null: the rules
+ * list the keys a booking may have and Firestore keeps a null as a field.
+ */
+fun draftToDocument(draft: SegmentDraft, stored: Map<String, Any?>?, id: String, tripId: String, now: String): Map<String, Any?> {
+    val doc = LinkedHashMap(stored ?: emptyMap())
+    doc["id"] = id
+    doc["tripId"] = tripId
+    doc["type"] = draft.type.wire
+    doc["title"] = draft.title
+    doc["start"] = draft.start
+    for ((key, value) in listOf("provider" to draft.provider, "confirmation" to draft.confirmation, "end" to draft.end, "notes" to draft.notes)) {
+        if (value != null) doc[key] = value else doc.remove(key)
+    }
+    @Suppress("UNCHECKED_CAST")
+    for ((key, place) in listOf("origin" to draft.origin, "destination" to draft.destination)) {
+        val written = placeToDocument(place, stored?.get(key) as? Map<String, Any?>)
+        if (written != null) doc[key] = written else doc.remove(key)
+    }
+    if (doc["source"] !is String) doc["source"] = "manual"
+    if (doc["gmailMessageIds"] !is List<*>) doc["gmailMessageIds"] = emptyList<String>()
+    if (doc["createdAt"] !is String) doc["createdAt"] = now
+    doc["updatedAt"] = now
+    return doc
 }

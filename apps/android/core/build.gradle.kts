@@ -17,6 +17,16 @@ java {
     }
 }
 
+// The airport table (IATA code to time zone) is the web's generated
+// packages/core/src/airports.json, read from there rather than copied, so
+// `pnpm --filter @travelmo/core airports` refreshes both apps.
+sourceSets {
+    main {
+        resources.srcDir(rootProject.file("../../packages/core/src"))
+        resources.include("airports.json")
+    }
+}
+
 dependencies {
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)

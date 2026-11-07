@@ -86,13 +86,25 @@ class ScreenScreenshotTest {
     @Test
     fun trip_detail() {
         val viewModel = viewModel()
-        capture("trip_detail") { TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}) }
+        capture("trip_detail") { TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}) }
     }
 
     @Test
     fun trip_detail_shared() {
         val viewModel = viewModel()
-        capture("trip_detail_shared") { TripDetailScreen(viewModel = viewModel, tripId = "edinburgh", uid = OWNER, onBack = {}) }
+        capture("trip_detail_shared") { TripDetailScreen(viewModel = viewModel, tripId = "edinburgh", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}) }
+    }
+
+    @Test
+    fun add_booking() {
+        val viewModel = viewModel()
+        capture("add_booking") { BookingFormScreen(viewModel = viewModel, tripId = "liverpool", segmentId = null, defaultDate = "2026-12-12", onDone = {}) }
+    }
+
+    @Test
+    fun edit_booking() {
+        val viewModel = viewModel()
+        capture("edit_booking") { BookingFormScreen(viewModel = viewModel, tripId = "liverpool", segmentId = "l-stay", defaultDate = "", onDone = {}) }
     }
 
     @Test
