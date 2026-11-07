@@ -1,7 +1,6 @@
 package app.travelmo.core
 
 import java.time.DayOfWeek
-import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -83,6 +82,3 @@ fun tripMonths(trips: List<Trip>): List<String> {
     }
     return months.toList()
 }
-
-/** Today's date on this device, as the calendar and grouping read it. */
-fun localToday(): String = LocalDate.now().toString()

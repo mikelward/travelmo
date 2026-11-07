@@ -9,6 +9,7 @@ import app.travelmo.core.groupTrips
 import app.travelmo.data.TripStore
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -28,11 +29,20 @@ data class TripListState(val groups: TripGroups?, val segmentsByTrip: Map<String
 const val UPCOMING_WITH_DETAILS = 3
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class TripsViewModel(private val store: TripStore, private val uid: String, private val email: String?) : ViewModel() {
+class TripsViewModel(
+    private val store: TripStore,
+    private val uid: String,
+    private val email: String?,
+    /** The clock, replaceable so a test renders a fixed moment. */
+    private val clock: () -> Instant = { Instant.now() },
+) : ViewModel() {
+    /** Today's date on this device, as grouping and the calendar read it. */
+    fun today(): String = LocalDate.ofInstant(clock(), ZoneId.systemDefault()).toString()
+
     /** The current instant, refreshed each minute so "next up" lines move on as events pass. */
     private val now: Flow<String> = flow {
         while (true) {
-            emit(Instant.now().toString())
+            emit(clock().toString())
             delay(60_000)
         }
     }
@@ -41,7 +51,7 @@ class TripsViewModel(private val store: TripStore, private val uid: String, priv
     val trips: StateFlow<List<Trip>?> = store.trips(uid, email).map<List<Trip>, List<Trip>?> { it }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    private val groups: Flow<TripGroups?> = combine(trips, now) { trips, _ -> trips?.let { groupTrips(it, LocalDate.now().toString()) } }
+    private val groups: Flow<TripGroups?> = combine(trips, now) { trips, _ -> trips?.let { groupTrips(it, today()) } }
 
     private val details: Flow<Map<String, List<Segment>>> = groups.flatMapLatest { groups ->
         val wanted = groups?.let { it.current + it.upcoming.take(UPCOMING_WITH_DETAILS) }.orEmpty()
@@ -53,7 +63,7 @@ class TripsViewModel(private val store: TripStore, private val uid: String, priv
     }
 
     val state: StateFlow<TripListState> = combine(groups, details, now) { groups, details, now -> TripListState(groups, details, now) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TripListState(null, emptyMap(), Instant.now().toString()))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TripListState(null, emptyMap(), clock().toString()))
 
     /** One trip, or null once the list has answered without it. */
     fun trip(id: String): Flow<Trip?> = trips.map { trips -> trips?.firstOrNull { it.id == id } }
