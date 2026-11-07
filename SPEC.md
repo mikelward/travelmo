@@ -803,7 +803,7 @@ edit can move a booking to another trip they see. Every write runs in the
 ViewModel under a token, so a rotation keeps its outcome. The Profile tab
 shows the travel profile as `/profile` does (documents and travelers folded,
 the loyalty programs at a glance and in full, who it is shared with, and the
-profiles shared with the viewer; sharing itself stays on the web), and the
+profiles shared with the viewer, and shares it as the web does), and the
 same document warnings as the web stand in one card at the top of the trip
 list and on trip pages, from the same logic in `:core` with the
 airport-country table read as a resource; as on the web, an upcoming card is

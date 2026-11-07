@@ -145,7 +145,8 @@
       does not have yet.
 - [x] Android app: the Reports tab (summary, world map, days per country,
       favorite places, trips per year, year picker).
-- [ ] Android app, next: profile sharing, reminders settings; the shared `androidlog` and
+- [x] Android app: share the travel profile from the Profile tab.
+- [ ] Android app, next: reminders settings; the shared `androidlog` and
       `androidzoom` libraries; release signing,
       the Play internal track and `scripts/publish-github-release.sh`
       (byte-identical across the Android apps); the weekly Gradle batch
