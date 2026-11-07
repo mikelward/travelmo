@@ -15,3 +15,4 @@ export * from "./calendarExport";
 export * from "./countries";
 export * from "./geocode";
 export * from "./loyalty";
+export * from "./calendar";
