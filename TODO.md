@@ -143,7 +143,9 @@
       completion listeners post to a looper the test owns), so these are
       instrumented tests that need a device or an Android emulator, which CI
       does not have yet.
-- [ ] Android app, next: reports, profile sharing, reminders settings; the shared `androidlog` and
+- [x] Android app: the Reports tab (summary, world map, days per country,
+      favorite places, trips per year, year picker).
+- [ ] Android app, next: profile sharing, reminders settings; the shared `androidlog` and
       `androidzoom` libraries; release signing,
       the Play internal track and `scripts/publish-github-release.sh`
       (byte-identical across the Android apps); the weekly Gradle batch
