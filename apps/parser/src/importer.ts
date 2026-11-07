@@ -12,6 +12,7 @@ import {
   segmentSources,
   stableHash,
   type ExtractedSegment,
+  needsGeocoding,
   type GeocodeLookup,
   type ParsedMessage,
   type Segment,
@@ -22,6 +23,7 @@ import {
 } from "@travelmo/core";
 import { airportPlace } from "@travelmo/core/airportPlaces";
 import type { Extractor } from "./extract";
+import type { RetryStore } from "./geocodeSweep";
 import { isNotFound, type EmailMessage } from "./gmail";
 import { calendarPrefilter, prefilter, senderDomain, type PrefilterResult, type SenderPatterns } from "./prefilter";
 import { embeddingText, similarityVerdict, type Example, type ExampleLabel, type Examples } from "./similarity";
@@ -105,6 +107,8 @@ export type TripStore = {
   // Every booking in the user's own live trips, read outside any lock: a
   // snapshot for planning an import, never for deciding a write.
   listUserSegments(uid: string): Promise<Segment[]>;
+  // One booking, read outside any lock.
+  readSegment(tripId: string, segmentId: string): Promise<Segment | undefined>;
   // Runs fn serialized per user, so two overlapping imports cannot both
   // decide to create a trip for the same dates.
   withUserLock<T>(uid: string, fn: (tx: TripTx) => Promise<T>): Promise<T>;
@@ -125,6 +129,9 @@ export type ImportDeps = {
   // Fills a place's country when its source gave none (geocode.ts); without
   // one, places stay as the source left them.
   geocode?: GeocodeLookup;
+  // Where a booking the geocoder put off waits for the daily sweep
+  // (geocodeSweep.ts); without one, a spent budget is the end of it.
+  geocodeRetries?: RetryStore;
   now: () => string;
   log: (event: string, fields: Record<string, unknown>) => void;
 };
@@ -361,17 +368,33 @@ export const sourceTripPrefix = "tripit-";
 // The one trip holding a source's unfiled items.
 const holdingTripPrefix = `${sourceTripPrefix}unfiled-`;
 
+// Records the bookings just written that still have a place to ask about,
+// when the import's lookups were put off. Outside the transaction, and best
+// effort: the bookings are already filed, so a queue that cannot be written
+// costs a retry (logged), never the import.
+async function recordRetries(uid: string, segments: readonly Segment[], deps: ImportDeps): Promise<void> {
+  const store = deps.geocodeRetries;
+  if (!store) return;
+  for (const segment of segments.filter(needsGeocoding)) {
+    try {
+      await store.put({ uid, tripId: segment.tripId, segmentId: segment.id, at: deps.now() });
+    } catch (error) {
+      deps.log("geocode_retry_queue_failed", { uid, tripId: segment.tripId, segmentId: segment.id, reason: (error as Error).message });
+    }
+  }
+}
+
 // A place's country and coordinates, before anything is written: a flight's
 // from its airport code (a table, no call), anything else's from the
 // geocoder when there is one. Network calls stay outside the transaction,
 // which Firestore may run more than once. A geocoder failure costs the
 // country, never the booking.
-async function placeSegments(uid: string, booking: BookingToFile, deps: ImportDeps): Promise<readonly ExtractedSegment[]> {
+async function placeSegments(uid: string, booking: BookingToFile, deps: ImportDeps): Promise<{ segments: readonly ExtractedSegment[]; deferred: number }> {
   const fromAirports = booking.segments.map((segment) => fillAirports(segment, airportPlace));
-  if (!deps.geocode) return fromAirports;
-  const { segments, filled, failed } = await enrichSegments(fromAirports, deps.geocode);
-  if (filled || failed) deps.log("geocoded", { uid, source: booking.source, sourceId: booking.sourceId, filled, failed });
-  return segments;
+  if (!deps.geocode) return { segments: fromAirports, deferred: 0 };
+  const { segments, filled, failed, deferred } = await enrichSegments(fromAirports, deps.geocode);
+  if (filled || failed || deferred) deps.log("geocoded", { uid, source: booking.source, sourceId: booking.sourceId, filled, failed, deferred });
+  return { segments, deferred };
 }
 
 // The part of every import after the booking is known, whatever it came
@@ -382,7 +405,8 @@ async function placeSegments(uid: string, booking: BookingToFile, deps: ImportDe
 // nothing is written.
 export async function fileBooking(uid: string, incoming: BookingToFile, deps: ImportDeps): Promise<Filed> {
   const { store } = deps;
-  const booking = { ...incoming, segments: await placeSegments(uid, incoming, deps) };
+  const placed = await placeSegments(uid, incoming, deps);
+  const booking = { ...incoming, segments: placed.segments };
   const range = segmentDateRange(booking.segments);
   if (!range) throw new Error(`booking ${booking.sourceId} has no segments`);
   const timestamp = deps.now();
@@ -484,22 +508,24 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
       });
     }
     recordSources();
-    for (const { segment, id } of fresh) {
-      tx.putSegment({
-        ...segment,
-        id,
-        tripId,
-        source: booking.source,
-        gmailMessageIds: booking.gmailMessageIds ?? [],
-        sources: [ref],
-        ...(booking.sender ? { sender: booking.sender } : {}),
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      });
-    }
-    return { tripId, segmentIds: fresh.map((f) => f.id), duplicates, matched };
+    const written: Segment[] = fresh.map(({ segment, id }) => ({
+      ...segment,
+      id,
+      tripId,
+      source: booking.source,
+      gmailMessageIds: booking.gmailMessageIds ?? [],
+      sources: [ref],
+      ...(booking.sender ? { sender: booking.sender } : {}),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }));
+    for (const segment of written) tx.putSegment(segment);
+    return { tripId, segmentIds: written.map((s) => s.id), duplicates, matched, written };
   });
-  return { ...result, timestamp };
+  // A place the budget put off is asked about again by the daily sweep.
+  const { written, ...filed } = result;
+  if (placed.deferred && written?.length) await recordRetries(uid, written, deps);
+  return { ...filed, timestamp };
 }
 
 // An item from a source that hands over bookings already structured (a

@@ -153,16 +153,25 @@ export function fillAirports(segment: ExtractedSegment, lookup: AirportLookup): 
 
 // Asks about a place; `need` says whether the place lacks its country or
 // only its coordinates, so a caller on a budget can keep the country calls
-// coming when coordinates are a luxury.
-export type GeocodeLookup = (query: string, need: GeocodeNeed) => Promise<GeocodeResult | "none">;
+// coming when coordinates are a luxury. "none" is an answer (the place
+// cannot be found); "later" is no answer yet (the day's budget is spent),
+// and the place is worth asking about again another day.
+export type GeocodeLookup = (query: string, need: GeocodeNeed) => Promise<GeocodeResult | "none" | "later">;
 
-export type Enriched = { segments: ExtractedSegment[]; filled: number; failed: number };
+// `deferred` counts the places put off to another day; `countryDeferred`
+// those among them still lacking a country, which a caller rationing the
+// budget by need may treat differently from a missing spot.
+export type Enriched = { segments: ExtractedSegment[]; filled: number; failed: number; deferred: number; countryDeferred: number };
+
+// Whether any place of the segment is still worth asking a geocoder about.
+export const needsGeocoding = (segment: ExtractedSegment): boolean => [segment.origin, segment.destination].some((p) => geocodeQuery(p) !== undefined);
 
 // The segments with their places filled from `lookup`, asked once per
 // distinct query. A failing lookup leaves its place as it was: an import
-// never fails for want of a country.
+// never fails for want of a country. `deferred` counts the places the
+// lookup put off to another day.
 export async function enrichSegments(segments: readonly ExtractedSegment[], lookup: GeocodeLookup): Promise<Enriched> {
-  const answers = new Map<string, Promise<GeocodeResult | "none" | undefined>>();
+  const answers = new Map<string, Promise<GeocodeResult | "none" | "later" | undefined>>();
   let failed = 0;
   const ask = (query: string, need: GeocodeNeed) => {
     const key = normalizeQuery(query);
@@ -177,12 +186,18 @@ export async function enrichSegments(segments: readonly ExtractedSegment[], look
     return pending;
   };
   let filled = 0;
+  let deferred = 0;
+  let countryDeferred = 0;
   const fill = async (place: Place | undefined) => {
     const query = geocodeQuery(place);
     const need = geocodeNeed(place);
     if (!place || !query || !need) return place;
     const result = await ask(query, need);
-    if (!result || result === "none") return place;
+    if (result === "later") {
+      deferred += 1;
+      if (need === "country") countryDeferred += 1;
+    }
+    if (!result || result === "none" || result === "later") return place;
     const applied = applyGeocode(place, result);
     if (applied.country !== place.country || applied.city !== place.city || applied.lat !== place.lat) filled += 1;
     return applied;
@@ -193,5 +208,5 @@ export async function enrichSegments(segments: readonly ExtractedSegment[], look
     const destination = await fill(segment.destination);
     out.push({ ...segment, ...(origin ? { origin } : {}), ...(destination ? { destination } : {}) });
   }
-  return { segments: out, filled, failed };
+  return { segments: out, filled, failed, deferred, countryDeferred };
 }
