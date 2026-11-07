@@ -139,11 +139,19 @@ One Google Cloud project holds everything.
    directory to `apps/web`, and fill in the variables in
    `apps/web/apphosting.yaml`, whose build command runs the app's `build`
    script so the service worker is bundled. Add the App Hosting domain to
-   Authentication's authorized domains.
+   Authentication's authorized domains. For address autocomplete in the
+   booking form, enable the Places API (New) and set
+   `NEXT_PUBLIC_GOOGLE_MAPS_KEY` to a browser key restricted to that API and
+   to the app's origins (HTTP referrers): it ships in the client bundle like
+   the Firebase config, so the restrictions are what protect it. Left unset,
+   the form's place fields are plain inputs.
 
 ## Costs
 
 Everything scales to zero. At a hundred users the bill is dominated by
 Firestore reads and a few cents of Gemini per imported booking; geocoding is
 one cached call per new place name, free up to the API's monthly allowance
-and about half a cent a call past it, with a daily cap; see `SPEC.md`.
+and about half a cent a call past it, with a daily cap; address autocomplete
+is billed per lookup session (the keystrokes of one field and the pick),
+free up to a monthly allowance and a fraction of a cent past it; see
+`SPEC.md`.
