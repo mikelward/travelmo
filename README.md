@@ -16,6 +16,7 @@ the ways trips can come in, built and planned.
 
 ```
 apps/web        Next.js app (Firebase Auth + Firestore, PWA) on Firebase App Hosting
+apps/android    Native Android app (Kotlin, Compose, Firebase Auth + Firestore): its own Gradle build
 apps/parser     Cloud Run worker: Gmail OAuth, Pub/Sub push, pre-filter, Gemini extraction, TripIt import
 packages/core   Shared zod schemas, Firestore paths, trip grouping, formatting, airport tables, travel reports, TripIt mapping
 packages/rules  Firestore security-rules tests (run against the emulator)
@@ -60,6 +61,31 @@ The install icons are PNGs rendered from SVGs and committed; after changing
 The web app's `build` script bundles the service worker (`src/sw.ts` to
 `public/sw.js`) before `next build`; the worker registers in production
 builds only, so `next dev` runs without it.
+
+### Android
+
+`apps/android` is a Gradle build of its own (JDK 21; the wrapper fetches
+Gradle). `:core` is plain Kotlin with the models and the logic the web's
+`packages/core` has (grouping, what comes next, the status lines, date
+formatting), tested without an SDK and kept free of Android by
+`:core:verifyNoAndroid`; `:app` is the Compose app.
+
+```sh
+cd apps/android
+./gradlew :core:verifyNoAndroid :core:test            # no SDK needed
+./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+```
+
+The app signs in with Google through Firebase Auth, so it needs the Firebase
+project's Android app: in the Firebase console add an Android app with the
+package `app.travelmo` (and `app.travelmo.debug` for debug builds) and the
+signing certificate's SHA-1, enable the Google sign-in provider (which gives
+the project a web client id), download `google-services.json` into
+`apps/android/app/` (gitignored; never commit it) and build again. Without
+the file the build still succeeds and runs, with the sign-in button explaining
+that nothing is behind it, which is how CI builds. `versionCode` is the
+repository's commit count and `versionName` names the commit, so build from a
+full clone (`scripts/unshallow.sh` deepens a shallow one).
 
 Run the web app locally against a Firebase project:
 

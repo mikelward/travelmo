@@ -754,10 +754,27 @@ are free; the daily job is the fourth Cloud Scheduler job, about ten cents
 a month. The rules tests and CI run
 on GitHub-hosted runners.
 
+## Android app
+
+`apps/android` is a native Kotlin and Compose app, built the way the other
+Android apps in this account are (AGP and Kotlin at the same versions, a
+pure-Kotlin `:core` guarded by `verifyNoAndroid`, JUnit 5 with Kotest
+assertions, the commit count as `versionCode`, Firebase dormant until
+`google-services.json` is dropped in) rather than the React Native port once
+pencilled in; `design/android/` is its reference, Material 3 in this palette,
+and the strings follow the web app exactly. It reads the same Firestore
+documents under the same rules, signed in as the same Google account through
+Credential Manager and Firebase Auth, so a trip looks the same on both and
+Firestore's own cache answers offline. `:core` re-implements, in Kotlin, what
+the screens need of `packages/core` (grouping, the next event, the status
+lines, date formatting); the two are kept in step by hand, with tests that
+mirror each other. The first cut is the sign-in, the trip list with its
+status lines, a read-only trip page and sign-out; editing, the calendar,
+reports, the profile and the import settings stay on the web until each
+comes over. CI builds it beside the web app (`ci / android`).
+
 ## Later
 
-Native apps (React Native + Expo in `apps/mobile`; the Android screens are
-mocked up in `design/android/`, Material 3 with this palette, as the reference
-for the port), itinerary ideas,
+Itinerary ideas,
 other mail providers and forward-to-import. Further import
 sources share the pipeline: Google Calendar; `IMPORT.md` compares them and maps their fields.
