@@ -57,6 +57,11 @@ viewer's zone. Trip bounds are calendar dates.
 - `users/{uid}/feeds/{feedId}` — `url, label, addedAt, lastFetchedAt,
   lastResult, lastError`: subscribed calendar feeds. The owner reads them;
   the parser alone writes them.
+- `geocodes/{key}` — `query, status (ok | none), country, city, at`: the
+  geocoder's answer for a normalized place query (`key` is its hash), shared
+  by every user, so a name is looked up once ever; `geocodeBudget/{day}` —
+  `calls`, the day's count against `GEOCODE_DAILY_LIMIT`. Both are the
+  parser's alone.
 - `users/{uid}/parsedMessages/{sourceId}` — `outcome` (processing,
   filtered, not_booking, imported, failed), `source` (absent for Gmail,
   `tripit` or `ics` otherwise), `reason, from, subject, segmentIds[],
@@ -112,11 +117,17 @@ counts and the map to one year; the trips-per-year table always shows every
 year. Trips still ahead are not counted, and a trip under way counts up to
 today.
 
-There is no geocoding: a place's country is the one its booking names, or
-for a flight the country of its airport code (`packages/core/src/airportPlaces.json`,
-generated from the same OpenFlights data as the zone table, which also gives
-the airport's coordinates for the map). Station and ferry codes are never
-read as airport codes. Each day of a trip counts for every country the
+A place's country is the one its booking names. Imports fill it in when the
+source gave none: a flight's from its airport code
+(`packages/core/src/airportPlaces.json`, generated from the same OpenFlights
+data as the zone table, which also gives the airport's coordinates for the
+map), anything else's from Google's Geocoding API (`packages/core/src/geocode.ts`
+for what to ask and how to read the answer, `apps/parser/src/geocode.ts` for
+the call), asked once per distinct place name, cached in `geocodes`, and
+capped per day; the city is filled too when the source left it out. A name
+Google cannot place stays as it was, and a hand-entered booking is not
+geocoded (the client writes it). Station and ferry codes are never read as
+airport codes. Each day of a trip counts for every country the
 traveler was in that day: a booking's start and end say where they were,
 and between bookings they stay where the last one (in time, not by local
 date, which differ across the date line) left them. So a travel day
@@ -285,6 +296,11 @@ Gmail ─watch─▶ Pub/Sub ─push(OIDC)─▶ parser /internal/pubsub/gmail
                                         │              and save the embedding as a non-booking
                                         │ yes, and save it as a booking
                                         ▼
+                               place each origin and destination without a
+                               country: airport table, then the geocoder
+                               (cache → day's budget → Google); a miss or a
+                               failure leaves the place as it was
+                                        ▼
                                transaction, serialized per user:
                                drop bookings already on an overlapping
                                trip (same type, time and route);
@@ -369,7 +385,8 @@ directly. A stay with no times takes 15:00 and 11:00, anything else noon; a
 DateTime with neither an offset nor a zone keeps its time as written at
 `+00:00` with a note saying so (the preview counts these), while a zone that is
 named but unknown is not guessed at. A place's country comes from the end of
-its one-line address when that names a country. Notes get TripIt's `[[TripItALT…]]`
+its one-line address when that names a country, and otherwise from the
+geocoder like any import's. Notes get TripIt's `[[TripItALT…]]`
 markers and pasted HTML stripped. Notes, empty trips, reservations TripIt kept
 only the name of (an empty leg, no dates: common in an old account, and all
 of its unfiled items), objects of no known kind and legs without a usable
@@ -605,7 +622,10 @@ last year's trips and bookings each time a subscribed calendar refreshes (a
 few times a day per subscriber). Gemini
 Flash-Lite costs a fraction of a cent per booking email, and an embedding
 of a few hundred tokens a hundredth of that; a hundred users importing
-fifty bookings a month is a few dollars. The rules tests and CI run
+fifty bookings a month is a few dollars. Geocoding is one call per place
+name Travelmo has not seen before (a 20-year export needs a few hundred),
+free up to the Geocoding API's monthly allowance and about half a cent a
+call past it, and `GEOCODE_DAILY_LIMIT` bounds the worst day. The rules tests and CI run
 on GitHub-hosted runners.
 
 ## Later
@@ -613,7 +633,8 @@ on GitHub-hosted runners.
 Native apps (React Native + Expo in `apps/mobile`; the Android screens are
 mocked up in `design/android/`, Material 3 with this palette, as the reference
 for the port), city-level places on the map (it knows only airports and
-countries, with no geocoding), a calendar view, check-in/out surfacing,
+countries; geocoding fills countries, not coordinates), address autocomplete
+in the booking form, a calendar view, check-in/out surfacing,
 ratings and favourites, itinerary ideas, loyalty balances, reminders sent
 by email or push rather than shown in the app, which visas a trip needs,
 other mail providers and forward-to-import. Further import
