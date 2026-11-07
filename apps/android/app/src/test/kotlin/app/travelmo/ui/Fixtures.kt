@@ -105,6 +105,11 @@ class FakeTripStore(
     private val shared: List<TravelProfile> = listOf(fixtureSharedProfile),
 ) : TripStore {
     override fun ownProfile(uid: String): Flow<OwnProfile> = flowOf(OwnProfile(profile))
+    val reminders = mutableListOf<Boolean>()
+    override fun reminderEmail(uid: String): Flow<Boolean?> = flowOf(true)
+    override suspend fun setReminderEmail(uid: String, on: Boolean) {
+        reminders += on
+    }
     override fun sharedProfiles(email: String?): Flow<List<TravelProfile>> = flowOf(shared)
     val saved = mutableListOf<Triple<String, SegmentDraft, String?>>()
     val deleted = mutableListOf<Pair<String, String>>()

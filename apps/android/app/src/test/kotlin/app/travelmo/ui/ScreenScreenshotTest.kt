@@ -160,7 +160,10 @@ class ScreenScreenshotTest {
     }
 
     @Test
-    fun settings() = capture("settings") {
-        SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, onBack = {})
+    fun settings() {
+        val viewModel = viewModel()
+        capture("settings") {
+            SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
+        }
     }
 }

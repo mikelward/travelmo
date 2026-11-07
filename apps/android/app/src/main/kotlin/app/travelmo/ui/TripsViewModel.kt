@@ -188,6 +188,11 @@ class TripsViewModel(
 
     fun mergeTrips(token: String, sourceId: String, targetId: String) = run(token) { store.mergeTrips(sourceId, targetId) }
 
+    /** Whether reminders by email are on; null until the user document answers. */
+    val reminderEmail: StateFlow<Boolean?> = store.reminderEmail(uid).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    fun setReminderEmail(token: String, on: Boolean) = run(token) { store.setReminderEmail(uid, on) }
+
     /** Who the user's travel profile is shared with; the profile is started if none has arrived yet. */
     fun saveTrusted(token: String, emails: List<String>) = run(token) {
         val answer = ownProfileAnswer.value ?: throw IllegalStateException("The profile is still loading; try again")

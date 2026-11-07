@@ -97,6 +97,15 @@ class TripsViewModelTest {
     }
 
     @Test
+    fun `the reminders switch writes the choice and reads the stored one`() = runTest {
+        val store = FakeTripStore()
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL)
+        viewModel.setReminderEmail("reminders", false)
+        store.reminders shouldBe listOf(false)
+        viewModel.outcomes.value shouldBe mapOf("reminders" to Outcome.Done)
+    }
+
+    @Test
     fun `a failed save says why, to the form that asked`() = runTest {
         val store = GatedStore(fail = true)
         val viewModel = TripsViewModel(store, OWNER, null)
