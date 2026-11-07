@@ -105,6 +105,8 @@
       status) under its provider on the trip page.
 - [x] Calendar view: trips as bars on a month grid (`/calendar`), linking
       to the trip, with previous, next and today.
+- [x] Ratings and favorites: one to five stars and a heart on a booking,
+      and a "Favorite places" list on Reports linking back to the trips.
 - [x] Android mockups, round three: the calendar as a fourth navigation
       destination, the loyalty table and booking line, and place dots on the
       map (`design/android/`, boards 30–31 and changes to 04, 21, 22, 26, 29).
@@ -264,6 +266,12 @@ Guesses made on autopilot; change any of them freely.
   revision is the one it read, so a hand edit is never overwritten; an entry
   older than thirty days is dropped unasked, and a lookup error keeps the
   entry for another day. The job takes the third free Cloud Scheduler slot.
+- Ratings and favorites live on the booking (the stay, the tour, the
+  flight), not on a separate place record: there is no place entity, and
+  the booking is where the traveler was. Anyone who can edit the trip can
+  rate, as with every other edit, and the last tap wins. The reports page
+  gathers them by place name and country rather than by coordinates, since
+  a name is what the traveler looks for. No rating comes from an import.
 - The mockups' navigation bar grew a fourth destination, Calendar, between
   Trips and Reports, in the web nav's order; Material 3 allows three to
   five. Own trips use the primary color and shared ones a violet token added
