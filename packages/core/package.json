@@ -7,12 +7,14 @@
     ".": "./src/index.ts",
     "./airports": "./src/airports.ts",
     "./airportPlaces": "./src/airportPlaces.ts",
-    "./projection": "./src/projection.ts"
+    "./projection": "./src/projection.ts",
+    "./visaRules": "./src/visaRules.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "airports": "node scripts/airports.mjs"
+    "airports": "node scripts/airports.mjs",
+    "visas": "node scripts/visas.mjs"
   },
   "dependencies": {
     "zod": "^4.6.7"

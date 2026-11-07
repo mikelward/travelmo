@@ -17,3 +17,4 @@ export * from "./geocode";
 export * from "./loyalty";
 export * from "./calendar";
 export * from "./favorites";
+export * from "./visas";

@@ -159,7 +159,7 @@ export type PersonWarning = { person: PersonDocuments; warning: DocumentWarning 
 
 // Someone else's documents matter for a trip they are on: one they own or
 // that is shared with them. The viewer is on every trip they can see.
-const onTrip = (person: PersonDocuments, trip: Trip) =>
+export const onTrip = (person: PersonDocuments, trip: Trip) =>
   person.own || person.uid === trip.ownerUid || (!!person.email && trip.sharedWith.includes(person.email.toLowerCase()));
 
 export function tripWarnings(
