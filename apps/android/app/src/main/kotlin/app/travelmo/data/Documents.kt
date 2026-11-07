@@ -2,6 +2,9 @@ package app.travelmo.data
 
 import app.travelmo.core.Place
 import app.travelmo.core.PlaceDraft
+import app.travelmo.core.ProfileEntry
+import app.travelmo.core.ProfileField
+import app.travelmo.core.TravelProfile
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentDraft
 import app.travelmo.core.SegmentType
@@ -110,4 +113,29 @@ fun draftToDocument(draft: SegmentDraft, stored: Map<String, Any?>?, id: String,
     if (doc["createdAt"] !is String) doc["createdAt"] = now
     doc["updatedAt"] = now
     return doc
+}
+
+@Suppress("UNCHECKED_CAST")
+private fun Map<String, Any?>.entries(key: String): List<ProfileEntry> =
+    (this[key] as? List<*>).orEmpty().mapNotNull { raw ->
+        val entry = raw as? Map<String, Any?> ?: return@mapNotNull null
+        val title = entry.text("title") ?: return@mapNotNull null
+        val fields = (entry["fields"] as? List<*>).orEmpty().mapNotNull { f ->
+            val field = f as? Map<String, Any?> ?: return@mapNotNull null
+            ProfileField(field["label"] as? String ?: return@mapNotNull null, field["value"] as? String ?: return@mapNotNull null)
+        }
+        ProfileEntry(title, fields)
+    }
+
+/** users/{uid}/travelProfile/main as the parser writes it. */
+fun profileFromDocument(data: Map<String, Any?>): TravelProfile? {
+    val ownerUid = data.text("ownerUid") ?: return null
+    return TravelProfile(
+        ownerUid = ownerUid,
+        ownerEmail = data.text("ownerEmail"),
+        trustedEmails = data.strings("trustedEmails"),
+        travelers = data.entries("travelers"),
+        loyalty = data.entries("loyalty"),
+        documents = data.entries("documents"),
+    )
 }

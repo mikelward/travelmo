@@ -4,6 +4,7 @@ import android.util.Log
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentDraft
 import app.travelmo.core.localDate
+import app.travelmo.core.TravelProfile
 import app.travelmo.core.Trip
 import app.travelmo.core.normalizeEmail
 import com.google.firebase.firestore.FirebaseFirestore
@@ -26,6 +27,12 @@ interface TripStore {
 
     /** One trip's bookings, live; empty while it loads. */
     fun segments(tripId: String): Flow<List<Segment>>
+
+    /** The user's own travel profile, live; null while it loads or when there is none. */
+    fun ownProfile(uid: String): Flow<TravelProfile?>
+
+    /** The profiles shared with the user's verified address, live. */
+    fun sharedProfiles(email: String?): Flow<List<TravelProfile>>
 
     /** Writes a booking, new ([existingId] null) or edited, widening the trip's dates to hold it. */
     suspend fun saveSegment(tripId: String, draft: SegmentDraft, existingId: String?)
@@ -67,6 +74,25 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
                 }
             }
         }
+
+    override fun ownProfile(uid: String): Flow<TravelProfile?> = callbackFlow {
+        val registration = db.collection("users").document(uid).collection("travelProfile").document("main").addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                Log.e(TAG, "Reading the travel profile failed", error)
+                trySend(null)
+                return@addSnapshotListener
+            }
+            trySend(snapshot?.data?.let(::profileFromDocument))
+        }
+        awaitClose { registration.remove() }
+    }
+
+    override fun sharedProfiles(email: String?): Flow<List<TravelProfile>> {
+        val address = normalizeEmail(email) ?: return flowOf(emptyList())
+        return db.collectionGroup("travelProfile").whereArrayContains("trustedEmails", address).snapshots().orNothing("shared profiles").map { snapshot ->
+            snapshot?.documents.orEmpty().mapNotNull { doc -> profileFromDocument(doc.data ?: emptyMap()) }
+        }
+    }
 
     /**
      * As the web's saveSegment: one transaction reads the trip and the stored

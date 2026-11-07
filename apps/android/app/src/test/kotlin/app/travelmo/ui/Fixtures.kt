@@ -1,6 +1,9 @@
 package app.travelmo.ui
 
 import app.travelmo.core.Place
+import app.travelmo.core.ProfileEntry
+import app.travelmo.core.ProfileField
+import app.travelmo.core.TravelProfile
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentDraft
 import app.travelmo.core.SegmentType
@@ -36,7 +39,7 @@ val fixtureSegments: Map<String, List<Segment>> = mapOf(
     "dublin" to listOf(
         Segment(
             "d-flight", "dublin", SegmentType.FLIGHT, "FR 123 MAN to DUB", "2026-11-28T07:10:00+00:00", "2026-11-28T08:15:00+00:00",
-            provider = "Ryanair", confirmation = "ABC123", origin = Place("Manchester", code = "MAN", country = "GB"), destination = Place("Dublin", code = "DUB", country = "IE"),
+            provider = "Example Air", confirmation = "ABC123", origin = Place("Manchester", code = "MAN", country = "GB"), destination = Place("Dublin", code = "DUB", country = "IE"),
         ),
     ),
     "liverpool" to listOf(
@@ -54,7 +57,38 @@ val fixtureSegments: Map<String, List<Segment>> = mapOf(
     ),
 )
 
-class FakeTripStore(private val trips: List<Trip> = fixtureTrips, private val segments: Map<String, List<Segment>> = fixtureSegments) : TripStore {
+private fun entry(title: String, vararg fields: Pair<String, String>) = ProfileEntry(title, fields.map { ProfileField(it.first, it.second) })
+
+/** The owner's profile: a passport that runs out two months after Dublin, two programs, two travelers. */
+val fixtureProfile = TravelProfile(
+    ownerUid = OWNER,
+    ownerEmail = OWNER_EMAIL,
+    trustedEmails = listOf("partner@example.com"),
+    travelers = listOf(entry("Ann Example", "Home city" to "Exampleton"), entry("Sam Example", "Home city" to "Exampleton")),
+    loyalty = listOf(
+        entry("Example Air Miles", "Account number" to "EA 1234567", "Balance" to "48200", "Elite status" to "Silver", "Elite next status" to "Gold"),
+        entry("Sample Hotels Rewards", "Account number" to "SH-90211", "Points" to "12000", "Tier" to "Member"),
+        entry("Example Cars Club", "Account number" to "EC 44 8812"),
+    ),
+    documents = listOf(entry("Passport: Ann Example", "Number" to "X1234567", "Nationality" to "GB", "Expiration date" to "2027-02-01")),
+)
+
+/** A partner's profile shared with the owner: a passport that runs out before Dublin ends. */
+val fixtureSharedProfile = TravelProfile(
+    ownerUid = "partner",
+    ownerEmail = "partner@example.com",
+    trustedEmails = listOf(OWNER_EMAIL),
+    documents = listOf(entry("Passport: Sam Example", "Nationality" to "GB", "Expiration date" to "2026-11-30")),
+)
+
+class FakeTripStore(
+    private val trips: List<Trip> = fixtureTrips,
+    private val segments: Map<String, List<Segment>> = fixtureSegments,
+    private val profile: TravelProfile? = fixtureProfile,
+    private val shared: List<TravelProfile> = listOf(fixtureSharedProfile),
+) : TripStore {
+    override fun ownProfile(uid: String): Flow<TravelProfile?> = flowOf(profile)
+    override fun sharedProfiles(email: String?): Flow<List<TravelProfile>> = flowOf(shared)
     val saved = mutableListOf<Triple<String, SegmentDraft, String?>>()
     val deleted = mutableListOf<Pair<String, String>>()
     override fun trips(uid: String, email: String?): Flow<List<Trip>> = flowOf(trips)

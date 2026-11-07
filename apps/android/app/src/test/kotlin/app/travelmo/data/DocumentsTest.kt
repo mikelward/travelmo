@@ -2,6 +2,8 @@ package app.travelmo.data
 
 import app.travelmo.core.Place
 import app.travelmo.core.PlaceDraft
+import app.travelmo.core.ProfileEntry
+import app.travelmo.core.ProfileField
 import app.travelmo.core.SegmentDraft
 import app.travelmo.core.SegmentType
 import io.kotest.matchers.nulls.shouldBeNull
@@ -79,5 +81,21 @@ class DocumentsTest {
         fresh["gmailMessageIds"] shouldBe emptyList<String>()
         fresh["createdAt"] shouldBe "now"
         fresh.keys shouldBe setOf("id", "tripId", "type", "title", "start", "confirmation", "destination", "source", "gmailMessageIds", "createdAt", "updatedAt")
+    }
+
+    @Test
+    fun `reads a travel profile's entries and drops malformed ones`() {
+        val profile = profileFromDocument(
+            mapOf(
+                "ownerUid" to "u1", "ownerEmail" to "owner@example.com", "trustedEmails" to listOf("partner@example.com"),
+                "documents" to listOf(mapOf("title" to "Passport", "fields" to listOf(mapOf("label" to "Expiry", "value" to "2031-05-06"), mapOf("label" to 3))), mapOf("fields" to emptyList<Any>())),
+                "loyalty" to emptyList<Any>(),
+            ),
+        )!!
+        profile.ownerEmail shouldBe "owner@example.com"
+        profile.trustedEmails shouldBe listOf("partner@example.com")
+        profile.documents shouldBe listOf(ProfileEntry("Passport", listOf(ProfileField("Expiry", "2031-05-06"))))
+        profile.travelers shouldBe emptyList()
+        profileFromDocument(mapOf("ownerEmail" to "x")).shouldBeNull()
     }
 }

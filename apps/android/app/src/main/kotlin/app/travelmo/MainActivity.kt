@@ -23,6 +23,7 @@ import app.travelmo.ui.BookingFormScreen
 import app.travelmo.ui.CalendarScreen
 import app.travelmo.ui.HomeNavigationBar
 import app.travelmo.ui.HomeTab
+import app.travelmo.ui.ProfileScreen
 import app.travelmo.ui.SettingsScreen
 import app.travelmo.ui.SignInScreen
 import app.travelmo.ui.TripDetailScreen
@@ -94,6 +95,7 @@ private fun SignedInApp(app: TravelmoApplication, user: SignedIn) {
                         onOpenSettings = { backStack.add(Settings) },
                         bottomBar = bar,
                     )
+                    HomeTab.PROFILE -> ProfileScreen(viewModel = viewModel, bottomBar = bar)
                     HomeTab.CALENDAR -> CalendarScreen(
                         viewModel = viewModel,
                         uid = user.uid,
