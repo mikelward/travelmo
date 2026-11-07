@@ -14,6 +14,8 @@ import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
 import { effectiveDecision, learnSender } from "@/lib/patterns";
 import { DocumentWarnings } from "@/components/DocumentWarnings";
+import { EntryRequirements } from "@/components/EntryRequirements";
+import { useEntryRequirements } from "@/lib/visas";
 import { localToday } from "@/lib/dates";
 import { usePeopleDocuments, useTripWarnings } from "@/lib/documents";
 import { useTravelProfile } from "@/lib/travelProfile";
@@ -274,6 +276,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   const tripList = useMemo(() => (trip ? [trip] : []), [trip]);
   const segmentsOfTrip = useMemo(() => (segments ? { [tripId]: segments } : {}), [segments, tripId]);
   const warnings = useTripWarnings(people, tripList, segmentsOfTrip, today)[tripId] ?? [];
+  const entries = useEntryRequirements(people, trip, segments, today);
   const [editing, setEditing] = useState<Editing>();
   const [error, setError] = useState<string>();
   if (trip === undefined) return <p className="text-zinc-500">Loading…</p>;
@@ -316,6 +319,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
       </p>
       {isOwner && trip.deleting && <DangerZone trip={trip} />}
       <DocumentWarnings warnings={warnings} today={today} />
+      {entries && <EntryRequirements entries={entries.entries} fetched={entries.fetched} />}
 
       {canEdit && !editing && (
         <button type="button" onClick={() => setEditing({ kind: "add" })} className={`${buttonClass} mt-4`}>
