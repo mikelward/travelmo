@@ -24,6 +24,8 @@ const flight = {
       start_airport_code: "lhr",
       start_city_name: "London",
       start_country_code: "GB",
+      start_airport_latitude: "51.4775",
+      start_airport_longitude: "-0.4614",
       end_airport_code: "CDG",
       end_city_name: "Paris",
       end_country_code: "FR",
@@ -48,7 +50,7 @@ const stay = {
   room_type: "Double",
   StartDateTime: { date: "2030-05-01", timezone: "Europe/Paris" },
   EndDateTime: { date: "2030-05-08", timezone: "Europe/Paris" },
-  Address: { address: "1 Rue Exemple, Paris", city: "Paris", country: "FR" },
+  Address: { address: "1 Rue Exemple, Paris", city: "Paris", country: "FR", latitude: "48.8567", longitude: "2.3508" },
 };
 
 const exportFile = {
@@ -142,7 +144,7 @@ describe("parseTripItExport", () => {
       provider: "Example Air",
       start: "2030-05-01T08:15:00+01:00",
       end: "2030-05-01T11:40:00+02:00",
-      origin: { name: "London", code: "LHR", city: "London", country: "GB" },
+      origin: { name: "London", code: "LHR", city: "London", country: "GB", lat: 51.4775, lon: -0.4614 },
       destination: { name: "Paris", code: "CDG", city: "Paris", country: "FR" },
       notes: "Seat: 12A\nDeparture terminal: 5",
     });
@@ -156,7 +158,7 @@ describe("parseTripItExport", () => {
       provider: "Hotel Example",
       start: "2030-05-01T15:00:00+02:00",
       end: "2030-05-08T11:00:00+02:00",
-      destination: { name: "Hotel Example", city: "Paris", country: "FR" },
+      destination: { name: "Hotel Example", city: "Paris", country: "FR", lat: 48.8567, lon: 2.3508 },
       notes: "Room: Double",
     });
   });
@@ -324,6 +326,10 @@ describe("parseTripItExport", () => {
   it("gives a stay or an activity the country its address ends in", () => {
     const withCountry = parseTripItExport({ Trips: [{ Objects: [{ ...stay, Address: { address: "1 Rue Exemple, 75001 Paris, France" } }] }] });
     expect(withCountry.trips[0]!.segments[0]!.destination).toEqual({ name: "Hotel Example", country: "FR" });
+    const blank = parseTripItExport({ Trips: [{ Objects: [{ ...stay, Address: { address: "1 Rue Exemple, Paris", city: "Paris", country: "FR", latitude: "0", longitude: "0" } }] }] });
+    expect(blank.trips[0]!.segments[0]!.destination).toEqual({ name: "Hotel Example", city: "Paris", country: "FR" });
+    const bad = parseTripItExport({ Trips: [{ Objects: [{ ...stay, Address: { address: "1 Rue Exemple, Paris", city: "Paris", country: "FR", latitude: "north", longitude: "2.35" } }] }] });
+    expect(bad.trips[0]!.segments[0]!.destination).toEqual({ name: "Hotel Example", city: "Paris", country: "FR" });
   });
 
   it("keeps unfiled items apart, with their confirmation numbers", () => {

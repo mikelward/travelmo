@@ -140,7 +140,18 @@ export function countryFromAddress(address: unknown): string | undefined {
   return countryCodeOf(named);
 }
 
-function place(name: unknown, code: unknown, city: unknown, country: unknown): Place | undefined {
+// TripIt writes coordinates as strings; a pair is kept only when both are
+// numbers on the globe.
+function coordinates(latitude: unknown, longitude: unknown): Pick<Place, "lat" | "lon"> {
+  const lat = Number(text(latitude));
+  const lon = Number(text(longitude));
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return {};
+  // (0, 0) is TripIt's blank, not the Gulf of Guinea.
+  if (lat === 0 && lon === 0) return {};
+  return { lat, lon };
+}
+
+function place(name: unknown, code: unknown, city: unknown, country: unknown, latitude?: unknown, longitude?: unknown): Place | undefined {
   const c = text(code)?.toUpperCase();
   const cityName = text(city);
   const label = text(name) ?? cityName ?? c;
@@ -151,12 +162,13 @@ function place(name: unknown, code: unknown, city: unknown, country: unknown): P
     ...(c ? { code: c } : {}),
     ...(cityName ? { city: cityName } : {}),
     ...(countryCode && /^[A-Z]{2}$/.test(countryCode) ? { country: countryCode } : {}),
+    ...coordinates(latitude, longitude),
   };
 }
 
 function addressPlace(name: unknown, address: unknown): Place | undefined {
   const a = isObj(address) ? address : {};
-  return place(name ?? a.address, undefined, a.city, a.country ?? countryFromAddress(a.address));
+  return place(name ?? a.address, undefined, a.city, a.country ?? countryFromAddress(a.address), a.latitude, a.longitude);
 }
 
 const joinNotes = (...parts: (string | undefined)[]) => {
@@ -219,8 +231,22 @@ function legs(object: Obj, kind: "flight" | "train"): Mapped {
     let number: string | undefined;
     let provider: string | undefined;
     if (kind === "flight") {
-      origin = place(leg.start_airport_name ?? leg.start_city_name, leg.start_airport_code, leg.start_city_name, leg.start_country_code);
-      destination = place(leg.end_airport_name ?? leg.end_city_name, leg.end_airport_code, leg.end_city_name, leg.end_country_code);
+      origin = place(
+        leg.start_airport_name ?? leg.start_city_name,
+        leg.start_airport_code,
+        leg.start_city_name,
+        leg.start_country_code,
+        leg.start_airport_latitude,
+        leg.start_airport_longitude,
+      );
+      destination = place(
+        leg.end_airport_name ?? leg.end_city_name,
+        leg.end_airport_code,
+        leg.end_city_name,
+        leg.end_country_code,
+        leg.end_airport_latitude,
+        leg.end_airport_longitude,
+      );
       const airline = text(leg.marketing_airline_code);
       const flight = text(leg.marketing_flight_number);
       number = airline && flight ? `${airline} ${flight}` : flight;

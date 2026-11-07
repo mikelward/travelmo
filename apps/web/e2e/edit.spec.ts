@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { owner, signIn } from "./helpers";
-import { clearData, seedFlight, seedTrip } from "./seed";
+import { clearData, readSegments, seedFlight, seedTrip } from "./seed";
 
 test.beforeEach(async () => {
   await clearData();
@@ -93,6 +93,7 @@ test("typing the start of an address offers places, and picking one fills city, 
           { longText: "Exampleville", shortText: "Exampleville", types: ["postal_town"] },
           { longText: "United Kingdom", shortText: "GB", types: ["country", "political"] },
         ],
+        location: { latitude: 53.41, longitude: -2.98 },
       },
     });
   });
@@ -114,6 +115,9 @@ test("typing the start of an address offers places, and picking one fills city, 
 
   await page.getByRole("button", { name: "Add" }).click();
   await expect(page.getByText("10 Example Street, Exampleville EX1 2MP, UK")).toBeVisible();
+  // The pick's spot is stored with the place, for the map.
+  const stored = (await readSegments("e2e-address")).find((s) => s.title === "Example stay");
+  expect(stored?.destination).toMatchObject({ name: "10 Example Street", city: "Exampleville", country: "GB", lat: 53.41, lon: -2.98 });
   // Keyboard: arrow to the second suggestion and pick it with Enter.
   await page.getByRole("button", { name: "Edit" }).nth(1).click();
   const edit = page.getByRole("combobox", { name: "Where" });

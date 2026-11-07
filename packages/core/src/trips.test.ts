@@ -45,6 +45,15 @@ describe("mergePlace", () => {
     expect(mergePlace(imported, "Heathrow", "LHR", "IE")).toMatchObject({ country: "IE", city: "London" });
     expect(mergePlace(imported, "Heathrow", "LHR", "")).toEqual({ name: "Heathrow", code: "LHR", city: "London" });
   });
+  it("sets or clears the spot only when an address pick gives or drops it", () => {
+    const spot = { lat: 48.5, lon: 2.25 };
+    const placed = { name: "Hotel Example", country: "FR", ...spot };
+    expect(mergePlace(undefined, "Hotel Example", "", "FR", { location: spot })).toEqual(placed);
+    expect(mergePlace(placed, "Hotel Sample", "")).toEqual({ ...placed, name: "Hotel Sample" });
+    expect(mergePlace(placed, "Hotel Sample", "", undefined, { location: null })).toEqual({ name: "Hotel Sample", country: "FR" });
+    expect(mergePlace(placed, "Hotel Sample", "", undefined, { location: { lat: 1, lon: 2 } })).toEqual({ name: "Hotel Sample", country: "FR", lat: 1, lon: 2 });
+  });
+
   it("sets or clears the city and address only when an address pick gives them", () => {
     const picked = { name: "Hotel Example", city: "Exampleville", address: "1 Example St, Exampleville, Exampleland" };
     expect(mergePlace(undefined, "Hotel Example", "", "FR", { city: "Exampleville", address: "1 Example St, Exampleville, Exampleland" })).toEqual({ ...picked, country: "FR" });

@@ -27,6 +27,9 @@ test("reports count days in each country, trips per year, and mark the map", asy
   await expect(map.locator('[data-country="PT"]')).toHaveAttribute("data-visited", "true");
   await expect(map.locator('[data-country="GB"]')).toHaveAttribute("data-visited", "true");
   await expect(map.locator("[data-airport]")).toHaveCount(2);
+  const guesthouse = map.locator('[data-place="Example Guesthouse"]');
+  await expect(guesthouse).toHaveCount(1);
+  await expect(guesthouse.locator("title")).toHaveText("Example Guesthouse, Lisbon, Portugal");
 
   await page.getByRole("combobox", { name: "Year" }).selectOption("2025");
   await expect(page.getByTestId("summary")).toHaveText("1 trip · 5 days away · 2 countries");

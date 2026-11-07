@@ -158,6 +158,7 @@ function Report({ user }: { user: User }) {
         data={tables.map}
         visited={new Set(report.countries.map((c) => c.country))}
         airports={report.airports}
+        places={report.places}
         name={countryName}
       />
       {(report.unknownDays > 0 || report.unplaced > 0) && (
@@ -168,7 +169,8 @@ function Report({ user }: { user: User }) {
           ]
             .filter(Boolean)
             .join("; ")}
-          : bookings say where they are by their country, or for a flight its airport code.
+          : bookings say where they are by their country, or for a flight its airport code; the map shows the places that know their
+          spot.
         </p>
       )}
       <Countries report={report} />
