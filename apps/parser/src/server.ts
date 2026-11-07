@@ -45,6 +45,7 @@ import { geminiEmbedder, geminiExtractor } from "./extract";
 import { cachedGeocoder, defaultDailyLimit, firestoreGeocodeStore, googleGeocoder } from "./geocode";
 import { firestoreRetryStore, sweepGeocodeRetries } from "./geocodeSweep";
 import { smtpConfig, smtpMailer } from "./mail";
+import { pushConfig, webPushSender } from "./push";
 import { firestoreReminderIo, sendReminders } from "./reminders";
 import { airportPlace } from "@travelmo/core/airportPlaces";
 import { visaTable } from "@travelmo/core/visaRules";
@@ -655,22 +656,23 @@ app.post("/internal/poll-feeds", async (c) => {
   return c.json({ ...result, calendars });
 });
 
-// Reminders by email go out only with SMTP settings; without them the
-// switch in Settings has no effect.
+// Reminders by email go out only with SMTP settings, by push only with
+// VAPID keys; without them the switches in Settings have no effect.
 const smtp = smtpConfig(process.env);
-const mailer = smtp ? smtpMailer(smtp) : undefined;
+const vapid = pushConfig(process.env);
+const reminderChannels = { ...(smtp ? { mail: smtpMailer(smtp) } : {}), ...(vapid ? { push: webPushSender(vapid) } : {}) };
 const reminderIo = firestoreReminderIo(db, verifiedEmail);
 
 // Cloud Scheduler calls this daily (deploy/scheduler.sh): the document
-// warnings and entry requirements of trips starting within a month, mailed
-// once each to everyone who asked.
+// warnings and entry requirements of trips starting within a month, sent
+// once each to everyone who asked, by email and to their browsers.
 app.post("/internal/reminders", async (c) => {
   await requireInternalCaller(c);
-  if (!mailer) {
+  if (!reminderChannels.mail && !reminderChannels.push) {
     log("INFO", "reminders_off", {});
     return c.json({ enabled: false });
   }
-  const run = await sendReminders(reminderIo, mailer, {
+  const run = await sendReminders(reminderIo, reminderChannels, {
     now: deps.now(),
     origin: webOrigin,
     lookups: { airportPlace, visaTable },

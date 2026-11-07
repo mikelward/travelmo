@@ -12,6 +12,7 @@ import { describeBackfill, pausedReason, readWholeMailbox } from "@/lib/backfill
 import { firestore } from "@/lib/firebase";
 import { useInstall } from "@/lib/install";
 import { useSaveForOffline } from "@/lib/offline";
+import { subscribePush, unsubscribePush, usePushState } from "@/lib/push";
 import { domainOf, effectiveDecision, learnSender } from "@/lib/patterns";
 import { describeCalendarResult, previewIcs } from "@/lib/ics";
 import { describeTripItResult, previewTripIt } from "@/lib/tripit";
@@ -582,7 +583,42 @@ function RemindersSection({ user }: { user: User }) {
         </span>
       </label>
       {status && <p className="mt-2 text-sm text-zinc-500">{status}</p>}
+      <PushSwitch uid={user.uid} />
     </section>
+  );
+}
+
+// The same reminders as notifications in this browser. Each browser
+// subscribes for itself, so the switch is per browser, not per account.
+function PushSwitch({ uid }: { uid: string }) {
+  const initial = usePushState(uid);
+  const [state, setState] = useState<"on" | "off">();
+  const [note, setNote] = useState<string>();
+  const current = state ?? initial;
+  if (!current || current === "unsupported") return null;
+  // The box follows the tap at once and comes back if the browser says no.
+  const toggle = async (on: boolean) => {
+    setNote(undefined);
+    setState(on ? "on" : "off");
+    try {
+      if (!on) await unsubscribePush(uid);
+      else if ((await subscribePush(uid)) === "denied") {
+        setState("off");
+        setNote("This browser blocks notifications from Travelmo; allow them in its site settings first.");
+      }
+    } catch (e) {
+      setState(on ? "off" : "on");
+      setNote((e as Error).message);
+    }
+  };
+  return (
+    <>
+      <label className="mt-3 flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={current === "on"} onChange={(e) => void toggle(e.target.checked)} />
+        <span>Notify me in this browser</span>
+      </label>
+      {note && <p className="mt-2 text-sm text-zinc-500">{note}</p>}
+    </>
   );
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dueForReminders, entryLine, newLines, reminderEmail, reminderLines } from "./reminders";
+import { dueForReminders, entryLine, newLines, reminderEmail, reminderLines, reminderNotifications, notificationPayloadLimit } from "./reminders";
 import type { Segment, Trip } from "./schema";
 import type { VisaTable } from "./visas";
 
@@ -84,5 +84,33 @@ describe("reminderEmail", () => {
       subject: "Before your trip to Rome",
       text: expect.stringContaining("Rome (30 Oct – 3 Nov 2026), under way:"),
     });
+  });
+});
+
+describe("reminderNotifications", () => {
+  it("makes one notification per trip, tagged by trip, opening it", () => {
+    const [dubai, rome] = reminderNotifications(
+      [
+        { trip: trip("Dubai", "2026-11-20", "2026-11-25"), lines: ["one", "two"] },
+        { trip: trip("Rome", "2026-10-30", "2026-11-03"), lines: ["three"] },
+      ],
+      { origin: "https://travelmo.example", today: "2026-11-01" },
+    );
+    expect(dubai).toEqual({
+      title: "Before your trip to Dubai",
+      body: "Starts in 19 days, 20–25 Nov 2026.\none\ntwo",
+      url: "https://travelmo.example/trips/Dubai",
+      tag: "reminder-Dubai",
+    });
+    expect(rome).toMatchObject({ body: "Under way, 30 Oct – 3 Nov 2026.\nthree", tag: "reminder-Rome" });
+  });
+
+  it("keeps a notification within what a push service guarantees to carry, counting the rest", () => {
+    const lines = Array.from({ length: 60 }, (_, i) => `Line ${i + 1}: ${"é".repeat(80)}`);
+    const [n] = reminderNotifications([{ trip: trip("Dubai", "2026-11-20", "2026-11-25"), lines }], { origin: "https://travelmo.example", today: "2026-11-01" });
+    expect(new TextEncoder().encode(JSON.stringify(n)).length).toBeLessThanOrEqual(notificationPayloadLimit);
+    const shown = n!.body.split("\n").filter((l) => l.startsWith("Line ")).length;
+    expect(shown).toBeGreaterThan(10);
+    expect(n!.body.endsWith(`And ${60 - shown} more on the trip page.`)).toBe(true);
   });
 });

@@ -92,4 +92,34 @@ self.addEventListener("message", (event) => {
   }
 });
 
+// A reminder from the parser (see apps/parser/src/push.ts): shown as it
+// came, replacing an earlier one about the same trip.
+self.addEventListener("push", (event) => {
+  const data = event.data?.json() as { title?: string; body?: string; url?: string; tag?: string } | undefined;
+  if (!data?.title) return;
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body ?? "",
+      tag: data.tag ?? "reminder",
+      icon: "/icons/icon-192.png",
+      data: { url: data.url ?? "/" },
+    }),
+  );
+});
+
+// Tapping one opens the trip, in a window the app already has if any.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = new URL((event.notification.data as { url?: string } | undefined)?.url ?? "/", self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clients) => {
+      const open = clients.find((c) => c.url === url) ?? clients[0];
+      if (open) {
+        if (open.url !== url && "navigate" in open) await open.navigate(url);
+        await open.focus();
+      } else await self.clients.openWindow(url);
+    }),
+  );
+});
+
 serwist.addEventListeners();

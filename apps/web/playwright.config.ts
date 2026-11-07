@@ -32,6 +32,8 @@ export default defineConfig({
       NEXT_PUBLIC_PARSER_URL: "http://localhost:8080",
       // A fake key so the place field offers suggestions; the tests stub Google.
       NEXT_PUBLIC_GOOGLE_MAPS_KEY: "fake-maps-key",
+      // Any URL-safe base64 of 65 bytes subscribes; the stubbed push manager never checks it.
+      NEXT_PUBLIC_VAPID_PUBLIC_KEY: "BPfakefakefakefakefakefakefakefakefakefakefakefakefakefakefakefakefakefakefakefakefakefakefake",
       NEXT_PUBLIC_AUTH_EMULATOR_URL: "http://localhost:9099",
       NEXT_PUBLIC_FIRESTORE_EMULATOR_HOST: "localhost:8081",
     },
