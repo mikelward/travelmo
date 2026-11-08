@@ -1,7 +1,7 @@
 ---
 trigger: always_on
 alwaysApply: true
-last_modified: 2026-11-07
+last_modified: 2026-11-08
 ---
 
 # travelmo
@@ -119,3 +119,14 @@ Shared by every mikelward repo and the user-level agent config; canonical in mik
 - **Dates**. ISO strings in Firestore, never Timestamps; segment times are shown as
   written, in the place's offset.
 - **Secrets**. Only the parser holds any; the web app has `NEXT_PUBLIC_*` config only.
+- **After a merge**. Report the versionCode (`git rev-list --count origin/main` after an
+  unshallowed refspec fetch; it counts the whole repository, not just `apps/android`):
+  `Need versionCode 72 (b81c23d) or higher to test PR #52's fix`. Without remote Git,
+  say it couldn't be verified.
+- **Release notes since N**. Up to five `• ` end-user bullets in one code block for
+  commits N+1..`origin/main` (freshly fetched; offline only from a complete local `main`,
+  saying it may be behind), worded as titles, one per feature (a reworked one by its final
+  state; read bodies where unclear), ranked by what the user risks without it (broken or
+  wrong first, polish last). Skip prefixed/docs/CI commits, dependency bumps (unless
+  nothing else changed — then one bullet) and anything the range added then undid. Range
+  above, one line below naming what was omitted.
