@@ -1,0 +1,48 @@
+name: npm update
+
+# One batched pnpm dependency PR per week for the workspace (`apps/web`,
+# `apps/parser`, `packages/*`), produced by the shared mikelward/npm-update
+# workflow in its pnpm mode: every range moves to the newest release it
+# already admits, in every workspace, the checks validate the batch, and a
+# passing batch lands by auto-merge. All policy lives in the shared
+# workflow; this caller owns only the schedule, the permission grant (which
+# the called workflow downscopes per job: the job that runs dependency code
+# only ever sees contents: read) and the one input that says pnpm.
+#
+# The @main reference is deliberate, as for gradle-update.yml: npm-update is
+# this owner's repo, its main only moves through its own gated pull
+# requests, and a fix there reaches every consumer's next run with no bump
+# PRs.
+#
+# Cost and reliability: GitHub Actions minutes on this account, one run a
+# week plus the CI it triggers on the batch PR; nothing the app ships or
+# sends. Off every app path, so a failure never reaches a user: the run
+# opens no PR that week and the next Saturday retries.
+on:
+  schedule:
+    - cron: '47 6 * * 6'   # Saturdays, after the Gradle batch, off the top of the hour
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: npm-update
+  cancel-in-progress: false
+jobs:
+  npm-update:
+    uses: mikelward/npm-update/.github/workflows/npm-update.yml@main
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    # `inherit`, not a `secrets:` block: the called workflow's publish job
+    # reads NPM_UPDATE_PAT from this repository's `npm-update` environment,
+    # and an environment secret reaches a called workflow no other way. A
+    # secret passed by name reaches the runner of every job in the called
+    # workflow, the untrusted update job included. The credential opens the
+    # batch PR as a real collaborator, so the ordinary `pull_request` round
+    # runs for it; until it exists, the PR's CI waits for one approval
+    # click, as README "Dependency updates" says.
+    secrets: inherit # zizmor: ignore[secrets-inherit]
+    with:
+      # pnpm-lock.yaml, `pnpm update -r` across the workspace, pnpm at the
+      # version package.json's packageManager pins, Node from .node-version.
+      package-manager: pnpm

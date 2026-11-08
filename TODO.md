@@ -158,11 +158,10 @@
       `mikelward/gradle-update` with the catalog under `apps/android`, the
       CI checks as its checks, androidlog's Maven branch as an extra
       repository and its two coordinates off the cooldown.
-- [ ] The weekly npm batch for the pnpm workspace. `mikelward/npm-update`
-      (what clothescast and readmo call) runs `npm ci` against a
-      `package-lock.json` and lists even npm workspaces as unsupported, so a
-      pnpm workspace needs that repository taught pnpm first; a change
-      outside this repo, so ask before taking it on.
+- [x] The weekly npm batch for the pnpm workspace:
+      `.github/workflows/npm-update.yml` calls `mikelward/npm-update` in
+      its pnpm mode (taught there for this workspace: `pnpm update -r`,
+      the workspace manifests, a pnpm-lock.yaml reader for its checker).
 - [x] Android app: release signing from the four `RELEASE_KEYSTORE_*`
       variables, the `Publish` job on main (signed bundle as an artifact, a
       GitHub prerelease per versionCode through the shared
@@ -179,10 +178,11 @@
       Console app with its declarations, then the service account; enable
       the Firebase Cloud Messaging API and give the parser's service
       account the Messaging admin role (README "Deploy"); for the
-      weekly batch, allow Actions to create pull requests and put
-      `GRADLE_UPDATE_PAT` in a `gradle-update` environment (README
-      "Dependency updates"), and have the ruleset require branches to be up
-      to date, which its auto-merge checks for before arming.
+      weekly batches, allow Actions to create pull requests, put
+      `GRADLE_UPDATE_PAT` in a `gradle-update` environment and
+      `NPM_UPDATE_PAT` in an `npm-update` one (README "Dependency
+      updates"), and have the ruleset require branches to be up to date,
+      which their auto-merge checks for before arming.
 - [x] A second chance for places an exhausted daily geocoding budget left
       without a country or a spot: the import queues the booking and a daily
       sweep (`/internal/geocode-sweep`, the third scheduler job) asks again.

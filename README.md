@@ -148,8 +148,18 @@ repository's README asks. One-time setup: Settings → Actions → General →
 Workflow permissions → "Allow GitHub Actions to create and approve pull
 requests", and a `gradle-update` environment holding `GRADLE_UPDATE_PAT`, a
 fine-grained token with Contents and Pull requests write on this repository
-(docs/PAT.md there), so the batch PR runs CI without an approval click. The
-pnpm workspace has no batch yet (TODO.md).
+(docs/PAT.md there), so the batch PR runs CI without an approval click.
+
+`.github/workflows/npm-update.yml` does the same for the pnpm workspace
+through mikelward/npm-update in its pnpm mode, later the same Saturday:
+every range in `package.json`, `apps/*/package.json` and
+`packages/*/package.json` moves to the newest release it already admits
+(`pnpm update -r`, pnpm at the version `packageManager` pins, Node from
+`.node-version`), `pnpm run lint`, `pnpm test` and `pnpm run build` run
+against the result, a transitive dependency that would cross a major is
+held back, and one pull request opens with auto-merge armed. Its one-time
+setup is the same Actions permission plus an `npm-update` environment
+holding `NPM_UPDATE_PAT`, a token with the same two scopes.
 
 Run the web app locally against a Firebase project:
 
