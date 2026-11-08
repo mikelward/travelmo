@@ -115,6 +115,11 @@ at the Auth emulator it exposes `window.travelmoTestSignIn(email)`, which
 signs in with the fake Google credential the emulator accepts, so the tests
 need no popup.
 
+The Android app's writes (`FirestoreTrips`) are tested the same way, on an
+Android emulator against the Firestore and Auth emulators on the host, as
+instrumented tests the `android-emulator` CI job runs; the Firestore SDK
+does not run under Robolectric.
+
 ## The trip list
 
 Trips are grouped into now, upcoming and past by calendar date. Trips under

@@ -47,7 +47,7 @@
       publish the OAuth consent screen (Gmail read scope: testing mode for
       up to 100 users, or Google verification), deploy the parser and the
       web app, then tune the pre-filter thresholds on real mail.
-- [ ] Import sources beyond Gmail, one pipeline: generalize
+- [x] Import sources beyond Gmail, one pipeline: generalize
       `importMessage` so any source hands over candidate text or a ready
       `ExtractedBooking` plus a stable source id for idempotency, and the
       same trip assignment and parsed-message record apply.
@@ -139,13 +139,12 @@
 - [x] Android app: the owner's trip edits (rename, fit dates, share, merge,
       delete and finish an interrupted deletion) and moving a booking to
       another trip.
-- [ ] Android app: tests of `FirestoreTrips`' writes against the Firestore
+- [x] Android app: tests of `FirestoreTrips`' writes against the Firestore
       emulator (the booking save, fit, move, merge, delete and an interrupted
-      deletion), as `apps/web/src/lib/edits.test.ts` has for their web twins.
-      The Firestore Android SDK does not run under Robolectric (its
-      completion listeners post to a looper the test owns), so these are
-      instrumented tests that need a device or an Android emulator, which CI
-      does not have yet.
+      deletion), as `apps/web/src/lib/edits.test.ts` has for their web twins:
+      instrumented tests in `app/src/androidTest`, run by CI's
+      `android-emulator` job on a hosted runner's emulator
+      (`scripts/connected-tests.sh` seeds the users and runs them).
 - [x] Android app: the Reports tab (summary, world map, days per country,
       favorite places, trips per year, year picker).
 - [x] Android app: share the travel profile from the Profile tab.
