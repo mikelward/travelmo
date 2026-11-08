@@ -70,7 +70,12 @@ Gradle). `:core` is plain Kotlin with the models and the logic the web's
 formatting), tested without an SDK and kept free of Android by
 `:core:verifyNoAndroid`; `:app` is the Compose app: sign-in, the trip list,
 a trip's bookings with adding, editing and deleting, the calendar's month
-view, the travel profile with its document warnings, and sign-out so far.
+view, the travel profile with its document warnings, reports, and Settings
+with sign-out, the reminders switch and the debug log. The debug log is the
+fleet's shared one, `com.mikelward.androidlog` from the Maven repository
+that mikelward/androidlog publishes into its own `maven` branch (declared in
+`settings.gradle.kts`, scoped to that group); it stays on the phone, and
+Settings shares a report of it through the share sheet.
 
 ```sh
 cd apps/android

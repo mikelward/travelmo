@@ -147,13 +147,17 @@
       favorite places, trips per year, year picker).
 - [x] Android app: share the travel profile from the Profile tab.
 - [x] Android app: the reminders-by-email switch in Settings.
+- [x] Android app: the shared `androidlog` debug log, with the recording
+      switch and the report share in Settings.
 - [ ] Android app, next: reminders as notifications (needs a push channel
       the web's VAPID subscriptions do not give an app; Firebase Cloud
-      Messaging and a parser sender would be new); the shared `androidlog` and
-      `androidzoom` libraries; release signing,
+      Messaging and a parser sender would be new); release signing,
       the Play internal track and `scripts/publish-github-release.sh`
       (byte-identical across the Android apps); the weekly Gradle batch
-      (`mikelward/gradle-update` with `catalog: apps/android/gradle/libs.versions.toml`).
+      (`mikelward/gradle-update` with `catalog: apps/android/gradle/libs.versions.toml`,
+      `extra-repositories` naming androidlog's Maven branch and
+      `no-cooldown-for` its two coordinates, as its README asks). The shared
+      `androidzoom` library is for apps that zoom a picture; nothing here does.
 - [ ] Android app, maintainer steps: register the Android app in the Firebase
       project (package `app.travelmo` and `app.travelmo.debug`, the signing
       SHA-1, Google sign-in enabled) and keep `google-services.json` out of
