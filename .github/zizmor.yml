@@ -16,10 +16,11 @@ rules:
         "mikelward/codex-review": ref-pin
         "mikelward/codex-review/.github/workflows/check-consumer.yml": ref-pin
         "mikelward/lanes": ref-pin
-        # Same reasoning: the weekly gradle-update.yml tracks this reusable
-        # workflow deliberately, and a pin would be a thing to bump here on
-        # every merge there.
+        # Same reasoning: the weekly gradle-update.yml and npm-update.yml
+        # track these reusable workflows deliberately, and a pin would be a
+        # thing to bump here on every merge there.
         "mikelward/gradle-update/.github/workflows/gradle-update.yml": ref-pin
+        "mikelward/npm-update/.github/workflows/npm-update.yml": ref-pin
         # Official actions may pin to a tag, as every workflow here does.
         "actions/*": ref-pin
         # Everything else must pin to a hash.
