@@ -151,19 +151,25 @@
       switch and the report share in Settings.
 - [ ] Android app, next: reminders as notifications (needs a push channel
       the web's VAPID subscriptions do not give an app; Firebase Cloud
-      Messaging and a parser sender would be new); release signing,
-      the Play internal track and `scripts/publish-github-release.sh`
-      (byte-identical across the Android apps); the weekly Gradle batch
+      Messaging and a parser sender would be new); the weekly Gradle batch
       (`mikelward/gradle-update` with `catalog: apps/android/gradle/libs.versions.toml`,
       `extra-repositories` naming androidlog's Maven branch and
       `no-cooldown-for` its two coordinates, as its README asks). The shared
       `androidzoom` library is for apps that zoom a picture; nothing here does.
+- [x] Android app: release signing from the four `RELEASE_KEYSTORE_*`
+      variables, the `Publish` job on main (signed bundle as an artifact, a
+      GitHub prerelease per versionCode through the shared
+      `scripts/publish-github-release.sh`, the Play internal track once a
+      service account exists).
 - [ ] Android app, maintainer steps: register the Android app in the Firebase
       project (package `app.travelmo` and `app.travelmo.debug`, the signing
       SHA-1, Google sign-in enabled) and keep `google-services.json` out of
       git; add `ci / android` to the ruleset's required checks; add the
       sibling apps' `.claude/settings.json` SessionStart hook (the sandbox
-      refuses an agent writing that file) so web sessions seed the SDK.
+      refuses an agent writing that file) so web sessions seed the SDK; make
+      the upload keystore and put it, its passwords and the Firebase config
+      in the `production` environment (README "Release"); create the Play
+      Console app with its declarations, then the service account.
 - [x] A second chance for places an exhausted daily geocoding budget left
       without a country or a spot: the import queues the booking and a daily
       sweep (`/internal/geocode-sweep`, the third scheduler job) asks again.
@@ -171,6 +177,11 @@
 ## Decisions needing review
 
 Guesses made on autopilot; change any of them freely.
+
+- The Android `Publish` job warns and stops when the release secrets are
+  missing, where the sibling apps fail the run: this app has no Play
+  listing yet, so a red main on every merge would say nothing new. Switch
+  it to failing once the first release has shipped.
 
 - Partner sharing is per trip, by email. A sharee edits bookings; only the
   owner renames, shares or deletes the trip. Not whole-account sharing.
