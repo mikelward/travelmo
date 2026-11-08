@@ -97,6 +97,24 @@ version CI uses, so the Settings screen reads the same on both):
 ./gradlew :app:testDebugUnitTest --tests app.travelmo.ui.ScreenScreenshotTest -Proborazzi.test.record
 ```
 
+The writes behind the screens (`FirestoreTrips`: saving, moving and
+merging bookings, fitting a trip's dates, deleting a trip and finishing a
+deletion the app interrupted) are tested against the Firestore emulator
+with the real rules, as the web's `edits.test.ts` tests their twins, in
+`app/src/androidTest`. The Firestore SDK does not run under Robolectric, so
+these run on an Android emulator or device that `adb` sees, with the
+Firebase emulators on the host; from the repository root:
+
+```sh
+pnpm --filter @travelmo/rules exec firebase emulators:exec --only firestore,auth \
+  --project demo-travelmo --config ../../firebase.json ../../apps/android/scripts/connected-tests.sh
+```
+
+The script seeds two users with verified addresses (the rules read
+`email_verified` for a sharee) and runs `connectedDebugAndroidTest`. CI's
+`android-emulator` job does the same on a hosted runner's emulator, beside
+the unit job, in about ten minutes.
+
 The app signs in with Google through Firebase Auth, so it needs the Firebase
 project's Android app: in the Firebase console add an Android app with the
 package `app.travelmo` (and `app.travelmo.debug` for debug builds) and the
