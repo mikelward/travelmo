@@ -1,7 +1,6 @@
 package app.travelmo.auth
 
 import android.content.Context
-import android.util.Log
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
@@ -10,6 +9,8 @@ import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
 import androidx.credentials.exceptions.NoCredentialException
 import app.travelmo.core.normalizeEmail
+import app.travelmo.log.TravelmoLog
+import com.mikelward.androidlog.safe
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.AuthCredential
@@ -86,7 +87,7 @@ class GoogleAccount(
         try {
             credentialManager(context).clearCredentialState(ClearCredentialStateRequest())
         } catch (e: Exception) {
-            Log.w(TAG, "Clearing the credential state failed", e)
+            TravelmoLog.failure(e, "Clearing the credential state failed")
         }
     }
 
@@ -96,7 +97,7 @@ class GoogleAccount(
             .build()
         val credential = credentialManager(activityContext).getCredential(activityContext, request).credential
         if (credential !is CustomCredential || credential.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-            Log.w(TAG, "Sign-in returned an unexpected credential type")
+            TravelmoLog.warning("Sign-in returned an unexpected credential type")
             return null
         }
         val idToken = GoogleIdTokenCredential.createFrom(credential.data).idToken
@@ -107,18 +108,14 @@ class GoogleAccount(
         is GetCredentialCancellationException -> SignInResult.Canceled
         is NoCredentialException -> SignInResult.NoAccount
         is GetCredentialException -> {
-            Log.w(TAG, "Sign-in failed: ${e.type}")
+            TravelmoLog.warning("Sign-in failed: %s", safe(e.type))
             SignInResult.Failed
         }
         else -> {
-            Log.w(TAG, "Sign-in failed", e)
+            TravelmoLog.failure(e, "Sign-in failed")
             SignInResult.Failed
         }
     }
 
     private fun FirebaseUser.toSignedIn() = SignedIn(uid, normalizeEmail(email))
-
-    private companion object {
-        const val TAG = "GoogleAccount"
-    }
 }

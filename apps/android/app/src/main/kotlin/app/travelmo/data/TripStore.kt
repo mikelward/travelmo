@@ -1,6 +1,5 @@
 package app.travelmo.data
 
-import android.util.Log
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentDraft
 import app.travelmo.core.localDate
@@ -10,6 +9,9 @@ import app.travelmo.core.MAX_TRUSTED
 import app.travelmo.core.normalizeEmail
 import app.travelmo.core.normalizeTrusted
 import app.travelmo.core.segmentDateRange
+import app.travelmo.log.TravelmoLog
+import com.mikelward.androidlog.safe
+import com.mikelward.androidlog.sensitive
 import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
@@ -98,7 +100,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             for (snapshot in listOfNotNull(mine, theirs)) {
                 for (doc in snapshot.documents) {
                     val trip = tripFromDocument(doc.id, doc.data ?: emptyMap())
-                    if (trip == null) Log.w(TAG, "Malformed trip ${doc.reference.path}") else byId[trip.id] = trip
+                    if (trip == null) TravelmoLog.warning("Malformed trip %s", sensitive(doc.reference.path)) else byId[trip.id] = trip
                 }
             }
             byId.values.toList()
@@ -109,7 +111,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         db.collection("trips").document(tripId).collection("segments").snapshots().orNothing("segments of $tripId").map { snapshot ->
             snapshot?.documents.orEmpty().mapNotNull { doc ->
                 segmentFromDocument(doc.id, tripId, doc.data ?: emptyMap()).also {
-                    if (it == null) Log.w(TAG, "Malformed segment ${doc.reference.path}")
+                    if (it == null) TravelmoLog.warning("Malformed segment %s", sensitive(doc.reference.path))
                 }
             }
         }
@@ -119,7 +121,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             if (error != null) {
                 // Nothing is sent: a profile that could not be read is not one
                 // that is absent, and sharing must not start a new one over it.
-                Log.e(TAG, "Reading the travel profile failed", error)
+                TravelmoLog.error(error, "Reading the travel profile failed")
                 return@addSnapshotListener
             }
             trySend(OwnProfile(snapshot?.data?.let(::profileFromDocument)))
@@ -137,7 +139,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     override fun reminderEmail(uid: String): Flow<Boolean?> = callbackFlow {
         val registration = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
             if (error != null) {
-                Log.e(TAG, "Reading the user document failed", error)
+                TravelmoLog.error(error, "Reading the user document failed")
                 trySend(null)
                 return@addSnapshotListener
             }
@@ -360,13 +362,11 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
 
     private fun Flow<QuerySnapshot>.orNothing(what: String): Flow<QuerySnapshot?> =
         map<QuerySnapshot, QuerySnapshot?> { it }.catch { error ->
-            Log.e(TAG, "Reading $what failed", error)
+            TravelmoLog.error(error, "Reading %s failed", safe(what))
             emit(null)
         }
 
     private companion object {
-        const val TAG = "FirestoreTrips"
-
         /** How often a revision-checked write is retried before giving up. */
         const val ATTEMPTS = 5
 

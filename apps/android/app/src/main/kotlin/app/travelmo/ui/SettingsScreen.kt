@@ -35,6 +35,8 @@ import app.travelmo.BuildConfig
 import app.travelmo.R
 import app.travelmo.auth.GoogleAccount
 import app.travelmo.auth.SignedIn
+import app.travelmo.log.DebugLogging
+import com.mikelward.androidlog.android.ShareOutcome
 import kotlinx.coroutines.launch
 
 private const val REMINDER_TOKEN = "settings/reminders/email"
@@ -99,6 +101,7 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
                 )
             }
             (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            DebugLogSection(signedIn = true)
             Text(
                 stringResource(R.string.version, BuildConfig.VERSION_NAME),
                 style = MaterialTheme.typography.bodySmall,
@@ -107,4 +110,51 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
             )
         }
     }
+}
+
+/**
+ * The on-device debug log: a switch to stop recording (which also empties
+ * what was collected) and a share of a report built from this run and the
+ * earlier ones, through the system share sheet with a clipboard copy. The
+ * log carries nothing of the user's that the privacy floor withholds.
+ */
+@Composable
+private fun DebugLogSection(signedIn: Boolean) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var enabled by remember { mutableStateOf(DebugLogging.isEnabled(context)) }
+    var saveFailed by remember { mutableStateOf(false) }
+    var sharing by remember { mutableStateOf(false) }
+    var shareNote by remember { mutableStateOf<Int?>(null) }
+    Text(stringResource(R.string.debug_log), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(R.string.debug_log_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Text(stringResource(R.string.debug_log_record), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Switch(
+            checked = enabled,
+            onCheckedChange = { on ->
+                enabled = on
+                saveFailed = !DebugLogging.setEnabled(context, on)
+            },
+        )
+    }
+    if (saveFailed) Text(stringResource(R.string.setting_not_saved), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+    OutlinedButton(
+        onClick = {
+            sharing = true
+            shareNote = null
+            scope.launch {
+                val outcome = DebugLogging.share(context, signedIn)
+                shareNote = when (outcome) {
+                    ShareOutcome.SHARED -> null
+                    ShareOutcome.COPIED_ONLY -> R.string.debug_log_copied_only
+                    ShareOutcome.FAILED -> R.string.debug_log_share_failed
+                }
+                sharing = false
+            }
+        },
+        enabled = !sharing,
+        modifier = Modifier.padding(top = 8.dp),
+    ) { Text(stringResource(if (sharing) R.string.sharing else R.string.share_debug_log)) }
+    shareNote?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
 }
