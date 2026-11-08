@@ -71,7 +71,9 @@ formatting), tested without an SDK and kept free of Android by
 `:core:verifyNoAndroid`; `:app` is the Compose app: sign-in, the trip list,
 a trip's bookings with adding, editing and deleting, the calendar's month
 view, the travel profile with its document warnings, reports, and Settings
-with sign-out, the reminders switch and the debug log. The debug log is the
+with sign-out, the reminders switches (by email, and as notifications on
+the phone over Firebase Cloud Messaging, which asks for the notification
+permission) and the debug log. The debug log is the
 fleet's shared one, `com.mikelward.androidlog` from the Maven repository
 that mikelward/androidlog publishes into its own `maven` branch (declared in
 `settings.gradle.kts`, scoped to that group); it stays on the phone, and
@@ -218,7 +220,13 @@ One Google Cloud project holds everything.
    and `VAPID_SUBJECT` (a `mailto:` or `https:` URL the push services may
    contact) turn on reminders as browser notifications; make the pair once
    with `pnpm --filter @travelmo/parser exec web-push generate-vapid-keys`
-   and keep it, since a new pair orphans every subscription.
+   and keep it, since a new pair orphans every subscription. Reminders to
+   phones go through Firebase Cloud Messaging with the service account's
+   own credential, so they need no setting, only the Firebase Cloud
+   Messaging API enabled on the project and the parser's service account
+   holding the **Firebase Cloud Messaging API Admin** role
+   (`roles/firebasecloudmessaging.admin`); without them the daily job logs
+   `reminder_failed` for anyone with a registered phone.
 4. **Push**: `PROJECT=… PARSER_URL=https://<parser> PUSH_SA=<service account>
    deploy/pubsub.sh` creates the `gmail` topic (with Gmail allowed to publish
    to it), a push subscription to `https://<parser>/internal/pubsub/gmail`
@@ -264,5 +272,5 @@ and about half a cent a call past it, with a daily cap; address autocomplete
 is billed per lookup session (the keystrokes of one field and the pick),
 free up to a monthly allowance and a fraction of a cent past it; reminders
 by email ride the account's own SMTP service, by push the browsers' own
-push services (free), and both a fourth Cloud Scheduler job (about ten
+push services and Firebase Cloud Messaging (both free), and all a fourth Cloud Scheduler job (about ten
 cents a month); see `SPEC.md`.

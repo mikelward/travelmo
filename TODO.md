@@ -149,10 +149,11 @@
 - [x] Android app: the reminders-by-email switch in Settings.
 - [x] Android app: the shared `androidlog` debug log, with the recording
       switch and the report share in Settings.
-- [ ] Android app, next: reminders as notifications (needs a push channel
-      the web's VAPID subscriptions do not give an app; Firebase Cloud
-      Messaging and a parser sender would be new). The shared `androidzoom`
-      library is for apps that zoom a picture; nothing here does.
+- [x] Android app: reminders as notifications over Firebase Cloud
+      Messaging (the phone's token under `users/{uid}/devices`, the parser's
+      `fcm.ts` sender beside web push, the switch in Settings). The shared
+      `androidzoom` library is for apps that zoom a picture; nothing here
+      does.
 - [x] The weekly Gradle batch: `.github/workflows/gradle-update.yml` calls
       `mikelward/gradle-update` with the catalog under `apps/android`, the
       CI checks as its checks, androidlog's Maven branch as an extra
@@ -175,7 +176,9 @@
       refuses an agent writing that file) so web sessions seed the SDK; make
       the upload keystore and put it, its passwords and the Firebase config
       in the `production` environment (README "Release"); create the Play
-      Console app with its declarations, then the service account; for the
+      Console app with its declarations, then the service account; enable
+      the Firebase Cloud Messaging API and give the parser's service
+      account the Messaging admin role (README "Deploy"); for the
       weekly batch, allow Actions to create pull requests and put
       `GRADLE_UPDATE_PAT` in a `gradle-update` environment (README
       "Dependency updates"), and have the ruleset require branches to be up
@@ -188,6 +191,17 @@
 
 Guesses made on autopilot; change any of them freely.
 
+- Reminders to phones share the web's `reminders.push` flag rather than a
+  flag of their own: the parser's one query finds everyone with any
+  channel, and each client clears the flag only when no browser and no
+  phone is left. The Messaging channel is always on in the parser (the
+  Admin credential needs no key), where email and web push each need a
+  setting. A device's id is the first 32 hex characters of the token's
+  SHA-256, so a token is never a document name. A message is data only
+  (a notification message is collapsible per app, so of several trips'
+  reminders queued for an offline phone only the last would arrive) and
+  the app draws it in the `reminders` channel at default importance; a tap
+  opens the trip in the app.
 - The Gradle batch dispatches no CI run (`ci-workflow: ''`): ci.yml has no
   `workflow_dispatch` with a `pr` input, and the PAT makes the dispatch
   unnecessary; until the PAT exists, a batch PR's CI waits for one approval

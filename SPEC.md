@@ -53,6 +53,10 @@ viewer's zone. Trip bounds are calendar dates.
 - `users/{uid}/pushSubscriptions/{id}` — `endpoint, keys {p256dh, auth},
   createdAt`: one per browser that asked for notifications, written by that
   browser, read and pruned by the parser.
+- `users/{uid}/devices/{id}` — `token, platform, createdAt`: one per phone
+  that asked for notifications (the Android app; `platform` is `android`),
+  written by the app with the id a hash of its Cloud Messaging token, read
+  and pruned by the parser.
 - `users/{uid}/settings/patterns` — `allow[], deny[]` sender domains.
 - `users/{uid}/travelProfile/main` — `ownerUid, ownerEmail, trustedEmails[],
   travelers[], loyalty[], documents[], importedAt, updatedAt`: the traveler's
@@ -243,14 +247,27 @@ The switch in Settings is per browser: it asks the browser's permission,
 subscribes through the service worker with the app's VAPID public key
 (`NEXT_PUBLIC_VAPID_PUBLIC_KEY`) and writes the subscription under the user
 (`users/{uid}/pushSubscriptions/{id}`, the id a hash of the endpoint), and
-sets `reminders.push`, which the last browser to unsubscribe clears. The
+sets `reminders.push`, which the last browser to unsubscribe clears, unless
+a phone is still registered. The
 same daily job sends one notification per trip (`reminderNotifications` in
 core: the title, when the trip starts, the lines, the trip's URL as the tap
 target, a tag per trip so a later one replaces it) to every subscription,
 signed with the private key the parser holds (`VAPID_PRIVATE_KEY`,
 `VAPID_PUBLIC_KEY`, `VAPID_SUBJECT`; `apps/parser/src/push.ts`, the
 `web-push` library) with a day to live; the worker (`src/sw.ts`) shows it
-and opens the trip on a tap. An endpoint is whatever the browser wrote, so
+and opens the trip on a tap. The same notifications go to every phone the
+Android app registered (`users/{uid}/devices/{id}`) through Firebase Cloud
+Messaging with the parser's Admin credential (`apps/parser/src/fcm.ts`; no
+key of its own, a day to live, the fields as a data message, which
+Messaging queues one by one for an offline phone where it collapses
+notification messages to the last, so the app draws each one itself in its
+`reminders` channel), and a
+token Messaging reports unregistered is dropped like a lost subscription.
+The app's switch in Settings asks for the notification permission, then
+writes the phone's token under the account and sets `reminders.push`; off
+forgets the phone, and the flag clears only once no phone and no browser
+is left. A refreshed token replaces the registration it had, so delivery
+never lapses, and a tap opens the trip in the app. An endpoint is whatever the browser wrote, so
 it is held to the calendar-feed rule (https on the standard port, public
 addresses only, checked at the connection) and one that fails is dropped
 like one the push service reports gone. The switch reads as on only when
@@ -259,7 +276,7 @@ second account on the same browser starts off, and turning it off forgets
 the browser for that account alone, leaving the browser's subscription to
 any other account that recorded it. Lines are marked sent once every channel the person turned on
 has taken them, so a failure on one keeps the day's news for tomorrow on
-both, as does a day on which no browser was left to take them. A
+all, as does a day on which no browser or phone was left to take them. A
 notification is kept within the payload a push service guarantees to carry
 (3993 bytes, RFC 8291): a trip with more news than fits says how many more
 lines wait on its page. Each send has a socket timeout, so one quiet
@@ -755,7 +772,8 @@ day. Address
 autocomplete in the form is billed to the user's browser key per lookup
 session, free up to the Places API's monthly allowance; a hand-entered
 booking is a rare thing beside imports. Reminders by email ride the
-operator's SMTP service, and by push the browsers' own push services, which
+operator's SMTP service, by push the browsers' own push services and
+Firebase Cloud Messaging for phones (free), which
 are free; the daily job is the fourth Cloud Scheduler job, about ten cents
 a month. The rules tests and CI run
 on GitHub-hosted runners.
@@ -776,11 +794,13 @@ the screens need of `packages/core` (grouping, the next event, the status
 lines, date formatting); the two are kept in step by hand, with tests that
 mirror each other. The first cut is the sign-in, the trip list with its
 status lines, a read-only trip page and sign-out; Settings also turns
-reminders by email on or off (`reminders.email`, as the web's does), keeps
+reminders by email on or off (`reminders.email`, as the web's does) and
+reminders as notifications on the phone (the phone's Cloud Messaging token
+under `users/{uid}/devices`, see "Document reminders"), keeps
 the on-device debug log (the fleet's shared `androidlog`: logcat and a
 rotated file, a privacy floor over every line, a switch to stop recording
-and a report shared through the share sheet), while the import settings and
-reminders as notifications stay on the web; a navigation bar switches between Trips,
+and a report shared through the share sheet), while the import settings
+stay on the web; a navigation bar switches between Trips,
 the Calendar (the month view of `/calendar`, with the same weeks, bars and
 lanes from `:core`), Reports and Profile. Reports counts what `/reports`
 does, from `:core`'s port of the same logic with the same tests: the trips
