@@ -20,3 +20,4 @@ export * from "./favorites";
 export * from "./visas";
 export * from "./reminders";
 export * from "./status";
+export * from "./forward";

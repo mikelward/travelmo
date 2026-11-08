@@ -1,0 +1,12 @@
+# The forward-to-import relay: an Email Worker behind Cloudflare Email
+# Routing's catch-all rule on the forwarding domain (README "Deploy").
+# Deploy from this directory with `pnpm dlx wrangler@4 deploy`; the secret
+# is set once with `pnpm dlx wrangler@4 secret put INBOUND_SECRET` and must
+# equal the parser's INBOUND_SECRET.
+name = "travelmo-inbound"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+
+[vars]
+# The parser's URL (Cloud Run), without a trailing slash.
+PARSER_URL = "https://REPLACE_ME.run.app"

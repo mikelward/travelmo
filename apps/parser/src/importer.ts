@@ -156,7 +156,7 @@ export type ImportOptions = {
   consumed?: Set<string>;
   // A calendar event read like an email: recorded and filed as `ics`, and
   // checked by this instead of the sender-and-subject pre-filter.
-  source?: "gmail" | "ics";
+  source?: "gmail" | "ics" | "forward";
   prefilter?: (message: EmailMessage) => PrefilterResult;
 };
 
@@ -284,7 +284,10 @@ export async function importMessage(
     return "not_booking";
   }
 
-  const sender = source === "gmail" ? senderDomain(message.from) : undefined;
+  // A forwarded email is an email: its sender (the original one, read out of
+  // the forwarding block) is learnable, and two alike may be one booking.
+  const isEmail = source === "gmail" || source === "forward";
+  const sender = isEmail ? senderDomain(message.from) : undefined;
   const filed = await fileBooking(
     uid,
     {
@@ -297,7 +300,7 @@ export async function importMessage(
       // Events of a calendar are one list with an id each: two alike are
       // two reservations. Emails are not; one booking is often confirmed
       // twice.
-      ...(source === "gmail" ? {} : { distinctWithinSource: true }),
+      ...(isEmail ? {} : { distinctWithinSource: true }),
       ...(options.consumed ? { consumed: options.consumed } : {}),
     },
     deps,

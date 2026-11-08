@@ -36,7 +36,7 @@ function endLabel(segment: Segment): string | undefined {
   return localDate(segment.end) === localDate(segment.start) ? time : `${formatDate(localDate(segment.end))} ${time}`;
 }
 
-const sourceKinds: Record<SourceRef["kind"], string> = { gmail: "Email", tripit: "TripIt", ics: "Calendar" };
+const sourceKinds: Record<SourceRef["kind"], string> = { gmail: "Email", tripit: "TripIt", ics: "Calendar", forward: "Forwarded email" };
 
 const plural = (n: number) => (n === 1 ? "1 star" : `${n} stars`);
 

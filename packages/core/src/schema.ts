@@ -53,9 +53,10 @@ export const ExtractedBooking = z.object({
 });
 export type ExtractedBooking = z.infer<typeof ExtractedBooking>;
 
-// Where a booking came from: an email, a hand entry, a TripIt export or a
-// calendar file.
-export const SegmentSource = z.enum(["gmail", "manual", "tripit", "ics"]);
+// Where a booking came from: an email read from Gmail, a hand entry, a
+// TripIt export, a calendar file or an email forwarded to the user's
+// forwarding address.
+export const SegmentSource = z.enum(["gmail", "manual", "tripit", "ics", "forward"]);
 export type SegmentSource = z.infer<typeof SegmentSource>;
 
 // One place a booking came from: the email, TripIt item or calendar event
@@ -63,7 +64,7 @@ export type SegmentSource = z.infer<typeof SegmentSource>;
 // too, so a dropped duplicate (perhaps a second room after all) is one
 // click away, as is anything the extraction left out.
 export const SourceRef = z.object({
-  kind: z.enum(["gmail", "tripit", "ics"]),
+  kind: z.enum(["gmail", "tripit", "ics", "forward"]),
   // The Gmail message id, or the import record's id for the others.
   id: z.string().min(1),
   // What the user recognizes it by: the email's subject, the TripIt trip's
@@ -190,6 +191,14 @@ export const Device = z.object({
 });
 export type Device = z.infer<typeof Device>;
 
+// The user's forward-to-import address (forward.ts): the parser issues it,
+// the owner reads it; only the token's hash is kept elsewhere.
+export const ForwardAddress = z.object({
+  address: z.string().min(3),
+  createdAt: isoDateTime,
+});
+export type ForwardAddress = z.infer<typeof ForwardAddress>;
+
 export const UserProfile = z.object({
   email: z.string().optional(),
   displayName: z.string().optional(),
@@ -197,6 +206,7 @@ export const UserProfile = z.object({
   gmail: GmailConnection.optional(),
   googleCalendar: GoogleCalendarConnection.optional(),
   reminders: ReminderSettings.optional(),
+  forward: ForwardAddress.optional(),
 });
 export type UserProfile = z.infer<typeof UserProfile>;
 
@@ -216,7 +226,7 @@ export type SenderPatterns = z.infer<typeof SenderPatterns>;
 // with `source` saying which). A record without `source` is a Gmail one.
 export const ParsedMessage = z.object({
   messageId: z.string().min(1),
-  source: z.enum(["gmail", "tripit", "ics"]).optional(),
+  source: z.enum(["gmail", "tripit", "ics", "forward"]).optional(),
   uid: z.string().min(1),
   outcome: z.enum(["processing", "filtered", "not_booking", "imported", "failed"]),
   reason: z.string().optional(),

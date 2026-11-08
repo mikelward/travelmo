@@ -1,0 +1,15 @@
+{
+  "name": "@travelmo/inbound",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261108.1",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.5"
+  }
+}

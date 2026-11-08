@@ -1,5 +1,5 @@
 import type { User } from "firebase/auth";
-import type { CalendarExport } from "@travelmo/core";
+import type { CalendarExport, ForwardAddress } from "@travelmo/core";
 import type { CalendarResult } from "./ics";
 import type { TripItResult } from "./tripit";
 
@@ -48,4 +48,6 @@ export const api = {
   removeFeed: (user: User, id: string) => post<void>(user, "/feeds/remove", { id }),
   issueCalendarExport: (user: User) => post<CalendarExport>(user, "/export/calendar"),
   stopCalendarExport: (user: User) => post<void>(user, "/export/calendar/stop"),
+  issueForward: (user: User) => post<ForwardAddress>(user, "/forward/issue"),
+  stopForward: (user: User) => post<void>(user, "/forward/stop"),
 };
