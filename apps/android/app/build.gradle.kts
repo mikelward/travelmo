@@ -102,6 +102,9 @@ android {
         targetSdk = 36
         versionCode = if (fixedTestVersion) 1 else gitCommitCount
         versionName = if (fixedTestVersion) "test" else "$gitCommitCount ($gitShortSha)"
+        // The instrumented tests (src/androidTest): FirestoreTrips against
+        // the Firestore emulator on an Android emulator (scripts/connected-tests.sh).
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -218,6 +221,11 @@ dependencies {
     testImplementation(libs.roborazzi.compose)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.androidx.test.ext.junit)
+
+    // Instrumented tests: JUnit 4 under AndroidJUnitRunner, on a device.
+    androidTestImplementation(libs.junit4)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
     testImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

@@ -98,7 +98,7 @@ jobs:
             exit 1
           fi
       - name: Unit tests, lint and a debug build
-        run: ./gradlew -PtravelmoFixedVersion :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+        run: ./gradlew -PtravelmoFixedVersion :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
       # The screens rendered under Robolectric against the PNGs in
       # app/snapshots: a UI change must come with its re-recorded PNGs, so the
       # diff is in the PR. The run above records nothing; this one compares.
@@ -117,6 +117,61 @@ jobs:
       - name: Release build
         if: github.event_name != 'push'
         run: ./gradlew :app:assembleRelease
+  # The app's instrumented tests (app/src/androidTest): FirestoreTrips'
+  # writes against the Firestore emulator with the real rules, on an Android
+  # emulator the runner boots with hardware acceleration. Its own job, so the
+  # minutes it takes run beside the unit job rather than after it.
+  android-emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320  # v4.4.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c  # v5.0.2
+        with:
+          cache-read-only: ${{ github.event_name != 'push' }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: firebase-emulators-
+      - run: pnpm install --frozen-lockfile
+      # The hosted runners expose KVM to the job once udev lets the runner
+      # user at it; without this the emulator boots in software, far too slowly.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      # The Firebase emulators run on the host for as long as the script
+      # does; the Android emulator reaches them as 10.0.2.2. The script seeds
+      # the two test users and runs connectedDebugAndroidTest.
+      - uses: reactivecircus/android-emulator-runner@9125fe764b516df676e33c5e6df011c6f375ef88  # v2.36.0
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          working-directory: packages/rules
+          script: pnpm exec firebase emulators:exec --only firestore,auth --project demo-travelmo --config ../../firebase.json ../../apps/android/scripts/connected-tests.sh
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: android-instrumented-tests
+          path: apps/android/app/build/reports/androidTests
+          retention-days: 7
   # A push to main builds the signed release bundle, keeps it as a workflow
   # artifact, publishes it as a GitHub prerelease tagged by its versionCode
   # with the release-worthy commit subjects as notes, and, once a Play
