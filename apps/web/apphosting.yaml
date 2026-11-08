@@ -41,3 +41,8 @@ env:
   - variable: NEXT_PUBLIC_VAPID_PUBLIC_KEY
     value: REPLACE_ME
     availability: [BUILD, RUNTIME]
+  # Optional: the domain of the forwarding addresses the parser issues
+  # (FORWARD_DOMAIN there); Settings offers forward-to-import when set.
+  - variable: NEXT_PUBLIC_FORWARD_DOMAIN
+    value: REPLACE_ME
+    availability: [BUILD, RUNTIME]

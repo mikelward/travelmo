@@ -22,6 +22,10 @@ export const paths = {
   calendarExport: (uid: string) => `users/${uid}/calendarExport/main`,
   // Server-only: a hash of an export link's token, naming whose it is.
   calendarExportToken: (tokenHash: string) => `calendarExports/${tokenHash}`,
+  // Server-only: a hash of a forwarding address's token, naming whose it is.
+  forwardAddress: (tokenHash: string) => `forwardAddresses/${tokenHash}`,
+  // Server-only: how many forwarded emails the user sent today.
+  forwardBudget: (uid: string) => `users/${uid}/private/forwardBudget`,
   parsedMessage: (uid: string, messageId: string) =>
     `users/${uid}/parsedMessages/${messageId}`,
   gmailAccount: (emailAddress: string) => `gmailAccounts/${emailAddress}`,

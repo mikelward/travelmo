@@ -830,6 +830,93 @@ function CalendarExportSection({ user }: { user: User }) {
   );
 }
 
+// Settings is the one place the forwarding address appears; hidden when the
+// deployment has no forwarding domain.
+const forwardDomain = process.env.NEXT_PUBLIC_FORWARD_DOMAIN || undefined;
+
+function ForwardSection({ user }: { user: User }) {
+  const profile = useProfile(user.uid);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const [copied, setCopied] = useState(false);
+  const record = profile?.forward;
+
+  const run = async (action: () => Promise<unknown>) => {
+    setBusy(true);
+    setError(undefined);
+    setCopied(false);
+    try {
+      await action();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const copy = async () => {
+    if (!record) return;
+    try {
+      await navigator.clipboard.writeText(record.address);
+      setCopied(true);
+    } catch (err) {
+      setError(`Couldn't copy the address: ${(err as Error).message}. Select it and copy it instead.`);
+    }
+  };
+
+  return (
+    <section className="mt-10">
+      <h2 className="text-lg font-medium">Forward by email</h2>
+      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+        No Gmail, or a confirmation in another mailbox? Forward it to your own Travelmo address and it is read like any
+        booking email, within a minute. The address is yours alone: anyone who has it can add bookings to your trips, so
+        replace it if it gets out. Attachments are not read, so forward the email itself rather than a PDF.
+      </p>
+      {profile && !record && (
+        <button type="button" disabled={busy} className={`${buttonClass} mt-3`} onClick={() => run(() => api.issueForward(user))}>
+          {busy ? "Creating…" : "Create forwarding address"}
+        </button>
+      )}
+      {record && (
+        <>
+          <input
+            readOnly
+            value={record.address}
+            aria-label="Forwarding address"
+            onFocus={(e) => e.target.select()}
+            className="mt-3 w-full rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
+          />
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" className={buttonClass} onClick={copy}>
+              {copied ? "Copied" : "Copy address"}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              className={buttonClass}
+              onClick={() => {
+                if (confirm("Replace the address? Emails sent to the old one bounce from now on.")) void run(() => api.issueForward(user));
+              }}
+            >
+              Replace address
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              className={buttonClass}
+              onClick={() => {
+                if (confirm("Turn off the forwarding address? Emails sent to it bounce from now on.")) void run(() => api.stopForward(user));
+              }}
+            >
+              Turn off
+            </button>
+          </div>
+        </>
+      )}
+      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+    </section>
+  );
+}
+
 export default function SettingsPage() {
   useSaveForOffline();
   return (
@@ -844,6 +931,7 @@ export default function SettingsPage() {
           <TripItSection user={user} />
           <CalendarSection user={user} />
           <FeedsSection user={user} />
+          {forwardDomain && <ForwardSection user={user} />}
           <Suspense fallback={null}>
             <GoogleCalendarSection user={user} />
           </Suspense>

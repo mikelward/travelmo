@@ -74,7 +74,16 @@ import { FeedLimitReached, addFeed, feedFailure, firestoreFeeds, pollAllFeeds, t
 import { fetchFeed } from "./safefetch";
 import { backfillBatch, backfillQuery, runBackfillBatch } from "./backfill";
 import { LeaseLost, UploadRunning, withUploadLease } from "./leases";
-import { calendarForToken, firestoreExportIo, issueExport, stopExport } from "./calendarExport";
+import { calendarForToken, firestoreExportIo, hashToken, issueExport, stopExport } from "./calendarExport";
+import {
+  defaultForwardDailyLimit,
+  firestoreForwardStore,
+  forwardRecord,
+  inboundMaxBytes,
+  newForwardToken,
+  receiveForwarded,
+  secretMatches,
+} from "./inbound";
 import { saveImportedProfile } from "./travelProfile";
 import {
   calendarFor,
@@ -110,6 +119,15 @@ const genai = process.env.GEMINI_API_KEY
     });
 
 
+// Forward-to-import (inbound.ts) is on when the forwarding domain and the
+// relay's secret are both set; without them Settings offers no address and
+// the inbound route answers 404.
+const forwardDomain = process.env.FORWARD_DOMAIN;
+const inboundSecret = process.env.INBOUND_SECRET;
+const forwardDailyLimit = Number(optionalEnv("FORWARD_DAILY_LIMIT", String(defaultForwardDailyLimit)));
+if (!Number.isInteger(forwardDailyLimit) || forwardDailyLimit < 0) throw new Error("FORWARD_DAILY_LIMIT must be a whole number");
+const forwarding = forwardDomain && inboundSecret ? { domain: forwardDomain, secret: inboundSecret } : undefined;
+
 // Without a Geocoding API key, places keep whatever country their source gave.
 const geocodingKey = process.env.GEOCODING_API_KEY;
 const geocodeDailyLimit = Number(optionalEnv("GEOCODE_DAILY_LIMIT", String(defaultDailyLimit)));
@@ -143,6 +161,7 @@ app.use("/import/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "
 app.use("/calendar/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/feeds/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/export/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
+app.use("/forward/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 
 app.get("/healthz", (c) => c.text("ok"));
 
@@ -596,6 +615,69 @@ app.post("/export/calendar/stop", async (c) => {
   log("INFO", "calendar_export_stopped", { uid });
   return c.body(null, 204);
 });
+
+// The user's forward-to-import address (inbound.ts): issuing again replaces
+// it, and the old one bounces from then on.
+const forwardStore = forwarding ? firestoreForwardStore(db, forwarding.domain) : undefined;
+
+app.post("/forward/issue", async (c) => {
+  const uid = await requireUser(c);
+  if (!forwarding || !forwardStore) throw new HTTPException(503, { message: "Forwarding is not set up on this server" });
+  const token = newForwardToken();
+  const record = forwardRecord(token, forwarding.domain, deps.now());
+  await forwardStore.issue(uid, record, hashToken(token), record.createdAt);
+  log("INFO", "forward_address_issued", { uid });
+  return c.json(record);
+});
+
+app.post("/forward/stop", async (c) => {
+  const uid = await requireUser(c);
+  if (!forwardStore) throw new HTTPException(503, { message: "Forwarding is not set up on this server" });
+  await forwardStore.stop(uid);
+  log("INFO", "forward_address_stopped", { uid });
+  return c.body(null, 204);
+});
+
+// The Email Worker (apps/inbound) relays each message for the forwarding
+// domain here as it arrived, with the shared secret; the answer tells it
+// whether to accept the message or bounce it with a reason.
+app.post(
+  "/inbound/cloudflare",
+  bodyLimit({
+    maxSize: inboundMaxBytes,
+    onError: () => {
+      throw new HTTPException(413, { message: "Message too large" });
+    },
+  }),
+  async (c) => {
+    if (!forwarding || !forwardStore) throw new HTTPException(404, { message: "Not found" });
+    if (!secretMatches(bearer(c), forwarding.secret)) {
+      log("WARNING", "bad_inbound_secret", {});
+      throw new HTTPException(403, { message: "Forbidden" });
+    }
+    const to = c.req.header("X-Envelope-To") ?? "";
+    const raw = new Uint8Array(await c.req.arrayBuffer());
+    const received = await receiveForwarded({ to, raw }, { store: forwardStore, domain: forwarding.domain, limit: forwardDailyLimit, deps });
+    switch (received.status) {
+      case "unknown_address":
+        log("INFO", "forward_unknown_address", { bytes: raw.length });
+        return c.text("No such address", 404);
+      case "limit":
+        log("WARNING", "forward_limit_reached", { uid: received.uid, limit: forwardDailyLimit });
+        return c.text("Daily forwarding limit reached", 429);
+      case "failed":
+        // Not acknowledged: the Worker fails and the sending server retries.
+        log("ERROR", "forward_import_failed", { uid: received.uid, messageId: received.messageId });
+        return c.text("Import failed; it will be retried", 503);
+      case "pending":
+        log("INFO", "forward_import_pending", { uid: received.uid, messageId: received.messageId });
+        return c.text("Import in progress; it will be retried", 503);
+      case "accepted":
+        log("INFO", "forward_received", { uid: received.uid, messageId: received.messageId, outcome: received.outcome, bytes: raw.length });
+        return c.body(null, 204);
+    }
+  },
+);
 
 // Only a sign-in Google verified counts for the trips shared with a user,
 // as in the rules.

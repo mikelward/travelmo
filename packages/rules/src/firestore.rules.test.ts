@@ -154,6 +154,9 @@ describe("segments", () => {
     await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s5")), imported));
     await assertSucceeds(updateDoc(doc(as(partner), paths.segment(trip.id, "s5")), { title: "Edited by partner" }));
     await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s7")), { ...imported, id: "s7", source: "ics" }));
+    // A forwarded email's booking is the owner's to edit, rate and move too.
+    await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s10")), { ...imported, id: "s10", source: "forward" }));
+    await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s10")), { ...imported, id: "s10", source: "forward", rating: 4 }));
     const withSources = { ...imported, id: "s8", sources: [{ kind: "gmail", id: "m1", label: "Your booking", at: "2026-11-01T00:00:00Z" }] };
     await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s8")), withSources));
     await assertSucceeds(updateDoc(doc(as(partner), paths.segment(trip.id, "s8")), { title: "Edited, sources kept" }));
@@ -198,6 +201,8 @@ describe("users", () => {
     await assertSucceeds(setDoc(doc(as(owner), paths.user(owner.uid)), { displayName: "Owner" }, { merge: true }));
     await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { gmail: { emailAddress: "forged@example.com" } }, { merge: true }));
     await assertFails(setDoc(doc(as(stranger), paths.user(stranger.uid)), { gmail: { emailAddress: "forged@example.com" } }));
+    // Nor a forwarding address: the parser issues those.
+    await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { forward: { address: "abcdefghijklmnopqrst@travelmo.app", createdAt: "2026-11-08T00:00:00Z" } }, { merge: true }));
   });
 
   it("a user may turn reminders on, but not read or write what was mailed", async () => {
@@ -275,6 +280,9 @@ describe("users", () => {
 describe("server-only collections", () => {
   it("are unreadable and unwritable by clients", async () => {
     await assertFails(getDoc(doc(as(owner), paths.gmailAccount(owner.email))));
+    await assertFails(getDoc(doc(as(owner), paths.forwardAddress("h1"))));
+    await assertFails(setDoc(doc(as(owner), paths.forwardAddress("h2")), { uid: owner.uid }));
+    await assertFails(getDoc(doc(as(owner), paths.forwardBudget(owner.uid))));
     await assertFails(setDoc(doc(as(owner), paths.oauthState("nonce")), { uid: owner.uid }));
     await assertFails(getDoc(doc(as(owner), paths.pendingConnection("token"))));
     await assertFails(getDoc(doc(as(owner), paths.geocode("abc"))));

@@ -79,7 +79,7 @@ service cloud.firestore {
             && segment.title is string && segment.title.size() > 0 && segment.title.size() <= 200
             && isInstant(segment.start)
             && (!('end' in segment) || isInstant(segment.end))
-            && segment.source in ['gmail', 'manual', 'tripit', 'ics']
+            && segment.source in ['gmail', 'manual', 'tripit', 'ics', 'forward']
             && segment.gmailMessageIds is list
             && (!('sources' in segment) || segment.sources is list)
             && (!('rating' in segment) || (segment.rating is int && segment.rating >= 1 && segment.rating <= 5))
@@ -101,12 +101,12 @@ service cloud.firestore {
       function isSelf() {
         return signedIn() && request.auth.uid == uid;
       }
-      // `gmail` and `googleCalendar` are written by the server; clients may
-      // not forge a connection.
+      // `gmail`, `googleCalendar` and `forward` are written by the server;
+      // clients may not forge a connection or a forwarding address.
       allow read: if isSelf();
-      allow create: if isSelf() && !request.resource.data.keys().hasAny(['gmail', 'googleCalendar']);
+      allow create: if isSelf() && !request.resource.data.keys().hasAny(['gmail', 'googleCalendar', 'forward']);
       allow update: if isSelf()
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['gmail', 'googleCalendar']);
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['gmail', 'googleCalendar', 'forward']);
 
       // What the parser has sent as reminders: nobody's to read or write.
       match /reminders/{tripId} {
@@ -196,6 +196,10 @@ service cloud.firestore {
 
     // Export-link token hashes to their owner: the parser's alone.
     match /calendarExports/{tokenHash} {
+      allow read, write: if false;
+    }
+    // Forwarding-address token hashes to their owner: the parser's alone.
+    match /forwardAddresses/{tokenHash} {
       allow read, write: if false;
     }
 
