@@ -776,8 +776,11 @@ the screens need of `packages/core` (grouping, the next event, the status
 lines, date formatting); the two are kept in step by hand, with tests that
 mirror each other. The first cut is the sign-in, the trip list with its
 status lines, a read-only trip page and sign-out; Settings also turns
-reminders by email on or off (`reminders.email`, as the web's does), while
-the import settings and reminders as notifications stay on the web; a navigation bar switches between Trips,
+reminders by email on or off (`reminders.email`, as the web's does), keeps
+the on-device debug log (the fleet's shared `androidlog`: logcat and a
+rotated file, a privacy floor over every line, a switch to stop recording
+and a report shared through the share sheet), while the import settings and
+reminders as notifications stay on the web; a navigation bar switches between Trips,
 the Calendar (the month view of `/calendar`, with the same weeks, bars and
 lanes from `:core`), Reports and Profile. Reports counts what `/reports`
 does, from `:core`'s port of the same logic with the same tests: the trips
