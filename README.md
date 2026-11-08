@@ -105,6 +105,34 @@ that nothing is behind it, which is how CI builds. `versionCode` is the
 repository's commit count and `versionName` names the commit, so build from a
 full clone (`scripts/unshallow.sh` deepens a shallow one).
 
+#### Release
+
+A push to `main` runs the `Publish` job: it builds the signed release
+bundle, keeps it as the `app-release-aab` workflow artifact for 30 days,
+publishes it as a GitHub prerelease tagged `v<versionCode>` with the
+release-worthy commit subjects since the last published release as notes
+(`scripts/publish-github-release.sh`,
+shared byte for byte with the sibling apps and tested on every pull
+request), and uploads it to the Play internal testing track once a Play
+service account is configured. The secrets live in the repository's
+`production` environment (Settings → Environments; limit its deployment
+branches to `main`):
+
+| Secret | What it is |
+|---|---|
+| `RELEASE_KEYSTORE_BASE64` | The Play upload keystore, base64: `keytool -genkeypair -keystore upload.keystore -alias upload -keyalg RSA -keysize 2048 -validity 10000`, then `base64 -w0 upload.keystore`. Play App Signing re-signs the bundle with its own key, so this one only authenticates the upload. |
+| `RELEASE_KEYSTORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD` | Its password, the key's alias and the key's password. |
+| `GOOGLE_SERVICES_JSON` | The Firebase project's `google-services.json` for `app.travelmo`, so the release signs in. |
+| `PLAY_SERVICE_ACCOUNT_JSON` | Optional. A Play Console service account's key with "Release to testing tracks" on the app and nothing more; until it is set, upload the prerelease's bundle through Play Console by hand. Add it only after the Play app exists with its declarations filed. |
+
+Without the keystore and the Firebase config the job warns and stops rather
+than failing. A push whose commits are all `docs:`, `test:`, `build:`,
+`refactor:` or `ci:`, or touch only Markdown, dotfiles or `design/`, keeps
+the bundle as the artifact and publishes nothing, as there is nothing to
+announce. Locally, `RELEASE_KEYSTORE_FILE=… RELEASE_KEYSTORE_PASSWORD=…
+RELEASE_KEY_ALIAS=… RELEASE_KEY_PASSWORD=… ./gradlew :app:bundleRelease`
+builds the same signed bundle.
+
 Run the web app locally against a Firebase project:
 
 ```sh
