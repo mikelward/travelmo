@@ -1,5 +1,8 @@
 package app.travelmo.ui
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -36,15 +39,16 @@ import app.travelmo.R
 import app.travelmo.auth.GoogleAccount
 import app.travelmo.auth.SignedIn
 import app.travelmo.log.DebugLogging
+import app.travelmo.notify.ReminderNotifications
 import com.mikelward.androidlog.android.ShareOutcome
 import kotlinx.coroutines.launch
 
 private const val REMINDER_TOKEN = "settings/reminders/email"
+private const val PUSH_TOKEN = "settings/reminders/push"
 
 /**
- * The account, reminders by email and the build; the import settings are
- * on the web for now. Reminders as notifications are the web's browsers'
- * alone: this app has no push channel yet.
+ * The account, reminders by email and as notifications on this phone, the
+ * debug log and the build; the import settings are on the web for now.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -101,6 +105,7 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
                 )
             }
             (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            PushSwitch(viewModel)
             DebugLogSection(signedIn = true)
             Text(
                 stringResource(R.string.version, BuildConfig.VERSION_NAME),
@@ -110,6 +115,64 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
             )
         }
     }
+}
+
+/**
+ * Reminders as notifications on this phone: the switch asks for the
+ * notification permission the first time, then registers the phone's
+ * messaging token under the account; off forgets the phone. It is absent
+ * when the phone has no token (Firebase dormant, no Play services).
+ */
+@Composable
+private fun PushSwitch(viewModel: TripsViewModel) {
+    val context = LocalContext.current
+    val state by viewModel.pushState.collectAsStateWithLifecycle()
+    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val outcome = outcomes[PUSH_TOKEN]
+    val ready = state as? PushState.Ready ?: return
+    var chosen by remember { mutableStateOf<Boolean?>(null) }
+    var blocked by remember { mutableStateOf(false) }
+    LaunchedEffect(outcome) {
+        when (outcome) {
+            is Outcome.Done -> viewModel.outcomeSeen(PUSH_TOKEN)
+            is Outcome.Failed -> chosen = null
+            else -> {}
+        }
+    }
+    LaunchedEffect(ready.on) { if (ready.on == chosen) chosen = null }
+    val turnOn = {
+        if (ReminderNotifications.allowed(context)) {
+            blocked = false
+            chosen = true
+            viewModel.setPushDevice(PUSH_TOKEN, true)
+        } else {
+            // Granted, yet the app is blocked in the system settings.
+            blocked = true
+        }
+    }
+    val askPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) turnOn() else blocked = true
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Text(stringResource(R.string.notify_me), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Switch(
+            checked = chosen ?: ready.on,
+            onCheckedChange = { on ->
+                if (!on) {
+                    blocked = false
+                    chosen = false
+                    viewModel.setPushDevice(PUSH_TOKEN, false)
+                } else if (ReminderNotifications.allowed(context)) {
+                    turnOn()
+                } else {
+                    askPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            },
+            enabled = outcome !is Outcome.Busy,
+        )
+    }
+    if (blocked) Text(stringResource(R.string.notifications_blocked), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
 }
 
 /**

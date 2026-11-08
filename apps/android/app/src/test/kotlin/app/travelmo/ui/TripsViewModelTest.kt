@@ -1,6 +1,7 @@
 package app.travelmo.ui
 
 import app.travelmo.core.SegmentDraft
+import app.travelmo.core.deviceId
 import app.travelmo.core.SegmentType
 import app.travelmo.data.TripStore
 import io.kotest.matchers.shouldBe
@@ -103,6 +104,74 @@ class TripsViewModelTest {
         viewModel.setReminderEmail("reminders", false)
         store.reminders shouldBe listOf(false)
         viewModel.outcomes.value shouldBe mapOf("reminders" to Outcome.Done)
+    }
+
+    @Test
+    fun `the notifications switch registers this phone under the user and forgets it again`() = runTest {
+        val store = FakeTripStore()
+        val device = FakePushDevice()
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, pushDevice = device)
+        val watching = backgroundScope.launch { viewModel.pushState.collect {} }
+        runCurrent()
+        viewModel.pushState.value shouldBe PushState.Ready(on = false)
+        viewModel.setPushDevice("push", true)
+        runCurrent()
+        val id = deviceId("fcm-token-1")
+        store.devices shouldBe listOf(id to "fcm-token-1")
+        device.remembered(OWNER) shouldBe id
+        viewModel.outcomes.value shouldBe mapOf("push" to Outcome.Done)
+        viewModel.setPushDevice("push", false)
+        runCurrent()
+        store.devices shouldBe listOf(id to "fcm-token-1", id to null)
+        device.remembered(OWNER) shouldBe null
+        watching.cancel()
+    }
+
+    @Test
+    fun `without a messaging token the notifications switch is unavailable`() = runTest {
+        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, pushDevice = FakePushDevice(token = null))
+        val watching = backgroundScope.launch { viewModel.pushState.collect {} }
+        runCurrent()
+        viewModel.pushState.value shouldBe PushState.Unavailable
+        viewModel.setPushDevice("push", true)
+        runCurrent()
+        viewModel.outcomes.value shouldBe mapOf("push" to Outcome.Failed("This phone has no messaging token"))
+        watching.cancel()
+    }
+
+    @Test
+    fun `a refreshed token replaces the registration it had, and none it did not`() = runTest {
+        val store = FakeTripStore()
+        val device = FakePushDevice()
+        device.tokenChanged(store, OWNER, "fcm-token-2")
+        store.devices shouldBe emptyList()
+        device.remember(OWNER, deviceId("fcm-token-1"))
+        device.tokenChanged(store, OWNER, "fcm-token-2")
+        store.devices shouldBe listOf(deviceId("fcm-token-2") to "fcm-token-2", deviceId("fcm-token-1") to null)
+        device.remembered(OWNER) shouldBe deviceId("fcm-token-2")
+    }
+
+    @Test
+    fun `the switch follows a token rotated while it is on screen, and a registration left under an old token moves on load`() = runTest {
+        val store = FakeTripStore()
+        val device = FakePushDevice(token = "fcm-token-2")
+        // Registered under an older token, as a refresh in a dead process leaves it.
+        store.registerDevice(OWNER, deviceId("fcm-token-1"), "fcm-token-1")
+        device.remember(OWNER, deviceId("fcm-token-1"))
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, pushDevice = device)
+        val watching = backgroundScope.launch { viewModel.pushState.collect {} }
+        runCurrent()
+        device.remembered(OWNER) shouldBe deviceId("fcm-token-2")
+        store.devices.last() shouldBe (deviceId("fcm-token-1") to null)
+        viewModel.pushState.value shouldBe PushState.Ready(on = true)
+        // Rotated again while Settings is open: the state and the switch use the new token.
+        device.tokenChanged(store, OWNER, "fcm-token-3")
+        runCurrent()
+        viewModel.pushState.value shouldBe PushState.Ready(on = true)
+        viewModel.setPushDevice("push", false)
+        runCurrent()
+        store.devices.last() shouldBe (deviceId("fcm-token-3") to null)
+        watching.cancel()
     }
 
     @Test

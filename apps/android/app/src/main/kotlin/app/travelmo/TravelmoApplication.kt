@@ -6,6 +6,10 @@ import app.travelmo.auth.GoogleAccount
 import app.travelmo.data.FirestoreTrips
 import app.travelmo.data.TripStore
 import app.travelmo.log.DebugLogging
+import app.travelmo.notify.FirebasePushDevice
+import app.travelmo.notify.NoPushDevice
+import app.travelmo.notify.PushDevice
+import app.travelmo.notify.ReminderNotifications
 import com.google.firebase.FirebaseApp
 
 /**
@@ -17,6 +21,9 @@ class TravelmoApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         DebugLogging.install(this)
+        // The channel exists before any message arrives, so the first one is
+        // shown rather than dropped for want of its channel.
+        ReminderNotifications.ensureChannel(this)
     }
 
     val firebaseReady: Boolean by lazy { FirebaseApp.getApps(this).isNotEmpty() }
@@ -31,6 +38,9 @@ class TravelmoApplication : Application() {
     }
 
     val trips: TripStore by lazy { FirestoreTrips() }
+
+    /** This phone as a reminder device; nothing without Firebase. */
+    val pushDevice: PushDevice by lazy { if (firebaseReady) FirebasePushDevice(this) else NoPushDevice }
 
     // By name rather than R.string: the resource exists only on a build where
     // the google-services plugin generated it, so a compile-time reference

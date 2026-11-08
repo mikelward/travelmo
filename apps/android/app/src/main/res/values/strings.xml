@@ -164,9 +164,13 @@
     <string name="sign_out">Sign out</string>
     <string name="version">Version %1$s</string>
     <string name="reminders">Reminders</string>
-    <string name="reminders_hint">A month before a trip, and as things change, an email about passports or visas that run out too soon and what each country asks of your passport: the same warnings the trip page shows, each sent once.</string>
+    <string name="reminders_hint">A month before a trip, and as things change, an email or a notification about passports or visas that run out too soon and what each country asks of your passport: the same warnings the trip page shows, each sent once.</string>
     <string name="email_me">Email me before a trip</string>
     <string name="email_me_to">Email me before a trip (to %1$s)</string>
+    <string name="notify_me">Notify me on this phone</string>
+    <string name="notifications_blocked">Notifications for Travelmo are off in the system settings; allow them there to turn this on.</string>
+    <string name="reminders_channel">Trip reminders</string>
+    <string name="reminders_channel_description">Passports or visas that run out too soon and what each country asks of your passport, before a trip.</string>
     <string name="debug_log">Debug log</string>
     <string name="debug_log_hint">Kept on this phone to help fix a bug: what the app did, never your bookings or addresses. Sharing opens the share sheet with a report of this run and the last few.</string>
     <string name="debug_log_record">Record what the app does</string>

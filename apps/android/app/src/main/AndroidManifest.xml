@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Firebase Auth and Firestore; nothing else leaves the device. -->
+    <!-- Firebase Auth, Firestore and Cloud Messaging; nothing else leaves the device. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Reminders as notifications, asked for by the switch in Settings. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".TravelmoApplication"
@@ -22,6 +24,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Reminders from the parser over Cloud Messaging, drawn by the
+             service from each message's data; a refreshed token is
+             re-registered. -->
+        <service
+            android:name=".notify.ReminderMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

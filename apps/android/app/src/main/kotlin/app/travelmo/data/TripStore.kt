@@ -49,6 +49,18 @@ interface TripStore {
     /** Turns reminders by email on or off, as the web's Settings does: a merge of `reminders.email` alone. */
     suspend fun setReminderEmail(uid: String, on: Boolean)
 
+    /** Whether this phone (`users/{uid}/devices/{id}`) is registered for reminders as notifications, live; null while it loads. */
+    fun pushDevice(uid: String, id: String): Flow<Boolean?>
+
+    /** Registers this phone's token under the user and turns `reminders.push` on, as a browser's subscribe does. */
+    suspend fun registerDevice(uid: String, id: String, token: String)
+
+    /** Forgets this phone; `reminders.push` goes off with the last phone when no browser is subscribed either. */
+    suspend fun unregisterDevice(uid: String, id: String)
+
+    /** A refreshed token: the new registration in, then the old out, so delivery never lapses. */
+    suspend fun replaceDevice(uid: String, oldId: String, newId: String, token: String)
+
     /** Sets who the user's travel profile is shared with, starting the profile if there is none yet ([exists] false). */
     suspend fun saveTrusted(uid: String, email: String?, exists: Boolean, emails: List<String>)
 
@@ -152,6 +164,41 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     override suspend fun setReminderEmail(uid: String, on: Boolean) {
         db.collection("users").document(uid).set(mapOf("reminders" to mapOf("email" to on)), SetOptions.merge()).await()
     }
+
+    override fun pushDevice(uid: String, id: String): Flow<Boolean?> = callbackFlow {
+        val registration = deviceRef(uid, id).addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                TravelmoLog.error(error, "Reading the device registration failed")
+                trySend(null)
+                return@addSnapshotListener
+            }
+            trySend(snapshot?.exists() == true)
+        }
+        awaitClose { registration.remove() }
+    }
+
+    override suspend fun registerDevice(uid: String, id: String, token: String) {
+        deviceRef(uid, id).set(mapOf("token" to token, "platform" to "android", "createdAt" to Instant.now().toString())).await()
+        db.collection("users").document(uid).set(mapOf("reminders" to mapOf("push" to true)), SetOptions.merge()).await()
+    }
+
+    override suspend fun unregisterDevice(uid: String, id: String) {
+        deviceRef(uid, id).delete().await()
+        // As the web's unsubscribe: the flag goes off only once nothing of
+        // the user's is left to send to, on either kind of channel.
+        val devices = db.collection("users").document(uid).collection("devices").limit(1).get().await()
+        val browsers = db.collection("users").document(uid).collection("pushSubscriptions").limit(1).get().await()
+        if (devices.isEmpty && browsers.isEmpty) {
+            db.collection("users").document(uid).set(mapOf("reminders" to mapOf("push" to false)), SetOptions.merge()).await()
+        }
+    }
+
+    override suspend fun replaceDevice(uid: String, oldId: String, newId: String, token: String) {
+        registerDevice(uid, newId, token)
+        deviceRef(uid, oldId).delete().await()
+    }
+
+    private fun deviceRef(uid: String, id: String): DocumentReference = db.collection("users").document(uid).collection("devices").document(id)
 
     /**
      * As the web's saveTrusted: a merge, so it starts a profile before any

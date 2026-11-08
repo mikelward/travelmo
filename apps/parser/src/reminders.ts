@@ -1,4 +1,5 @@
 import {
+  Device,
   dueForReminders,
   newLines,
   paths,
@@ -15,6 +16,7 @@ import {
   type TripReminder,
 } from "@travelmo/core";
 import { Filter, type Firestore } from "firebase-admin/firestore";
+import type { DeviceSender } from "./fcm";
 import type { Mailer } from "./mail";
 import type { PushSender } from "./push";
 
@@ -22,10 +24,12 @@ import type { PushSender } from "./push";
 // document warnings and entry requirements of their trips starting within
 // a month, each line sent once (a log per trip remembers what went out),
 // all of a day's news in one email and one notification per trip to every
-// browser that subscribed, as the person chose.
+// browser that subscribed and every phone that registered, as the person
+// chose.
 
 export type ReminderUser = { uid: string; settings: ReminderSettings };
 export type StoredSubscription = { id: string; subscription: PushSubscription };
+export type StoredDevice = { id: string; device: Device };
 
 export type ReminderIo = {
   // Users with reminders on, by email or push.
@@ -33,6 +37,8 @@ export type ReminderIo = {
   verifiedEmail(uid: string): Promise<string | undefined>;
   pushSubscriptions(uid: string): Promise<StoredSubscription[]>;
   removePushSubscription(uid: string, id: string): Promise<void>;
+  devices(uid: string): Promise<StoredDevice[]>;
+  removeDevice(uid: string, id: string): Promise<void>;
   // The user's own trips and those shared with them, ending on or after the day.
   trips(uid: string, email: string | undefined, endsOnOrAfter: string): Promise<Trip[]>;
   segments(tripId: string): Promise<Segment[]>;
@@ -44,8 +50,8 @@ export type ReminderIo = {
 
 export type ReminderRun = { users: number; mailed: number; pushed: number; lines: number; skipped: number; failed: number };
 
-// The ways out; either may be off (no SMTP, no VAPID keys).
-export type ReminderChannels = { mail?: Mailer; push?: PushSender };
+// The ways out; any may be off (no SMTP, no VAPID keys, no Messaging).
+export type ReminderChannels = { mail?: Mailer; push?: PushSender; fcm?: DeviceSender };
 
 export type ReminderOptions = {
   now: string;
@@ -60,12 +66,14 @@ export async function sendReminders(io: ReminderIo, channels: ReminderChannels, 
   for (const { uid, settings } of await io.users()) {
     run.users += 1;
     try {
-      // Email wants a verified address; push wants a subscribed browser.
-      // Someone with neither is skipped, with the reason, before any reads.
+      // Email wants a verified address; push wants a subscribed browser or
+      // a registered phone. Someone with none is skipped, with the reason,
+      // before any reads.
       let email = settings.email && channels.mail ? await io.verifiedEmail(uid) : undefined;
       if (settings.email && channels.mail && !email) options.log("reminder_no_verified_email", { uid });
       const subscriptions = settings.push && channels.push ? await io.pushSubscriptions(uid) : [];
-      if (!email && !subscriptions.length) {
+      const devices = settings.push && channels.fcm ? await io.devices(uid) : [];
+      if (!email && !subscriptions.length && !devices.length) {
         run.skipped += 1;
         continue;
       }
@@ -94,7 +102,7 @@ export async function sendReminders(io: ReminderIo, channels: ReminderChannels, 
         run.mailed += 1;
         options.log("reminder_mailed", { uid, trips: reminders.length, lines });
       }
-      if (subscriptions.length && channels.push) {
+      if (subscriptions.length || devices.length) {
         const notifications = reminderNotifications(reminders, { origin: options.origin, today });
         let browsers = 0;
         for (const { id, subscription } of subscriptions) {
@@ -104,10 +112,18 @@ export async function sendReminders(io: ReminderIo, channels: ReminderChannels, 
             options.log("push_subscription_gone", { uid, id });
           } else browsers += 1;
         }
-        if (browsers) {
+        let phones = 0;
+        for (const { id, device } of devices) {
+          const outcomes = await Promise.all(notifications.map((n) => channels.fcm!(device, n)));
+          if (outcomes.includes("gone")) {
+            await io.removeDevice(uid, id);
+            options.log("push_device_gone", { uid, id });
+          } else phones += 1;
+        }
+        if (browsers || phones) {
           delivered = true;
           run.pushed += 1;
-          options.log("reminder_pushed", { uid, trips: reminders.length, lines, browsers });
+          options.log("reminder_pushed", { uid, trips: reminders.length, lines, browsers, phones });
         }
       }
       if (!delivered) {
@@ -148,6 +164,13 @@ export function firestoreReminderIo(db: Firestore, verifiedEmail: (uid: string) 
     },
     async removePushSubscription(uid, id) {
       await db.doc(paths.pushSubscription(uid, id)).delete();
+    },
+    async devices(uid) {
+      const snap = await db.collection(paths.devices(uid)).get();
+      return snap.docs.flatMap((d) => parse(Device, d.data()).map((device) => ({ id: d.id, device })));
+    },
+    async removeDevice(uid, id) {
+      await db.doc(paths.device(uid, id)).delete();
     },
     async trips(uid, email, endsOnOrAfter) {
       const queries = [db.collection(paths.trips()).where("ownerUid", "==", uid).where("end", ">=", endsOnOrAfter).get()];

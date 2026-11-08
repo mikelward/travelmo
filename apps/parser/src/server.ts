@@ -45,11 +45,13 @@ import { geminiEmbedder, geminiExtractor } from "./extract";
 import { cachedGeocoder, defaultDailyLimit, firestoreGeocodeStore, googleGeocoder } from "./geocode";
 import { firestoreRetryStore, sweepGeocodeRetries } from "./geocodeSweep";
 import { smtpConfig, smtpMailer } from "./mail";
+import { fcmSender } from "./fcm";
 import { pushConfig, webPushSender } from "./push";
 import { firestoreReminderIo, sendReminders } from "./reminders";
 import { airportPlace } from "@travelmo/core/airportPlaces";
 import { visaTable } from "@travelmo/core/visaRules";
-import { auth, db } from "./firebase";
+import { app as firebaseApp, auth, db } from "./firebase";
+import { getMessaging } from "firebase-admin/messaging";
 import {
   currentHistoryId,
   fetchMessage,
@@ -656,22 +658,25 @@ app.post("/internal/poll-feeds", async (c) => {
   return c.json({ ...result, calendars });
 });
 
-// Reminders by email go out only with SMTP settings, by push only with
-// VAPID keys; without them the switches in Settings have no effect.
+// Reminders by email go out only with SMTP settings, to browsers only with
+// VAPID keys; without them those switches in Settings have no effect. To
+// phones they go through Cloud Messaging with the Admin credential, so that
+// channel is always on (the service account needs the Messaging role; README
+// "Deploy").
 const smtp = smtpConfig(process.env);
 const vapid = pushConfig(process.env);
-const reminderChannels = { ...(smtp ? { mail: smtpMailer(smtp) } : {}), ...(vapid ? { push: webPushSender(vapid) } : {}) };
+const reminderChannels = {
+  ...(smtp ? { mail: smtpMailer(smtp) } : {}),
+  ...(vapid ? { push: webPushSender(vapid) } : {}),
+  fcm: fcmSender(getMessaging(firebaseApp)),
+};
 const reminderIo = firestoreReminderIo(db, verifiedEmail);
 
 // Cloud Scheduler calls this daily (deploy/scheduler.sh): the document
 // warnings and entry requirements of trips starting within a month, sent
-// once each to everyone who asked, by email and to their browsers.
+// once each to everyone who asked, by email and to their browsers and phones.
 app.post("/internal/reminders", async (c) => {
   await requireInternalCaller(c);
-  if (!reminderChannels.mail && !reminderChannels.push) {
-    log("INFO", "reminders_off", {});
-    return c.json({ enabled: false });
-  }
   const run = await sendReminders(reminderIo, reminderChannels, {
     now: deps.now(),
     origin: webOrigin,

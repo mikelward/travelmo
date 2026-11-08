@@ -200,6 +200,7 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
+    implementation(libs.firebase.messaging)
     implementation(libs.androidlog.logging.core)
     implementation(libs.androidlog.logging.android)
     debugImplementation(libs.androidx.compose.ui.tooling)

@@ -10,7 +10,9 @@ import app.travelmo.core.SegmentType
 import app.travelmo.core.Trip
 import app.travelmo.data.OwnProfile
 import app.travelmo.data.TripStore
+import app.travelmo.notify.PushDevice
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 
 // The invented trips of design/android's boards, as the screenshot tests
@@ -110,6 +112,22 @@ class FakeTripStore(
     override suspend fun setReminderEmail(uid: String, on: Boolean) {
         reminders += on
     }
+    /** Every registration write, in order: the id and its token, or null for a removal. */
+    val devices = mutableListOf<Pair<String, String?>>()
+    private val registered = mutableSetOf<String>()
+    override fun pushDevice(uid: String, id: String): Flow<Boolean?> = flowOf(id in registered)
+    override suspend fun registerDevice(uid: String, id: String, token: String) {
+        devices += id to token
+        registered += id
+    }
+    override suspend fun unregisterDevice(uid: String, id: String) {
+        devices += id to null
+        registered -= id
+    }
+    override suspend fun replaceDevice(uid: String, oldId: String, newId: String, token: String) {
+        registerDevice(uid, newId, token)
+        unregisterDevice(uid, oldId)
+    }
     override fun sharedProfiles(email: String?): Flow<List<TravelProfile>> = flowOf(shared)
     val saved = mutableListOf<Triple<String, SegmentDraft, String?>>()
     val deleted = mutableListOf<Pair<String, String>>()
@@ -154,5 +172,19 @@ class FakeTripStore(
     override suspend fun mergeTrips(sourceId: String, targetId: String): Int {
         merged += sourceId to targetId
         return segments[sourceId].orEmpty().size
+    }
+}
+
+/** A phone with a messaging token, remembering its registration in memory. */
+class FakePushDevice(private val token: String? = "fcm-token-1") : PushDevice {
+    val remembered = mutableMapOf<String, String>()
+    override val latest = MutableStateFlow<String?>(null)
+    override suspend fun token(): String? = token.also { latest.value = it }
+    override fun remember(uid: String, id: String?) {
+        if (id == null) remembered.remove(uid) else remembered[uid] = id
+    }
+    override fun remembered(uid: String): String? = remembered[uid]
+    override fun tokenKnown(token: String?) {
+        latest.value = token
     }
 }
