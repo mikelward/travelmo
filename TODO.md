@@ -12,8 +12,9 @@
       requiring the `codex` status, the
       `codex-review-check / codex-review-check` check (appears in the
       required-checks search only after its first run), `ci / check`,
-      conversation resolution and up-to-date branches; enable the
-      auto-merge setting.
+      `ci / android` and `ci / android-emulator` (without them a PR can
+      auto-merge while an Android job is red, as #68 did), conversation
+      resolution and up-to-date branches; enable the auto-merge setting.
 
 ## Product
 
