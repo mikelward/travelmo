@@ -34,6 +34,9 @@ export const paths = {
   reminderLog: (uid: string, tripId: string) => `users/${uid}/reminders/${tripId}`,
   pushSubscriptions: (uid: string) => `users/${uid}/pushSubscriptions`,
   pushSubscription: (uid: string, id: string) => `users/${uid}/pushSubscriptions/${id}`,
+  // Phones registered for reminders as notifications, written by the app.
+  devices: (uid: string) => `users/${uid}/devices`,
+  device: (uid: string, id: string) => `users/${uid}/devices/${id}`,
   // Bookings a spent budget left with a place to ask about another day.
   geocodeRetries: () => "geocodeRetries",
   geocodeRetry: (tripId: string, segmentId: string) => `geocodeRetries/${tripId}__${segmentId}`,

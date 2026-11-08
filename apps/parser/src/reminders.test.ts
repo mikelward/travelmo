@@ -3,8 +3,9 @@ import { visaTable } from "@travelmo/core/visaRules";
 import { airportPlace } from "@travelmo/core/airportPlaces";
 import { describe, expect, it } from "vitest";
 import type { Mail } from "./mail";
+import type { DeviceSender } from "./fcm";
 import type { PushSender } from "./push";
-import { sendReminders, type ReminderIo, type ReminderUser, type StoredSubscription } from "./reminders";
+import { sendReminders, type ReminderIo, type ReminderUser, type StoredDevice, type StoredSubscription } from "./reminders";
 
 // Invented people, trips and documents. Today is 1 Nov 2026.
 const now = "2026-11-01T06:07:00Z";
@@ -43,6 +44,7 @@ const profile = (uid: string, expires: string): TravelProfile => ({
 });
 
 const subscription = (n: number) => ({ id: `s${n}`, subscription: { endpoint: `https://push.example/${n}`, keys: { p256dh: "p", auth: "a" }, createdAt: at } });
+const device = (n: number) => ({ id: `d${n}`, device: { token: `fcm-${n}`, platform: "android" as const, createdAt: at } });
 
 function setup(
   options: {
@@ -52,12 +54,15 @@ function setup(
     emails?: Record<string, string>;
     users?: (string | ReminderUser)[];
     subscriptions?: Record<string, StoredSubscription[]>;
+    devices?: Record<string, StoredDevice[]>;
     push?: PushSender;
+    fcm?: DeviceSender;
   } = {},
 ) {
   const users = (options.users ?? ["u1"]).map((u) => (typeof u === "string" ? { uid: u, settings: { email: true } } : u));
   const emails = options.emails ?? { u1: "traveler@example" };
   const subscriptions = new Map(Object.entries(options.subscriptions ?? {}));
+  const devices = new Map(Object.entries(options.devices ?? {}));
   const sent = new Map<string, string[]>();
   const mails: Mail[] = [];
   const pushes: [string, string][] = [];
@@ -68,6 +73,10 @@ function setup(
     pushSubscriptions: async (uid) => subscriptions.get(uid) ?? [],
     removePushSubscription: async (uid, id) => {
       subscriptions.set(uid, (subscriptions.get(uid) ?? []).filter((s) => s.id !== id));
+    },
+    devices: async (uid) => devices.get(uid) ?? [],
+    removeDevice: async (uid, id) => {
+      devices.set(uid, (devices.get(uid) ?? []).filter((d) => d.id !== id));
     },
     trips: async (uid, email, endsOnOrAfter) =>
       (options.trips ?? []).filter((t) => (t.ownerUid === uid || (email && t.sharedWith.includes(email))) && t.end >= endsOnOrAfter),
@@ -86,8 +95,14 @@ function setup(
       pushes.push([s.endpoint, n.title]);
       return "sent";
     });
-  const run = () => sendReminders(io, { mail, push }, { now, origin: "https://travelmo.example", lookups: { airportPlace, visaTable }, log: (e, f) => logs.push([e, f]) });
-  return { io, mails, pushes, logs, sent, subscriptions, run };
+  const fcm: DeviceSender =
+    options.fcm ??
+    (async (d, n) => {
+      pushes.push([d.token, n.title]);
+      return "sent";
+    });
+  const run = () => sendReminders(io, { mail, push, fcm }, { now, origin: "https://travelmo.example", lookups: { airportPlace, visaTable }, log: (e, f) => logs.push([e, f]) });
+  return { io, mails, pushes, logs, sent, subscriptions, devices, run };
 }
 
 describe("sendReminders", () => {
@@ -147,6 +162,60 @@ describe("sendReminders", () => {
     expect(gone.subscriptions.get("u1")).toEqual([subscription(2)]);
     expect(gone.logs.map(([e]) => e)).toEqual(["reminder_mailed", "push_subscription_gone", "reminder_pushed"]);
     expect(subscriptions.get("u1")).toHaveLength(2);
+  });
+
+  it("notifies every registered phone once per trip, with the browsers, and drops a token Messaging no longer knows", async () => {
+    const { run, mails, pushes, devices, logs } = setup({
+      users: [{ uid: "u1", settings: { push: true } }],
+      emails: {},
+      trips: [trip("Dubai", "u1", "2026-11-20", "2026-11-25"), trip("Paris", "u1", "2026-11-05", "2026-11-07")],
+      segments: [flight("Dubai", "DXB", "AE"), flight("Paris", "CDG", "FR")],
+      profiles: { u1: profile("u1", "2026-11-26") },
+      subscriptions: { u1: [subscription(1)] },
+      devices: { u1: [device(1), device(2)] },
+    });
+    expect(await run()).toEqual({ users: 1, mailed: 0, pushed: 1, lines: expect.any(Number), skipped: 0, failed: 0 });
+    expect(mails).toEqual([]);
+    expect(pushes).toEqual([
+      ["https://push.example/1", "Before your trip to Paris"],
+      ["https://push.example/1", "Before your trip to Dubai"],
+      ["fcm-1", "Before your trip to Paris"],
+      ["fcm-1", "Before your trip to Dubai"],
+      ["fcm-2", "Before your trip to Paris"],
+      ["fcm-2", "Before your trip to Dubai"],
+    ]);
+    expect(logs).toEqual([["reminder_pushed", { uid: "u1", trips: 2, lines: expect.any(Number), browsers: 1, phones: 2 }]]);
+    expect(devices.get("u1")).toHaveLength(2);
+    expect(await run()).toMatchObject({ pushed: 0, lines: 0 });
+
+    // A phone alone is a channel: no browser, no email, still delivered.
+    const gone = setup({
+      users: [{ uid: "u1", settings: { push: true } }],
+      emails: {},
+      trips: [trip("Dubai", "u1", "2026-11-20", "2026-11-25")],
+      segments: [flight("Dubai", "DXB", "AE")],
+      profiles: { u1: profile("u1", "2026-11-26") },
+      devices: { u1: [device(1), device(2)] },
+      fcm: async (d) => (d.token === "fcm-1" ? "gone" : "sent"),
+    });
+    expect(await gone.run()).toMatchObject({ mailed: 0, pushed: 1, skipped: 0, failed: 0 });
+    expect(gone.devices.get("u1")).toEqual([device(2)]);
+    expect(gone.logs.map(([e]) => e)).toEqual(["push_device_gone", "reminder_pushed"]);
+    expect(gone.sent.size).toBe(1);
+
+    // Every phone gone and no other channel: nothing is marked sent.
+    const none = setup({
+      users: [{ uid: "u1", settings: { push: true } }],
+      emails: {},
+      trips: [trip("Dubai", "u1", "2026-11-20", "2026-11-25")],
+      segments: [flight("Dubai", "DXB", "AE")],
+      profiles: { u1: profile("u1", "2026-11-26") },
+      devices: { u1: [device(1)] },
+      fcm: async () => "gone",
+    });
+    expect(await none.run()).toEqual({ users: 1, mailed: 0, pushed: 0, lines: 0, skipped: 1, failed: 0 });
+    expect(none.sent.size).toBe(0);
+    expect(none.logs.map(([e]) => e)).toEqual(["push_device_gone", "reminder_undelivered"]);
   });
 
   it("marks nothing sent when every browser is gone, so a new browser gets the news", async () => {

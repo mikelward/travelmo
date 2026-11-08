@@ -88,13 +88,14 @@ export async function subscribePush(uid: string, now = new Date().toISOString())
 }
 
 // Forgets this browser for this account; the setting goes off with the
-// last browser. The browser's own subscription stays: another account on
-// the same browser may have recorded it too, and nothing is sent to a
+// last browser, unless a phone (users/{uid}/devices, the Android app's) is
+// still registered. The browser's own subscription stays: another account
+// on the same browser may have recorded it too, and nothing is sent to a
 // subscription no account holds.
 export async function unsubscribePush(uid: string): Promise<void> {
   const subscription = await currentSubscription();
   const db = firestore();
   if (subscription) await deleteDoc(doc(db, paths.pushSubscription(uid, subscriptionId(subscription.endpoint))));
-  const remaining = await getDocs(collection(db, paths.pushSubscriptions(uid)));
-  if (remaining.empty) await setDoc(doc(db, paths.user(uid)), { reminders: { push: false } }, { merge: true });
+  const [remaining, devices] = await Promise.all([getDocs(collection(db, paths.pushSubscriptions(uid))), getDocs(collection(db, paths.devices(uid)))]);
+  if (remaining.empty && devices.empty) await setDoc(doc(db, paths.user(uid)), { reminders: { push: false } }, { merge: true });
 }

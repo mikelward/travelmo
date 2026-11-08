@@ -164,7 +164,8 @@ export const GoogleCalendarState = GoogleCalendarConnection.extend({
 export type GoogleCalendarState = z.infer<typeof GoogleCalendarState>;
 
 // How the user wants reminders before a trip; the owner sets it in Settings.
-// `push` is on while any browser of theirs holds a push subscription.
+// `push` is on while any browser of theirs holds a push subscription or any
+// phone of theirs is registered as a device.
 export const ReminderSettings = z.object({ email: z.boolean().optional(), push: z.boolean().optional() });
 export type ReminderSettings = z.infer<typeof ReminderSettings>;
 
@@ -177,6 +178,17 @@ export const PushSubscription = z.object({
   createdAt: z.string(),
 });
 export type PushSubscription = z.infer<typeof PushSubscription>;
+
+// A phone's Firebase Cloud Messaging registration, stored under the user by
+// the app on that phone (users/{uid}/devices/{id}, the id a hash of the
+// token); the parser sends reminders to it and drops it once Messaging says
+// the token is no longer registered.
+export const Device = z.object({
+  token: z.string().min(1),
+  platform: z.literal("android"),
+  createdAt: z.string(),
+});
+export type Device = z.infer<typeof Device>;
 
 export const UserProfile = z.object({
   email: z.string().optional(),

@@ -219,6 +219,19 @@ describe("users", () => {
     await assertSucceeds(deleteDoc(ref));
   });
 
+  it("a user keeps their own phones' device registrations, whole, and nobody else's", async () => {
+    const device = { token: "fcm-token-1", platform: "android", createdAt: "2026-11-07T00:00:00Z" };
+    const ref = doc(as(owner), paths.device(owner.uid, "d1"));
+    await assertSucceeds(setDoc(ref, device));
+    await assertSucceeds(getDoc(ref));
+    await assertFails(setDoc(doc(as(owner), paths.device(owner.uid, "d2")), { ...device, token: "" }));
+    await assertFails(setDoc(doc(as(owner), paths.device(owner.uid, "d3")), { ...device, platform: "ios" }));
+    await assertFails(setDoc(doc(as(owner), paths.device(owner.uid, "d4")), { ...device, extra: 1 }));
+    await assertFails(getDoc(doc(as(partner), paths.device(owner.uid, "d1"))));
+    await assertFails(setDoc(doc(as(partner), paths.device(owner.uid, "d5")), device));
+    await assertSucceeds(deleteDoc(ref));
+  });
+
   it("a user may not forge a Google Calendar connection or read its token", async () => {
     const forged = { emailAddress: "forged@example.com", connectedAt: "2026-11-01T00:00:00Z", calendars: [] };
     await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { googleCalendar: forged }, { merge: true }));

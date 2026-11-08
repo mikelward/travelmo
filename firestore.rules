@@ -128,6 +128,19 @@ service cloud.firestore {
           && request.resource.data.createdAt is string;
       }
 
+      // A phone's Cloud Messaging registration, written by the app on that
+      // phone: the token the parser sends to, and nothing else.
+      match /devices/{id} {
+        allow read, delete: if isSelf();
+        allow create, update: if isSelf()
+          && request.resource.data.keys().hasOnly(['token', 'platform', 'createdAt'])
+          && request.resource.data.token is string
+          && request.resource.data.token.size() > 0
+          && request.resource.data.token.size() <= 4096
+          && request.resource.data.platform == 'android'
+          && request.resource.data.createdAt is string;
+      }
+
       // The traveler's profile (documents, loyalty numbers): the parser writes
       // what was imported; the owner alone chooses, by verified email, who
       // else may read it, and nobody else writes anything.

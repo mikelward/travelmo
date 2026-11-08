@@ -14,8 +14,12 @@ import app.travelmo.core.TripGroups
 import app.travelmo.core.TripWithSegments
 import app.travelmo.core.groupTrips
 import app.travelmo.core.listWarnings
+import app.travelmo.core.deviceId
 import app.travelmo.data.OwnProfile
 import app.travelmo.data.TripStore
+import app.travelmo.log.TravelmoLog
+import app.travelmo.notify.NoPushDevice
+import app.travelmo.notify.PushDevice
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -57,6 +61,15 @@ sealed interface Outcome {
 /** How many upcoming trips get a segment listener for their "next up" line, as on the web. */
 const val UPCOMING_WITH_DETAILS = 3
 
+/** Reminders as notifications on this phone, as Settings shows them. */
+sealed interface PushState {
+    /** No token: Firebase dormant or Play services missing. The switch does not show. */
+    data object Unavailable : PushState
+
+    /** The phone has a token and is, or is not, registered under this user. */
+    data class Ready(val on: Boolean) : PushState
+}
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class TripsViewModel(
     private val store: TripStore,
@@ -64,6 +77,8 @@ class TripsViewModel(
     private val email: String?,
     /** The clock, replaceable so a test renders a fixed moment. */
     private val clock: () -> Instant = { Instant.now() },
+    /** This phone's messaging token and registration memory; none by default. */
+    private val pushDevice: PushDevice = NoPushDevice,
 ) : ViewModel() {
     /** Today's date on this device, as grouping and the calendar read it. */
     fun today(): String = LocalDate.ofInstant(clock(), ZoneId.systemDefault()).toString()
@@ -192,6 +207,46 @@ class TripsViewModel(
     val reminderEmail: StateFlow<Boolean?> = store.reminderEmail(uid).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun setReminderEmail(token: String, on: Boolean) = run(token) { store.setReminderEmail(uid, on) }
+
+    /**
+     * This phone's messaging token is asked for once per view model, and a
+     * registration remembered under an older token is moved to it (a refresh
+     * that happened while the app was not running, or whose write failed).
+     */
+    private val tokenAnswered: StateFlow<Boolean> = flow {
+        val token = pushDevice.token()
+        if (token != null) {
+            try {
+                pushDevice.tokenChanged(store, uid, token)
+            } catch (e: Exception) {
+                TravelmoLog.error(e, "Moving the registration to the current token failed")
+            }
+        }
+        emit(true)
+    }.stateIn(viewModelScope, SharingStarted.Lazily, false)
+
+    /**
+     * Reminders as notifications on this phone: unavailable without a token,
+     * else whether the phone is registered under this user, live from its
+     * document, following the token when Messaging rotates it; null until
+     * the token and the document have both answered.
+     */
+    val pushState: StateFlow<PushState?> = combine(tokenAnswered, pushDevice.latest) { answered, token -> answered to token }
+        .flatMapLatest { (answered, token) ->
+            when {
+                !answered -> flowOf(null)
+                token == null -> flowOf(PushState.Unavailable)
+                else -> store.pushDevice(uid, deviceId(token)).map { on -> on?.let { PushState.Ready(it) } }
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Turns reminders as notifications on this phone on or off; the permission is the screen's to ask for first. */
+    fun setPushDevice(token: String, on: Boolean) = run(token) {
+        val messagingToken = pushDevice.latest.value ?: throw IllegalStateException("This phone has no messaging token")
+        val id = deviceId(messagingToken)
+        if (on) store.registerDevice(uid, id, messagingToken) else store.unregisterDevice(uid, id)
+        pushDevice.remember(uid, if (on) id else null)
+    }
 
     /** Who the user's travel profile is shared with; the profile is started if none has arrived yet. */
     fun saveTrusted(token: String, emails: List<String>) = run(token) {
