@@ -1,0 +1,96 @@
+name: gradle-update
+
+# One batched Gradle dependency PR per week for the Android app, produced by
+# the shared mikelward/gradle-update workflow: every entry in
+# apps/android/gradle/libs.versions.toml moves to the newest stable release
+# within its current major, the checks below validate the batch, and a
+# passing batch lands by auto-merge. All policy lives in the shared
+# workflow; this caller owns only the schedule, the permission grant (which
+# the called workflow downscopes per job: the job that runs Gradle only
+# ever sees contents: read) and where this repository's Gradle build is.
+#
+# The @main reference is deliberate, not an unpinned third-party action:
+# gradle-update is this owner's repo, its main only moves through its own
+# gated pull requests (CI + automated review, no direct pushes), and the
+# whole point of the shared workflow is that a fix there reaches every
+# consumer's next run with no per-repo bump PRs. A SHA pin here would also
+# pin less than it appears to: the workflow checks its engine out at main by
+# design, so the moving piece would move regardless.
+#
+# Cost and reliability: GitHub Actions minutes on this account, one
+# scheduled run a week plus the CI it triggers on the batch PR; no paid
+# third-party action and nothing the app ships or sends. It is off every
+# app path, so a failure never reaches a user: if the shared workflow, the
+# `gradle-update` credential or the androidlog repository is unavailable,
+# the run opens no PR that week, dependencies stay where they are pinned,
+# and the next Saturday retries. Nothing lands unreviewed: `ci / check`
+# and `ci / android` gate every batch like any other pull request.
+on:
+  schedule:
+    - cron: '17 6 * * 6'   # Saturdays, off the congested top of the hour
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: gradle-update
+  cancel-in-progress: false
+jobs:
+  update:
+    uses: mikelward/gradle-update/.github/workflows/gradle-update.yml@main
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    # `inherit`, not a `secrets:` block: the called workflow's publish job
+    # reads GRADLE_UPDATE_PAT (or the App pair) from this repository's
+    # `gradle-update` environment, and an environment secret reaches a
+    # called workflow no other way. A secret passed by name reaches the
+    # runner of every job in the called workflow, the untrusted update job
+    # included, which is what this replaces; see docs/PAT.md in
+    # mikelward/gradle-update (the PAT takes priority over the App
+    # credential there; either opens the PR as a real collaborator, so CI
+    # starts on it normally, with no first-time-contributor approval to
+    # click through). The zizmor marker names the finding this excuses,
+    # for the day that scanner runs here as it does in the sibling repos.
+    secrets: inherit # zizmor: ignore[secrets-inherit]
+    with:
+      # The Android app is a Gradle build of its own under apps/android
+      # (the repository root is a pnpm workspace), so the catalog and every
+      # check name that directory. Each check is its own line and its own
+      # subshell in the called workflow, so the `cd` never leaks.
+      catalog: apps/android/gradle/libs.versions.toml
+      # The same commands as ci.yml's android job, less the release build:
+      # the core module's Android ban and tests, the app's unit tests, lint,
+      # a debug build, and the screenshots against the recorded PNGs, so a
+      # Compose or Material bump that changes a pixel is caught here rather
+      # than only by the PR's CI. -PtravelmoFixedVersion for the same reason
+      # CI sets it: a per-commit version would miss the build cache.
+      checks: |
+        cd apps/android && ./gradlew -PtravelmoFixedVersion :core:verifyNoAndroid :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+        cd apps/android && ./gradlew -PtravelmoFixedVersion -Proborazzi.test.verify :app:testDebugUnitTest --tests app.travelmo.ui.ScreenScreenshotTest
+      # No dispatch: ci.yml carries no workflow_dispatch with a `pr` input,
+      # and a batch PR opened with the `gradle-update` environment's PAT
+      # starts `ci` on its own like any collaborator's PR. Until that PAT
+      # exists, the PR's CI waits for one click of approval on the Actions
+      # tab, which the workflow's own PR body explains.
+      ci-workflow: ''
+      # androidlog is published to a branch of its own repository rather
+      # than to Maven Central, so the engine cannot discover its releases
+      # through the default repositories. Declaring it here is what lets the
+      # weekly batch see a new version at all; without it the coordinate
+      # sits at whatever it was pinned to, silently, with no failing run to
+      # say so. apps/android/settings.gradle.kts already declares the same
+      # repository, scoped to that one group, so Gradle can resolve what the
+      # batch selects.
+      extra-repositories: |
+        https://raw.githubusercontent.com/mikelward/androidlog/maven
+      # Both coordinates, because they share one `androidlog` version key
+      # and the input exempts a key only when every coordinate it pins is
+      # named. The cooldown exists to let a compromised third-party release
+      # be yanked before an unattended job takes it; it guards nothing
+      # against a library this owner publishes and reviews, and would never
+      # expire anyway: raw.githubusercontent.com serves no `Last-Modified`,
+      # so there is no release date to age out and the coordinate would be
+      # deferred forever rather than merely delayed.
+      no-cooldown-for: |
+        com.mikelward.androidlog:logging-core
+        com.mikelward.androidlog:logging-android
