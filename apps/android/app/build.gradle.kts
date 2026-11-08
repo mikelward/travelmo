@@ -60,9 +60,40 @@ val gitShortSha: String = gitOutput("rev-parse", "--short", "HEAD", fallback = "
 val fixedTestVersion: Boolean = listOf("travelmoFixedVersion", "roborazzi.test.record", "roborazzi.test.verify")
     .any { providers.gradleProperty(it).isPresent }
 
+// The four release-keystore variables, normalized once: blank is absent. All
+// four or none: a partial set used to attach a signing config with a password
+// missing, which fails deep inside AGP naming neither the variable nor this
+// block. CI materializes the Play upload keystore from a secret and points
+// RELEASE_KEYSTORE_FILE at it (README "Release"); a build without the
+// variables makes an unsigned release, so a fresh clone still builds.
+fun releaseKeystoreEnv(name: String): String? = providers.environmentVariable(name).orNull?.takeIf { it.isNotBlank() }
+
+val releaseKeystorePath = releaseKeystoreEnv("RELEASE_KEYSTORE_FILE")
+val releaseKeystorePassword = releaseKeystoreEnv("RELEASE_KEYSTORE_PASSWORD")
+val releaseKeyAlias = releaseKeystoreEnv("RELEASE_KEY_ALIAS")
+val releaseKeyPassword = releaseKeystoreEnv("RELEASE_KEY_PASSWORD")
+val releaseKeystoreVars = listOf(releaseKeystorePath, releaseKeystorePassword, releaseKeyAlias, releaseKeyPassword)
+val releaseSigningConfigured = releaseKeystoreVars.all { it != null }
+if (!releaseSigningConfigured && releaseKeystoreVars.any { it != null }) {
+    throw GradleException(
+        "Release signing needs all of RELEASE_KEYSTORE_FILE, RELEASE_KEYSTORE_PASSWORD, RELEASE_KEY_ALIAS and RELEASE_KEY_PASSWORD, or none; only some are set.",
+    )
+}
+
 android {
     namespace = "app.travelmo"
     compileSdk = 37
+
+    signingConfigs {
+        if (releaseSigningConfigured) {
+            create("release") {
+                storeFile = file(releaseKeystorePath!!)
+                storePassword = releaseKeystorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
 
     defaultConfig {
         applicationId = "app.travelmo"
@@ -81,6 +112,9 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Signed only when the variables are set; Play App Signing re-signs
+            // the bundle with its own key, so this one only authenticates the upload.
+            if (releaseSigningConfigured) signingConfig = signingConfigs.getByName("release")
         }
     }
 
