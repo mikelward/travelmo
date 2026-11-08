@@ -133,6 +133,22 @@ announce. Locally, `RELEASE_KEYSTORE_FILE=… RELEASE_KEYSTORE_PASSWORD=…
 RELEASE_KEY_ALIAS=… RELEASE_KEY_PASSWORD=… ./gradlew :app:bundleRelease`
 builds the same signed bundle.
 
+#### Dependency updates
+
+`.github/workflows/gradle-update.yml` runs the fleet's shared weekly batch
+(mikelward/gradle-update) on Saturdays: every entry in
+`apps/android/gradle/libs.versions.toml` moves to the newest stable release
+within its major, the Android checks run against the result, and one pull
+request opens with auto-merge armed, so a clean batch lands once CI passes;
+a failed check leaves it open for a look. The androidlog repository's Maven
+branch is declared to it and exempted from the release-age cooldown, as that
+repository's README asks. One-time setup: Settings → Actions → General →
+Workflow permissions → "Allow GitHub Actions to create and approve pull
+requests", and a `gradle-update` environment holding `GRADLE_UPDATE_PAT`, a
+fine-grained token with Contents and Pull requests write on this repository
+(docs/PAT.md there), so the batch PR runs CI without an approval click. The
+pnpm workspace has no batch yet (TODO.md).
+
 Run the web app locally against a Firebase project:
 
 ```sh

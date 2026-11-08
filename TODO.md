@@ -151,11 +151,17 @@
       switch and the report share in Settings.
 - [ ] Android app, next: reminders as notifications (needs a push channel
       the web's VAPID subscriptions do not give an app; Firebase Cloud
-      Messaging and a parser sender would be new); the weekly Gradle batch
-      (`mikelward/gradle-update` with `catalog: apps/android/gradle/libs.versions.toml`,
-      `extra-repositories` naming androidlog's Maven branch and
-      `no-cooldown-for` its two coordinates, as its README asks). The shared
-      `androidzoom` library is for apps that zoom a picture; nothing here does.
+      Messaging and a parser sender would be new). The shared `androidzoom`
+      library is for apps that zoom a picture; nothing here does.
+- [x] The weekly Gradle batch: `.github/workflows/gradle-update.yml` calls
+      `mikelward/gradle-update` with the catalog under `apps/android`, the
+      CI checks as its checks, androidlog's Maven branch as an extra
+      repository and its two coordinates off the cooldown.
+- [ ] The weekly npm batch for the pnpm workspace. `mikelward/npm-update`
+      (what clothescast and readmo call) runs `npm ci` against a
+      `package-lock.json` and lists even npm workspaces as unsupported, so a
+      pnpm workspace needs that repository taught pnpm first; a change
+      outside this repo, so ask before taking it on.
 - [x] Android app: release signing from the four `RELEASE_KEYSTORE_*`
       variables, the `Publish` job on main (signed bundle as an artifact, a
       GitHub prerelease per versionCode through the shared
@@ -169,7 +175,11 @@
       refuses an agent writing that file) so web sessions seed the SDK; make
       the upload keystore and put it, its passwords and the Firebase config
       in the `production` environment (README "Release"); create the Play
-      Console app with its declarations, then the service account.
+      Console app with its declarations, then the service account; for the
+      weekly batch, allow Actions to create pull requests and put
+      `GRADLE_UPDATE_PAT` in a `gradle-update` environment (README
+      "Dependency updates"), and have the ruleset require branches to be up
+      to date, which its auto-merge checks for before arming.
 - [x] A second chance for places an exhausted daily geocoding budget left
       without a country or a spot: the import queues the booking and a daily
       sweep (`/internal/geocode-sweep`, the third scheduler job) asks again.
@@ -178,6 +188,15 @@
 
 Guesses made on autopilot; change any of them freely.
 
+- The Gradle batch dispatches no CI run (`ci-workflow: ''`): ci.yml has no
+  `workflow_dispatch` with a `pr` input, and the PAT makes the dispatch
+  unnecessary; until the PAT exists, a batch PR's CI waits for one approval
+  click. Its checks include the screenshot verify, so a rendering change
+  from a Compose bump fails the batch for a human rather than landing. The
+  engine's "Not managed" report reads only root-level Gradle scripts, so the
+  one plugin pinned outside the catalog, foojay-resolver in
+  `apps/android/settings.gradle.kts`, goes unreported; it is listed here
+  instead.
 - The Android `Publish` job warns and stops when the release secrets are
   missing, where the sibling apps fail the run: this app has no Play
   listing yet, so a red main on every merge would say nothing new. Switch
