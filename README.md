@@ -18,6 +18,7 @@ the ways trips can come in, built and planned.
 apps/web        Next.js app (Firebase Auth + Firestore, PWA) on Firebase App Hosting
 apps/android    Native Android app (Kotlin, Compose, Firebase Auth + Firestore): its own Gradle build
 apps/parser     Cloud Run worker: Gmail OAuth, Pub/Sub push, pre-filter, Gemini extraction, TripIt import
+apps/inbound    Cloudflare Email Worker: relays mail for the forwarding domain to the parser
 packages/core   Shared zod schemas, Firestore paths, trip grouping, formatting, airport tables, travel reports, TripIt mapping
 packages/rules  Firestore security-rules tests (run against the emulator)
 firestore.rules Who may read and write what
@@ -270,7 +271,28 @@ One Google Cloud project holds everything.
    the form's place fields are plain inputs. A picked address also puts the
    place on the reports map. `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, the public half
    of the parser's pair, lets Settings offer reminders as notifications in
-   the browser; left unset, the switch is hidden.
+   the browser; left unset, the switch is hidden. `NEXT_PUBLIC_FORWARD_DOMAIN`,
+   the parser's `FORWARD_DOMAIN`, lets Settings offer a forwarding address;
+   left unset, that section is hidden.
+8. **Forwarding addresses** (optional) on Cloudflare, for people whose
+   confirmations are not in Gmail: each user gets `<token>@<domain>` from
+   Settings and forwards booking emails to it. Add the domain to Cloudflare
+   (its nameservers) and turn on Email Routing for it, which writes the MX
+   and SPF records; a subdomain (`in.example.com`) works too where the
+   account's plan allows Email Routing on subdomains, leaving the apex for
+   a mailbox. Deploy the Worker from `apps/inbound` with
+   `pnpm dlx wrangler@4 deploy` after setting `PARSER_URL` in its
+   `wrangler.toml`, give it the shared secret with
+   `pnpm dlx wrangler@4 secret put INBOUND_SECRET` (any long random string),
+   and make the domain's catch-all rule "Send to a Worker" naming it. On the
+   parser set `FORWARD_DOMAIN` to the domain and `INBOUND_SECRET` (from
+   Secret Manager) to the same secret; `FORWARD_DAILY_LIMIT` caps the
+   forwarded emails read per user per day (default 50). The Worker relays
+   each message as it arrived to `/inbound/cloudflare`, where the parser
+   parses it, finds whose address it was sent to and runs the usual import;
+   a message to a retired or unknown address, or one over 2 MB, bounces to
+   the sender with the reason. Email Routing and the Worker are free at
+   this volume on Cloudflare's free plan; attachments are not read.
 
 ## Costs
 
@@ -283,4 +305,6 @@ is billed per lookup session (the keystrokes of one field and the pick),
 free up to a monthly allowance and a fraction of a cent past it; reminders
 by email ride the account's own SMTP service, by push the browsers' own
 push services and Firebase Cloud Messaging (both free), and all a fourth Cloud Scheduler job (about ten
-cents a month); see `SPEC.md`.
+cents a month); forwarding addresses ride Cloudflare Email Routing and a
+Worker, free at this volume, with the model cost of a Gmail import per
+forwarded email; see `SPEC.md`.

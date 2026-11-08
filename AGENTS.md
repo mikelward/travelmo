@@ -105,7 +105,7 @@ Shared by every mikelward repo and the user-level agent config; canonical in mik
 - **Commands**. `pnpm install`, then `pnpm test`, `pnpm typecheck`, `pnpm lint`,
   `pnpm build` from the root; the rules tests start the Firestore emulator (JRE).
 - **Layout**. `apps/web` (Next.js, Firebase App Hosting), `apps/parser` (Cloud Run
-  worker), `apps/android` (Kotlin, Compose; its own Gradle build), `packages/core`
+  worker), `apps/inbound` (Cloudflare Email Worker), `apps/android` (Kotlin, Compose; its own Gradle build), `packages/core`
   (schemas, paths, pure logic — put testable logic here), `packages/rules`
   (security-rules tests), `firestore.rules`.
 - **Android**. From `apps/android`: `./gradlew :core:verifyNoAndroid :core:test`, then

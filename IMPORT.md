@@ -17,7 +17,7 @@ is the roadmap in `TODO.md`. Every method ends in the same place: an
 | TripIt per-trip export (`.ics` file) | Built | One trip's reservations as events | Any single trip | One-off | Website only, one trip at a time, "Export trip to calendar" | The `.ics` importer |
 | Any `.ics` file or feed | Built | Calendar events | Whatever the calendar holds | One-off (file) or polled (URL) | Export or subscription URL from any calendar app | The `.ics` importer |
 | Google Calendar | Built | Events from chosen calendars | Unlimited | Read when chosen, then daily | One OAuth consent, calendar picker | The `calendar.readonly` scope on the consent screen (a sensitive scope: verification for public use) |
-| Forward-to-import address | Planned | Emails the user forwards | Anything the user still has | As forwarded | Forward a confirmation to an address | Inbound mail handling (a mail provider's inbound webhook or a dedicated mailbox) and sender verification |
+| Forward-to-import address | Built | Emails the user forwards, read by the model as the original sender's | Anything the user still has | As forwarded (within a minute) | Create the address in Settings, forward a confirmation to it | A domain on Cloudflare with Email Routing, the `apps/inbound` Worker relaying to the parser, `FORWARD_DOMAIN` and `INBOUND_SECRET` on the parser |
 
 ## What each source gives per booking
 

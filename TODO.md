@@ -73,7 +73,10 @@
         `calendar.readonly` and a calendar picker.
   - [x] Backfill without the three-year cap, batched with a cursor, so a
         mailbox's whole history comes in.
-  - [ ] Forward-to-import address for people without Gmail.
+  - [x] Forward-to-import address for people without Gmail:
+        `<token>@travelmo.app` from Settings, Cloudflare Email Routing's
+        catch-all to the `apps/inbound` Worker, which relays each message
+        to the parser's `/inbound/cloudflare` for the usual import.
 - [x] Duplicate matching no longer depends on item order: a TripIt export
       reserves existing bookings for the item whose confirmation number they
       carry, and a calendar upload reads changed events before new ones.
@@ -182,7 +185,11 @@
       `GRADLE_UPDATE_PAT` in a `gradle-update` environment and
       `NPM_UPDATE_PAT` in an `npm-update` one (README "Dependency
       updates"), and have the ruleset require branches to be up to date,
-      which their auto-merge checks for before arming.
+      which their auto-merge checks for before arming; for forwarding
+      addresses, add travelmo.app to Cloudflare with Email Routing on,
+      deploy the `apps/inbound` Worker with its `INBOUND_SECRET`, point
+      the catch-all rule at it, and set `FORWARD_DOMAIN`, `INBOUND_SECRET`
+      and `NEXT_PUBLIC_FORWARD_DOMAIN` (README "Deploy", step 8).
 - [x] A second chance for places an exhausted daily geocoding budget left
       without a country or a spot: the import queues the booking and a daily
       sweep (`/internal/geocode-sweep`, the third scheduler job) asks again.
@@ -191,6 +198,23 @@
 
 Guesses made on autopilot; change any of them freely.
 
+- Forwarding addresses are `<token>@travelmo.app`, the token the whole
+  local part (twenty lowercase base32 characters) rather than an
+  `import+<token>` tag: Email Routing's catch-all delivers either, and the
+  bare form has nothing for a mail client to mangle. The Worker relays the
+  raw message and the parser parses it (`postal-mime`, MIT-0, no
+  dependencies), so the Worker stays within the free plan's CPU allowance;
+  attachments are not read. A forwarded message skips the pre-filter, as a
+  user's "import anyway" does, with a cap of 50 a day per user. Unknown and
+  retired addresses and over-limit days bounce to the sender with the
+  reason rather than vanish. The web learns the domain from
+  `NEXT_PUBLIC_FORWARD_DOMAIN`, as it learns the push key, so the section
+  hides on a deployment without forwarding. `wrangler` is not a
+  dependency: deploys use `pnpm dlx wrangler@4`. The forwarding helpers in
+  `packages/core/src/forward.ts` (token shape, address, reading the
+  original sender out of a forwarding block) have no Kotlin twin: only
+  the parser runs them, and an Android Settings section would show the
+  issued address straight from the user document, as the web does.
 - Reminders to phones share the web's `reminders.push` flag rather than a
   flag of their own: the parser's one query finds everyone with any
   channel, and each client clears the flag only when no browser and no
