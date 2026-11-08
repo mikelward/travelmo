@@ -5,6 +5,7 @@ import android.app.Application
 import app.travelmo.auth.GoogleAccount
 import app.travelmo.data.FirestoreTrips
 import app.travelmo.data.TripStore
+import app.travelmo.log.DebugLogging
 import com.google.firebase.FirebaseApp
 
 /**
@@ -13,6 +14,11 @@ import com.google.firebase.FirebaseApp
  * is false, the account is unavailable and the sign-in screen says why.
  */
 class TravelmoApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        DebugLogging.install(this)
+    }
+
     val firebaseReady: Boolean by lazy { FirebaseApp.getApps(this).isNotEmpty() }
 
     val account: GoogleAccount by lazy {

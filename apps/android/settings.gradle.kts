@@ -26,6 +26,14 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // mikelward/androidlog publishes its own Maven repository into the
+        // `maven` branch of that repository, which raw.githubusercontent.com
+        // serves; scoped to its group so no other coordinate is looked for here.
+        maven {
+            name = "androidlog"
+            url = uri("https://raw.githubusercontent.com/mikelward/androidlog/maven")
+            content { includeGroup("com.mikelward.androidlog") }
+        }
     }
 }
 
