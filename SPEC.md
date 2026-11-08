@@ -35,7 +35,8 @@ viewer's zone. Trip bounds are calendar dates.
   start, end, origin, destination, notes, source, gmailMessageIds[], sources[],
   sender` (the booking email's domain), `rating` (one to five) and
   `favorite`, the traveler's own verdict. `source` is `gmail`, `manual`,
-  `tripit` or `ics`: where the booking first came from. `sources` lists every
+  `tripit`, `ics` or `forward` (an email forwarded to the user's forwarding
+  address): where the booking first came from. `sources` lists every
   email, TripIt item or calendar event it was read from (`kind, id, label,
   uid, at`), including later ones dropped as duplicates of it; the trip page
   shows them all, each email linking into Gmail for the user who imported
@@ -46,8 +47,9 @@ viewer's zone. Trip bounds are calendar dates.
   duplicates.
 - `users/{uid}` — `email, displayName, photoURL, gmail {emailAddress,
   connectedAt, watchExpiration, historyId, backfill}, googleCalendar
-  {emailAddress, connectedAt, calendars[]}, reminders {email, push}`. `gmail` and
-  `googleCalendar` are server-written; `reminders` is the owner's choice; `backfill` is how far a reading of the whole mailbox has
+  {emailAddress, connectedAt, calendars[]}, reminders {email, push}, forward
+  {address, createdAt}`. `gmail`, `googleCalendar` and `forward` are
+  server-written; `reminders` is the owner's choice; `backfill` is how far a reading of the whole mailbox has
   got (`cursor, scanned, imported, failed, done, updatedAt`); each calendar
   is `{id, summary, primary, selected, lastReadAt, lastResult, lastError}`.
 - `users/{uid}/pushSubscriptions/{id}` — `endpoint, keys {p256dh, auth},
@@ -88,6 +90,10 @@ viewer's zone. Trip bounds are calendar dates.
   transaction, serializing trip assignment per user.
   `users/{uid}/private/examples` — `bookings[], others[]` of `{subject,
   vector}`, the embeddings the similarity pre-filter compares against.
+- `forwardAddresses/{tokenHash}` → `{uid, createdAt}`: whose a forwarding
+  address is, by the hash of its token, as `calendarExports` does for export
+  links; `users/{uid}/private/forwardBudget` → `{day, count}`, the day's
+  forwarded emails. Server only.
 - `gmailAccounts/{emailAddress}` → `{uid}`, one owner per mailbox, enforced in
   a transaction; `oauthStates/{nonce}` → `{uid, createdAt}`;
   `pendingConnections/{token}` → `{uid, refreshToken, createdAt}`, parked
@@ -626,6 +632,36 @@ otherwise reserved, connects to the address it checked so DNS cannot be
 switched in between, re-checks every redirect (three at most), and stops at
 15 seconds or 5 MB.
 
+### Forwarded email
+
+People whose confirmations are not in Gmail forward them to an address of
+their own, `<token>@<FORWARD_DOMAIN>`, created from Settings: the token is
+twenty lowercase base32 characters (100 bits), only its hash is stored
+(`forwardAddresses`), and issuing again retires the old one. The domain is
+on Cloudflare: Email Routing's catch-all rule hands every message for it to
+the Email Worker in `apps/inbound`, which does no parsing of its own (the
+free plan's CPU allowance is small) and relays the message as it arrived,
+with the envelope recipient and a shared bearer secret, to the parser's
+`/inbound/cloudflare`. The parser checks the secret in constant time,
+refuses more than 2 MB (attachments are not read), parses the MIME
+(`postal-mime`), reads the original sender and subject out of the forwarding
+block Gmail, Apple Mail, Outlook and Thunderbird write (else the forwarder's
+own, the `Fwd:` prefix stripped), and runs `importMessage` with
+`source: "forward"` and the pre-filter skipped: forwarding is the user's
+request, as "import anyway" is. The record id is a hash of the message's
+`Message-ID` (its bytes when it has none), so a relay retry is one import.
+A per-user daily cap (`FORWARD_DAILY_LIMIT`, default 50) bounds the model
+spend should an address leak; a message past it, or to an unknown or
+retired address, is answered 429 or 404 and the Worker bounces it to the
+sender with the reason, so a mistake is seen rather than swallowed. A
+message the model could not read (unavailable, rate-limited, an answer
+that failed validation) is recorded `failed` and answered 503, not
+acknowledged: the Worker fails, the sending server tries again later, and
+the retry claims the failed record afresh, as a re-uploaded file does; a
+redelivery while another delivery's claim is live is answered 503 too, and
+the retry finds the outcome. Any other failure makes the Worker fail the
+same way.
+
 ### Google Calendar
 
 A second Google consent, `calendar.readonly`, separate from Gmail's: its own
@@ -748,6 +784,9 @@ refused to any other until the first disconnects.
 | `POST /import/tripit` | Firebase ID token | Imports a TripIt JSON export (up to 20 MB); returns counts of trips, bookings, duplicates, items imported before, failures and items not importable; 409 while another TripIt upload of the same user runs |
 | `POST /internal/pubsub/gmail` | OIDC from `INTERNAL_CALLERS` | Pub/Sub push target |
 | `POST /internal/renew-watches` | OIDC from `INTERNAL_CALLERS` | Cloud Scheduler target |
+| `POST /forward/issue` | Firebase ID token | Issues the user's forwarding address, retiring any old one; returns it; 503 without `FORWARD_DOMAIN` |
+| `POST /forward/stop` | Firebase ID token | Retires the user's forwarding address |
+| `POST /inbound/cloudflare` | Bearer `INBOUND_SECRET` | The Email Worker's relay of one message (raw MIME, up to 2 MB, `X-Envelope-To`); 204 accepted, 404 no such address, 429 over the day's limit, 413 too large, 503 the model could not read it (the sender's server retries) |
 | `POST /export/calendar` | Firebase ID token | Issues the user's calendar export link, retiring any old one; returns its token |
 | `POST /export/calendar/stop` | Firebase ID token | Turns the calendar export link off |
 | `GET /cal/{token}.ics` | the token | The calendar export itself, for calendar apps; 404 for a link not in use |
@@ -775,7 +814,9 @@ booking is a rare thing beside imports. Reminders by email ride the
 operator's SMTP service, by push the browsers' own push services and
 Firebase Cloud Messaging for phones (free), which
 are free; the daily job is the fourth Cloud Scheduler job, about ten cents
-a month. The rules tests and CI run
+a month. Forwarding addresses ride Cloudflare Email Routing (free, unlimited
+inbound) and one Email Worker (free plan: 100,000 requests a day), with
+the model cost of a Gmail import per forwarded email. The rules tests and CI run
 on GitHub-hosted runners.
 
 ## Android app
@@ -837,6 +878,7 @@ booking row carries the viewer's matching loyalty programs. CI builds it beside 
 
 ## Later
 
-Itinerary ideas,
-other mail providers and forward-to-import. Further import
-sources share the pipeline: Google Calendar; `IMPORT.md` compares them and maps their fields.
+Itinerary ideas and
+other mail providers. Further import
+sources share the pipeline, as Google Calendar and forward-to-import do;
+`IMPORT.md` compares them and maps their fields.
