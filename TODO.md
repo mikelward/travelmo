@@ -193,6 +193,23 @@
 - [x] A second chance for places an exhausted daily geocoding budget left
       without a country or a spot: the import queues the booking and a daily
       sweep (`/internal/geocode-sweep`, the third scheduler job) asks again.
+- [ ] Trial the Gemini Decisions API (`gemini-decision-1`, launched
+      2026-11-11) as the booking gate in place of the similarity
+      pre-filter, behind a flag. Wait until the deploy has real mail: first
+      count how often an extraction ends `not_booking` versus `imported`,
+      and go ahead only if those wasted calls add up. One call can ask
+      several closed questions over the same email (booking? promotional?
+      booking type?), billed once at $0.10 per 1M input tokens with no
+      output tokens and 150–250 ms latency, and it needs no stored examples
+      or thresholds. It cannot replace extraction, which must write
+      `ExtractedBooking`. From the docs: `ai.decisions.create` needs
+      `@google/genai` 3.2 or later (the parser has 2.32, so a major bump
+      first) and `apiVersion: "v1beta"`; it is on the Developer API (AI
+      Studio key) only, so the Vertex AI path stays on the similarity
+      filter until Google Cloud support ships; no batch or context caching;
+      yes/no answers are clamped to 0.01–0.99, so pick the threshold from
+      labeled mail, and record a drop as "filtered" so it still shows in
+      the Import review list with "import anyway". Docs: https://aistudio.google.com/docs/decisions-api
 
 ## Decisions needing review
 
