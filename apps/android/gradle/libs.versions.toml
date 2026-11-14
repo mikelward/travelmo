@@ -3,29 +3,29 @@
 # ships Kotlin support built in, so there is no standalone kotlin-android
 # plugin; the Kotlin compiler options live in a top-level `kotlin { }` block in
 # app/build.gradle.kts. The versions match the sibling Android apps.
-agp = "9.5.0"
+agp = "9.5.1"
 kotlin = "2.4.21"
 coroutines = "1.11.0"
 # The fleet's shared on-device debug log (mikelward/androidlog): the privacy
 # floor, the logcat and file sinks, and the bug-report share sheet.
-androidlog = "5.1.97"
-serialization = "1.11.0"
+androidlog = "5.1.99"
+serialization = "1.12.0"
 coreKtx = "1.19.1"
 activityCompose = "1.13.0"
 lifecycle = "2.11.0"
 composeBom = "2026.09.00"
 # Navigation 3: the back stack is a plain list the app owns.
-navigation3 = "1.2.0"
+navigation3 = "1.2.1"
 credentials = "1.6.0"
 googleid = "1.2.1"
 firebaseBom = "35.1.0"
 googleServices = "4.5.0"
 junit5 = "6.1.3"
-kotest = "6.2.5"
+kotest = "6.2.6"
 # Screenshot tests: Roborazzi renders the screens to PNG under Robolectric,
 # no emulator needed, in :app's JVM unit tests. JUnit Vintage lets the JUnit 5
 # platform run them, since Robolectric's runner is a JUnit 4 one.
-roborazzi = "1.77.0"
+roborazzi = "1.78.0"
 robolectric = "4.17"
 junit4 = "4.13.2"
 androidxTestCore = "1.7.0"
