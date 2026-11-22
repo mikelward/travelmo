@@ -11,14 +11,14 @@ import { exportLinks, useCalendarExport } from "@/lib/calendarExport";
 import { describeBackfill, pausedReason, readWholeMailbox } from "@/lib/backfill";
 import { useAuth } from "@/lib/auth";
 import { firestore, forgetFirestoreCache } from "@/lib/firebase";
-import { describeRegroup } from "@/lib/regroup";
+import { describeDeletedTrips, describeRegroup } from "@/lib/regroup";
 import { useInstall } from "@/lib/install";
 import { useSaveForOffline } from "@/lib/offline";
 import { subscribePush, unsubscribePush, usePushState } from "@/lib/push";
 import { domainOf, effectiveDecision, learnSender } from "@/lib/patterns";
 import { describeCalendarResult, previewIcs } from "@/lib/ics";
 import { describeTripItResult, previewTripIt } from "@/lib/tripit";
-import { useFeeds, useParsedMessages, useProfile, useSenderPatterns } from "@/lib/trips";
+import { useFeeds, useParsedMessages, useProfile, useSenderPatterns, useTrips } from "@/lib/trips";
 
 const buttonClass =
   "rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
@@ -176,7 +176,25 @@ function RegroupSection({ user }: { user: User }) {
     try {
       setResult(describeRegroup(await api.regroupTrips(user)));
     } catch (e) {
+      console.error("Regrouping trips failed", e);
       setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  // Deleting them all asks first, in the page, with how many will go.
+  const own = useTrips(user)?.filter((t) => t.ownerUid === user.uid).length;
+  const [confirming, setConfirming] = useState(false);
+  const deleteAll = async () => {
+    setBusy(true);
+    setResult(undefined);
+    setError(undefined);
+    try {
+      setResult(describeDeletedTrips((await api.deleteAllTrips(user)).trips));
+      setConfirming(false);
+    } catch (e) {
+      console.error("Deleting all trips failed", e);
+      setError(`Couldn't delete your trips: ${(e as Error).message}. Try again.`);
     } finally {
       setBusy(false);
     }
@@ -187,9 +205,34 @@ function RegroupSection({ user }: { user: User }) {
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
         Rebuilds your trips from your bookings, keeping days out at home separate from trips away.
       </p>
-      <button type="button" disabled={busy} className={`${buttonClass} mt-3`} onClick={() => void regroup()}>
-        {busy ? "Regrouping…" : "Regroup trips"}
-      </button>
+      <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+        <button type="button" disabled={busy} className={buttonClass} onClick={() => void regroup()}>
+          {busy && !confirming ? "Regrouping…" : "Regroup trips"}
+        </button>
+        {!confirming && (
+          <button type="button" disabled={busy} onClick={() => setConfirming(true)} className="text-red-600 hover:underline disabled:opacity-50">
+            Delete all trips
+          </button>
+        )}
+      </div>
+      {confirming && (
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+          <span>
+            Delete all your trips and their bookings? Your profile and connections stay. This cannot be undone.
+          </span>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void deleteAll()}
+            className="rounded-lg bg-red-600 px-3 py-1.5 font-medium text-white disabled:opacity-50"
+          >
+            {busy ? "Deleting…" : own === undefined ? "Delete" : `Delete ${own} trip${own === 1 ? "" : "s"}`}
+          </button>
+          <button type="button" disabled={busy} onClick={() => setConfirming(false)} className={buttonClass}>
+            Keep
+          </button>
+        </div>
+      )}
       {result && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{result}</p>}
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
     </section>

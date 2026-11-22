@@ -87,3 +87,23 @@ function addCounts(a: ImportCounts, b: ImportCounts): ImportCounts {
   for (const key of Object.keys(sum) as (keyof ImportCounts)[]) sum[key] += b[key];
   return sum;
 }
+
+// One /gmail/backfill request. The reset generation is read before the
+// connection, so a "Delete all trips" at any later point makes the save
+// refuse this batch's place: a place read before the reset never pairs with
+// a generation read after it. Undefined when Gmail is not connected.
+export async function backfillRequest<S extends { backfill?: BackfillProgress | undefined }>(
+  restart: boolean,
+  deps: {
+    resetGeneration: () => Promise<number>;
+    loadState: () => Promise<S | undefined>;
+    io: (state: S, generation: number) => BackfillIo;
+    save: (state: S, progress: BackfillProgress, generation: number) => Promise<boolean>;
+  },
+): Promise<{ state: S; batch: BackfillBatch; saved: boolean } | undefined> {
+  const generation = await deps.resetGeneration();
+  const state = await deps.loadState();
+  if (!state) return undefined;
+  const batch = await runBackfillBatch(state.backfill, restart, deps.io(state, generation));
+  return { state, batch, saved: await deps.save(state, batch.progress, generation) };
+}

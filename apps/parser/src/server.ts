@@ -73,13 +73,14 @@ import {
 } from "./gmail";
 import { importCalendar, importMessage, importMessages, importTripIt, type ImportDeps, type ImportOptions } from "./importer";
 import { regroupTrips } from "./regroup";
+import { resetTrips } from "./tripsReset";
 import { loadHomeOverrides } from "./homeOverrides";
 import { errorFields, log } from "./log";
-import { BadPushEnvelope, parseGmailPush, type GmailNotification } from "./pubsub";
+import { BadPushEnvelope, parseGmailPush, processNotification, type GmailNotification } from "./pubsub";
 import { firestoreStore } from "./store";
 import { FeedLimitReached, addFeed, feedFailure, firestoreFeeds, pollAllFeeds, type FeedIo } from "./feeds";
 import { fetchFeed } from "./safefetch";
-import { backfillBatch, backfillQuery, runBackfillBatch } from "./backfill";
+import { backfillBatch, backfillQuery, backfillRequest } from "./backfill";
 
 // How long one backfill batch may spend importing. Leaves two minutes of Cloud Run's default five for the last message and
 // saving progress.
@@ -368,26 +369,31 @@ function importIds(uid: string, gmail: ReturnType<typeof gmailFor>, ids: readonl
 // the connection, where Settings shows it. The page calls this until done.
 app.post("/gmail/backfill", async (c) => {
   const uid = await requireUser(c);
-  const state = await loadState(db, uid);
-  if (!state) throw new HTTPException(409, { message: "Gmail not connected" });
   const body = (await c.req.json().catch(() => ({}))) as { restart?: unknown };
-  const gmail = gmailFor(oauth, state.refreshToken);
   // Stop importing well before Cloud Run's request limit, leaving time to
   // save progress; the page then asks for the next batch.
   const deadline = Date.now() + backfillBudgetMs;
-  const batch = await runBackfillBatch(state.backfill, body.restart === true, {
-    timeLeftMs: () => deadline - Date.now(),
-    page: (token) => searchMessagePage(gmail, backfillQuery, backfillBatch, token),
-    // An email whose import failed (the model was down, say) is read again
-    // when the reading passes it again, as after starting over.
-    importIds: (ids) => importIds(uid, gmail, ids, { retryFailed: true }),
-    isStaleCursor: isBadRequest,
-    now: () => new Date().toISOString(),
-    log: (event, fields) => log("WARNING", event, { uid, ...fields }),
+  const result = await backfillRequest(body.restart === true, {
+    resetGeneration: () => deps.store.resetGeneration(uid),
+    loadState: async () => (await loadState(db, uid)) ?? undefined,
+    io: (state, generation) => {
+      const gmail = gmailFor(oauth, state.refreshToken);
+      return {
+        timeLeftMs: () => deadline - Date.now(),
+        page: (token) => searchMessagePage(gmail, backfillQuery, backfillBatch, token),
+        // An email whose import failed (the model was down, say) is read
+        // again when the reading passes it again, as after starting over.
+        importIds: (ids) => importIds(uid, gmail, ids, { retryFailed: true, generation }),
+        isStaleCursor: isBadRequest,
+        now: () => new Date().toISOString(),
+        log: (event, fields) => log("WARNING", event, { uid, ...fields }),
+      };
+    },
+    save: (state, progress, generation) => updateBackfill(db, uid, state.emailAddress, progress, generation),
   });
-  if (!(await updateBackfill(db, uid, state.emailAddress, batch.progress))) {
-    log("WARNING", "backfill_for_disconnected_user", { uid });
-  }
+  if (!result) throw new HTTPException(409, { message: "Gmail not connected" });
+  const { batch } = result;
+  if (!result.saved) log("WARNING", "backfill_progress_not_saved", { uid });
   const { cursor: _cursor, ...progress } = batch.progress;
   log("INFO", "backfill", { uid, candidates: batch.candidates, ...batch.counts, ...progress });
   return c.json({ candidates: batch.candidates, ...batch.counts, progress });
@@ -398,6 +404,15 @@ app.post("/gmail/backfill", async (c) => {
 app.post("/trips/regroup", async (c) => {
   const uid = await requireUser(c);
   const result = await regroupTrips(uid, deps);
+  return c.json(result);
+});
+
+// Deletes every trip the signed-in user owns, with its bookings, and their
+// import records, so they can import again from scratch. Trips shared with
+// them, their profile and their connections stay.
+app.post("/trips/delete-all", async (c) => {
+  const uid = await requireUser(c);
+  const result = await resetTrips(db, uid, (severity, event, fields) => log(severity, event, fields));
   return c.json(result);
 });
 
@@ -881,28 +896,29 @@ app.post("/internal/pubsub/gmail", async (c) => {
       log("WARNING", "notification_for_unknown_account", { pubsubMessageId });
       return c.body(null, 204);
     }
-    const state = await loadState(db, uid);
-    if (!state) return c.body(null, 204);
-
-    const gmail = gmailFor(oauth, state.refreshToken);
-    const since = state.historyId ?? notification.historyId;
-    const result = await listAddedSince(gmail, since);
-    if (result === "expired") {
-      log("WARNING", "history_expired", { uid, since });
-      await updateHistoryId(db, uid, state.emailAddress, notification.historyId);
+    const result = await processNotification(notification.historyId, {
+      resetGeneration: () => deps.store.resetGeneration(uid),
+      loadState: async () => (await loadState(db, uid)) ?? undefined,
+      listAdded: (state, since) => listAddedSince(gmailFor(oauth, state.refreshToken), since),
+      importIds: (state, ids, generation) => importIds(uid, gmailFor(oauth, state.refreshToken), ids, { generation }),
+      saveHistoryId: (state, historyId, generation) => updateHistoryId(db, uid, state.emailAddress, historyId, generation),
+    });
+    if (result.kind === "disconnected") {
+      log("WARNING", "notification_for_disconnected_user", { uid });
       return c.body(null, 204);
     }
-    const counts = await importIds(uid, gmail, result.messageIds);
-    if (!(await updateHistoryId(db, uid, state.emailAddress, result.historyId))) {
-      log("WARNING", "notification_for_disconnected_user", { uid });
+    if (result.kind === "expired") {
+      log("WARNING", "history_expired", { uid, since: result.since });
+      return c.body(null, 204);
     }
-    log("INFO", "notification_processed", {
-      uid,
-      pubsubMessageId,
-      deliveryAttempt,
-      messages: result.messageIds.length,
-      ...counts,
-    });
+    const fields = { uid, pubsubMessageId, deliveryAttempt, messages: result.messages, ...result.counts };
+    if (result.kind === "superseded") {
+      // Trips were reset while this ran: fail it so Pub/Sub delivers it
+      // again and the emails are read under the new generation.
+      log("WARNING", "notification_superseded", fields);
+      return c.body(null, 503);
+    }
+    log("INFO", "notification_processed", fields);
     return c.body(null, 204);
   } catch (error) {
     log("ERROR", "notification_failed", { pubsubMessageId, deliveryAttempt, ...errorFields(error) });

@@ -1,8 +1,15 @@
 import { ParsedMessage, Segment, SenderPatterns, Trip, paths } from "@travelmo/core";
-import { FieldValue, type Firestore, type Transaction } from "firebase-admin/firestore";
+import { FieldValue, type DocumentSnapshot, type Firestore, type Transaction } from "firebase-admin/firestore";
 import { AccountDeletedError, wasDeleted } from "./deleted";
 import { changeClaimable, claimable, reclaimable, retryable, type TripStore } from "./importer";
 import { Examples, addExample, emptyExamples } from "./similarity";
+
+// How many times the user's trips were reset (tripsReset.ts), kept on the
+// import lock every import reads.
+export function generationOf(snap: DocumentSnapshot): number {
+  const value: unknown = snap.get("generation");
+  return typeof value === "number" ? value : 0;
+}
 
 export function firestoreStore(db: Firestore): TripStore {
   // Every write of an import runs in a transaction that reads the deletion
@@ -11,15 +18,22 @@ export function firestoreStore(db: Firestore): TripStore {
   async function deleted(t: Transaction, uid: string): Promise<boolean> {
     return wasDeleted(db, t, uid);
   }
+  // Whether the user's trips were reset since `generation` was read; never
+  // when no generation was given.
+  async function resetSince(t: Transaction, uid: string, generation: number | undefined): Promise<boolean> {
+    return generation !== undefined && generationOf(await t.get(db.doc(paths.importLock(uid)))) !== generation;
+  }
   function claimWhen(
     uid: string,
     messageId: string,
     processedAt: string,
     allowed: (existing: ParsedMessage | undefined) => boolean,
+    generation?: number,
   ): Promise<boolean> {
     const ref = db.doc(paths.parsedMessage(uid, messageId));
     return db.runTransaction(async (t) => {
       if (await deleted(t, uid)) return false;
+      if (await resetSince(t, uid, generation)) return false;
       const snap = await t.get(ref);
       const existing = snap.exists ? ParsedMessage.parse(snap.data()) : undefined;
       if (!allowed(existing)) return false;
@@ -28,16 +42,17 @@ export function firestoreStore(db: Firestore): TripStore {
     });
   }
   return {
-    claimMessage(uid, messageId, processedAt) {
-      return claimWhen(uid, messageId, processedAt, (existing) => claimable(existing, processedAt));
+    claimMessage(uid, messageId, processedAt, generation) {
+      return claimWhen(uid, messageId, processedAt, (existing) => claimable(existing, processedAt), generation);
     },
-    reclaimMessage(uid, messageId, processedAt) {
-      return claimWhen(uid, messageId, processedAt, (existing) => reclaimable(existing, processedAt));
+    reclaimMessage(uid, messageId, processedAt, generation) {
+      return claimWhen(uid, messageId, processedAt, (existing) => reclaimable(existing, processedAt), generation);
     },
-    claimChange(uid, messageId, processedAt, expected) {
+    claimChange(uid, messageId, processedAt, expected, generation) {
       const ref = db.doc(paths.parsedMessage(uid, messageId));
       return db.runTransaction(async (t) => {
         if (await deleted(t, uid)) return false;
+        if (await resetSince(t, uid, generation)) return false;
         const snap = await t.get(ref);
         const existing = snap.exists ? ParsedMessage.parse(snap.data()) : undefined;
         if (!changeClaimable(existing, expected, processedAt)) return false;
@@ -45,10 +60,11 @@ export function firestoreStore(db: Firestore): TripStore {
         return true;
       });
     },
-    replaceIfUnchanged(uid, expected, next, now) {
+    replaceIfUnchanged(uid, expected, next, now, generation) {
       const ref = db.doc(paths.parsedMessage(uid, expected.messageId));
       return db.runTransaction(async (t) => {
         if (await deleted(t, uid)) return false;
+        if (await resetSince(t, uid, generation)) return false;
         const snap = await t.get(ref);
         const existing = snap.exists ? ParsedMessage.parse(snap.data()) : undefined;
         if (!changeClaimable(existing, expected, now)) return false;
@@ -70,8 +86,22 @@ export function firestoreStore(db: Firestore): TripStore {
       const snap = await db.doc(paths.parsedMessage(uid, messageId)).get();
       return snap.exists ? ParsedMessage.parse(snap.data()) : undefined;
     },
-    retryMessage(uid, messageId, processedAt) {
-      return claimWhen(uid, messageId, processedAt, (existing) => retryable(existing, processedAt));
+    retryMessage(uid, messageId, processedAt, generation) {
+      return claimWhen(uid, messageId, processedAt, (existing) => retryable(existing, processedAt), generation);
+    },
+    async resetGeneration(uid) {
+      return generationOf(await db.doc(paths.importLock(uid)).get());
+    },
+    setParsedIfCurrent(record, generation) {
+      const lock = db.doc(paths.importLock(record.uid));
+      return db.runTransaction(async (t) => {
+        // As setParsed: nothing is written for a deleted account, whose
+        // lock (and so its generation) went with it.
+        if (await deleted(t, record.uid)) throw new AccountDeletedError(record.uid);
+        if (generationOf(await t.get(lock)) !== generation) return false;
+        t.set(db.doc(paths.parsedMessage(record.uid, record.messageId)), record);
+        return true;
+      });
     },
     async setParsed(record) {
       await db.runTransaction(async (t) => {
@@ -85,8 +115,20 @@ export function firestoreStore(db: Firestore): TripStore {
       const lock = db.doc(paths.importLock(uid));
       return db.runTransaction(async (t) => {
         if (await deleted(t, uid)) throw new AccountDeletedError(uid);
-        await t.get(lock);
+        const generation = generationOf(await t.get(lock));
+        let next = generation;
         const result = await fn({
+          generation,
+          bumpGeneration() {
+            next = generation + 1;
+          },
+          async hasGmail() {
+            return (await t.get(db.doc(paths.gmailState(uid)))).exists;
+          },
+          clearBackfill() {
+            t.update(db.doc(paths.gmailState(uid)), { backfill: FieldValue.delete() });
+            t.update(db.doc(paths.user(uid)), { "gmail.backfill": FieldValue.delete() });
+          },
           async listTrips() {
             const snap = await t.get(db.collection(paths.trips()).where("ownerUid", "==", uid));
             return snap.docs.map((d) => Trip.parse(d.data()));
@@ -123,6 +165,13 @@ export function firestoreStore(db: Firestore): TripStore {
           deleteTrip(tripId) {
             t.delete(db.doc(paths.trip(tripId)));
           },
+          async listParsedIds(limit) {
+            const snap = await t.get(db.collection(paths.parsedMessages(uid)).limit(limit));
+            return snap.docs.map((d) => d.id);
+          },
+          deleteParsed(messageId) {
+            t.delete(db.doc(paths.parsedMessage(uid, messageId)));
+          },
           addSource(tripId, segmentId, source) {
             t.update(db.doc(paths.segment(tripId, segmentId)), { sources: FieldValue.arrayUnion(source) });
             // The trip's revision moves with any change to its bookings, so a
@@ -131,7 +180,8 @@ export function firestoreStore(db: Firestore): TripStore {
             t.update(db.doc(paths.trip(tripId)), { updatedAt: source.at });
           },
         });
-        t.set(lock, { lastImportAt: new Date().toISOString() });
+        // Merged, so the reset generation survives every other import.
+        t.set(lock, { lastImportAt: new Date().toISOString(), ...(next !== generation ? { generation: next } : {}) }, { merge: true });
         return result;
       });
     },

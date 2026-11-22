@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeRegroup } from "./regroup";
+import { describeDeletedTrips, describeRegroup } from "./regroup";
 
 describe("describeRegroup", () => {
   it("says what changed", () => {
@@ -9,5 +9,13 @@ describe("describeRegroup", () => {
 
   it("says when nothing needed changing", () => {
     expect(describeRegroup({ changed: 0, deleted: 0 })).toBe("Your trips were already grouped this way.");
+  });
+});
+
+describe("describeDeletedTrips", () => {
+  it("says how many went and what to do next", () => {
+    expect(describeDeletedTrips(12)).toBe("Deleted 12 trips. Import past bookings to start again.");
+    expect(describeDeletedTrips(1)).toBe("Deleted 1 trip. Import past bookings to start again.");
+    expect(describeDeletedTrips(0)).toBe("You had no trips to delete.");
   });
 });

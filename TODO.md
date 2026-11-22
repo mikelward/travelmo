@@ -246,6 +246,15 @@
       trips" in Settings on the web, `POST /trips/regroup`).
 - [ ] Android: a "Regroup trips" action in Settings, calling
       `POST /trips/regroup` as the web does.
+- [ ] Android: "Delete all trips" in Settings, calling
+      `POST /trips/delete-all` and asking first, as the web does.
+- [ ] Finish a half-done account deletion: when the deletion marker exists
+      but the sign-in account does not go (in production it once failed
+      deleting the Firebase Auth user, before the parser held
+      `roles/firebaseauth.admin`), every action fails with "410 This account
+      was deleted". The parser's 410 should say the deletion did not finish,
+      and the web app should say so and offer to finish deleting (calling
+      `POST /account/delete` again), rather than leave every action failing.
 - [ ] A "New Payment Confirmation" receipt from class4kids.co.uk came in as
       its own 00:00 activity, duplicating the "Stage Stars! Holiday Club -
       Day 1" booking it paid for: a receipt without a time should not

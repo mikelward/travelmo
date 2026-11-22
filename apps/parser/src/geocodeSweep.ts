@@ -3,6 +3,7 @@ import { airportPlace } from "@travelmo/core/airportPlaces";
 import type { Firestore } from "firebase-admin/firestore";
 import { refuseIfDeleted } from "./deleted";
 import type { ImportDeps } from "./importer";
+import { generationOf } from "./store";
 
 // A second chance for the places a spent daily budget left without a
 // country or a spot. An import that was put off records the booking here;
@@ -10,10 +11,15 @@ import type { ImportDeps } from "./importer";
 // (and only if nobody edited the booking meanwhile), and drops the entry
 // once every place is answered, the booking is gone, or it is too old.
 
-export type GeocodeRetry = { uid: string; tripId: string; segmentId: string; at: string };
+// `generation` is the reset generation the booking was filed under, so a
+// reset's cleanup can tell an entry from before it from one a later import
+// queued (tripsReset.ts).
+export type GeocodeRetry = { uid: string; tripId: string; segmentId: string; at: string; generation?: number };
 
 export type RetryStore = {
-  put(entry: GeocodeRetry): Promise<void>;
+  // With `generation`, only while the user's trips have not been reset
+  // since it was read (tripsReset.ts): the booking may be gone.
+  put(entry: GeocodeRetry, generation?: number): Promise<void>;
   // Oldest first.
   list(limit: number): Promise<GeocodeRetry[]>;
   delete(entry: Pick<GeocodeRetry, "tripId" | "segmentId">): Promise<void>;
@@ -21,10 +27,11 @@ export type RetryStore = {
 
 export function firestoreRetryStore(db: Firestore): RetryStore {
   return {
-    async put(entry) {
+    async put(entry, generation) {
       await db.runTransaction(async (t) => {
         await refuseIfDeleted(db, t, entry.uid);
-        t.set(db.doc(paths.geocodeRetry(entry.tripId, entry.segmentId)), entry);
+        if (generation !== undefined && generationOf(await t.get(db.doc(paths.importLock(entry.uid)))) !== generation) return;
+        t.set(db.doc(paths.geocodeRetry(entry.tripId, entry.segmentId)), generation === undefined ? entry : { ...entry, generation });
       });
     },
     async list(limit) {

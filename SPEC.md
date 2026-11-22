@@ -585,6 +585,29 @@ Heathrow). Whichever is imported first, the other joins its trip. A trip of noth
 else "Heathrow to London"; when a journey later joins it and the owner has
 not renamed it, it takes the name the whole trip would get ("New York").
 
+To start over instead, "Delete all trips" in Settings (`POST /trips/delete-all`,
+`apps/parser/src/tripsReset.ts`) deletes every trip the user owns, its
+bookings (with their ratings and favorites) and every import record, in
+passes in the import's per-user transaction until none is left. Every pass
+moves on a reset generation kept on the import lock; every import (an
+email, a calendar event, a TripIt item, a calendar upload or a mailbox
+reading as a whole) reads it before any state it acts on, and every write it
+makes checks it in the write's own transaction: the claim, the booking and
+its trip, removing the bookings of a changed or cancelled event, the record
+and its revision, a place queued for another look, the mailbox reading's
+position, and how far new mail has been read (a Gmail notification the
+reset overtook fails, so Pub/Sub delivers it again). Each goes ahead only
+while the generation is unchanged
+(and the account not deleted), so an import that was running (reading the
+email with the model, say) files and records nothing, and the email is read
+again by the next import rather than recreating a trip or leaving a record
+of bookings that are gone. In each of those transactions it also forgets
+how far the last reading of the mailbox got, so "Import past bookings"
+reads every email again and a reading can never pair the new generation
+with the old place; a reading saves its place only while the generation it
+read first is unchanged. Trips others share with the user, bookings the user added to
+them, the travel profile, home corrections, connections and feeds stay.
+
 Trips filed before home was known are rebuilt on request ("Regroup trips"
 in Settings, `POST /trips/regroup`, `apps/parser/src/regroup.ts`), in the
 import's per-user transaction. Each booking, the segments that share any
@@ -939,6 +962,7 @@ build without one points to the web instead.
 | `POST /gmail/reimport` | Firebase ID token | Imports one message again, skipping the pre-filter; returns its outcome |
 | `POST /gmail/disconnect` | Firebase ID token | Stops the watch, revokes the token, deletes the connection |
 | `POST /trips/regroup` | Firebase ID token | Rebuilds the user's trips from their bookings with the current grouping ("Home"); returns how many trips changed and how many were merged away |
+| `POST /trips/delete-all` | Firebase ID token | Deletes every trip the user owns with its bookings, their import records, places waiting for a geocode on those bookings, and how far the last mailbox reading got; returns how many trips went. Trips shared with them, their profile and connections stay |
 | `POST /feeds/add` | Firebase ID token | Subscribes to a calendar feed after checking its address and reading it once; returns counts as for `/import/ics` |
 | `POST /feeds/remove` | Firebase ID token | Stops polling a feed; its bookings stay |
 | `POST /calendar/connect` | Firebase ID token | Returns the Google OAuth URL for `calendar.readonly`; the callback is `/gmail/callback` |
