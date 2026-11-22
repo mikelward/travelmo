@@ -10,7 +10,7 @@ export function SignInGate({ children }: { children: (user: User) => ReactNode }
   const [error, setError] = useState<string>();
 
   if (user === undefined) {
-    return <p className="text-zinc-500">Loading…</p>;
+    return <p className="text-muted">Loading…</p>;
   }
   if (user === null) {
     return (
@@ -27,7 +27,7 @@ export function SignInGate({ children }: { children: (user: User) => ReactNode }
         >
           Sign in with Google
         </button>
-        {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+        {error && <p className="mt-4 text-sm text-danger">{error}</p>}
       </div>
     );
   }

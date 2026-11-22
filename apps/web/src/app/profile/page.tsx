@@ -49,7 +49,7 @@ function LoyaltyTable({ entries }: { entries: ProfileEntry[] }) {
     <section className="mt-6">
       <h3 className="font-medium">Loyalty programs</h3>
       <table className="mt-2 w-full text-sm" aria-label="Loyalty programs">
-        <thead className="text-left text-zinc-500">
+        <thead className="text-left text-muted">
           <tr>
             <th className="py-1 font-normal">Program</th>
             <th className="py-1 font-normal">Account</th>
@@ -137,13 +137,13 @@ function SharingSection({ user, profile }: { user: User; profile: TravelProfile 
           onChange={(e) => setEmail(e.target.value)}
           placeholder="name@example.com"
           aria-label="Email address to share with"
-          className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
+          className="min-w-0 flex-1 rounded-lg border border-field bg-background px-3 py-2 text-sm"
         />
         <button type="submit" disabled={busy || !email.trim() || trusted.length >= maxTrusted} className={buttonClass}>
           Share
         </button>
       </form>
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
     </section>
   );
 }
@@ -186,14 +186,14 @@ function HomeSection({ user }: { user: User }) {
     <section className="mt-10">
       <h2 className="text-lg font-medium">Home</h2>
       {homes === undefined ? (
-        <p className="mt-2 text-sm text-zinc-500">Loading…</p>
+        <p className="mt-2 text-sm text-muted">Loading…</p>
       ) : (
         <>
           <p className="mt-2 text-sm" data-testid="home-line">
             {line ?? "Not known yet."}
           </p>
           <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Worked out from your trips.</p>
-          {homes.failed > 0 && <p className="mt-2 text-sm text-red-600">{failedReadsText(homes.failed)}</p>}
+          {homes.failed > 0 && <p className="mt-2 text-sm text-danger">{failedReadsText(homes.failed)}</p>}
           {homes.corrections.length > 0 && (
             <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
               {homes.corrections.map((c) => (
@@ -224,7 +224,7 @@ function HomeSection({ user }: { user: User }) {
               onChange={(e) => setCity(e.target.value)}
               placeholder="City"
               aria-label="City"
-              className="w-32 rounded-lg border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700"
+              className="w-32 rounded-lg border border-field bg-background px-3 py-2"
             />
             <input
               value={country}
@@ -232,7 +232,7 @@ function HomeSection({ user }: { user: User }) {
               placeholder="GB"
               aria-label="Country code"
               maxLength={2}
-              className="w-16 rounded-lg border border-zinc-300 bg-transparent px-3 py-2 uppercase dark:border-zinc-700"
+              className="w-16 rounded-lg border border-field bg-background px-3 py-2 uppercase"
             />
             <span>from</span>
             <input
@@ -240,13 +240,13 @@ function HomeSection({ user }: { user: User }) {
               value={from}
               onChange={(e) => setFrom(e.target.value)}
               aria-label="From"
-              className="rounded-lg border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700"
+              className="rounded-lg border border-field bg-background px-3 py-2"
             />
             <button type="submit" disabled={busy || !city.trim() || !from} className={buttonClass}>
               Set
             </button>
           </form>
-          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+          {error && <p className="mt-3 text-sm text-danger">{error}</p>}
         </>
       )}
     </section>
@@ -262,7 +262,7 @@ function SharedWithYou({ user }: { user: User }) {
       {shared.map((p) => (
         <div key={p.ownerUid} className="mt-4">
           <p className="text-sm font-medium">From {p.ownerEmail ?? "someone who trusts you"}</p>
-          {hasDetails(p) ? <ProfileSections profile={p} /> : <p className="mt-2 text-sm text-zinc-500">Nothing in it yet.</p>}
+          {hasDetails(p) ? <ProfileSections profile={p} /> : <p className="mt-2 text-sm text-muted">Nothing in it yet.</p>}
         </div>
       ))}
     </section>
@@ -274,7 +274,7 @@ function ProfilePage({ user }: { user: User }) {
   return (
     <>
       <h1 className="mb-2 text-2xl font-semibold">Travel profile</h1>
-      {profile === undefined && <p className="text-zinc-500">Loading…</p>}
+      {profile === undefined && <p className="text-muted">Loading…</p>}
       {profile !== undefined && (!profile || !hasDetails(profile)) && (
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
           Nothing imported yet. Upload a TripIt export in <Link href="/settings" className="underline">Settings</Link> to

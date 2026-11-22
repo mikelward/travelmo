@@ -34,7 +34,7 @@ function Section({
   if (trips.length === 0) return null;
   return (
     <section className="mt-8 first:mt-0">
-      <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">{title}</h2>
+      <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted">{title}</h2>
       <div className="grid gap-3">
         {trips.map((trip) => (
           <TripCard
@@ -60,7 +60,7 @@ function Trips({ user }: { user: User }) {
   const people = usePeopleDocuments(user);
   const warnings = useTripWarnings(people, trips ?? [], segmentsByTrip, today);
 
-  if (!trips || !groups) return <p className="text-zinc-500">Loading trips…</p>;
+  if (!trips || !groups) return <p className="text-muted">Loading trips…</p>;
   if (trips.length === 0) {
     return (
       <div className="mt-16 text-center text-zinc-600 dark:text-zinc-400">

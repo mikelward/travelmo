@@ -121,6 +121,21 @@ Android emulator against the Firestore and Auth emulators on the host, as
 instrumented tests the `android-emulator` CI job runs; the Firestore SDK
 does not run under Robolectric.
 
+## Light and dark
+
+The web app has no theme setting: it follows the system's
+`prefers-color-scheme`, live and without a reload, and declares
+`color-scheme: light dark` so the browser draws native controls (dropdown
+lists, date and time pickers, checkboxes, scrollbars) in the same scheme.
+Colors that change between schemes are tokens in `globals.css`: `muted` for
+secondary text, `danger` for destructive actions and errors, and `field`
+for the outline of text fields and dropdowns, each chosen to meet WCAG AA in
+both (4.5:1 for text, 3:1 for outlines); placeholders use `muted`, and a
+keyboard focus ring in the text color stands off every control.
+`e2e/contrast.spec.ts` runs axe-core's contrast check, and the outline,
+placeholder and focus-ring checks axe lacks, on the main pages in both
+schemes.
+
 ## The trip list
 
 Trips are grouped into now, upcoming and past by calendar date. Trips under

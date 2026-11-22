@@ -50,7 +50,7 @@ function Countries({ report }: { report: TravelReport }) {
     <section className="mt-8">
       <h2 className="text-lg font-medium">Days in each country</h2>
       <table className="mt-2 w-full text-sm" aria-label="Days in each country">
-        <thead className="text-left text-zinc-500">
+        <thead className="text-left text-muted">
           <tr>
             <th className="py-1 font-normal">Country</th>
             <th className="py-1 text-right font-normal">Days</th>
@@ -91,13 +91,13 @@ function Favorites({ places }: { places: readonly FavoritePlace[] }) {
               )}
               {p.name}
             </span>
-            {(p.city || p.country) && <span className="text-zinc-500">{[p.city, p.country ? countryName(p.country) : undefined].filter(Boolean).join(", ")}</span>}
+            {(p.city || p.country) && <span className="text-muted">{[p.city, p.country ? countryName(p.country) : undefined].filter(Boolean).join(", ")}</span>}
             {p.rating !== undefined && (
               <span className="text-amber-500" aria-label={`Rated ${p.rating} ${p.rating === 1 ? "star" : "stars"}`}>
                 {stars(p.rating)}
               </span>
             )}
-            <span className="text-zinc-500">
+            <span className="text-muted">
               {p.trips.map((t, i) => (
                 <span key={t.id}>
                   {i > 0 && " · "}
@@ -120,7 +120,7 @@ function Years({ report, onPick }: { report: TravelReport; onPick: (year: string
     <section className="mt-8">
       <h2 className="text-lg font-medium">Trips per year</h2>
       <table className="mt-2 w-full text-sm" aria-label="Trips per year">
-        <thead className="text-left text-zinc-500">
+        <thead className="text-left text-muted">
           <tr>
             <th className="py-1 font-normal">Year</th>
             <th className="py-1 text-right font-normal">Trips</th>
@@ -169,8 +169,8 @@ function Report({ user }: { user: User }) {
     [all, tables, year, today],
   );
 
-  if (tables instanceof Error) return <p className="text-red-600">The map couldn&apos;t be loaded: {tables.message}</p>;
-  if (!report || !tables || !all || !segments) return <p className="text-zinc-500">Loading reports…</p>;
+  if (tables instanceof Error) return <p className="text-danger">The map couldn&apos;t be loaded: {tables.message}</p>;
+  if (!report || !tables || !all || !segments) return <p className="text-muted">Loading reports…</p>;
 
   const years = all.report.years.map((y) => y.year);
   return (
@@ -181,7 +181,7 @@ function Report({ user }: { user: User }) {
             value={year}
             onChange={(e) => setYear(e.target.value)}
             aria-label="Year"
-            className="rounded-lg border border-zinc-300 bg-transparent px-2 py-1 text-sm dark:border-zinc-700"
+            className="rounded-lg border border-field bg-background px-2 py-1 text-sm"
           >
             <option value="">All years</option>
             {years.map((y) => (
@@ -193,7 +193,7 @@ function Report({ user }: { user: User }) {
       </div>
       <Summary report={report} />
       {segments.failed.length > 0 && (
-        <p className="mt-2 text-sm text-red-600">
+        <p className="mt-2 text-sm text-danger">
           {plural(segments.failed.length, "trip")} couldn&apos;t be read, so {segments.failed.length === 1 ? "it isn't" : "they aren't"}{" "}
           counted. Reload to try again.
         </p>
@@ -221,11 +221,11 @@ function Report({ user }: { user: User }) {
       <Favorites places={favoritePlaces(all.withSegments)} />
       <Years report={all.report} onPick={setYear} />
       {all.report.upcoming > 0 && (
-        <p className="mt-6 text-sm text-zinc-500">
+        <p className="mt-6 text-sm text-muted">
           {plural(all.report.upcoming, "trip")} still ahead {all.report.upcoming === 1 ? "isn't" : "aren't"} counted.
         </p>
       )}
-      {all.report.trips === 0 && all.report.upcoming === 0 && <p className="mt-6 text-zinc-500">No trips yet.</p>}
+      {all.report.trips === 0 && all.report.upcoming === 0 && <p className="mt-6 text-muted">No trips yet.</p>}
     </>
   );
 }

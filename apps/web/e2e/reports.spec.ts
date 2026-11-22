@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { owner, signIn } from "./helpers";
+import { contrastRatio, owner, signIn } from "./helpers";
 import { clearData, seedLisbonTrip, seedTrip } from "./seed";
 
 test.beforeEach(async () => {
@@ -43,4 +43,20 @@ test("with no trips, nothing is counted", async ({ page }) => {
   await expect(page.getByText("No trips yet.")).toBeVisible();
   await expect(page.getByTestId("summary")).toHaveText("0 trips · 0 days away · 0 countries");
   await expect(page.getByTestId("world-map").locator("[data-visited]")).toHaveCount(0);
+});
+
+test("in dark mode, the year dropdown is drawn dark with readable text", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await signIn(page, owner);
+  await page.goto("/reports");
+  const select = page.getByRole("combobox", { name: "Year" });
+  await expect(select).toBeVisible();
+
+  const style = await select.evaluate((el) => {
+    const s = getComputedStyle(el);
+    return { colorScheme: s.colorScheme, color: s.color, background: s.backgroundColor };
+  });
+  // Without a dark color scheme the option popup is drawn light under light text.
+  expect(style.colorScheme).toContain("dark");
+  expect(contrastRatio(style.color, style.background)).toBeGreaterThanOrEqual(4.5);
 });

@@ -49,7 +49,7 @@ function Verdict({ segment, onRate, onFavorite }: { segment: Segment; onRate?: (
   const rating = segment.rating ?? 0;
   const favorite = segment.favorite === true;
   if (!onRate && !onFavorite && !rating && !favorite) return null;
-  const starClass = (n: number) => (n <= rating ? "text-amber-500" : "text-zinc-300 dark:text-zinc-700");
+  const starClass = (n: number) => (n <= rating ? "text-amber-500" : "text-muted");
   return (
     <p className="mt-1 flex items-center gap-1 text-sm" data-testid="segment-verdict">
       <span role="group" aria-label={rating ? `Rated ${plural(rating)}` : "Not rated"} className="flex">
@@ -78,7 +78,7 @@ function Verdict({ segment, onRate, onFavorite }: { segment: Segment; onRate?: (
           aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
           aria-pressed={favorite}
           onClick={() => onFavorite(!favorite)}
-          className={`ml-1 ${favorite ? "text-rose-500" : "text-zinc-300 hover:text-rose-400 dark:text-zinc-700"}`}
+          className={`ml-1 ${favorite ? "text-rose-500" : "text-muted hover:text-rose-400"}`}
         >
           ♥
         </button>
@@ -101,7 +101,7 @@ function Sources({ segment, emailLinks, onLearnSender }: { segment: Segment; ema
   const sources = segmentSources(segment);
   if (sources.length === 0 && !segment.sender) return null;
   return (
-    <p className="mt-1 text-xs text-zinc-500" data-testid="segment-sources">
+    <p className="mt-1 text-xs text-muted" data-testid="segment-sources">
       {sources.length > 0 && (sources.length === 1 ? "Source: " : `Sources (${sources.length}): `)}
       {sources.map((source, i) => {
         const text = `${sourceKinds[source.kind]}${source.label ? ` “${source.label}”` : ""}`;
@@ -176,28 +176,28 @@ export function SegmentRow({
     // On a phone the actions drop below the details, in line with them,
     // rather than squeezing them into a narrow column.
     <li className="flex flex-wrap gap-x-4 gap-y-2 py-3">
-      <SegmentIcon type={segment.type} label={labels[segment.type]} className="mt-0.5 shrink-0 text-zinc-500" />
+      <SegmentIcon type={segment.type} label={labels[segment.type]} className="mt-0.5 shrink-0 text-muted" />
       <div className="min-w-0 flex-1">
         <p className="font-medium">{segment.title}</p>
         {route && <p className="text-sm text-zinc-600 dark:text-zinc-400">{route}</p>}
         {times && <p className="text-sm text-zinc-600 dark:text-zinc-400">{times}</p>}
-        {addresses && <p className="mt-1 text-xs text-zinc-500">{addresses}</p>}
+        {addresses && <p className="mt-1 text-xs text-muted">{addresses}</p>}
         {(segment.confirmation || segment.provider) && (
-          <p className="mt-1 text-xs text-zinc-500">
+          <p className="mt-1 text-xs text-muted">
             {[segment.provider, segment.confirmation && `Ref ${segment.confirmation}`].filter(Boolean).join(" · ")}
           </p>
         )}
         {programs && programs.length > 0 && (
-          <p className="mt-1 text-xs text-zinc-500" data-testid="segment-loyalty">
+          <p className="mt-1 text-xs text-muted" data-testid="segment-loyalty">
             {programs.map(loyaltyLine).join(" · ")}
           </p>
         )}
-        {segment.notes && <p className="mt-1 whitespace-pre-line text-xs text-zinc-500">{segment.notes}</p>}
+        {segment.notes && <p className="mt-1 whitespace-pre-line text-xs text-muted">{segment.notes}</p>}
         <Verdict segment={segment} {...(onRate ? { onRate } : {})} {...(onFavorite ? { onFavorite } : {})} />
         <Sources segment={segment} {...(emailLinks ? { emailLinks } : {})} {...(onLearnSender ? { onLearnSender } : {})} />
       </div>
       {(onEdit || onDelete || (onMove && moveTargets && moveTargets.length > 0)) && (
-        <div className="flex w-full flex-wrap items-center gap-3 self-start pl-20 text-xs text-zinc-500 sm:w-auto sm:shrink-0 sm:pl-0">
+        <div className="flex w-full flex-wrap items-center gap-3 self-start pl-20 text-xs text-muted sm:w-auto sm:shrink-0 sm:pl-0">
           {onEdit && (
             <button type="button" onClick={onEdit} className="hover:underline">
               Edit
@@ -213,7 +213,7 @@ export function SegmentRow({
               value=""
               onChange={(e) => e.target.value && onMove(e.target.value)}
               title="Move to another trip"
-              className="max-w-40 rounded border border-zinc-300 bg-transparent px-1 py-0.5 text-xs dark:border-zinc-700"
+              className="max-w-40 rounded border border-field bg-background px-1 py-0.5 text-xs"
             >
               <option value="">Move to…</option>
               {moveTargets.map((t) => (
