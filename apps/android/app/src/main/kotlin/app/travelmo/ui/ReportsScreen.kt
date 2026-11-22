@@ -32,9 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
@@ -58,6 +56,7 @@ import app.travelmo.core.countryName
 import app.travelmo.core.favoritePlaces
 import app.travelmo.core.travelReport
 import app.travelmo.core.worldMap
+import app.travelmo.ui.theme.TravelmoTheme
 import com.mikelward.androidzoom.compose.pinchFontSizeHost
 
 /**
@@ -235,8 +234,8 @@ fun WorldMap(data: WorldMapData, visited: Set<String>, airports: List<AirportVis
     }
     // The web's sky blue for a country visited (sky-600 by day, sky-400 by
     // night), which reads against the theme's violet and amber alike.
-    val filled = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) Color(0xFF38BDF8) else Color(0xFF0284C7)
-    val empty = MaterialTheme.colorScheme.surfaceVariant
+    val filled = TravelmoTheme.colors.visited
+    val empty = TravelmoTheme.colors.land
     val border = MaterialTheme.colorScheme.surface
     val airport = MaterialTheme.colorScheme.tertiary
     val place = MaterialTheme.colorScheme.error

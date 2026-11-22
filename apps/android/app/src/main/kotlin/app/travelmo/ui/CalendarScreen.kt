@@ -31,7 +31,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -46,7 +45,7 @@ import app.travelmo.core.monthLabel
 import app.travelmo.core.monthOf
 import app.travelmo.core.monthWeeks
 import app.travelmo.core.weekBars
-import app.travelmo.ui.theme.SharedBadge
+import app.travelmo.ui.theme.TravelmoTheme
 
 private val weekdays = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
@@ -180,8 +179,13 @@ private fun Bar(bar: TripBar, shared: Boolean, modifier: Modifier = Modifier, on
         topEnd = if (bar.continuesAfter) 0.dp else radius,
         bottomEnd = if (bar.continuesAfter) 0.dp else radius,
     )
-    val background = if (shared) SharedBadge else MaterialTheme.colorScheme.primary
-    val foreground = if (shared) Color.White else MaterialTheme.colorScheme.onPrimary
+    // A trip being deleted is grayed out with text that still reads, rather
+    // than its color faded under white text.
+    val (background, foreground) = when {
+        bar.trip.deleting -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
+        shared -> TravelmoTheme.colors.sharedContainer to TravelmoTheme.colors.onSharedContainer
+        else -> MaterialTheme.colorScheme.primary to MaterialTheme.colorScheme.onPrimary
+    }
     Text(
         (if (bar.continuesBefore) "… " else "") + bar.trip.title,
         style = MaterialTheme.typography.bodyMedium,
@@ -191,7 +195,7 @@ private fun Bar(bar: TripBar, shared: Boolean, modifier: Modifier = Modifier, on
         modifier = modifier
             .padding(horizontal = 1.dp)
             .clip(shape)
-            .background(if (bar.trip.deleting) background.copy(alpha = 0.5f) else background)
+            .background(background)
             .clickable(onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 2.dp),
     )
