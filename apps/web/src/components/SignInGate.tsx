@@ -2,6 +2,7 @@
 
 import type { User } from "firebase/auth";
 import { useState, type ReactNode } from "react";
+import { Logo } from "@/components/Logo";
 import { useAuth } from "@/lib/auth";
 
 export function SignInGate({ children }: { children: (user: User) => ReactNode }) {
@@ -14,7 +15,8 @@ export function SignInGate({ children }: { children: (user: User) => ReactNode }
   if (user === null) {
     return (
       <div className="mx-auto mt-16 max-w-sm rounded-xl border border-zinc-200 p-8 text-center dark:border-zinc-800">
-        <h1 className="text-2xl font-semibold">Travelmo</h1>
+        <Logo size={72} className="mx-auto mb-4" />
+        <h1 className="font-wordmark text-2xl font-medium">Travelmo</h1>
         <p className="mt-2 text-zinc-600 dark:text-zinc-400">
           Your trips in one place, imported from your inbox.
         </p>

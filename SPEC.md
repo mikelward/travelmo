@@ -381,7 +381,10 @@ launchers; iOS takes `app/apple-icon.png` (180 px, full bleed) and the
 `appleWebApp` metadata, opening without Safari's bars. `scripts/icons.mjs`
 renders the PNGs from the SVGs in `apps/web/icons` with Playwright's
 Chromium; they are committed, as is the Play listing's 512 px icon
-(`apps/android/play/icon.svg`). Settings shows an Install button where the
+(`apps/android/play/icon.svg`). The rest of the Play listing (texts,
+feature graphic, screenshots framed from the Android snapshots) lives
+beside it in `apps/android/play/listings`, and `scripts/publish-play-listing.mjs`
+sends it through the Play Developer API with no dependencies. Settings shows an Install button where the
 browser offers its install prompt (`beforeinstallprompt`), and on iPhone and
 iPad, where Safari has none, says how to add it to the Home Screen; neither
 shows once Travelmo runs installed.
@@ -833,7 +836,12 @@ pure-Kotlin `:core` guarded by `verifyNoAndroid`, JUnit 5 with Kotest
 assertions, the commit count as `versionCode`, Firebase dormant until
 `google-services.json` is dropped in) rather than the React Native port once
 pencilled in; `design/android/` is its reference, Material 3 in this palette,
-and the strings follow the web app exactly. It reads the same Firestore
+and the strings follow the web app exactly. The "Travelmo" wordmark (the trip
+list's app bar, the sign-in screen, the web's header and sign-in card) is Fira
+Sans Medium, bundled under the SIL Open Font License; all other text keeps the
+system font on Android and Geist on the web. On the web the app icon
+(`components/Logo.tsx`, inline, in step with `app/icon.svg`) stands beside it in
+the header and above it on the sign-in card. It reads the same Firestore
 documents under the same rules, signed in as the same Google account through
 Credential Manager and Firebase Auth, so a trip looks the same on both and
 Firestore's own cache answers offline. `:core` re-implements, in Kotlin, what
