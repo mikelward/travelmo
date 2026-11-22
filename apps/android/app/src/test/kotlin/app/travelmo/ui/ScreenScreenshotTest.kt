@@ -162,7 +162,10 @@ class ScreenScreenshotTest {
     @Test
     fun settings() {
         // With a messaging token, so the notifications switch is on the screen.
-        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, pushDevice = FakePushDevice())
+        // With a parser address, so Delete account is a button.
+        val viewModel = TripsViewModel(
+            FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, pushDevice = FakePushDevice(), accountDeletion = FakeAccountDeletion(),
+        )
         capture("settings") {
             SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
         }

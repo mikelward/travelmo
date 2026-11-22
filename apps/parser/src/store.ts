@@ -1,9 +1,16 @@
 import { ParsedMessage, Segment, SenderPatterns, Trip, paths } from "@travelmo/core";
-import { FieldValue, type Firestore } from "firebase-admin/firestore";
+import { FieldValue, type Firestore, type Transaction } from "firebase-admin/firestore";
+import { AccountDeletedError, wasDeleted } from "./deleted";
 import { changeClaimable, claimable, reclaimable, retryable, type TripStore } from "./importer";
 import { Examples, addExample, emptyExamples } from "./similarity";
 
 export function firestoreStore(db: Firestore): TripStore {
+  // Every write of an import runs in a transaction that reads the deletion
+  // marker first, so once account deletion has written it no import can add
+  // a trip, booking or record behind it (apps/parser/src/account.ts).
+  async function deleted(t: Transaction, uid: string): Promise<boolean> {
+    return wasDeleted(db, t, uid);
+  }
   function claimWhen(
     uid: string,
     messageId: string,
@@ -12,6 +19,7 @@ export function firestoreStore(db: Firestore): TripStore {
   ): Promise<boolean> {
     const ref = db.doc(paths.parsedMessage(uid, messageId));
     return db.runTransaction(async (t) => {
+      if (await deleted(t, uid)) return false;
       const snap = await t.get(ref);
       const existing = snap.exists ? ParsedMessage.parse(snap.data()) : undefined;
       if (!allowed(existing)) return false;
@@ -29,6 +37,7 @@ export function firestoreStore(db: Firestore): TripStore {
     claimChange(uid, messageId, processedAt, expected) {
       const ref = db.doc(paths.parsedMessage(uid, messageId));
       return db.runTransaction(async (t) => {
+        if (await deleted(t, uid)) return false;
         const snap = await t.get(ref);
         const existing = snap.exists ? ParsedMessage.parse(snap.data()) : undefined;
         if (!changeClaimable(existing, expected, processedAt)) return false;
@@ -39,6 +48,7 @@ export function firestoreStore(db: Firestore): TripStore {
     replaceIfUnchanged(uid, expected, next, now) {
       const ref = db.doc(paths.parsedMessage(uid, expected.messageId));
       return db.runTransaction(async (t) => {
+        if (await deleted(t, uid)) return false;
         const snap = await t.get(ref);
         const existing = snap.exists ? ParsedMessage.parse(snap.data()) : undefined;
         if (!changeClaimable(existing, expected, now)) return false;
@@ -64,13 +74,17 @@ export function firestoreStore(db: Firestore): TripStore {
       return claimWhen(uid, messageId, processedAt, (existing) => retryable(existing, processedAt));
     },
     async setParsed(record) {
-      await db.doc(paths.parsedMessage(record.uid, record.messageId)).set(record);
+      await db.runTransaction(async (t) => {
+        if (await deleted(t, record.uid)) throw new AccountDeletedError(record.uid);
+        t.set(db.doc(paths.parsedMessage(record.uid, record.messageId)), record);
+      });
     },
     async withUserLock(uid, fn) {
       // Every import reads and writes this document, so two transactions
       // for one user conflict and the later one retries against fresh trips.
       const lock = db.doc(paths.importLock(uid));
       return db.runTransaction(async (t) => {
+        if (await deleted(t, uid)) throw new AccountDeletedError(uid);
         await t.get(lock);
         const result = await fn({
           async listTrips() {
@@ -128,6 +142,7 @@ export function firestoreStore(db: Firestore): TripStore {
       // both keep their example.
       const ref = db.doc(paths.examples(uid));
       await db.runTransaction(async (t) => {
+        if (await deleted(t, uid)) throw new AccountDeletedError(uid);
         const snap = await t.get(ref);
         const current = snap.exists ? Examples.parse(snap.data()) : emptyExamples();
         t.set(ref, addExample(current, label, example));

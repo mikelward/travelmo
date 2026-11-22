@@ -1,6 +1,7 @@
 import { enrichSegments, fillAirports, needsGeocoding, paths, type Segment } from "@travelmo/core";
 import { airportPlace } from "@travelmo/core/airportPlaces";
 import type { Firestore } from "firebase-admin/firestore";
+import { refuseIfDeleted } from "./deleted";
 import type { ImportDeps } from "./importer";
 
 // A second chance for the places a spent daily budget left without a
@@ -21,7 +22,10 @@ export type RetryStore = {
 export function firestoreRetryStore(db: Firestore): RetryStore {
   return {
     async put(entry) {
-      await db.doc(paths.geocodeRetry(entry.tripId, entry.segmentId)).set(entry);
+      await db.runTransaction(async (t) => {
+        await refuseIfDeleted(db, t, entry.uid);
+        t.set(db.doc(paths.geocodeRetry(entry.tripId, entry.segmentId)), entry);
+      });
     },
     async list(limit) {
       const snap = await db.collection(paths.geocodeRetries()).orderBy("at").limit(limit).get();

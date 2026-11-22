@@ -8,6 +8,8 @@ import app.travelmo.core.Segment
 import app.travelmo.core.SegmentDraft
 import app.travelmo.core.SegmentType
 import app.travelmo.core.Trip
+import app.travelmo.data.AccountDeletion
+import app.travelmo.data.AccountDeletionFailed
 import app.travelmo.data.OwnProfile
 import app.travelmo.data.TripStore
 import app.travelmo.notify.PushDevice
@@ -186,5 +188,15 @@ class FakePushDevice(private val token: String? = "fcm-token-1") : PushDevice {
     override fun remembered(uid: String): String? = remembered[uid]
     override fun tokenKnown(token: String?) {
         latest.value = token
+    }
+}
+
+/** The parser's account deletion, failing with [failure] when given. */
+class FakeAccountDeletion(private val failure: String? = null) : AccountDeletion {
+    var calls = 0
+    override val available = true
+    override suspend fun deleteAccount() {
+        calls++
+        failure?.let { throw AccountDeletionFailed(it) }
     }
 }

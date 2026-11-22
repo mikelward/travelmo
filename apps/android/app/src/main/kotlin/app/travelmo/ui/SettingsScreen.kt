@@ -12,6 +12,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -20,6 +22,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -45,10 +48,12 @@ import kotlinx.coroutines.launch
 
 private const val REMINDER_TOKEN = "settings/reminders/email"
 private const val PUSH_TOKEN = "settings/reminders/push"
+private const val DELETE_ACCOUNT_TOKEN = "settings/account/delete"
 
 /**
  * The account, reminders by email and as notifications on this phone, the
- * debug log and the build; the import settings are on the web for now.
+ * debug log, deleting the account and the build; the import settings are on
+ * the web for now.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -107,6 +112,7 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
             (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             PushSwitch(viewModel)
             DebugLogSection(signedIn = true)
+            DeleteAccountSection(account, viewModel)
             Text(
                 stringResource(R.string.version, BuildConfig.VERSION_NAME),
                 style = MaterialTheme.typography.bodySmall,
@@ -173,6 +179,50 @@ private fun PushSwitch(viewModel: TripsViewModel) {
     }
     if (blocked) Text(stringResource(R.string.notifications_blocked), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
     (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+}
+
+/**
+ * Deleting the account, as on the web: a dialog asks first, then the parser
+ * deletes everything and the app signs out, and the sign-in screen says the
+ * account is gone. A build with no parser address says to use the web.
+ */
+@Composable
+private fun DeleteAccountSection(account: GoogleAccount, viewModel: TripsViewModel) {
+    val context = LocalContext.current
+    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val outcome = outcomes[DELETE_ACCOUNT_TOKEN]
+    var confirming by remember { mutableStateOf(false) }
+    Text(stringResource(R.string.delete_account), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(R.string.delete_account_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (!viewModel.canDeleteAccount) {
+        Text(stringResource(R.string.delete_account_on_web), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+        return
+    }
+    OutlinedButton(
+        onClick = { confirming = true },
+        enabled = outcome !is Outcome.Busy,
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+        modifier = Modifier.padding(top = 8.dp),
+    ) { Text(stringResource(if (outcome is Outcome.Busy) R.string.deleting else R.string.delete_account)) }
+    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+    if (confirming) {
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text(stringResource(R.string.delete_account_confirm_title)) },
+            text = { Text(stringResource(R.string.delete_account_confirm)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirming = false
+                        val appContext = context.applicationContext
+                        viewModel.deleteAccount(DELETE_ACCOUNT_TOKEN) { account.signOutDeleted(appContext) }
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) { Text(stringResource(R.string.delete)) }
+            },
+            dismissButton = { TextButton(onClick = { confirming = false }) { Text(stringResource(R.string.keep)) } },
+        )
+    }
 }
 
 /**

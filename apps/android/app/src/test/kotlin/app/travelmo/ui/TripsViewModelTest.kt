@@ -175,6 +175,38 @@ class TripsViewModelTest {
     }
 
     @Test
+    fun `deleting the account signs out once the parser has deleted it`() = runTest {
+        val deletion = FakeAccountDeletion()
+        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, accountDeletion = deletion)
+        viewModel.canDeleteAccount shouldBe true
+        var signedOut = 0
+        viewModel.deleteAccount("delete") { signedOut++ }
+        deletion.calls shouldBe 1
+        signedOut shouldBe 1
+        viewModel.outcomes.value shouldBe mapOf("delete" to Outcome.Done)
+    }
+
+    @Test
+    fun `a failed deletion says why and leaves the user signed in`() = runTest {
+        val deletion = FakeAccountDeletion(failure = "Couldn't delete your account (error 500). Try again.")
+        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, accountDeletion = deletion)
+        var signedOut = 0
+        viewModel.deleteAccount("delete") { signedOut++ }
+        signedOut shouldBe 0
+        viewModel.outcomes.value shouldBe mapOf("delete" to Outcome.Failed("Couldn't delete your account (error 500). Try again."))
+    }
+
+    @Test
+    fun `without a parser address the account cannot be deleted here`() = runTest {
+        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL)
+        viewModel.canDeleteAccount shouldBe false
+        var signedOut = 0
+        viewModel.deleteAccount("delete") { signedOut++ }
+        signedOut shouldBe 0
+        viewModel.outcomes.value shouldBe mapOf("delete" to Outcome.Failed("Delete your account from Settings on the web."))
+    }
+
+    @Test
     fun `a failed save says why, to the form that asked`() = runTest {
         val store = GatedStore(fail = true)
         val viewModel = TripsViewModel(store, OWNER, null)

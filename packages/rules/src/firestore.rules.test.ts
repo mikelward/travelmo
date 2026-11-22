@@ -290,6 +290,31 @@ describe("server-only collections", () => {
     await assertFails(setDoc(doc(as(owner), paths.geocodeBudget("2026-11-07")), { calls: 0 }));
     await assertFails(getDoc(doc(as(owner), paths.geocodeRetry("t1", "s1"))));
     await assertFails(setDoc(doc(as(owner), paths.geocodeRetry("t1", "s1")), { uid: owner.uid, tripId: "t1", segmentId: "s1", at: "2026-11-07T00:00:00Z" }));
+    await assertFails(getDoc(doc(as(owner), paths.deletedAccount(owner.uid))));
+    await assertFails(setDoc(doc(as(owner), paths.deletedAccount(owner.uid)), { uid: owner.uid }));
+  });
+});
+
+describe("a deleted account", () => {
+  // Its sign-in token is still good for up to an hour after deletion.
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), paths.deletedAccount(owner.uid)), { uid: owner.uid, at: "2026-11-22T00:00:00Z" });
+    });
+  });
+
+  it("can create or change nothing, while everyone else carries on", async () => {
+    await assertFails(setDoc(doc(as(owner), paths.trip("t2")), { ...trip, id: "t2" }));
+    await assertFails(updateDoc(doc(as(owner), paths.trip(trip.id)), { title: "Renamed", updatedAt: "2026-11-23T00:00:00Z" }));
+    await assertFails(setDoc(doc(as(owner), paths.segment(trip.id, "s2")), { ...segment, id: "s2" }));
+    await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { email: owner.email }));
+    await assertFails(setDoc(doc(as(owner), paths.travelProfile(owner.uid)), { ownerUid: owner.uid, ownerEmail: owner.email, trustedEmails: [] }));
+    // The partner the trip is shared with is not deleted and still edits it.
+    await assertSucceeds(setDoc(doc(as(partner), paths.segment(trip.id, "s3")), { ...segment, id: "s3" }));
+  });
+
+  it("can still delete, which only removes data", async () => {
+    await assertSucceeds(deleteDoc(doc(as(owner), paths.segment(trip.id, segment.id))));
   });
 });
 

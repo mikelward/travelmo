@@ -13,6 +13,7 @@ const storage = new Map<string, string>();
 const fakeStorage = {
   getItem: (key: string) => storage.get(key) ?? null,
   setItem: (key: string, value: string) => void storage.set(key, value),
+  removeItem: (key: string) => void storage.delete(key),
 } as unknown as Storage;
 
 beforeAll(() => {
@@ -41,5 +42,32 @@ describe("adoptFirestoreCache", () => {
     await expect(getDocFromCache(doc(after, "trips/none"))).rejects.toMatchObject({ code: "unavailable" });
     // Not recorded as this account's cache, so the next load tries again.
     expect(storage.has("travelmo.cacheOwner")).toBe(false);
+  });
+});
+
+describe("forgetFirestoreCache", () => {
+  it("clears the deleted account's cache and no longer names it as the owner", async () => {
+    const { forgetFirestoreCache, firestore } = await import("./firebase");
+    const { clearIndexedDbPersistence } = await import("firebase/firestore");
+    vi.mocked(clearIndexedDbPersistence).mockResolvedValueOnce(undefined);
+    storage.set("travelmo.cacheOwner", "deleted-user");
+    const before = firestore();
+
+    await forgetFirestoreCache();
+
+    expect(clearIndexedDbPersistence).toHaveBeenLastCalledWith(before);
+    expect(storage.has("travelmo.cacheOwner")).toBe(false);
+    expect(firestore()).not.toBe(before);
+  });
+
+  it("keeps naming the deleted account when clearing fails, so the next sign-in clears it", async () => {
+    const { forgetFirestoreCache, firestore } = await import("./firebase");
+    storage.set("travelmo.cacheOwner", "deleted-user");
+    const before = firestore();
+
+    await expect(forgetFirestoreCache()).rejects.toThrow("IndexedDB is unavailable");
+
+    expect(storage.get("travelmo.cacheOwner")).toBe("deleted-user");
+    expect(firestore()).not.toBe(before);
   });
 });

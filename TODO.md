@@ -177,8 +177,11 @@
       every pull request and published by the `Publish` job when it changes.
 - [ ] Privacy policy page on the web app, for the Play listing and Google's
       OAuth verification.
-- [ ] Account deletion in the app and on the web, which Play requires of
-      apps that create accounts.
+- [x] Account deletion in the app and on the web (Play requires both for
+      an app with sign-in): Settings' "Delete account" calls the parser's
+      `POST /account/delete` (SPEC "Deleting an account"). The Play
+      listing's data safety form and account deletion URL (the web's
+      Settings page) are the maintainer's to fill in.
 - [ ] Android app, maintainer steps: register the Android app in the Firebase
       project (package `app.travelmo` and `app.travelmo.debug`, the signing
       SHA-1, Google sign-in enabled) and keep `google-services.json` out of
@@ -243,6 +246,24 @@
 ## Decisions needing review
 
 Guesses made on autopilot; change any of them freely.
+
+- Deleting an account keeps the bookings the user added to someone else's
+  trip (they belong to that trip; their `sources` still carry the deleted
+  uid, which links to nothing), takes the user's verified email off other
+  people's travel profiles' `trustedEmails` as well as trips'
+  `sharedWith`, and revokes every Google token outright rather than
+  sparing a grant another connection rests on, since none is left. An
+  unverified email in the ID token removes the user from nothing, so a
+  look-alike account cannot unshare a real address. The parser does not
+  ask for a recent sign-in: the in-page confirmation (a dialog on
+  Android) is the only check. The web clears its Firestore cache
+  afterwards; the Android app does not clear Firestore's on-device cache,
+  as it does not on a change of account either. The Android app's parser
+  address is the production one from `apps/android/gradle.properties`
+  (public, as in `apphosting.yaml`), overridable with
+  `-PtravelmoParserUrl` or `TRAVELMO_PARSER_URL`; a build without one
+  says to delete the account on the web. Logs name the account by uid
+  only, as the parser's other logs do.
 
 - Forwarding addresses are `<token>@travelmo.app`, the token the whole
   local part (twenty lowercase base32 characters) rather than an

@@ -20,17 +20,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.R
 import app.travelmo.auth.GoogleAccount
 import app.travelmo.auth.SignInResult
 import app.travelmo.ui.theme.Wordmark
 import kotlinx.coroutines.launch
 
-/** The entry: the name, the tagline, and Sign in with Google, as on the web. */
+/** The entry: the name, the tagline, and Sign in with Google, as on the web; after a deletion, that the account is gone. */
 @Composable
 fun SignInScreen(account: GoogleAccount) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val deleted by account.deleted.collectAsStateWithLifecycle()
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<Int?>(if (account.available) null else R.string.sign_in_unavailable) }
     Surface(modifier = Modifier.fillMaxSize()) {
@@ -39,6 +41,13 @@ fun SignInScreen(account: GoogleAccount) {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            if (deleted) {
+                Text(
+                    stringResource(R.string.account_deleted),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(bottom = 24.dp),
+                )
+            }
             Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineMedium, fontFamily = Wordmark)
             Text(
                 stringResource(R.string.sign_in_tagline),

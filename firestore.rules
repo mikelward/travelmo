@@ -8,6 +8,14 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Signed in to an account that has not been deleted. A sign-in token
+    // stays valid for up to an hour after its account is deleted, so every
+    // create and update also checks the deletion marker (SPEC "Deleting an
+    // account"); deletes stay allowed, since they only remove data.
+    function active() {
+      return signedIn() && !exists(/databases/$(database)/documents/deletedAccounts/$(request.auth.uid));
+    }
+
     function isOwner(trip) {
       return trip.ownerUid == request.auth.uid;
     }
@@ -45,17 +53,17 @@ service cloud.firestore {
       // A missing trip reads as absent rather than forbidden, so a client can
       // tell a deleted trip from one it may not see.
       allow read: if signedIn() && (resource == null || isOwner(resource.data) || isSharee(resource.data));
-      allow create: if signedIn()
+      allow create: if active()
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.id == tripId
         && validTrip(request.resource.data);
-      allow update: if signedIn()
+      allow update: if active()
         && isOwner(resource.data)
         && request.resource.data.ownerUid == resource.data.ownerUid
         && request.resource.data.id == tripId
         && validTrip(request.resource.data);
       // A sharee adding a booking may only widen the dates to hold it.
-      allow update: if signedIn()
+      allow update: if active()
         && isSharee(resource.data)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['start', 'end', 'updatedAt'])
         && request.resource.data.start <= resource.data.start
@@ -90,7 +98,7 @@ service cloud.firestore {
           return signedIn() && (isOwner(trip()) || isSharee(trip()));
         }
         allow read: if canEdit();
-        allow create, update: if canEdit()
+        allow create, update: if active() && canEdit()
           && trip().get('deleting', false) == false
           && validSegment(request.resource.data);
         allow delete: if canEdit();
@@ -104,8 +112,8 @@ service cloud.firestore {
       // `gmail`, `googleCalendar` and `forward` are written by the server;
       // clients may not forge a connection or a forwarding address.
       allow read: if isSelf();
-      allow create: if isSelf() && !request.resource.data.keys().hasAny(['gmail', 'googleCalendar', 'forward']);
-      allow update: if isSelf()
+      allow create: if active() && isSelf() && !request.resource.data.keys().hasAny(['gmail', 'googleCalendar', 'forward']);
+      allow update: if active() && isSelf()
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['gmail', 'googleCalendar', 'forward']);
 
       // What the parser has sent as reminders: nobody's to read or write.
@@ -117,7 +125,7 @@ service cloud.firestore {
       // endpoint the push service gave it and the keys that encrypt to it.
       match /pushSubscriptions/{id} {
         allow read, delete: if isSelf();
-        allow create, update: if isSelf()
+        allow create, update: if active() && isSelf()
           && request.resource.data.keys().hasOnly(['endpoint', 'keys', 'createdAt'])
           && request.resource.data.endpoint is string
           && request.resource.data.endpoint.matches('https://.*')
@@ -132,7 +140,7 @@ service cloud.firestore {
       // phone: the token the parser sends to, and nothing else.
       match /devices/{id} {
         allow read, delete: if isSelf();
-        allow create, update: if isSelf()
+        allow create, update: if active() && isSelf()
           && request.resource.data.keys().hasOnly(['token', 'platform', 'createdAt'])
           && request.resource.data.token is string
           && request.resource.data.token.size() > 0
@@ -149,12 +157,12 @@ service cloud.firestore {
           return list is list && list.size() <= 20;
         }
         allow read: if isSelf() || isTrusted(resource.data);
-        allow create: if isSelf() && document == 'main'
+        allow create: if active() && isSelf() && document == 'main'
           && request.resource.data.keys().hasOnly(['ownerUid', 'ownerEmail', 'trustedEmails', 'updatedAt'])
           && request.resource.data.ownerUid == uid
           && (!('ownerEmail' in request.resource.data) || request.resource.data.ownerEmail == request.auth.token.email.lower())
           && trustedList(request.resource.data.trustedEmails);
-        allow update: if isSelf()
+        allow update: if active() && isSelf()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['trustedEmails', 'updatedAt'])
           && trustedList(request.resource.data.trustedEmails);
       }
@@ -196,6 +204,12 @@ service cloud.firestore {
 
     // Export-link token hashes to their owner: the parser's alone.
     match /calendarExports/{tokenHash} {
+      allow read, write: if false;
+    }
+
+    // Deleted accounts' markers, which stop imports recreating their data:
+    // the parser's alone.
+    match /deletedAccounts/{uid} {
       allow read, write: if false;
     }
     // Forwarding-address token hashes to their owner: the parser's alone.
