@@ -517,6 +517,28 @@ recorded as imported, with none. A booking part of which matched joins the
 trip of that match, and otherwise its whole range, new and old legs
 together, picks the trip.
 
+### Home
+
+Trips are travel away from home, so the app needs to know where home is,
+and since people move it is a timeline, not one place (`homeTimeline` in
+`packages/core/src/home.ts`, mirrored in the Android `:core`). Nobody types
+it in: a round trip, a journey out and the first journey back into the town
+it left, however many legs lie between, says where home was on its date.
+Towns match on the city (or a place's name when it has no city), ignoring
+case, and on the country when both give one. The first round trip's base is
+home until another base holds for two round trips in a row, which is a move
+dated from the first of them; one trip from somewhere else (flying home from
+a relative's) is not. Periods are calendar dates, inclusive, the first open
+at its start and the last at its end. Corrections the person makes are
+periods too and win over the worked-out ones for the dates they cover
+(`homeAt`).
+
+Grouping is to use it (planned, `TODO.md`): a booking that is not a journey
+and happens in the home of its day (`isAtHome`), a day out, never joins a
+trip away by nearness of dates, and journeys from home and back bound the
+trips between, so a holiday club in London either side of a weekend in
+Liverpool stays out of the Liverpool trip.
+
 ### TripIt export
 
 TripIt has no export button; its support sends a JSON file of the whole
