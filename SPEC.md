@@ -1272,6 +1272,15 @@ the read lands resizes a frame later rather than waiting on the disk). A
 save storage refuses stays in force until a restart, and Settings says it
 wasn't saved.
 
+### Back
+
+A page opens over the one it was opened from (a trip, a booking's form,
+Settings, the licenses) with a short slide, an eighth of the screen's width,
+as it fades in, in a quarter of a second, and closes the same way in 200 ms,
+as in stopdash: Navigation 3's 700 ms default fade felt like waiting. The back
+gesture is predictive: swiping back draws the closing transition under the
+finger, and letting go without going back settles the page where it was.
+
 ### Scroll cue
 
 A scrolling screen marks its top or bottom edge while there is more to
