@@ -14,7 +14,7 @@
     <string name="about_version">Version %1$s</string>
     <string name="licenses">Open-source licenses</string>
     <string name="licenses_by">By %1$s</string>
-    <string name="licenses_link_failed">No app can open the link.</string>
+    <string name="link_failed">No app can open the link.</string>
     <string name="update_available">Update available</string>
     <string name="update_open_failed">No app can open Google Play.</string>
     <string name="sign_in_refused">Google didn’t finish signing you in. Sharing the debug log helps get it fixed.</string>
@@ -45,12 +45,18 @@
     <string name="trip_not_found">No such trip, or it is not shared with you.</string>
     <string name="trip_no_bookings">No bookings yet.</string>
     <string name="shared_with">Shared with</string>
-    <plurals name="sources">
-        <item quantity="one">Source: %1$d</item>
-        <item quantity="other">Sources: %1$d</item>
-    </plurals>
+    <!-- A booking's sources, from its ⋮ menu, as the web's trip page lists them. -->
+    <string name="sources">Sources</string>
+    <string name="source_gmail">Email</string>
+    <string name="source_tripit">TripIt</string>
+    <string name="source_ics">Calendar</string>
+    <string name="source_forward">Forwarded email</string>
+    <string name="open_in_gmail">Open in Gmail</string>
     <string name="from_sender">From %1$s</string>
-
+    <string name="close">Close</string>
+    <string name="copy_reference">Copy reference</string>
+    <!-- The clipboard entry's label, which some keyboards show. -->
+    <string name="booking_reference">Booking reference</string>
     <!-- Booking form and actions. -->
     <string name="add_booking">Add a booking</string>
     <string name="edit_booking">Edit booking</string>

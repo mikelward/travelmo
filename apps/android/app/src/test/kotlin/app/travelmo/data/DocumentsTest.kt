@@ -6,6 +6,8 @@ import app.travelmo.core.ProfileEntry
 import app.travelmo.core.ProfileField
 import app.travelmo.core.SegmentDraft
 import app.travelmo.core.SegmentType
+import app.travelmo.core.SourceKind
+import app.travelmo.core.SourceRef
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
@@ -33,8 +35,13 @@ class DocumentsTest {
                 "provider" to "Avanti West Coast", "confirmation" to "ABC123",
                 "origin" to mapOf("name" to "London Euston", "code" to "EUS"), "destination" to mapOf("name" to "Liverpool Lime Street", "code" to "LIV", "country" to "GB"),
                 "rating" to 4L, "favorite" to true, "sender" to "avantiwestcoast.example",
-                "sources" to listOf(mapOf("kind" to "gmail", "id" to "m1"), mapOf("kind" to "tripit", "id" to "x")),
-                "gmailMessageIds" to listOf("m1"),
+                "sources" to listOf(
+                    mapOf("kind" to "tripit", "id" to "x", "label" to "Liverpool", "at" to "2026-11-02T00:00:00Z"),
+                    mapOf("kind" to "gmail", "id" to "m1", "label" to "Your tickets", "uid" to "u1", "at" to "2026-11-01T00:00:00Z"),
+                    mapOf("kind" to "carrier-pigeon", "id" to "y", "at" to "2026-11-01T00:00:00Z"),
+                ),
+                "gmailMessageIds" to listOf("m1", "m0"),
+                "createdAt" to "2026-10-31T00:00:00Z",
             ),
         )!!
         segment.type shouldBe SegmentType.TRAIN
@@ -42,8 +49,14 @@ class DocumentsTest {
         segment.destination!!.country shouldBe "GB"
         segment.rating shouldBe 4
         segment.favorite shouldBe true
-        segment.sourceCount shouldBe 2
-        segmentFromDocument("s2", "t1", mapOf("type" to "train", "title" to "x", "start" to "2026-12-12T09:07:00+00:00", "gmailMessageIds" to listOf("m1")))!!.sourceCount shouldBe 1
+        // Every source once, oldest first, an older document's Gmail id dated by the booking's creation; an unknown kind is dropped.
+        segment.sources shouldBe listOf(
+            SourceRef(SourceKind.GMAIL, "m0", at = "2026-10-31T00:00:00Z"),
+            SourceRef(SourceKind.GMAIL, "m1", label = "Your tickets", uid = "u1", at = "2026-11-01T00:00:00Z"),
+            SourceRef(SourceKind.TRIPIT, "x", label = "Liverpool", at = "2026-11-02T00:00:00Z"),
+        )
+        segmentFromDocument("s2", "t1", mapOf("type" to "train", "title" to "x", "start" to "2026-12-12T09:07:00+00:00", "gmailMessageIds" to listOf("m1")))!!.sources shouldBe
+            listOf(SourceRef(SourceKind.GMAIL, "m1", at = ""))
         segmentFromDocument("s3", "t1", mapOf("type" to "hovercraft", "title" to "x", "start" to "2026-12-12T09:07:00+00:00")).shouldBeNull()
         segmentFromDocument("s4", "t1", mapOf("type" to "train", "title" to "x", "start" to "2026-12-12T09:07:00+00:00", "rating" to 9L))!!.rating.shouldBeNull()
     }

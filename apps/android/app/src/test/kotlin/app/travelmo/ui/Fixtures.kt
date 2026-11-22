@@ -7,6 +7,8 @@ import app.travelmo.core.TravelProfile
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentDraft
 import app.travelmo.core.SegmentType
+import app.travelmo.core.SourceKind
+import app.travelmo.core.SourceRef
 import app.travelmo.core.Trip
 import app.travelmo.data.AccountDeletion
 import app.travelmo.data.AccountDeletionFailed
@@ -43,6 +45,17 @@ val fixtureUntimedActivity = Segment(
     provider = "Example Museums", destination = Place("Walker Art Gallery", city = "Liverpool", country = "GB"),
 )
 
+// The owner's own import, which opens in Gmail.
+val fixtureTrainEmail = SourceRef(SourceKind.GMAIL, "m-avanti", label = "Your Avanti West Coast tickets", uid = OWNER, at = "2026-10-20T08:00:00Z")
+
+// The stay's booking email, a reminder the partner imported (in their
+// mailbox, so no link), and the TripIt trip it was also in.
+val fixtureStaySources = listOf(
+    SourceRef(SourceKind.GMAIL, "m-cove", label = "Booking confirmed: Cove Liverpool", uid = OWNER, at = "2026-10-21T09:00:00Z"),
+    SourceRef(SourceKind.GMAIL, "m-cove-reminder", label = "Your stay is coming up", uid = "partner", at = "2026-11-01T09:00:00Z"),
+    SourceRef(SourceKind.TRIPIT, "tripit-liverpool", label = "Liverpool weekend", uid = OWNER, at = "2026-11-01T10:00:00Z"),
+)
+
 val fixtureSegments: Map<String, List<Segment>> = mapOf(
     "edinburgh" to listOf(
         Segment("e-stay", "edinburgh", SegmentType.LODGING, "Grassmarket Hotel", "2026-10-31T15:00:00+00:00", "2026-11-03T11:00:00+00:00", provider = "Grassmarket", confirmation = "GM-2210"),
@@ -57,11 +70,11 @@ val fixtureSegments: Map<String, List<Segment>> = mapOf(
         Segment(
             "l-train", "liverpool", SegmentType.TRAIN, "Avanti to Liverpool", "2026-12-12T09:07:00+00:00", "2026-12-12T11:25:00+00:00",
             provider = "Avanti West Coast", confirmation = "ABC123", origin = Place("London Euston", code = "EUS"), destination = Place("Liverpool Lime Street", code = "LIV"),
-            sender = "avantiwestcoast.example", sourceCount = 1,
+            sender = "avantiwestcoast.example", sources = listOf(fixtureTrainEmail),
         ),
         Segment(
             "l-stay", "liverpool", SegmentType.LODGING, "Cove Liverpool", "2026-12-12T15:00:00+00:00", "2026-12-13T11:00:00+00:00",
-            provider = "Cove", confirmation = "CV-55120", notes = "Late check-in after 22:00: call reception", sender = "cove.example", sourceCount = 2, rating = 4, favorite = true,
+            provider = "Cove", confirmation = "CV-55120", notes = "Late check-in after 22:00: call reception", sender = "cove.example", sources = fixtureStaySources, rating = 4, favorite = true,
             destination = Place("Cove Liverpool", city = "Liverpool", country = "GB"),
         ),
         Segment("l-tour", "liverpool", SegmentType.ACTIVITY, "Anfield stadium tour", "2026-12-13T14:00:00+00:00", "2026-12-13T15:30:00+00:00", provider = "Liverpool FC", confirmation = "LFC-4471"),

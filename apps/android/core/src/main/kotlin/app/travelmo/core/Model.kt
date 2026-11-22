@@ -48,8 +48,8 @@ data class Segment(
     val sender: String? = null,
     val rating: Int? = null,
     val favorite: Boolean = false,
-    /** How many emails, TripIt trips or calendar events it was read from. */
-    val sourceCount: Int = 0,
+    /** The emails, TripIt trips and calendar events it was read from, oldest first ([segmentSources]). */
+    val sources: List<SourceRef> = emptyList(),
 )
 
 data class Trip(
