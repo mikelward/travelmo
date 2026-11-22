@@ -13,36 +13,40 @@ runConfig:
   memoryMiB: 512
 
 # Public Firebase web config and the parser URL are build-time inputs because
-# Next.js inlines NEXT_PUBLIC_* into the client bundle. Fill these in per
-# environment (apphosting.<env>.yaml) or in the console.
+# Next.js inlines NEXT_PUBLIC_* into the client bundle, so every visitor can
+# read them and none is a secret (`firebase apps:sdkconfig WEB` prints the
+# Firebase ones). These are the travelmo-13a7c project's; a fork deploying
+# its own project replaces them.
 env:
   - variable: NEXT_PUBLIC_FIREBASE_API_KEY
-    value: REPLACE_ME
+    value: AIzaSyCPdRTnOD7fwYuIdsKZr_e-gebozAgKcos
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
-    value: REPLACE_ME.firebaseapp.com
+    value: travelmo-13a7c.firebaseapp.com
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
-    value: REPLACE_ME
+    value: travelmo-13a7c
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_FIREBASE_APP_ID
-    value: REPLACE_ME
+    value: 1:593618561840:web:562daaabd02a8cc33ef6f5
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_PARSER_URL
-    value: https://REPLACE_ME.run.app
+    value: https://parser-593618561840.us-east4.run.app
     availability: [BUILD, RUNTIME]
-  # Optional: Places API (New) key, restricted to this app's origins, for
-  # address autocomplete in the booking form.
-  - variable: NEXT_PUBLIC_GOOGLE_MAPS_KEY
-    value: REPLACE_ME
-    availability: [BUILD, RUNTIME]
-  # Optional: the public half of the parser's VAPID key pair, for reminders
-  # as notifications in the browser.
-  - variable: NEXT_PUBLIC_VAPID_PUBLIC_KEY
-    value: REPLACE_ME
-    availability: [BUILD, RUNTIME]
-  # Optional: the domain of the forwarding addresses the parser issues
-  # (FORWARD_DOMAIN there); Settings offers forward-to-import when set.
-  - variable: NEXT_PUBLIC_FORWARD_DOMAIN
-    value: REPLACE_ME
-    availability: [BUILD, RUNTIME]
+  # Optional settings: any value turns the feature on, so leave each
+  # commented out until it has a real one.
+  # Places API (New) key, restricted to this app's origins, for address
+  # autocomplete in the booking form.
+  # - variable: NEXT_PUBLIC_GOOGLE_MAPS_KEY
+  #   value: <browser key>
+  #   availability: [BUILD, RUNTIME]
+  # The public half of the parser's VAPID key pair, for reminders as
+  # notifications in the browser.
+  # - variable: NEXT_PUBLIC_VAPID_PUBLIC_KEY
+  #   value: <public key>
+  #   availability: [BUILD, RUNTIME]
+  # The domain of the forwarding addresses the parser issues (FORWARD_DOMAIN
+  # there); Settings offers forward-to-import when set.
+  # - variable: NEXT_PUBLIC_FORWARD_DOMAIN
+  #   value: <domain>
+  #   availability: [BUILD, RUNTIME]
