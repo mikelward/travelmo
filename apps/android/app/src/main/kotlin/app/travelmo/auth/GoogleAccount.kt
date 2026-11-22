@@ -32,6 +32,13 @@ sealed interface SignInResult {
     /** The user backed out of the account picker. Nothing to say. */
     data object Canceled : SignInResult
 
+    /**
+     * Play services ended the sign-in after the pick with a status code, as
+     * it does when this build's signing key isn't registered, and reported it
+     * as a cancellation. Not something the user did, so the screen says so.
+     */
+    data object Refused : SignInResult
+
     /** No Google account on the device to pick. */
     data object NoAccount : SignInResult
 
@@ -120,9 +127,11 @@ class GoogleAccount(
         is GetCredentialCancellationException -> {
             // Play services also reports a sign-in it refused after the pick
             // (a signing certificate missing from Firebase, say) as a
-            // cancellation, so the log keeps its status code to tell them apart.
-            TravelmoLog.event("Sign-in canceled, status %s", safe(playServicesStatus(e.errorMessage)))
-            SignInResult.Canceled
+            // cancellation, but with a status code, where the user backing
+            // out has none.
+            val status = playServicesStatus(e.errorMessage)
+            TravelmoLog.event("Sign-in canceled, status %s", safe(status))
+            if (status == NO_STATUS) SignInResult.Canceled else SignInResult.Refused
         }
         is NoCredentialException -> SignInResult.NoAccount
         is GetCredentialException -> {
@@ -138,8 +147,10 @@ class GoogleAccount(
     private fun FirebaseUser.toSignedIn() = SignedIn(uid, normalizeEmail(email))
 }
 
+private const val NO_STATUS = "none"
+
 private val STATUS = Regex("""^\[(\d+)]""")
 
 /** The leading "[16]" status code Play services puts on its messages, or "none"; never the rest of the message. */
 internal fun playServicesStatus(message: CharSequence?): String =
-    message?.let { STATUS.find(it.trim())?.groupValues?.get(1) } ?: "none"
+    message?.let { STATUS.find(it.trim())?.groupValues?.get(1) } ?: NO_STATUS

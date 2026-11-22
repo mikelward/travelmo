@@ -3,9 +3,12 @@ package app.travelmo.ui
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.travelmo.auth.GoogleAccount
+import app.travelmo.auth.SignInResult
 import app.travelmo.auth.SignedIn
 import app.travelmo.ui.theme.TravelmoTheme
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -56,6 +59,21 @@ class ScreenScreenshotTest {
     @Test
     fun sign_in_without_firebase() = capture("sign_in_without_firebase") {
         SignInScreen(account = GoogleAccount(firebaseAvailable = { false }, webClientId = null))
+    }
+
+    @Test
+    fun sign_in_refused() {
+        composeRule.setContent {
+            TravelmoTheme {
+                SignInScreen(
+                    account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"),
+                    signIn = { SignInResult.Refused },
+                )
+            }
+        }
+        composeRule.onNodeWithText("Sign in with Google").performClick()
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage(filePath = "$outputDir/sign_in_refused.png")
     }
 
     // The view models are made outside the composition, as the app makes them.
