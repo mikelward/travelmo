@@ -61,11 +61,19 @@ fun routeLine(segment: Segment): String? =
     listOfNotNull(placeLabel(segment.origin), placeLabel(segment.destination)).takeIf { it.isNotEmpty() }?.joinToString(" → ")
 
 /**
- * "09:07 – 11:25", or for a stay "Check-in 15:00 · Check-out Sun 13 Dec 11:00".
- * The row sits under its start day's heading, so an end on another day
- * carries its date.
+ * An activity with no time of its own: local midnight and no end, the
+ * importer's convention for a dated thing with no stated time.
  */
-fun timesLine(segment: Segment): String {
+fun isUntimed(segment: Segment): Boolean =
+    (segment.type == SegmentType.ACTIVITY || segment.type == SegmentType.OTHER) && segment.end == null && localTime(segment.start) == "00:00"
+
+/**
+ * "09:07 – 11:25", or for a stay "Check-in 15:00 · Check-out Sun 13 Dec 11:00";
+ * null for an untimed activity. The row sits under its start day's heading,
+ * so an end on another day carries its date.
+ */
+fun timesLine(segment: Segment): String? {
+    if (isUntimed(segment)) return null
     val end = segment.end?.let { end ->
         val time = localTime(end)
         if (localDate(end) == localDate(segment.start)) time else "${formatDate(localDate(end))} $time"

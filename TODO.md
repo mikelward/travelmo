@@ -255,7 +255,7 @@
       was deleted". The parser's 410 should say the deletion did not finish,
       and the web app should say so and offer to finish deleting (calling
       `POST /account/delete` again), rather than leave every action failing.
-- [ ] A "New Payment Confirmation" receipt from class4kids.co.uk came in as
+- [x] A "New Payment Confirmation" receipt from class4kids.co.uk came in as
       its own 00:00 activity, duplicating the "Stage Stars! Holiday Club -
       Day 1" booking it paid for: a receipt without a time should not
       become a booking, or should match the order it pays for.

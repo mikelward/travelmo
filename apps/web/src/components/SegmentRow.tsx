@@ -1,6 +1,7 @@
 import { emailLinkFor, type EmailLinks } from "@/lib/sourceLinks";
 import {
   formatDate,
+  isUntimed,
   localDate,
   localTime,
   loyaltyLine,
@@ -164,8 +165,10 @@ export function SegmentRow({
   // Addresses an address pick recorded, under the route they belong to.
   const addresses = [segment.origin?.address, segment.destination?.address].filter(Boolean).join(" → ");
   const end = endLabel(segment);
-  const times =
-    segment.type === "lodging"
+  // A day out with no time of its own shows none, not 00:00.
+  const times = isUntimed(segment)
+    ? undefined
+    : segment.type === "lodging"
       ? `Check-in ${localTime(segment.start)}${end ? ` · Check-out ${end}` : ""}`
       : `${localTime(segment.start)}${end ? ` – ${end}` : ""}`;
   return (
@@ -176,7 +179,7 @@ export function SegmentRow({
       <div className="min-w-0 flex-1">
         <p className="font-medium">{segment.title}</p>
         {route && <p className="text-sm text-zinc-600 dark:text-zinc-400">{route}</p>}
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">{times}</p>
+        {times && <p className="text-sm text-zinc-600 dark:text-zinc-400">{times}</p>}
         {addresses && <p className="mt-1 text-xs text-zinc-500">{addresses}</p>}
         {(segment.confirmation || segment.provider) && (
           <p className="mt-1 text-xs text-zinc-500">

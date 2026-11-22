@@ -1,4 +1,4 @@
-import { daysBetween, eventVerb, findTripForRange, groupTrips, mergeDetails, mergePlace, nextEvent, overlappingTrips, sameBooking, sameEvent, segmentDateRange } from "./trips";
+import { daysBetween, eventVerb, findTripForRange, groupTrips, compareMatchRanks, isUntimed, matchRank, mergeDetails, mergePlace, nextEvent, notBookings, overlappingTrips, sameBooking, sameEvent, segmentDateRange, withoutValidityEnds } from "./trips";
 
 describe("nextEvent", () => {
   const stay = { type: "lodging" as const, title: "Cove Liverpool", start: "2026-12-12T15:00:00+00:00", end: "2026-12-14T11:00:00+00:00" };
@@ -304,5 +304,167 @@ describe("overlappingTrips", () => {
       ({ id, title: id, start, end, ownerUid: "u", sharedWith: [], createdAt: "2030-01-01T00:00:00Z", updatedAt: "2030-01-01T00:00:00Z" });
     const trips = [trip("a", "2030-05-01", "2030-05-03"), trip("b", "2030-05-04", "2030-05-06"), trip("c", "2030-05-10", "2030-05-12")];
     expect(overlappingTrips(trips, { start: "2030-05-03", end: "2030-05-04" }).map((t) => t.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("isUntimed", () => {
+  it("is an activity at local midnight with no end", () => {
+    expect(isUntimed({ type: "activity", start: "2026-05-26T00:00:00+01:00" })).toBe(true);
+    expect(isUntimed({ type: "other", start: "2026-05-26T00:00:00+01:00" })).toBe(true);
+  });
+
+  it("is not a timed activity, one with an end, or a journey at midnight", () => {
+    expect(isUntimed({ type: "activity", start: "2026-12-20T12:00:00+00:00" })).toBe(false);
+    expect(isUntimed({ type: "activity", start: "2026-12-31T00:00:00+00:00", end: "2026-12-31T01:00:00+00:00" })).toBe(false);
+    expect(isUntimed({ type: "flight", start: "2026-12-20T00:00:00+00:00" })).toBe(false);
+  });
+});
+
+describe("notBookings", () => {
+  const membership = { type: "activity" as const, title: "Family 2 Adults Membership", provider: "Palace Trust", start: "2026-10-28T00:00:00+00:00" };
+
+  it("picks out memberships, passes and vouchers with no time of their own", () => {
+    expect(notBookings([membership])).toEqual([membership]);
+    for (const title of ["Annual Pass", "Season ticket", "Gift voucher", "Monthly subscription", "Donation"]) {
+      expect(notBookings([{ ...membership, title }])).toHaveLength(1);
+    }
+  });
+
+  it("keeps a timed ticket, and an untimed day out", () => {
+    const ticket = { type: "activity" as const, title: "Hampton Court Palace admission", start: "2026-12-20T12:00:00+00:00" };
+    const members = { ...ticket, title: "Members' evening", start: "2026-12-20T18:00:00+00:00" };
+    const dayOut = { type: "activity" as const, title: "Zoo day tickets", start: "2026-08-01T00:00:00+01:00" };
+    expect(notBookings([ticket, members, dayOut])).toEqual([]);
+  });
+});
+
+describe("sameBooking with an untimed side", () => {
+  const club = {
+    type: "activity" as const,
+    title: "Stage Stars! Holiday Club - Day 1",
+    provider: "Example Academy of Performing Arts",
+    start: "2026-05-26T09:00:00+01:00",
+    end: "2026-05-26T15:00:00+01:00",
+    confirmation: "BK-1001",
+  };
+  const receipt = {
+    type: "activity" as const,
+    title: "Stage Stars Holiday Club payment",
+    provider: "Example Academy of Performing Arts",
+    start: "2026-05-20T00:00:00+01:00",
+  };
+
+  it("matches a payment receipt to the booking it pays for, weeks apart", () => {
+    expect(sameBooking(club, receipt)).toBe(true);
+    expect(sameBooking(receipt, club)).toBe(true);
+  });
+
+  it("matches by reference when both have one", () => {
+    expect(sameBooking(club, { ...receipt, title: "Payment received", confirmation: "bk 1001" })).toBe(true);
+    expect(sameBooking(club, { ...receipt, confirmation: "BK-2002" })).toBe(false);
+  });
+
+  it("needs the same provider and a shared name", () => {
+    expect(sameBooking(club, { ...receipt, provider: "Another Theatre School" })).toBe(false);
+    expect(sameBooking(club, { ...receipt, provider: undefined })).toBe(false);
+    expect(sameBooking(club, { ...receipt, title: "Ballet Term 3 payment" })).toBe(false);
+  });
+
+  it("matches a receipt dated the booking's day with no time", () => {
+    expect(sameBooking(club, { ...receipt, start: "2026-05-26T00:00:00+01:00" })).toBe(true);
+  });
+
+  it("needs a word naming the thing paid for, not just the payment", () => {
+    const ballet = { ...receipt, title: "Ballet payment" };
+    expect(sameBooking(ballet, { ...receipt, title: "Swimming payment", start: "2026-05-27T00:00:00+01:00" })).toBe(false);
+    expect(sameBooking(ballet, { ...receipt, title: "Ballet payment receipt", start: "2026-05-27T00:00:00+01:00" })).toBe(true);
+  });
+
+  it("never matches a receipt for another event, however close its name", () => {
+    const film = { ...club, title: "Toy Story 4", provider: "Everyman", confirmation: undefined };
+    const paid = { ...receipt, title: "Toy Story 5 payment", provider: "Everyman" };
+    expect(sameBooking(film, paid)).toBe(false);
+    expect(sameBooking({ ...film, title: "Toy Story 5" }, paid)).toBe(true);
+  });
+
+  it("never matches a receipt for another venue named only in its title", () => {
+    const film = { ...club, title: "Toy Story 5 at Everyman Muswell Hill", provider: "Everyman", confirmation: undefined };
+    const paid = { ...receipt, title: "Toy Story 5 payment at Everyman Hampstead", provider: "Everyman" };
+    expect(sameBooking(film, paid)).toBe(false);
+    expect(sameBooking(film, { ...paid, title: "Toy Story 5 payment at Everyman Muswell Hill" })).toBe(true);
+  });
+
+  it("never matches a receipt for another venue in the same town", () => {
+    const film = {
+      ...club,
+      title: "Toy Story 5 at Everyman Muswell Hill",
+      provider: "Everyman",
+      destination: { name: "Everyman Muswell Hill", city: "London", country: "GB" },
+    };
+    const paid = { ...receipt, title: "Toy Story 5 payment", provider: "Everyman", destination: { name: "Everyman Hampstead", city: "London", country: "GB" } };
+    expect(sameBooking(film, paid)).toBe(false);
+    expect(sameBooking(film, { ...paid, destination: { name: "Everyman", city: "London", country: "GB" } })).toBe(true);
+  });
+
+  it("never matches a receipt for somewhere else", () => {
+    const berlin = { ...club, title: "Madame Tussauds", provider: "Example Attractions", destination: { name: "Madame Tussauds", city: "Berlin", country: "DE" } };
+    const londonPaid = { ...receipt, title: "Madame Tussauds payment", provider: "Example Attractions", destination: { name: "Madame Tussauds", city: "London", country: "GB" } };
+    expect(sameBooking(berlin, londonPaid)).toBe(false);
+    expect(sameBooking(berlin, { ...londonPaid, destination: { name: "Madame Tussauds", city: "Berlin", country: "DE" } })).toBe(true);
+  });
+
+  it("never merges two dated visits, whatever they share", () => {
+    const day2 = { ...club, title: "Stage Stars! Holiday Club - Day 2", start: "2026-05-27T00:00:00+01:00", end: undefined };
+    expect(sameBooking(club, day2)).toBe(false);
+    expect(sameBooking(club, { ...day2, confirmation: "BK-1001" })).toBe(false);
+    expect(sameBooking(club, { ...receipt, title: "Stage Stars Holiday Club - Day 2 payment" })).toBe(false);
+  });
+
+  it("does not reach more than a month", () => {
+    expect(sameBooking(club, { ...receipt, start: "2026-03-01T00:00:00+00:00" })).toBe(false);
+  });
+});
+
+describe("withoutValidityEnds", () => {
+  // Invented, shaped like an airport train's open ticket: a departure, and
+  // a date the ticket is valid until.
+  const open = {
+    type: "train" as const,
+    title: "Airport express to the city",
+    start: "2026-08-15T13:28:00+02:00",
+    end: "2026-11-13T23:59:00+01:00",
+  };
+
+  it("drops a ticket's validity read as an arrival", () => {
+    expect(withoutValidityEnds([open])[0]).not.toHaveProperty("end");
+    expect(withoutValidityEnds([{ ...open, end: "2026-08-16T23:59:00+02:00" }])[0]).not.toHaveProperty("end");
+  });
+
+  it("keeps real arrivals, overnight and long ones too", () => {
+    const sleeper = { ...open, end: "2026-08-16T07:45:00+02:00" };
+    const sameDay = { ...open, end: "2026-08-15T23:59:00+02:00" };
+    const stay = { type: "lodging" as const, title: "Cove", start: "2026-08-15T15:00:00+02:00", end: "2026-08-30T11:00:00+02:00" };
+    expect(withoutValidityEnds([sleeper, sameDay, stay])).toEqual([sleeper, sameDay, stay]);
+  });
+});
+
+describe("matchRank", () => {
+  const paid = { type: "activity" as const, title: "Ballet payment", provider: "Example Dance", confirmation: "CLASS-21", start: "2026-12-14T00:00:00+00:00" };
+  const sameDay = { ...paid, title: "Ballet class", confirmation: undefined, start: "2026-12-14T17:00:00+00:00" };
+  const referenced = { ...sameDay, confirmation: "class 21", start: "2026-12-21T17:00:00+00:00" };
+  const later = { ...sameDay, start: "2026-12-28T17:00:00+00:00" };
+
+  it("puts the same reference first, then the same day, then the nearest", () => {
+    const ranked = [later, sameDay, referenced].sort((a, b) => compareMatchRanks(matchRank(a, paid), matchRank(b, paid)));
+    expect(ranked).toEqual([referenced, sameDay, later]);
+  });
+
+  it("breaks a tie between bookings with the reference by date", () => {
+    const term = { ...paid, title: "Ballet class", confirmation: "TERM3" };
+    const week1 = { ...term, start: "2026-12-14T17:00:00+00:00" };
+    const week2 = { ...term, start: "2026-12-21T17:00:00+00:00" };
+    const termPaid = { ...paid, confirmation: "TERM3" };
+    const ranked = [week2, week1].sort((a, b) => compareMatchRanks(matchRank(a, termPaid), matchRank(b, termPaid)));
+    expect(ranked).toEqual([week1, week2]);
   });
 });

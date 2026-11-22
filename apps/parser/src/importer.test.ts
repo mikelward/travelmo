@@ -215,6 +215,201 @@ describe("importMessage", () => {
     expect(store.trips.size).toBe(0);
   });
 
+  // Invented, shaped like a palace trust's membership email: no visit date,
+  // only the day it was bought.
+  const membershipEmail = email({
+    id: "m-member",
+    from: "Example Palaces <tickets@palaces.example>",
+    subject: "Ticket Summary",
+    text: "Family 2 Adults Membership. Valid from 28 October 2026. Ref EXAMPLE123",
+  });
+
+  it("files no membership, pass or voucher as a trip", async () => {
+    const store = memoryStore();
+    const membership: ExtractedBooking = {
+      isBooking: true,
+      segments: [
+        { type: "activity", title: "Family 2 Adults Membership", provider: "Example Palaces", confirmation: "EXAMPLE123", start: "2026-10-28T00:00:00+00:00" },
+      ],
+    };
+    expect(await importMessage("u1", membershipEmail, deps(store, async () => membership))).toBe("not_booking");
+    expect(store.trips.size).toBe(0);
+    expect(store.parsed.get("u1/m-member")).toMatchObject({ outcome: "not_booking", reason: "membership, pass or voucher" });
+  });
+
+  it("still imports a ticket for a set time", async () => {
+    const store = memoryStore();
+    const ticket: ExtractedBooking = {
+      isBooking: true,
+      segments: [
+        {
+          type: "activity",
+          title: "Hampton Court Palace admission",
+          provider: "Example Palaces",
+          start: "2026-12-20T12:00:00+00:00",
+          destination: { name: "Hampton Court Palace", city: "East Molesey", country: "GB" },
+        },
+      ],
+    };
+    expect(await importMessage("u1", membershipEmail, deps(store, async () => ticket))).toBe("imported");
+    expect([...store.segments.values()]).toHaveLength(1);
+  });
+
+  it("files an open ticket on its travel day, not until it expires", async () => {
+    const store = memoryStore();
+    // Invented, shaped like an airport train's ticket and receipt.
+    const ticket: ExtractedBooking = {
+      isBooking: true,
+      segments: [
+        {
+          type: "train",
+          title: "Airport express to the city",
+          provider: "Example Airport Express",
+          confirmation: "ORDER-1234",
+          start: "2026-08-15T13:28:00+02:00",
+          end: "2026-11-13T23:59:00+01:00",
+          origin: { name: "Arlanda", city: "Stockholm", country: "SE" },
+          destination: { name: "Stockholm Central", city: "Stockholm", country: "SE" },
+        },
+      ],
+    };
+    const mail = email({ id: "m-open", subject: "Ticket and receipt - Order number 1234" });
+    expect(await importMessage("u1", mail, deps(store, async () => ticket))).toBe("imported");
+    expect(store.segments.get("m-open-0")).not.toHaveProperty("end");
+    expect([...store.trips.values()][0]).toMatchObject({ start: "2026-08-15", end: "2026-08-15" });
+  });
+
+  it("gives a receipt filed first the date and time of the booking it pays for", async () => {
+    const store = memoryStore();
+    const receipt: ExtractedBooking = {
+      isBooking: true,
+      segments: [
+        { type: "activity", title: "Stage Stars Holiday Club payment", provider: "Example Academy of Performing Arts", start: "2026-12-14T00:00:00+00:00" },
+      ],
+    };
+    const club: ExtractedBooking = {
+      isBooking: true,
+      segments: [
+        {
+          type: "activity",
+          title: "Stage Stars! Holiday Club - Day 1",
+          provider: "Example Academy of Performing Arts",
+          start: "2026-12-21T09:00:00+00:00",
+          end: "2026-12-21T15:00:00+00:00",
+        },
+      ],
+    };
+    await importMessage("u1", email({ id: "m-paid", subject: "New Payment Confirmation" }), deps(store, async () => receipt));
+    await importMessage("u1", email({ id: "m-club", subject: "Booking confirmed: Stage Stars!" }), deps(store, async () => club));
+    expect(store.segments.size).toBe(1);
+    expect(store.segments.get("m-paid-0")).toMatchObject({
+      title: "Stage Stars! Holiday Club - Day 1",
+      start: "2026-12-21T09:00:00+00:00",
+      end: "2026-12-21T15:00:00+00:00",
+    });
+    expect(store.segments.get("m-paid-0")?.sources?.map((source) => source.id)).toEqual(["m-paid", "m-club"]);
+    expect(store.trips.size).toBe(1);
+    expect([...store.trips.values()][0]).toMatchObject({ start: "2026-12-21", end: "2026-12-21" });
+  });
+
+  it("spans every booking of a receipt's trip once the booking it pays for arrives", async () => {
+    const store = memoryStore();
+    const provider = "Example Academy of Performing Arts";
+    const receipt: ExtractedBooking = {
+      isBooking: true,
+      segments: [{ type: "activity", title: "Stage Stars Holiday Club payment", provider, start: "2026-12-14T00:00:00+00:00" }],
+    };
+    const club: ExtractedBooking = {
+      isBooking: true,
+      segments: [
+        { type: "activity", title: "Stage Stars! Holiday Club - Day 1", provider, start: "2026-12-21T09:00:00+00:00", end: "2026-12-21T15:00:00+00:00" },
+        { type: "activity", title: "Stage Stars! Holiday Club - Day 2", provider, start: "2026-12-22T09:00:00+00:00", end: "2026-12-22T15:00:00+00:00" },
+      ],
+    };
+    await importMessage("u1", email({ id: "m-paid", subject: "New Payment Confirmation" }), deps(store, async () => receipt));
+    await importMessage("u1", email({ id: "m-club", subject: "Booking confirmed: Stage Stars!" }), deps(store, async () => club));
+    expect(store.segments.size).toBe(2);
+    expect(store.trips.size).toBe(1);
+    expect([...store.trips.values()][0]).toMatchObject({ start: "2026-12-21", end: "2026-12-22" });
+  });
+
+  it("adds a receipt to the booking with its reference, not one that shares a name and a date", async () => {
+    const store = memoryStore();
+    const lesson = (start: string, confirmation?: string): ExtractedBooking => ({
+      isBooking: true,
+      segments: [{ type: "activity", title: "Ballet class", provider: "Example Dance", start, end: start.replace("T17:", "T18:"), ...(confirmation ? { confirmation } : {}) }],
+    });
+    const receipt: ExtractedBooking = {
+      isBooking: true,
+      segments: [{ type: "activity", title: "Ballet class payment", provider: "Example Dance", confirmation: "CLASS-21", start: "2026-12-14T00:00:00+00:00" }],
+    };
+    await importMessage("u1", email({ id: "m-14" }), deps(store, async () => lesson("2026-12-14T17:00:00+00:00")));
+    await importMessage("u1", email({ id: "m-21" }), deps(store, async () => lesson("2026-12-21T17:00:00+00:00", "CLASS-21")));
+    await importMessage("u1", email({ id: "m-paid", subject: "New Payment Confirmation" }), deps(store, async () => receipt));
+    expect(store.segments.size).toBe(2);
+    expect(store.segments.get("m-21-0")?.sources?.map((source) => source.id)).toEqual(["m-21", "m-paid"]);
+    expect(store.segments.get("m-14-0")?.sources?.map((source) => source.id)).toEqual(["m-14"]);
+  });
+
+  it("adds a receipt to the lesson of the order it is dated nearest", async () => {
+    const store = memoryStore();
+    const lesson = (start: string): ExtractedBooking => ({
+      isBooking: true,
+      segments: [{ type: "activity", title: "Ballet class", provider: "Example Dance", confirmation: "TERM3", start, end: start.replace("T17:", "T18:") }],
+    });
+    const receipt: ExtractedBooking = {
+      isBooking: true,
+      segments: [{ type: "activity", title: "Ballet class payment", provider: "Example Dance", confirmation: "TERM3", start: "2026-12-14T00:00:00+00:00" }],
+    };
+    // The later lesson first, so the first found is not the nearest.
+    await importMessage("u1", email({ id: "m-21" }), deps(store, async () => lesson("2026-12-21T17:00:00+00:00")));
+    await importMessage("u1", email({ id: "m-14" }), deps(store, async () => lesson("2026-12-14T17:00:00+00:00")));
+    await importMessage("u1", email({ id: "m-paid", subject: "New Payment Confirmation" }), deps(store, async () => receipt));
+    expect(store.segments.get("m-14-0")?.sources?.map((source) => source.id)).toEqual(["m-14", "m-paid"]);
+    expect(store.segments.get("m-21-0")?.sources?.map((source) => source.id)).toEqual(["m-21"]);
+  });
+
+  it("keeps each day of a camp, whatever they share", async () => {
+    const store = memoryStore();
+    const day = (n: number, start: string): ExtractedBooking => ({
+      isBooking: true,
+      segments: [{ type: "activity", title: `Holiday Camp (Day ${n})`, provider: "Example Camps", confirmation: "ORDER-77", start }],
+    });
+    await importMessage("u1", email({ id: "m-d1" }), deps(store, async () => day(1, "2026-12-21T09:00:00+00:00")));
+    await importMessage("u1", email({ id: "m-d2" }), deps(store, async () => day(2, "2026-12-22T00:00:00+00:00")));
+    expect(store.segments.size).toBe(2);
+  });
+
+  it("adds a payment receipt to the booking it pays for instead of a trip of its own", async () => {
+    const store = memoryStore();
+    const club: ExtractedBooking = {
+      isBooking: true,
+      segments: [
+        {
+          type: "activity",
+          title: "Stage Stars! Holiday Club - Day 1",
+          provider: "Example Academy of Performing Arts",
+          start: "2026-12-21T09:00:00+00:00",
+          end: "2026-12-21T15:00:00+00:00",
+          destination: { name: "Example Academy", city: "Kingston upon Thames", country: "GB" },
+        },
+      ],
+    };
+    // Invented, shaped like a class-booking site's receipt: paid a week
+    // before, no time of its own.
+    const receipt: ExtractedBooking = {
+      isBooking: true,
+      segments: [
+        { type: "activity", title: "Stage Stars Holiday Club payment", provider: "Example Academy of Performing Arts", start: "2026-12-14T00:00:00+00:00" },
+      ],
+    };
+    await importMessage("u1", email({ id: "m-club", subject: "Booking confirmed: Stage Stars!" }), deps(store, async () => club));
+    expect(await importMessage("u1", email({ id: "m-paid", subject: "New Payment Confirmation" }), deps(store, async () => receipt))).toBe("imported");
+    expect(store.trips.size).toBe(1);
+    expect(store.segments.size).toBe(1);
+    expect(store.segments.get("m-club-0")?.sources?.map((source) => source.id)).toEqual(["m-club", "m-paid"]);
+  });
+
   // Embeddings stand in for meaning: bookings point one way, newsletters another.
   const bookingVector = [1, 0];
   const newsletterVector = [0, 1];
@@ -1184,6 +1379,113 @@ describe("fileBooking geocoding", () => {
     expect(none.entries.size).toBe(0);
   });
 
+  it("queues a receipt upgraded by a booking whose place lookup was put off", async () => {
+    const store = memoryStore();
+    const retries = memoryRetryStore();
+    const provider = "Example Academy of Performing Arts";
+    const receipt: ExtractedBooking = {
+      isBooking: true,
+      segments: [{ type: "activity", title: "Stage Stars Holiday Club payment", provider, start: "2026-12-14T00:00:00+00:00" }],
+    };
+    const club: ExtractedBooking = {
+      isBooking: true,
+      segments: [
+        {
+          type: "activity",
+          title: "Stage Stars! Holiday Club - Day 1",
+          provider,
+          start: "2026-12-21T09:00:00+00:00",
+          end: "2026-12-21T15:00:00+00:00",
+          destination: { name: "Example Academy", city: "Exampleville" },
+        },
+      ],
+    };
+    await importMessage("u1", email({ id: "m-paid", subject: "New Payment Confirmation" }), deps(store, async () => receipt));
+    const d: ImportDeps = { ...deps(store, async () => club), geocode: async () => "later", geocodeRetries: retries };
+    await importMessage("u1", email({ id: "m-club", subject: "Booking confirmed: Stage Stars!" }), d);
+    const upgraded = store.segments.get("m-paid-0")!;
+    expect(upgraded.destination).toEqual({ name: "Example Academy", city: "Exampleville" });
+    expect(upgraded.updatedAt).toBe(upgraded.createdAt);
+    expect([...retries.entries.values()]).toEqual([{ uid: "u1", tripId: upgraded.tripId, segmentId: "m-paid-0", at: "2026-11-01T12:00:00Z" }]);
+  });
+
+  it("upgrades no receipt, moves no trip and queues no place for a booking the trips' reset overtook", async () => {
+    const store = memoryStore();
+    const retries = memoryRetryStore();
+    const provider = "Example Academy of Performing Arts";
+    const receipt: ExtractedBooking = {
+      isBooking: true,
+      segments: [{ type: "activity", title: "Stage Stars Holiday Club payment", provider, start: "2026-12-14T00:00:00+00:00" }],
+    };
+    const club: ExtractedBooking = {
+      isBooking: true,
+      segments: [
+        {
+          type: "activity",
+          title: "Stage Stars! Holiday Club - Day 1",
+          provider,
+          start: "2026-12-21T09:00:00+00:00",
+          destination: { name: "Example Academy", city: "Exampleville" },
+        },
+      ],
+    };
+    await importMessage("u1", email({ id: "m-paid", subject: "New Payment Confirmation" }), deps(store, async () => receipt));
+    const before = { segment: store.segments.get("m-paid-0"), trips: [...store.trips.values()] };
+    // The reset moves the generation on while the model reads the booking.
+    const overtaken: ImportDeps["extract"] = async () => {
+      await store.withUserLock("u1", async (tx) => tx.bumpGeneration());
+      return club;
+    };
+    await importMessage("u1", email({ id: "m-club", subject: "Booking confirmed: Stage Stars!" }), {
+      ...deps(store, overtaken),
+      geocode: async () => "later",
+      geocodeRetries: retries,
+    }).catch(() => undefined);
+    expect(store.segments.get("m-paid-0")).toEqual(before.segment);
+    expect([...store.trips.values()]).toEqual(before.trips);
+    expect(retries.entries.size).toBe(0);
+  });
+
+  it("upgrades a receipt a second receipt filled out, once the booking arrives", async () => {
+    const store = memoryStore();
+    const provider = "Example Academy of Performing Arts";
+    const paid = { type: "activity" as const, title: "Stage Stars Holiday Club payment", provider, start: "2026-12-14T00:00:00+00:00" };
+    const receipt: ExtractedBooking = { isBooking: true, segments: [paid] };
+    const invoice: ExtractedBooking = { isBooking: true, segments: [{ ...paid, title: "Stage Stars Holiday Club invoice", confirmation: "INV-88" }] };
+    const club: ExtractedBooking = {
+      isBooking: true,
+      segments: [{ type: "activity", title: "Stage Stars! Holiday Club - Day 1", provider, start: "2026-12-21T09:00:00+00:00", end: "2026-12-21T15:00:00+00:00" }],
+    };
+    // Each import at its own time, as in the mailbox.
+    const at = (time: string, extract: ImportDeps["extract"]): ImportDeps => ({ ...deps(store, extract), now: () => time });
+    await importMessage("u1", email({ id: "m-paid", subject: "New Payment Confirmation" }), at("2026-11-01T12:00:00Z", async () => receipt));
+    await importMessage("u1", email({ id: "m-invoice", subject: "Your invoice and booking confirmation" }), at("2026-11-02T12:00:00Z", async () => invoice));
+    expect(store.segments.get("m-paid-0")).toMatchObject({ confirmation: "INV-88" });
+    await importMessage("u1", email({ id: "m-club", subject: "Booking confirmed: Stage Stars!" }), at("2026-11-03T12:00:00Z", async () => club));
+    expect(store.segments.size).toBe(1);
+    expect(store.segments.get("m-paid-0")).toMatchObject({ title: "Stage Stars! Holiday Club - Day 1", start: "2026-12-21T09:00:00+00:00", confirmation: "INV-88" });
+    expect(store.segments.get("m-paid-0")?.sources?.map((source) => source.id)).toEqual(["m-paid", "m-invoice", "m-club"]);
+  });
+
+  it("leaves a receipt the user edited as they wrote it", async () => {
+    const store = memoryStore();
+    const provider = "Example Academy of Performing Arts";
+    const receipt: ExtractedBooking = {
+      isBooking: true,
+      segments: [{ type: "activity", title: "Stage Stars Holiday Club payment", provider, start: "2026-12-14T00:00:00+00:00" }],
+    };
+    const club: ExtractedBooking = {
+      isBooking: true,
+      segments: [{ type: "activity", title: "Stage Stars! Holiday Club - Day 1", provider, start: "2026-12-21T09:00:00+00:00" }],
+    };
+    await importMessage("u1", email({ id: "m-paid", subject: "New Payment Confirmation" }), deps(store, async () => receipt));
+    const filed = store.segments.get("m-paid-0")!;
+    store.segments.set(filed.id, { ...filed, notes: "Pack lunch", updatedAt: "2026-11-01T13:00:00Z" });
+    await importMessage("u1", email({ id: "m-club", subject: "Booking confirmed: Stage Stars!" }), deps(store, async () => club));
+    expect(store.segments.get("m-paid-0")).toMatchObject({ title: "Stage Stars Holiday Club payment", notes: "Pack lunch" });
+    expect(store.segments.get("m-paid-0")?.sources?.map((source) => source.id)).toEqual(["m-paid", "m-club"]);
+  });
+
   it("still counts the import as done when the retry queue cannot be written, and logs why", async () => {
     const store = memoryStore();
     const logs: [string, Record<string, unknown>][] = [];
@@ -1459,6 +1761,25 @@ describe("fileBooking one showing confirmed twice", () => {
     expect(kept).toHaveLength(1);
     expect(kept[0]!.destination).toEqual(reservation.destination);
     expect([...retries.entries.values()]).toEqual([{ uid: "u1", tripId: kept[0]!.tripId, segmentId: kept[0]!.id, at: "2026-11-01T12:00:00Z" }]);
+  });
+
+  it("files one booking for an event confirmed twice and paid for, matched once each", async () => {
+    const store = memoryStore();
+    const paid: ExtractedSegment = {
+      type: "activity",
+      title: "Wild Horse Nine payment",
+      provider: "Everyman Cinemas",
+      start: "2026-11-01T00:00:00+00:00",
+      destination: { name: "Everyman Muswell Hill", city: "London", country: "GB" },
+    };
+    const elsewhere: ExtractedSegment = { ...paid, destination: { name: "Everyman Hampstead", city: "London", country: "GB" } };
+    await file(store, "615858", [film], "everymancinema.com");
+    await file(store, "WQFXR5T", [reservation], "everymancinema.com");
+    await file(store, "paid", [paid], "everymancinema.com");
+    await file(store, "hampstead", [elsewhere], "everymancinema.com");
+    const films = [...store.segments.values()].filter((s) => s.title.startsWith("Wild Horse Nine"));
+    expect(films.map((s) => s.title)).toEqual(["Wild Horse Nine at Muswell Hill", "Wild Horse Nine payment"]);
+    expect(films[0]!.sources?.map((s) => s.id)).toEqual(["615858", "WQFXR5T", "paid"]);
   });
 
   it("keeps two films at the same time apart", async () => {

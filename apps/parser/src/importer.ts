@@ -10,6 +10,11 @@ import {
   type HomePeriod,
   icsEventText,
   isTravelCalendar,
+  isPaymentReceipt,
+  compareMatchRanks,
+  matchRank,
+  notBookings,
+  withoutValidityEnds,
   type IcsCalendar,
   type IcsEvent,
   mergeDetails,
@@ -28,6 +33,7 @@ import {
   type SourceRef,
   type Trip,
   type TripItImport,
+  untimedMatchDays,
 } from "@travelmo/core";
 import { airportPlace } from "@travelmo/core/airportPlaces";
 import type { Extractor } from "./extract";
@@ -338,6 +344,15 @@ export async function importMessage(
     return "failed";
   }
 
+  // A membership, pass or voucher the model took for a dated visit is no
+  // trip; what else the email books still is.
+  booking = { ...booking, segments: withoutValidityEnds(booking.segments) };
+  const bought = notBookings(booking.segments);
+  if (bought.length) {
+    booking = { ...booking, segments: booking.segments.filter((segment) => !bought.includes(segment)) };
+    if (booking.segments.length === 0) reason = "membership, pass or voucher";
+    log("not_booking_segments", { uid, messageId: message.id, dropped: bought.length });
+  }
   const range = segmentDateRange(booking.segments);
   if (!(await releaseReplaced())) return "skipped";
   if (!booking.isBooking || booking.segments.length === 0 || !range) {
@@ -504,12 +519,17 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     // A source that is already one deduplicated list (a TripIt export) is
     // checked only against other sources: two alike reservations in it are
     // two rooms, not one booking seen twice.
-    const existing = overlappingTrips(live, range)
+    // A payment receipt with no time of its own may be dated weeks from the
+    // booking it pays for (sameBooking), whichever came first.
+    const existing = overlappingTrips(live, { start: shiftDate(range.start, -untimedMatchDays), end: shiftDate(range.end, untimedMatchDays) })
       .flatMap((trip) => segmentsOf(trip.id))
       .filter((other) => !booking.distinctWithinSource || other.source !== booking.source);
     const matchedTrips = new Set<string>();
     const matched: string[] = [];
     const matchedSegments: { segment: Segment; found: ExtractedSegment }[] = [];
+    // A receipt filed first, found to be this booking: it takes this
+    // booking's date, time and details.
+    const upgrades = new Map<string, ExtractedSegment>();
     const ref: SourceRef = {
       kind: booking.source,
       id: booking.sourceId,
@@ -522,18 +542,34 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     // only the second email gives, its own reference: mergeDetails).
     // A booking it fills out (an end it lacked) can outgrow its trip, which
     // then widens to hold it, in this transaction, with the trip this
-    // booking files into (`target`) widened once for both.
+    // booking files into (`target`) widened once for both. A receipt this
+    // booking upgrades is replaced instead, and its trip settled last
+    // (settleUpgradedTrips).
     const merges: Segment[] = [];
     const recordSources = (target?: string) => {
       const changedTrips = new Set<string>();
       for (const { segment, found } of matchedSegments) {
+        if (upgrades.has(`${segment.tripId}/${segment.id}`)) {
+          const sources = segmentSources(segment).some((s) => s.kind === ref.kind && s.id === ref.id) ? segmentSources(segment) : [...segmentSources(segment), ref];
+          // Filed anew as the booking: a fresh revision, and still unedited
+          // (updatedAt its createdAt), as a booking written now would be, so a
+          // sweep or a merge that read the receipt before this one retries.
+          const upgraded: Segment = { ...segment, ...found, id: segment.id, tripId: segment.tripId, sources, createdAt: timestamp, updatedAt: timestamp };
+          tx.putSegment(upgraded);
+          upgradedSegments.set(`${segment.tripId}/${segment.id}`, upgraded);
+          continue;
+        }
         const merged = mergeDetails(segment, found);
         if (JSON.stringify(merged) === JSON.stringify(segment)) {
           tx.addSource(segment.tripId, segment.id, ref);
           continue;
         }
         const kept = (segment.sources ?? []).filter((s) => s.kind !== ref.kind || s.id !== ref.id);
-        const written = { ...merged, sources: [...kept, ref], updatedAt: timestamp };
+        // Filled out by an import, not edited: one still unedited stays so
+        // (updatedAt its createdAt, a fresh revision), so a receipt can
+        // still become its booking and a calendar change replace it.
+        const unedited = segment.updatedAt === segment.createdAt;
+        const written = { ...merged, sources: [...kept, ref], ...(unedited ? { createdAt: timestamp } : {}), updatedAt: timestamp };
         tx.putSegment(written);
         merges.push(written);
         changedTrips.add(segment.tripId);
@@ -547,9 +583,39 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
         } else tx.touchTrip(tripId, timestamp);
       }
     };
-    // The dates the bookings of a trip this one matched span once filled out.
+    // A trip holding an upgraded receipt spans what it ends up with: its
+    // other bookings, the upgraded ones and those written now (and any
+    // bounds this import already gave it). One that held only receipts
+    // moves to those dates; one with other bookings only widens. Written
+    // last, so it supersedes bounds set from the trip as first read.
+    const upgradedSegments = new Map<string, Segment>();
+    const wanted = new Map<string, { start: string; end: string }>();
+    const settleUpgradedTrips = (written: readonly Segment[]) => {
+      for (const tripId of new Set([...upgradedSegments.values()].map((segment) => segment.tripId))) {
+        const trip = live.find((t) => t.id === tripId);
+        if (!trip) continue;
+        const before = segmentsOf(tripId);
+        const final = [
+          ...before.map((segment) => upgradedSegments.get(`${tripId}/${segment.id}`) ?? merges.find((m) => m.tripId === tripId && m.id === segment.id) ?? segment),
+          ...written.filter((segment) => segment.tripId === tripId),
+        ];
+        const dates = segmentDateRange(final);
+        if (!dates) continue;
+        const onlyReceipts = before.every((segment) => upgradedSegments.has(`${tripId}/${segment.id}`));
+        let bounds = onlyReceipts ? dates : { start: min(trip.start, dates.start), end: max(trip.end, dates.end) };
+        const extra = wanted.get(tripId);
+        if (extra) bounds = { start: min(bounds.start, extra.start), end: max(bounds.end, extra.end) };
+        tx.extendTrip(tripId, { ...bounds, updatedAt: timestamp });
+      }
+    };
+    // The dates the bookings of a trip this one matched span once filled out
+    // (or, for a receipt it upgrades, once it is this booking).
     const growth = (tripId: string) =>
-      segmentDateRange(matchedSegments.filter((m) => m.segment.tripId === tripId).map((m) => mergeDetails(m.segment, m.found)));
+      segmentDateRange(
+        matchedSegments
+          .filter((m) => m.segment.tripId === tripId)
+          .map((m) => (upgrades.has(`${m.segment.tripId}/${m.segment.id}`) ? m.found : mergeDetails(m.segment, m.found))),
+      );
     const taken = (other: Segment) => {
       const key = `${other.tripId}/${other.id}`;
       const owner = booking.reserved?.get(key);
@@ -563,11 +629,18 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
         const candidate = (other: Segment) =>
           other.id !== id && !taken(other) && (sameBooking(other, segment) || sameEvent(other, segment, other.sender, booking.sender));
         // A booking set aside for this item comes first: matching a lookalike
-        // instead would strand it, reserved for an item already done.
+        // instead would strand it, reserved for an item already done. Of the
+        // rest, the likeliest (matchRank): a receipt goes to the booking with
+        // its reference before one that merely shares a name.
+        const best = (others: Segment[]) =>
+          others.reduce<Segment | undefined>((top, other) => (top && compareMatchRanks(matchRank(top, segment), matchRank(other, segment)) <= 0 ? top : other), undefined);
         const match =
           existing.find((other) => booking.reserved?.get(`${other.tripId}/${other.id}`) === booking.sourceId && candidate(other)) ??
-          existing.find(candidate);
+          best(existing.filter(candidate));
         if (match) {
+          // Only a receipt nobody edited: one the user corrected by hand
+          // keeps what they wrote, and gains this source.
+          if (isPaymentReceipt(match) && !isPaymentReceipt(segment) && match.updatedAt === match.createdAt) upgrades.set(`${match.tripId}/${match.id}`, segment);
           matchedTrips.add(match.tripId);
           matched.push(`${match.tripId}/${match.id}`);
           matchedSegments.push({ segment: match, found: segment });
@@ -578,7 +651,8 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     const freshRange = segmentDateRange(fresh.map((f) => f.segment));
     if (!freshRange) {
       recordSources();
-      return { segmentIds: [], duplicates, matched, written: merges };
+      settleUpgradedTrips([]);
+      return { segmentIds: [], duplicates, matched, written: [...merges, ...upgradedSegments.values()] };
     }
 
     const hint = booking.trip;
@@ -615,6 +689,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
       const own = hint ? { start: min(hint.start, freshRange.start), end: max(hint.end, freshRange.end) } : freshRange;
       const filled = growth(tripId);
       const want = filled ? { start: min(own.start, filled.start), end: max(own.end, filled.end) } : own;
+      wanted.set(tripId, want);
       // A trip of nothing but a ride from the airport, still named for its
       // route, takes the name of the flight's trip once the flight joins it.
       // Home may have been unknown when it was named ("Heathrow to London").
@@ -657,9 +732,11 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
       updatedAt: timestamp,
     }));
     for (const segment of written) tx.putSegment(segment);
-    return { tripId, segmentIds: written.map((s) => s.id), duplicates, matched, written: [...written, ...merges] };
+    settleUpgradedTrips(written);
+    return { tripId, segmentIds: written.map((s) => s.id), duplicates, matched, written: [...written, ...merges, ...upgradedSegments.values()] };
   });
-  // A place the budget put off is asked about again by the daily sweep.
+  // A place the budget put off is asked about again by the daily sweep,
+  // a receipt this booking upgraded included.
   const { written, ...filed } = result;
   // So is one a booking found again took from this one; both only while
   // the trips have not been reset since the import began.
