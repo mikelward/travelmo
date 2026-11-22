@@ -143,14 +143,18 @@ the unit job, in about ten minutes.
 The app signs in with Google through Firebase Auth, so it needs the Firebase
 project's Android app: in the Firebase console add an Android app with the
 package `app.travelmo` (and `app.travelmo.debug` for debug builds) and the
-signing certificate's SHA-1 (for Play builds, both SHA-1s on Play Console's
-App integrity → App signing page: Play re-signs the app with its own key, and
-without that key's fingerprint the account picker hands back a cancellation
-and the app returns to sign-in silently), enable the Google sign-in provider (which gives
-the project a web client id), download `google-services.json` into
-`apps/android/app/` (gitignored; never commit it) and build again. Without
-the file the build still succeeds and runs, with the sign-in button explaining
-that nothing is behind it, which is how CI builds. `versionCode` is the
+signing certificates' SHA-1s: the upload key's, and for Play builds every
+SHA-1 that Play Console's Protected with Play → Play Store protection → Play
+app signing page gives under "Copy all certificate fingerprints" (there can be
+three, more than the page shows; Play re-signs the app with its own keys, and
+without the fingerprint of the one a phone gets, sign-in fails with status 16).
+Enable the Google sign-in provider (which gives the project a web client id),
+fill in the Google Auth platform's Branding page (app name, user support email
+and developer contact; a missing one also fails with status 16), download
+`google-services.json` into `apps/android/app/` (gitignored; never commit it)
+and build again. Fingerprints and branding are checked on Google's side, so
+changing them needs no new build. Without the file the build still succeeds
+and runs, with sign-in off and saying so, which is how CI builds. `versionCode` is the
 repository's commit count and `versionName` names the commit, so build from a
 full clone (`scripts/unshallow.sh` deepens a shallow one).
 
