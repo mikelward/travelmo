@@ -28,15 +28,25 @@ export function localDate(instant: string): string {
   return instant.slice(0, 10);
 }
 
+const journeyTypes: ReadonlySet<SegmentType> = new Set(["flight", "train", "bus", "ferry"]);
+// The longest a journey is believed to take, in days: a week on the
+// Trans-Siberian, with a day to spare.
+const maxJourneyDays = 8;
+
 export function segmentDateRange(
   segments: readonly ExtractedSegment[],
 ): { start: string; end: string } | undefined {
   // Both endpoints feed both bounds: across the date line a flight can land
   // on an earlier local date than it departed.
+  // A journey's end more than a week after it leaves is not when it
+  // arrives (a ticket's expiry, read as its arrival) and never stretches a
+  // trip: its start stands for both.
   let start: string | undefined;
   let end: string | undefined;
   for (const segment of segments) {
-    for (const date of [localDate(segment.start), localDate(segment.end ?? segment.start)]) {
+    const tooLong = !!segment.end && journeyTypes.has(segment.type) && daysBetween(localDate(segment.start), localDate(segment.end)) > maxJourneyDays;
+    const last = segment.end && !tooLong ? segment.end : segment.start;
+    for (const date of [localDate(segment.start), localDate(last)]) {
       if (start === undefined || date < start) start = date;
       if (end === undefined || date > end) end = date;
     }
@@ -217,6 +227,86 @@ export function sameBooking(a: ExtractedSegment, b: ExtractedSegment): boolean {
   }
   for (const word of ours) if (theirs.has(word)) return true;
   return false;
+}
+
+// Every word of an event's name but a few that join others, accents and
+// case aside: short words and numbers tell events apart.
+const joiningWords = new Set(["the", "a", "an", "at", "of", "and"]);
+function eventWords(...texts: (string | undefined)[]): Set<string> {
+  const out = new Set<string>();
+  for (const text of texts) {
+    for (const word of (text ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().split(/[^a-z0-9]+/)) {
+      if (word && !joiningWords.has(word)) out.add(word);
+    }
+  }
+  return out;
+}
+
+// Whether two activities at the same minute are one event confirmed twice
+// under different references (a cinema's booking email and its reservation
+// email): the same seller, by its name or the domain the emails came from
+// (`senderA`, `senderB`), the same town where both give one, and the same
+// event by name. The event is the title before any " at <venue>", less the
+// venue's and the seller's own words; one name must hold every word of the
+// other, so two films at one cinema and time stay two.
+export function sameEvent(a: ExtractedSegment, b: ExtractedSegment, senderA?: string, senderB?: string): boolean {
+  if (a.type !== "activity" || b.type !== "activity") return false;
+  if (a.start.slice(0, 16) !== b.start.slice(0, 16)) return false;
+  const theirBrand = words(b.provider);
+  const sameSeller =
+    (!!senderA && !!senderB && senderA.trim().toLowerCase() === senderB.trim().toLowerCase()) ||
+    [...words(a.provider)].some((word) => theirBrand.has(word));
+  if (!sameSeller) return false;
+  const differ = (x?: string, y?: string) => x !== undefined && y !== undefined && x.trim().toLowerCase() !== y.trim().toLowerCase();
+  if (differ(a.destination?.city, b.destination?.city) || differ(a.destination?.country, b.destination?.country)) return false;
+  const seller = eventWords(a.provider, b.provider);
+  const cities = eventWords(a.destination?.city, b.destination?.city);
+  // Where each says it is, after " at " or in its place, less the seller's
+  // and the city's words. Two named venues must agree, one may shorten the
+  // other ("Everyman" for "Everyman Muswell Hill"), but Muswell Hill is not
+  // Hampstead.
+  const split = (s: ExtractedSegment) => s.title.split(/\s+(?:at|@)\s+/i);
+  const where = (s: ExtractedSegment) => {
+    const found = eventWords(split(s).slice(1).join(" "), s.destination?.name);
+    for (const word of [...seller, ...cities]) found.delete(word);
+    return found;
+  };
+  const within = (x: Set<string>, y: Set<string>) => [...x].every((word) => y.has(word));
+  const [here, there] = [where(a), where(b)];
+  if (here.size > 0 && there.size > 0 && !within(here, there) && !within(there, here)) return false;
+  // Every word of the name counts here, however short: Toy Story 4 is not
+  // Toy Story 5, nor Inside Out Inside Man.
+  const venue = eventWords(a.destination?.name, a.destination?.city, b.destination?.name, b.destination?.city);
+  const event = (s: ExtractedSegment) => {
+    const found = eventWords(s.title.split(/\s+(?:at|@)\s+/i)[0]);
+    for (const word of [...venue, ...seller]) found.delete(word);
+    return found;
+  };
+  const [ours, theirs] = [event(a), event(b)];
+  if (ours.size === 0 || theirs.size === 0) return false;
+  return within(ours, theirs) || within(theirs, ours);
+}
+
+// A booking found again, with what the new email adds to it: fields it
+// lacked, the new notes (seats, a screen) where it has not got them, and the
+// new reference when it differs. Nothing it already says is replaced.
+export function mergeDetails<S extends ExtractedSegment>(existing: S, found: ExtractedSegment): S {
+  const merged: S = { ...existing };
+  if (merged.provider === undefined && found.provider !== undefined) merged.provider = found.provider;
+  if (merged.confirmation === undefined && found.confirmation !== undefined) merged.confirmation = found.confirmation;
+  if (merged.end === undefined && found.end !== undefined) merged.end = found.end;
+  if (merged.origin === undefined && found.origin !== undefined) merged.origin = found.origin;
+  if (merged.destination === undefined && found.destination !== undefined) merged.destination = found.destination;
+  const notes = merged.notes?.trim() ? [merged.notes.trim()] : [];
+  const has = (text: string) => notes.some((note) => note.toLowerCase().includes(text.toLowerCase()));
+  const extra = found.notes?.trim();
+  if (extra && !has(extra)) notes.push(extra);
+  const other = found.confirmation;
+  if (other && merged.confirmation && normalizeReference(other) !== normalizeReference(merged.confirmation) && !has(other)) {
+    notes.push(`Other reference: ${other}`);
+  }
+  if (notes.length) merged.notes = notes.join("\n");
+  return merged;
 }
 
 // Trips whose dates touch the range at all (no gap allowed), the candidates

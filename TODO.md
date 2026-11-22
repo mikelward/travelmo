@@ -320,6 +320,18 @@ Guesses made on autopilot; change any of them freely.
   marks a title the user typed; a renamed trip that loses bookings takes
   the worked-out name.
 
+- Outings (activities and other bookings in one place) no longer chain by
+  nearness of dates, even while home is unknown: an outing and travel join
+  only when they share a town the travel goes to. The price is that a day
+  trip from a trip away (Uppsala from Stockholm) comes in as its own trip.
+  Recognizing a home district by distance (Bromley, Muswell Hill as
+  London) was left out: grouping no longer needs it.
+- A journey's end more than eight days after it leaves is ignored for a
+  trip's dates, rather than capping it at eight days.
+- One event confirmed twice under two references is matched only on the
+  event's name, never on a shared venue alone; regrouping still moves
+  bookings only, so duplicates already filed stay until deleted.
+
 - Forwarding addresses are `<token>@travelmo.app`, the token the whole
   local part (twenty lowercase base32 characters) rather than an
   `import+<token>` tag: Email Routing's catch-all delivers either, and the

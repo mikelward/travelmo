@@ -12,8 +12,10 @@ import {
   isTravelCalendar,
   type IcsCalendar,
   type IcsEvent,
+  mergeDetails,
   overlappingTrips,
   sameBooking,
+  sameEvent,
   segmentDateRange,
   segmentSources,
   stableHash,
@@ -507,7 +509,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
       .filter((other) => !booking.distinctWithinSource || other.source !== booking.source);
     const matchedTrips = new Set<string>();
     const matched: string[] = [];
-    const matchedSegments: Segment[] = [];
+    const matchedSegments: { segment: Segment; found: ExtractedSegment }[] = [];
     const ref: SourceRef = {
       kind: booking.source,
       id: booking.sourceId,
@@ -516,10 +518,38 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
       at: timestamp,
     };
     // A booking found again keeps this source too, so nothing dropped as a
-    // duplicate is lost from view.
-    const recordSources = () => {
-      for (const segment of matchedSegments) tx.addSource(segment.tripId, segment.id, ref);
+    // duplicate is lost from view, and whatever this one adds to it (seats
+    // only the second email gives, its own reference: mergeDetails).
+    // A booking it fills out (an end it lacked) can outgrow its trip, which
+    // then widens to hold it, in this transaction, with the trip this
+    // booking files into (`target`) widened once for both.
+    const merges: Segment[] = [];
+    const recordSources = (target?: string) => {
+      const changedTrips = new Set<string>();
+      for (const { segment, found } of matchedSegments) {
+        const merged = mergeDetails(segment, found);
+        if (JSON.stringify(merged) === JSON.stringify(segment)) {
+          tx.addSource(segment.tripId, segment.id, ref);
+          continue;
+        }
+        const kept = (segment.sources ?? []).filter((s) => s.kind !== ref.kind || s.id !== ref.id);
+        const written = { ...merged, sources: [...kept, ref], updatedAt: timestamp };
+        tx.putSegment(written);
+        merges.push(written);
+        changedTrips.add(segment.tripId);
+      }
+      for (const tripId of changedTrips) {
+        if (tripId === target) continue;
+        const trip = live.find((t) => t.id === tripId);
+        const want = growth(tripId);
+        if (trip && want && (want.start < trip.start || want.end > trip.end)) {
+          tx.extendTrip(tripId, { start: min(trip.start, want.start), end: max(trip.end, want.end), updatedAt: timestamp });
+        } else tx.touchTrip(tripId, timestamp);
+      }
     };
+    // The dates the bookings of a trip this one matched span once filled out.
+    const growth = (tripId: string) =>
+      segmentDateRange(matchedSegments.filter((m) => m.segment.tripId === tripId).map((m) => mergeDetails(m.segment, m.found)));
     const taken = (other: Segment) => {
       const key = `${other.tripId}/${other.id}`;
       const owner = booking.reserved?.get(key);
@@ -528,7 +558,10 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     const fresh = booking.segments
       .map((segment, index) => ({ segment, id: `${booking.sourceId}-${index}` }))
       .filter(({ segment, id }) => {
-        const candidate = (other: Segment) => other.id !== id && !taken(other) && sameBooking(other, segment);
+        // One event confirmed by two emails under two references is one
+        // booking too (sameEvent).
+        const candidate = (other: Segment) =>
+          other.id !== id && !taken(other) && (sameBooking(other, segment) || sameEvent(other, segment, other.sender, booking.sender));
         // A booking set aside for this item comes first: matching a lookalike
         // instead would strand it, reserved for an item already done.
         const match =
@@ -537,7 +570,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
         if (match) {
           matchedTrips.add(match.tripId);
           matched.push(`${match.tripId}/${match.id}`);
-          matchedSegments.push(match);
+          matchedSegments.push({ segment: match, found: segment });
         }
         return !match;
       });
@@ -545,7 +578,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     const freshRange = segmentDateRange(fresh.map((f) => f.segment));
     if (!freshRange) {
       recordSources();
-      return { segmentIds: [], duplicates, matched };
+      return { segmentIds: [], duplicates, matched, written: merges };
     }
 
     const hint = booking.trip;
@@ -579,7 +612,9 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
       // editing them right now.
       // A source's own trip dates (a TripIt itinerary) widen it too, so a
       // later booking within them finds this trip.
-      const want = hint ? { start: min(hint.start, freshRange.start), end: max(hint.end, freshRange.end) } : freshRange;
+      const own = hint ? { start: min(hint.start, freshRange.start), end: max(hint.end, freshRange.end) } : freshRange;
+      const filled = growth(tripId);
+      const want = filled ? { start: min(own.start, filled.start), end: max(own.end, filled.end) } : own;
       // A trip of nothing but a ride from the airport, still named for its
       // route, takes the name of the flight's trip once the flight joins it.
       // Home may have been unknown when it was named ("Heathrow to London").
@@ -609,7 +644,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
         updatedAt: timestamp,
       });
     }
-    recordSources();
+    recordSources(target ? tripId : undefined);
     const written: Segment[] = fresh.map(({ segment, id }) => ({
       ...segment,
       id,
@@ -622,11 +657,13 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
       updatedAt: timestamp,
     }));
     for (const segment of written) tx.putSegment(segment);
-    return { tripId, segmentIds: written.map((s) => s.id), duplicates, matched, written };
+    return { tripId, segmentIds: written.map((s) => s.id), duplicates, matched, written: [...written, ...merges] };
   });
   // A place the budget put off is asked about again by the daily sweep.
   const { written, ...filed } = result;
-  if (placed.deferred && written?.length) await recordRetries(uid, written, deps, booking.generation);
+  // So is one a booking found again took from this one; both only while
+  // the trips have not been reset since the import began.
+  if (placed.deferred && written.length) await recordRetries(uid, written, deps, booking.generation);
   return { ...filed, timestamp };
 }
 
@@ -861,8 +898,12 @@ export async function importMessages(
 // is for the place itself, its title starting with the place's name
 // (Hampton Court Palace for "Hampton Court Palace Admission", not the town it
 // stands in), otherwise the event ("Toy Story 5 at Everyman Muswell Hill",
-// The Graham Norton Show, not London or Television Centre). Dates are
-// compared as written, in local time.
+// The Graham Norton Show, not London or Television Centre). So is a course
+// of several days: one ticket that spans them, or one a day whose titles
+// differ only in the day ("Holiday Camp - Junior Group (Day 2)"). Dates are
+// compared as written, in local time. A trip is named after where its
+// journeys and stays go before a car or transfer's drop-off: a car to
+// Stansted for a flight to Stockholm makes a Stockholm trip.
 export function tripTitle(
   segments: readonly ExtractedSegment[],
   periods: readonly HomePeriod[] = [],
@@ -873,16 +914,24 @@ export function tripTitle(
   // as a trip to the home town.
   if (first && segments.every(isTransfer)) return transferTitle(first, periods, overrides)!;
   const days = new Set(segments.flatMap((s) => [s.start, s.end].filter((t) => t !== undefined).map((t) => t.slice(0, 10))));
-  if (first && days.size === 1 && segments.every((s) => s.type === "activity")) {
-    const venue = first.destination?.name;
-    if (venue && first.title.toLowerCase().startsWith(venue.toLowerCase())) return venue;
-    if (first.title) return first.title;
+  if (first && segments.every((s) => s.type === "activity")) {
+    if (days.size === 1) {
+      const venue = first.destination?.name;
+      if (venue && first.title.toLowerCase().startsWith(venue.toLowerCase())) return venue;
+      if (first.title) return first.title;
+    }
+    const course = new Set(segments.map((s) => withoutDay(s.title)));
+    if (segments.length === 1 || (course.size === 1 && segments.some((s) => s.title !== withoutDay(s.title)))) return withoutDay(first.title);
   }
   // Known home is not where a trip goes: a train out of London to Liverpool
   // makes a Liverpool trip, even booked as its return leg alone.
-  const place = awayPlace(segments, periods, overrides) ?? segments.find((s) => s.destination)?.destination;
+  const ordered = [...segments.filter((s) => !isTransfer(s)), ...segments.filter(isTransfer)];
+  const place = awayPlace(ordered, periods, overrides) ?? ordered.find((s) => s.destination)?.destination;
   return place?.city ?? place?.name ?? segments[0]?.title ?? "Trip";
 }
+
+// A title without the day of a course it names: "(Day 2)", "- Day 2".
+const withoutDay = (title: string) => title.replace(/\s*(?:\(\s*day\s+\d+\s*\)|[-–:]\s*day\s+\d+)\s*$/i, "").trim() || title;
 
 // How far either side of a booking the importer reads trips to work out
 // where home was, in days.

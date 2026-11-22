@@ -63,10 +63,12 @@ describe("an import with home corrected", () => {
     await fileBooking("u1", { sourceId: "out", source: "gmail", segments: [out] }, deps(corrected, london));
     expect([...corrected.trips.values()].map((t) => t.title).sort()).toEqual(["Holiday Club", "Liverpool"]);
 
-    // Without it, a single outbound says nothing about home, and the two join.
+    // Without it, a single outbound says nothing about home, and the two
+    // stay apart all the same: an outing joins travel only in a town the
+    // travel goes to.
     const plain = memoryStore();
     await fileBooking("u1", { sourceId: "club", source: "gmail", segments: [club] }, deps(plain));
     await fileBooking("u1", { sourceId: "out", source: "gmail", segments: [out] }, deps(plain));
-    expect(plain.trips.size).toBe(1);
+    expect([...plain.trips.values()].map((t) => t.title).sort()).toEqual(["Holiday Club", "Liverpool"]);
   });
 });

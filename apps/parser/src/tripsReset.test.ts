@@ -6,7 +6,7 @@ import type { EmailMessage } from "./gmail";
 import { loadState, updateBackfill, updateHistoryId } from "./connections";
 import { AccountDeletedError } from "./deleted";
 import { cancelImported, importMessage, importStructured, importTripIt, type ImportDeps } from "./importer";
-import { firestoreRetryStore } from "./geocodeSweep";
+import { firestoreRetryStore, memoryRetryStore } from "./geocodeSweep";
 import { firestoreStore } from "./store";
 import { memoryStore } from "./testStore";
 import { deleteOldRetries, deleteOwnTrips, resetTrips } from "./tripsReset";
@@ -149,6 +149,41 @@ describe("resetTrips", () => {
       expect(store.parsed.has("u1/racing")).toBe(false);
       expect(await importMessage("u1", email, deps(store, async () => lodging))).toBe("imported");
       expect(store.trips.size).toBe(1);
+    });
+
+    it("adds nothing to a booking found again when the reset comes while the second email is read", async () => {
+      const store = memoryStore();
+      const retries = memoryRetryStore();
+      const showing = (title: string, confirmation: string, extra: object = {}): ExtractedBooking => ({
+        isBooking: true,
+        segments: [{ type: "activity", title, provider: "Everyman", confirmation, start: "2026-11-08T12:00:00+00:00", ...extra }],
+      });
+      const reservation = showing("Wild Horse Nine at Everyman", "WQFXR5T");
+      const booked = showing("Wild Horse Nine at Muswell Hill", "615858", {
+        end: "2026-11-10T14:00:00+00:00",
+        notes: "Screen 3, seats C8 and C7",
+        destination: { name: "Everyman Muswell Hill", city: "London", country: "GB" },
+      });
+      const cinema = (id: string): EmailMessage => ({ ...email, id, from: "Everyman <tickets@everymancinema.com>", subject: `Booking confirmation for Wild Horse Nine ${id}` });
+      const plain = { ...deps(store, async () => reservation), geocode: async () => "later" as const, geocodeRetries: retries };
+      expect(await importMessage("u1", cinema("first"), plain)).toBe("imported");
+      // While the second email is read, the user deletes all trips and the
+      // first comes in again under the new generation.
+      const extract = async () => {
+        await deleteOwnTrips("u1", store);
+        expect(await importMessage("u1", cinema("first"), plain)).toBe("imported");
+        return booked;
+      };
+      expect(await importMessage("u1", cinema("second"), { ...plain, extract })).toBe("skipped");
+      // Only what the first email, read again, made: no seats, no end, no
+      // second source, and its trip no wider.
+      expect(store.segments.size).toBe(1);
+      const [kept] = [...store.segments.values()];
+      expect([kept!.notes, kept!.end, kept!.confirmation]).toEqual([undefined, undefined, "WQFXR5T"]);
+      expect(kept!.sources?.map((s) => s.id)).toEqual(["first"]);
+      expect([...store.trips.values()][0]).toMatchObject({ start: "2026-11-08", end: "2026-11-08" });
+      expect(retries.entries.size).toBe(0);
+      expect(store.parsed.has("u1/second")).toBe(false);
     });
 
     it("claims nothing when the reset comes between reading the generation and the claim", async () => {

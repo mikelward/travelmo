@@ -505,7 +505,19 @@ dropping a real booking loses it: equal confirmation numbers when both have
 one, otherwise agreeing codes at both ends of a journey, or a distinctive
 word shared by the two titles or place names other than their city and,
 unless it is all the name there is, their chain or provider. Known cities
-and countries that differ rule a match out. In doubt, both are kept. A TripIt export or a calendar file is
+and countries that differ rule a match out. In doubt, both are kept. One
+event confirmed by two emails under two references (a cinema's booking
+confirmation and its reservation email) is one booking too (`sameEvent`):
+two activities at the same local minute from the same seller, by a shared
+word of the provider's name or the same sender domain, in the same town
+where both give one, whose event names agree: the title before any
+"at <venue>", less the venue's and the seller's words, one holding every
+word of the other, short words and numbers counting (Toy Story 4 is not
+Toy Story 5, nor Inside Out Inside Man; only "the", "a", "an", "at", "of"
+and "and" are left out). A shared venue alone is not enough, so two films at one cinema
+and time stay two, and venues both name (after "at" or as the place, less
+the seller's and the city's words) must agree, one allowed to shorten the
+other: "Everyman" is "Everyman Muswell Hill", Everyman Hampstead is not. A TripIt export or a calendar file is
 checked only against other sources, since it is already one list: two alike reservations in it
 are two. Matching is one to one: an existing booking matched once, in
 the same email or the same export, stands in for no other, and each
@@ -519,11 +531,22 @@ event that does is matched. A booking that
 matches one already on an overlapping trip is left out and counted in the
 record's reason, and its source is added to the booking it matched, so a
 false match (a second room after all) and anything the extraction missed
-stay one click away; when all of an email's bookings are, the email is still
+stay one click away. What the new one adds is merged into the booking
+kept (`mergeDetails`): fields it lacked, notes it does not already hold
+(seats, a screen) and, when the references differ, "Other reference: …";
+nothing it already says is replaced. Its trip widens in the same
+transaction when the booking now ends later (a checkout only the second
+email gave), and a place it gains that the geocoding budget put off is
+queued for the daily sweep like a new booking's, all under the reset
+generation the import began with (below), so an import the user's "Delete
+all trips" overtook adds nothing to a booking filed again since. When all of an email's bookings are, the email is still
 recorded as imported, with none. A booking part of which matched joins the
 trip of that match, and otherwise its whole range, new and old legs
-together, picks the trip: the one within two days of it, except that a
-day out at home and a trip away never join each other ("Home" below).
+together, picks the trip: the one within two days of it, except that
+outings never chain by nearness of dates alone ("Home" below). A
+journey's end more than eight days after it leaves (a ticket's expiry read
+as its arrival) is not trusted for a trip's dates; its start stands for
+both (`segmentDateRange`, also in the Android `:core`).
 
 ### Home
 
@@ -557,17 +580,31 @@ filed (`ImportDeps.homeOverrides`).
 Grouping uses it (`findTripForBooking`, also in `home.ts`). Each import
 works out home from the bookings of the trips within a year either side of
 the new one, plus the new one itself (a return ticket is a round trip on
-its own), and corrections win as above. A booking that is not a journey and
-happens in the home of its day (`isAtHome`), a day out, never joins a trip
-by nearness of dates: only a trip of nothing but bookings at home on the
-same dates, so two tickets on one evening stay together. A booking away
-never joins such a trip, and a journey, even one leaving from home, is
-never at home. So a holiday club in London either side of a weekend in
-Liverpool comes in as three trips, each club day named as a day out and
-the weekend "Liverpool": a new trip is named after its first destination
-that is not home, or failing that its first origin that is not (a return
-leg booked alone). While home is unknown, nothing changes: a booking joins
-the trip within two days of it.
+its own), and corrections win as above. Bookings are outings (an activity,
+a car hired and returned in one place, or another booking in one place) or
+travel (journeys, stays, and transfers, such as a car to the airport, which
+are never at home). Travel joins travel within two days. Outings never
+chain by nearness of dates alone, home known or not, since a town that is
+not named as home (Muswell Hill, Bromley) or a home not yet worked out on a
+fresh import would otherwise string a summer of outings and the trips
+between them into one: an outing in the home of its day (`isAtHome`) joins
+only a day out at home on the same dates, so two tickets on one evening
+stay together, and other outings join one another on the same dates. An
+outing and travel, and outings away on different days once home is known,
+join only within two days and when they share a town the travel goes to
+(with home known, every place it goes to or from other than home, so a
+return flight booked alone counts where it leaves from; with home unknown,
+its destinations other than where it set off from): a ticket in
+Stockholm joins the Stockholm trip, while a day camp the day before the car
+to Stansted, or a course while the family flies to Boston, stays apart. So
+a holiday club in London either side of a weekend in Liverpool comes in as
+three trips, each club day named as a day out and the weekend "Liverpool":
+a new trip is named after its first destination that is not home, or
+failing that its first origin that is not (a return leg booked alone),
+looking at journeys and stays before a car or transfer's drop-off. A day
+out is named after what it is, and so is a course of several days at one
+place: one ticket spanning them, or one a day whose titles differ only in
+the day ("Holiday Camp East Finchley - Junior Group").
 
 A car or taxi booked from one place to another (`isTransfer`: a car or
 "other" booking whose origin and destination differ by code, name and
@@ -616,7 +653,9 @@ email filed beside it stay one), is filed again in the order they happen with th
 decision as an import. Each resulting trip keeps the existing trip holding
 most of its bookings, with its id, sharing and dates; it keeps that trip's
 title too while it still holds every booking the trip had, so a name the
-user gave a trip only added to survives, and a trip whose bookings are
+user gave a trip only added to survives (otherwise it is named from all
+its bookings, so a trip that starts with a car to the airport is named
+after where the flight goes), and a trip whose bookings are
 unchanged is not written at all. Bookings never move between trips shared
 with different people (the maintainer's call: never mix them). Bookings are
 regrouped only among trips with the same share list, compared as a set and

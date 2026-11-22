@@ -90,12 +90,31 @@ fun segmentDateRange(segments: List<Segment>): Pair<String, String>? {
     var start: String? = null
     var end: String? = null
     for (segment in segments) {
-        for (date in listOf(localDate(segment.start), localDate(segment.end ?: segment.start))) {
+        for (date in listOf(localDate(segment.start), localDate(trustedEnd(segment)))) {
             if (start == null || date < start) start = date
             if (end == null || date > end) end = date
         }
     }
     return if (start == null || end == null) null else start to end
+}
+
+private val journeyTypes = setOf(SegmentType.FLIGHT, SegmentType.TRAIN, SegmentType.BUS, SegmentType.FERRY)
+
+// The longest a journey is believed to take, in days: a week on the
+// Trans-Siberian, with a day to spare.
+private const val MAX_JOURNEY_DAYS = 8L
+
+// A journey's end more than a week after it leaves is not when it arrives
+// (a ticket's expiry, read as its arrival) and never stretches a trip: its
+// start stands for both.
+private fun trustedEnd(segment: Segment): String {
+    val end = segment.end ?: return segment.start
+    if (segment.type !in journeyTypes) return end
+    val days = java.time.temporal.ChronoUnit.DAYS.between(
+        java.time.LocalDate.parse(localDate(segment.start)),
+        java.time.LocalDate.parse(localDate(end)),
+    )
+    return if (days > MAX_JOURNEY_DAYS) segment.start else end
 }
 
 /** Whether "Fit dates to bookings" has anything to do: the bookings span less than the trip. */

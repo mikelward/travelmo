@@ -255,7 +255,12 @@ describe("regroupTrips", () => {
       await regroupTrips("u1", deps(store));
       expect(store.segments.get("o-0")?.tripId).not.toBe("shared");
       expect(store.segments.get("h-0")?.tripId).not.toBe("shared");
-      expect([...store.trips.values()].filter((t) => t.sharedWith.length > 0).map((t) => t.id)).toEqual(["shared"]);
+      // The outings on different days each become a day out of their own,
+      // still shared as they were; the private bookings stay private.
+      for (const id of ["o-0", "h-0"]) expect(store.trips.get(store.segments.get(id)!.tripId)?.sharedWith).toEqual([]);
+      for (let day = 10; day <= 30; day++) {
+        expect(store.trips.get(store.segments.get(`x${day}-0`)!.tripId)?.sharedWith).toEqual(["sharee@example.com"]);
+      }
     });
 
     it("still regroups trips shared with the same people, in any order", async () => {
@@ -313,5 +318,114 @@ describe("regroupTrips", () => {
     );
     expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0 });
     expect(summary(store).map((t) => [t.title, t.segments])).toEqual([["Liverpool", ["a-0", "b-1"]]]);
+  });
+});
+
+describe("regroupTrips with outings at home", () => {
+  const gb = (name: string, city: string) => ({ name, city, country: "GB" });
+
+  it("splits three outings filed as one trip into a day out each", async () => {
+    const store = memoryStore();
+    store.trips.set("club", trip("club", "Junior Adventures Group Club", "2026-11-08", "2026-11-09"));
+    const put = (s: Segment) => store.segments.set(s.id, s);
+    put(
+      segment("club", "e1-0", "e1", {
+        type: "activity",
+        title: "Wild Horse Nine at Muswell Hill",
+        provider: "Everyman Cinemas",
+        confirmation: "615858",
+        start: "2026-11-08T12:00:00+00:00",
+        destination: gb("Everyman Muswell Hill", "London"),
+        notes: "Screen 3, seats C8 and C7",
+      }),
+    );
+    put(
+      segment("club", "e2-0", "e2", {
+        type: "activity",
+        title: "Wild Horse Nine at Everyman Muswell Hill",
+        provider: "Everyman",
+        confirmation: "WQFXR5T",
+        start: "2026-11-08T12:00:00+00:00",
+        destination: gb("Everyman", "London"),
+      }),
+    );
+    put(
+      segment("club", "j-0", "j", {
+        type: "activity",
+        title: "Junior Adventures Group Club",
+        provider: "Junior Adventures Group",
+        confirmation: "PSAD8686493/38",
+        start: "2026-11-09T12:02:00+00:00",
+        destination: gb("BR1 2SQ", "Bromley"),
+      }),
+    );
+    await regroupTrips("u1", deps(store));
+    expect(summary(store).map((t) => [t.title, t.start, t.end, t.segments])).toEqual([
+      ["Wild Horse Nine at Muswell Hill", "2026-11-08", "2026-11-08", ["e1-0", "e2-0"]],
+      ["Junior Adventures Group Club", "2026-11-09", "2026-11-09", ["j-0"]],
+    ]);
+  });
+
+  it("splits a summer filed as one trip into the outings and the two trips away", async () => {
+    const store = memoryStore();
+    store.trips.set("tower", trip("tower", "Tower of London", "2026-08-10", "2026-11-13"));
+    const put = (id: string, extracted: ExtractedSegment) => store.segments.set(id, segment("tower", id, id.replace(/-\d+$/, ""), extracted));
+    for (const n of [1, 2, 3, 4, 5]) {
+      put(`camp-${n - 1}`, {
+        type: "activity",
+        title: `Holiday Camp East Finchley - Junior Group (Day ${n})`,
+        start: `2026-08-${9 + n}T09:00:00+01:00`,
+        end: `2026-08-${9 + n}T17:00:00+01:00`,
+        destination: gb("N2 9JP", "London"),
+      });
+    }
+    put("car-0", {
+      type: "other",
+      title: "Abetta car to Stansted Airport",
+      start: "2026-08-15T10:30:00+01:00",
+      origin: gb("N10 3AR", "London"),
+      destination: { ...gb("Stansted Airport", "Stansted"), code: "STN" },
+    });
+    put("express-0", {
+      type: "train",
+      title: "Arlanda Express Stockholm → Stockholm",
+      start: "2026-08-15T13:28:00+02:00",
+      end: "2026-11-13T23:59:00+01:00",
+      origin: { name: "Stockholm Arlanda Airport", city: "Stockholm", country: "SE" },
+      destination: { name: "Stockholm Central", city: "Stockholm", country: "SE" },
+    });
+    put("course-0", {
+      type: "activity",
+      title: "5 Day Summer Holiday Course: Peter Pan",
+      start: "2026-08-24T09:30:00+01:00",
+      end: "2026-08-28T15:30:00+01:00",
+      destination: gb("N10 3BG", "Muswell Hill"),
+    });
+    put("vs-0", {
+      type: "flight",
+      title: "VS157 LHR to BOS",
+      start: "2026-08-25T11:20:00+01:00",
+      end: "2026-08-25T13:50:00-04:00",
+      origin: { name: "Heathrow", code: "LHR", city: "London", country: "GB" },
+      destination: { name: "Logan", code: "BOS", city: "Boston", country: "US" },
+    });
+    put("vs-1", {
+      type: "flight",
+      title: "VS158 BOS to LHR",
+      start: "2026-09-04T19:00:00-04:00",
+      end: "2026-09-05T06:30:00+01:00",
+      origin: { name: "Logan", code: "BOS", city: "Boston", country: "US" },
+      destination: { name: "Heathrow", code: "LHR", city: "London", country: "GB" },
+    });
+    put("tower-0", { type: "activity", title: "Tower of London Admission", start: "2026-11-01T10:00:00+00:00", destination: gb("Tower of London", "London") });
+    await regroupTrips("u1", deps(store));
+    expect(summary(store).map((t) => [t.title, t.start, t.end, t.segments])).toEqual([
+      ["Holiday Camp East Finchley - Junior Group", "2026-08-10", "2026-08-14", ["camp-0", "camp-1", "camp-2", "camp-3", "camp-4"]],
+      ["Stockholm", "2026-08-15", "2026-08-15", ["car-0", "express-0"]],
+      ["5 Day Summer Holiday Course: Peter Pan", "2026-08-24", "2026-08-28", ["course-0"]],
+      ["Boston", "2026-08-25", "2026-09-05", ["vs-0", "vs-1"]],
+      ["Tower of London", "2026-11-01", "2026-11-01", ["tower-0"]],
+    ]);
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0 });
   });
 });

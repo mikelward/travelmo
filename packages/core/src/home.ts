@@ -231,17 +231,53 @@ export function isHomeTrip(
   return segments.length > 0 && segments.every((s) => isAtHome(s, periods, overrides));
 }
 
-// The trip a new booking joins by its dates, knowing where home is. With
-// home unknown, the nearest trip within a couple of days (findTripForRange).
-// A booking all at home joins only a day out on the same dates, so two
-// tickets on one day stay together but nothing at home chains into a trip
-// away; a booking away never joins a day out at home, and a journey, even
-// one leaving from home, is never at home. Before any of that, a transfer
+type Grouped = Located;
+
+// A booking that goes somewhere: a journey, or a transfer (a car to the
+// airport).
+const goes = (s: Grouped) => journeyTypes.has(s.type) || isTransfer(s);
+
+// An outing: a ticket, an event or a car hired and returned in one place;
+// nothing that travels or stays. A trip of nothing but outings is a day
+// out, or a course of days.
+const isOuting = (s: Grouped) => (s.type === "activity" || s.type === "other" || s.type === "car_rental") && !goes(s);
+const allOutings = (segments: readonly Grouped[]) => segments.length > 0 && segments.every(isOuting);
+
+// The towns some bookings take someone to, leaving out where they set off
+// from (the origin of the first that goes) and the home of the day.
+// With home known, an origin away from it counts too, as in awayPlace: a
+// return flight booked alone goes to Stockholm as much as an outbound.
+function awayTowns(segments: readonly Grouped[], periods: readonly HomePeriod[], overrides: readonly HomePeriod[]) {
+  const first = segments.filter(goes).sort((a, b) => compareInstants(a.start, b.start))[0];
+  const base = town(first?.origin);
+  return segments.flatMap((s) => {
+    const home = homeAt(periods, localDate(s.start), overrides);
+    const places = home && goes(s) ? [s.destination, s.origin] : [s.destination];
+    return places.flatMap((place) => {
+      const where = town(place);
+      if (!where) return [];
+      if (home) return sameTown(where, home) ? [] : [where];
+      return base && sameTown(where, base) ? [] : [where];
+    });
+  });
+}
+
+// The trip a new booking joins by its dates, knowing where home is if it
+// can. Travel (journeys, stays, a car to the airport) joins travel within a
+// couple of days (findTripForRange). Outings never chain by nearness of
+// dates alone: an outing at home joins only a day out at home on the same
+// dates, so two tickets on one day stay together; other outings join one
+// another on the same dates. An outing and travel, or outings away on
+// different days once home is known, join only when they share a town the
+// travel goes to, so a ticket in Stockholm joins the Stockholm trip while a
+// day camp the day before the airport run, or a course while the family
+// flies to Boston, stays apart, home known or not. A journey, even one
+// leaving from home, is never at home. Before any of that, a transfer
 // joins the trip of the flight or train it meets (connects), and a journey
 // the trip of a transfer that meets it, whichever came in first.
 export function findTripForBooking(
   trips: readonly Trip[],
-  segmentsOf: (tripId: string) => readonly Located[],
+  segmentsOf: (tripId: string) => readonly Grouped[],
   booking: readonly ExtractedSegment[],
   periods: readonly HomePeriod[],
   overrides: readonly HomePeriod[] = [],
@@ -259,12 +295,22 @@ export function findTripForBooking(
     }
   }
   if (met) return met.trip;
-  if (periods.length === 0 && overrides.length === 0) return findTripForRange(trips, range);
-  const atHome = isHomeTrip(booking, periods, overrides);
-  const homeTrip = (trip: Trip) => isHomeTrip(segmentsOf(trip.id), periods, overrides);
-  return atHome
-    ? findTripForRange(trips.filter(homeTrip), range, 0)
-    : findTripForRange(trips.filter((trip) => !homeTrip(trip)), range);
+  const homeKnown = periods.length > 0 || overrides.length > 0;
+  const atHome = (segments: readonly Grouped[]) => homeKnown && allOutings(segments) && isHomeTrip(segments, periods, overrides);
+  const near = (trip: Trip, gap: number) => !!findTripForRange([trip], range, gap);
+  if (atHome(booking)) return trips.find((trip) => atHome(segmentsOf(trip.id)) && near(trip, 0));
+  const ours = allOutings(booking);
+  const ourTowns = awayTowns(booking, periods, overrides);
+  return trips.find((trip) => {
+    const segments = segmentsOf(trip.id);
+    if (atHome(segments)) return false;
+    const theirs = allOutings(segments);
+    if (!ours && !theirs) return near(trip, 2);
+    if (ours && theirs && near(trip, 0)) return true;
+    if (ours && theirs && !homeKnown) return false;
+    const theirTowns = awayTowns(segments, periods, overrides);
+    return near(trip, 2) && ourTowns.some((a) => theirTowns.some((b) => sameTown(a, b)));
+  });
 }
 
 // Where a booking goes away from home, for naming its trip: the first

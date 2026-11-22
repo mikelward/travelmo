@@ -200,14 +200,127 @@ describe("findTripForBooking", () => {
     expect(findTripForBooking([awayTrip, clubTrip], of, [hotel], periods)?.id).toBe("liverpool");
   });
 
-  it("joins the nearest trip as before when home is unknown", () => {
-    expect(findTripForBooking([clubTrip], of, [out, back], [])?.id).toBe("club");
+  it("keeps a trip away out of a nearby day out even when home is unknown", () => {
+    expect(findTripForBooking([clubTrip], of, [out, back], [])).toBeUndefined();
+    expect(findTripForBooking([awayTrip], of, [out], [])?.id).toBe("liverpool");
   });
 
   it("calls only a trip of bookings all at home a day out", () => {
     expect(isHomeTrip([club26], periods)).toBe(true);
     expect(isHomeTrip([out, back], periods)).toBe(false);
     expect(isHomeTrip([], periods)).toBe(false);
+  });
+});
+
+describe("findTripForBooking with outings", () => {
+  const trip = (id: string, start: string, end: string): Trip => ({
+    id,
+    title: id,
+    start,
+    end,
+    ownerUid: "u1",
+    sharedWith: [],
+    createdAt: "2026-01-01T00:00:00Z",
+    updatedAt: "2026-01-01T00:00:00Z",
+  });
+  const outing = (title: string, start: string, city?: string, end?: string): ExtractedSegment => ({
+    type: "activity",
+    title,
+    start,
+    ...(end ? { end } : {}),
+    destination: { name: title, ...(city ? { city } : {}) },
+  });
+  const film = outing("Wild Horse Nine at Muswell Hill", "2026-11-08T12:00:00+00:00", "London");
+  const club = outing("Junior Adventures Group Club", "2026-11-09T12:02:00+00:00", "Bromley");
+  const camp = [10, 11, 12, 13, 14].map((d) =>
+    outing(`Holiday Camp East Finchley - Junior Group (Day ${d - 9})`, `2026-08-${d}T09:00:00+01:00`, "London", `2026-08-${d}T17:00:00+01:00`),
+  );
+  const car: ExtractedSegment = {
+    type: "other",
+    title: "Abetta car to Stansted Airport",
+    start: "2026-08-15T10:30:00+01:00",
+    origin: { name: "N10 3AR", city: "London", country: "GB" },
+    destination: { name: "London Stansted Airport", code: "STN", city: "London", country: "GB" },
+  };
+  const express: ExtractedSegment = {
+    type: "train",
+    title: "Arlanda Express",
+    start: "2026-08-15T13:28:00+02:00",
+    end: "2026-11-13T23:59:00+01:00",
+    origin: { name: "Stockholm Arlanda Airport", city: "Stockholm", country: "SE" },
+    destination: { name: "Stockholm Central", city: "Stockholm", country: "SE" },
+  };
+  const course = outing("5 Day Summer Holiday Course: Peter Pan", "2026-08-24T09:30:00+01:00", "Muswell Hill", "2026-08-28T15:30:00+01:00");
+  const boston = roundTrip("London", "Boston", "2026-08-25", "2026-09-04");
+  const periods = homeTimeline(boston);
+
+  it("never chains outings on different days into one trip, home known or not", () => {
+    const segments: Record<string, ExtractedSegment[]> = { film: [film] };
+    const of = (id: string) => segments[id] ?? [];
+    expect(findTripForBooking([trip("film", "2026-11-08", "2026-11-08")], of, [club], [])).toBeUndefined();
+    expect(findTripForBooking([trip("film", "2026-11-08", "2026-11-08")], of, [club], periods)).toBeUndefined();
+    const sameDay = outing("Lunch", "2026-11-08T14:00:00+00:00", "Bromley");
+    expect(findTripForBooking([trip("film", "2026-11-08", "2026-11-08")], of, [sameDay], [])?.id).toBe("film");
+  });
+
+  it("keeps travel out of a day camp the day before, home known or not", () => {
+    const segments: Record<string, ExtractedSegment[]> = { camp, stockholm: [car] };
+    const of = (id: string) => segments[id] ?? [];
+    const campTrip = trip("camp", "2026-08-10", "2026-08-14");
+    for (const known of [[], periods]) {
+      expect(findTripForBooking([campTrip], of, [car], known)).toBeUndefined();
+      expect(findTripForBooking([trip("stockholm", "2026-08-15", "2026-08-15")], of, camp, known)).toBeUndefined();
+    }
+  });
+
+  it("puts the car to the airport and the train at the other end in one trip", () => {
+    const segments: Record<string, ExtractedSegment[]> = { stockholm: [car] };
+    const of = (id: string) => segments[id] ?? [];
+    expect(findTripForBooking([trip("stockholm", "2026-08-15", "2026-08-15")], of, [express], periods)?.id).toBe("stockholm");
+  });
+
+  it("keeps a course at home out of a trip away on the same dates, even in a town not named as home", () => {
+    const segments: Record<string, ExtractedSegment[]> = { course: [course], boston };
+    const of = (id: string) => segments[id] ?? [];
+    expect(findTripForBooking([trip("course", "2026-08-24", "2026-08-28")], of, boston, periods)).toBeUndefined();
+    expect(findTripForBooking([trip("boston", "2026-08-25", "2026-09-05")], of, [course], periods)).toBeUndefined();
+  });
+
+  it("puts an outing in the town a return leg booked alone leaves from in its trip, either way round", () => {
+    const museum = outing("Vasa Museum", "2026-08-21T11:00:00+02:00", "Stockholm");
+    const home: ExtractedSegment = {
+      type: "flight",
+      title: "SK 1529 ARN to LHR",
+      start: "2026-08-22T08:00:00+02:00",
+      end: "2026-08-22T09:50:00+01:00",
+      origin: { name: "Arlanda", code: "ARN", city: "Stockholm", country: "SE" },
+      destination: { name: "Heathrow", code: "LHR", city: "London", country: "GB" },
+    };
+    const segments: Record<string, ExtractedSegment[]> = { back: [home], museum: [museum] };
+    const of = (id: string) => segments[id] ?? [];
+    expect(findTripForBooking([trip("back", "2026-08-22", "2026-08-22")], of, [museum], periods)?.id).toBe("back");
+    expect(findTripForBooking([trip("museum", "2026-08-21", "2026-08-21")], of, [home], periods)?.id).toBe("museum");
+    // Home in Stockholm, the same flight is a trip to London.
+    const stockholm = [{ city: "Stockholm", country: "SE" }];
+    expect(findTripForBooking([trip("back", "2026-08-22", "2026-08-22")], of, [museum], stockholm)).toBeUndefined();
+  });
+
+  it("puts an outing in the town a trip goes to in that trip", () => {
+    const museum = outing("Vasa Museum", "2026-08-16T11:00:00+02:00", "Stockholm");
+    const segments: Record<string, ExtractedSegment[]> = { stockholm: [car, express], museum: [museum] };
+    const of = (id: string) => segments[id] ?? [];
+    for (const known of [[], periods]) {
+      expect(findTripForBooking([trip("stockholm", "2026-08-15", "2026-08-15")], of, [museum], known)?.id).toBe("stockholm");
+      expect(findTripForBooking([trip("museum", "2026-08-16", "2026-08-16")], of, [car, express], known)?.id).toBe("museum");
+    }
+  });
+
+  it("keeps two outings away in one town together once home is known", () => {
+    const show = outing("Hamilton", "2026-10-10T19:30:00+01:00", "Liverpool");
+    const match = outing("Everton v Spurs", "2026-10-11T15:00:00+01:00", "Liverpool");
+    const segments: Record<string, ExtractedSegment[]> = { show: [show] };
+    const of = (id: string) => segments[id] ?? [];
+    expect(findTripForBooking([trip("show", "2026-10-10", "2026-10-10")], of, [match], periods)?.id).toBe("show");
   });
 });
 
