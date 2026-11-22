@@ -242,6 +242,12 @@
       its own 00:00 activity, duplicating the "Stage Stars! Holiday Club -
       Day 1" booking it paid for: a receipt without a time should not
       become a booking, or should match the order it pays for.
+- [ ] Evaluate pre-filtering Gmail on sender and subject alone, fetching
+      a message's body only once it passes (`format: "metadata"` first,
+      then `"full"`), so emails that aren't bookings are never downloaded
+      in full. Check what the filter and the similarity step read beyond
+      those headers, what an extra request per passing message costs in
+      quota and time, and update `/privacy` to match if it changes.
 
 ## Decisions needing review
 
