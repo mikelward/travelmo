@@ -515,7 +515,8 @@ false match (a second room after all) and anything the extraction missed
 stay one click away; when all of an email's bookings are, the email is still
 recorded as imported, with none. A booking part of which matched joins the
 trip of that match, and otherwise its whole range, new and old legs
-together, picks the trip.
+together, picks the trip: the one within two days of it, except that a
+day out at home and a trip away never join each other ("Home" below).
 
 ### Home
 
@@ -533,11 +534,21 @@ at its start and the last at its end. Corrections the person makes are
 periods too and win over the worked-out ones for the dates they cover
 (`homeAt`).
 
-Grouping is to use it (planned, `TODO.md`): a booking that is not a journey
-and happens in the home of its day (`isAtHome`), a day out, never joins a
-trip away by nearness of dates, and journeys from home and back bound the
-trips between, so a holiday club in London either side of a weekend in
-Liverpool stays out of the Liverpool trip.
+Grouping uses it (`findTripForBooking`, also in `home.ts`). Each import
+works out home from the bookings of the trips within a year either side of
+the new one, plus the new one itself (a return ticket is a round trip on
+its own), and corrections win as above. A booking that is not a journey and
+happens in the home of its day (`isAtHome`), a day out, never joins a trip
+by nearness of dates: only a trip of nothing but bookings at home on the
+same dates, so two tickets on one evening stay together. A booking away
+never joins such a trip, and a journey, even one leaving from home, is
+never at home. So a holiday club in London either side of a weekend in
+Liverpool comes in as three trips, each club day named as a day out and
+the weekend "Liverpool": a new trip is named after its first destination
+that is not home, or failing that its first origin that is not (a return
+leg booked alone). While home is unknown, nothing changes: a booking joins
+the trip within two days of it. Trips filed before home was known are not
+regrouped (`TODO.md`).
 
 ### TripIt export
 

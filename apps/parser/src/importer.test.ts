@@ -1,9 +1,10 @@
-import { parseIcs, parseTripItExport, type ExtractedBooking, type ParsedMessage, type Segment, type Trip } from "@travelmo/core";
+import { parseIcs, parseTripItExport, type ExtractedBooking, type ExtractedSegment, type ParsedMessage, type Segment, type Trip } from "@travelmo/core";
 import type { EmailMessage } from "./gmail";
 import {
   claimLeaseMs,
   changeClaimable,
   claimable,
+  fileBooking,
   reclaimable,
   retryable,
   importCalendar,
@@ -1169,5 +1170,65 @@ describe("fileBooking geocoding", () => {
       expect(typeof p.lon).toBe("number");
     }
     expect(asked).toEqual([]);
+  });
+});
+
+// The May 2026 bookings that came in as one "London" trip: a holiday club at
+// home either side of a weekend in Liverpool, booked as a return train.
+describe("fileBooking with home known", () => {
+  const academy = { name: "Fixation Academy of Performing Arts", city: "London", country: "GB" };
+  const euston = { name: "London Euston", code: "EUS", city: "London", country: "GB" };
+  const limeStreet = { name: "Liverpool Lime Street", code: "LIV", city: "Liverpool", country: "GB" };
+  const club22: ExtractedSegment = { type: "activity", title: "Eva Ward's Stage Stars! Holiday Club", start: "2026-05-22T00:00:00+01:00", destination: academy };
+  const club26: ExtractedSegment = {
+    type: "activity",
+    title: "Stage Stars! Holiday Club - Day 1",
+    start: "2026-05-26T09:00:00+01:00",
+    end: "2026-05-26T16:00:00+01:00",
+    destination: academy,
+  };
+  const trains: ExtractedSegment[] = [
+    { type: "train", title: "Avanti West Coast London Euston to Liverpool Lime Street", start: "2026-05-23T12:07:00+01:00", end: "2026-05-23T14:23:00+01:00", origin: euston, destination: limeStreet },
+    { type: "train", title: "Avanti West Coast Liverpool Lime Street to London Euston", start: "2026-05-25T11:43:00+01:00", end: "2026-05-25T14:03:00+01:00", origin: limeStreet, destination: euston },
+  ];
+  const file = (store: Memory, sourceId: string, segments: ExtractedSegment[]) =>
+    fileBooking("u1", { sourceId, source: "gmail", segments }, deps(store, async () => ({ isBooking: false, segments: [] })));
+  const titles = (store: Memory) =>
+    [...store.trips.values()].map((t) => `${t.title} ${t.start}..${t.end}`).sort();
+
+  it.each([
+    ["newest first", [["c26", [club26]], ["tr", trains], ["c22", [club22]]]],
+    ["oldest first", [["c22", [club22]], ["tr", trains], ["c26", [club26]]]],
+  ] as const)("keeps days out at home apart from the trip away, read %s", async (_, order) => {
+    const store = memoryStore();
+    for (const [id, segments] of order) await file(store, id, [...segments]);
+    expect(titles(store)).toEqual([
+      "Eva Ward's Stage Stars! Holiday Club 2026-05-22..2026-05-22",
+      "Liverpool 2026-05-23..2026-05-25",
+      "Stage Stars! Holiday Club - Day 1 2026-05-26..2026-05-26",
+    ]);
+  });
+
+  it("names a trip away after where it goes, even from its return leg alone", async () => {
+    const store = memoryStore();
+    await file(store, "tr", trains);
+    await file(store, "back", [{ ...trains[1]!, start: "2026-07-05T11:43:00+01:00", end: "2026-07-05T14:03:00+01:00" }]);
+    expect(titles(store)).toContain("Liverpool 2026-07-05..2026-07-05");
+  });
+
+  it("keeps a stay in the destination with its trains", async () => {
+    const store = memoryStore();
+    await file(store, "tr", trains);
+    await file(store, "hotel", [
+      { type: "lodging", title: "Hotel", start: "2026-05-23T15:00:00+01:00", end: "2026-05-25T11:00:00+01:00", destination: { name: "Hotel", city: "Liverpool", country: "GB" } },
+    ]);
+    expect(titles(store)).toEqual(["Liverpool 2026-05-23..2026-05-25"]);
+  });
+
+  it("joins nearby bookings as before while home is unknown", async () => {
+    const store = memoryStore();
+    await file(store, "c22", [club22]);
+    await file(store, "out", [trains[0]!]);
+    expect(store.trips.size).toBe(1);
   });
 });

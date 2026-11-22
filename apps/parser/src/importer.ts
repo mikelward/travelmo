@@ -1,7 +1,10 @@
 import {
   enrichSegments,
   fillAirports,
-  findTripForRange,
+  awayPlace,
+  findTripForBooking,
+  homeTimeline,
+  type HomePeriod,
   icsEventText,
   isTravelCalendar,
   type IcsCalendar,
@@ -132,6 +135,9 @@ export type ImportDeps = {
   // Where a booking the geocoder put off waits for the daily sweep
   // (geocodeSweep.ts); without one, a spent budget is the end of it.
   geocodeRetries?: RetryStore;
+  // Corrections the user made to where home was (none are stored yet):
+  // they win over the home worked out from journeys for their dates.
+  homeOverrides?: (uid: string) => Promise<readonly HomePeriod[]>;
   now: () => string;
   log: (event: string, fields: Record<string, unknown>) => void;
 };
@@ -413,14 +419,22 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
   const range = segmentDateRange(booking.segments);
   if (!range) throw new Error(`booking ${booking.sourceId} has no segments`);
   const timestamp = deps.now();
+  const overrides = (await deps.homeOverrides?.(uid)) ?? [];
   const result = await store.withUserLock(uid, async (tx) => {
     const trips = await tx.listTrips();
     const live = trips.filter((trip) => !trip.deleting);
+    // The bookings of the year either side, for where home was around this
+    // one (homeTimeline): enough round trips to tell, without reading every
+    // trip the user ever took on every import.
+    const nearby = overlappingTrips(live, { start: shiftDate(range.start, -homeWindowDays), end: shiftDate(range.end, homeWindowDays) });
+    const segmentsByTrip = new Map(await Promise.all(nearby.map(async (trip) => [trip.id, await tx.listSegments(trip.id)] as const)));
+    const segmentsOf = (tripId: string) => segmentsByTrip.get(tripId) ?? [];
+    const periods = homeTimeline([...[...segmentsByTrip.values()].flat(), ...booking.segments]);
     // A source that is already one deduplicated list (a TripIt export) is
     // checked only against other sources: two alike reservations in it are
     // two rooms, not one booking seen twice.
-    const existing = (await Promise.all(overlappingTrips(live, range).map((trip) => tx.listSegments(trip.id))))
-      .flat()
+    const existing = overlappingTrips(live, range)
+      .flatMap((trip) => segmentsOf(trip.id))
       .filter((other) => !booking.distinctWithinSource || other.source !== booking.source);
     const matchedTrips = new Set<string>();
     const matched: string[] = [];
@@ -484,8 +498,10 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
       // A booking part of which is already filed (an outbound flight, now
       // sent again with its return) joins that trip; otherwise its whole
       // range, not only what is new, decides.
+      // With home known, a day out at home and a trip away never join by
+      // nearness of dates (findTripForBooking).
       const assignable = live.filter((trip) => !trip.id.startsWith(holdingTripPrefix));
-      target = assignable.find((trip) => matchedTrips.has(trip.id)) ?? findTripForRange(assignable, range);
+      target = assignable.find((trip) => matchedTrips.has(trip.id)) ?? findTripForBooking(assignable, segmentsOf, booking.segments, periods, overrides);
     }
     let tripId: string;
     if (target) {
@@ -501,7 +517,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
       tripId = hint && !trips.some((trip) => trip.id === hint.id) ? hint.id : store.newId();
       tx.createTrip({
         id: tripId,
-        title: hint?.title ?? tripTitle(booking.segments),
+        title: hint?.title ?? tripTitle(booking.segments, periods, overrides),
         start: hint ? min(hint.start, freshRange.start) : freshRange.start,
         end: hint ? max(hint.end, freshRange.end) : freshRange.end,
         ownerUid: uid,
@@ -739,7 +755,8 @@ export async function importMessages(
   return counts;
 }
 
-// A trip is named after where it goes: the destination's city, which suits
+// A trip is named after where it goes: the city of its first destination
+// away from home (or of any destination, while home is unknown), which suits
 // flights and stays. A day out, nothing but tickets with no travel or stay
 // and all on one day, is named after what it is: the place when the ticket
 // is for the place itself, its title starting with the place's name
@@ -747,7 +764,11 @@ export async function importMessages(
 // stands in), otherwise the event ("Toy Story 5 at Everyman Muswell Hill",
 // The Graham Norton Show, not London or Television Centre). Dates are
 // compared as written, in local time.
-export function tripTitle(segments: readonly ExtractedSegment[]): string {
+export function tripTitle(
+  segments: readonly ExtractedSegment[],
+  periods: readonly HomePeriod[] = [],
+  overrides: readonly HomePeriod[] = [],
+): string {
   const days = new Set(segments.flatMap((s) => [s.start, s.end].filter((t) => t !== undefined).map((t) => t.slice(0, 10))));
   const first = segments[0];
   if (first && days.size === 1 && segments.every((s) => s.type === "activity")) {
@@ -755,8 +776,20 @@ export function tripTitle(segments: readonly ExtractedSegment[]): string {
     if (venue && first.title.toLowerCase().startsWith(venue.toLowerCase())) return venue;
     if (first.title) return first.title;
   }
-  const place = segments.find((s) => s.destination)?.destination;
+  // Known home is not where a trip goes: a train out of London to Liverpool
+  // makes a Liverpool trip, even booked as its return leg alone.
+  const place = awayPlace(segments, periods, overrides) ?? segments.find((s) => s.destination)?.destination;
   return place?.city ?? place?.name ?? segments[0]?.title ?? "Trip";
+}
+
+// How far either side of a booking the importer reads trips to work out
+// where home was, in days.
+const homeWindowDays = 365;
+
+function shiftDate(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
 const min = (a: string, b: string) => (a < b ? a : b);

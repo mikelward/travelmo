@@ -228,7 +228,7 @@
 - [x] Home, step 1: work out home over time from round trips, with moves
       and corrections (`homeTimeline`, `homeAt`, `isAtHome` in
       `packages/core` and the Android `:core`; SPEC "Home").
-- [ ] Home, step 2: group imports by it, so a day out at home never joins
+- [x] Home, step 2: group imports by it, so a day out at home never joins
       a trip away and journeys from home and back bound a trip (a holiday
       club in London either side of a Liverpool weekend came in as one
       "London" trip).
