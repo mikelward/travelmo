@@ -1,0 +1,9 @@
+# Builds the parser's image on Cloud Build from the repository root, since
+# the Dockerfile needs packages/core beside apps/parser:
+#
+#   gcloud builds submit . --config=apps/parser/cloudbuild.yaml \
+#     --substitutions=_IMAGE=<region>-docker.pkg.dev/<project>/travelmo/parser
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: [build, -f, apps/parser/Dockerfile, -t, "${_IMAGE}", .]
+images: ["${_IMAGE}"]
