@@ -117,6 +117,12 @@ export function firestoreStore(db: Firestore): TripStore {
           touchTrip(tripId, updatedAt) {
             t.update(db.doc(paths.trip(tripId)), { updatedAt });
           },
+          updateTrip(tripId, fields) {
+            t.update(db.doc(paths.trip(tripId)), fields);
+          },
+          deleteTrip(tripId) {
+            t.delete(db.doc(paths.trip(tripId)));
+          },
           addSource(tripId, segmentId, source) {
             t.update(db.doc(paths.segment(tripId, segmentId)), { sources: FieldValue.arrayUnion(source) });
             // The trip's revision moves with any change to its bookings, so a

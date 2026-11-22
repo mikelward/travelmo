@@ -41,6 +41,12 @@ export function memoryStore(): Memory {
       const trip = trips.get(id);
       if (trip) trips.set(id, { ...trip, updatedAt });
     },
+    updateTrip: (id, fields) => {
+      const trip = trips.get(id);
+      if (!trip) throw new Error(`trip ${id} missing`);
+      trips.set(id, { ...trip, ...fields });
+    },
+    deleteTrip: (id) => void trips.delete(id),
     addSource: (_tripId, id, source) => {
       const s = segments.get(id);
       if (!s) throw new Error(`segment ${id} missing`);

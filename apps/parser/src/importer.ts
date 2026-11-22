@@ -48,6 +48,10 @@ export type TripTx = {
   putParsed(record: ParsedMessage): void;
   // Moves the trip's revision, as any change to its bookings must.
   touchTrip(tripId: string, updatedAt: string): void;
+  // A new title and bounds for a trip regrouping reshaped (regroup.ts).
+  updateTrip(tripId: string, fields: Pick<Trip, "title" | "start" | "end" | "updatedAt">): void;
+  // Removes a trip regrouping emptied of bookings.
+  deleteTrip(tripId: string): void;
 };
 
 // A claim older than this with no outcome belongs to a worker that died;

@@ -11,6 +11,7 @@ import { exportLinks, useCalendarExport } from "@/lib/calendarExport";
 import { describeBackfill, pausedReason, readWholeMailbox } from "@/lib/backfill";
 import { useAuth } from "@/lib/auth";
 import { firestore, forgetFirestoreCache } from "@/lib/firebase";
+import { describeRegroup } from "@/lib/regroup";
 import { useInstall } from "@/lib/install";
 import { useSaveForOffline } from "@/lib/offline";
 import { subscribePush, unsubscribePush, usePushState } from "@/lib/push";
@@ -162,6 +163,39 @@ type FilePreview = { text: string; canImport: boolean; notImported?: SkipGroup[]
 
 // Picks a file, shows what reading it in the browser found, and sends it
 // only when the user presses Import.
+// Files every booking again with the grouping imports use now, for trips
+// imported before it knew where home was.
+function RegroupSection({ user }: { user: User }) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string>();
+  const [error, setError] = useState<string>();
+  const regroup = async () => {
+    setBusy(true);
+    setResult(undefined);
+    setError(undefined);
+    try {
+      setResult(describeRegroup(await api.regroupTrips(user)));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="mt-10">
+      <h2 className="text-lg font-medium">Trips</h2>
+      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+        Rebuilds your trips from your bookings, keeping days out at home separate from trips away.
+      </p>
+      <button type="button" disabled={busy} className={`${buttonClass} mt-3`} onClick={() => void regroup()}>
+        {busy ? "Regrouping…" : "Regroup trips"}
+      </button>
+      {result && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{result}</p>}
+      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+    </section>
+  );
+}
+
 function FileImportSection(props: { title: string; blurb: string; accept: string; label: string; preview: (text: string) => FilePreview }) {
   const [preview, setPreview] = useState<FilePreview>();
   const [busy, setBusy] = useState(false);
@@ -997,6 +1031,7 @@ export default function SettingsPage() {
           <Suspense fallback={<p className="text-zinc-500">Loading…</p>}>
             <GmailSection user={user} />
           </Suspense>
+          <RegroupSection user={user} />
           <TripItSection user={user} />
           <CalendarSection user={user} />
           <FeedsSection user={user} />
