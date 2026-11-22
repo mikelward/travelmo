@@ -378,7 +378,9 @@ the end-to-end tests run against `next build && next start`.
 `/privacy` is the privacy policy the Play listing and Google's OAuth
 consent screen link to, readable signed out and linked from every page's
 footer; it changes in the same pull request as any change to what is
-collected or who receives it.
+collected or who receives it. `docs/PRIVACY.md` holds the same text for
+GitHub Pages (published from `docs/`) and readers of the repository, as in
+the sibling repos; an end-to-end test fails when the two differ.
 
 Installing: the manifest (`app/manifest.ts`) gives a standalone window, the
 SVG icon and PNGs at 192 and 512 px plus a maskable 512 px one for Android
