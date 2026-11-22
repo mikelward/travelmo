@@ -65,7 +65,7 @@ fun ProfileScreen(viewModel: TripsViewModel, bottomBar: @Composable () -> Unit) 
             val own = profile
             if (own == null || !own.hasDetails) {
                 item(key = "empty") {
-                    Text(stringResource(R.string.profile_empty), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.profile_empty), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
                 profileSections(own, prefix = "own")
@@ -86,10 +86,10 @@ fun ProfileScreen(viewModel: TripsViewModel, bottomBar: @Composable () -> Unit) 
                 item(key = "shared-with-you") { SectionTitle(stringResource(R.string.shared_with_you)) }
                 for (p in others) {
                     item(key = "from-${p.ownerUid}") {
-                        Text(stringResource(R.string.from_sender, p.ownerEmail ?: stringResource(R.string.someone_who_trusts_you)), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 8.dp))
+                        Text(stringResource(R.string.from_sender, p.ownerEmail ?: stringResource(R.string.someone_who_trusts_you)), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 8.dp))
                     }
                     if (p.hasDetails) profileSections(p, prefix = p.ownerUid) else item(key = "nothing-${p.ownerUid}") {
-                        Text(stringResource(R.string.profile_nothing_yet), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.profile_nothing_yet), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -130,13 +130,13 @@ private fun Sharing(trusted: List<String>, busy: Boolean, error: String?, onSave
     var formError by rememberSaveable { mutableStateOf<String?>(null) }
     val notAnAddress = stringResource(R.string.enter_email)
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text(stringResource(R.string.share_profile_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(R.string.share_profile_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (trusted.isEmpty()) {
-            Text(stringResource(R.string.only_you), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+            Text(stringResource(R.string.only_you), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
         }
         for (email in trusted) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text(email, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                Text(email, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                 IconButton(onClick = { onSave(trusted - email) }, enabled = !busy) {
                     Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.stop_sharing_with, email))
                 }
@@ -163,13 +163,13 @@ private fun Sharing(trusted: List<String>, busy: Boolean, error: String?, onSave
                 enabled = !busy && address.isNotBlank() && trusted.size < MAX_TRUSTED,
             ) { Text(stringResource(R.string.share)) }
         }
-        (formError ?: error)?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp)) }
+        (formError ?: error)?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp)) }
     }
 }
 
 @Composable
 private fun SectionTitle(text: String) {
-    Text(text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
+    Text(text, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
 }
 
 @Composable
@@ -183,12 +183,12 @@ private fun FoldingEntry(entry: ProfileEntry) {
             .clickable { open = !open }
             .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
-        Text((if (open) "▾ " else "▸ ") + entry.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+        Text((if (open) "▾ " else "▸ ") + entry.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
         if (open) {
             for (field in entry.fields) {
                 Row(modifier = Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text(field.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                    Text(field.value, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1.4f))
+                    Text(field.label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                    Text(field.value, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1.4f))
                 }
             }
         }
@@ -201,21 +201,21 @@ private fun LoyaltyTable(entries: List<ProfileEntry>) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.padding(vertical = 4.dp)) {
-            Text(stringResource(R.string.col_program), style = MaterialTheme.typography.labelMedium, color = muted, modifier = Modifier.weight(1.4f))
-            Text(stringResource(R.string.col_account), style = MaterialTheme.typography.labelMedium, color = muted, modifier = Modifier.weight(1f))
-            Text(stringResource(R.string.col_balance), style = MaterialTheme.typography.labelMedium, color = muted, textAlign = TextAlign.End, modifier = Modifier.weight(0.8f))
-            Text(stringResource(R.string.col_status), style = MaterialTheme.typography.labelMedium, color = muted, modifier = Modifier.weight(0.9f).padding(start = 8.dp))
+            Text(stringResource(R.string.col_program), style = MaterialTheme.typography.labelLarge, color = muted, modifier = Modifier.weight(1.4f))
+            Text(stringResource(R.string.col_account), style = MaterialTheme.typography.labelLarge, color = muted, modifier = Modifier.weight(1f))
+            Text(stringResource(R.string.col_balance), style = MaterialTheme.typography.labelLarge, color = muted, textAlign = TextAlign.End, modifier = Modifier.weight(0.8f))
+            Text(stringResource(R.string.col_status), style = MaterialTheme.typography.labelLarge, color = muted, modifier = Modifier.weight(0.9f).padding(start = 8.dp))
         }
         for (entry in entries) {
             val s = loyaltySummary(entry)
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Row(modifier = Modifier.padding(vertical = 6.dp)) {
-                Text(s.title, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1.4f))
-                Text(s.account ?: "", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                Text(s.balance ?: "", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.End, modifier = Modifier.weight(0.8f))
+                Text(s.title, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1.4f))
+                Text(s.account ?: "", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                Text(s.balance ?: "", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.End, modifier = Modifier.weight(0.8f))
                 Text(
                     if (s.status != null && s.nextStatus != null) "${s.status} (next: ${s.nextStatus})" else s.status ?: "",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(0.9f).padding(start = 8.dp),
                 )
             }
