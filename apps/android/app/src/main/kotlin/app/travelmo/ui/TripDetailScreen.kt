@@ -1,5 +1,6 @@
 package app.travelmo.ui
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -8,13 +9,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
@@ -51,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -61,6 +62,7 @@ import app.travelmo.R
 import app.travelmo.core.PersonWarning
 import app.travelmo.core.ProfileEntry
 import app.travelmo.core.Segment
+import app.travelmo.core.SegmentType
 import app.travelmo.core.Trip
 import app.travelmo.core.fittedRange
 import app.travelmo.core.formatDate
@@ -443,11 +445,11 @@ fun SegmentRow(segment: Segment, actions: BookingActions? = null, programs: List
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     var menu by remember { mutableStateOf(false) }
     Row(modifier = Modifier.padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text(
-            segment.type.label.uppercase(),
-            style = MaterialTheme.typography.labelSmall,
-            color = muted,
-            modifier = Modifier.width(64.dp).padding(top = 4.dp),
+        Icon(
+            painterResource(segmentIcon(segment.type)),
+            contentDescription = segment.type.label,
+            tint = muted,
+            modifier = Modifier.padding(top = 2.dp).size(24.dp),
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(segment.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
@@ -500,4 +502,17 @@ private fun Verdict(segment: Segment) {
         }
         if (segment.favorite) Text("♥", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
     }
+}
+
+/** The icon for a booking's type, from scripts/segment-icons.mjs. */
+@DrawableRes
+fun segmentIcon(type: SegmentType): Int = when (type) {
+    SegmentType.FLIGHT -> R.drawable.ic_segment_flight
+    SegmentType.TRAIN -> R.drawable.ic_segment_train
+    SegmentType.BUS -> R.drawable.ic_segment_bus
+    SegmentType.FERRY -> R.drawable.ic_segment_ferry
+    SegmentType.LODGING -> R.drawable.ic_segment_lodging
+    SegmentType.CAR_RENTAL -> R.drawable.ic_segment_car_rental
+    SegmentType.ACTIVITY -> R.drawable.ic_segment_activity
+    SegmentType.OTHER -> R.drawable.ic_segment_other
 }

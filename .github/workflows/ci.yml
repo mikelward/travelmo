@@ -83,7 +83,7 @@ jobs:
       # a pull request checks it against Play's limits here instead.
       - name: Icon sources match their generator
         working-directory: .
-        run: node scripts/icon-sources.mjs && git diff --exit-code
+        run: node scripts/icon-sources.mjs && node scripts/segment-icons.mjs && git diff --exit-code
       - name: Test the Play listing script
         working-directory: .
         run: node --test scripts/publish-play-listing.test.mjs
