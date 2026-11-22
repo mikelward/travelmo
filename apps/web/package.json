@@ -7,6 +7,7 @@
     "build": "node sw.build.mjs && next build",
     "start": "next start",
     "icons": "node scripts/icons.mjs",
+    "play-graphics": "node scripts/play-graphics.mjs",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "firebase emulators:exec --only firestore --project demo-travelmo --config ../../firebase.json 'vitest run'",
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^6.0.0",
+    "@fontsource/fira-sans": "^5.3.0",
     "@playwright/test": "1.63.0",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^22",

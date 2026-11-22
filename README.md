@@ -150,7 +150,7 @@ branches to `main`):
 | `RELEASE_KEYSTORE_BASE64` | The Play upload keystore, base64: `keytool -genkeypair -keystore upload.keystore -alias upload -keyalg RSA -keysize 2048 -validity 10000`, then `base64 -w0 upload.keystore`. Play App Signing re-signs the bundle with its own key, so this one only authenticates the upload. |
 | `RELEASE_KEYSTORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD` | Its password, the key's alias and the key's password. |
 | `GOOGLE_SERVICES_JSON` | The Firebase project's `google-services.json` for `app.travelmo`, so the release signs in. |
-| `PLAY_SERVICE_ACCOUNT_JSON` | Optional. A Play Console service account's key with "Release to testing tracks" on the app and nothing more; until it is set, upload the prerelease's bundle through Play Console by hand. Add it only after the Play app exists with its declarations filed. |
+| `PLAY_SERVICE_ACCOUNT_JSON` | Optional. A Play Console service account's key with "Release to testing tracks" and "Manage store presence" (for the listing) on the app and nothing more; until it is set, upload the prerelease's bundle through Play Console by hand. Add it only after the Play app exists with its declarations filed. |
 
 Without the keystore and the Firebase config the job warns and stops rather
 than failing. A push whose commits are all `docs:`, `test:`, `build:`,
@@ -159,6 +159,21 @@ the bundle as the artifact and publishes nothing, as there is nothing to
 announce. Locally, `RELEASE_KEYSTORE_FILE=… RELEASE_KEYSTORE_PASSWORD=…
 RELEASE_KEY_ALIAS=… RELEASE_KEY_PASSWORD=… ./gradlew :app:bundleRelease`
 builds the same signed bundle.
+
+The Play store listing lives in `apps/android/play`: `icon-512.png`, and
+per language under `listings/<language>/` the title, short and full
+descriptions (`title.txt`, `short-description.txt`,
+`full-description.txt`), `feature-graphic.png` (1024 × 500) and
+`phone-screenshots/` (2 to 8, sorted by name).
+`pnpm --filter @travelmo/web play-graphics` renders the feature graphic
+and frames the screenshots from `apps/android/app/snapshots`, so rerun it
+after re-recording those. CI checks the listing against Play's limits on
+every pull request (`node scripts/publish-play-listing.mjs --check`), and
+once `PLAY_SERVICE_ACCOUNT_JSON` is set the `Publish` job compares it with
+Play's copy on every push to `main` and sends what differs in one edit. Play cannot take
+a listing before the app exists in Play Console; the content rating,
+target audience, data safety, app access and ads declarations stay in
+Play Console.
 
 #### Dependency updates
 

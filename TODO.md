@@ -172,6 +172,13 @@
       service account exists).
 - [x] App icon: a white paper plane with a dotted trail on orange, on the
       web, the Android launcher and notification, and a 512 px Play icon.
+- [x] Play store listing in the repo (`apps/android/play`): texts, feature
+      graphic and six screenshots framed from the snapshots, checked on
+      every pull request and published by the `Publish` job when it changes.
+- [ ] Privacy policy page on the web app, for the Play listing and Google's
+      OAuth verification.
+- [ ] Account deletion in the app and on the web, which Play requires of
+      apps that create accounts.
 - [ ] Android app, maintainer steps: register the Android app in the Firebase
       project (package `app.travelmo` and `app.travelmo.debug`, the signing
       SHA-1, Google sign-in enabled) and keep `google-services.json` out of
