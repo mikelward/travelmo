@@ -1023,7 +1023,9 @@ list's app bar, the sign-in screen, the web's header and sign-in card) is Fira
 Sans Medium, bundled under the SIL Open Font License; all other text keeps the
 system font on Android and Geist on the web. On the web the app icon
 (`components/Logo.tsx`, inline, in step with `app/icon.svg`) stands beside it in
-the header and above it on the sign-in card. It reads the same Firestore
+the header and above it on the sign-in card. The header links Trips (the
+trip list), Calendar, Reports, Profile and Settings, in the Android bar's
+order; Sign out is at the foot of Settings. It reads the same Firestore
 documents under the same rules, signed in as the same Google account through
 Credential Manager and Firebase Auth, so a trip looks the same on both and
 Firestore's own cache answers offline. `:core` re-implements, in Kotlin, what

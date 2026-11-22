@@ -20,6 +20,7 @@ export async function signIn(page: Page, email: string): Promise<string> {
 }
 
 export async function signOut(page: Page): Promise<void> {
+  await page.getByRole("link", { name: "Settings" }).click();
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
 }

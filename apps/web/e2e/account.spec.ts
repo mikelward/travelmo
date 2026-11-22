@@ -43,3 +43,20 @@ test("a failed deletion says so and keeps the user signed in", async ({ page }) 
   await expect(page.getByText(/Couldn't delete your account: .*500.* Try again\./)).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 });
+
+test("the header leads with Trips and signing out is at the foot of Settings", async ({ page }) => {
+  await signIn(page, owner);
+  const links = page.getByRole("banner").getByRole("link");
+  await expect(links.nth(1)).toHaveText("Trips");
+  await expect(page.getByRole("banner").getByRole("button", { name: "Sign out" })).toHaveCount(0);
+
+  await page.getByRole("link", { name: "Settings" }).click();
+  const signOut = page.getByRole("button", { name: "Sign out" });
+  await expect(signOut).toBeVisible();
+  // Below everything else on the page, Delete account included.
+  const signOutTop = (await signOut.boundingBox())!.y;
+  const deleteTop = (await page.getByRole("button", { name: "Delete account" }).boundingBox())!.y;
+  expect(signOutTop).toBeGreaterThan(deleteTop);
+  await signOut.click();
+  await expect(page.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
+});
