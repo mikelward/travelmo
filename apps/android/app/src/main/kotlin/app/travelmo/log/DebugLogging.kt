@@ -10,6 +10,9 @@ import com.mikelward.androidlog.android.LogcatSink
 import com.mikelward.androidlog.android.ProcessExits
 import com.mikelward.androidlog.android.ShareOutcome
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
 
@@ -17,7 +20,9 @@ import java.util.concurrent.Executors
  * Where [TravelmoLog] goes and how it reaches the user: logcat and the
  * library's persisted file on the device, recording on unless Settings
  * turned it off, and a bug report shared from Settings that carries this
- * run and the earlier ones the file kept.
+ * run and the earlier ones the file kept. After a crash in an earlier run,
+ * [unacknowledgedCrash] raises the crash banner until a report lands or the
+ * user dismisses it.
  */
 object DebugLogging {
     private const val PREFS = "debug_log"
@@ -25,6 +30,16 @@ object DebugLogging {
 
     @Volatile
     private var sink: DebugFileSink? = null
+
+    private val crashState = MutableStateFlow(false)
+
+    /**
+     * Whether an earlier run ended in a crash the user has neither shared nor
+     * dismissed: the crash banner's state. The library derives it on its own
+     * worker and reports it through a listener; this mirrors it as a flow so
+     * every banner reads one answer.
+     */
+    val unacknowledgedCrash: StateFlow<Boolean> = crashState.asStateFlow()
 
     /** Call once from `Application.onCreate`; the setting is applied before any sink writes. */
     fun install(context: Context) {
@@ -34,6 +49,7 @@ object DebugLogging {
         val fileSink = DebugFileSink(TravelmoLog, app)
         fileSink.start()
         TravelmoLog.addSink(fileSink)
+        fileSink.addCrashListener { crashState.value = it }
         sink = fileSink
         TravelmoLog.pinnedEvent("Travelmo %s starting on Android %s", safeVersion(), Build.VERSION.SDK_INT)
         // Why the last processes ended is two binder calls, so it is read off the main thread.
@@ -41,6 +57,17 @@ object DebugLogging {
             runCatching { ProcessExits.logRecent(app, TravelmoLog) }
                 .onFailure { TravelmoLog.failure(it, "Reading why earlier processes ended failed") }
         }
+    }
+
+    /** Re-derives [unacknowledgedCrash] from the files on disk; call it when a banner's screen comes forward. */
+    fun refreshCrash() {
+        sink?.requestCrashRecompute()
+    }
+
+    /** Lowers the crash banner without sharing. The crashed run stays on disk, still shareable from Settings. */
+    fun dismissCrash() {
+        TravelmoLog.event("Crash banner dismissed")
+        sink?.acknowledgeCrashBanner()
     }
 
     fun isEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_ENABLED, true)

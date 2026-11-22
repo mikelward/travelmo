@@ -30,7 +30,9 @@ import app.travelmo.ui.BookingFormScreen
 import app.travelmo.ui.CalendarScreen
 import app.travelmo.ui.HomeNavigationBar
 import app.travelmo.ui.HomeTab
+import app.travelmo.ui.CrashReport
 import app.travelmo.ui.LicensesHost
+import app.travelmo.ui.LocalCrashReport
 import app.travelmo.ui.LocalReportBug
 import app.travelmo.ui.LocalUpdateAvailable
 import app.travelmo.ui.ProfileScreen
@@ -86,7 +88,15 @@ class MainActivity : ComponentActivity() {
                 val signedIn = user
                 val isSignedIn = signedIn != null
                 val reportBug: suspend (Context) -> ShareOutcome = remember(isSignedIn) { { DebugLogging.share(it, signedIn = isSignedIn) } }
-                CompositionLocalProvider(LocalReportBug provides reportBug, LocalUpdateAvailable provides updateAvailable) {
+                val crashReport = remember(isSignedIn) {
+                    CrashReport(
+                        crashed = DebugLogging.unacknowledgedCrash,
+                        refresh = DebugLogging::refreshCrash,
+                        dismiss = DebugLogging::dismissCrash,
+                        share = { DebugLogging.share(it, signedIn = isSignedIn) },
+                    )
+                }
+                CompositionLocalProvider(LocalReportBug provides reportBug, LocalCrashReport provides crashReport, LocalUpdateAvailable provides updateAvailable) {
                     LicensesHost(
                         open = licensesOpen,
                         onOpenChange = { licensesOpen = it },

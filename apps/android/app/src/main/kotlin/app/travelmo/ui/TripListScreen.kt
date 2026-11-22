@@ -58,6 +58,7 @@ import app.travelmo.ui.theme.SharedBadge
 @Composable
 fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) -> Unit, onOpenSettings: () -> Unit, bottomBar: @Composable () -> Unit = {}) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val crashed = crashPending()
     Scaffold(
         topBar = {
             TopAppBar(
@@ -74,17 +75,26 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
     ) { padding ->
         val groups = state.groups
         when {
-            groups == null -> Message(stringResource(R.string.trips_loading), Modifier.padding(padding))
+            groups == null -> Column(Modifier.padding(padding)) {
+                // The crash banner first, at the top of whatever the list shows.
+                if (crashed) LastCrashBanner(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
+                Message(stringResource(R.string.trips_loading))
+            }
             groups.current.isEmpty() && groups.upcoming.isEmpty() && groups.past.isEmpty() ->
-                Column(Modifier.fillMaxSize().padding(padding).padding(start = 24.dp, end = 24.dp, top = 64.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(stringResource(R.string.trips_empty), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
-                    Text(stringResource(R.string.trips_empty_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
+                Column(Modifier.fillMaxSize().padding(padding)) {
+                    if (crashed) LastCrashBanner(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
+                    Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 64.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(stringResource(R.string.trips_empty), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                        Text(stringResource(R.string.trips_empty_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
+                    }
                 }
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                // In the list, so it scrolls away with it rather than taking room from the trips.
+                if (crashed) item(key = "crash") { LastCrashBanner() }
                 // Document warnings once, at the top, each for the earliest trip
                 // it bears on and opening it, rather than repeated on every card.
                 if (state.warnings.isNotEmpty()) {
