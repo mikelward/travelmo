@@ -5,7 +5,7 @@
 # rerun after changing a value. Three jobs per billing account are free; the
 # fourth costs about ten cents a month.
 #
-#   PROJECT=my-project PARSER_URL=https://parser-xyz.a.run.app \
+#   PROJECT=my-project LOCATION=us-east4 PARSER_URL=https://parser-xyz.a.run.app \
 #   SCHEDULER_SA=scheduler@my-project.iam.gserviceaccount.com deploy/scheduler.sh
 #
 # SCHEDULER_SA must be listed in the parser's INTERNAL_CALLERS; PARSER_URL
@@ -15,7 +15,8 @@ set -euo pipefail
 : "${PROJECT:?set PROJECT to the Google Cloud project id}"
 : "${PARSER_URL:?set PARSER_URL to the Cloud Run URL of the parser}"
 : "${SCHEDULER_SA:?set SCHEDULER_SA to the service account the jobs call as}"
-LOCATION="${LOCATION:-europe-west1}"
+# The parser's region; Cloud Scheduler has no sensible default for it.
+: "${LOCATION:?set LOCATION to the region the parser runs in}"
 TIME_ZONE="${TIME_ZONE:-Etc/UTC}"
 
 gcloud="gcloud --project=$PROJECT --quiet"
