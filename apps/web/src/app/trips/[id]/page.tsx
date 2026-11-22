@@ -49,7 +49,7 @@ function Title({ trip, canEdit }: { trip: Trip; canEdit: boolean }) {
               setTitle(trip.title);
               setEditing(true);
             }}
-            className="text-sm text-zinc-500 hover:underline"
+            className="text-sm text-muted hover:underline"
           >
             Rename
           </button>
@@ -74,7 +74,7 @@ function Title({ trip, canEdit }: { trip: Trip; canEdit: boolean }) {
         autoFocus
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        className="flex-1 rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-2xl font-semibold dark:border-zinc-700"
+        className="flex-1 rounded-lg border border-field bg-background px-3 py-2 text-2xl font-semibold"
       />
       <button type="submit" className={buttonClass}>
         Save
@@ -82,7 +82,7 @@ function Title({ trip, canEdit }: { trip: Trip; canEdit: boolean }) {
       <button type="button" onClick={() => setEditing(false)} className={buttonClass}>
         Cancel
       </button>
-      {error && <span className="text-sm text-red-600">{error}</span>}
+      {error && <span className="text-sm text-danger">{error}</span>}
     </form>
   );
 }
@@ -99,11 +99,11 @@ function FitDates({ trip, segments }: { trip: Trip; segments: Segment[] }) {
       <button
         type="button"
         onClick={() => fitTripDates(firestore(), trip.id).catch((e: Error) => setError(e.message))}
-        className="text-sm text-zinc-500 hover:underline"
+        className="text-sm text-muted hover:underline"
       >
         Fit dates to bookings ({formatDateRange(range.start, range.end)})
       </button>
-      {error && <span className="ml-2 text-sm text-red-600">{error}</span>}
+      {error && <span className="ml-2 text-sm text-danger">{error}</span>}
     </>
   );
 }
@@ -132,13 +132,13 @@ function Sharing({ trip }: { trip: Trip }) {
 
   return (
     <section className="mt-10">
-      <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">Shared with</h2>
+      <h2 className="text-sm font-medium uppercase tracking-wide text-muted">Shared with</h2>
       <ul className="mt-2 space-y-1 text-sm">
-        {trip.sharedWith.length === 0 && <li className="text-zinc-500">Only you</li>}
+        {trip.sharedWith.length === 0 && <li className="text-muted">Only you</li>}
         {trip.sharedWith.map((address) => (
           <li key={address} className="flex items-center justify-between">
             <span>{address}</span>
-            <button type="button" onClick={() => remove(address)} className="text-zinc-500 hover:underline">
+            <button type="button" onClick={() => remove(address)} className="text-muted hover:underline">
               Remove
             </button>
           </li>
@@ -150,13 +150,13 @@ function Sharing({ trip }: { trip: Trip }) {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="partner@example.com"
-          className="flex-1 rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
+          className="flex-1 rounded-lg border border-field bg-background px-3 py-2 text-sm"
         />
         <button type="submit" className={buttonClass}>
           Share
         </button>
       </form>
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
     </section>
   );
 }
@@ -180,7 +180,7 @@ function MergeInto({ trip, targets }: { trip: Trip; targets: Trip[] }) {
   };
   return (
     <section className="mt-10">
-      <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">Merge into another trip</h2>
+      <h2 className="text-sm font-medium uppercase tracking-wide text-muted">Merge into another trip</h2>
       <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
         Moves every booking here into the other trip and deletes this one. Who it is shared with stays as the other trip has it.
       </p>
@@ -188,7 +188,8 @@ function MergeInto({ trip, targets }: { trip: Trip; targets: Trip[] }) {
         <select
           value={target?.id ?? ""}
           onChange={(e) => setTarget(targets.find((t) => t.id === e.target.value))}
-          className="min-w-0 max-w-full rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
+          aria-label="Trip to merge into"
+          className="min-w-0 max-w-full rounded-lg border border-field bg-background px-3 py-2 text-sm"
         >
           <option value="">Choose a trip…</option>
           {targets.map((t) => (
@@ -201,7 +202,7 @@ function MergeInto({ trip, targets }: { trip: Trip; targets: Trip[] }) {
           {busy ? "Merging…" : `Merge into ${target?.title ?? "…"}`}
         </button>
       </div>
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
     </section>
   );
 }
@@ -233,14 +234,14 @@ function DangerZone({ trip }: { trip: Trip }) {
         >
           {busy ? "Deleting…" : "Finish deleting"}
         </button>
-        {error && <p className="mt-2 text-red-600">{error}</p>}
+        {error && <p className="mt-2 text-danger">{error}</p>}
       </section>
     );
   }
   return (
     <section className="mt-10 border-t border-zinc-200 pt-6 dark:border-zinc-800">
       {!confirming ? (
-        <button type="button" onClick={() => setConfirming(true)} className="text-sm text-red-600 hover:underline">
+        <button type="button" onClick={() => setConfirming(true)} className="text-sm text-danger hover:underline">
           Delete this trip
         </button>
       ) : (
@@ -254,7 +255,7 @@ function DangerZone({ trip }: { trip: Trip }) {
           </button>
         </div>
       )}
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
     </section>
   );
 }
@@ -279,8 +280,8 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   const entries = useEntryRequirements(people, trip, segments, today);
   const [editing, setEditing] = useState<Editing>();
   const [error, setError] = useState<string>();
-  if (trip === undefined) return <p className="text-zinc-500">Loading…</p>;
-  if (trip === null) return <p className="text-zinc-500">This trip does not exist or is not shared with you.</p>;
+  if (trip === undefined) return <p className="text-muted">Loading…</p>;
+  if (trip === null) return <p className="text-muted">This trip does not exist or is not shared with you.</p>;
   const isOwner = trip.ownerUid === user.uid;
   const isSharee = !!user.email && user.emailVerified && trip.sharedWith.includes(user.email.toLowerCase());
   // Sharees edit bookings; only the owner renames, shares or deletes the trip.
@@ -309,7 +310,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
 
   return (
     <>
-      <Link href="/" className="text-sm text-zinc-500 hover:underline">
+      <Link href="/" className="text-sm text-muted hover:underline">
         ← All trips
       </Link>
       <Title trip={trip} canEdit={canManage} />
@@ -329,14 +330,14 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
       {editing?.kind === "add" && (
         <SegmentForm defaultDate={trip.start} onSave={save} onCancel={() => setEditing(undefined)} />
       )}
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
 
-      {!segments && <p className="mt-8 text-zinc-500">Loading…</p>}
-      {segments && segments.length === 0 && <p className="mt-8 text-zinc-500">No bookings in this trip yet.</p>}
+      {!segments && <p className="mt-8 text-muted">Loading…</p>}
+      {segments && segments.length === 0 && <p className="mt-8 text-muted">No bookings in this trip yet.</p>}
       {segments &&
         byDay(segments).map(([day, items]) => (
           <section key={day} className="mt-8">
-            <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">{formatDate(day)}</h2>
+            <h2 className="text-sm font-medium uppercase tracking-wide text-muted">{formatDate(day)}</h2>
             <ul className="mt-1 divide-y divide-zinc-200 dark:divide-zinc-800">
               {items.map((segment) =>
                 editing?.kind === "edit" && editing.segment.id === segment.id ? (
@@ -391,7 +392,7 @@ function TripRoute({ params }: { params: Promise<{ id: string }> }) {
 
 export default function TripPage(props: PageProps<"/trips/[id]">) {
   return (
-    <Suspense fallback={<p className="text-zinc-500">Loading…</p>}>
+    <Suspense fallback={<p className="text-muted">Loading…</p>}>
       <TripRoute params={props.params} />
     </Suspense>
   );

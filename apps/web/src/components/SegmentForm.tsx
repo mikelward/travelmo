@@ -165,9 +165,9 @@ export function toExtracted(f: Fields, existing?: Segment): ExtractedSegment {
 
 // min-w-0: a grid or flex item is otherwise as wide as its longest option
 // (a time zone, a country), pushing the form past a phone's width.
-const fieldClass = "min-w-0 rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700";
+const fieldClass = "min-w-0 rounded-lg border border-field bg-background px-3 py-2 text-sm";
 const inputClass = `w-full ${fieldClass}`;
-const labelClass = "block text-xs font-medium uppercase tracking-wide text-zinc-500";
+const labelClass = "block text-xs font-medium uppercase tracking-wide text-muted";
 
 // Whatever the field holds is always an option, so the select never shows a
 // zone other than the one that will be saved.
@@ -392,7 +392,7 @@ export function SegmentForm({
         Notes
         <textarea rows={2} value={fields.notes} onChange={set("notes")} className={inputClass} />
       </label>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
       <div className="flex gap-2">
         <button
           type="submit"

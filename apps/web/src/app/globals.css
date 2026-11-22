@@ -1,13 +1,25 @@
 @import "tailwindcss";
 
+/*
+ * Every pair below meets WCAG AA on --background in its scheme: --muted and
+ * --danger at 4.5:1 for text, --field at 3:1 for the outline of a control.
+ */
 :root {
+  /* Native controls (select popups, checkboxes, date pickers, scrollbars) follow the page's scheme. */
+  color-scheme: light dark;
   --background: #ffffff;
   --foreground: #171717;
+  --muted: #6e6e78; /* just under zinc-500, to keep 4.5:1 on zinc-100 too */
+  --danger: #e7000b; /* red-600 */
+  --field: #71717b; /* zinc-500 */
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-danger: var(--danger);
+  --color-field: var(--field);
   --font-sans: var(--font-geist-sans);
   --font-wordmark: var(--font-fira-sans);
 }
@@ -16,6 +28,9 @@
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
+    --muted: #9f9fa9; /* zinc-400 */
+    --danger: #ff6467; /* red-400 */
+    --field: #71717b; /* zinc-500 */
   }
 }
 
@@ -23,4 +38,17 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Tailwind's default, half the text color, falls short of 4.5:1. */
+@layer base {
+  ::placeholder {
+    color: var(--muted);
+  }
+
+  /* The browser's ring disappears against a filled button; this one stands off it in the text color. */
+  :focus-visible {
+    outline: 2px solid var(--foreground);
+    outline-offset: 2px;
+  }
 }

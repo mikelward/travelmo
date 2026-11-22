@@ -27,7 +27,7 @@ export function EntryRequirements({ entries, fetched }: { entries: readonly Pers
           })}
         </ul>
       ))}
-      <p className="mt-2 text-xs text-zinc-500">
+      <p className="mt-2 text-xs text-muted">
         From Passport Index data as of {monthYear(fetched)}. Rules change and depend on the purpose and length of the stay: check with the embassy
         before you travel.
       </p>

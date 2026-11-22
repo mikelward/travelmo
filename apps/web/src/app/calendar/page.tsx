@@ -49,7 +49,7 @@ function Week({ week, trips, month, today, uid }: { week: readonly string[]; tri
         const inMonth = monthOf(date) === month;
         const isToday = date === today;
         return (
-          <div key={date} style={{ gridColumn: i + 1, gridRow: 1 }} className={`px-1.5 pt-1 text-xs ${inMonth ? "" : "text-zinc-400 dark:text-zinc-600"}`}>
+          <div key={date} style={{ gridColumn: i + 1, gridRow: 1 }} className={`px-1.5 pt-1 text-xs ${inMonth ? "" : "text-muted"}`}>
             <span
               className={isToday ? "inline-block rounded-full bg-zinc-900 px-1.5 font-medium text-white dark:bg-zinc-100 dark:text-zinc-900" : ""}
               aria-label={isToday ? `Today, ${date}` : undefined}
@@ -73,7 +73,7 @@ function Calendar({ user }: { user: User }) {
   const trips = useTrips(user);
   const today = localToday();
   const [month, setMonth] = useState(monthOf(today));
-  if (!trips) return <p className="text-zinc-500">Loading trips…</p>;
+  if (!trips) return <p className="text-muted">Loading trips…</p>;
   const weeks = monthWeeks(month);
   const inMonth = trips.filter((t) => monthOf(t.start) <= month && monthOf(t.end) >= month);
   return (
@@ -95,7 +95,7 @@ function Calendar({ user }: { user: User }) {
         </div>
       </div>
       <div className="mt-4 rounded-xl border border-zinc-200 dark:border-zinc-800" role="grid" aria-label={`Trips in ${monthLabel(month)}`}>
-        <div className="grid text-center text-xs font-medium uppercase tracking-wide text-zinc-500" style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}>
+        <div className="grid text-center text-xs font-medium uppercase tracking-wide text-muted" style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}>
           {weekdays.map((d) => (
             <div key={d} className="py-1">
               {d}
@@ -107,7 +107,7 @@ function Calendar({ user }: { user: User }) {
         ))}
       </div>
       {inMonth.length === 0 && (
-        <p className="mt-4 text-sm text-zinc-500" data-testid="no-trips">
+        <p className="mt-4 text-sm text-muted" data-testid="no-trips">
           No trips in {monthLabel(month)}.
         </p>
       )}

@@ -85,7 +85,7 @@ function GmailSection({ user }: { user: User }) {
   return (
     <section>
       <h2 className="text-lg font-medium">Gmail</h2>
-      {profile === undefined && <p className="mt-2 text-zinc-500">Loading…</p>}
+      {profile === undefined && <p className="mt-2 text-muted">Loading…</p>}
       {profile && !gmail && (
         <>
           <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
@@ -137,11 +137,11 @@ function GmailSection({ user }: { user: User }) {
               {describeBackfill(progress, reading)}
             </p>
           )}
-          {paused && <p className="mt-3 text-sm text-red-600">{paused}</p>}
+          {paused && <p className="mt-3 text-sm text-danger">{paused}</p>}
         </>
       )}
       {notice && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{notice}</p>}
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
     </section>
   );
 }
@@ -197,7 +197,7 @@ function RegroupSection({ user }: { user: User }) {
           {busy && !confirming ? "Regrouping…" : "Regroup trips"}
         </button>
         {!confirming && (
-          <button type="button" disabled={busy} onClick={() => setConfirming(true)} className="text-red-600 hover:underline disabled:opacity-50">
+          <button type="button" disabled={busy} onClick={() => setConfirming(true)} className="text-danger hover:underline disabled:opacity-50">
             Delete all trips
           </button>
         )}
@@ -221,7 +221,7 @@ function RegroupSection({ user }: { user: User }) {
         </div>
       )}
       {result && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{result}</p>}
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
     </section>
   );
 }
@@ -307,7 +307,7 @@ function FileImportSection(props: { title: string; blurb: string; accept: string
         </div>
       )}
       {result && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{result}</p>}
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
     </section>
   );
 }
@@ -450,7 +450,7 @@ function GoogleCalendarSection({ user }: { user: User }) {
                   <span className="font-medium">{cal.summary}</span>
                 </label>
                 {cal.selected && (cal.lastReadAt || cal.lastError) && (
-                  <p className={`ml-6 ${cal.lastError ? "text-red-600" : "text-zinc-600 dark:text-zinc-400"}`}>
+                  <p className={`ml-6 ${cal.lastError ? "text-danger" : "text-zinc-600 dark:text-zinc-400"}`}>
                     {cal.lastError ?? `Read ${cal.lastReadAt!.slice(0, 10)}${cal.lastResult ? ` · ${cal.lastResult}` : ""}`}
                   </p>
                 )}
@@ -479,7 +479,7 @@ function GoogleCalendarSection({ user }: { user: User }) {
         </>
       )}
       {notice && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{notice}</p>}
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
     </section>
   );
 }
@@ -531,14 +531,14 @@ function FeedsSection({ user }: { user: User }) {
           onChange={(e) => setUrl(e.target.value)}
           placeholder="webcal://… or https://…"
           aria-label="Calendar feed link"
-          className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
+          className="min-w-0 flex-1 rounded-lg border border-field bg-background px-3 py-2 text-sm"
         />
         <button type="submit" disabled={busy || !url.trim()} className={buttonClass}>
           {busy ? "Reading…" : "Add feed"}
         </button>
       </form>
       {result && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{result}</p>}
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
       {feeds && feeds.length > 0 && (
         <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
           {feeds.map((feed) => (
@@ -549,7 +549,7 @@ function FeedsSection({ user }: { user: User }) {
                   {feed.lastFetchedAt ? `Read ${feed.lastFetchedAt.slice(0, 10)}` : "Not read yet"}
                   {feed.lastResult && !feed.lastError ? ` · ${feed.lastResult}` : ""}
                 </p>
-                {feed.lastError && <p className="text-red-600">{feed.lastError}</p>}
+                {feed.lastError && <p className="text-danger">{feed.lastError}</p>}
               </div>
               <button type="button" className={buttonClass} onClick={() => remove(feed.id)}>
                 Remove
@@ -584,12 +584,12 @@ function PatternsSection({ user }: { user: User }) {
   const field = (key: keyof SenderPatterns, label: string, hint: string) => (
     <label className="block text-sm">
       <span className="font-medium">{label}</span>
-      <span className="ml-2 text-zinc-500">{hint}</span>
+      <span className="ml-2 text-muted">{hint}</span>
       <textarea
         rows={3}
         value={(patterns?.[key] ?? []).join("\n")}
         onChange={(e) => setDraft({ allow: [], deny: [], ...patterns, [key]: e.target.value.split("\n") })}
-        className="mt-1 w-full rounded-lg border border-zinc-300 bg-transparent px-3 py-2 font-mono text-sm dark:border-zinc-700"
+        className="mt-1 w-full rounded-lg border border-field bg-background px-3 py-2 font-mono text-sm"
       />
     </label>
   );
@@ -609,7 +609,7 @@ function PatternsSection({ user }: { user: User }) {
         <button type="button" disabled={!draft} className={buttonClass} onClick={save}>
           Save
         </button>
-        {status && <span className="text-sm text-zinc-500">{status}</span>}
+        {status && <span className="text-sm text-muted">{status}</span>}
       </div>
     </section>
   );
@@ -644,10 +644,10 @@ function RemindersSection({ user }: { user: User }) {
       <label className="mt-3 flex items-center gap-2 text-sm">
         <input type="checkbox" checked={on} onChange={(e) => void toggle(e.target.checked)} />
         <span>
-          Email me before a trip{user.email ? <span className="text-zinc-500"> (to {user.email})</span> : null}
+          Email me before a trip{user.email ? <span className="text-muted"> (to {user.email})</span> : null}
         </span>
       </label>
-      {status && <p className="mt-2 text-sm text-zinc-500">{status}</p>}
+      {status && <p className="mt-2 text-sm text-muted">{status}</p>}
       <PushSwitch uid={user.uid} />
     </section>
   );
@@ -682,7 +682,7 @@ function PushSwitch({ uid }: { uid: string }) {
         <input type="checkbox" checked={current === "on"} onChange={(e) => void toggle(e.target.checked)} />
         <span>Notify me in this browser</span>
       </label>
-      {note && <p className="mt-2 text-sm text-zinc-500">{note}</p>}
+      {note && <p className="mt-2 text-sm text-muted">{note}</p>}
     </>
   );
 }
@@ -720,8 +720,8 @@ function ReviewSection({ user }: { user: User }) {
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
         Recent emails and other imports that did not become bookings. Teach the importer about a sender, or import one anyway.
       </p>
-      {records === undefined && <p className="mt-3 text-zinc-500">Loading…</p>}
-      {records && toReview.length === 0 && <p className="mt-3 text-sm text-zinc-500">Nothing to review.</p>}
+      {records === undefined && <p className="mt-3 text-muted">Loading…</p>}
+      {records && toReview.length === 0 && <p className="mt-3 text-sm text-muted">Nothing to review.</p>}
       <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
         {toReview.map((record) => {
           // Records from other sources have no sender to teach and no email
@@ -767,7 +767,7 @@ function ReviewSection({ user }: { user: User }) {
                     Never import {domain}
                   </button>
                 )}
-                {notice[record.messageId] && <span className="self-center text-zinc-500">{notice[record.messageId]}</span>}
+                {notice[record.messageId] && <span className="self-center text-muted">{notice[record.messageId]}</span>}
               </div>
             </li>
           );
@@ -853,7 +853,7 @@ function CalendarExportSection({ user }: { user: User }) {
             value={links.https}
             aria-label="Calendar link"
             onFocus={(e) => e.target.select()}
-            className="mt-3 w-full rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
+            className="mt-3 w-full rounded-lg border border-field bg-background px-3 py-2 text-sm"
           />
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" className={buttonClass} onClick={copy}>
@@ -890,7 +890,7 @@ function CalendarExportSection({ user }: { user: User }) {
           </div>
         </>
       )}
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
     </section>
   );
 }
@@ -948,7 +948,7 @@ function ForwardSection({ user }: { user: User }) {
             value={record.address}
             aria-label="Forwarding address"
             onFocus={(e) => e.target.select()}
-            className="mt-3 w-full rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
+            className="mt-3 w-full rounded-lg border border-field bg-background px-3 py-2 text-sm"
           />
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" className={buttonClass} onClick={copy}>
@@ -977,7 +977,7 @@ function ForwardSection({ user }: { user: User }) {
           </div>
         </>
       )}
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
     </section>
   );
 }
@@ -1006,7 +1006,7 @@ function DeleteAccountSection({ user, onDeleted }: { user: User; onDeleted: () =
         This deletes your trips, bookings, travel profile and connections, and people you shared trips with lose them.
       </p>
       {!confirming ? (
-        <button type="button" onClick={() => setConfirming(true)} className="mt-3 text-sm text-red-600 hover:underline">
+        <button type="button" onClick={() => setConfirming(true)} className="mt-3 text-sm text-danger hover:underline">
           Delete account
         </button>
       ) : (
@@ -1020,7 +1020,7 @@ function DeleteAccountSection({ user, onDeleted }: { user: User; onDeleted: () =
           </button>
         </div>
       )}
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
     </section>
   );
 }
@@ -1042,7 +1042,7 @@ function SignOutSection() {
       <button type="button" onClick={() => void signOutNow()} className={buttonClass}>
         Sign out
       </button>
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
     </section>
   );
 }
@@ -1080,7 +1080,7 @@ export default function SettingsPage() {
         <>
           <h1 className="mb-6 text-2xl font-semibold">Settings</h1>
           <InstallSection />
-          <Suspense fallback={<p className="text-zinc-500">Loading…</p>}>
+          <Suspense fallback={<p className="text-muted">Loading…</p>}>
             <GmailSection user={user} />
           </Suspense>
           <RegroupSection user={user} />
