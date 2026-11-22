@@ -95,7 +95,7 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, botto
                         report.unknownDays.takeIf { it > 0 }?.let { pluralStringResource(R.plurals.unknown_days, it, it) },
                         report.unplaced.takeIf { it > 0 }?.let { pluralStringResource(R.plurals.unplaced_bookings, it, it) },
                     )
-                    Text(stringResource(R.string.unplaced_hint, parts.joinToString("; ")), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+                    Text(stringResource(R.string.unplaced_hint, parts.joinToString("; ")), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
                 }
             }
             if (report.countries.isNotEmpty()) {
@@ -125,7 +125,7 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, botto
             }
             if (whole.upcoming > 0) {
                 item(key = "upcoming") {
-                    Text(pluralStringResource(R.plurals.trips_ahead, whole.upcoming, whole.upcoming), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 24.dp))
+                    Text(pluralStringResource(R.plurals.trips_ahead, whole.upcoming, whole.upcoming), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 24.dp))
                 }
             }
             if (whole.trips == 0 && whole.upcoming == 0) {
@@ -167,7 +167,7 @@ private fun Summary(report: TravelReport) {
 
 @Composable
 private fun SectionTitle(text: String) {
-    Text(text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(text, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
 }
 
 /** A small table: a muted header, then rows divided by hairlines; numbers right-aligned. */
@@ -177,7 +177,7 @@ private fun Table(header: List<Pair<String, Float>>, rows: List<List<String>>, o
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.padding(vertical = 4.dp)) {
             for ((i, column) in header.withIndex()) {
-                Text(column.first, style = MaterialTheme.typography.labelMedium, color = muted, textAlign = if (i == 0) TextAlign.Start else TextAlign.End, modifier = Modifier.weight(column.second))
+                Text(column.first, style = MaterialTheme.typography.labelLarge, color = muted, textAlign = if (i == 0) TextAlign.Start else TextAlign.End, modifier = Modifier.weight(column.second))
             }
         }
         for ((r, row) in rows.withIndex()) {
@@ -185,7 +185,7 @@ private fun Table(header: List<Pair<String, Float>>, rows: List<List<String>>, o
             val rowModifier = if (onRow != null) Modifier.clickable { onRow(r) } else Modifier
             Row(modifier = rowModifier.padding(vertical = 6.dp)) {
                 for ((i, cell) in row.withIndex()) {
-                    Text(cell, style = MaterialTheme.typography.bodySmall, textAlign = if (i == 0) TextAlign.Start else TextAlign.End, modifier = Modifier.weight(header[i].second))
+                    Text(cell, style = MaterialTheme.typography.bodyMedium, textAlign = if (i == 0) TextAlign.Start else TextAlign.End, modifier = Modifier.weight(header[i].second))
                 }
             }
         }
@@ -199,16 +199,16 @@ private fun Favorite(place: FavoritePlace, onOpenTrip: (String) -> Unit) {
     val favoriteMark = stringResource(R.string.favorite_mark)
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (place.favorite) Text("♥", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.semantics { contentDescription = favoriteMark })
-            Text(place.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-            place.rating?.let { Text("★".repeat(it) + "☆".repeat(5 - it), color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodyMedium) }
+            if (place.favorite) Text("♥", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.semantics { contentDescription = favoriteMark })
+            Text(place.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            place.rating?.let { Text("★".repeat(it) + "☆".repeat(5 - it), color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodyLarge) }
         }
         val where = listOfNotNull(place.city, place.country?.let { countryName(it) }).joinToString(", ")
-        if (where.isNotEmpty()) Text(where, style = MaterialTheme.typography.bodySmall, color = muted)
+        if (where.isNotEmpty()) Text(where, style = MaterialTheme.typography.bodyMedium, color = muted)
         // A place on many trips wraps its links onto more lines rather than running off the screen.
         FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             for (trip in place.trips) {
-                Text(trip.title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { onOpenTrip(trip.id) }.padding(vertical = 2.dp))
+                Text(trip.title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { onOpenTrip(trip.id) }.padding(vertical = 2.dp))
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(top = 8.dp))
