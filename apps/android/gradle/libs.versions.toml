@@ -41,6 +41,9 @@ androidxTestRunner = "1.7.0"
 # res/raw/aboutlibraries.json, and the Compose library reads it for the
 # Licenses screen. The version matches the sibling apps.
 aboutlibraries = "15.3.0"
+# Google Play In-App Update, read-only: whether Play has a newer version, for
+# the update dot on the menu. The version matches stopdash's.
+playAppUpdate = "2.1.0"
 
 [libraries]
 androidlog-logging-core = { group = "com.mikelward.androidlog", name = "logging-core", version.ref = "androidlog" }
@@ -86,6 +89,7 @@ androidx-test-runner = { group = "androidx.test", name = "runner", version.ref =
 androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 aboutlibraries-compose-m3 = { group = "com.mikepenz", name = "aboutlibraries-compose-m3", version.ref = "aboutlibraries" }
+play-app-update = { group = "com.google.android.play", name = "app-update", version.ref = "playAppUpdate" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

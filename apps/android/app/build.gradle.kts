@@ -139,6 +139,9 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
+            // The `.debug` applicationId isn't a Play app, so an update check
+            // there only ever fails: PlayUpdateChecker skips it.
+            buildConfigField("boolean", "PLAY_UPDATE_CHECKS_ENABLED", "false")
         }
         release {
             isMinifyEnabled = true
@@ -147,6 +150,9 @@ android {
             // Signed only when the variables are set; Play App Signing re-signs
             // the bundle with its own key, so this one only authenticates the upload.
             if (releaseSigningConfigured) signingConfig = signingConfigs.getByName("release")
+            // Only the release build is a Play app, so only it asks Play
+            // whether a newer version is out (the update dot on the menu).
+            buildConfigField("boolean", "PLAY_UPDATE_CHECKS_ENABLED", "true")
         }
     }
 
@@ -322,6 +328,10 @@ dependencies {
     implementation(libs.androidlog.logging.android)
     // Reads the committed res/raw/aboutlibraries.json for the Licenses screen.
     implementation(libs.aboutlibraries.compose.m3)
+    // Google Play In-App Update, read-only: asks Play whether a newer version
+    // is out, for the update dot on the menu. Free; a background Play Task on
+    // each foreground, release-only, and "no update" when Play is absent.
+    implementation(libs.play.app.update)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation(platform(libs.junit.bom))

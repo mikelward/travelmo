@@ -1,8 +1,14 @@
 package app.travelmo.ui
 
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
@@ -15,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -22,14 +29,20 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import app.travelmo.BuildConfig
 import app.travelmo.R
 import app.travelmo.log.DebugLogging
+import app.travelmo.log.TravelmoLog
 import com.mikelward.androidlog.android.ShareOutcome
+import com.mikelward.androidlog.safe
 import kotlinx.coroutines.launch
 
 /**
@@ -40,16 +53,26 @@ import kotlinx.coroutines.launch
 val LocalReportBug = staticCompositionLocalOf<suspend (Context) -> ShareOutcome> { { DebugLogging.share(it, signedIn = false) } }
 
 /**
+ * Whether Google Play has a newer version (PlayUpdateChecker). The activity
+ * provides it once and rechecks on each foreground; false (a test, a
+ * preview) shows no dot.
+ */
+val LocalUpdateAvailable = compositionLocalOf { false }
+
+/**
  * The overflow every screen's top bar ends with, as in the sibling apps
  * (stopdash's AppMenuOverflow, clothescast's BugReportOverflowMenu): Report a
  * bug, which shares the debug log as Settings does, and About, which leads
  * to the open-source licenses. [items] are a screen's own, first, each given
- * a `close` to call as it acts.
+ * a `close` to call as it acts. While Play has a newer version
+ * ([LocalUpdateAvailable]) the button carries a red dot and "Update
+ * available", last, opens the Play listing.
  */
 @Composable
 fun AppMenu(modifier: Modifier = Modifier, items: @Composable (close: () -> Unit) -> Unit = {}) {
     val context = LocalContext.current
     val reportBug = LocalReportBug.current
+    val updateAvailable = LocalUpdateAvailable.current
     val scope = rememberCoroutineScope()
     var expanded by rememberSaveable { mutableStateOf(false) }
     var showAbout by rememberSaveable { mutableStateOf(false) }
@@ -57,7 +80,21 @@ fun AppMenu(modifier: Modifier = Modifier, items: @Composable (close: () -> Unit
     // Button and menu in one Box, so the menu drops from the button rather than the row slot.
     Box(modifier) {
         IconButton(onClick = { expanded = true }) {
-            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.more_options))
+            Box {
+                Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.more_options))
+                if (updateAvailable) {
+                    val updateDescription = stringResource(R.string.update_available)
+                    Box(
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            // Seats the dot on the icon's top-right corner, where a badge goes.
+                            .offset(x = 2.dp, y = (-2).dp)
+                            .size(8.dp)
+                            .background(MaterialTheme.colorScheme.error, CircleShape)
+                            .semantics { contentDescription = updateDescription },
+                    )
+                }
+            }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, shape = RoundedCornerShape(12.dp)) {
             items { expanded = false }
@@ -86,6 +123,16 @@ fun AppMenu(modifier: Modifier = Modifier, items: @Composable (close: () -> Unit
                     showAbout = true
                 },
             )
+            // Last, so the other items keep their places whether or not an update is out.
+            if (updateAvailable) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.update_available), style = MaterialTheme.typography.bodyLarge) },
+                    onClick = {
+                        expanded = false
+                        openPlayListing(context)
+                    },
+                )
+            }
         }
     }
     val openLicenses = LocalOpenLicenses.current
@@ -100,6 +147,30 @@ fun AppMenu(modifier: Modifier = Modifier, items: @Composable (close: () -> Unit
             onDismiss = { showAbout = false },
         )
     }
+}
+
+// The app's Play listing, in the Play Store app first, then on the web; the
+// package name goes on the end.
+private val PLAY_LISTING_URIS = listOf("market://details?id=", "https://play.google.com/store/apps/details?id=")
+
+/**
+ * Opens the app's Play listing, where Play does the download and install, as
+ * stopdash does. With neither the Play Store nor a browser to open it (rare,
+ * since Play itself reported the update), says so rather than let the tap do
+ * nothing.
+ */
+internal fun openPlayListing(context: Context) {
+    for (uri in PLAY_LISTING_URIS) {
+        try {
+            context.startActivity(Intent(Intent.ACTION_VIEW, "$uri${context.packageName}".toUri()))
+            return
+        } catch (e: ActivityNotFoundException) {
+            // No app for this one (no Play Store for market://, say): try the next.
+            TravelmoLog.warning("No app to open the Play listing link: %s", safe(e.javaClass.simpleName))
+        }
+    }
+    TravelmoLog.warning("No app to open the Play listing")
+    Toast.makeText(context, R.string.update_open_failed, Toast.LENGTH_SHORT).show()
 }
 
 /**

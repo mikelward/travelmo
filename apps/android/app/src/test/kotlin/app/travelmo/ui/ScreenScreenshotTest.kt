@@ -2,6 +2,7 @@ package app.travelmo.ui
 
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -93,6 +94,17 @@ class ScreenScreenshotTest {
         val viewModel = viewModel()
         capture("trip_list_dark", dark = true) {
             TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.TRIPS) {} })
+        }
+    }
+
+    // The red dot on ⋮ while Play has a newer version.
+    @Test
+    fun trip_list_update_available() {
+        val viewModel = viewModel()
+        capture("trip_list_update_available") {
+            CompositionLocalProvider(LocalUpdateAvailable provides true) {
+                TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.TRIPS) {} })
+            }
         }
     }
 

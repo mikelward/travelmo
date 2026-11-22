@@ -1152,6 +1152,18 @@ its title and dates, and a booking row's sources and sender share a line; a
 booking row carries the viewer's matching loyalty programs. CI builds it beside the web app
 (`ci / android`).
 
+When Google Play has a newer version, the ⋮ menu's icon carries a small red
+dot and the menu ends with "Update available", last so the other items keep
+their places, which opens the app's Play listing (the Play Store, else the
+web); Play does the download and install, as in stopdash. The app asks Play
+on each foreground, in the background (the Play In-App Update library, free),
+in release builds only, since a debug build's `.debug` package isn't on
+Play. A check that fails shows no dot and logs the exception's class only;
+Play still updates the app on its own schedule. The check sends nothing of
+the user's, only what Play already knows as the app's distributor (its
+package and installed version), so the Play data safety answers are
+unchanged.
+
 ## Later
 
 Itinerary ideas and

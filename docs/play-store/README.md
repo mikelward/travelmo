@@ -74,6 +74,9 @@ website, and the privacy policy covers that. If opt-in crash reports or analytic
 (TODO.md), add "App info and performance: Crash logs / Diagnostics" (optional, App
 functionality / Analytics) here and in the form.
 
+The update dot on the ⋮ menu asks Google Play whether a newer version is out. That is a
+query to Play about the app itself, carrying no user data, so it adds nothing here.
+
 ## Permissions
 
 `INTERNET` and `POST_NOTIFICATIONS` only; neither needs a declaration.
