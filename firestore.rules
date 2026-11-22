@@ -111,10 +111,18 @@ service cloud.firestore {
       }
       // `gmail`, `googleCalendar` and `forward` are written by the server;
       // clients may not forge a connection or a forwarding address.
+      // Corrections to where home was (Profile): a list of at most fifty.
+      // Rules cannot check each entry; the parser parses them and ignores a
+      // list that does not parse.
+      function validHomes(data) {
+        return !('homes' in data) || (data.homes is list && data.homes.size() <= 50);
+      }
       allow read: if isSelf();
-      allow create: if active() && isSelf() && !request.resource.data.keys().hasAny(['gmail', 'googleCalendar', 'forward']);
+      allow create: if active() && isSelf() && !request.resource.data.keys().hasAny(['gmail', 'googleCalendar', 'forward'])
+        && validHomes(request.resource.data);
       allow update: if active() && isSelf()
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['gmail', 'googleCalendar', 'forward']);
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['gmail', 'googleCalendar', 'forward'])
+        && validHomes(request.resource.data);
 
       // What the parser has sent as reminders: nobody's to read or write.
       match /reminders/{tripId} {

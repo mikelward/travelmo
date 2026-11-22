@@ -102,3 +102,58 @@ fun isAtHome(segment: Segment, periods: List<HomePeriod>, overrides: List<HomePe
     val home = homeAt(periods, localDate(segment.start), overrides) ?: return false
     return sameTown(place, home)
 }
+
+/**
+ * A correction the user made to where home was: home is this town from
+ * [from], until the next correction's date. Kept on the user document as
+ * `homes`, at most [MAX_HOME_CORRECTIONS].
+ */
+data class HomeCorrection(val city: String, val country: String? = null, val from: String)
+
+const val MAX_HOME_CORRECTIONS = 50
+
+/** The corrections as periods, each until the day before the next; two on one date keep the later. */
+fun homeCorrections(corrections: List<HomeCorrection>): List<HomePeriod> {
+    val sorted = corrections.associateBy { it.from }.values.sortedBy { it.from }
+    return sorted.mapIndexed { i, c ->
+        val next = sorted.getOrNull(i + 1)
+        HomePeriod(c.city, c.country, from = c.from, until = next?.let { LocalDate.parse(it.from).minusDays(1).toString() })
+    }
+}
+
+/** Home over time as the app uses it: the journeys' answer, overridden from the first correction's date on. */
+fun effectiveHomes(inferred: List<HomePeriod>, corrections: List<HomeCorrection>): List<HomePeriod> {
+    val corrected = homeCorrections(corrections)
+    val cut = corrected.firstOrNull()?.from
+    val before = inferred.mapNotNull { p ->
+        when {
+            cut == null -> p
+            p.from != null && p.from >= cut -> null
+            p.until != null && p.until < cut -> p
+            else -> p.copy(until = LocalDate.parse(cut).minusDays(1).toString())
+        }
+    }
+    val merged = mutableListOf<HomePeriod>()
+    for (p in before + corrected) {
+        val last = merged.lastOrNull()
+        if (last != null && sameTown(Town(last.city, last.country), p)) merged[merged.lastIndex] = last.copy(until = p.until)
+        else merged += p
+    }
+    return merged
+}
+
+private val months = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+private fun monthYear(date: String) = "${months[date.substring(5, 7).toInt() - 1]} ${date.take(4)}"
+
+/** Home over time in a line, newest first: "London since Mar 2021 · Boston 2018–2021"; empty when unknown. */
+fun describeHomes(periods: List<HomePeriod>): String = periods.reversed().joinToString(" · ") { p ->
+    val from = p.from
+    val until = p.until
+    when {
+        from == null && until == null -> p.city
+        until == null -> "${p.city} since ${monthYear(from!!)}"
+        from == null -> "${p.city} until ${until.take(4)}"
+        from.take(4) == until.take(4) -> "${p.city} ${from.take(4)}"
+        else -> "${p.city} ${from.take(4)}–${until.take(4)}"
+    }
+}

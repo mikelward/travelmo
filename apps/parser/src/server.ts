@@ -73,6 +73,7 @@ import {
 } from "./gmail";
 import { importCalendar, importMessage, importMessages, importTripIt, type ImportDeps, type ImportOptions } from "./importer";
 import { regroupTrips } from "./regroup";
+import { loadHomeOverrides } from "./homeOverrides";
 import { errorFields, log } from "./log";
 import { BadPushEnvelope, parseGmailPush, type GmailNotification } from "./pubsub";
 import { firestoreStore } from "./store";
@@ -155,6 +156,7 @@ const deps: ImportDeps = {
         geocodeRetries: firestoreRetryStore(db),
       }
     : {}),
+  homeOverrides: (uid) => loadHomeOverrides(db, uid, (event, fields) => log("WARNING", event, fields)),
   now: () => new Date().toISOString(),
   log: (event, fields) => log("INFO", event, fields),
 };

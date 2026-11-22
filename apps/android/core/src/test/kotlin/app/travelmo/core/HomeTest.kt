@@ -102,4 +102,35 @@ class HomeTest {
         isAtHome(may[0], emptyList()) shouldBe false
         isAtHome(Segment("x", "t", SegmentType.ACTIVITY, "Thing", "2026-05-22T09:00:00+01:00"), periods) shouldBe false
     }
+
+    @Test
+    fun `runs each correction until the next, keeping the later of two on one date`() {
+        homeCorrections(listOf(HomeCorrection("London", "GB", "2021-03-12"), HomeCorrection("Boston", "US", "2018-09-01"))) shouldBe listOf(
+            HomePeriod("Boston", "US", from = "2018-09-01", until = "2021-03-11"),
+            HomePeriod("London", "GB", from = "2021-03-12"),
+        )
+        homeCorrections(listOf(HomeCorrection("Leeds", from = "2021-03-12"), HomeCorrection("London", from = "2021-03-12"))) shouldBe
+            listOf(HomePeriod("London", from = "2021-03-12"))
+    }
+
+    @Test
+    fun `follows a correction from its date on`() {
+        val inferred = listOf(HomePeriod("Boston", until = "2021-03-11"), HomePeriod("London", from = "2021-03-12"))
+        effectiveHomes(inferred, emptyList()) shouldBe inferred
+        effectiveHomes(inferred, listOf(HomeCorrection("Cambridge", "GB", "2020-09-01"))) shouldBe listOf(
+            HomePeriod("Boston", until = "2020-08-31"),
+            HomePeriod("Cambridge", "GB", from = "2020-09-01"),
+        )
+        effectiveHomes(listOf(HomePeriod("London")), listOf(HomeCorrection("London", from = "2024-01-01"))) shouldBe listOf(HomePeriod("London"))
+    }
+
+    @Test
+    fun `says home over time, newest first`() {
+        describeHomes(listOf(HomePeriod("Boston", from = "2018-09-01", until = "2021-03-11"), HomePeriod("London", from = "2021-03-12"))) shouldBe
+            "London since Mar 2021 · Boston 2018–2021"
+        describeHomes(listOf(HomePeriod("Boston", until = "2021-03-11"), HomePeriod("London", from = "2021-03-12"))) shouldBe
+            "London since Mar 2021 · Boston until 2021"
+        describeHomes(listOf(HomePeriod("London"))) shouldBe "London"
+        describeHomes(emptyList()) shouldBe ""
+    }
 }
