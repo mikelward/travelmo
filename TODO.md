@@ -226,8 +226,10 @@
       shows only a small green notice. Show the connected state and the
       next step (import past bookings) prominently in the Gmail section.
 
-- [ ] Consider Fira Sans for headings in the app (screen titles, trip
-      names) on Android and the web; only the wordmark uses it so far.
+- [ ] Choose the app's heading and body fonts on the web and Android.
+      Geist on the web for now; Fira Sans is the brand face (wordmark,
+      Play listing). None of Fira Sans with Inter, with the system font,
+      or on its own was right.
 - [x] Home, step 1: work out home over time from round trips, with moves
       and corrections (`homeTimeline`, `homeAt`, `isAtHome` in
       `packages/core` and the Android `:core`; SPEC "Home").
@@ -267,6 +269,12 @@
 - [ ] Maybe later: opt-in Android crash reports (Firebase Crashlytics),
       as in the sibling apps, behind a Settings switch that is off by
       default. The privacy policy already promises the opt-in.
+- [ ] Live flight updates: gate changes, delays and the baggage carousel
+      on arrival, on the flight's card and as a notification. Needs a
+      flight-status data source (and its cost) chosen first.
+- [ ] Read PDF attachments (tickets, booking confirmations) when an email
+      passes the filter: an SJ "Tickets for booking …" email was read as
+      not a booking, most likely because the journey is only in the PDF.
 
 ## Decisions needing review
 
