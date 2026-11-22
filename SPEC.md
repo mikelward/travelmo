@@ -554,8 +554,36 @@ Liverpool comes in as three trips, each club day named as a day out and
 the weekend "Liverpool": a new trip is named after its first destination
 that is not home, or failing that its first origin that is not (a return
 leg booked alone). While home is unknown, nothing changes: a booking joins
-the trip within two days of it. Trips filed before home was known are not
-regrouped (`TODO.md`).
+the trip within two days of it.
+
+Trips filed before home was known are rebuilt on request ("Regroup trips"
+in Settings, `POST /trips/regroup`, `apps/parser/src/regroup.ts`), in the
+import's per-user transaction. Each booking, the segments that share any
+source kept together (an outbound from one email and the return a later
+email filed beside it stay one), is filed again in the order they happen with the same
+decision as an import. Each resulting trip keeps the existing trip holding
+most of its bookings, with its id, sharing and dates; it keeps that trip's
+title too while it still holds every booking the trip had, so a name the
+user gave a trip only added to survives, and a trip whose bookings are
+unchanged is not written at all. Bookings never move between trips shared
+with different people (the maintainer's call: never mix them). Bookings are
+regrouped only among trips with the same share list, compared as a set and
+ignoring case, a private trip's being empty, and a trip they start is shared
+as the trips they came from were. So nobody gains sight of a booking, as a
+sharee could by filling a shared trip until it won the regroup, and nobody
+loses it. A trip left with
+none of its bookings is deleted; one that never had any is left alone, and
+a TripIt trip keeps its own grouping. Bookings are moved, never changed or
+deleted, so ratings and favorites go with them; an import record still
+names the trip a booking was first filed in, and a later calendar change
+treats a regrouped booking as one the user moved, keeping it. Running it
+again changes nothing. A plan too large for one transaction (Firestore's
+500 writes) is applied over several, each planning afresh and finishing
+what it moves: a trip it took bookings from is deleted when left empty or
+has its revision moved, so a merge that read it before retries. Every pass
+moves at least one booking: a move too large for one pass goes in parts,
+and a trip already named and dated as planned is not written again. A trip
+empty when regrouping began is never deleted.
 
 ### TripIt export
 
@@ -881,6 +909,7 @@ build without one points to the web instead.
 | `POST /gmail/backfill` | Firebase ID token | Reads the next batch of past emails (`restart: true` starts over); returns counts per outcome and the reading's progress |
 | `POST /gmail/reimport` | Firebase ID token | Imports one message again, skipping the pre-filter; returns its outcome |
 | `POST /gmail/disconnect` | Firebase ID token | Stops the watch, revokes the token, deletes the connection |
+| `POST /trips/regroup` | Firebase ID token | Rebuilds the user's trips from their bookings with the current grouping ("Home"); returns how many trips changed and how many were merged away |
 | `POST /feeds/add` | Firebase ID token | Subscribes to a calendar feed after checking its address and reading it once; returns counts as for `/import/ics` |
 | `POST /feeds/remove` | Firebase ID token | Stops polling a feed; its bookings stay |
 | `POST /calendar/connect` | Firebase ID token | Returns the Google OAuth URL for `calendar.readonly`; the callback is `/gmail/callback` |

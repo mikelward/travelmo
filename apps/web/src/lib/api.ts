@@ -1,6 +1,7 @@
 import type { User } from "firebase/auth";
 import type { CalendarExport, ForwardAddress } from "@travelmo/core";
 import type { CalendarResult } from "./ics";
+import type { RegroupResult } from "./regroup";
 import type { TripItResult } from "./tripit";
 
 export type BackfillResult = {
@@ -51,4 +52,5 @@ export const api = {
   issueForward: (user: User) => post<ForwardAddress>(user, "/forward/issue"),
   stopForward: (user: User) => post<void>(user, "/forward/stop"),
   deleteAccount: (user: User) => post<void>(user, "/account/delete"),
+  regroupTrips: (user: User) => post<RegroupResult>(user, "/trips/regroup"),
 };

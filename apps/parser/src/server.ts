@@ -72,6 +72,7 @@ import {
   type OAuthConfig,
 } from "./gmail";
 import { importCalendar, importMessage, importMessages, importTripIt, type ImportDeps, type ImportOptions } from "./importer";
+import { regroupTrips } from "./regroup";
 import { errorFields, log } from "./log";
 import { BadPushEnvelope, parseGmailPush, type GmailNotification } from "./pubsub";
 import { firestoreStore } from "./store";
@@ -168,6 +169,7 @@ app.use("/feeds/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "C
 app.use("/export/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/forward/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/account/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
+app.use("/trips/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 
 app.get("/healthz", (c) => c.text("ok"));
 
@@ -379,6 +381,14 @@ app.post("/gmail/backfill", async (c) => {
   const { cursor: _cursor, ...progress } = batch.progress;
   log("INFO", "backfill", { uid, candidates: batch.candidates, ...batch.counts, ...progress });
   return c.json({ candidates: batch.candidates, ...batch.counts, progress });
+});
+
+// Rebuilds the signed-in user's trips from their bookings with the grouping
+// imports use now, keeping days out at home apart from trips away.
+app.post("/trips/regroup", async (c) => {
+  const uid = await requireUser(c);
+  const result = await regroupTrips(uid, deps);
+  return c.json(result);
 });
 
 // A second look at one message the user picked from the review list: the

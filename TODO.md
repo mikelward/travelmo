@@ -237,7 +237,10 @@
       "London" trip).
 - [ ] Home, step 3: show home over time on Profile, web and Android, with
       a way to correct it (stored as override periods).
-- [ ] Home, step 4: regroup existing trips under the new rule.
+- [x] Home, step 4: regroup existing trips under the new rule ("Regroup
+      trips" in Settings on the web, `POST /trips/regroup`).
+- [ ] Android: a "Regroup trips" action in Settings, calling
+      `POST /trips/regroup` as the web does.
 - [ ] A "New Payment Confirmation" receipt from class4kids.co.uk came in as
       its own 00:00 activity, duplicating the "Stage Stars! Holiday Club -
       Day 1" booking it paid for: a receipt without a time should not
@@ -270,6 +273,13 @@ Guesses made on autopilot; change any of them freely.
   `-PtravelmoParserUrl` or `TRAVELMO_PARSER_URL`; a build without one
   says to delete the account on the web. Logs name the account by uid
   only, as the parser's other logs do.
+
+- Home, step 4 (regrouping existing trips) went before step 3 (showing and
+  correcting home on Profile): the trips already imported were grouped
+  wrongly, and step 3 is only the Profile view. Regrouping keeps a trip's
+  title only while it still holds every booking it had, since nothing
+  marks a title the user typed; a renamed trip that loses bookings takes
+  the worked-out name.
 
 - Forwarding addresses are `<token>@travelmo.app`, the token the whole
   local part (twenty lowercase base32 characters) rather than an
