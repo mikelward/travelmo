@@ -1227,8 +1227,8 @@ long-click action). Sources opens a dialog listing them as the web's trip
 page does (each source's label and kind, then "From" the sender), the same
 `segmentSources` in `:core`; an email the viewer imported, by the source's
 `uid` or as the trip's owner for one without, opens in Gmail at that
-message (the default account: the app does not read the connected
-address). CI builds it beside the web app
+message, in the Gmail account the user connected for importing
+(`gmail.emailAddress`, as the web's links), else the phone's default one. CI builds it beside the web app
 (`ci / android`).
 
 When Google Play has a newer version, the ⋮ menu's icon carries a small red

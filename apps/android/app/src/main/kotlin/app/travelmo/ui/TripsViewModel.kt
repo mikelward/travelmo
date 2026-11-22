@@ -207,6 +207,9 @@ class TripsViewModel(
 
     fun mergeTrips(token: String, sourceId: String, targetId: String) = run(token) { store.mergeTrips(sourceId, targetId) }
 
+    /** The Gmail account the user connected for importing, for source links; null when none. */
+    val gmailAccount: StateFlow<String?> = store.gmailAccount(uid).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     /** Whether reminders by email are on; null until the user document answers. */
     val reminderEmail: StateFlow<Boolean?> = store.reminderEmail(uid).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 

@@ -117,6 +117,7 @@ fun TripDetailScreen(
     val loaded by viewModel.state.collectAsStateWithLifecycle()
     val people by viewModel.people.collectAsStateWithLifecycle()
     val ownProfile by viewModel.ownProfile.collectAsStateWithLifecycle()
+    val gmailAccount by viewModel.gmailAccount.collectAsStateWithLifecycle()
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
     var deleting by remember { mutableStateOf<Segment?>(null) }
     var moving by remember { mutableStateOf<Segment?>(null) }
@@ -198,7 +199,7 @@ fun TripDetailScreen(
                 current, segments, shared = current.ownerUid != uid, errors = errors, busy = busy,
                 warnings = tripWarnings(people, current, segments, viewModel.today()), today = viewModel.today(),
                 programsFor = { provider -> programsFor(provider, ownProfile?.loyalty.orEmpty()) },
-                emailLink = { source -> emailLinkFor(source, uid, ownsTrip = isOwner) },
+                emailLink = { source -> emailLinkFor(source, uid, ownsTrip = isOwner, account = gmailAccount) },
                 bookingActions = if (canEdit) {
                     BookingActions(onEdit = { onEditBooking(it.id) }, onDelete = { deleting = it }, onMove = if (targets.isEmpty()) null else { segment -> moving = segment })
                 } else {

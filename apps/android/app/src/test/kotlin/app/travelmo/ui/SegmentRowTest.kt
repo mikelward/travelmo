@@ -189,4 +189,21 @@ class SegmentRowTest {
         composeRule.onNodeWithText("Booking confirmed: Cove Liverpool").performClick()
         shadowOf(composeRule.activity).nextStartedActivity.dataString shouldBe "https://mail.google.com/mail/u/0/#all/m-cove"
     }
+
+    @Test
+    fun `the trip page opens the viewer's own import in the Gmail account they connected`() {
+        val store = FakeTripStore(gmailAccount = "owner@example.com")
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent {
+            TravelmoTheme {
+                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithContentDescription("Booking actions")[1].performClick()
+        composeRule.onNodeWithText("Sources").performClick()
+        composeRule.onNodeWithText("Booking confirmed: Cove Liverpool").performClick()
+        shadowOf(composeRule.activity).nextStartedActivity.dataString shouldBe
+            "https://mail.google.com/mail/u/?authuser=owner%40example.com#all/m-cove"
+    }
 }
