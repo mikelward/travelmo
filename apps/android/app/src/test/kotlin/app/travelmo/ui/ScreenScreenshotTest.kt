@@ -20,6 +20,8 @@ import com.mikepenz.aboutlibraries.Libs
 import com.mikepenz.aboutlibraries.util.withJson
 import java.time.Instant
 import java.util.TimeZone
+import com.mikelward.androidlog.android.ShareOutcome
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -50,6 +52,8 @@ class ScreenScreenshotTest {
     private fun viewModel() = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
 
     private val user = SignedIn(OWNER, OWNER_EMAIL)
+
+    private val crashed = CrashReport(MutableStateFlow(true), refresh = {}, dismiss = {}, share = { ShareOutcome.SHARED })
 
     // At a fixed text size (the system's unless [textScale] says), not the
     // process-wide stored one, so a picture never depends on another test.
@@ -99,6 +103,25 @@ class ScreenScreenshotTest {
         val viewModel = viewModel()
         capture("trip_list_dark", dark = true) {
             TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.TRIPS) {} })
+        }
+    }
+
+    // After a crash in an earlier run: the banner at the top of the list.
+    @Test
+    fun trip_list_crash_banner() {
+        val viewModel = viewModel()
+        capture("trip_list_crash_banner") {
+            CompositionLocalProvider(LocalCrashReport provides crashed) {
+                TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.TRIPS) {} })
+            }
+        }
+    }
+
+    // Signed out, the same banner above the sign-in.
+    @Test
+    fun sign_in_crash_banner() = capture("sign_in_crash_banner") {
+        CompositionLocalProvider(LocalCrashReport provides crashed) {
+            SignInScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"))
         }
     }
 

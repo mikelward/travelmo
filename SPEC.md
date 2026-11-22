@@ -1109,7 +1109,11 @@ the on-device debug log (the fleet's shared `androidlog`: logcat and a
 rotated file, a privacy floor over every line, a switch to stop recording
 and a report shared through the share sheet, also offered on the sign-in
 screen when Google refuses a sign-in or it fails, since Settings is behind
-sign-in; every screen's top bar, and the sign-in screen's corner, ends
+sign-in; after a crash in an earlier run, a banner at the top of the trip
+list, or of the sign-in screen when signed out, offers that report (without
+a screenshot: the crash was in an earlier run) or Dismiss, and comes down
+when the report's clipboard copy lands or on Dismiss, the crashed run
+staying on the phone; every screen's top bar, and the sign-in screen's corner, ends
 with the same ⋮ menu, as in the sibling apps: Report a bug shares that
 report, and About names the version and opens the open-source licenses:
 every component the release APK bundles, Fira Sans included, by name, each

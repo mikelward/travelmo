@@ -197,6 +197,10 @@
     <string name="sharing">Sharing…</string>
     <string name="debug_log_copied_only">No app would take the report, so it is on the clipboard instead.</string>
     <string name="debug_log_share_failed">Couldn\'t share the debug log.</string>
+    <string name="crash_banner_title">Travelmo crashed</string>
+    <string name="crash_banner_body">Share the debug log to help fix it? Nothing is sent until you choose where.</string>
+    <string name="crash_banner_share">Share</string>
+    <string name="crash_banner_dismiss">Dismiss</string>
     <string name="delete_account">Delete account</string>
     <string name="delete_account_hint">This deletes your trips, bookings, travel profile and connections, and people you shared trips with lose them.</string>
     <string name="delete_account_on_web">Delete your account from Settings on the web.</string>
