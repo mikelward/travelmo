@@ -46,6 +46,13 @@ interface TripStore {
     /** Whether the user asked for reminders by email (`reminders.email` on their user document), live; null while it loads. */
     fun reminderEmail(uid: String): Flow<Boolean?>
 
+    /**
+     * The Gmail address the user connected for importing (`gmail.emailAddress`
+     * on their user document), live; null when none is connected or while it
+     * loads. A source email opens in that account, as on the web.
+     */
+    fun gmailAccount(uid: String): Flow<String?>
+
     /** Turns reminders by email on or off, as the web's Settings does: a merge of `reminders.email` alone. */
     suspend fun setReminderEmail(uid: String, on: Boolean)
 
@@ -146,6 +153,20 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         return db.collectionGroup("travelProfile").whereArrayContains("trustedEmails", address).snapshots().orNothing("shared profiles").map { snapshot ->
             snapshot?.documents.orEmpty().mapNotNull { doc -> profileFromDocument(doc.data ?: emptyMap()) }
         }
+    }
+
+    override fun gmailAccount(uid: String): Flow<String?> = callbackFlow {
+        val registration = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                // Links fall back to the phone's default Gmail account.
+                TravelmoLog.error(error, "Reading the user document for the Gmail account failed")
+                trySend(null)
+                return@addSnapshotListener
+            }
+            val gmail = snapshot?.get("gmail") as? Map<*, *>
+            trySend((gmail?.get("emailAddress") as? String)?.takeIf { it.isNotBlank() })
+        }
+        awaitClose { registration.remove() }
     }
 
     override fun reminderEmail(uid: String): Flow<Boolean?> = callbackFlow {

@@ -126,9 +126,12 @@ class FakeTripStore(
     private val segments: Map<String, List<Segment>> = fixtureSegments,
     private val profile: TravelProfile? = fixtureProfile,
     private val shared: List<TravelProfile> = listOf(fixtureSharedProfile),
+    private val gmailAccount: String? = null,
 ) : TripStore {
     override fun ownProfile(uid: String): Flow<OwnProfile> = flowOf(OwnProfile(profile))
     val reminders = mutableListOf<Boolean>()
+    override fun gmailAccount(uid: String): Flow<String?> = flowOf(gmailAccount)
+
     override fun reminderEmail(uid: String): Flow<Boolean?> = flowOf(true)
     override suspend fun setReminderEmail(uid: String, on: Boolean) {
         reminders += on
