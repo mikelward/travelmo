@@ -1,0 +1,146 @@
+import { describe, expect, it } from "vitest";
+import { homeAt, homeTimeline, isAtHome } from "./home";
+import type { ExtractedSegment, Place } from "./schema";
+
+const london: Place = { name: "London Euston", code: "EUS", city: "London", country: "GB" };
+const liverpool: Place = { name: "Liverpool Lime Street", code: "LIV", city: "Liverpool", country: "GB" };
+
+const train = (title: string, start: string, origin: Place, destination: Place): ExtractedSegment => ({
+  type: "train",
+  title,
+  start,
+  origin,
+  destination,
+});
+const flight = (start: string, from: string, to: string): ExtractedSegment => ({
+  type: "flight",
+  title: `${from} to ${to}`,
+  start,
+  origin: { name: `${from} airport`, city: from },
+  destination: { name: `${to} airport`, city: to },
+});
+const roundTrip = (from: string, to: string, out: string, back: string) => [
+  flight(`${out}T09:00:00+00:00`, from, to),
+  flight(`${back}T18:00:00+00:00`, to, from),
+];
+
+// The bookings that came in as one "London" trip: a holiday club at home on
+// either side of a weekend in Liverpool.
+const club = (title: string, start: string): ExtractedSegment => ({
+  type: "activity",
+  title,
+  start,
+  destination: { name: "Fixation Academy of Performing Arts", city: "London", country: "GB" },
+});
+const may = [
+  club("Eva Ward's Stage Stars! Holiday Club", "2026-05-22T00:00:00+01:00"),
+  train("Avanti West Coast London Euston to Liverpool Lime Street", "2026-05-23T12:07:00+01:00", london, liverpool),
+  train("Avanti West Coast Liverpool Lime Street to London Euston", "2026-05-25T11:43:00+01:00", liverpool, london),
+  club("Stage Stars! Holiday Club - Day 1", "2026-05-26T09:00:00+01:00"),
+];
+
+describe("homeTimeline", () => {
+  it("takes home from where a round trip leaves and comes back to", () => {
+    expect(homeTimeline(may)).toEqual([{ city: "London", country: "GB" }]);
+  });
+
+  it("dates a move from the first of two round trips from the new base", () => {
+    const bookings = [
+      ...roundTrip("Boston", "Chicago", "2019-03-01", "2019-03-05"),
+      ...roundTrip("Boston", "Denver", "2019-08-10", "2019-08-14"),
+      ...roundTrip("Boston", "Miami", "2020-01-02", "2020-01-06"),
+      ...roundTrip("London", "Paris", "2021-03-12", "2021-03-15"),
+      ...roundTrip("London", "Rome", "2021-06-01", "2021-06-05"),
+      ...roundTrip("London", "Lisbon", "2022-02-10", "2022-02-14"),
+    ];
+    expect(homeTimeline(bookings)).toEqual([
+      { city: "Boston", until: "2021-03-11" },
+      { city: "London", from: "2021-03-12" },
+    ]);
+  });
+
+  it("does not count one trip from somewhere else as a move", () => {
+    const bookings = [
+      ...roundTrip("London", "Paris", "2025-03-12", "2025-03-15"),
+      ...roundTrip("Sydney", "Melbourne", "2025-07-01", "2025-07-04"),
+      ...roundTrip("London", "Rome", "2025-09-01", "2025-09-05"),
+    ];
+    expect(homeTimeline(bookings)).toEqual([{ city: "London" }]);
+  });
+
+  it("follows a trip of several legs back to where it started", () => {
+    const bookings = [
+      flight("2025-04-01T09:00:00+00:00", "London", "Dubai"),
+      flight("2025-04-02T03:00:00+04:00", "Dubai", "Sydney"),
+      flight("2025-04-20T10:00:00+10:00", "Sydney", "London"),
+    ];
+    expect(homeTimeline(bookings)).toEqual([{ city: "London" }]);
+  });
+
+  it("orders legs by the instant they leave, across the date line", () => {
+    const bookings: ExtractedSegment[] = [
+      { type: "flight", title: "Tokyo to Honolulu", start: "2026-01-02T01:00:00+09:00", origin: { name: "Haneda", city: "Tokyo" }, destination: { name: "Honolulu", city: "Honolulu" } },
+      { type: "flight", title: "Honolulu to Tokyo", start: "2026-01-01T22:00:00-10:00", origin: { name: "Honolulu", city: "Honolulu" }, destination: { name: "Haneda", city: "Tokyo" } },
+    ];
+    expect(homeTimeline(bookings)).toEqual([{ city: "Tokyo" }]);
+  });
+
+  it("takes no home from a journey within one town", () => {
+    const crossing: ExtractedSegment = {
+      type: "ferry",
+      title: "Thames Clipper",
+      start: "2025-02-01T10:00:00+00:00",
+      origin: { name: "Westminster Pier", city: "London" },
+      destination: { name: "Greenwich Pier", city: "London" },
+    };
+    expect(homeTimeline([crossing])).toEqual([]);
+    expect(homeTimeline([crossing, ...roundTrip("London", "Rome", "2025-03-01", "2025-03-05")])).toEqual([{ city: "London" }]);
+  });
+
+  it("knows no home without a round trip", () => {
+    expect(homeTimeline([flight("2025-04-01T09:00:00+00:00", "London", "Boston")])).toEqual([]);
+    expect(homeTimeline([club("Holiday Club", "2026-05-22T09:00:00+01:00")])).toEqual([]);
+  });
+});
+
+describe("homeAt", () => {
+  const periods = [
+    { city: "Boston", until: "2021-03-11" },
+    { city: "London", from: "2021-03-12" },
+  ];
+
+  it("finds the home of a date", () => {
+    expect(homeAt(periods, "2020-06-01")?.city).toBe("Boston");
+    expect(homeAt(periods, "2021-03-12")?.city).toBe("London");
+    expect(homeAt([], "2021-03-12")).toBeUndefined();
+  });
+
+  it("lets a correction win for the dates it covers", () => {
+    const overrides = [{ city: "Cambridge", from: "2020-09-01", until: "2021-03-11" }];
+    expect(homeAt(periods, "2020-10-01", overrides)?.city).toBe("Cambridge");
+    expect(homeAt(periods, "2020-06-01", overrides)?.city).toBe("Boston");
+  });
+});
+
+describe("isAtHome", () => {
+  const periods = homeTimeline(may);
+
+  it("puts the holiday club at home and the trains away", () => {
+    expect(may.map((s) => isAtHome(s, periods))).toEqual([true, false, false, true]);
+  });
+
+  it("puts a stay in another city away", () => {
+    const stay: ExtractedSegment = {
+      type: "lodging",
+      title: "Hotel",
+      start: "2026-05-23T15:00:00+01:00",
+      destination: { name: "Hotel", city: "Liverpool", country: "GB" },
+    };
+    expect(isAtHome(stay, periods)).toBe(false);
+  });
+
+  it("says nothing is at home when home is unknown or the place is missing", () => {
+    expect(isAtHome(may[0]!, [])).toBe(false);
+    expect(isAtHome({ type: "activity", start: "2026-05-22T09:00:00+01:00" }, periods)).toBe(false);
+  });
+});

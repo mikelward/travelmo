@@ -215,6 +215,20 @@
 
 - [ ] Consider Fira Sans for headings in the app (screen titles, trip
       names) on Android and the web; only the wordmark uses it so far.
+- [x] Home, step 1: work out home over time from round trips, with moves
+      and corrections (`homeTimeline`, `homeAt`, `isAtHome` in
+      `packages/core` and the Android `:core`; SPEC "Home").
+- [ ] Home, step 2: group imports by it, so a day out at home never joins
+      a trip away and journeys from home and back bound a trip (a holiday
+      club in London either side of a Liverpool weekend came in as one
+      "London" trip).
+- [ ] Home, step 3: show home over time on Profile, web and Android, with
+      a way to correct it (stored as override periods).
+- [ ] Home, step 4: regroup existing trips under the new rule.
+- [ ] A "New Payment Confirmation" receipt from class4kids.co.uk came in as
+      its own 00:00 activity, duplicating the "Stage Stars! Holiday Club -
+      Day 1" booking it paid for: a receipt without a time should not
+      become a booking, or should match the order it pays for.
 
 ## Decisions needing review
 
