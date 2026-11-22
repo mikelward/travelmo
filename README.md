@@ -155,7 +155,7 @@ branches to `main`):
 |---|---|
 | `RELEASE_KEYSTORE_BASE64` | The Play upload keystore, base64: `keytool -genkeypair -keystore upload.keystore -alias upload -keyalg RSA -keysize 2048 -validity 10000`, then `base64 -w0 upload.keystore`. Play App Signing re-signs the bundle with its own key, so this one only authenticates the upload. |
 | `RELEASE_KEYSTORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD` | Its password, the key's alias and the key's password. |
-| `GOOGLE_SERVICES_JSON` | The Firebase project's `google-services.json` for `app.travelmo`, so the release signs in. |
+| `GOOGLE_SERVICES_JSON` | The Firebase project's `google-services.json` for `app.travelmo`, so the release signs in. Download it after enabling Google sign-in in Firebase Authentication: the Publish job fails on one without the web OAuth client. |
 | `PLAY_SERVICE_ACCOUNT_JSON` | Optional. A Play Console service account's key with "Release to testing tracks" and "Manage store presence" (for the listing) on the app and nothing more; until it is set, upload the prerelease's bundle through Play Console by hand. Add it only after the Play app exists with its declarations filed. |
 
 Without the keystore and the Firebase config the job warns and stops rather

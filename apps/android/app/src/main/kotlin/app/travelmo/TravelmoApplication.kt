@@ -9,6 +9,7 @@ import app.travelmo.data.NoAccountDeletion
 import app.travelmo.data.ParserAccountDeletion
 import app.travelmo.data.TripStore
 import app.travelmo.log.DebugLogging
+import app.travelmo.log.TravelmoLog
 import app.travelmo.notify.FirebasePushDevice
 import app.travelmo.notify.NoPushDevice
 import app.travelmo.notify.PushDevice
@@ -54,6 +55,7 @@ class TravelmoApplication : Application() {
     @SuppressLint("DiscouragedApi")
     private fun webClientId(): String? {
         val id = resources.getIdentifier("default_web_client_id", "string", packageName)
+        if (id == 0) TravelmoLog.warning("No default_web_client_id: google-services.json has no web OAuth client, so sign-in is off")
         return if (id == 0) null else getString(id)
     }
 }
