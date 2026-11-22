@@ -9,7 +9,7 @@ export function Nav() {
     <header className="border-b border-zinc-200 dark:border-zinc-800">
       {/* Wraps on a phone, where the links do not fit beside the wordmark. */}
       <nav className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-x-6 gap-y-1 px-4 py-3">
-        <Link href="/" className="text-lg font-semibold">
+        <Link href="/" className="font-wordmark text-lg font-medium">
           Travelmo
         </Link>
         {user && (

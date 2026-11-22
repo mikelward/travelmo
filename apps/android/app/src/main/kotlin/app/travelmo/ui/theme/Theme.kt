@@ -6,6 +6,10 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import app.travelmo.R
 
 // Travelmo's palette, the one the web app and the mockups
 // (design/android/project/styles/travelmo.css) use: zinc neutrals, an amber
@@ -53,6 +57,13 @@ private val DarkScheme = darkColorScheme(
     inverseSurface = Color(0xFFE4E4E7),
     inverseOnSurface = Color(0xFF18181B),
 )
+
+/**
+ * The "Travelmo" wordmark's face, as on the Play listing and the web's header:
+ * Fira Sans Medium (SIL Open Font License, app/fonts/FiraSans-OFL.txt). Only
+ * the wordmark uses it; the rest of the app keeps the system font.
+ */
+val Wordmark = FontFamily(Font(R.font.fira_sans_medium, FontWeight.Medium))
 
 /** The badge color of a trip shared with the viewer. */
 val SharedBadge = Color(0xFF7C3AED)

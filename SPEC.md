@@ -833,7 +833,10 @@ pure-Kotlin `:core` guarded by `verifyNoAndroid`, JUnit 5 with Kotest
 assertions, the commit count as `versionCode`, Firebase dormant until
 `google-services.json` is dropped in) rather than the React Native port once
 pencilled in; `design/android/` is its reference, Material 3 in this palette,
-and the strings follow the web app exactly. It reads the same Firestore
+and the strings follow the web app exactly. The "Travelmo" wordmark (the trip
+list's app bar, the sign-in screen, the web's header and sign-in card) is Fira
+Sans Medium, bundled under the SIL Open Font License; all other text keeps the
+system font on Android and Geist on the web. It reads the same Firestore
 documents under the same rules, signed in as the same Google account through
 Credential Manager and Firebase Auth, so a trip looks the same on both and
 Firestore's own cache answers offline. `:core` re-implements, in Kotlin, what

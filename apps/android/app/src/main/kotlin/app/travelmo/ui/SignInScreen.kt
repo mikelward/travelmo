@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import app.travelmo.R
 import app.travelmo.auth.GoogleAccount
 import app.travelmo.auth.SignInResult
+import app.travelmo.ui.theme.Wordmark
 import kotlinx.coroutines.launch
 
 /** The entry: the name, the tagline, and Sign in with Google, as on the web. */
@@ -38,7 +39,7 @@ fun SignInScreen(account: GoogleAccount) {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineMedium)
+            Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineMedium, fontFamily = Wordmark)
             Text(
                 stringResource(R.string.sign_in_tagline),
                 style = MaterialTheme.typography.bodyLarge,
