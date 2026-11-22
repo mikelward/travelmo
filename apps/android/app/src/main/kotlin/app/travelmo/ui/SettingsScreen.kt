@@ -3,6 +3,7 @@ package app.travelmo.ui
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,7 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -20,13 +21,17 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -34,7 +39,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.BuildConfig
@@ -44,6 +52,11 @@ import app.travelmo.auth.SignedIn
 import app.travelmo.log.DebugLogging
 import app.travelmo.notify.ReminderNotifications
 import com.mikelward.androidlog.android.ShareOutcome
+import com.mikelward.androidzoom.MAX_FONT_SCALE
+import com.mikelward.androidzoom.MIN_FONT_SCALE
+import com.mikelward.androidzoom.compose.LocalFontSizeState
+import com.mikelward.androidzoom.compose.StableInputDensity
+import com.mikelward.androidzoom.fontScalePercent
 import kotlinx.coroutines.launch
 
 private const val REMINDER_TOKEN = "settings/reminders/email"
@@ -52,7 +65,7 @@ private const val DELETE_ACCOUNT_TOKEN = "settings/account/delete"
 
 /**
  * The account, reminders by email and as notifications on this phone, the
- * debug log, deleting the account and the build; the import settings are on
+ * text size, the debug log, deleting the account and the build; the import settings are on
  * the web for now.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -112,6 +125,7 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
             }
             (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             PushSwitch(viewModel)
+            TextSizeSection()
             DebugLogSection(signedIn = true)
             DeleteAccountSection(account, viewModel)
             Text(
@@ -207,7 +221,7 @@ private fun DeleteAccountSection(account: GoogleAccount, viewModel: TripsViewMod
     ) { Text(stringResource(if (outcome is Outcome.Busy) R.string.deleting else R.string.delete_account)) }
     (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
     if (confirming) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { confirming = false },
             title = { Text(stringResource(R.string.delete_account_confirm_title)) },
             text = { Text(stringResource(R.string.delete_account_confirm)) },
@@ -271,4 +285,80 @@ private fun DebugLogSection(signedIn: Boolean) {
         modifier = Modifier.padding(top = 8.dp),
     ) { Text(stringResource(if (sharing) R.string.sharing else R.string.share_debug_log)) }
     shareNote?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+}
+
+/**
+ * The text size (SPEC "Text size"): the percentage of the phone's own size,
+ * a slider that resizes the app as it moves and saves on release, − and +
+ * for one percent a tap, each off at its end of the range, and a switch for
+ * the two-finger pinch. Reads the theme's state, so the slider and a pinch
+ * move one value; absent outside the theme.
+ */
+@Composable
+internal fun TextSizeSection() {
+    val fontSize = LocalFontSizeState.current ?: return
+    val scale = fontSize.scale
+    val percent = stringResource(R.string.text_size_value, fontScalePercent(scale))
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 4.dp)) {
+        Text(stringResource(R.string.text_size), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        Text(percent, style = MaterialTheme.typography.titleMedium)
+    }
+    Text(stringResource(R.string.text_size_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    // Where the drag last was, so the release saves exactly that: [scale]
+    // comes back through recomposition, which a release in the same frame
+    // as the last movement would beat.
+    var dragged by remember { mutableFloatStateOf(scale) }
+    var dragging by remember { mutableStateOf(false) }
+    // Level with a pinch or a step whenever the slider isn't the one moving it.
+    if (!dragging) dragged = scale
+    // Leaving Settings mid-drag never calls onValueChangeFinished; end the drag
+    // here, or the state would hold back stored values for the rest of the run.
+    DisposableEffect(Unit) { onDispose { if (dragging) fontSize.commit(dragged) } }
+    val smaller = stepTextScale(scale, -1)
+    val larger = stepTextScale(scale, 1)
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        IconButton(
+            onClick = {
+                fontSize.preview(smaller)
+                fontSize.commit(smaller)
+            },
+            enabled = smaller != scale,
+        ) { Icon(painterResource(R.drawable.ic_remove), contentDescription = stringResource(R.string.text_size_smaller)) }
+        Box(modifier = Modifier.weight(1f)) {
+            // At the density before the text size: dragging changes that
+            // density, which would otherwise restart the slider's own gesture.
+            StableInputDensity {
+                Slider(
+                    value = scale,
+                    onValueChange = {
+                        dragging = true
+                        dragged = it
+                        fontSize.preview(it)
+                    },
+                    onValueChangeFinished = {
+                        dragging = false
+                        fontSize.commit(dragged)
+                    },
+                    // Not stepped, like the pinch, so neither rounds away the other's size.
+                    valueRange = MIN_FONT_SCALE..MAX_FONT_SCALE,
+                    // The palette has no secondaryContainer, Material's default here.
+                    colors = SliderDefaults.colors(inactiveTrackColor = MaterialTheme.colorScheme.outlineVariant),
+                    // The percentage beside the title, not the thumb's place in the track.
+                    modifier = Modifier.semantics { stateDescription = percent },
+                )
+            }
+        }
+        IconButton(
+            onClick = {
+                fontSize.preview(larger)
+                fontSize.commit(larger)
+            },
+            enabled = larger != scale,
+        ) { Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.text_size_larger)) }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Text(stringResource(R.string.pinch_to_resize), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Switch(checked = fontSize.pinchEnabled, onCheckedChange = fontSize::choosePinch)
+    }
+    if (TextSizeSetting.saveFailed) Text(stringResource(R.string.setting_not_saved), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
 }

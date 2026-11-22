@@ -73,17 +73,18 @@ jobs:
       # exists, the PR's CI waits for one click of approval on the Actions
       # tab, which the workflow's own PR body explains.
       ci-workflow: ''
-      # androidlog is published to a branch of its own repository rather
-      # than to Maven Central, so the engine cannot discover its releases
-      # through the default repositories. Declaring it here is what lets the
+      # androidlog and androidzoom are each published to a branch of their own
+      # repository rather than to Maven Central, so the engine cannot discover
+      # their releases through the default repositories. Declaring them here is what lets the
       # weekly batch see a new version at all; without it the coordinate
       # sits at whatever it was pinned to, silently, with no failing run to
       # say so. apps/android/settings.gradle.kts already declares the same
-      # repository, scoped to that one group, so Gradle can resolve what the
+      # repositories, each scoped to its one group, so Gradle can resolve what the
       # batch selects.
       extra-repositories: |
         https://raw.githubusercontent.com/mikelward/androidlog/maven
-      # Both coordinates, because they share one `androidlog` version key
+        https://raw.githubusercontent.com/mikelward/androidzoom/maven
+      # Every coordinate, because each pair shares one version key
       # and the input exempts a key only when every coordinate it pins is
       # named. The cooldown exists to let a compromised third-party release
       # be yanked before an unattended job takes it; it guards nothing
@@ -94,6 +95,8 @@ jobs:
       no-cooldown-for: |
         com.mikelward.androidlog:logging-core
         com.mikelward.androidlog:logging-android
+        com.mikelward.androidzoom:zoom-core
+        com.mikelward.androidzoom:zoom-compose
       # The licenses export follows the dependency set, so the batch
       # regenerates it and commits it with the catalog; otherwise CI's
       # drift check would fail every bump, as in the sibling apps.

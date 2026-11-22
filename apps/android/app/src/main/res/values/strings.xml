@@ -181,6 +181,14 @@
     <string name="notifications_blocked">Notifications for Travelmo are off in the system settings; allow them there to turn this on.</string>
     <string name="reminders_channel">Trip reminders</string>
     <string name="reminders_channel_description">Passports or visas that run out too soon and what each country asks of your passport, before a trip.</string>
+    <!-- Text size: a factor over the phone's own text size (SPEC "Text size"). -->
+    <string name="text_size">Text size</string>
+    <string name="text_size_hint">Compared with your phone\'s text size.</string>
+    <!-- A percentage; %% is a literal percent sign. -->
+    <string name="text_size_value">%1$d%%</string>
+    <string name="text_size_smaller">Smaller text</string>
+    <string name="text_size_larger">Larger text</string>
+    <string name="pinch_to_resize">Pinch to resize</string>
     <string name="debug_log">Debug log</string>
     <string name="debug_log_hint">Kept on this phone to help fix a bug: what the app did, never your bookings or addresses. Sharing opens the share sheet with a report of this run and the last few.</string>
     <string name="debug_log_record">Record what the app does</string>

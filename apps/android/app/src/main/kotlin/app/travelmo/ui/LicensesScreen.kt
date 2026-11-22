@@ -17,7 +17,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -163,7 +162,7 @@ internal fun LicensesContent(libraries: Libs?, onBack: () -> Unit = {}, onOpenLi
 @Composable
 private fun LibraryDialog(library: Library, onOpenLicenseUrl: (String) -> Unit, onDismiss: () -> Unit) {
     val authors = remember(library) { library.authors() }
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(library.name) },
         text = {

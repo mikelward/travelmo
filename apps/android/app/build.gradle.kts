@@ -329,6 +329,10 @@ dependencies {
     implementation(libs.firebase.messaging)
     implementation(libs.androidlog.logging.core)
     implementation(libs.androidlog.logging.android)
+    // The text size: a factor over the system's font scale, set in Settings
+    // or by a pinch anywhere in the app (SPEC "Text size"). Free, on-device
+    // only, and from the same owner as androidlog.
+    implementation(libs.androidzoom.compose)
     // Reads the committed res/raw/aboutlibraries.json for the Licenses screen.
     implementation(libs.aboutlibraries.compose.m3)
     // Google Play In-App Update, read-only: asks Play whether a newer version

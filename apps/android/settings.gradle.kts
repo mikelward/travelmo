@@ -34,6 +34,13 @@ dependencyResolutionManagement {
             url = uri("https://raw.githubusercontent.com/mikelward/androidlog/maven")
             content { includeGroup("com.mikelward.androidlog") }
         }
+        // mikelward/androidzoom, the text size the sibling apps share,
+        // publishes the same way and is scoped the same way.
+        maven {
+            name = "androidzoom"
+            url = uri("https://raw.githubusercontent.com/mikelward/androidzoom/maven")
+            content { includeGroup("com.mikelward.androidzoom") }
+        }
     }
 }
 

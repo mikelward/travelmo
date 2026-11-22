@@ -23,7 +23,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -75,6 +74,7 @@ import app.travelmo.core.timesLine
 import app.travelmo.core.tripWarnings
 import app.travelmo.ui.theme.SharedBadge
 import app.travelmo.ui.theme.TextButtonInset
+import com.mikelward.androidzoom.compose.pinchFontSizeHost
 
 /**
  * A trip's bookings by day, as the web's trip page lists them. The owner and
@@ -159,7 +159,7 @@ fun TripDetailScreen(
         },
     ) { padding ->
         deleting?.let { segment ->
-            AlertDialog(
+            AppAlertDialog(
                 onDismissRequest = { deleting = null },
                 title = { Text(stringResource(R.string.delete_booking_title)) },
                 text = { Text(stringResource(R.string.delete_booking_text, segment.title)) },
@@ -240,7 +240,7 @@ private fun TripBody(
         }
     }
     if (confirmingDelete && tripActions != null) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { confirmingDelete = false },
             title = { Text(stringResource(R.string.delete_trip_title)) },
             text = { Text(stringResource(R.string.delete_trip_text, trip.title)) },
@@ -389,7 +389,7 @@ private fun MergeInto(targets: List<Trip>, busy: Boolean, merge: (String) -> Uni
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
                 modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
             )
-            ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.pinchFontSizeHost()) {
                 for (t in targets) {
                     DropdownMenuItem(text = { Text(tripChoice(t)) }, onClick = { targetId = t.id; open = false })
                 }
@@ -407,7 +407,7 @@ private fun tripChoice(trip: Trip) = "${trip.title} (${formatDateRange(trip.star
 @Composable
 private fun RenameDialog(current: String, onDismiss: () -> Unit, onRename: (String) -> Unit) {
     var title by rememberSaveable { mutableStateOf(current) }
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.rename_trip)) },
         text = { OutlinedTextField(value = title, onValueChange = { title = it }, singleLine = true, label = { Text(stringResource(R.string.trip_name)) }) },
@@ -419,7 +419,7 @@ private fun RenameDialog(current: String, onDismiss: () -> Unit, onRename: (Stri
 /** The trips a booking can move to, one tap each. */
 @Composable
 private fun MoveDialog(segment: Segment, targets: List<Trip>, onDismiss: () -> Unit, onMove: (Trip) -> Unit) {
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.move_booking_title, segment.title)) },
         text = {
@@ -471,7 +471,7 @@ fun SegmentRow(segment: Segment, actions: BookingActions? = null, programs: List
                 IconButton(onClick = { menu = true }, modifier = Modifier.size(32.dp)) {
                     Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.booking_actions), tint = muted)
                 }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, modifier = Modifier.pinchFontSizeHost()) {
                     DropdownMenuItem(text = { Text(stringResource(R.string.edit)) }, onClick = { menu = false; actions.onEdit(segment) })
                     actions.onMove?.let { move ->
                         DropdownMenuItem(text = { Text(stringResource(R.string.move_to)) }, onClick = { menu = false; move(segment) })

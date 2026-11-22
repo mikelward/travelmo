@@ -12,7 +12,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -43,6 +42,7 @@ import app.travelmo.log.DebugLogging
 import app.travelmo.log.TravelmoLog
 import com.mikelward.androidlog.android.ShareOutcome
 import com.mikelward.androidlog.safe
+import com.mikelward.androidzoom.compose.pinchFontSizeHost
 import kotlinx.coroutines.launch
 
 /**
@@ -96,7 +96,9 @@ fun AppMenu(modifier: Modifier = Modifier, items: @Composable (close: () -> Unit
                 }
             }
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, shape = RoundedCornerShape(12.dp)) {
+        // A popup inherits the text size but not the pinch, which is a
+        // window's own; pinchFontSizeHost brings it into the menu.
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.pinchFontSizeHost(), shape = RoundedCornerShape(12.dp)) {
             items { expanded = false }
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.report_a_bug), style = MaterialTheme.typography.bodyLarge) },
@@ -180,7 +182,7 @@ internal fun openPlayListing(context: Context) {
  */
 @Composable
 fun AboutDialog(onOpenLicenses: (() -> Unit)?, onDismiss: () -> Unit) {
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.app_name)) },
         text = { Text(stringResource(R.string.about_version, "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")) },

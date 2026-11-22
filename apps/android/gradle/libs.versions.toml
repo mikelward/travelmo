@@ -9,6 +9,9 @@ coroutines = "1.11.0"
 # The fleet's shared on-device debug log (mikelward/androidlog): the privacy
 # floor, the logcat and file sinks, and the bug-report share sheet.
 androidlog = "5.1.99"
+# The fleet's shared text size (mikelward/androidzoom): the 80%-160% range,
+# the pinch, and the window helpers for menus and dialogs.
+androidzoom = "1.0.9"
 serialization = "1.12.0"
 coreKtx = "1.19.1"
 activityCompose = "1.13.0"
@@ -48,6 +51,7 @@ playAppUpdate = "2.1.0"
 [libraries]
 androidlog-logging-core = { group = "com.mikelward.androidlog", name = "logging-core", version.ref = "androidlog" }
 androidlog-logging-android = { group = "com.mikelward.androidlog", name = "logging-android", version.ref = "androidlog" }
+androidzoom-compose = { group = "com.mikelward.androidzoom", name = "zoom-compose", version.ref = "androidzoom" }
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "coroutines" }

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Material's filled "remove" (minus), the text size's minus button in
+  Settings; material-icons-core has the plus (Icons.Filled.Add) but not this.
+  No tint, so Compose's Icon dims it with the button when disabled.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M19,13H5v-2h14v2z" />
+</vector>

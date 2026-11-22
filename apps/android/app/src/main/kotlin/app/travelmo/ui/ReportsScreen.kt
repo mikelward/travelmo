@@ -57,6 +57,7 @@ import app.travelmo.core.countryName
 import app.travelmo.core.favoritePlaces
 import app.travelmo.core.travelReport
 import app.travelmo.core.worldMap
+import com.mikelward.androidzoom.compose.pinchFontSizeHost
 
 /**
  * Where the traveler has been, as the web's /reports counts it: the trips
@@ -145,7 +146,7 @@ private fun YearPicker(years: List<String>, year: String?, onPick: (String?) -> 
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
             modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
         )
-        ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.pinchFontSizeHost()) {
             DropdownMenuItem(text = { Text(stringResource(R.string.all_years)) }, onClick = { onPick(null); open = false })
             for (y in years) DropdownMenuItem(text = { Text(y) }, onClick = { onPick(y); open = false })
         }

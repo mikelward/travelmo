@@ -1164,6 +1164,34 @@ the user's, only what Play already knows as the app's distributor (its
 package and installed version), so the Play data safety answers are
 unchanged.
 
+### Text size
+
+The app's text can be made larger or smaller than the rest of the phone, as
+in the sibling apps, through the fleet's shared `androidzoom` library. The
+size is a factor on top of the system's font scale, not a replacement for
+it, so an accessibility setting made in Android still holds; only text
+grows, while paddings, icons and touch targets keep their layout. The range
+is 80% to 160% and it starts at 100%, the phone's own size: there is no
+dense board to protect, so travelmo skips stopdash's 105% default. Settings
+has a "Text size" section showing the percentage, a slider that resizes the
+app as it moves and saves on release, and a − and a + either side that move
+it one whole percent of the shown percentage a tap, saved at once, each off
+at its end of the range. A two-finger pinch anywhere in the app, dropdown
+menus, dialogs and the date picker included, resizes the app live and saves
+once when the fingers lift; it takes over only once the fingers have spread
+past androidzoom's slop, so a two-finger scroll still scrolls, and a
+"Pinch to resize" switch turns it off. No screen has a long press, so a
+pinch can't trigger one; a long press added later must ignore a gesture
+with two fingers down (stopdash's `unlessPinch`). A menu's popup inherits
+the size and hosts the pinch itself; a dialog, a window of its own,
+re-applies both (`AppAlertDialog`). The value is one number and one
+boolean in a SharedPreferences file on the phone, not synced to Firestore
+and nothing of the user's, read into memory off the main thread at startup
+so the first frame is normally at the chosen size (a screen drawn before
+the read lands resizes a frame later rather than waiting on the disk). A
+save storage refuses stays in force until a restart, and Settings says it
+wasn't saved.
+
 ## Later
 
 Itinerary ideas and
