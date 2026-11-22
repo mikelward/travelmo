@@ -10,5 +10,7 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
     "test": "pnpm -r --workspace-concurrency=1 test"
-  }
+  },
+  "dependencies": {},
+  "devDependencies": {}
 }

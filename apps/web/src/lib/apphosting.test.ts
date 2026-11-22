@@ -19,3 +19,15 @@ describe("apphosting.yaml", () => {
     }
   });
 });
+
+// When apphosting.yaml sets a buildCommand, App Hosting's build rewrites the
+// root package.json, writing a missing dependencies or devDependencies field
+// as null, and pnpm install then fails with "Cannot convert undefined or null
+// to object". Empty objects survive the rewrite.
+describe("root package.json", () => {
+  const pkg = JSON.parse(readFileSync(new URL("../../../../package.json", import.meta.url), "utf8"));
+  it("declares dependencies and devDependencies", () => {
+    expect(pkg.dependencies).toBeTypeOf("object");
+    expect(pkg.devDependencies).toBeTypeOf("object");
+  });
+});
