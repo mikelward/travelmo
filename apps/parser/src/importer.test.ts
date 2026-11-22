@@ -1232,3 +1232,63 @@ describe("fileBooking with home known", () => {
     expect(store.trips.size).toBe(1);
   });
 });
+
+// A car home from Heathrow after a flight from New York, which was filed as
+// a trip of its own named after home.
+describe("fileBooking with a ride from the airport", () => {
+  const lhr = { name: "London Heathrow", code: "LHR", city: "London", country: "GB" };
+  const jfk = { name: "John F. Kennedy International", code: "JFK", city: "New York", country: "US" };
+  const cdg = { name: "Paris Charles de Gaulle", code: "CDG", city: "Paris", country: "FR" };
+  const homeAddress = { name: "1 Example Road, London N1 1AA", city: "London", country: "GB" };
+  const flights: ExtractedSegment[] = [
+    { type: "flight", title: "BA 117", start: "2026-07-10T08:25:00+01:00", end: "2026-07-10T11:10:00-04:00", origin: lhr, destination: jfk },
+    { type: "flight", title: "BA 112", start: "2026-07-22T18:30:00-04:00", end: "2026-07-23T06:35:00+01:00", origin: jfk, destination: lhr },
+  ];
+  const paris: ExtractedSegment[] = [
+    { type: "flight", title: "AF 1081", start: "2026-03-06T07:00:00+00:00", end: "2026-03-06T09:15:00+01:00", origin: lhr, destination: cdg },
+    { type: "flight", title: "AF 1180", start: "2026-03-09T19:00:00+01:00", end: "2026-03-09T19:20:00+00:00", origin: cdg, destination: lhr },
+  ];
+  const ride: ExtractedSegment = {
+    type: "car_rental",
+    title: "Abetta Car from Heathrow Terminal 3 to London",
+    start: "2026-07-23T15:27:00+01:00",
+    origin: { name: "Heathrow Terminal 3 - LHR, TW6 1SX", city: "London", country: "GB" },
+    destination: homeAddress,
+  };
+  const file = (store: Memory, sourceId: string, segments: ExtractedSegment[]) =>
+    fileBooking("u1", { sourceId, source: "gmail", segments }, deps(store, async () => ({ isBooking: false, segments: [] })));
+  const titles = (store: Memory) =>
+    [...store.trips.values()].map((t) => `${t.title} ${t.start}..${t.end}`).sort();
+
+  it.each([
+    ["after", [["flights", flights], ["ride", [ride]]]],
+    ["before", [["ride", [ride]], ["flights", flights]]],
+  ] as const)("files the ride with the flight it meets, read %s it", async (_, order) => {
+    const store = memoryStore();
+    for (const [id, segments] of order) await file(store, id, [...segments]);
+    expect(titles(store)).toEqual(["New York 2026-07-10..2026-07-23"]);
+  });
+
+  it("names a ride with no flight by its route", async () => {
+    const store = memoryStore();
+    await file(store, "paris", paris);
+    await file(store, "ride", [ride]);
+    expect(titles(store)).toEqual(["Heathrow to home 2026-07-23..2026-07-23", "Paris 2026-03-06..2026-03-09"]);
+  });
+
+  it("keeps a renamed ride's name when the flight joins it", async () => {
+    const store = memoryStore();
+    const { tripId } = await file(store, "ride", [ride]);
+    store.trips.set(tripId!, { ...store.trips.get(tripId!)!, title: "Home from New York" });
+    await file(store, "flights", flights);
+    expect(titles(store)).toEqual(["Home from New York 2026-07-10..2026-07-23"]);
+  });
+
+  it("still keeps a car hired at home out of the trip away", async () => {
+    const store = memoryStore();
+    await file(store, "flights", flights);
+    const where = { name: "Hertz Islington", city: "London", country: "GB" };
+    await file(store, "hire", [{ type: "car_rental", title: "Hertz", start: "2026-07-24T09:00:00+01:00", end: "2026-07-24T18:00:00+01:00", origin: where, destination: where }]);
+    expect(titles(store)).toEqual(["London 2026-07-24..2026-07-24", "New York 2026-07-10..2026-07-23"]);
+  });
+});

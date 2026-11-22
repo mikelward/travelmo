@@ -95,9 +95,29 @@ private fun HomePeriod.covers(date: String) = (from == null || from <= date) && 
 fun homeAt(periods: List<HomePeriod>, date: String, overrides: List<HomePeriod> = emptyList()): HomePeriod? =
     overrides.firstOrNull { it.covers(date) } ?: periods.firstOrNull { it.covers(date) }
 
-/** Whether a booking that is not a journey happens in the home of its day. */
+// Whether two places are one: the same code where both have one, else the
+// same name or the same address.
+private fun samePlace(a: Place, b: Place): Boolean {
+    if (a.code != null && b.code != null) return a.code.trim().equals(b.code.trim(), ignoreCase = true)
+    return a.name.trim().equals(b.name.trim(), ignoreCase = true) ||
+        (a.address != null && b.address != null && a.address.trim().equals(b.address.trim(), ignoreCase = true))
+}
+
+/**
+ * A ground transfer: a car or taxi booked from one place to another (an
+ * airport to home), not a car hired and returned in one place. It travels,
+ * so it is never at home, but it is no round trip either.
+ */
+fun isTransfer(segment: Segment): Boolean {
+    if (segment.type != SegmentType.CAR_RENTAL && segment.type != SegmentType.OTHER) return false
+    val origin = segment.origin ?: return false
+    val destination = segment.destination ?: return false
+    return !samePlace(origin, destination)
+}
+
+/** Whether a booking that is not a journey or a transfer happens in the home of its day. */
 fun isAtHome(segment: Segment, periods: List<HomePeriod>, overrides: List<HomePeriod> = emptyList()): Boolean {
-    if (segment.type in journeyTypes) return false
+    if (segment.type in journeyTypes || isTransfer(segment)) return false
     val place = town(segment.destination) ?: return false
     val home = homeAt(periods, localDate(segment.start), overrides) ?: return false
     return sameTown(place, home)

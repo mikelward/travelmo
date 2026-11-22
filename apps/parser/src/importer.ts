@@ -2,7 +2,10 @@ import {
   enrichSegments,
   fillAirports,
   awayPlace,
+  compareInstants,
   findTripForBooking,
+  isTransfer,
+  transferTitle,
   homeTimeline,
   type HomePeriod,
   icsEventText,
@@ -31,7 +34,7 @@ import { isNotFound, type EmailMessage } from "./gmail";
 import { calendarPrefilter, prefilter, senderDomain, type PrefilterResult, type SenderPatterns } from "./prefilter";
 import { embeddingText, similarityVerdict, type Example, type ExampleLabel, type Examples } from "./similarity";
 
-export type TripBounds = Pick<Trip, "start" | "end" | "updatedAt">;
+export type TripBounds = Pick<Trip, "start" | "end" | "updatedAt"> & Partial<Pick<Trip, "title">>;
 
 // Reads first, then writes: Firestore transactions require that order.
 export type TripTx = {
@@ -515,7 +518,21 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
       // A source's own trip dates (a TripIt itinerary) widen it too, so a
       // later booking within them finds this trip.
       const want = hint ? { start: min(hint.start, freshRange.start), end: max(hint.end, freshRange.end) } : freshRange;
-      tx.extendTrip(tripId, { start: min(target.start, want.start), end: max(target.end, want.end), updatedAt: timestamp });
+      // A trip of nothing but a ride from the airport, still named for its
+      // route, takes the name of the flight's trip once the flight joins it.
+      // Home may have been unknown when it was named ("Heathrow to London").
+      const held = segmentsOf(tripId);
+      const routeNamed = [tripTitle(held, periods, overrides), tripTitle(held)].includes(target.title);
+      const renamed =
+        held.length > 0 && held.every(isTransfer) && routeNamed
+          ? tripTitle([...held, ...booking.segments].sort((a, b) => compareInstants(a.start, b.start)), periods, overrides)
+          : undefined;
+      tx.extendTrip(tripId, {
+        start: min(target.start, want.start),
+        end: max(target.end, want.end),
+        ...(renamed && renamed !== target.title ? { title: renamed } : {}),
+        updatedAt: timestamp,
+      });
     } else {
       // A hinted id still taken by a trip being deleted cannot be reused.
       tripId = hint && !trips.some((trip) => trip.id === hint.id) ? hint.id : store.newId();
@@ -773,8 +790,11 @@ export function tripTitle(
   periods: readonly HomePeriod[] = [],
   overrides: readonly HomePeriod[] = [],
 ): string {
-  const days = new Set(segments.flatMap((s) => [s.start, s.end].filter((t) => t !== undefined).map((t) => t.slice(0, 10))));
   const first = segments[0];
+  // Nothing but a ride, from the airport home say: named by its route, not
+  // as a trip to the home town.
+  if (first && segments.every(isTransfer)) return transferTitle(first, periods, overrides)!;
+  const days = new Set(segments.flatMap((s) => [s.start, s.end].filter((t) => t !== undefined).map((t) => t.slice(0, 10))));
   if (first && days.size === 1 && segments.every((s) => s.type === "activity")) {
     const venue = first.destination?.name;
     if (venue && first.title.toLowerCase().startsWith(venue.toLowerCase())) return venue;

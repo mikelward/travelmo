@@ -275,6 +275,12 @@
 - [ ] Read PDF attachments (tickets, booking confirmations) when an email
       passes the filter: an SJ "Tickets for booking …" email was read as
       not a booking, most likely because the journey is only in the PDF.
+- [x] File a car or taxi from the airport with the flight it meets, not as
+      a trip of its own named after home (`isTransfer`, `connects`).
+- [ ] Maybe later: a `transfer` booking type from extraction, shown as
+      "Transfer" rather than "Car". Transfers are inferred today from a car
+      or "other" booking whose two ends differ, which needs no schema,
+      rules or Android model change.
 
 ## Decisions needing review
 

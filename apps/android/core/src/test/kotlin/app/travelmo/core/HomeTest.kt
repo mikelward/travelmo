@@ -104,6 +104,24 @@ class HomeTest {
     }
 
     @Test
+    fun `does not call a ride home from the airport a day out at home, unlike a car hired there`() {
+        val periods = listOf(HomePeriod("London", "GB"))
+        val home = Place("1 Example Road, London N1 1AA", city = "London", country = "GB")
+        val ride = Segment(
+            "r", "t", SegmentType.CAR_RENTAL, "Abetta Car from Heathrow Terminal 3 to London", "2026-07-23T15:27:00+01:00",
+            origin = Place("Heathrow Terminal 3 - LHR, TW6 1SX", city = "London", country = "GB"), destination = home,
+        )
+        val hertz = Place("Hertz Islington", city = "London", country = "GB")
+        val hire = Segment("h", "t", SegmentType.CAR_RENTAL, "Hertz", "2026-07-23T09:00:00+01:00", origin = hertz, destination = hertz)
+        isTransfer(ride) shouldBe true
+        isTransfer(hire) shouldBe false
+        isTransfer(ride.copy(destination = null)) shouldBe false
+        isTransfer(ride.copy(type = SegmentType.LODGING)) shouldBe false
+        isAtHome(ride, periods) shouldBe false
+        isAtHome(hire, periods) shouldBe true
+    }
+
+    @Test
     fun `runs each correction until the next, keeping the later of two on one date`() {
         homeCorrections(listOf(HomeCorrection("London", "GB", "2021-03-12"), HomeCorrection("Boston", "US", "2018-09-01"))) shouldBe listOf(
             HomePeriod("Boston", "US", from = "2018-09-01", until = "2021-03-11"),
