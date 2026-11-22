@@ -169,7 +169,9 @@ export function SegmentRow({
       ? `Check-in ${localTime(segment.start)}${end ? ` · Check-out ${end}` : ""}`
       : `${localTime(segment.start)}${end ? ` – ${end}` : ""}`;
   return (
-    <li className="flex gap-4 py-3">
+    // On a phone the actions drop below the details, in line with them,
+    // rather than squeezing them into a narrow column.
+    <li className="flex flex-wrap gap-x-4 gap-y-2 py-3">
       <span className="w-16 shrink-0 text-xs font-medium uppercase tracking-wide text-zinc-500">{labels[segment.type]}</span>
       <div className="min-w-0 flex-1">
         <p className="font-medium">{segment.title}</p>
@@ -191,7 +193,7 @@ export function SegmentRow({
         <Sources segment={segment} {...(emailLinks ? { emailLinks } : {})} {...(onLearnSender ? { onLearnSender } : {})} />
       </div>
       {(onEdit || onDelete || (onMove && moveTargets && moveTargets.length > 0)) && (
-        <div className="flex shrink-0 flex-wrap items-center gap-3 self-start text-xs text-zinc-500">
+        <div className="flex w-full flex-wrap items-center gap-3 self-start pl-20 text-xs text-zinc-500 sm:w-auto sm:shrink-0 sm:pl-0">
           {onEdit && (
             <button type="button" onClick={onEdit} className="hover:underline">
               Edit
@@ -207,7 +209,7 @@ export function SegmentRow({
               value=""
               onChange={(e) => e.target.value && onMove(e.target.value)}
               title="Move to another trip"
-              className="rounded border border-zinc-300 bg-transparent px-1 py-0.5 text-xs dark:border-zinc-700"
+              className="max-w-40 rounded border border-zinc-300 bg-transparent px-1 py-0.5 text-xs dark:border-zinc-700"
             >
               <option value="">Move to…</option>
               {moveTargets.map((t) => (
