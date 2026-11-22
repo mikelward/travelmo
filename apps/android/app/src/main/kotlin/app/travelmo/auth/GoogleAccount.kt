@@ -116,8 +116,14 @@ class GoogleAccount(
         return GoogleAuthProvider.getCredential(idToken, null)
     }
 
-    private fun failure(e: Exception): SignInResult = when (e) {
-        is GetCredentialCancellationException -> SignInResult.Canceled
+    internal fun failure(e: Exception): SignInResult = when (e) {
+        is GetCredentialCancellationException -> {
+            // Play services also reports a sign-in it refused after the pick
+            // (a signing certificate missing from Firebase, say) as a
+            // cancellation, so the log keeps its status code to tell them apart.
+            TravelmoLog.event("Sign-in canceled, status %s", safe(playServicesStatus(e.errorMessage)))
+            SignInResult.Canceled
+        }
         is NoCredentialException -> SignInResult.NoAccount
         is GetCredentialException -> {
             TravelmoLog.warning("Sign-in failed: %s", safe(e.type))
@@ -131,3 +137,9 @@ class GoogleAccount(
 
     private fun FirebaseUser.toSignedIn() = SignedIn(uid, normalizeEmail(email))
 }
+
+private val STATUS = Regex("""^\[(\d+)]""")
+
+/** The leading "[16]" status code Play services puts on its messages, or "none"; never the rest of the message. */
+internal fun playServicesStatus(message: CharSequence?): String =
+    message?.let { STATUS.find(it.trim())?.groupValues?.get(1) } ?: "none"

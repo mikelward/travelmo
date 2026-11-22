@@ -130,7 +130,10 @@ the unit job, in about ten minutes.
 The app signs in with Google through Firebase Auth, so it needs the Firebase
 project's Android app: in the Firebase console add an Android app with the
 package `app.travelmo` (and `app.travelmo.debug` for debug builds) and the
-signing certificate's SHA-1, enable the Google sign-in provider (which gives
+signing certificate's SHA-1 (for Play builds, both SHA-1s on Play Console's
+App integrity → App signing page: Play re-signs the app with its own key, and
+without that key's fingerprint the account picker hands back a cancellation
+and the app returns to sign-in silently), enable the Google sign-in provider (which gives
 the project a web client id), download `google-services.json` into
 `apps/android/app/` (gitignored; never commit it) and build again. Without
 the file the build still succeeds and runs, with the sign-in button explaining
