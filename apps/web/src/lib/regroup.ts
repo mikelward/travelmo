@@ -7,3 +7,9 @@ export function describeRegroup({ changed, deleted }: RegroupResult): string {
   const parts = [changed ? `${trips(changed)} rebuilt` : "", deleted ? `${trips(deleted)} merged away` : ""].filter(Boolean);
   return `Done: ${parts.join(", ")}.`;
 }
+
+// What deleting all trips did, with the next step.
+export function describeDeletedTrips(trips: number): string {
+  if (trips === 0) return "You had no trips to delete.";
+  return `Deleted ${trips} trip${trips === 1 ? "" : "s"}. Import past bookings to start again.`;
+}

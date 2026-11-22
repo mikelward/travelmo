@@ -53,4 +53,5 @@ export const api = {
   stopForward: (user: User) => post<void>(user, "/forward/stop"),
   deleteAccount: (user: User) => post<void>(user, "/account/delete"),
   regroupTrips: (user: User) => post<RegroupResult>(user, "/trips/regroup"),
+  deleteAllTrips: (user: User) => post<{ trips: number }>(user, "/trips/delete-all"),
 };

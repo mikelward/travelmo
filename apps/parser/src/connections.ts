@@ -1,6 +1,7 @@
 import { GmailState, GoogleCalendarState, paths, stableHash, type BackfillProgress, type GmailConnection, type GoogleCalendarChoice, type GoogleCalendarConnection } from "@travelmo/core";
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
 import { refuseIfDeleted } from "./deleted";
+import { generationOf } from "./store";
 
 export const oauthStateTtlMs = 10 * 60 * 1000;
 
@@ -102,10 +103,14 @@ export async function saveConnection(db: Firestore, uid: string, state: GmailSta
 // Background work only touches a connection that still exists for the same
 // mailbox; a user who disconnected while Gmail was answering must not come
 // back as connected, nor be left with a half-formed document.
-function updateLive(db: Firestore, uid: string, emailAddress: string, fields: Partial<GmailConnection>): Promise<boolean> {
+// With `generation`, also only while the user's trips have not been reset
+// since it was read (tripsReset.ts): a mailbox reading that began before
+// "Delete all trips" must not write its old place back.
+function updateLive(db: Firestore, uid: string, emailAddress: string, fields: Partial<GmailConnection>, generation?: number): Promise<boolean> {
   return db.runTransaction(async (t) => {
     const stateRef = db.doc(paths.gmailState(uid));
     const snap = await t.get(stateRef);
+    if (generation !== undefined && generationOf(await t.get(db.doc(paths.importLock(uid)))) !== generation) return false;
     if (!snap.exists || GmailState.parse(snap.data()).emailAddress !== emailAddress) return false;
     t.update(stateRef, fields);
     t.set(db.doc(paths.user(uid)), { gmail: fields }, { merge: true });
@@ -117,12 +122,12 @@ export function updateWatch(db: Firestore, uid: string, emailAddress: string, wa
   return updateLive(db, uid, emailAddress, { watchExpiration });
 }
 
-export function updateBackfill(db: Firestore, uid: string, emailAddress: string, backfill: BackfillProgress): Promise<boolean> {
-  return updateLive(db, uid, emailAddress, { backfill });
+export function updateBackfill(db: Firestore, uid: string, emailAddress: string, backfill: BackfillProgress, generation?: number): Promise<boolean> {
+  return updateLive(db, uid, emailAddress, { backfill }, generation);
 }
 
-export function updateHistoryId(db: Firestore, uid: string, emailAddress: string, historyId: string): Promise<boolean> {
-  return updateLive(db, uid, emailAddress, { historyId });
+export function updateHistoryId(db: Firestore, uid: string, emailAddress: string, historyId: string, generation?: number): Promise<boolean> {
+  return updateLive(db, uid, emailAddress, { historyId }, generation);
 }
 
 export async function removeConnection(db: Firestore, uid: string, emailAddress: string): Promise<void> {

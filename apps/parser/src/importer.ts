@@ -55,7 +55,30 @@ export type TripTx = {
   updateTrip(tripId: string, fields: Pick<Trip, "title" | "start" | "end" | "updatedAt">): void;
   // Removes a trip regrouping emptied of bookings.
   deleteTrip(tripId: string): void;
+  // Ids of up to `limit` of the user's import records (parsedMessages), and
+  // removing one, for deleting all trips (tripsReset.ts).
+  listParsedIds(limit: number): Promise<string[]>;
+  deleteParsed(messageId: string): void;
+  // How many times the user's trips have been reset, as the lock read it;
+  // a reset moves it on (bumpGeneration), so an import that began before
+  // can tell and give up rather than recreate what the reset removed.
+  generation: number;
+  bumpGeneration(): void;
+  // Whether the user has a Gmail connection whose reading position a reset
+  // would clear (a read), and clearing it (a write), so a reset forgets the
+  // place in the same transaction that moves the generation on.
+  hasGmail(): Promise<boolean>;
+  clearBackfill(): void;
 };
+
+// An import that began before the user deleted all their trips: it files
+// and records nothing, and the email is read again by the next import.
+export class ImportSupersededError extends Error {
+  constructor() {
+    super("trips were reset while this import ran");
+    this.name = "ImportSupersededError";
+  }
+}
 
 // A claim older than this with no outcome belongs to a worker that died;
 // the next delivery may take it over.
@@ -97,22 +120,30 @@ export type TripStore = {
   // Atomically records the message as being processed; false if a record
   // exists and is not an expired lease, so concurrent deliveries of one
   // message import it once while an abandoned claim can be retried.
-  claimMessage(uid: string, messageId: string, processedAt: string): Promise<boolean>;
+  // With `generation`, every claim also refuses once the user's trips have
+  // been reset since it was read (TripTx.generation), so a claim cannot
+  // outlive the reset that deleted the records.
+  claimMessage(uid: string, messageId: string, processedAt: string, generation?: number): Promise<boolean>;
   // Like claimMessage, but a record that did not become a booking is claimed
   // again too; an imported one and an unexpired processing claim are
   // refused. For the user asking for another look at a message.
-  reclaimMessage(uid: string, messageId: string, processedAt: string): Promise<boolean>;
+  reclaimMessage(uid: string, messageId: string, processedAt: string, generation?: number): Promise<boolean>;
   // Like claimMessage, but a record whose import failed is claimed again
   // too. For sources the user can only re-send whole, such as a file.
-  retryMessage(uid: string, messageId: string, processedAt: string): Promise<boolean>;
+  retryMessage(uid: string, messageId: string, processedAt: string, generation?: number): Promise<boolean>;
   // Claims a changed calendar event while its record is still `expected`
   // (see changeClaimable). The claim keeps the record's bookings, so a
   // worker that dies mid-change leaves them named for the next one.
-  claimChange(uid: string, messageId: string, processedAt: string, expected: ParsedMessage): Promise<boolean>;
+  claimChange(uid: string, messageId: string, processedAt: string, expected: ParsedMessage, generation?: number): Promise<boolean>;
   // Writes `next` only while the record is still `expected`, on the same
   // terms as claimChange; false when another worker got there first.
-  replaceIfUnchanged(uid: string, expected: ParsedMessage, next: ParsedMessage, now: string): Promise<boolean>;
+  replaceIfUnchanged(uid: string, expected: ParsedMessage, next: ParsedMessage, now: string, generation?: number): Promise<boolean>;
   setParsed(record: ParsedMessage): Promise<void>;
+  // The user's reset generation (TripTx.generation), read outside any lock.
+  resetGeneration(uid: string): Promise<number>;
+  // Writes the record only while the reset generation is still
+  // `generation`; false, writing nothing, once a reset has moved it on.
+  setParsedIfCurrent(record: ParsedMessage, generation: number): Promise<boolean>;
   getParsed(uid: string, messageId: string): Promise<ParsedMessage | undefined>;
   // Every booking in the user's own live trips, read outside any lock: a
   // snapshot for planning an import, never for deciding a write.
@@ -152,6 +183,10 @@ export type ImportDeps = {
 export type ImportOutcome = Exclude<ParsedMessage["outcome"], "processing"> | "skipped";
 
 export type ImportOptions = {
+  // The reset generation, when the caller read it before state of its own
+  // that the import depends on (a calendar's records, a batch's place);
+  // otherwise importMessage reads it first thing.
+  generation?: number;
   // Skip the pre-filter: the user has asked for this message specifically.
   force?: boolean;
   // Take another look at a message that already has an outcome.
@@ -181,11 +216,17 @@ export async function importMessage(
 ): Promise<ImportOutcome> {
   const { store, now, log } = deps;
   const replacing = options.replacing;
+  // Read before the claim: a reset that runs at any point after this makes
+  // every write below give up.
+  const generation = options.generation ?? (await store.resetGeneration(uid));
+  const save = async (r: ParsedMessage) => {
+    if (!(await store.setParsedIfCurrent(r, generation))) log("import_superseded", { uid, messageId: message.id });
+  };
   if (replacing) {
-    if (!(await store.claimChange(uid, message.id, now(), replacing))) return "skipped";
+    if (!(await store.claimChange(uid, message.id, now(), replacing, generation))) return "skipped";
   } else {
     const claim = options.reclaim ? store.reclaimMessage : options.retryFailed ? store.retryMessage : store.claimMessage;
-    if (!(await claim(uid, message.id, now()))) return "skipped";
+    if (!(await claim(uid, message.id, now(), generation))) return "skipped";
   }
   const source = options.source ?? "gmail";
   const base = {
@@ -215,9 +256,16 @@ export async function importMessage(
     // bookings (which would read as the user's deletion and block the
     // change), nor one that forgot bookings still there.
     const cleared: ParsedMessage = { ...replacing, outcome: "processing", segmentIds: [], processedAt: now() };
-    const { kept } = await removeOwnBookings(uid, { ...replacing, tripId: replacing.tripId }, deps, true, cleared);
+    let kept: string[];
+    try {
+      ({ kept } = await removeOwnBookings(uid, { ...replacing, tripId: replacing.tripId }, deps, true, cleared, generation));
+    } catch (error) {
+      if (!(error instanceof ImportSupersededError)) throw error;
+      log("import_superseded", { uid, messageId: message.id });
+      return false;
+    }
     if (!kept.length) return true;
-    await store.setParsed({ ...replacing, ...(options.revision ? { revision: options.revision } : {}), reason: changeKeptReason });
+    await save({ ...replacing, ...(options.revision ? { revision: options.revision } : {}), reason: changeKeptReason });
     log("calendar_change_kept", { uid, messageId: message.id, kept: kept.length });
     return false;
   };
@@ -232,7 +280,7 @@ export async function importMessage(
         );
     if (!verdict.pass) {
       if (!(await releaseReplaced())) return "skipped";
-      await store.setParsed(record("filtered", { reason: verdict.reason }));
+      await save(record("filtered", { reason: verdict.reason }));
       log("filtered", { uid, messageId: message.id, reason: verdict.reason });
       return "filtered";
     }
@@ -262,7 +310,7 @@ export async function importMessage(
     }
     if (similar?.skip) {
       if (!(await releaseReplaced())) return "skipped";
-      await store.setParsed(record("filtered", { reason: similar.reason }));
+      await save(record("filtered", { reason: similar.reason }));
       log("filtered", { uid, messageId: message.id, reason: similar.reason });
       return "filtered";
     }
@@ -283,7 +331,7 @@ export async function importMessage(
     const failure = (error as Error).message;
     // A changed event's old record comes back whole, its old revision
     // included, so the change is tried again next time.
-    await store.setParsed(replacing ?? record("failed", { reason: failure }));
+    await save(replacing ?? record("failed", { reason: failure }));
     log("extract_failed", { uid, messageId: message.id, reason: failure });
     return "failed";
   }
@@ -291,7 +339,7 @@ export async function importMessage(
   const range = segmentDateRange(booking.segments);
   if (!(await releaseReplaced())) return "skipped";
   if (!booking.isBooking || booking.segments.length === 0 || !range) {
-    await store.setParsed(record("not_booking", { reason }));
+    await save(record("not_booking", { reason }));
     await learn("others");
     log("not_booking", { uid, messageId: message.id });
     return "not_booking";
@@ -301,26 +349,36 @@ export async function importMessage(
   // the forwarding block) is learnable, and two alike may be one booking.
   const isEmail = source === "gmail" || source === "forward";
   const sender = isEmail ? senderDomain(message.from) : undefined;
-  const filed = await fileBooking(
-    uid,
-    {
-      sourceId: message.id,
-      source,
-      label: message.subject,
-      segments: booking.segments,
-      ...(source === "gmail" ? { gmailMessageIds: [message.id] } : {}),
-      ...(sender ? { sender } : {}),
-      // Events of a calendar are one list with an id each: two alike are
-      // two reservations. Emails are not; one booking is often confirmed
-      // twice.
-      ...(isEmail ? {} : { distinctWithinSource: true }),
-      ...(options.consumed ? { consumed: options.consumed } : {}),
-    },
-    deps,
-  );
+  let filed;
+  try {
+    filed = await fileBooking(
+      uid,
+      {
+        generation,
+        sourceId: message.id,
+        source,
+        label: message.subject,
+        segments: booking.segments,
+        ...(source === "gmail" ? { gmailMessageIds: [message.id] } : {}),
+        ...(sender ? { sender } : {}),
+        // Events of a calendar are one list with an id each: two alike are
+        // two reservations. Emails are not; one booking is often confirmed
+        // twice.
+        ...(isEmail ? {} : { distinctWithinSource: true }),
+        ...(options.consumed ? { consumed: options.consumed } : {}),
+      },
+      deps,
+    );
+  } catch (error) {
+    // The user deleted all their trips while this ran: nothing is filed
+    // or recorded, and the next import reads the email again.
+    if (!(error instanceof ImportSupersededError)) throw error;
+    log("import_superseded", { uid, messageId: message.id });
+    return "skipped";
+  }
   const { tripId, segmentIds, duplicates, timestamp, matched } = filed;
   for (const id of matched) options.consumed?.add(id);
-  await store.setParsed(
+  await save(
     record("imported", {
       segmentIds,
       processedAt: timestamp,
@@ -357,6 +415,9 @@ export type BookingToFile = {
   trip?: TripHint;
   // Never treat two of this source's own bookings as one.
   distinctWithinSource?: boolean;
+  // The reset generation the import began under: a booking from before a
+  // reset is not filed after it (ImportSupersededError).
+  generation?: number;
   // Ids of existing segments already matched by earlier items of the same
   // import, which cannot stand in for another: matching is one to one, so
   // two alike TripIt rooms against one Gmail room leaves two rooms, and
@@ -388,12 +449,12 @@ const holdingTripPrefix = `${sourceTripPrefix}unfiled-`;
 // when the import's lookups were put off. Outside the transaction, and best
 // effort: the bookings are already filed, so a queue that cannot be written
 // costs a retry (logged), never the import.
-async function recordRetries(uid: string, segments: readonly Segment[], deps: ImportDeps): Promise<void> {
+async function recordRetries(uid: string, segments: readonly Segment[], deps: ImportDeps, generation?: number): Promise<void> {
   const store = deps.geocodeRetries;
   if (!store) return;
   for (const segment of segments.filter(needsGeocoding)) {
     try {
-      await store.put({ uid, tripId: segment.tripId, segmentId: segment.id, at: deps.now() });
+      await store.put({ uid, tripId: segment.tripId, segmentId: segment.id, at: deps.now() }, generation);
     } catch (error) {
       deps.log("geocode_retry_queue_failed", { uid, tripId: segment.tripId, segmentId: segment.id, reason: (error as Error).message });
     }
@@ -428,6 +489,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
   const timestamp = deps.now();
   const overrides = (await deps.homeOverrides?.(uid)) ?? [];
   const result = await store.withUserLock(uid, async (tx) => {
+    if (booking.generation !== undefined && tx.generation !== booking.generation) throw new ImportSupersededError();
     const trips = await tx.listTrips();
     const live = trips.filter((trip) => !trip.deleting);
     // The bookings of the year either side, for where home was around this
@@ -564,7 +626,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
   });
   // A place the budget put off is asked about again by the daily sweep.
   const { written, ...filed } = result;
-  if (placed.deferred && written?.length) await recordRetries(uid, written, deps);
+  if (placed.deferred && written?.length) await recordRetries(uid, written, deps, booking.generation);
   return { ...filed, timestamp };
 }
 
@@ -581,9 +643,15 @@ export type StructuredResult = { outcome: "imported" | "skipped" | "failed"; seg
 
 export async function importStructured(uid: string, item: StructuredItem, deps: ImportDeps): Promise<StructuredResult> {
   const { store, now, log } = deps;
+  // As for an email: read first, and everything below gives up once the
+  // user deletes all their trips meanwhile.
+  const generation = item.generation ?? (await store.resetGeneration(uid));
+  const save = async (r: ParsedMessage) => {
+    if (!(await store.setParsedIfCurrent(r, generation))) log("import_superseded", { uid, source: item.source, id: item.id });
+  };
   // Reclaim, not claim: an item that failed is tried again on the next
   // upload; one already imported, or being imported, is not.
-  if (!(await store.reclaimMessage(uid, item.id, now()))) {
+  if (!(await store.reclaimMessage(uid, item.id, now(), generation))) {
     // Its matches still count against the rest of this upload.
     const previous = await store.getParsed(uid, item.id);
     return { outcome: "skipped", segments: 0, duplicates: 0, matched: previous?.matchedSegmentIds ?? [] };
@@ -594,6 +662,7 @@ export async function importStructured(uid: string, item: StructuredItem, deps: 
     filed = await fileBooking(
       uid,
       {
+        generation,
         sourceId: item.id,
         source: item.source,
         label: item.title,
@@ -606,12 +675,16 @@ export async function importStructured(uid: string, item: StructuredItem, deps: 
       deps,
     );
   } catch (error) {
+    if (error instanceof ImportSupersededError) {
+      log("import_superseded", { uid, source: item.source, id: item.id });
+      return { outcome: "skipped", segments: 0, duplicates: 0, matched: [] };
+    }
     const reason = (error as Error).message;
-    await store.setParsed({ ...base, outcome: "failed", reason, segmentIds: [], processedAt: now() });
+    await save({ ...base, outcome: "failed", reason, segmentIds: [], processedAt: now() });
     log("import_failed", { uid, source: item.source, id: item.id, reason });
     return { outcome: "failed", segments: 0, duplicates: 0, matched: [] };
   }
-  await store.setParsed({
+  await save({
     ...base,
     outcome: "imported",
     segmentIds: filed.segmentIds,
@@ -671,6 +744,9 @@ export async function importTripIt(
   options: { beforeEach?: () => void } = {},
 ): Promise<TripItCounts> {
   const counts: TripItCounts = { trips: 0, imported: 0, duplicates: 0, skipped: 0, failed: 0 };
+  // Before the records and bookings planned against below: a reset after
+  // this makes every item give up, rather than file against what it removed.
+  const generation = await deps.store.resetGeneration(uid);
   // Matching against other sources is one to one across the whole export:
   // an existing booking that one item matched cannot stand in for another.
   const consumed = new Set<string>();
@@ -715,6 +791,7 @@ export async function importTripIt(
         source: "tripit",
         title: trip.title,
         segments: trip.segments,
+        generation,
         consumed,
         reserved,
         trip: { id: tripItTripId(uid, trip.key), title: trip.title, start: trip.start, end: trip.end, joinOverlapping: true },
@@ -735,6 +812,7 @@ export async function importTripIt(
           source: "tripit",
           title: item.title,
           segments: item.segments,
+          generation,
           consumed,
           reserved,
           trip: { id: tripItUnfiledTripId(uid), title: unfiledTripTitle, ...range, joinOverlapping: false },
@@ -842,10 +920,15 @@ async function removeOwnBookings(
   deps: ImportDeps,
   allOrNothing: boolean,
   then?: ParsedMessage,
+  // The reset generation the caller read before the record: once trips have
+  // been reset since, nothing is removed (ImportSupersededError), since the
+  // bookings there now came from a later import.
+  generation?: number,
 ): Promise<{ removed: string[]; kept: string[] }> {
   const tripId = record.tripId;
   const timestamp = deps.now();
   return deps.store.withUserLock(uid, async (tx) => {
+    if (generation !== undefined && tx.generation !== generation) throw new ImportSupersededError();
     const segments = await Promise.all(record.segmentIds.map((id) => tx.getSegment(tripId, id)));
     const removable: string[] = [];
     const kept: string[] = [];
@@ -870,19 +953,33 @@ async function removeOwnBookings(
 
 // An event cancelled after it was imported takes its booking with it, but
 // only a booking that is still just what the calendar made.
-export async function cancelImported(uid: string, recordId: string, deps: ImportDeps): Promise<number> {
+export async function cancelImported(uid: string, recordId: string, deps: ImportDeps, generation?: number): Promise<number> {
   const { store, now, log } = deps;
+  // Read before the record, so a reset after it keeps its record deleted.
+  const current = generation ?? (await store.resetGeneration(uid));
   const record = await store.getParsed(uid, recordId);
   if (record?.outcome !== "imported" || !record.tripId || record.segmentIds.length === 0) return 0;
   const timestamp = now();
-  const { removed, kept } = await removeOwnBookings(uid, { ...record, tripId: record.tripId }, deps, false);
-  await store.setParsed({
-    ...record,
-    outcome: "not_booking",
-    reason: kept.length ? "cancelled in the calendar; edited or matched bookings kept" : "cancelled in the calendar",
-    segmentIds: kept,
-    processedAt: timestamp,
-  });
+  let removed: string[];
+  let kept: string[];
+  try {
+    ({ removed, kept } = await removeOwnBookings(uid, { ...record, tripId: record.tripId }, deps, false, undefined, current));
+  } catch (error) {
+    if (!(error instanceof ImportSupersededError)) throw error;
+    log("import_superseded", { uid, id: recordId });
+    return 0;
+  }
+  const saved = await store.setParsedIfCurrent(
+    {
+      ...record,
+      outcome: "not_booking",
+      reason: kept.length ? "cancelled in the calendar; edited or matched bookings kept" : "cancelled in the calendar",
+      segmentIds: kept,
+      processedAt: timestamp,
+    },
+    current,
+  );
+  if (!saved) log("import_superseded", { uid, id: recordId });
   log("cancelled", { uid, id: recordId, removed: removed.length, kept: kept.length });
   return removed.length;
 }
@@ -912,6 +1009,9 @@ export const calendarSender = "Calendar file";
 // the same file, which skips everything already read.
 export async function importCalendar(uid: string, calendar: IcsCalendar, deps: ImportDeps, maxRead: number): Promise<CalendarCounts> {
   const counts: CalendarCounts = { ...emptyCounts(), recurring: 0, cancelled: 0, remaining: 0, removed: 0, updated: 0, exported: 0 };
+  // Before the records read below: a reset after this makes every event's
+  // import give up rather than act on records it deleted.
+  const generation = await deps.store.resetGeneration(uid);
   const travel = isTravelCalendar(calendar);
   let read = 0;
   // One to one across the file, and across uploads of it: what events
@@ -947,7 +1047,7 @@ export async function importCalendar(uid: string, calendar: IcsCalendar, deps: I
     }
     if (event.cancelled) {
       counts.cancelled += 1;
-      counts.removed += await cancelImported(uid, `ics-${event.key}`, deps);
+      counts.removed += await cancelImported(uid, `ics-${event.key}`, deps, generation);
       continue;
     }
     if (read >= maxRead) {
@@ -977,13 +1077,15 @@ export async function importCalendar(uid: string, calendar: IcsCalendar, deps: I
         : previous.revision !== revision);
     if (changed && previous.revision === undefined && previous.outcome !== "processing") {
       // Read before revisions were kept: this text becomes the baseline.
-      await deps.store.replaceIfUnchanged(uid, previous, { ...previous, revision }, deps.now());
+      await deps.store.replaceIfUnchanged(uid, previous, { ...previous, revision }, deps.now(), generation);
       counts.skipped += 1;
       continue;
     }
     if (changed && !(await replaceable(uid, previous, deps))) {
       // Only over the record as read: another read may have changed it since.
-      if (previous.revision !== revision) await deps.store.replaceIfUnchanged(uid, previous, { ...previous, revision, reason: changeKeptReason }, deps.now());
+      if (previous.revision !== revision) {
+        await deps.store.replaceIfUnchanged(uid, previous, { ...previous, revision, reason: changeKeptReason }, deps.now(), generation);
+      }
       counts.skipped += 1;
       continue;
     }
@@ -994,6 +1096,7 @@ export async function importCalendar(uid: string, calendar: IcsCalendar, deps: I
     // not done yet.
     const outcome = await importMessage(uid, message, deps, {
       source: "ics",
+      generation,
       retryFailed: true,
       consumed,
       revision,

@@ -30,6 +30,7 @@ export const paths = {
   forwardAddress: (tokenHash: string) => `forwardAddresses/${tokenHash}`,
   // Server-only: how many forwarded emails the user sent today.
   forwardBudget: (uid: string) => `users/${uid}/private/forwardBudget`,
+  parsedMessages: (uid: string) => `users/${uid}/parsedMessages`,
   parsedMessage: (uid: string, messageId: string) =>
     `users/${uid}/parsedMessages/${messageId}`,
   gmailAccount: (emailAddress: string) => `gmailAccounts/${emailAddress}`,
