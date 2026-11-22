@@ -92,6 +92,21 @@ if (parserUrl.isNotEmpty() && !Regex("""https?://[^\s"\\$]+""").matches(parserUr
     throw GradleException("travelmoParserUrl must be an http(s) URL; got \"$parserUrl\".")
 }
 
+// Robolectric runs the tests on an Android framework jar it would otherwise
+// download itself at test time, outside Gradle's cache and retries, which made
+// CI flaky. Gradle fetches it instead, into a directory Robolectric reads in
+// offline mode. Each SDK in the tests' @Config needs its jar here.
+val robolectricAndroidAll: Configuration = configurations.create("robolectricAndroidAll") {
+    isCanBeConsumed = false
+    isTransitive = false
+}
+val robolectricAndroidAllDir = layout.buildDirectory.dir("robolectric-android-all")
+val syncRobolectricAndroidAll = tasks.register<Sync>("syncRobolectricAndroidAll") {
+    description = "Copies the Android jars Robolectric runs the unit tests on."
+    from(robolectricAndroidAll)
+    into(robolectricAndroidAllDir)
+}
+
 android {
     namespace = "app.travelmo"
     compileSdk = 37
@@ -157,6 +172,16 @@ android {
             // Robolectric's SDK sandbox reads FileDescriptor internals through
             // jdk.internal.access.SharedSecrets, which java.base does not export.
             it.jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
+            // Robolectric loads its Android jars from the Gradle-fetched
+            // directory above and never downloads one.
+            it.inputs.files(syncRobolectricAndroidAll)
+                .withPropertyName("robolectricAndroidAll")
+                .withNormalizer(ClasspathNormalizer::class.java)
+            it.systemProperty("robolectric.offline", "true")
+            it.systemProperty(
+                "robolectric.dependency.dir",
+                robolectricAndroidAllDir.get().asFile.absolutePath,
+            )
         }
         // Coroutines' Android dispatcher asks for the main Looper at class
         // load; with defaults it gets null and steps aside for the test one.
@@ -230,6 +255,7 @@ dependencies {
     testImplementation(libs.junit4)
     testRuntimeOnly(libs.junit.vintage.engine)
     testImplementation(libs.robolectric)
+    robolectricAndroidAll(libs.robolectric.android.all)
     testImplementation(libs.roborazzi)
     testImplementation(libs.roborazzi.compose)
     testImplementation(libs.androidx.test.core)
