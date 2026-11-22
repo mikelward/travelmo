@@ -210,23 +210,41 @@ pnpm --filter @travelmo/parser dev
 
 One Google Cloud project holds everything.
 
-1. **Firebase**: create the project, enable Google sign-in in Authentication,
-   create a Firestore database, then `firebase deploy --only firestore` for
-   the rules and indexes (the shared travel profiles need a collection-group
-   index on `trustedEmails`, and the calendar export composite indexes on
-   `trips`).
+1. **Firebase**: create the project, upgrade it to the Blaze plan (Cloud
+   Run, Cloud Build and Cloud Scheduler need billing), enable Google sign-in
+   in Authentication, register a web app (`firebase apps:create WEB`), and
+   deploy the rules and indexes with `firebase deploy --only firestore` (the
+   shared travel profiles need a collection-group index on `trustedEmails`,
+   and the calendar export composite indexes on `trips`). The Firestore
+   database's location is permanent; a multi-region (`nam5`, `eur3`) is
+   fine, since browsers and phones talk to it directly.
 2. **Gmail, Calendar and Geocoding**: enable the Gmail API, the Google
-   Calendar API and the Geocoding API.
-   Create an OAuth client (web application) whose redirect URI is
-   `https://<parser>/gmail/callback` (Calendar consent returns there too), and
-   add the `gmail.readonly` and `calendar.readonly` scopes to the consent
-   screen. Create a service account for Pub/Sub to push as (it needs no roles
-   of its own).
-3. **Parser** on Cloud Run, built from the repository root:
-   `gcloud run deploy parser --source . --dockerfile apps/parser/Dockerfile`
-   (or build the image and deploy it). Allow unauthenticated invocations —
+   Calendar API and the Geocoding API. In the Google Cloud console's Google
+   Auth Platform, create an OAuth client (web application) whose redirect URI
+   is `https://<parser>/gmail/callback` (Calendar consent returns there too),
+   and add the `gmail.readonly` and `calendar.readonly` scopes under Data
+   Access. Gmail's is a restricted scope, so Google verification means a paid
+   security assessment; for a few users skip it. In Testing, only the listed
+   test users can connect and their Gmail access lapses after seven days; in
+   production unverified, each user clicks through an unverified-app warning
+   once, up to 100 users. A Cloud Run service's URL is
+   `https://<service>-<project number>.<region>.run.app`, so the redirect URI
+   can be set before the parser exists. Create service accounts for Pub/Sub
+   to push as and for Cloud Scheduler to call as (they need no roles of
+   their own), and one for the parser to run as with
+   `roles/datastore.user`, `roles/secretmanager.secretAccessor` and
+   `roles/firebasecloudmessaging.admin`.
+3. **Parser** on Cloud Run. Build the image from the repository root with
+   `gcloud builds submit . --config=apps/parser/cloudbuild.yaml
+   --substitutions=_IMAGE=<region>-docker.pkg.dev/<project>/travelmo/parser`
+   (into an Artifact Registry repository; a cleanup policy keeping the
+   newest two images stays within its free storage), then
+   `gcloud run deploy parser --image=… --service-account=…`. Allow
+   unauthenticated invocations —
    user endpoints verify Firebase ID tokens and `/internal/*` verifies an OIDC
-   token from the service accounts named in `INTERNAL_CALLERS`. Environment:
+   token from the service accounts named in `INTERNAL_CALLERS`. `--set-env-vars`
+   splits on commas, so pass a list such as `INTERNAL_CALLERS` with another
+   delimiter (`--set-env-vars="^;^A=1;INTERNAL_CALLERS=a,b"`). Environment:
    `WEB_ORIGIN`, `GMAIL_PUBSUB_TOPIC`, `GOOGLE_OAUTH_CLIENT_ID`,
    `GOOGLE_OAUTH_CLIENT_SECRET` (from Secret Manager),
    `GOOGLE_OAUTH_REDIRECT_URL`, `INTERNAL_AUDIENCE` (the service URL),
@@ -262,7 +280,7 @@ One Google Cloud project holds everything.
    authenticated with an OIDC token from that service account, and a
    `gmail-dead-letter` topic and subscription that receive a notification the
    parser failed five times. Rerun it to change a setting.
-5. **Daily jobs**: `PROJECT=… PARSER_URL=https://<parser>
+5. **Daily jobs**: `PROJECT=… LOCATION=<region> PARSER_URL=https://<parser>
    SCHEDULER_SA=<service account> deploy/scheduler.sh` creates four Cloud
    Scheduler jobs that POST with an OIDC token from that service account
    (list it in `INTERNAL_CALLERS`): `/internal/renew-watches`, since Gmail
@@ -278,8 +296,11 @@ One Google Cloud project holds everything.
    notification. Create the notification channel (email, Slack, …) first;
    Cloud Monitoring's alerting is free at this volume.
 7. **Web** on Firebase App Hosting: connect the repository, set the root
-   directory to `apps/web`, and fill in the variables in
-   `apps/web/apphosting.yaml`, whose build command runs the app's `build`
+   directory to `apps/web`, and set the variables in
+   `apps/web/apphosting.yaml` (committed: App Hosting reads them from the
+   repository, and they ship in the client bundle anyway; the optional ones
+   stay commented out until they have a value, as any value turns a feature
+   on), whose build command runs the app's `build`
    script so the service worker is bundled. Add the App Hosting domain to
    Authentication's authorized domains. For address autocomplete in the
    booking form, enable the Places API (New) and set
