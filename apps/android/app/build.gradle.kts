@@ -236,6 +236,9 @@ aboutLibraries {
         // wording varies, which would make CI's regenerate-and-diff flaky.
         // The screen shows each license's name and links to its text.
         excludeFields.add("License.content")
+        // The hash is taken over that text, so it varies by environment too
+        // (CI and a local export disagreed on Fira Sans's OFL-1.1).
+        excludeFields.add("License.hash")
     }
 }
 

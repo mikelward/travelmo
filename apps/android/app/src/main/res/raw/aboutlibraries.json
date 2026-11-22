@@ -3617,54 +3617,46 @@
     "licenses": {
         "2895aeae23f1ae6eaa282fe471e528c6": {
             "name": "Go License",
-            "url": "https://golang.org/LICENSE",
-            "hash": "2895aeae23f1ae6eaa282fe471e528c6"
+            "url": "https://golang.org/LICENSE"
         },
         "7546fd760989f8b6ad8de53f6c981adb": {
             "name": "Play Integrity API Terms of Service",
-            "url": "https://developer.android.com/google/play/integrity/overview#tos",
-            "hash": "7546fd760989f8b6ad8de53f6c981adb"
+            "url": "https://developer.android.com/google/play/integrity/overview#tos"
         },
         "ASDKL": {
             "name": "Android Software Development Kit License",
             "url": "https://developer.android.com/studio/terms.html",
             "internalHash": "ASDKL",
-            "spdxId": "ASDKL",
-            "hash": "ASDKL"
+            "spdxId": "ASDKL"
         },
         "Apache-2.0": {
             "name": "Apache License 2.0",
             "url": "https://spdx.org/licenses/Apache-2.0.html",
             "internalHash": "Apache-2.0",
-            "spdxId": "Apache-2.0",
-            "hash": "Apache-2.0"
+            "spdxId": "Apache-2.0"
         },
         "BSD-3-Clause": {
             "name": "BSD 3-Clause \"New\" or \"Revised\" License",
             "url": "https://spdx.org/licenses/BSD-3-Clause.html",
             "internalHash": "BSD-3-Clause",
-            "spdxId": "BSD-3-Clause",
-            "hash": "BSD-3-Clause"
+            "spdxId": "BSD-3-Clause"
         },
         "MIT": {
             "name": "MIT License",
             "url": "https://spdx.org/licenses/MIT.html",
             "internalHash": "MIT",
-            "spdxId": "MIT",
-            "hash": "MIT"
+            "spdxId": "MIT"
         },
         "OFL-1.1": {
             "name": "SIL Open Font License 1.1",
             "url": "https://spdx.org/licenses/OFL-1.1.html",
-            "spdxId": "OFL-1.1",
-            "hash": "e625b1901a8bebb4f046ef022bd18484"
+            "spdxId": "OFL-1.1"
         },
         "PCSDKToS": {
             "name": "Play Core Software Development Kit Terms of Service",
             "url": "https://developer.android.com/guide/playcore/license",
             "internalHash": "PCSDKToS",
-            "spdxId": "PCSDKToS",
-            "hash": "PCSDKToS"
+            "spdxId": "PCSDKToS"
         }
     }
 }
