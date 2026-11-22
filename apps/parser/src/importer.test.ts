@@ -817,7 +817,7 @@ describe("importTripIt", () => {
     const store = memoryStore();
     await importMessage("u1", email({ id: "m2", subject: "Your Ryanair itinerary" }), deps(store, async () => flight));
     expect(store.segments.get("m2-0")?.sources).toEqual([
-      { kind: "gmail", id: "m2", label: "Your Ryanair itinerary", uid: "u1", at: "2026-11-01T12:00:00Z" },
+      { kind: "gmail", id: "m2", label: "Your Ryanair itinerary", uid: "u1", at: "2026-11-01T12:00:00Z", sentAt: "2026-11-01T10:00:00.000Z" },
     ]);
     await importTripIt("u1", tripItExport(), deps(store, async () => lodging));
     // The outbound was already there: it now lists the TripIt trip as well.

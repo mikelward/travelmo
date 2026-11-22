@@ -1,4 +1,4 @@
-import { eventVerb, formatDate, formatDateRange, localDate, localTime, relativeTime, tripStatus, type Segment, type Trip } from "@travelmo/core";
+import { allCancelled, displayBounds, eventVerb, formatDate, formatDateRange, localDate, localTime, relativeTime, tripStatus, type Segment, type Trip } from "@travelmo/core";
 import Link from "next/link";
 
 // A trip's card: the title (as displayTitles shows it among the list), its
@@ -29,7 +29,12 @@ export function TripCard({
         <h3 className="truncate text-lg font-medium">{title}</h3>
         {badge && <span className="shrink-0 text-xs uppercase tracking-wide text-muted">{badge}</span>}
       </div>
-      <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{formatDateRange(trip.start, trip.end)}</p>
+      <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{formatDateRange(displayBounds(trip).start, displayBounds(trip).end)}</p>
+      {segments && allCancelled(segments) && (
+        <p className="mt-2 text-sm text-danger" data-testid="trip-cancelled">
+          Every booking cancelled
+        </p>
+      )}
       {stay && (
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="trip-stay">
           Staying at {stay.title}

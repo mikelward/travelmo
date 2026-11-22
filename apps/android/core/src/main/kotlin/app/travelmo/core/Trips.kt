@@ -4,11 +4,11 @@ package app.travelmo.core
 
 data class TripGroups(val current: List<Trip>, val upcoming: List<Trip>, val past: List<Trip>)
 
-/** Now, upcoming and past by calendar date; past newest first. */
+/** Now, upcoming and past by when the person travels (displayBounds); past newest first. */
 fun groupTrips(trips: List<Trip>, today: String): TripGroups {
-    val current = trips.filter { it.start <= today && it.end >= today }.sortedBy { it.start }
-    val upcoming = trips.filter { it.start > today }.sortedBy { it.start }
-    val past = trips.filter { it.end < today }.sortedByDescending { it.end }
+    val current = trips.filter { it.shownStart <= today && it.shownEnd >= today }.sortedBy { it.shownStart }
+    val upcoming = trips.filter { it.shownStart > today }.sortedBy { it.shownStart }
+    val past = trips.filter { it.shownEnd < today }.sortedByDescending { it.shownEnd }
     return TripGroups(current, upcoming, past)
 }
 
@@ -22,7 +22,7 @@ data class UpcomingEvent(val segment: Segment, val kind: EventKind, val at: Stri
  */
 fun nextEvent(segments: List<Segment>, now: String): UpcomingEvent? {
     var best: UpcomingEvent? = null
-    for (segment in segments) {
+    for (segment in liveSegments(segments)) {
         val candidate = when {
             compareInstants(segment.start, now) >= 0 -> UpcomingEvent(segment, EventKind.START, segment.start)
             segment.end != null && compareInstants(segment.end, now) >= 0 -> UpcomingEvent(segment, EventKind.END, segment.end)
@@ -97,13 +97,37 @@ fun referenceLine(segment: Segment): String? =
 fun segmentDateRange(segments: List<Segment>): Pair<String, String>? {
     var start: String? = null
     var end: String? = null
-    for (segment in segments) {
+    for (segment in liveSegments(segments)) {
         for (date in listOf(localDate(segment.start), localDate(trustedEnd(segment)))) {
             if (start == null || date < start) start = date
             if (end == null || date > end) end = date
         }
     }
     return if (start == null || end == null) null else start to end
+}
+
+/**
+ * Every booking's dates, cancelled ones too: what a trip's own dates must
+ * always cover, so an import finds each of its bookings again by date
+ * (bookedDateRange in packages/core).
+ */
+fun bookedDateRange(segments: List<Segment>): Pair<String, String>? =
+    segmentDateRange(segments.map { if (it.isCancelled) it.copy(cancelledAt = null) else it })
+
+/**
+ * When the person now travels, once cancellations have taken some of a
+ * trip's bookings, as packages/core's liveBounds: an end only a cancelled
+ * booking reached moves in to what is still booked; an end set beyond the
+ * bookings stays. Null when nothing is cancelled, nothing is left booked, or
+ * it is the trip's own dates.
+ */
+fun liveBounds(trip: Pair<String, String>, segments: List<Segment>): Pair<String, String>? {
+    if (segments.none { it.isCancelled }) return null
+    val live = segmentDateRange(segments) ?: return null
+    val booked = segments.filter { it.isCancelled }.mapNotNull { bookedDateRange(listOf(it)) }
+    val start = if (trip.first < live.first && booked.any { it.first == trip.first }) live.first else minOf(trip.first, live.first)
+    val end = if (trip.second > live.second && booked.any { it.second == trip.second }) live.second else maxOf(trip.second, live.second)
+    return if (start == trip.first && end == trip.second) null else start to end
 }
 
 private val journeyTypes = setOf(SegmentType.FLIGHT, SegmentType.TRAIN, SegmentType.BUS, SegmentType.FERRY)
@@ -125,9 +149,12 @@ private fun trustedEnd(segment: Segment): String {
     return if (days > MAX_JOURNEY_DAYS) segment.start else end
 }
 
-/** Whether "Fit dates to bookings" has anything to do: the bookings span less than the trip. */
+/**
+ * Whether "Fit dates to bookings" has anything to do: the bookings, cancelled
+ * ones too (the trip's own dates cover every one), span less than the trip.
+ */
 fun fittedRange(trip: Trip, segments: List<Segment>): Pair<String, String>? =
-    segmentDateRange(segments)?.takeIf { it.first != trip.start || it.second != trip.end }
+    bookedDateRange(segments)?.takeIf { it.first != trip.start || it.second != trip.end }
 
 /** The other trips a booking, or a whole trip, can move to: every other trip the viewer sees that is not being deleted, by start. */
 fun otherTrips(trips: List<Trip>, tripId: String): List<Trip> =

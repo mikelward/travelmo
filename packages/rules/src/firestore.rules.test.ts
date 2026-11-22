@@ -5,7 +5,7 @@ import {
   type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
 import { paths, type Segment, type Trip } from "@travelmo/core";
-import { arrayUnion, collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
+import { arrayUnion, collection, collectionGroup, deleteDoc, deleteField, doc, getDoc, getDocs, query, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
 import { readFileSync } from "node:fs";
 
 let env: RulesTestEnvironment;
@@ -117,6 +117,19 @@ describe("trips", () => {
     await assertSucceeds(updateDoc(ref, { updatedAt: "2026-11-03T00:00:00Z" }));
   });
 
+  it("keeps the dates a trip is shown with within its own, both or neither; a sharee may only widen them", async () => {
+    const owned = doc(as(owner), paths.trip(trip.id));
+    await assertSucceeds(updateDoc(owned, { liveStart: trip.start, liveEnd: trip.start }));
+    await assertFails(updateDoc(owned, { liveStart: "2026-12-01", liveEnd: trip.start }));
+    await assertFails(updateDoc(owned, { liveEnd: trip.end, liveStart: deleteField() }));
+    await assertFails(updateDoc(owned, { liveStart: "soon", liveEnd: "later" }));
+    const shared = doc(as(partner), paths.trip(trip.id));
+    await assertFails(updateDoc(shared, { liveStart: trip.end, liveEnd: trip.end }));
+    await assertSucceeds(updateDoc(shared, { liveStart: trip.start, liveEnd: trip.end }));
+    await assertSucceeds(updateDoc(shared, { liveStart: deleteField(), liveEnd: deleteField() }));
+    await assertFails(updateDoc(shared, { liveStart: trip.start, liveEnd: trip.start }));
+  });
+
   it("owner cannot hand the trip to someone else or write bad dates", async () => {
     await assertFails(updateDoc(doc(as(owner), paths.trip(trip.id)), { ownerUid: stranger.uid }));
     await assertFails(updateDoc(doc(as(owner), paths.trip(trip.id)), { start: "2027-01-01" }));
@@ -179,6 +192,21 @@ describe("segments", () => {
     await assertFails(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { title: "Late edit" }));
     await assertSucceeds(deleteDoc(doc(as(owner), paths.segment(trip.id, segment.id))));
     await assertSucceeds(deleteDoc(doc(as(owner), paths.trip(trip.id))));
+  });
+
+  it("keeps a booking's cancellation well formed, and lets an editor take it back", async () => {
+    const cancelled = { cancelledAt: "2026-11-05T09:00:00Z", cancelledBy: "m2", cancelledSentAt: "2026-11-04T08:00:00Z" };
+    await assertSucceeds(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), cancelled));
+    await assertSucceeds(
+      updateDoc(doc(as(partner), paths.segment(trip.id, segment.id)), { cancelledAt: deleteField(), cancelledBy: deleteField(), restoredFrom: arrayUnion("m2") }),
+    );
+    await assertFails(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { restoredFrom: "m2" }));
+    await assertFails(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { cancelledSentAt: "last week" }));
+    await assertSucceeds(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { restoredAt: "2026-11-06T10:00:00Z" }));
+    await assertFails(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { restoredAt: "yesterday" }));
+    await assertFails(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { cancelledAt: "yesterday" }));
+    await assertFails(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { cancelledBy: "" }));
+    await assertFails(updateDoc(doc(as(stranger), paths.segment(trip.id, segment.id)), cancelled));
   });
 
   it("lets an editor rate a booking one to five stars and mark it a favorite, and nothing else", async () => {

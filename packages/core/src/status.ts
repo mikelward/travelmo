@@ -1,7 +1,7 @@
 import { formatDate } from "./format";
 import { compareInstants, splitInstant } from "./instant";
 import type { ExtractedSegment } from "./schema";
-import { localDate, nextEvent, type UpcomingEvent } from "./trips";
+import { liveSegments, localDate, nextEvent, type UpcomingEvent } from "./trips";
 
 // What a trip card says about the moment: how soon the next thing is, the
 // stay under way, and whether a flight's online check-in is open. All of it
@@ -62,7 +62,7 @@ export type CheckIn<S extends ExtractedSegment = ExtractedSegment> = { segment: 
 // until it departs; nothing once it has gone or while it is further off.
 export function flightCheckIn<S extends ExtractedSegment>(segments: readonly S[], now: string): CheckIn<S> | undefined {
   let next: S | undefined;
-  for (const segment of segments) {
+  for (const segment of liveSegments(segments)) {
     if (segment.type !== "flight" || compareInstants(segment.start, now) < 0) continue;
     if (!next || compareInstants(segment.start, next.start) < 0) next = segment;
   }
@@ -74,7 +74,7 @@ export function flightCheckIn<S extends ExtractedSegment>(segments: readonly S[]
 
 // The stay the traveler is in the middle of, if any: checked in, not yet out.
 export function currentStay<S extends ExtractedSegment>(segments: readonly S[], now: string): S | undefined {
-  return segments.find((s) => s.type === "lodging" && s.end && compareInstants(s.start, now) <= 0 && compareInstants(now, s.end) < 0);
+  return liveSegments(segments).find((s) => s.type === "lodging" && s.end && compareInstants(s.start, now) <= 0 && compareInstants(now, s.end) < 0);
 }
 
 export type TripStatus<S extends ExtractedSegment = ExtractedSegment> = {

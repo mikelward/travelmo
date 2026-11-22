@@ -51,6 +51,15 @@ class HomeTest {
     }
 
     @Test
+    fun `leaves cancelled journeys out`() {
+        fun cancelled(legs: List<Segment>) = legs.map { it.copy(cancelledAt = "2025-01-01T00:00:00Z") }
+        val bookings = roundTrip("London", "Paris", "2025-03-12", "2025-03-15") +
+            cancelled(roundTrip("Sydney", "Melbourne", "2025-05-01", "2025-05-04")) +
+            cancelled(roundTrip("Sydney", "Perth", "2025-07-01", "2025-07-04"))
+        homeTimeline(bookings) shouldBe listOf(HomePeriod("London"))
+    }
+
+    @Test
     fun `follows a trip of several legs back to where it started`() {
         val bookings = listOf(
             flight("2025-04-01T09:00:00+00:00", "London", "Dubai"),

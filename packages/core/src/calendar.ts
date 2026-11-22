@@ -1,4 +1,5 @@
 import type { Trip } from "./schema";
+import { displayBounds } from "./trips";
 
 // A month of trips, laid out for a calendar: the weeks of a month (Monday
 // first, padded with the neighboring months' days so every row is seven
@@ -57,26 +58,31 @@ export type TripBar = {
 // The bars of the trips touching a week, earliest start first, each in the
 // lowest lane free for its span. A trip keeps its lane from one week to
 // the next only by luck; the rows are laid out one at a time.
+// Trips are drawn for when the person travels (displayBounds).
 export function weekBars(week: readonly string[], trips: readonly Trip[]): TripBar[] {
   const monday = week[0]!;
   const sunday = week[week.length - 1]!;
   const touching = trips
+    .map((trip) => ({ trip, ...displayBounds(trip) }))
     .filter((t) => t.start <= sunday && t.end >= monday)
-    .sort((a, b) => a.start.localeCompare(b.start) || b.end.localeCompare(a.end) || a.title.localeCompare(b.title));
+    .sort((a, b) => a.start.localeCompare(b.start) || b.end.localeCompare(a.end) || a.trip.title.localeCompare(b.trip.title));
   const laneEnds: number[] = [];
-  return touching.map((trip) => {
-    const from = trip.start < monday ? 0 : week.indexOf(trip.start);
-    const to = trip.end > sunday ? week.length - 1 : week.indexOf(trip.end);
-    let lane = laneEnds.findIndex((end) => end < from);
+  return touching.map(({ trip, start, end }) => {
+    const from = start < monday ? 0 : week.indexOf(start);
+    const to = end > sunday ? week.length - 1 : week.indexOf(end);
+    let lane = laneEnds.findIndex((e) => e < from);
     if (lane === -1) lane = laneEnds.length;
     laneEnds[lane] = to;
-    return { trip, from, to, continuesBefore: trip.start < monday, continuesAfter: trip.end > sunday, lane };
+    return { trip, from, to, continuesBefore: start < monday, continuesAfter: end > sunday, lane };
   });
 }
 
 // The months a set of trips spans, earliest first, for a jump list.
 export function tripMonths(trips: readonly Trip[]): Month[] {
   const months = new Set<Month>();
-  for (const t of trips) for (let m = monthOf(t.start); m <= monthOf(t.end); m = addMonths(m, 1)) months.add(m);
+  for (const trip of trips) {
+    const t = displayBounds(trip);
+    for (let m = monthOf(t.start); m <= monthOf(t.end); m = addMonths(m, 1)) months.add(m);
+  }
   return [...months].sort();
 }

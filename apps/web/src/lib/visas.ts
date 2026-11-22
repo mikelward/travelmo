@@ -1,6 +1,6 @@
 "use client";
 
-import { onTrip, travelerEntry, tripPlaces, type PersonDocuments, type ExtractedSegment, type PlaceLookup, type TravelerEntry, type Trip, type VisaTable } from "@travelmo/core";
+import { displayBounds, onTrip, travelerEntry, tripPlaces, type PersonDocuments, type ExtractedSegment, type PlaceLookup, type TravelerEntry, type Trip, type VisaTable } from "@travelmo/core";
 import { useEffect, useMemo, useState } from "react";
 
 export type PersonEntry = { person: PersonDocuments; entry: TravelerEntry };
@@ -17,7 +17,7 @@ export function useEntryRequirements(
   today: string,
 ): EntryRequirementsOf | undefined {
   const travelers = useMemo(
-    () => (people && trip && trip.end >= today ? people.filter((p) => onTrip(p, trip) && p.documents.some((d) => d.kind === "passport" && d.country)) : []),
+    () => (people && trip && displayBounds(trip).end >= today ? people.filter((p) => onTrip(p, trip) && p.documents.some((d) => d.kind === "passport" && d.country)) : []),
     [people, trip, today],
   );
   const wanted = travelers.length > 0 && !!segments?.length;

@@ -95,6 +95,11 @@ class FlightStatusTest {
     }
 
     @Test
+    fun showsNoStatusForACancelledBooking() {
+        flightStatusShown(flight.copy(cancelledAt = "2026-11-01T00:00:00Z"), "2026-12-12T21:00:00Z") shouldBe false
+    }
+
+    @Test
     fun saysWhereTheFlightLeavesArrivesAndWhereTheBagsComeOut() {
         val known = status(departureGate = "8", departureTerminal = "1", arrivalGate = "D46", baggageClaim = "16")
         flightStatusLines(known) shouldBe listOf("Departs from terminal 1, gate 8", "Arrives at gate D46", "Bags on carousel 16")

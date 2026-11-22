@@ -323,10 +323,34 @@
 - [ ] Web manifest: `background_color` and `theme_color` are light only,
       so an installed app's splash screen is white in dark mode; a manifest
       cannot vary by scheme, so it needs a choice of one neutral color.
+- [x] Pending cancellations expire per entry: an undated entry in a mixed
+      list keeps the undated retention (`stillWaiting`).
+- [x] Revival after a reconfirmation should check the other pending
+      cancellations for that booking (`standingCancellation`).
+- [ ] Show the cancelled label on upcoming trip cards: pass segments for
+      cancellation status independently of showNext (web page.tsx Section,
+      Android TripListScreen), with a snapshot re-record.
+- [ ] Cancel through an alternate reference: one kept only as "Other
+      reference: …" in a booking's notes isn't matched; needs a field for
+      matchable alternate references.
+- [x] "Delete all trips" also clears the user's `pendingCancellations`,
+      so a re-import starts from nothing.
+- [x] Android app: read a booking's `cancelledAt` in `data/Documents.kt` and
+      show cancelled bookings struck through with a "Cancelled" label and a
+      Restore action, as the web does.
+- [x] Android app: a cancelled booking in a screenshot fixture
+      (`trip_detail_cancelled`).
 
 ## Decisions needing review
 
 Guesses made on autopilot; change any of them freely.
+
+- Cancellations and trip dates: rather than every screen loading a trip's
+  bookings to work out what is still booked (the trip list loads them for
+  only a few trips), the trip keeps when the person now travels beside its
+  own dates (`liveStart`, `liveEnd`), set by the importer and widened by
+  the apps' edits. An end set beyond the bookings is kept. Deleting a
+  booking narrows neither, as before; Fit dates does.
 
 - Live flight status: the flight number is read from the booking's title
   (no field of its own yet); one status per flight number, local date and

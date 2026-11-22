@@ -1,4 +1,6 @@
 import type { ExtractedSegment, Place, Trip } from "./schema";
+import { reportBounds } from "./reports";
+import { allCancelled, liveSegments } from "./trips";
 
 // The user's trips as an iCalendar (RFC 5545) feed that Google or Apple
 // Calendar can subscribe to: each trip an all-day event across its dates,
@@ -100,18 +102,23 @@ export function exportCalendar(items: readonly ExportTrip[], options: { stamp: s
   const event = (fields: string[]) => lines.push("BEGIN:VEVENT", ...fields, "END:VEVENT");
   const sorted = [...items].sort((a, b) => a.trip.start.localeCompare(b.trip.start) || a.trip.id.localeCompare(b.trip.id));
   for (const { trip, segments } of sorted) {
+    // A trip whose every booking was cancelled isn't happening; one with
+    // some cancelled spans what is still booked (reportBounds).
+    if (allCancelled(segments)) continue;
+    const bounds = reportBounds(trip, segments);
+    if (!bounds) continue;
     const url = options.tripUrl(trip.id);
     event([
       `UID:trip-${trip.id}${exportUidSuffix}`,
       `DTSTAMP:${stamp}`,
-      `DTSTART;VALUE=DATE:${dateValue(trip.start)}`,
+      `DTSTART;VALUE=DATE:${dateValue(bounds.start)}`,
       // All-day ends are exclusive.
-      `DTEND;VALUE=DATE:${dateValue(nextDay(trip.end))}`,
+      `DTEND;VALUE=DATE:${dateValue(nextDay(bounds.end))}`,
       `SUMMARY:${escapeText(trip.title)}`,
       `URL:${url}`,
       "TRANSP:TRANSPARENT",
     ]);
-    for (const s of [...segments].sort((a, b) => a.start.localeCompare(b.start) || a.id.localeCompare(b.id))) {
+    for (const s of liveSegments(segments).sort((a, b) => a.start.localeCompare(b.start) || a.id.localeCompare(b.id))) {
       const where = location(s);
       // A stay is free time, a journey busy.
       event([

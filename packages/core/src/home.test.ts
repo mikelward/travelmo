@@ -81,6 +81,16 @@ describe("homeTimeline", () => {
     expect(homeTimeline(bookings)).toEqual([{ city: "London" }]);
   });
 
+  it("leaves cancelled journeys out", () => {
+    const cancelled = (legs: ExtractedSegment[]) => legs.map((leg) => Object.assign({}, leg, { cancelledAt: "2025-01-01T00:00:00Z" }));
+    const bookings = [
+      ...roundTrip("London", "Paris", "2025-03-12", "2025-03-15"),
+      ...cancelled(roundTrip("Sydney", "Melbourne", "2025-05-01", "2025-05-04")),
+      ...cancelled(roundTrip("Sydney", "Perth", "2025-07-01", "2025-07-04")),
+    ];
+    expect(homeTimeline(bookings)).toEqual([{ city: "London" }]);
+  });
+
   it("follows a trip of several legs back to where it started", () => {
     const bookings = [
       flight("2025-04-01T09:00:00+00:00", "London", "Dubai"),

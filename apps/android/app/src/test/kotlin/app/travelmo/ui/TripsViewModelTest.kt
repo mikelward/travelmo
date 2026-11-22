@@ -130,6 +130,15 @@ class TripsViewModelTest {
     }
 
     @Test
+    fun `restoring a cancelled booking goes to the store`() = runTest {
+        val store = FakeTripStore()
+        val viewModel = TripsViewModel(store, OWNER, null)
+        viewModel.restoreSegment("restore", "liverpool", "l-stay")
+        viewModel.outcomes.value shouldBe mapOf("restore" to Outcome.Done)
+        store.restored shouldBe listOf("liverpool" to "l-stay")
+    }
+
+    @Test
     fun `sharing the profile says whether it exists yet, and waits until that is known`() = runTest {
         val store = FakeTripStore(profile = null)
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL)

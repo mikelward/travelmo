@@ -1,3 +1,4 @@
+import { displayBounds } from "./trips";
 // Segment instants carry the offset of the place they happen in, so the
 // display reads the local wall-clock straight from the string rather than
 // converting to the viewer's zone.
@@ -39,11 +40,14 @@ export function formatDateRange(start: string, end: string, locale = "en-GB"): s
 // or more of them share, compared ignoring case and spacing (the same camp
 // every summer), gets each one's dates, "Debutots Camp (11–15 Aug 2025)";
 // any other title reads as it is. Keyed by trip id.
-export function displayTitles(trips: readonly { id: string; title: string; start: string; end: string }[], locale = "en-GB"): Map<string, string> {
+export function displayTitles(
+  trips: readonly { id: string; title: string; start: string; end: string; liveStart?: string | undefined; liveEnd?: string | undefined }[],
+  locale = "en-GB",
+): Map<string, string> {
   const key = (title: string) => title.trim().replace(/\s+/g, " ").toLowerCase();
   const count = new Map<string, number>();
   for (const trip of trips) count.set(key(trip.title), (count.get(key(trip.title)) ?? 0) + 1);
   return new Map(
-    trips.map((trip) => [trip.id, (count.get(key(trip.title)) ?? 0) > 1 ? `${trip.title.trim()} (${formatDateRange(trip.start, trip.end, locale)})` : trip.title]),
+    trips.map((trip) => [trip.id, (count.get(key(trip.title)) ?? 0) > 1 ? `${trip.title.trim()} (${formatDateRange(displayBounds(trip).start, displayBounds(trip).end, locale)})` : trip.title]),
   );
 }

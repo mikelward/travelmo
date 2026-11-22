@@ -1,6 +1,6 @@
 import { compareInstants } from "./instant";
 import type { ExtractedSegment, HomeCorrection, Place, SegmentType, Trip } from "./schema";
-import { findTripForRange, isUntimed, segmentDateRange } from "./trips";
+import { findTripForRange, isUntimed, liveSegments, segmentDateRange } from "./trips";
 
 // Where someone lives, over time. Nobody types it in: it is worked out from
 // their journeys, since a round trip leaves from home and comes back to it.
@@ -56,7 +56,8 @@ const stayDays = 60;
 // the date line; a journey within one town (a river bus) goes nowhere and
 // says nothing.
 function roundTrips(segments: readonly Booking[]): { base: { city: string; country?: string }; start: string }[] {
-  const journeys = segments
+  // A cancelled journey was never travelled, so it says nothing about home.
+  const journeys = liveSegments(segments)
     .filter((s) => {
       const from = town(s.origin);
       const to = town(s.destination);

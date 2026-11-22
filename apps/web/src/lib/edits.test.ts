@@ -3,7 +3,7 @@ import { paths, type ExtractedSegment, type Segment, type Trip } from "@travelmo
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, type Firestore } from "firebase/firestore";
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { deleteSegment, deleteTrip, fitTripDates, mergeTrips, moveSegment, renameTrip, saveSegment } from "./edits";
+import { deleteSegment, deleteTrip, fitTripDates, mergeTrips, moveSegment, renameTrip, restoreSegment, saveSegment } from "./edits";
 
 // Runs inside `firebase emulators:exec` with the real rules loaded, so these
 // workflows are exercised the way the browser runs them.
@@ -142,6 +142,87 @@ describe("saveSegment", () => {
   });
 });
 
+describe("cancelled bookings", () => {
+  const cancel = () =>
+    seed(async (db) => {
+      await updateDoc(doc(db, paths.segment(trip.id, imported.id)), { cancelledAt: "2026-11-05T09:00:00Z", cancelledBy: "m2" });
+    });
+  const stored = async () => (await getDoc(doc(asOwner(), paths.segment(trip.id, imported.id)))).data();
+
+  it("stay cancelled when edited", async () => {
+    await cancel();
+    await saveSegment(asOwner(), trip.id, { ...imported, title: "Renamed" }, imported);
+    expect(await stored()).toMatchObject({ title: "Renamed", cancelledAt: "2026-11-05T09:00:00Z", cancelledBy: "m2" });
+  });
+
+  it("widen only the trip's own dates when edited, not those it is shown with", async () => {
+    await cancel();
+    await seed(async (db) => {
+      await updateDoc(doc(db, paths.trip(trip.id)), { start: "2026-12-13", end: "2026-12-13" });
+    });
+    await saveSegment(as(partner), trip.id, { ...imported, title: "Renamed" }, imported);
+    expect(await readTrip()).toMatchObject({ start: "2026-12-12", end: "2026-12-14", liveStart: "2026-12-13", liveEnd: "2026-12-13" });
+  });
+
+  it("can be restored by the owner or a sharee", async () => {
+    await cancel();
+    await restoreSegment(as(partner), trip.id, imported.id);
+    const data = await stored();
+    expect(data?.cancelledAt).toBeUndefined();
+    expect(data?.cancelledBy).toBeUndefined();
+    // Remembered, so the importer doesn't cancel it again; an edit keeps it.
+    expect(data?.restoredFrom).toEqual(["m2"]);
+    // And when, so no cancellation sent before it applies again.
+    expect(data?.restoredAt).toEqual(expect.any(String));
+    await saveSegment(asOwner(), trip.id, { ...imported, title: "Renamed" }, imported);
+    expect((await stored())?.restoredFrom).toEqual(["m2"]);
+    expect((await stored())?.restoredAt).toBe(data?.restoredAt);
+  });
+
+  it("widen the trip again when restored after Fit dates narrowed it", async () => {
+    await cancel();
+    await seed(async (db) => {
+      await updateDoc(doc(db, paths.trip(trip.id)), { start: "2026-12-13", end: "2026-12-13" });
+    });
+    await restoreSegment(as(partner), trip.id, imported.id);
+    expect(await readTrip()).toMatchObject({ start: "2026-12-12", end: "2026-12-14" });
+  });
+
+  // The trip as the parser leaves it: 12-18 December, shown as the 18th
+  // only while the 12-14 stay is cancelled.
+  const showingOnlyThe18th = async () => {
+    await cancel();
+    await seed(async (db) => {
+      await updateDoc(doc(db, paths.trip(trip.id)), { start: "2026-12-12", end: "2026-12-18", liveStart: "2026-12-18", liveEnd: "2026-12-18" });
+    });
+  };
+
+  it("show the trip for all its dates again once restored", async () => {
+    await showingOnlyThe18th();
+    await restoreSegment(as(partner), trip.id, imported.id);
+    const restored = await readTrip();
+    expect(restored).toMatchObject({ start: "2026-12-12", end: "2026-12-18" });
+    expect(restored?.liveStart).toBeUndefined();
+    expect(restored?.liveEnd).toBeUndefined();
+  });
+
+  it("widen the dates the trip is shown with for a booking added meanwhile", async () => {
+    await showingOnlyThe18th();
+    await saveSegment(as(partner), trip.id, flight("2026-12-16"));
+    expect(await readTrip()).toMatchObject({ start: "2026-12-12", end: "2026-12-18", liveStart: "2026-12-16", liveEnd: "2026-12-18" });
+  });
+
+  it("fit the trip to every booking, cancelled ones too, shown by what is still booked", async () => {
+    await showingOnlyThe18th();
+    await saveSegment(asOwner(), trip.id, flight("2026-12-18"));
+    await seed(async (db) => {
+      await updateDoc(doc(db, paths.trip(trip.id)), { start: "2026-12-01", end: "2026-12-31", liveStart: "2026-12-10", liveEnd: "2026-12-20" });
+    });
+    expect(await fitTripDates(asOwner(), trip.id)).toBe(true);
+    expect(await readTrip()).toMatchObject({ start: "2026-12-12", end: "2026-12-18", liveStart: "2026-12-18", liveEnd: "2026-12-18" });
+  });
+});
+
 describe("deleteSegment", () => {
   it("removes the segment and leaves the bounds alone", async () => {
     await deleteSegment(asOwner(), trip.id, imported.id);
@@ -198,6 +279,19 @@ describe("moveSegment", () => {
     expect(moved).toMatchObject({ tripId: other.id, title: imported.title, source: "gmail", sender: "cove.example" });
     expect(await readOther()).toMatchObject({ start: "2026-12-12", end: "2026-12-22" });
     expect(await readTrip()).toMatchObject({ start: "2026-12-12", end: "2026-12-14" });
+  });
+
+  it("moves a cancelled booking still cancelled, widening only the target's own dates", async () => {
+    await seed(async (db) => {
+      await updateDoc(doc(db, paths.segment(trip.id, imported.id)), { cancelledAt: "2026-11-05T09:00:00Z", cancelledBy: "m2" });
+    });
+    await moveSegment(asOwner(), trip.id, imported.id, other.id);
+    expect(await segmentIds(other.id)).toEqual([imported.id]);
+    const moved = (await getDoc(doc(asOwner(), paths.segment(other.id, imported.id)))).data();
+    expect(moved).toMatchObject({ tripId: other.id, cancelledAt: "2026-11-05T09:00:00Z", cancelledBy: "m2" });
+    expect(await readOther()).toMatchObject({ start: "2026-12-12", end: "2026-12-22", liveStart: "2026-12-20", liveEnd: "2026-12-22" });
+    expect((await readOther())?.updatedAt).not.toBe(other.updatedAt);
+    expect((await readTrip())?.updatedAt).not.toBe(trip.updatedAt);
   });
 
   it("moves the booking as it is now, not as the page last saw it", async () => {

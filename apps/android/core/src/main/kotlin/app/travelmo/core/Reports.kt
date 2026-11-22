@@ -32,13 +32,23 @@ private fun nextDay(date: String): String = LocalDate.parse(date).plusDays(1).to
  * journey, and a day in the air for neither. A day before anything says
  * where the traveler is has no country.
  */
+/**
+ * A trip's dates as reports count them: what its bookings still span once a
+ * cancellation has taken some (a cancelled stay that stretched the trip, or
+ * started it, counts for none of its dates), none when every booking is
+ * cancelled, and its own dates when none is (as planned, bookings or not).
+ */
+fun reportBounds(trip: Trip, segments: List<Segment>): Pair<String, String>? =
+    if (segments.any { it.isCancelled }) segmentDateRange(segments) else trip.start to trip.end
+
 fun tripDays(trip: Trip, segments: List<Segment>, today: String, lookup: (String) -> AirportPlace? = ::airportPlace): Map<String, Set<String>> {
     // In the order they happened, which across the date line is not the
     // order of their local dates: a flight can land the day before it left.
-    val timeline = segments.flatMap { moments(it, lookup) }.sortedWith { a, b -> compareInstants(a.at, b.at) }
+    val timeline = liveSegments(segments).flatMap { moments(it, lookup) }.sortedWith { a, b -> compareInstants(a.at, b.at) }
     val days = LinkedHashMap<String, Set<String>>()
-    val last = minOf(trip.end, today)
-    var day = trip.start
+    val bounds = reportBounds(trip, segments) ?: return days
+    val last = minOf(bounds.second, today)
+    var day = bounds.first
     while (day <= last) {
         // Where the traveler was as the day began: left by the latest moment dated before it.
         var where: String? = null
@@ -103,13 +113,16 @@ fun travelReport(all: List<TripWithSegments>, today: String, year: String? = nul
 
     // The same trip listed twice (owned and shared) counts once.
     for ((trip, segments) in all.associateBy { it.trip.id }.values) {
-        if (trip.start > today) {
+        // Ahead, done, and in which year, by what it still books; not
+        // happening at all when nothing is.
+        val bounds = reportBounds(trip, segments) ?: continue
+        if (bounds.first > today) {
             upcoming += 1
             continue
         }
-        val startYear = trip.start.substring(0, 4)
+        val startYear = bounds.first.substring(0, 4)
         yearTrips[startYear] = (yearTrips[startYear] ?: 0) + 1
-        if (inYear(trip.start)) trips += 1
+        if (inYear(bounds.first)) trips += 1
 
         for ((day, countries) in tripDays(trip, segments, today, lookup)) {
             val y = day.substring(0, 4)
@@ -119,7 +132,7 @@ fun travelReport(all: List<TripWithSegments>, today: String, year: String? = nul
             for (c in countries) countryTrips.getOrPut(c) { mutableSetOf() } += trip.id
         }
 
-        for (s in segments) {
+        for (s in liveSegments(segments)) {
             fun counted(date: String) = date <= today && inYear(date)
             if (counted(localDate(s.start))) {
                 val ends = listOfNotNull(s.origin, s.destination)

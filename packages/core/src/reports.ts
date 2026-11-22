@@ -1,7 +1,7 @@
 import { hasLocation } from "./geocode";
 import { compareInstants } from "./instant";
 import type { ExtractedSegment, Place, SegmentType, Trip } from "./schema";
-import { localDate } from "./trips";
+import { isCancelled, liveSegments, localDate, segmentDateRange } from "./trips";
 
 // Where the user has been, worked out from their trips' bookings alone: no
 // lookups here, so a place is known by the country its booking names, or
@@ -51,6 +51,17 @@ function nextDay(date: string): string {
 // country the traveler was in, so a travel day counts for both ends of the
 // journey, and a day in the air for neither. A day before anything says
 // where the traveler is has no country.
+// A trip's dates as reports count them: what its bookings still span once a
+// cancellation has taken some (a cancelled stay that stretched the trip, or
+// started it, counts for none of its dates), none when every booking is
+// cancelled, and its own dates when none is (as planned, bookings or not).
+export function reportBounds(
+  trip: Pick<Trip, "start" | "end">,
+  segments: readonly ExtractedSegment[],
+): { start: string; end: string } | undefined {
+  return segments.some(isCancelled) ? segmentDateRange(segments) : { start: trip.start, end: trip.end };
+}
+
 export function tripDays(
   trip: Pick<Trip, "start" | "end">,
   segments: readonly ExtractedSegment[],
@@ -59,10 +70,12 @@ export function tripDays(
 ): Map<string, Set<string>> {
   // In the order they happened, which across the date line is not the
   // order of their local dates: a flight can land the day before it left.
-  const timeline = segments.flatMap((s) => moments(s, lookup)).sort((a, b) => compareInstants(a.at, b.at));
+  const timeline = liveSegments(segments).flatMap((s) => moments(s, lookup)).sort((a, b) => compareInstants(a.at, b.at));
   const days = new Map<string, Set<string>>();
-  const last = trip.end < today ? trip.end : today;
-  for (let day = trip.start; day <= last; day = nextDay(day)) {
+  const bounds = reportBounds(trip, segments);
+  if (!bounds) return days;
+  const last = bounds.end < today ? bounds.end : today;
+  for (let day = bounds.start; day <= last; day = nextDay(day)) {
     // Where the traveler was as the day began: left by the latest moment
     // dated before it.
     let where: string | undefined;
@@ -125,13 +138,17 @@ export function travelReport(
   let upcoming = 0;
 
   for (const { trip, segments } of distinct(all)) {
-    if (trip.start > today) {
+    // Ahead, done, and in which year, by what it still books; not
+    // happening at all when nothing is.
+    const bounds = reportBounds(trip, segments);
+    if (!bounds) continue;
+    if (bounds.start > today) {
       upcoming += 1;
       continue;
     }
-    const startYear = trip.start.slice(0, 4);
+    const startYear = bounds.start.slice(0, 4);
     yearTrips.set(startYear, (yearTrips.get(startYear) ?? 0) + 1);
-    if (inYear(trip.start)) trips += 1;
+    if (inYear(bounds.start)) trips += 1;
 
     for (const [day, countries] of tripDays(trip, segments, today, lookup)) {
       const y = day.slice(0, 4);
@@ -143,7 +160,7 @@ export function travelReport(
       for (const c of countries) countryTrips.set(c, new Set([...(countryTrips.get(c) ?? []), trip.id]));
     }
 
-    for (const s of segments) {
+    for (const s of liveSegments(segments)) {
       const counted = (date: string) => date <= today && inYear(date);
       if (counted(localDate(s.start))) {
         const ends = [s.origin, s.destination].filter((p): p is Place => Boolean(p));
@@ -224,8 +241,9 @@ function distinct(trips: readonly TripWithSegments[]): TripWithSegments[] {
 // booking has one, for deciding whether the trip crosses a border.
 export function tripPlaces(segments: readonly ExtractedSegment[], lookup?: PlaceLookup): { countries: Set<string>; complete: boolean } {
   const countries = new Set<string>();
-  let complete = segments.length > 0;
-  for (const s of segments) {
+  const live = liveSegments(segments);
+  let complete = live.length > 0;
+  for (const s of live) {
     const places = [s.origin, s.destination].filter((p): p is Place => Boolean(p));
     // A journey with an end missing went somewhere unknown; a stay or
     // activity has one place.

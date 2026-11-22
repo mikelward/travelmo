@@ -2,6 +2,7 @@ import {
   flightCheckDue,
   flightRefreshDue,
   flightStatusKey,
+  isCancelled,
   flightStatusLines,
   flightStatusNews,
   FlightStatus,
@@ -105,6 +106,8 @@ type Flight = { key: string; segments: Segment[] };
 function flightsOf(segments: readonly Segment[]): Flight[] {
   const byKey = new Map<string, Segment[]>();
   for (const segment of segments) {
+    // A cancelled booking's flight is no one's to look up (each look is paid).
+    if (isCancelled(segment)) continue;
     const key = flightStatusKey(segment);
     if (!key) continue;
     byKey.set(key, [...(byKey.get(key) ?? []), segment]);

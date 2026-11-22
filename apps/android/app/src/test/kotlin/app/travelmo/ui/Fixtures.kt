@@ -98,6 +98,27 @@ val fixtureSegments: Map<String, List<Segment>> = mapOf(
     ),
 )
 
+/**
+ * A trip whose stay a cancellation email cancelled, beside a live train:
+ * rendered on its own (trip_detail_cancelled), so no other screen changes.
+ */
+// Its own dates still cover the cancelled stay; it is shown by the train's,
+// as the importer leaves it (liveStart, liveEnd).
+val fixtureCancelledTrip = trip("york", "York", "2027-01-15", "2027-01-17").copy(liveStart = "2027-01-15", liveEnd = "2027-01-15")
+val fixtureCancelledSegments = listOf(
+    Segment(
+        "y-train", "york", SegmentType.TRAIN, "LNER to York", "2027-01-15T09:00:00+00:00", "2027-01-15T10:52:00+00:00",
+        provider = "LNER", confirmation = "LN-7731", origin = Place("London King's Cross", code = "KGX"), destination = Place("York", code = "YRK"),
+    ),
+    Segment(
+        "y-stay", "york", SegmentType.LODGING, "Minster View Hotel", "2027-01-15T15:00:00+00:00", "2027-01-17T11:00:00+00:00",
+        provider = "Booking.com", confirmation = "4410.552.019", sender = "booking.example",
+        sources = listOf(SourceRef(SourceKind.GMAIL, "m-minster", label = "Booking confirmed: Minster View Hotel", uid = OWNER, at = "2026-10-15T09:00:00Z")),
+        destination = Place("Minster View Hotel", city = "York", country = "GB"),
+        cancelledAt = "2026-10-28T09:00:00Z", cancelledBy = "m-cancel",
+    ),
+)
+
 private fun entry(title: String, vararg fields: Pair<String, String>) = ProfileEntry(title, fields.map { ProfileField(it.first, it.second) })
 
 /** The owner's profile: a passport that runs out two months after Dublin, two programs, two travelers. */
@@ -165,6 +186,10 @@ class FakeTripStore(
     }
     override suspend fun deleteSegment(tripId: String, segmentId: String) {
         deleted += tripId to segmentId
+    }
+    val restored = mutableListOf<Pair<String, String>>()
+    override suspend fun restoreSegment(tripId: String, segmentId: String) {
+        restored += tripId to segmentId
     }
     val trusted = mutableListOf<Triple<String, Boolean, List<String>>>()
     override suspend fun saveTrusted(uid: String, email: String?, exists: Boolean, emails: List<String>) {

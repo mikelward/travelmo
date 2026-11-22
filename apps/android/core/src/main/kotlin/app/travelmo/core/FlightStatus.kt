@@ -85,11 +85,11 @@ fun flightRefreshDue(segment: Segment, status: FlightStatus?, now: String): Bool
     return watched && (status == null || at - instantMillis(status.checkedAt) >= REFRESH_INTERVAL - SLACK)
 }
 
-/** Whether a trip page shows the flight's status: from a day before departure until the looks stop. */
+/** Whether a trip page shows the flight's status: from a day before departure until the looks stop; never for a cancelled booking. */
 fun flightStatusShown(segment: Segment, now: String): Boolean {
     val at = instantMillis(now)
     val start = instantMillis(segment.start)
-    return segment.type == SegmentType.FLIGHT && at >= start - 24 * HOUR && at <= start + GIVE_UP_AFTER
+    return segment.type == SegmentType.FLIGHT && !segment.isCancelled && at >= start - 24 * HOUR && at <= start + GIVE_UP_AFTER
 }
 
 /** The keys of the flights whose status a trip page shows now, each once. */

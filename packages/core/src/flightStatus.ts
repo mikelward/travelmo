@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { isoDate, isoDateTime, type ExtractedSegment } from "./schema";
-import { localDate } from "./trips";
+import { isCancelled, localDate } from "./trips";
 
 // Live gates, terminals and the baggage carousel for a flight, read from a
 // flight-status service by the parser and kept once per flight
@@ -123,11 +123,12 @@ export function flightRefreshDue(segment: Pick<ExtractedSegment, "start" | "end"
 }
 
 // Whether a trip page shows the flight's status: from a day before its
-// booked departure until the parser stops looking at it.
-export function flightStatusShown(segment: Pick<ExtractedSegment, "type" | "start">, now: string): boolean {
+// booked departure until the parser stops looking at it; never for a
+// cancelled booking.
+export function flightStatusShown(segment: Pick<ExtractedSegment, "type" | "start"> & { cancelledAt?: string }, now: string): boolean {
   const at = Date.parse(now);
   const start = Date.parse(segment.start);
-  return segment.type === "flight" && at >= start - 24 * hour && at <= start + giveUpAfterMs;
+  return segment.type === "flight" && !isCancelled(segment) && at >= start - 24 * hour && at <= start + giveUpAfterMs;
 }
 
 // "terminal 1, gate 8", "gate 8" or "terminal 1".

@@ -8,6 +8,8 @@ import app.travelmo.core.SegmentDraft
 import app.travelmo.core.SegmentType
 import app.travelmo.core.SourceKind
 import app.travelmo.core.SourceRef
+import app.travelmo.core.isCancelled
+import app.travelmo.core.liveSegments
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
@@ -75,6 +77,18 @@ class DocumentsTest {
             listOf(SourceRef(SourceKind.GMAIL, "m1", at = ""))
         segmentFromDocument("s3", "t1", mapOf("type" to "hovercraft", "title" to "x", "start" to "2026-12-12T09:07:00+00:00")).shouldBeNull()
         segmentFromDocument("s4", "t1", mapOf("type" to "train", "title" to "x", "start" to "2026-12-12T09:07:00+00:00", "rating" to 9L))!!.rating.shouldBeNull()
+    }
+
+    @Test
+    fun `reads a cancelled segment so it drops out of what is live`() {
+        val base = mapOf("type" to "lodging", "title" to "Harbor Inn", "start" to "2026-12-12T15:00:00+01:00")
+        val cancelled = segmentFromDocument("s1", "t1", base + mapOf("cancelledAt" to "2026-11-20T08:00:00Z", "cancelledBy" to "m2"))!!
+        cancelled.cancelledAt shouldBe "2026-11-20T08:00:00Z"
+        cancelled.cancelledBy shouldBe "m2"
+        cancelled.isCancelled shouldBe true
+        val live = segmentFromDocument("s2", "t1", base)!!
+        live.isCancelled shouldBe false
+        liveSegments(listOf(cancelled, live)) shouldBe listOf(live)
     }
 
     @Test

@@ -25,6 +25,7 @@ const outcomeLabels: Record<ParsedMessage["outcome"], string> = {
   not_booking: "Read, not a booking",
   imported: "Imported",
   failed: "Failed",
+  cancellation: "Cancellation",
 };
 
 function ReviewList({ user }: { user: User }) {

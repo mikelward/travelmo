@@ -127,6 +127,10 @@ describe("flightStatusShown", () => {
     expect(flightStatusShown(flight, "2026-12-14T04:01:00Z")).toBe(false);
     expect(flightStatusShown({ ...flight, type: "train" }, "2026-12-12T21:00:00Z")).toBe(false);
   });
+
+  it("shows none for a cancelled booking", () => {
+    expect(flightStatusShown({ ...flight, cancelledAt: "2026-11-01T00:00:00Z" }, "2026-12-12T21:00:00Z")).toBe(false);
+  });
 });
 
 describe("flightStatusLines", () => {

@@ -64,8 +64,10 @@ describe("resetTrips", () => {
     await db.doc(paths.parsedMessage(uid, "m1")).set({ messageId: "m1", uid, outcome: "imported", segmentIds: ["m1-0"], processedAt: at });
     await db.doc(paths.parsedMessage(uid, "m2")).set({ messageId: "m2", uid, outcome: "not_booking", segmentIds: [], processedAt: at });
     await db.doc(paths.geocodeRetry("reset-own-1", "m1-0")).set({ uid, tripId: "reset-own-1", segmentId: "m1-0", at });
+    await db.doc(paths.pendingCancellation(uid, "m3")).set({ messageId: "m3", uid, cancellations: [{ confirmation: "CV-1" }], at });
 
     expect(await resetTrips(db, uid, quiet)).toEqual({ trips: 2 });
+    expect((await db.collection(paths.pendingCancellations(uid)).get()).empty).toBe(true);
 
     expect((await db.doc(paths.trip("reset-own-1")).get()).exists).toBe(false);
     expect((await db.doc(paths.trip("reset-own-2")).get()).exists).toBe(false);
@@ -255,6 +257,69 @@ describe("resetTrips", () => {
       expect(await cancelImported("u1", "ics-k1", deps(store, async () => lodging), before)).toBe(0);
       expect(store.segments.size).toBe(1);
       expect(store.parsed.get("u1/ics-k1")?.outcome).toBe("imported");
+    });
+
+    describe("with a cancellation email", () => {
+      const numbered: ExtractedBooking = { ...lodging, segments: lodging.segments.map((s) => ({ ...s, confirmation: "CV-1" })) };
+      const cancelling: ExtractedBooking = { isBooking: false, segments: [], cancellations: [{ type: "lodging", confirmation: "CV-1" }] };
+      const cancelEmail: EmailMessage = { ...email, id: "cancel", subject: "Booking cancelled for Cove Liverpool" };
+      // Runs the reset right after the next per-user transaction.
+      const resetAfterLock = (store: ReturnType<typeof memoryStore>) => {
+        const lock = store.withUserLock.bind(store);
+        let armed = true;
+        store.withUserLock = async (uid, fn) => {
+          const result = await lock(uid, fn);
+          if (armed) {
+            armed = false;
+            await deleteOwnTrips(uid, store);
+          }
+          return result;
+        };
+      };
+
+      it("marks nothing and keeps nothing waiting when the reset comes while it is being read", async () => {
+        const store = memoryStore();
+        const extract = async () => {
+          await deleteOwnTrips("u1", store);
+          return cancelling;
+        };
+        expect(await importMessage("u1", cancelEmail, deps(store, extract))).toBe("skipped");
+        expect(store.pending.size).toBe(0);
+        expect(store.parsed.has("u1/cancel")).toBe(false);
+        // Read again, it waits for its booking as before.
+        expect(await importMessage("u1", cancelEmail, deps(store, async () => cancelling))).toBe("cancellation");
+        expect(store.pending.size).toBe(1);
+      });
+
+      it("records nothing when the reset comes after it marked its booking", async () => {
+        const store = memoryStore();
+        await importMessage("u1", email, deps(store, async () => numbered));
+        resetAfterLock(store);
+        expect(await importMessage("u1", cancelEmail, deps(store, async () => cancelling))).toBe("cancellation");
+        // The reset took the booking and the waiting cancellation; no record is left naming them.
+        expect(store.segments.size).toBe(0);
+        expect(store.pending.size).toBe(0);
+        expect(store.parsed.has("u1/cancel")).toBe(false);
+      });
+
+      it("files no booking cancelled by a cancellation the reset cleared", async () => {
+        const store = memoryStore();
+        await importMessage("u1", cancelEmail, deps(store, async () => cancelling));
+        expect(store.pending.size).toBe(1);
+        await deleteOwnTrips("u1", store);
+        expect(store.pending.size).toBe(0);
+        expect(await importMessage("u1", email, deps(store, async () => numbered))).toBe("imported");
+        expect([...store.segments.values()][0]?.cancelledAt).toBeUndefined();
+      });
+
+      it("doesn't write back the cancellation's record when the reset comes after its booking is filed cancelled", async () => {
+        const store = memoryStore();
+        await importMessage("u1", cancelEmail, deps(store, async () => cancelling));
+        resetAfterLock(store);
+        expect(await importMessage("u1", email, deps(store, async () => numbered))).toBe("imported");
+        expect(store.segments.size).toBe(0);
+        expect(store.parsed.has("u1/cancel")).toBe(false);
+      });
     });
 
     it("records nothing when the reset comes after the booking is filed", async () => {

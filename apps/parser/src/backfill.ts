@@ -11,7 +11,7 @@ import { emptyCounts, type ImportCounts } from "./importer";
 // Booking-like subjects over the whole mailbox; the pre-filter and the
 // model decide the rest.
 export const backfillQuery =
-  "-in:spam -in:trash {subject:booking subject:reservation subject:confirmation subject:confirmed subject:itinerary subject:ticket subject:tickets subject:flight subject:hotel subject:rental subject:check-in subject:\"boarding pass\"}";
+  "-in:spam -in:trash {subject:booking subject:reservation subject:confirmation subject:confirmed subject:itinerary subject:ticket subject:tickets subject:flight subject:hotel subject:rental subject:check-in subject:\"boarding pass\" subject:cancellation subject:cancelation subject:cancelled subject:canceled}";
 // Messages per batch: enough to make progress, in one search call. A batch
 // that runs short of time stops early (see `timeLeftMs`), so it always ends
 // inside a request.

@@ -58,6 +58,109 @@ const summary = (store: Memory) =>
     }))
     .sort((a, b) => a.start.localeCompare(b.start));
 
+describe("regroupTrips with cancelled bookings", () => {
+  const cancelled = { cancelledAt: "2026-11-05T09:00:00Z", cancelledBy: "mc" };
+
+  it("regroups a trip whose only booking is cancelled without error, leaving it where it is", async () => {
+    const store = memoryStore();
+    store.trips.set("stockholm", trip("stockholm", "Stockholm", "2026-06-10", "2026-06-13"));
+    const stay = { type: "lodging" as const, title: "Example Hotel Gamla Stan", start: "2026-06-10T15:00:00+02:00", end: "2026-06-13T11:00:00+02:00", destination: { name: "Example Hotel Gamla Stan", city: "Stockholm", country: "SE" } };
+    store.segments.set("ms-0", segment("stockholm", "ms-0", "ms", stay, cancelled));
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0 });
+    expect(summary(store)).toEqual([{ title: "Stockholm", start: "2026-06-10", end: "2026-06-13", sharedWith: [], segments: ["ms-0"] }]);
+  });
+
+  it("files a booking by what is still booked in it, not by a cancelled part", async () => {
+    const store = memoryStore();
+    const stay = (title: string, city: string, country: string, start: string, end: string) => ({
+      type: "lodging" as const,
+      title,
+      start,
+      end,
+      destination: { name: title, city, country },
+    });
+    store.trips.set("stockholm", trip("stockholm", "Stockholm", "2026-06-10", "2026-06-13"));
+    store.segments.set("ms-0", segment("stockholm", "ms-0", "ms", stay("Example Hotel Gamla Stan", "Stockholm", "SE", "2026-06-10T15:00:00+02:00", "2026-06-13T11:00:00+02:00")));
+    // One email: a cancelled Paris stay in June and a live Rome stay in July.
+    store.trips.set("rome", trip("rome", "Rome", "2026-07-10", "2026-07-12"));
+    store.segments.set("mx-0", segment("rome", "mx-0", "mx", stay("Example Hotel Paris", "Paris", "FR", "2026-06-12T15:00:00+02:00", "2026-06-14T11:00:00+02:00"), cancelled));
+    store.segments.set("mx-1", segment("rome", "mx-1", "mx", stay("Example Hotel Roma", "Rome", "IT", "2026-07-10T15:00:00+02:00", "2026-07-12T11:00:00+02:00")));
+    await regroupTrips("u1", deps(store));
+    const trips = summary(store);
+    expect(trips.find((t) => t.segments.includes("ms-0"))).toMatchObject({ start: "2026-06-10", end: "2026-06-13", segments: ["ms-0"] });
+    expect(trips.find((t) => t.segments.includes("mx-1"))).toMatchObject({ start: "2026-07-10", end: "2026-07-12" });
+  });
+
+  it("leaves each trip showing when its own bookings now travel", async () => {
+    const store = memoryStore();
+    const stay = (title: string, start: string, end: string) => ({ type: "lodging" as const, title, start, end, destination: { name: title, city: "Lyon", country: "FR" } });
+    // A live June stay and a cancelled one weeks later, on one trip showing June only.
+    store.trips.set("lyon", { ...trip("lyon", "Lyon", "2026-06-01", "2026-06-25"), liveStart: "2026-06-01", liveEnd: "2026-06-03" });
+    store.segments.set("ma-0", segment("lyon", "ma-0", "ma", stay("Example Hotel One", "2026-06-01T15:00:00+02:00", "2026-06-03T11:00:00+02:00")));
+    store.segments.set("mb-0", segment("lyon", "mb-0", "mb", stay("Example Hotel Two", "2026-06-20T15:00:00+02:00", "2026-06-25T11:00:00+02:00"), cancelled));
+    await regroupTrips("u1", deps(store));
+    const live = [...store.trips.values()].find((t) => store.segments.get("ma-0")!.tripId === t.id)!;
+    expect(store.segments.get("mb-0")!.tripId).not.toBe(live.id);
+    expect(live).toMatchObject({ start: "2026-06-01", end: "2026-06-03" });
+    expect(live.liveStart).toBeUndefined();
+  });
+
+  it("keeps back-to-back cancelled stays together, by their booked dates", async () => {
+    const store = memoryStore();
+    const stay = (title: string, start: string, end: string) => ({ type: "lodging" as const, title, start, end, destination: { name: title, city: "Lyon", country: "FR" } });
+    store.trips.set("lyon", trip("lyon", "Lyon", "2026-06-01", "2026-06-09"));
+    store.segments.set("ma-0", segment("lyon", "ma-0", "ma", stay("Example Hotel One", "2026-06-01T15:00:00+02:00", "2026-06-03T11:00:00+02:00"), cancelled));
+    store.segments.set("mb-0", segment("lyon", "mb-0", "mb", stay("Example Hotel Two", "2026-06-04T15:00:00+02:00", "2026-06-06T11:00:00+02:00"), cancelled));
+    store.segments.set("mc-0", segment("lyon", "mc-0", "mc", stay("Example Hotel Three", "2026-06-07T15:00:00+02:00", "2026-06-09T11:00:00+02:00"), cancelled));
+    await regroupTrips("u1", deps(store));
+    expect(summary(store)).toMatchObject([{ start: "2026-06-01", end: "2026-06-09", segments: ["ma-0", "mb-0", "mc-0"] }]);
+  });
+
+  it("doesn't let a cancelled stay that seeds a group bridge two trips", async () => {
+    const store = memoryStore();
+    const stay = (title: string, city: string, country: string, start: string, end: string) => ({
+      type: "lodging" as const,
+      title,
+      start,
+      end,
+      destination: { name: title, city, country },
+    });
+    store.trips.set("june", trip("june", "June", "2026-06-01", "2026-06-30"));
+    // A month's stay, cancelled, filed first by its booked dates...
+    store.segments.set("ma-0", segment("june", "ma-0", "ma", stay("Example Residence", "Lyon", "FR", "2026-06-01T15:00:00+02:00", "2026-06-30T11:00:00+02:00"), cancelled));
+    // ...then two live stays weeks apart.
+    store.segments.set("mb-0", segment("june", "mb-0", "mb", stay("Example Hotel Paris", "Paris", "FR", "2026-06-05T15:00:00+02:00", "2026-06-07T11:00:00+02:00")));
+    store.segments.set("mc-0", segment("june", "mc-0", "mc", stay("Example Hotel Roma", "Rome", "IT", "2026-06-20T15:00:00+02:00", "2026-06-22T11:00:00+02:00")));
+    await regroupTrips("u1", deps(store));
+    const trips = summary(store);
+    const paris = trips.find((t) => t.segments.includes("mb-0"))!;
+    const rome = trips.find((t) => t.segments.includes("mc-0"))!;
+    expect(paris).not.toBe(rome);
+    // The cancelled month stays inside one trip's own dates, which show
+    // only what is still booked.
+    const shown = (id: string) => {
+      const t = [...store.trips.values()].find((x) => x.id === store.segments.get(id)!.tripId)!;
+      return { start: t.liveStart ?? t.start, end: t.liveEnd ?? t.end };
+    };
+    expect(shown("mb-0")).toEqual({ start: "2026-06-05", end: "2026-06-07" });
+    expect(shown("mc-0")).toEqual({ start: "2026-06-20", end: "2026-06-22" });
+    const holding = [...store.trips.values()].find((x) => x.id === store.segments.get("ma-0")!.tripId)!;
+    expect(holding).toMatchObject({ start: "2026-06-01", end: "2026-06-30" });
+  });
+
+  it("files a cancelled day out beside live bookings without letting it count", async () => {
+    const store = memoryStore();
+    mayAsOneTrip(store);
+    store.segments.set("m26-0", { ...store.segments.get("m26-0")!, ...cancelled });
+    await regroupTrips("u1", deps(store));
+    const liverpool = summary(store).find((t) => t.title === "Liverpool");
+    expect(liverpool).toMatchObject({ start: "2026-05-23", end: "2026-05-25", segments: ["mtr-0", "mtr-1"] });
+    // The cancelled booking is kept, in some trip, still cancelled.
+    expect(store.segments.get("m26-0")).toMatchObject(cancelled);
+    expect(store.segments.size).toBe(4);
+  });
+});
+
 describe("regroupTrips", () => {
   it("splits days out at home from the trip away, each part shared as the trip was", async () => {
     const store = memoryStore();

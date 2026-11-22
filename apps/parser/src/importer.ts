@@ -7,11 +7,24 @@ import {
   findTripForBooking,
   isTransfer,
   transferTitle,
+  cancels,
+  stripForwardPrefix,
+  unwrapForwarded,
+  pendingCancellationExpired,
+  stillWaiting,
+  isCancelled,
+  liveBounds,
+  bookedDateRange,
+  displayBounds,
+  normalizeReference,
+  type ExtractedCancellation,
   homeTimeline,
   type HomePeriod,
   icsEventText,
   isTravelCalendar,
   isPaymentReceipt,
+  liveSegments,
+  mentionsPayment,
   compareMatchRanks,
   matchRank,
   notBookings,
@@ -29,6 +42,7 @@ import {
   needsGeocoding,
   type GeocodeLookup,
   type ParsedMessage,
+  type PendingCancellation,
   type Segment,
   type SegmentSource,
   type SourceRef,
@@ -61,6 +75,9 @@ export type TripTx = {
   // Moves the trip's revision, as any change to its bookings must, and
   // renames it when given a title (settleTitles in fileBooking).
   touchTrip(tripId: string, updatedAt: string, title?: string): void;
+  // When the person now travels (liveBounds), or none: beside the trip's
+  // own dates, which stay its full span.
+  setLiveBounds(tripId: string, bounds: { start: string; end: string } | undefined): void;
   // A new title and bounds for a trip regrouping reshaped (regroup.ts).
   updateTrip(tripId: string, fields: Pick<Trip, "title" | "start" | "end" | "updatedAt">): void;
   // Removes a trip regrouping emptied of bookings.
@@ -79,6 +96,10 @@ export type TripTx = {
   // place in the same transaction that moves the generation on.
   hasGmail(): Promise<boolean>;
   clearBackfill(): void;
+  // Cancellations not yet matched to a booking (see markCancelled).
+  listPendingCancellations(uid: string): Promise<PendingCancellation[]>;
+  putPendingCancellation(pending: PendingCancellation): void;
+  deletePendingCancellation(uid: string, messageId: string): void;
 };
 
 // An import that began before the user deleted all their trips: it files
@@ -239,6 +260,8 @@ export async function importMessage(
     if (!(await claim(uid, message.id, now(), generation))) return "skipped";
   }
   const source = options.source ?? "gmail";
+  // When what the email carries was sent (the original's, for a forward).
+  const sent = originalSentAt(message, source);
   const base = {
     messageId: message.id,
     uid,
@@ -357,6 +380,24 @@ export async function importMessage(
   }
   const range = segmentDateRange(booking.segments);
   if (!(await releaseReplaced())) return "skipped";
+  // A cancellation is read from email only: a calendar's own cancelled
+  // events are handled by `cancelImported`.
+  if (booking.cancellations?.length && booking.segments.length === 0 && source !== "ics") {
+    let marked;
+    try {
+      marked = await markCancelled(uid, message.id, booking.cancellations, deps, sent, generation);
+    } catch (error) {
+      // The user deleted all their trips while this ran: nothing is marked
+      // or recorded, and the next import reads the email again.
+      if (!(error instanceof ImportSupersededError)) throw error;
+      log("import_superseded", { uid, messageId: message.id });
+      return "skipped";
+    }
+    await save(record("cancellation", { reason: cancellationReason(marked.length), segmentIds: marked.map((m) => m.segmentId) }));
+    await learn("bookings");
+    log("cancellation", { uid, messageId: message.id, cancelled: marked.length });
+    return "cancellation";
+  }
   if (!booking.isBooking || booking.segments.length === 0 || !range) {
     await save(record("not_booking", { reason }));
     await learn("others");
@@ -380,6 +421,7 @@ export async function importMessage(
         segments: booking.segments,
         ...(source === "gmail" ? { gmailMessageIds: [message.id] } : {}),
         ...(sender ? { sender } : {}),
+        ...(isEmail && sent ? { sentAt: sent } : {}),
         // Events of a calendar are one list with an id each: two alike are
         // two reservations. Emails are not; one booking is often confirmed
         // twice.
@@ -413,6 +455,177 @@ export async function importMessage(
 
 const duplicateReason = (n: number) => `${n} already imported from elsewhere`;
 
+function groupBy<T>(items: readonly T[], key: (item: T) => string | undefined): Map<string, T[]> {
+  const out = new Map<string, T[]>();
+  for (const item of items) {
+    const k = key(item);
+    if (k !== undefined) out.set(k, [...(out.get(k) ?? []), item]);
+  }
+  return out;
+}
+
+// An email's Date header as an instant, or undefined when it doesn't parse.
+function sentAt(date: string | undefined): string | undefined {
+  const ms = date ? Date.parse(date) : NaN;
+  return Number.isNaN(ms) ? undefined : new Date(ms).toISOString();
+}
+
+// When the booking or cancellation an email carries was sent. A forward
+// (by the forwarding address, or a Gmail message whose subject says so) is
+// dated by its original's Date line, never the forward's: an old
+// confirmation forwarded today is still old. Unknown when that line is
+// missing or unreadable, which orders it against nothing.
+function originalSentAt(message: EmailMessage, source: string): string | undefined {
+  const forwarded = source === "forward" || stripForwardPrefix(message.subject) !== message.subject.trim();
+  return forwarded ? unwrapForwarded(message).date : sentAt(message.date);
+}
+
+// Whether an email carries only payments (a receipt, an invoice, a refund)
+// and so books nothing: every segment is a payment receipt or says it is one,
+// or the subject does.
+// Timed or not: a "Payment confirmation" for a stay still books nothing.
+function paymentOnly(segments: readonly ExtractedSegment[], subject?: string): boolean {
+  if (mentionsPayment(subject)) return true;
+  return segments.length > 0 && segments.every((s) => mentionsPayment(s.title));
+}
+
+// A cancellation email as the importer weighs it: when it was sent, if
+// known, and what it names.
+type CancellationSignal = Pick<PendingCancellation, "messageId" | "sentAt" | "cancellations" | "at">;
+
+// Which cancellation stands for a booking, if any, from every email about it
+// by the date it was sent, whichever order they were read in. The booking was
+// confirmed by the emails it was read from (`confirmations`: their send times;
+// receipts carry none); a cancellation that names it (`cancels`) and wasn't
+// taken back (Restore) stands unless a confirmation was sent after it, and one
+// sent at the same time as the latest confirmation still stands. Of those
+// that stand, the latest wins; one of unknown date always stands but wins
+// only when none is dated. The one the booking already records stays while
+// it still stands and none later does, so reading an email again changes
+// nothing. `waiting` are the cancellations still waiting for bookings;
+// `all` also has the expired ones, for the date of the one recorded.
+//
+// The recorded one's date comes from the booking (`cancelledSentAt`), so
+// cleanup deleting its waiting record changes nothing; a booking cancelled
+// before that field existed falls back to the record while it remains, and
+// is undated after.
+type Standing = { messageId: string; sentAt?: string | undefined };
+function standingCancellation(
+  segment: ExtractedSegment & Pick<Partial<Segment>, "cancelledBy" | "cancelledSentAt" | "restoredFrom" | "restoredAt">,
+  confirmations: readonly (string | undefined)[],
+  waiting: readonly CancellationSignal[],
+  all: readonly CancellationSignal[],
+): Standing | undefined {
+  const restored = segment.restoredFrom ?? [];
+  // Restore overrides every cancellation sent, or (undated) read, by then.
+  const restoredAt = segment.restoredAt ? Date.parse(segment.restoredAt) : undefined;
+  const overridden = (when: string | undefined) => restoredAt !== undefined && when !== undefined && Date.parse(when) <= restoredAt;
+  const candidates = waiting
+    .filter((p) => !restored.includes(p.messageId) && !overridden(p.sentAt ?? p.at) && p.cancellations.some((c) => cancels(c, segment, p.sentAt ?? p.at)))
+    .map((p) => ({ messageId: p.messageId, sentAt: p.sentAt }));
+  const recorded = segment.cancelledBy;
+  if (recorded && !restored.includes(recorded) && !candidates.some((c) => c.messageId === recorded)) {
+    const sentAt = segment.cancelledSentAt ?? all.find((p) => p.messageId === recorded)?.sentAt;
+    if (!overridden(sentAt)) candidates.push({ messageId: recorded, sentAt });
+  }
+  const dated = confirmations.filter((t): t is string => t !== undefined).map((t) => Date.parse(t));
+  const latest = dated.length > 0 ? Math.max(...dated) : undefined;
+  const standing = candidates.filter((c) => latest === undefined || c.sentAt === undefined || Date.parse(c.sentAt) >= latest);
+  if (standing.length === 0) return undefined;
+  const when = (c: { sentAt?: string | undefined }) => (c.sentAt === undefined ? -Infinity : Date.parse(c.sentAt));
+  const best = Math.max(...standing.map(when));
+  const winners = standing.filter((c) => when(c) === best);
+  return winners.find((c) => c.messageId === recorded) ?? winners[0]!;
+}
+
+// The booking as `standingCancellation` leaves it: cancelled by the one that
+// stands (from `timestamp`, unless it already was by that one), else live.
+function settled<S extends ExtractedSegment & Pick<Partial<Segment>, "cancelledAt" | "cancelledBy" | "cancelledSentAt">>(
+  segment: S,
+  by: Standing | undefined,
+  timestamp: string,
+): S {
+  if (by) {
+    // Its date kept with it (filled in for one recorded before the field).
+    if (segment.cancelledBy === by.messageId) return by.sentAt && !segment.cancelledSentAt ? { ...segment, cancelledSentAt: by.sentAt } : segment;
+    const { cancelledSentAt: _old, ...rest } = segment;
+    return { ...rest, cancelledAt: timestamp, cancelledBy: by.messageId, ...(by.sentAt ? { cancelledSentAt: by.sentAt } : {}) } as S;
+  }
+  if (!isCancelled(segment)) return segment;
+  const { cancelledAt: _at, cancelledBy: _by, cancelledSentAt: _sent, ...live } = segment;
+  return live as S;
+}
+
+export const cancellationReason = (n: number) =>
+  n === 0 ? "no matching booking found" : n === 1 ? "cancelled 1 booking" : `cancelled ${n} bookings`;
+
+// Marks the user's own bookings a cancellation email names (see `cancels`)
+// as cancelled, keeping them on their trips. A booking already cancelled is
+// left as it was, so reading the email again changes nothing.
+export async function markCancelled(
+  uid: string,
+  messageId: string,
+  cancellations: readonly ExtractedCancellation[],
+  deps: ImportDeps,
+  sent?: string,
+  // The reset generation the import began under: once trips have been
+  // reset since, nothing is marked or kept waiting (ImportSupersededError).
+  generation?: number,
+): Promise<{ tripId: string; segmentId: string }[]> {
+  const timestamp = deps.now();
+  return deps.store.withUserLock(uid, async (lockTx) => {
+    const tx = settlingTripDates(lockTx, timestamp);
+    if (generation !== undefined && tx.generation !== generation) throw new ImportSupersededError();
+    // Only the user's own trips: a trip shared with them is someone else's
+    // booking, which their email can't cancel.
+    const trips = (await tx.listTrips()).filter((t) => t.ownerUid === uid && !t.deleting);
+    // This email beside every other cancellation read: which one stands for
+    // a booking is weighed from all of them by date (standingCancellation).
+    const self: CancellationSignal = { messageId, cancellations: [...cancellations], at: timestamp, ...(sent ? { sentAt: sent } : {}) };
+    const others = (await tx.listPendingCancellations(uid)).filter((p) => p.messageId !== messageId);
+    const all = [...others, self];
+    const waiting = [
+      ...others.filter((p) => !pendingCancellationExpired(p, timestamp)).map((p) => ({ ...p, cancellations: stillWaiting(p, timestamp) })),
+      self,
+    ];
+    const found: Segment[] = [];
+    const changed: Segment[] = [];
+    const segmentsOf = new Map<string, Segment[]>();
+    for (const trip of trips) {
+      const segments = await tx.listSegments(trip.id);
+      segmentsOf.set(trip.id, segments);
+      for (const segment of segments) {
+        const named = cancellations.some((c) => cancels(c, segment, sent ?? timestamp));
+        if (!named && segment.cancelledBy !== messageId) continue;
+        const confirmations = (segment.sources ?? []).map((r) => r.sentAt);
+        const after = settled(segment, standingCancellation(segment, confirmations, waiting, all), timestamp);
+        if (named && isCancelled(after)) found.push(after);
+        if (after !== segment) changed.push(after);
+      }
+    }
+    for (const segment of changed) {
+      // An import's mark, not the user's edit: an unedited booking stays so.
+      const unedited = segment.updatedAt === segment.createdAt;
+      tx.putSegment({ ...segment, ...(unedited ? { createdAt: timestamp } : {}), updatedAt: timestamp });
+    }
+    // A booking booked again widens its trip, as filing it would; when the
+    // person now travels is settled once everything is written.
+    for (const tripId of new Set(changed.map((s) => s.tripId))) {
+      const trip = trips.find((t) => t.id === tripId)!;
+      const live = segmentDateRange((segmentsOf.get(tripId) ?? []).map((s) => changed.find((c) => c.id === s.id) ?? s));
+      if (live && (live.start < trip.start || live.end > trip.end)) {
+        tx.extendTrip(tripId, { start: min(trip.start, live.start), end: max(trip.end, live.end), updatedAt: timestamp });
+      } else tx.touchTrip(tripId, timestamp);
+    }
+    tx.settle(trips, (tripId) => segmentsOf.get(tripId) ?? []);
+    // Every cancellation also waits for bookings imported later
+    // (fileBooking): the mailbox is read newest first, and another leg under
+    // the same reference may not have been read yet.
+    tx.putPendingCancellation({ messageId, uid, cancellations: [...cancellations], at: timestamp, ...(sent ? { sentAt: sent } : {}) });
+    return found.map((s) => ({ tripId: s.tripId, segmentId: s.id }));
+  });
+}
+
 // Where a source wants its bookings filed. Without one, a booking joins the
 // trip its dates fall in (or near) and otherwise starts one titled by its
 // destination. With one, as for a TripIt trip, the source's own grouping
@@ -431,6 +644,8 @@ export type BookingToFile = {
   segments: readonly ExtractedSegment[];
   gmailMessageIds?: string[];
   sender?: string;
+  // When the source was sent (an email's Date), if known.
+  sentAt?: string;
   trip?: TripHint;
   // Never treat two of this source's own bookings as one.
   distinctWithinSource?: boolean;
@@ -493,6 +708,74 @@ async function placeSegments(uid: string, booking: BookingToFile, deps: ImportDe
   return { segments, deferred };
 }
 
+// A transaction that remembers the trip dates and bookings it writes, so
+// that once an import has written everything for an email (new, merged and
+// upgraded bookings, and the cancellations they meet), `settle` records on
+// each trip it touched when the person now travels (liveBounds), whichever
+// path cancelled or revived a booking, and clears it once nothing is
+// cancelled. The trip's own dates are never narrowed: they stay the span its
+// bookings are found again by.
+export function settlingTripDates(tx: TripTx, timestamp: string): TripTx & { settle(trips: readonly Trip[], segmentsOf: (tripId: string) => readonly Segment[]): void } {
+  const bounds = new Map<string, { start: string; end: string }>();
+  const written = new Map<string, Map<string, Segment | undefined>>();
+  const touched = new Set<string>();
+  const gone = new Set<string>();
+  const segmentWrites = (tripId: string) => written.get(tripId) ?? written.set(tripId, new Map()).get(tripId)!;
+  const overrides: Partial<TripTx> = {
+    createTrip(trip) {
+      tx.createTrip(trip);
+      bounds.set(trip.id, { start: trip.start, end: trip.end });
+      touched.add(trip.id);
+    },
+    extendTrip(tripId, next) {
+      tx.extendTrip(tripId, next);
+      bounds.set(tripId, { start: next.start, end: next.end });
+      touched.add(tripId);
+    },
+    updateTrip(tripId, fields) {
+      tx.updateTrip(tripId, fields);
+      bounds.set(tripId, { start: fields.start, end: fields.end });
+      touched.add(tripId);
+    },
+    putSegment(segment) {
+      tx.putSegment(segment);
+      segmentWrites(segment.tripId).set(segment.id, segment);
+      touched.add(segment.tripId);
+    },
+    deleteSegment(tripId, segmentId) {
+      tx.deleteSegment(tripId, segmentId);
+      segmentWrites(tripId).set(segmentId, undefined);
+      touched.add(tripId);
+    },
+    deleteTrip(tripId) {
+      tx.deleteTrip(tripId);
+      gone.add(tripId);
+    },
+  };
+  const settle = (trips: readonly Trip[], segmentsOf: (tripId: string) => readonly Segment[]) => {
+    for (const tripId of touched) {
+      if (gone.has(tripId)) continue;
+      const trip = trips.find((t) => t.id === tripId);
+      const now = bounds.get(tripId) ?? (trip ? { start: trip.start, end: trip.end } : undefined);
+      if (!now) continue;
+      const writes = written.get(tripId) ?? new Map<string, Segment | undefined>();
+      const after = [
+        ...segmentsOf(tripId).flatMap((s) => (writes.has(s.id) ? (writes.get(s.id) ?? []) : [s])),
+        ...[...writes.entries()].flatMap(([id, s]) => (s && !segmentsOf(tripId).some((o) => o.id === id) ? [s] : [])),
+      ];
+      const next = liveBounds(now, after);
+      if (next?.start !== trip?.liveStart || next?.end !== trip?.liveEnd) tx.setLiveBounds(tripId, next);
+    }
+  };
+  return new Proxy(tx, {
+    get(target, key, receiver) {
+      if (key === "settle") return settle;
+      if (typeof key === "string" && key in overrides) return overrides[key as keyof TripTx];
+      return Reflect.get(target, key, receiver);
+    },
+  }) as TripTx & { settle: typeof settle };
+}
+
 // The part of every import after the booking is known, whatever it came
 // from: trip assignment, duplicate detection against bookings already on the
 // user's trips, and the segment writes, in one transaction serialized per
@@ -500,14 +783,15 @@ async function placeSegments(uid: string, booking: BookingToFile, deps: ImportDe
 // type, time and route: sameBooking) is left out; when every one does,
 // nothing is written.
 export async function fileBooking(uid: string, incoming: BookingToFile, deps: ImportDeps): Promise<Filed> {
-  const { store } = deps;
+  const { store, log } = deps;
   const placed = await placeSegments(uid, incoming, deps);
   const booking = { ...incoming, segments: placed.segments };
   const range = segmentDateRange(booking.segments);
   if (!range) throw new Error(`booking ${booking.sourceId} has no segments`);
   const timestamp = deps.now();
   const overrides = (await deps.homeOverrides?.(uid)) ?? [];
-  const result = await store.withUserLock(uid, async (tx) => {
+  const result = await store.withUserLock(uid, async (lockTx) => {
+    const tx = settlingTripDates(lockTx, timestamp);
     if (booking.generation !== undefined && tx.generation !== booking.generation) throw new ImportSupersededError();
     const trips = await tx.listTrips();
     const live = trips.filter((trip) => !trip.deleting);
@@ -517,27 +801,42 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     const nearby = overlappingTrips(live, { start: shiftDate(range.start, -homeWindowDays), end: shiftDate(range.end, homeWindowDays) });
     const segmentsByTrip = new Map(await Promise.all(nearby.map(async (trip) => [trip.id, await tx.listSegments(trip.id)] as const)));
     const segmentsOf = (tripId: string) => segmentsByTrip.get(tripId) ?? [];
-    const periods = homeTimeline([...[...segmentsByTrip.values()].flat(), ...booking.segments]);
+    let periods = homeTimeline([...[...segmentsByTrip.values()].flat(), ...booking.segments]);
+    // Cancellations read before this booking was (the mailbox is read newest
+    // first); read here, before any write, as a transaction requires.
+    const pending = await tx.listPendingCancellations(uid);
     // A source that is already one deduplicated list (a TripIt export) is
     // checked only against other sources: two alike reservations in it are
     // two rooms, not one booking seen twice.
     // A payment receipt with no time of its own may be dated weeks from the
     // booking it pays for (sameBooking), whichever came first.
-    const existing = overlappingTrips(live, { start: shiftDate(range.start, -untimedMatchDays), end: shiftDate(range.end, untimedMatchDays) })
-      .flatMap((trip) => segmentsOf(trip.id))
-      .filter((other) => !booking.distinctWithinSource || other.source !== booking.source);
-    const matchedTrips = new Set<string>();
+    // Found by date in the trips around this booking, and by reference in
+    // every trip read for the year either side, so no trip's dates can hide
+    // a booking from its own confirmation sent again (sameBooking still
+    // decides).
+    const references = new Set(booking.segments.flatMap((s) => (s.confirmation ? [normalizeReference(s.confirmation)] : [])));
+    const byDate = overlappingTrips(live, { start: shiftDate(range.start, -untimedMatchDays), end: shiftDate(range.end, untimedMatchDays) }).flatMap((trip) => segmentsOf(trip.id));
+    const byReference = [...segmentsByTrip.values()]
+      .flat()
+      .filter((other) => other.confirmation && references.has(normalizeReference(other.confirmation)) && !byDate.includes(other));
+    const existing = [...byDate, ...byReference].filter((other) => !booking.distinctWithinSource || other.source !== booking.source);
     const matched: string[] = [];
     const matchedSegments: { segment: Segment; found: ExtractedSegment }[] = [];
     // A receipt filed first, found to be this booking: it takes this
     // booking's date, time and details.
     const upgrades = new Map<string, ExtractedSegment>();
+    // When this email booked what it carries. A receipt, an invoice or a
+    // refund sent after a cancellation (a hotel's refund receipt often is)
+    // books nothing, so it dates nothing: it neither revives a cancelled
+    // booking nor shields one from an older cancellation.
+    const bookedAt = booking.sentAt && !paymentOnly(booking.segments, booking.label) ? booking.sentAt : undefined;
     const ref: SourceRef = {
       kind: booking.source,
       id: booking.sourceId,
       ...(booking.label ? { label: booking.label } : {}),
       uid,
       at: timestamp,
+      ...(bookedAt ? { sentAt: bookedAt } : {}),
     };
     // A booking found again keeps this source too, so nothing dropped as a
     // duplicate is lost from view, and whatever this one adds to it (seats
@@ -547,6 +846,19 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     // booking files into (`target`) widened once for both. A receipt this
     // booking upgrades is replaced instead, and its trip settled last
     // (settleUpgradedTrips).
+    // Cancellations read before this booking (see markCancelled), less those
+    // past waiting for, which go below.
+    const expired = pending.filter((p) => pendingCancellationExpired(p, timestamp));
+    // Each with only the bookings it still waits for (stillWaiting).
+    const waiting = pending.filter((p) => !expired.includes(p)).map((p) => ({ ...p, cancellations: stillWaiting(p, timestamp) }));
+    // A booking as this email leaves it: cancelled or live by every
+    // cancellation read and every email that confirmed it, by date
+    // (standingCancellation), this one included unless it books nothing.
+    const withCancellation = (merged: Segment, segment: Segment): Segment =>
+      settled(merged, standingCancellation(merged, [...(segment.sources ?? []).map((r) => r.sentAt), bookedAt], waiting, pending), timestamp);
+    // A place the user corrected by hand stays (mergeDetails).
+    const mergedOf = (segment: Segment, found: ExtractedSegment): Segment =>
+      withCancellation(mergeDetails(segment, found, { edited: segment.updatedAt !== segment.createdAt }), segment);
     const merges: Segment[] = [];
     const recordSources = (target?: string) => {
       const changedTrips = new Set<string>();
@@ -556,13 +868,15 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
           // Filed anew as the booking: a fresh revision, and still unedited
           // (updatedAt its createdAt), as a booking written now would be, so a
           // sweep or a merge that read the receipt before this one retries.
-          const upgraded: Segment = { ...segment, ...found, id: segment.id, tripId: segment.tripId, sources, createdAt: timestamp, updatedAt: timestamp };
+          const upgraded: Segment = withCancellation(
+            { ...segment, ...found, id: segment.id, tripId: segment.tripId, sources, createdAt: timestamp, updatedAt: timestamp },
+            segment,
+          );
           tx.putSegment(upgraded);
           upgradedSegments.set(`${segment.tripId}/${segment.id}`, upgraded);
           continue;
         }
-        // A place the user corrected by hand stays (mergeDetails).
-        const merged = mergeDetails(segment, found, { edited: segment.updatedAt !== segment.createdAt });
+        const merged = mergedOf(segment, found);
         if (JSON.stringify(merged) === JSON.stringify(segment)) {
           tx.addSource(segment.tripId, segment.id, ref);
           continue;
@@ -581,7 +895,11 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
         if (tripId === target) continue;
         const trip = live.find((t) => t.id === tripId);
         const want = growth(tripId);
-        if (trip && want && (want.start < trip.start || want.end > trip.end)) {
+        if (!trip) {
+          tx.touchTrip(tripId, timestamp);
+          continue;
+        }
+        if (want && (want.start < trip.start || want.end > trip.end)) {
           tx.extendTrip(tripId, { start: min(trip.start, want.start), end: max(trip.end, want.end), updatedAt: timestamp });
         } else tx.touchTrip(tripId, timestamp);
       }
@@ -625,7 +943,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
           ...before.map((segment) => upgradedSegments.get(`${tripId}/${segment.id}`) ?? merges.find((m) => m.tripId === tripId && m.id === segment.id) ?? segment),
           ...written.filter((segment) => segment.tripId === tripId),
         ];
-        const dates = segmentDateRange(final);
+        const dates = bookedDateRange(final);
         if (!dates) continue;
         const onlyReceipts = before.every((segment) => upgradedSegments.has(`${tripId}/${segment.id}`));
         let bounds = onlyReceipts ? dates : { start: min(trip.start, dates.start), end: max(trip.end, dates.end) };
@@ -636,24 +954,47 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     };
     // The dates the bookings of a trip this one matched span once filled out
     // (or, for a receipt it upgrades, once it is this booking).
+    // Every booking's dates, cancelled ones too (bookedDateRange).
     const growth = (tripId: string) =>
-      segmentDateRange(
+      bookedDateRange(
         matchedSegments
           .filter((m) => m.segment.tripId === tripId)
-          .map((m) => (upgrades.has(`${m.segment.tripId}/${m.segment.id}`) ? m.found : mergeDetails(m.segment, m.found))),
+          .map((m) => (upgrades.has(`${m.segment.tripId}/${m.segment.id}`) ? withCancellation({ ...m.segment, ...m.found }, m.segment) : mergedOf(m.segment, m.found))),
       );
     const taken = (other: Segment) => {
       const key = `${other.tripId}/${other.id}`;
       const owner = booking.reserved?.get(key);
       return booking.consumed?.has(key) || matched.includes(key) || (owner !== undefined && owner !== booking.sourceId);
     };
+    // A cancelled booking alike in all but its number is a new booking for
+    // the same stay or journey (made again after cancelling), not this one
+    // read again: it's this one only when the confirmation numbers agree
+    // (sameBooking decides by them when both have one) or this very source
+    // is being read again.
+    // Two references that disagree are two bookings, however alike the
+    // event (sameEvent matches without them): the same show booked again.
+    const reference = (r: string) => r.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    // A receipt or refund with no reference books nothing, so it may join
+    // the cancelled booking it is about (and stays cancelled with it: it
+    // dates nothing, bookedAt).
+    const payment = paymentOnly(booking.segments, booking.label);
+    const rebooked = (other: Segment, segment: ExtractedSegment) =>
+      isCancelled(other) &&
+      (other.confirmation && segment.confirmation
+        ? reference(other.confirmation) !== reference(segment.confirmation)
+        : !payment &&
+          !(other.sources ?? []).some((r) => r.kind === ref.kind && r.id === ref.id) &&
+          !(booking.gmailMessageIds ?? []).some((m) => other.gmailMessageIds.includes(m)));
     const fresh = booking.segments
       .map((segment, index) => ({ segment, id: `${booking.sourceId}-${index}` }))
       .filter(({ segment, id }) => {
         // One event confirmed by two emails under two references is one
         // booking too (sameEvent).
         const candidate = (other: Segment) =>
-          other.id !== id && !taken(other) && (sameBooking(other, segment) || sameEvent(other, segment, other.sender, booking.sender));
+          other.id !== id &&
+          !taken(other) &&
+          (sameBooking(other, segment) || sameEvent(other, segment, other.sender, booking.sender)) &&
+          !rebooked(other, segment);
         // A booking set aside for this item comes first: matching a lookalike
         // instead would strand it, reserved for an item already done. Of the
         // rest, the likeliest (matchRank): a receipt goes to the booking with
@@ -667,7 +1008,6 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
           // Only a receipt nobody edited: one the user corrected by hand
           // keeps what they wrote, and gains this source.
           if (isPaymentReceipt(match) && !isPaymentReceipt(segment) && match.updatedAt === match.createdAt) upgrades.set(`${match.tripId}/${match.id}`, segment);
-          matchedTrips.add(match.tripId);
           matched.push(`${match.tripId}/${match.id}`);
           matchedSegments.push({ segment: match, found: segment });
         }
@@ -679,8 +1019,39 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
       recordSources();
       settleUpgradedTrips([]);
       settleTitles([]);
+      tx.settle(live, segmentsOf);
       return { segmentIds: [], duplicates, matched, written: [...merges, ...upgradedSegments.values()] };
     }
+
+    // A booking a cancellation already read names is filed cancelled. The
+    // cancellation keeps waiting for any other leg it names, until it expires.
+    const cancelledBy = new Map<string, Standing>();
+    for (const { segment, id } of fresh) {
+      const by = standingCancellation(segment, [bookedAt], waiting, pending);
+      if (by) cancelledBy.set(id, by);
+    }
+    // Live first, wherever a trip is chosen, named or widened: what this
+    // booking still books (new bookings not filed cancelled, and those it
+    // found again that stay live) decides, and its cancelled parts only
+    // when nothing in it is live. A cancelled stay never pulls a live one
+    // into its trip, nor names it.
+    const matchedAs = (m: { segment: Segment; found: ExtractedSegment }) =>
+      upgrades.has(`${m.segment.tripId}/${m.segment.id}`) ? withCancellation({ ...m.segment, ...m.found }, m.segment) : mergedOf(m.segment, m.found);
+    const liveMatches = matchedSegments.filter((m) => !isCancelled(matchedAs(m)));
+    const stillBooked = [...fresh.filter(({ id }) => !cancelledBy.has(id)).map(({ segment }) => segment), ...liveMatches.map((m) => m.found)];
+    const anyLive = stillBooked.length > 0;
+    const deciding = anyLive ? stillBooked : booking.segments;
+    const preferred = new Set((anyLive ? liveMatches : matchedSegments).map((m) => m.segment.tripId));
+    // A trip's own bookings, live first, for what they connect to and where
+    // home is.
+    const liveSegmentsOf = (tripId: string) => {
+      const all = segmentsOf(tripId);
+      const live = liveSegments(all);
+      return live.length > 0 ? live : all;
+    };
+    // Where home was, by what this booking still books (a journey filed
+    // cancelled was never travelled).
+    periods = homeTimeline([...[...segmentsByTrip.values()].flat(), ...deciding]);
 
     const hint = booking.trip;
     let target: Trip | undefined;
@@ -688,12 +1059,18 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
       target = live.find((trip) => trip.id === hint.id);
       // A trip already holding part of this booking comes before any that
       // merely overlaps its dates.
-      if (!target && hint.joinOverlapping) target = live.find((trip) => matchedTrips.has(trip.id) && !trip.id.startsWith(holdingTripPrefix));
+      if (!target && hint.joinOverlapping) target = live.find((trip) => preferred.has(trip.id) && !trip.id.startsWith(holdingTripPrefix));
       if (!target && hint.joinOverlapping) {
         // The whole of the source's trip, not just its new bookings: a
         // return leg is in the same journey as the outbound already filed.
-        const whole = { start: min(hint.start, range.start), end: max(hint.end, range.end) };
-        target = overlappingTrips(live.filter((trip) => !trip.id.startsWith(sourceTripPrefix)), whole)[0];
+        const span = segmentDateRange(deciding) ?? range;
+        const whole = { start: min(hint.start, span.start), end: max(hint.end, span.end) };
+        // Joined by when the person travels on it (displayBounds), not a
+        // cancelled booking's dates.
+        target = live.find((trip) => {
+          const shown = displayBounds(trip);
+          return !trip.id.startsWith(sourceTripPrefix) && shown.start <= whole.end && shown.end >= whole.start;
+        });
       }
     } else {
       // The holding trip spans whatever years its items do; nothing joins
@@ -704,7 +1081,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
       // With home known, a day out at home and a trip away never join by
       // nearness of dates (findTripForBooking).
       const assignable = live.filter((trip) => !trip.id.startsWith(holdingTripPrefix));
-      target = assignable.find((trip) => matchedTrips.has(trip.id)) ?? findTripForBooking(assignable, segmentsOf, booking.segments, periods, overrides);
+      target = assignable.find((trip) => preferred.has(trip.id)) ?? findTripForBooking(assignable, liveSegmentsOf, deciding, periods, overrides);
     }
     let tripId: string;
     if (target) {
@@ -714,21 +1091,20 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
       // an import gave it is settled last, settleTitles).
       // A source's own trip dates (a TripIt itinerary) widen it too, so a
       // later booking within them finds this trip.
+      // Its own dates cover every booking in it, cancelled ones too, so
+      // each is found again by date; when the person now travels is
+      // settled once everything is written (settle).
       const own = hint ? { start: min(hint.start, freshRange.start), end: max(hint.end, freshRange.end) } : freshRange;
       const filled = growth(tripId);
       const want = filled ? { start: min(own.start, filled.start), end: max(own.end, filled.end) } : own;
       wanted.set(tripId, want);
-      tx.extendTrip(tripId, {
-        start: min(target.start, want.start),
-        end: max(target.end, want.end),
-        updatedAt: timestamp,
-      });
+      tx.extendTrip(tripId, { start: min(target.start, want.start), end: max(target.end, want.end), updatedAt: timestamp });
     } else {
       // A hinted id still taken by a trip being deleted cannot be reused.
       tripId = hint && !trips.some((trip) => trip.id === hint.id) ? hint.id : store.newId();
       tx.createTrip({
         id: tripId,
-        title: hint?.title ?? tripTitle(booking.segments, periods, overrides),
+        title: hint?.title ?? tripTitle(deciding, periods, overrides),
         start: hint ? min(hint.start, freshRange.start) : freshRange.start,
         end: hint ? max(hint.end, freshRange.end) : freshRange.end,
         ownerUid: uid,
@@ -738,22 +1114,39 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
       });
     }
     recordSources(target ? tripId : undefined);
-    const written: Segment[] = fresh.map(({ segment, id }) => ({
-      ...segment,
-      id,
-      tripId,
-      source: booking.source,
-      gmailMessageIds: booking.gmailMessageIds ?? [],
-      sources: [ref],
-      ...(booking.sender ? { sender: booking.sender } : {}),
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    }));
+    for (const p of expired) tx.deletePendingCancellation(uid, p.messageId);
+    const written: Segment[] = fresh.map(({ segment, id }) => {
+      const by = cancelledBy.get(id);
+      return {
+        ...segment,
+        id,
+        tripId,
+        source: booking.source,
+        gmailMessageIds: booking.gmailMessageIds ?? [],
+        sources: [ref],
+        ...(booking.sender ? { sender: booking.sender } : {}),
+        ...(by ? { cancelledAt: timestamp, cancelledBy: by.messageId, ...(by.sentAt ? { cancelledSentAt: by.sentAt } : {}) } : {}),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+    });
     for (const segment of written) tx.putSegment(segment);
     settleUpgradedTrips(written);
     settleTitles(written);
+    tx.settle(live, segmentsOf);
     return { tripId, segmentIds: written.map((s) => s.id), duplicates, matched, written: [...written, ...merges, ...upgradedSegments.values()] };
   });
+  // The cancellation emails that just found their bookings say so in the
+  // import review.
+  for (const [messageId, ids] of groupBy(result.written ?? [], (s) => s.cancelledBy)) {
+    const record = await store.getParsed(uid, messageId);
+    if (record?.outcome !== "cancellation") continue;
+    const segmentIds = [...new Set([...record.segmentIds, ...ids.map((s) => s.id)])];
+    const next = { ...record, segmentIds, reason: cancellationReason(segmentIds.length) };
+    // Only while no reset has removed the bookings it would name.
+    if (booking.generation === undefined) await store.setParsed(next);
+    else if (!(await store.setParsedIfCurrent(next, booking.generation))) log("import_superseded", { uid, messageId });
+  }
   // A place the budget put off is asked about again by the daily sweep,
   // a receipt this booking upgraded included.
   const { written, ...filed } = result;
@@ -959,7 +1352,7 @@ export async function importTripIt(
 
 export type ImportCounts = Record<ImportOutcome, number>;
 
-export const emptyCounts = (): ImportCounts => ({ skipped: 0, filtered: 0, not_booking: 0, imported: 0, failed: 0 });
+export const emptyCounts = (): ImportCounts => ({ skipped: 0, filtered: 0, not_booking: 0, imported: 0, failed: 0, cancellation: 0 });
 
 // A message deleted between Gmail's history entry and our fetch is gone for
 // good; skipping it keeps one 404 from wedging every later message in the
@@ -1334,7 +1727,7 @@ export async function importCalendar(uid: string, calendar: IcsCalendar, deps: I
       ...(changed ? { replacing: previous } : {}),
       prefilter: (m) => calendarPrefilter(m.subject, travel),
     });
-    if (outcome === "imported" || outcome === "not_booking" || outcome === "failed") read += 1;
+    if (outcome === "imported" || outcome === "not_booking" || outcome === "failed" || outcome === "cancellation") read += 1;
     counts[outcome] += 1;
     if (changed && outcome !== "skipped" && outcome !== "failed") counts.updated += 1;
     // A change that failed or was not made leaves the old record, and its

@@ -50,6 +50,8 @@ fun tripFromDocument(id: String, data: Map<String, Any?>): Trip? {
         ownerUid = ownerUid,
         sharedWith = data.strings("sharedWith"),
         deleting = data["deleting"] == true,
+        liveStart = data.text("liveStart"),
+        liveEnd = data.text("liveEnd"),
     )
 }
 
@@ -83,6 +85,8 @@ fun segmentFromDocument(id: String, tripId: String, data: Map<String, Any?>): Se
         // Imports record every source they were read from; older documents
         // only list their Gmail message ids.
         sources = segmentSources(data.sourceRefs(), data.strings("gmailMessageIds"), data.text("createdAt") ?: ""),
+        cancelledAt = data.text("cancelledAt"),
+        cancelledBy = data.text("cancelledBy"),
     )
 }
 

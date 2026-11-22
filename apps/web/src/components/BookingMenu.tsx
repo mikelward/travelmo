@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { formatDateRange, segmentSources, type Segment, type SourceRef, type Trip } from "@travelmo/core";
+import { formatDateRange, isCancelled, segmentSources, type Segment, type SourceRef, type Trip } from "@travelmo/core";
 import { emailLinkFor, type EmailLinks } from "@/lib/sourceLinks";
 
 const sourceKinds: Record<SourceRef["kind"], string> = { gmail: "Email", tripit: "TripIt", ics: "Calendar", forward: "Forwarded email" };
@@ -125,11 +125,13 @@ function MoveDialog({ targets, onMove, onClose }: { targets: Trip[]; onMove: (tr
 /**
  * A booking's ⋮ menu, in the order Android's has: Copy reference (when it
  * has one) and Sources (when it has sources or a sender) for anyone who sees
- * the trip, then Edit, Move to and Delete for those who may edit.
+ * the trip, then Edit, Restore (for a cancelled booking), Move to and Delete
+ * for those who may edit.
  */
 export function BookingMenu({
   segment,
   onEdit,
+  onRestore,
   onDelete,
   moveTargets,
   onMove,
@@ -138,6 +140,8 @@ export function BookingMenu({
 }: {
   segment: Segment;
   onEdit?: () => void;
+  // Takes back the cancellation an email set; offered only while it's cancelled.
+  onRestore?: () => void;
   onDelete?: () => void;
   moveTargets?: Trip[];
   onMove?: (tripId: string) => void;
@@ -154,6 +158,7 @@ export function BookingMenu({
   const reference = segment.confirmation?.trim() || undefined;
   const hasSources = segmentSources(segment).length > 0 || !!segment.sender;
   const canMove = !!onMove && !!moveTargets && moveTargets.length > 0;
+  const canRestore = !!onRestore && isCancelled(segment);
 
   const close = () => {
     setOpen(false);
@@ -184,7 +189,7 @@ export function BookingMenu({
     return () => clearTimeout(timer);
   }, [status]);
 
-  if (!reference && !hasSources && !onEdit && !onDelete && !canMove) return null;
+  if (!reference && !hasSources && !onEdit && !canRestore && !onDelete && !canMove) return null;
 
   const copy = async (text: string) => {
     try {
@@ -254,6 +259,7 @@ export function BookingMenu({
           {reference && item("Copy reference", () => void copy(reference))}
           {hasSources && item("Sources", () => setDialog("sources"))}
           {onEdit && item("Edit", onEdit)}
+          {canRestore && onRestore && item("Restore", onRestore)}
           {canMove && item("Move to another trip…", () => setDialog("move"))}
           {onDelete && item("Delete", onDelete)}
         </div>
