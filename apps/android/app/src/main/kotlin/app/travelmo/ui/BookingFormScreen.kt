@@ -16,7 +16,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
@@ -65,6 +64,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.UUID
+import com.mikelward.androidzoom.compose.FontSizeWindow
+import com.mikelward.androidzoom.compose.pinchFontSizeHost
 
 private val typeLabels = mapOf(
     SegmentType.FLIGHT to "Flight", SegmentType.TRAIN to "Train", SegmentType.BUS to "Bus", SegmentType.FERRY to "Ferry",
@@ -246,7 +247,7 @@ private fun TypeField(type: SegmentType, onChange: (SegmentType) -> Unit) {
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
             modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
         )
-        ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.pinchFontSizeHost()) {
             for (t in SegmentType.entries) {
                 DropdownMenuItem(text = { Text(typeLabels.getValue(t)) }, onClick = { onChange(t); open = false })
             }
@@ -291,21 +292,25 @@ private fun WhenFields(
         "date" -> {
             val initial = date.takeIf { it.isNotEmpty() }?.let { LocalDate.parse(it).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli() }
             val state = rememberDatePickerState(initialSelectedDateMillis = initial)
+            // A window of its own, so it re-applies the text size and hosts the pinch.
             DatePickerDialog(
                 onDismissRequest = { picking = null },
+                modifier = Modifier.pinchFontSizeHost(),
                 confirmButton = {
-                    TextButton(onClick = {
-                        state.selectedDateMillis?.let { onDate(Instant.ofEpochMilli(it).atOffset(ZoneOffset.UTC).toLocalDate().toString()) }
-                        picking = null
-                    }) { Text(stringResource(R.string.ok)) }
+                    FontSizeWindow {
+                        TextButton(onClick = {
+                            state.selectedDateMillis?.let { onDate(Instant.ofEpochMilli(it).atOffset(ZoneOffset.UTC).toLocalDate().toString()) }
+                            picking = null
+                        }) { Text(stringResource(R.string.ok)) }
+                    }
                 },
-                dismissButton = { TextButton(onClick = { picking = null }) { Text(stringResource(R.string.cancel)) } },
-            ) { DatePicker(state = state) }
+                dismissButton = { FontSizeWindow { TextButton(onClick = { picking = null }) { Text(stringResource(R.string.cancel)) } } },
+            ) { FontSizeWindow { DatePicker(state = state) } }
         }
         "time" -> {
             val (h, m) = time.takeIf { it.length == 5 }?.let { it.substring(0, 2).toInt() to it.substring(3, 5).toInt() } ?: (9 to 0)
             val state = rememberTimePickerState(initialHour = h, initialMinute = m, is24Hour = true)
-            AlertDialog(
+            AppAlertDialog(
                 onDismissRequest = { picking = null },
                 confirmButton = {
                     TextButton(onClick = {
@@ -340,7 +345,7 @@ private fun ZonePicker(current: String, onPick: (String) -> Unit, onDismiss: () 
     var query by remember { mutableStateOf("") }
     val zones = remember { timeZones() }
     val shown = remember(query) { zones.filter { it.replace('_', ' ').contains(query.trim(), ignoreCase = true) } }
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
@@ -386,7 +391,7 @@ private fun CountryField(label: String, code: String, modifier: Modifier = Modif
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
             modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
         )
-        ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.pinchFontSizeHost()) {
             DropdownMenuItem(text = { Text(stringResource(R.string.no_country)) }, onClick = { onChange(""); open = false })
             for ((c, name) in choices) {
                 DropdownMenuItem(text = { Text(name) }, onClick = { onChange(c); open = false })

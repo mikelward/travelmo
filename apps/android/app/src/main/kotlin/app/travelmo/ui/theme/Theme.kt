@@ -10,6 +10,9 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import app.travelmo.R
+import app.travelmo.ui.rememberAppFontSizeState
+import com.mikelward.androidzoom.compose.FontSizeState
+import com.mikelward.androidzoom.compose.ProvideFontSize
 
 // Travelmo's palette, the one the web app and the mockups
 // (design/android/project/styles/travelmo.css) use: zinc neutrals, an amber
@@ -68,7 +71,20 @@ val Wordmark = FontFamily(Font(R.font.fira_sans_medium, FontWeight.Medium))
 /** The badge color of a trip shared with the viewer. */
 val SharedBadge = Color(0xFF7C3AED)
 
+/**
+ * The palette, and the text at the user's chosen size (SPEC "Text size"):
+ * [fontSize] multiplies the system's font scale, and a two-finger pinch
+ * anywhere under the theme changes it. Only text grows; paddings, icons and
+ * touch targets keep their layout. A menu or dialog, being its own window,
+ * re-applies both (FontSizeWindow, pinchFontSizeHost, AppAlertDialog).
+ */
 @Composable
-fun TravelmoTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = if (darkTheme) DarkScheme else LightScheme, content = content)
+fun TravelmoTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    fontSize: FontSizeState = rememberAppFontSizeState(),
+    content: @Composable () -> Unit,
+) {
+    MaterialTheme(colorScheme = if (darkTheme) DarkScheme else LightScheme) {
+        ProvideFontSize(fontSize, content = content)
+    }
 }

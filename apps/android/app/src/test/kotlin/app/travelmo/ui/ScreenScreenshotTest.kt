@@ -14,6 +14,8 @@ import app.travelmo.auth.SignInResult
 import app.travelmo.auth.SignedIn
 import app.travelmo.ui.theme.TravelmoTheme
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.mikelward.androidzoom.FontSizeSettings
+import com.mikelward.androidzoom.compose.FontSizeState
 import com.mikepenz.aboutlibraries.Libs
 import com.mikepenz.aboutlibraries.util.withJson
 import java.time.Instant
@@ -49,8 +51,11 @@ class ScreenScreenshotTest {
 
     private val user = SignedIn(OWNER, OWNER_EMAIL)
 
-    private fun capture(name: String, dark: Boolean = false, content: @Composable () -> Unit) {
-        composeRule.setContent { TravelmoTheme(darkTheme = dark, content = content) }
+    // At a fixed text size (the system's unless [textScale] says), not the
+    // process-wide stored one, so a picture never depends on another test.
+    private fun capture(name: String, dark: Boolean = false, textScale: Float = 1f, content: @Composable () -> Unit) {
+        val fontSize = FontSizeState(FontSizeSettings(scale = textScale), onScaleSettled = {}, onPinchEnabledChange = {})
+        composeRule.setContent { TravelmoTheme(darkTheme = dark, fontSize = fontSize, content = content) }
         composeRule.waitForIdle()
         composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
     }
@@ -105,6 +110,15 @@ class ScreenScreenshotTest {
             CompositionLocalProvider(LocalUpdateAvailable provides true) {
                 TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.TRIPS) {} })
             }
+        }
+    }
+
+    // At 150%: the text grows; paddings, icons and touch targets keep their layout.
+    @Test
+    fun trip_list_large_text() {
+        val viewModel = viewModel()
+        capture("trip_list_large_text", textScale = 1.5f) {
+            TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.TRIPS) {} })
         }
     }
 

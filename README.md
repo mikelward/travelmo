@@ -82,7 +82,7 @@ a trip's bookings with adding, editing and deleting, the calendar's month
 view, the travel profile with its document warnings, reports, the
 open-source licenses, and Settings with sign-out, the reminders switches (by email, and as notifications on
 the phone over Firebase Cloud Messaging, which asks for the notification
-permission), the debug log and deleting the account. Deleting calls the
+permission), the text size, the debug log and deleting the account. Deleting calls the
 parser at `travelmoParserUrl` in `apps/android/gradle.properties` (the
 production address, as in `apphosting.yaml`; override it with
 `-PtravelmoParserUrl=…` or `TRAVELMO_PARSER_URL`, or set it empty to have
@@ -90,7 +90,9 @@ Settings point to the web instead). The debug log is the
 fleet's shared one, `com.mikelward.androidlog` from the Maven repository
 that mikelward/androidlog publishes into its own `maven` branch (declared in
 `settings.gradle.kts`, scoped to that group); it stays on the phone, and
-Settings shares a report of it through the share sheet.
+Settings shares a report of it through the share sheet. The text size is
+the fleet's shared `com.mikelward.androidzoom`, published and declared the
+same way.
 
 ```sh
 cd apps/android
@@ -202,9 +204,9 @@ Play Console.
 `apps/android/gradle/libs.versions.toml` moves to the newest stable release
 within its major, the Android checks run against the result, and one pull
 request opens with auto-merge armed, so a clean batch lands once CI passes;
-a failed check leaves it open for a look. The androidlog repository's Maven
-branch is declared to it and exempted from the release-age cooldown, as that
-repository's README asks. One-time setup: Settings → Actions → General →
+a failed check leaves it open for a look. The androidlog and androidzoom
+repositories' Maven branches are declared to it and exempted from the release-age cooldown, as those
+repositories' READMEs ask. One-time setup: Settings → Actions → General →
 Workflow permissions → "Allow GitHub Actions to create and approve pull
 requests", and a `gradle-update` environment holding `GRADLE_UPDATE_PAT`, a
 fine-grained token with Contents and Pull requests write on this repository

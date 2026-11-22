@@ -14,6 +14,7 @@ import app.travelmo.notify.FirebasePushDevice
 import app.travelmo.notify.NoPushDevice
 import app.travelmo.notify.PushDevice
 import app.travelmo.notify.ReminderNotifications
+import app.travelmo.ui.TextSizeSetting
 import com.google.firebase.FirebaseApp
 
 /**
@@ -25,6 +26,8 @@ class TravelmoApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         DebugLogging.install(this)
+        // Off the main thread, so the first frame is normally at the chosen size.
+        TextSizeSetting.warm(this)
         // The channel exists before any message arrives, so the first one is
         // shown rather than dropped for want of its channel.
         ReminderNotifications.ensureChannel(this)
