@@ -16,6 +16,7 @@ import {
   type TripReminder,
 } from "@travelmo/core";
 import { Filter, type Firestore } from "firebase-admin/firestore";
+import { refuseIfDeleted } from "./deleted";
 import type { DeviceSender } from "./fcm";
 import type { Mailer } from "./mail";
 import type { PushSender } from "./push";
@@ -197,6 +198,7 @@ export function firestoreReminderIo(db: Firestore, verifiedEmail: (uid: string) 
     async markSent(uid, tripId, lines, at) {
       const ref = db.doc(paths.reminderLog(uid, tripId));
       await db.runTransaction(async (t) => {
+        await refuseIfDeleted(db, t, uid);
         const before = (await t.get(ref)).get("sent");
         const sent = Array.isArray(before) ? before.filter((l): l is string => typeof l === "string") : [];
         t.set(ref, { sent: [...new Set([...sent, ...lines])], at });

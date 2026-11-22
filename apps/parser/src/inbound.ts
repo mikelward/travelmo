@@ -10,6 +10,7 @@ import {
   type ForwardAddress,
 } from "@travelmo/core";
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
+import { refuseIfDeleted } from "./deleted";
 import { hashToken } from "./calendarExport";
 import type { EmailMessage } from "./gmail";
 import { importMessage, type ImportDeps, type ImportOutcome } from "./importer";
@@ -166,6 +167,7 @@ export function firestoreForwardStore(db: Firestore, domain: string): ForwardSto
     },
     issue: async (uid, record, tokenHash, now) => {
       await db.runTransaction(async (tx) => {
+        await refuseIfDeleted(db, tx, uid);
         const ref = db.doc(paths.user(uid));
         const old = recordedToken((await tx.get(ref)).data(), domain);
         if (old) tx.delete(db.doc(paths.forwardAddress(hashToken(old))));
@@ -185,6 +187,7 @@ export function firestoreForwardStore(db: Firestore, domain: string): ForwardSto
     reserve: async (uid, day, limit) => {
       const ref = db.doc(paths.forwardBudget(uid));
       return db.runTransaction(async (tx) => {
+        await refuseIfDeleted(db, tx, uid);
         const data = (await tx.get(ref)).data() as { day?: string; count?: number } | undefined;
         const count = data?.day === day ? (data.count ?? 0) : 0;
         if (count >= limit) return false;

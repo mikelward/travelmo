@@ -1,5 +1,9 @@
 export const paths = {
   user: (uid: string) => `users/${uid}`,
+  // Server-only: written first when an account is deleted and kept, so an
+  // import already under way cannot recreate the user's data (holds the uid
+  // and when; Firebase never reuses a uid).
+  deletedAccount: (uid: string) => `deletedAccounts/${uid}`,
   // Server-only: refresh tokens live here; rules deny every client read.
   gmailState: (uid: string) => `users/${uid}/private/gmail`,
   googleCalendarState: (uid: string) => `users/${uid}/private/googleCalendar`,

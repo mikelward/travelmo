@@ -50,4 +50,5 @@ export const api = {
   stopCalendarExport: (user: User) => post<void>(user, "/export/calendar/stop"),
   issueForward: (user: User) => post<ForwardAddress>(user, "/forward/issue"),
   stopForward: (user: User) => post<void>(user, "/forward/stop"),
+  deleteAccount: (user: User) => post<void>(user, "/account/delete"),
 };

@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { exportCalendar, paths, Segment, Trip, type CalendarExport } from "@travelmo/core";
 import type { Firestore } from "firebase-admin/firestore";
+import { refuseIfDeleted } from "./deleted";
 
 // The subscribable calendar of a user's trips. Its link carries a random
 // token; only the token's hash is stored as a key, so the lookup collection
@@ -75,6 +76,7 @@ export async function issueExport(db: Firestore, uid: string, now: string): Prom
   const token = newToken();
   const record: CalendarExport = { token, createdAt: now };
   await db.runTransaction(async (tx) => {
+    await refuseIfDeleted(db, tx, uid);
     const ref = db.doc(paths.calendarExport(uid));
     const old = (await tx.get(ref)).get("token");
     if (typeof old === "string") tx.delete(db.doc(paths.calendarExportToken(hashToken(old))));

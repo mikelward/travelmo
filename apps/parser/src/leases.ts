@@ -1,5 +1,6 @@
 import { paths } from "@travelmo/core";
 import type { Firestore } from "firebase-admin/firestore";
+import { refuseIfDeleted } from "./deleted";
 
 // An upload of a kind (a TripIt export) is one to one in its matching only
 // within itself: two running at once each keep their own record of which
@@ -24,6 +25,7 @@ export function leaseFree(existing: Lease | undefined, now: string): boolean {
 export async function acquireUploadLease(db: Firestore, uid: string, kind: string, holder: string, now: string): Promise<boolean> {
   const ref = db.doc(paths.uploadLease(uid, kind));
   return db.runTransaction(async (t) => {
+    await refuseIfDeleted(db, t, uid);
     const snap = await t.get(ref);
     if (!leaseFree(snap.exists ? (snap.data() as Lease) : undefined, now)) return false;
     t.set(ref, { holder, expiresAt: new Date(Date.parse(now) + uploadLeaseMs).toISOString() } satisfies Lease);

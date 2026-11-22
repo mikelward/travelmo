@@ -1,5 +1,6 @@
 import { GmailState, GoogleCalendarState, paths, stableHash, type BackfillProgress, type GmailConnection, type GoogleCalendarChoice, type GoogleCalendarConnection } from "@travelmo/core";
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
+import { refuseIfDeleted } from "./deleted";
 
 export const oauthStateTtlMs = 10 * 60 * 1000;
 
@@ -40,15 +41,23 @@ async function take<T extends { createdAt: string }>(db: Firestore, path: string
 }
 
 export async function createOAuthState(db: Firestore, nonce: string, uid: string, now: string, purpose: OAuthPurpose = "gmail"): Promise<void> {
-  await db.doc(paths.oauthState(nonce)).create({ uid, createdAt: now, purpose } satisfies OAuthState);
+  await db.runTransaction(async (t) => {
+    await refuseIfDeleted(db, t, uid);
+    t.create(db.doc(paths.oauthState(nonce)), { uid, createdAt: now, purpose } satisfies OAuthState);
+  });
 }
 
 export function takeOAuthState(db: Firestore, nonce: string, now: number): Promise<OAuthState | undefined> {
   return take<OAuthState>(db, paths.oauthState(nonce), now);
 }
 
+// Refuses a deleted account (deleted.ts), so a consent Google answered
+// after deletion began is not parked with its token.
 export async function savePending(db: Firestore, token: string, pending: PendingConnection): Promise<void> {
-  await db.doc(paths.pendingConnection(token)).create(pending);
+  await db.runTransaction(async (t) => {
+    await refuseIfDeleted(db, t, pending.uid);
+    t.create(db.doc(paths.pendingConnection(token)), pending);
+  });
 }
 
 export function takePending(db: Firestore, token: string, now: number): Promise<PendingConnection | undefined> {
@@ -76,6 +85,7 @@ function publicPart(state: GmailState): GmailConnection {
 // the old mapping behind).
 export async function saveConnection(db: Firestore, uid: string, state: GmailState): Promise<void> {
   await db.runTransaction(async (t) => {
+    await refuseIfDeleted(db, t, uid);
     const accountRef = db.doc(paths.gmailAccount(state.emailAddress));
     const stateRef = db.doc(paths.gmailState(uid));
     const [account, current] = await Promise.all([t.get(accountRef), t.get(stateRef)]);
@@ -118,9 +128,13 @@ export function updateHistoryId(db: Firestore, uid: string, emailAddress: string
 export async function removeConnection(db: Firestore, uid: string, emailAddress: string): Promise<void> {
   await db.runTransaction(async (t) => {
     const accountRef = db.doc(paths.gmailAccount(emailAddress));
+    const userRef = db.doc(paths.user(uid));
     const owner = (await t.get(accountRef)).data()?.uid as string | undefined;
+    // An update, not a merge: a user document already deleted (account
+    // deletion) must not come back empty.
+    const userExists = (await t.get(userRef)).exists;
     t.delete(db.doc(paths.gmailState(uid)));
-    t.set(db.doc(paths.user(uid)), { gmail: FieldValue.delete() }, { merge: true });
+    if (userExists) t.update(userRef, { gmail: FieldValue.delete() });
     if (owner === uid) t.delete(accountRef);
   });
 }
@@ -139,6 +153,7 @@ function publicCalendar(state: GoogleCalendarState): GoogleCalendarConnection {
 
 export async function saveCalendarState(db: Firestore, uid: string, state: GoogleCalendarState): Promise<void> {
   await db.runTransaction(async (t) => {
+    await refuseIfDeleted(db, t, uid);
     t.set(db.doc(paths.googleCalendarState(uid)), state);
     t.set(db.doc(paths.user(uid)), { googleCalendar: publicCalendar(state) }, { merge: true });
   });
@@ -169,9 +184,11 @@ export function updateCalendars(
 
 export async function removeCalendarState(db: Firestore, uid: string, calendarIds: readonly string[] = []): Promise<void> {
   await db.runTransaction(async (t) => {
+    const userRef = db.doc(paths.user(uid));
+    const userExists = (await t.get(userRef)).exists;
     t.delete(db.doc(paths.googleCalendarState(uid)));
     for (const id of calendarIds) t.delete(db.doc(paths.googleCalendarAliases(uid, stableHash(id))));
-    t.set(db.doc(paths.user(uid)), { googleCalendar: FieldValue.delete() }, { merge: true });
+    if (userExists) t.update(userRef, { googleCalendar: FieldValue.delete() });
   });
 }
 
@@ -181,7 +198,10 @@ export async function loadEventAliases(db: Firestore, uid: string, calendarId: s
 }
 
 export async function saveEventAliases(db: Firestore, uid: string, calendarId: string, aliases: Record<string, string>): Promise<void> {
-  await db.doc(paths.googleCalendarAliases(uid, stableHash(calendarId))).set({ aliases });
+  await db.runTransaction(async (t) => {
+    await refuseIfDeleted(db, t, uid);
+    t.set(db.doc(paths.googleCalendarAliases(uid, stableHash(calendarId))), { aliases });
+  });
 }
 
 // Every user with Google Calendar connected, for the daily poll.

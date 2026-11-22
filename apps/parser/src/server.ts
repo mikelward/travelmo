@@ -19,6 +19,8 @@ import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
+import type { DecodedIdToken } from "firebase-admin/auth";
+import { deleteAccount } from "./account";
 import {
   MailboxConflict,
   OtherMailboxConnected,
@@ -42,6 +44,7 @@ import {
   updateHistoryId,
   updateWatch,
 } from "./connections";
+import { AccountDeletedError } from "./deleted";
 import { optionalEnv, requireEnv } from "./env";
 import { geminiEmbedder, geminiExtractor } from "./extract";
 import { cachedGeocoder, defaultDailyLimit, firestoreGeocodeStore, googleGeocoder } from "./geocode";
@@ -164,6 +167,7 @@ app.use("/calendar/*", cors({ origin: webOrigin, allowHeaders: ["Authorization",
 app.use("/feeds/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/export/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/forward/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
+app.use("/account/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 
 app.get("/healthz", (c) => c.text("ok"));
 
@@ -173,14 +177,25 @@ function bearer(c: Context<Env>): string {
   return header.slice(7);
 }
 
-async function requireUser(c: Context<Env>): Promise<string> {
+async function requireIdToken(c: Context<Env>): Promise<DecodedIdToken> {
   const token = bearer(c);
   try {
-    return (await auth.verifyIdToken(token)).uid;
+    return await auth.verifyIdToken(token);
   } catch (error) {
     log("WARNING", "bad_id_token", errorFields(error));
     throw new HTTPException(401, { message: "Invalid token" });
   }
+}
+
+// Every user endpoint but /account/delete itself: a sign-in token stays
+// valid for up to an hour after its account is deleted, so a deleted
+// account is refused here before any handler can write for it again.
+async function requireUser(c: Context<Env>): Promise<string> {
+  const { uid } = await requireIdToken(c);
+  if ((await db.doc(paths.deletedAccount(uid)).get()).exists) {
+    throw new HTTPException(410, { message: "This account was deleted" });
+  }
+  return uid;
 }
 
 async function requireInternalCaller(c: Context<Env>): Promise<void> {
@@ -249,7 +264,16 @@ app.get("/gmail/callback", async (c) => {
     return c.redirect(`${webOrigin}/settings?${purpose}=error`);
   }
   const completion = randomBytes(24).toString("base64url");
-  await savePending(db, completion, { uid: state.uid, refreshToken: tokens.refresh_token, createdAt: new Date().toISOString(), purpose });
+  try {
+    await savePending(db, completion, { uid: state.uid, refreshToken: tokens.refresh_token, createdAt: new Date().toISOString(), purpose });
+  } catch (error) {
+    if (!(error instanceof AccountDeletedError)) throw error;
+    // The account was deleted while Google was answering: the new grant
+    // goes back rather than being kept for no one.
+    log("INFO", "consent_after_account_deleted", { uid: state.uid, purpose });
+    await revokeQuietly(tokens.refresh_token, state.uid);
+    return c.redirect(`${webOrigin}/settings?${purpose}=error`);
+  }
   return c.redirect(`${webOrigin}/settings?${purpose}=pending&state=${completion}`);
 });
 
@@ -303,6 +327,7 @@ app.post("/gmail/complete", async (c) => {
     if (error instanceof MailboxConflict || error instanceof OtherMailboxConnected) {
       throw new HTTPException(409, { message: error.message });
     }
+    if (error instanceof AccountDeletedError) throw new HTTPException(410, { message: "This account was deleted" });
     throw error;
   }
   log("INFO", "gmail_connected", { uid });
@@ -440,12 +465,18 @@ app.post("/calendar/complete", async (c) => {
     await releaseToken(previous.refreshToken, uid, previous.emailAddress);
   }
   const kept = previous?.emailAddress === emailAddress ? previous.calendars : [];
-  await saveCalendarState(db, uid, {
-    refreshToken: pending.refreshToken,
-    emailAddress,
-    connectedAt: new Date().toISOString(),
-    calendars: mergeCalendarList(kept, listed),
-  });
+  try {
+    await saveCalendarState(db, uid, {
+      refreshToken: pending.refreshToken,
+      emailAddress,
+      connectedAt: new Date().toISOString(),
+      calendars: mergeCalendarList(kept, listed),
+    });
+  } catch (error) {
+    if (!(error instanceof AccountDeletedError)) throw error;
+    await revokeQuietly(pending.refreshToken, uid);
+    throw new HTTPException(410, { message: "This account was deleted" });
+  }
   log("INFO", "google_calendar_connected", { uid, calendars: listed.length });
   return c.json({ emailAddress, calendars: listed.length });
 });
@@ -680,6 +711,34 @@ app.post(
     }
   },
 );
+
+// Deletes the caller's account and everything they own (account.ts). The
+// email comes from the token rather than the Auth user, so a retry after
+// the user is gone still finds the trips that name them; only a verified
+// one, as sharing keys on.
+app.post("/account/delete", async (c) => {
+  const token = await requireIdToken(c);
+  const email = token.email_verified && token.email ? token.email.toLowerCase() : undefined;
+  await deleteAccount(token.uid, email, {
+    db,
+    stopWatch: (refreshToken) => stopWatch(gmailFor(oauth, refreshToken)),
+    revoke: async (refreshToken) => {
+      await oauthClient(oauth).revokeToken(refreshToken);
+    },
+    deleteAuthUser: async (uid) => {
+      try {
+        await auth.deleteUser(uid);
+      } catch (error) {
+        if ((error as { code?: unknown }).code !== "auth/user-not-found") throw error;
+        // Gone already: an earlier run got this far.
+        log("INFO", "account_delete_auth_user_gone", { uid });
+      }
+    },
+    now: deps.now,
+    log,
+  });
+  return c.body(null, 204);
+});
 
 // Only a sign-in Google verified counts for the trips shared with a user,
 // as in the rules.

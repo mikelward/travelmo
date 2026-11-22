@@ -1,5 +1,6 @@
 import { CalendarFeed, NotACalendar, parseIcs, paths, stableHash } from "@travelmo/core";
 import type { Firestore } from "firebase-admin/firestore";
+import { refuseIfDeleted } from "./deleted";
 import { importCalendar, type CalendarCounts, type ImportDeps } from "./importer";
 import { FeedFetchFailed, FeedUrlRefused, normalizeFeedUrl } from "./safefetch";
 
@@ -130,7 +131,10 @@ export function firestoreFeeds(db: Firestore): FeedStore {
       });
     },
     async save(uid, feed) {
-      await db.doc(paths.feed(uid, feed.id)).set(feed);
+      await db.runTransaction(async (t) => {
+        await refuseIfDeleted(db, t, uid);
+        t.set(db.doc(paths.feed(uid, feed.id)), feed);
+      });
     },
     async get(uid, feedId) {
       const snap = await db.doc(paths.feed(uid, feedId)).get();
@@ -139,6 +143,7 @@ export function firestoreFeeds(db: Firestore): FeedStore {
     reserve(uid, feed, max) {
       const ref = db.doc(paths.feed(uid, feed.id));
       return db.runTransaction(async (t) => {
+        await refuseIfDeleted(db, t, uid);
         const all = await t.get(db.collection(paths.feeds(uid)));
         if (all.docs.some((d) => d.id === feed.id)) return "existing";
         if (all.size >= max) throw new FeedLimitReached(`At most ${max} calendar feeds.`);

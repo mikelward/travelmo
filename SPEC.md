@@ -805,6 +805,65 @@ started the flow. A link forwarded to someone else therefore cannot attach
 their mailbox to the sender's account. A mailbox connected to one user is
 refused to any other until the first disconnects.
 
+## Deleting an account
+
+Settings on the web and in the Android app ends with "Delete account": one
+sentence on what goes, a confirmation (in the page on the web, a dialog on
+Android), then `POST /account/delete` to the parser, which does the work
+with the Admin SDK (`apps/parser/src/account.ts`), since the rules let no
+client touch other people's records of the user or the sign-in. For the
+caller's uid, in this order:
+
+0. A marker, `deletedAccounts/{uid}` (`uid` and when; Firebase never
+   reuses a uid), kept for good. Every server write that could recreate
+   the user's data reads it in its transaction and refuses once it exists
+   (`apps/parser/src/deleted.ts`): an import's claim, record, trip filing
+   and similarity examples, a Google consent's parking or connection
+   (whose new token is revoked instead), a forwarding address, a
+   calendar link, a TripIt profile, a calendar feed, an upload lease, a
+   sign-in's OAuth state, and background bookkeeping (calendar event
+   aliases, reminder logs, geocode retries, the forwarding budget); a
+   disconnect touches the user document only while it exists. Writes that only change a document that must already exist
+   need no check: deletion removed it. Every user endpoint but `/account/delete` answers 410
+   for the account from then on. The rules refuse every client create
+   and update from the account too, since a sign-in token stays valid for up
+   to an hour after deletion (deletes stay allowed). So nothing already under
+   way, on the server or another device, recreates data behind the steps
+   below; what committed before the marker is found by them.
+1. Connections, while their tokens are still stored: the Gmail watch is
+   stopped, then the Gmail and Calendar refresh tokens and any consent
+   parked in `pendingConnections` are revoked (all of them, unlike a single
+   disconnect, which keeps a grant another connection rests on), and both
+   connections are removed. A failure to stop or revoke is logged and
+   deletion goes on: Google may already have withdrawn the grant.
+2. Lookups that name the user outside their own documents: `gmailAccounts`,
+   `forwardAddresses` (the forwarding address bounces from then on),
+   `calendarExports` (the export link stops working), `pendingConnections`,
+   `oauthStates` and `geocodeRetries`, each by its `uid` field.
+3. Every trip they own: marked `deleting` first, as a trip deletion is, so
+   no edit adds to it meanwhile, then its segments, and the trip document
+   only once they are all gone, so a failure leaves the trip for a retry to
+   find (`recursiveDelete` on the trip would delete it regardless). Looked
+   for again until none is left.
+4. Their verified email (from the ID token, so a retry after the sign-in is
+   gone still finds it) comes off `sharedWith` on trips others shared with
+   them and off `trustedEmails` on profiles others trusted them with. Those
+   trips keep every booking, including ones the deleted user added: they
+   belong to the trip.
+5. `users/{uid}` and every subcollection under it, whatever it holds.
+6. The Firebase Auth user, last, so the user can retry until everything
+   else is gone; one already deleted counts as done.
+
+Every step works from what is still stored, so calling it again after an
+interruption finishes the job. Writes are batched in pages of 200 (and
+`recursiveDelete` for a trip's segments or the user tree). The parser logs the start,
+the end with counts, and a failure with the step it stopped at, by uid
+only. Afterwards the web app signs out, clears this browser's Firestore
+cache, and says the account was deleted; the Android app signs out and its
+sign-in screen says the same. Android builds call the parser at the
+address given at build time (`travelmoParserUrl`, README "Android"); a
+build without one points to the web instead.
+
 ## HTTP surface of the parser
 
 | Route | Auth | Purpose |
@@ -832,6 +891,7 @@ refused to any other until the first disconnects.
 | `POST /export/calendar` | Firebase ID token | Issues the user's calendar export link, retiring any old one; returns its token |
 | `POST /export/calendar/stop` | Firebase ID token | Turns the calendar export link off |
 | `GET /cal/{token}.ics` | the token | The calendar export itself, for calendar apps; 404 for a link not in use |
+| `POST /account/delete` | Firebase ID token | Deletes the caller's account and everything they own ("Deleting an account"); 204, and a retry finishes an interrupted run |
 | `GET /healthz` | none | Liveness |
 
 ## Costs
@@ -887,8 +947,9 @@ reminders as notifications on the phone (the phone's Cloud Messaging token
 under `users/{uid}/devices`, see "Document reminders"), keeps
 the on-device debug log (the fleet's shared `androidlog`: logcat and a
 rotated file, a privacy floor over every line, a switch to stop recording
-and a report shared through the share sheet), while the import settings
-stay on the web; a navigation bar switches between Trips,
+and a report shared through the share sheet) and deletes the account
+through the parser ("Deleting an account"), the app's one call to it,
+while the import settings stay on the web; a navigation bar switches between Trips,
 the Calendar (the month view of `/calendar`, with the same weeks, bars and
 lanes from `:core`), Reports and Profile. Reports counts what `/reports`
 does, from `:core`'s port of the same logic with the same tests: the trips

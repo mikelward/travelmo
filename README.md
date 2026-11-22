@@ -80,7 +80,11 @@ a trip's bookings with adding, editing and deleting, the calendar's month
 view, the travel profile with its document warnings, reports, and Settings
 with sign-out, the reminders switches (by email, and as notifications on
 the phone over Firebase Cloud Messaging, which asks for the notification
-permission) and the debug log. The debug log is the
+permission), the debug log and deleting the account. Deleting calls the
+parser at `travelmoParserUrl` in `apps/android/gradle.properties` (the
+production address, as in `apphosting.yaml`; override it with
+`-PtravelmoParserUrl=…` or `TRAVELMO_PARSER_URL`, or set it empty to have
+Settings point to the web instead). The debug log is the
 fleet's shared one, `com.mikelward.androidlog` from the Maven repository
 that mikelward/androidlog publishes into its own `maven` branch (declared in
 `settings.gradle.kts`, scoped to that group); it stays on the phone, and

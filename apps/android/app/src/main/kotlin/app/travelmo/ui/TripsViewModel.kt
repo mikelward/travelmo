@@ -15,6 +15,8 @@ import app.travelmo.core.TripWithSegments
 import app.travelmo.core.groupTrips
 import app.travelmo.core.listWarnings
 import app.travelmo.core.deviceId
+import app.travelmo.data.AccountDeletion
+import app.travelmo.data.NoAccountDeletion
 import app.travelmo.data.OwnProfile
 import app.travelmo.data.TripStore
 import app.travelmo.log.TravelmoLog
@@ -79,6 +81,8 @@ class TripsViewModel(
     private val clock: () -> Instant = { Instant.now() },
     /** This phone's messaging token and registration memory; none by default. */
     private val pushDevice: PushDevice = NoPushDevice,
+    /** The parser's account deletion; none by default. */
+    private val accountDeletion: AccountDeletion = NoAccountDeletion,
 ) : ViewModel() {
     /** Today's date on this device, as grouping and the calendar read it. */
     fun today(): String = LocalDate.ofInstant(clock(), ZoneId.systemDefault()).toString()
@@ -246,6 +250,20 @@ class TripsViewModel(
         val id = deviceId(messagingToken)
         if (on) store.registerDevice(uid, id, messagingToken) else store.unregisterDevice(uid, id)
         pushDevice.remember(uid, if (on) id else null)
+    }
+
+    /** Whether this build can delete the account here; without a parser address, Settings points to the web. */
+    val canDeleteAccount: Boolean
+        get() = accountDeletion.available
+
+    /**
+     * Deletes the account through the parser, then [signOut]. Both run in
+     * this scope, so signing out, which takes Settings off the screen, is
+     * not cut short with it. A failure leaves the user signed in to retry.
+     */
+    fun deleteAccount(token: String, signOut: suspend () -> Unit) = run(token) {
+        accountDeletion.deleteAccount()
+        signOut()
     }
 
     /** Who the user's travel profile is shared with; the profile is started if none has arrived yet. */

@@ -80,11 +80,24 @@ const cacheOwnerKey = "travelmo.cacheOwner";
 export async function adoptFirestoreCache(uid: string): Promise<void> {
   if (typeof window === "undefined") return;
   if (localStorage.getItem(cacheOwnerKey) === uid) return;
+  await clearCache(uid);
+}
+
+// After the account is deleted, its documents do not stay in this browser.
+// If they cannot be cleared now, the cache still names the deleted account,
+// so the next sign-in clears it.
+export async function forgetFirestoreCache(): Promise<void> {
+  if (typeof window === "undefined") return;
+  await clearCache(undefined);
+}
+
+async function clearCache(owner: string | undefined): Promise<void> {
   const instance = firestore();
   try {
     await terminate(instance);
     await clearIndexedDbPersistence(instance);
-    localStorage.setItem(cacheOwnerKey, uid);
+    if (owner) localStorage.setItem(cacheOwnerKey, owner);
+    else localStorage.removeItem(cacheOwnerKey);
   } catch (error) {
     persistent = false;
     throw error;

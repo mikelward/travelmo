@@ -72,12 +72,24 @@ class GoogleAccount(
         return try {
             val credential = googleCredential(activityContext, clientId) ?: return SignInResult.Failed
             auth().signInWithCredential(credential).await()
+            _deleted.value = false
             SignInResult.Success
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             failure(e)
         }
+    }
+
+    private val _deleted = MutableStateFlow(false)
+
+    /** Whether the last account was deleted rather than signed out of, so the sign-in screen says so. */
+    val deleted: StateFlow<Boolean> = _deleted.asStateFlow()
+
+    /** Signs out after the account was deleted. */
+    suspend fun signOutDeleted(context: Context) {
+        _deleted.value = true
+        signOut(context)
     }
 
     /** Signs out of Firebase and clears Credential Manager's remembered choice. */

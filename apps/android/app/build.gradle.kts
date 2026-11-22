@@ -80,6 +80,18 @@ if (!releaseSigningConfigured && releaseKeystoreVars.any { it != null }) {
     )
 }
 
+// The parser's address (the web's NEXT_PUBLIC_PARSER_URL), which Settings
+// deletes the account through: -PtravelmoParserUrl or TRAVELMO_PARSER_URL,
+// set for releases by CI (README "Release"). Without it Settings says to
+// delete the account on the web.
+val parserUrl: String = (
+    providers.gradleProperty("travelmoParserUrl").orNull
+        ?: providers.environmentVariable("TRAVELMO_PARSER_URL").orNull
+    )?.trim().orEmpty()
+if (parserUrl.isNotEmpty() && !Regex("""https?://[^\s"\\$]+""").matches(parserUrl)) {
+    throw GradleException("travelmoParserUrl must be an http(s) URL; got \"$parserUrl\".")
+}
+
 android {
     namespace = "app.travelmo"
     compileSdk = 37
@@ -102,6 +114,7 @@ android {
         targetSdk = 36
         versionCode = if (fixedTestVersion) 1 else gitCommitCount
         versionName = if (fixedTestVersion) "test" else "$gitCommitCount ($gitShortSha)"
+        buildConfigField("String", "PARSER_URL", "\"$parserUrl\"")
         // The instrumented tests (src/androidTest): FirestoreTrips against
         // the Firestore emulator on an Android emulator (scripts/connected-tests.sh).
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

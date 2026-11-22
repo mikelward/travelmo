@@ -3,7 +3,10 @@ package app.travelmo
 import android.annotation.SuppressLint
 import android.app.Application
 import app.travelmo.auth.GoogleAccount
+import app.travelmo.data.AccountDeletion
 import app.travelmo.data.FirestoreTrips
+import app.travelmo.data.NoAccountDeletion
+import app.travelmo.data.ParserAccountDeletion
 import app.travelmo.data.TripStore
 import app.travelmo.log.DebugLogging
 import app.travelmo.notify.FirebasePushDevice
@@ -38,6 +41,9 @@ class TravelmoApplication : Application() {
     }
 
     val trips: TripStore by lazy { FirestoreTrips() }
+
+    /** Deleting the account through the parser; nothing without Firebase or a parser address. */
+    val accountDeletion: AccountDeletion by lazy { if (firebaseReady) ParserAccountDeletion(BuildConfig.PARSER_URL) else NoAccountDeletion }
 
     /** This phone as a reminder device; nothing without Firebase. */
     val pushDevice: PushDevice by lazy { if (firebaseReady) FirebasePushDevice(this) else NoPushDevice }
