@@ -1,11 +1,13 @@
 package app.travelmo
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,11 +24,13 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import app.travelmo.auth.SignedIn
 import app.travelmo.core.tripIdFromReminderUrl
+import app.travelmo.log.DebugLogging
 import app.travelmo.notify.ReminderNotifications
 import app.travelmo.ui.BookingFormScreen
 import app.travelmo.ui.CalendarScreen
 import app.travelmo.ui.HomeNavigationBar
 import app.travelmo.ui.HomeTab
+import app.travelmo.ui.LocalReportBug
 import app.travelmo.ui.ProfileScreen
 import app.travelmo.ui.ReportsScreen
 import app.travelmo.ui.SettingsScreen
@@ -35,6 +39,7 @@ import app.travelmo.ui.TripDetailScreen
 import app.travelmo.ui.TripListScreen
 import app.travelmo.ui.TripsViewModel
 import app.travelmo.ui.theme.TravelmoTheme
+import com.mikelward.androidlog.android.ShareOutcome
 import kotlinx.serialization.Serializable
 
 // The pages, as Navigation 3 keys: the back stack is a list the app owns.
@@ -66,10 +71,14 @@ class MainActivity : ComponentActivity() {
             TravelmoTheme {
                 val user by app.account.user.collectAsStateWithLifecycle()
                 val signedIn = user
-                if (signedIn == null) {
-                    SignInScreen(account = app.account)
-                } else {
-                    SignedInApp(app, signedIn, requestedTrip, onTripOpened = { requestedTrip = null })
+                val isSignedIn = signedIn != null
+                val reportBug: suspend (Context) -> ShareOutcome = remember(isSignedIn) { { DebugLogging.share(it, signedIn = isSignedIn) } }
+                CompositionLocalProvider(LocalReportBug provides reportBug) {
+                    if (signedIn == null) {
+                        SignInScreen(account = app.account)
+                    } else {
+                        SignedInApp(app, signedIn, requestedTrip, onTripOpened = { requestedTrip = null })
+                    }
                 }
             }
         }

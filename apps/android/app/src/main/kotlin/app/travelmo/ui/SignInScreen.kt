@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -30,7 +31,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.R
 import app.travelmo.auth.GoogleAccount
 import app.travelmo.auth.SignInResult
-import app.travelmo.log.DebugLogging
 import app.travelmo.ui.theme.Wordmark
 import com.mikelward.androidlog.android.ShareOutcome
 import kotlinx.coroutines.launch
@@ -46,7 +46,7 @@ fun SignInScreen(
     account: GoogleAccount,
     /** Sign-in and the debug-log share; a test hands in its own. */
     signIn: suspend (Context) -> SignInResult = account::signIn,
-    shareLog: suspend (Context) -> ShareOutcome = { DebugLogging.share(it, signedIn = false) },
+    shareLog: suspend (Context) -> ShareOutcome = LocalReportBug.current,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -138,5 +138,7 @@ fun SignInScreen(
                 }
             }
         }
+        // Last, so it is on top. No top bar here, so the app's menu sits where one would end.
+        AppMenu(modifier = Modifier.fillMaxSize().safeDrawingPadding().wrapContentSize(Alignment.TopEnd))
     }
 }

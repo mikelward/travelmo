@@ -145,6 +145,7 @@ fun TripDetailScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },
+                actions = { AppMenu() },
             )
         },
         floatingActionButton = {
