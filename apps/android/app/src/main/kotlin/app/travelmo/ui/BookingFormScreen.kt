@@ -150,8 +150,9 @@ fun BookingForm(
             )
         },
     ) { padding ->
+        val scroll = rememberScrollState()
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxSize().padding(padding).scrollEdgeCue(scroll, scrollCueColors()).verticalScroll(scroll).padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             TypeField(fields.type) { fields = fields.copy(type = it) }

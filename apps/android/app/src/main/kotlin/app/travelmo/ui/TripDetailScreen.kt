@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -253,7 +254,8 @@ private fun TripBody(
             dismissButton = { TextButton(onClick = { confirmingDelete = false }) { Text(stringResource(R.string.keep)) } },
         )
     }
-    LazyColumn(modifier = modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp)) {
+    val list = rememberLazyListState()
+    LazyColumn(modifier = modifier.fillMaxSize().scrollEdgeCue(list, scrollCueColors()), state = list, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp)) {
         item(key = "dates") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(formatDateRange(trip.start, trip.end), style = MaterialTheme.typography.bodyMedium, color = muted)

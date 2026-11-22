@@ -93,7 +93,8 @@ fun CalendarScreen(
             Text(stringResource(R.string.trips_loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp))
         } else {
             val inMonth = all.filter { monthOf(it.start) <= month && monthOf(it.end) >= month }
-            Column(modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp)) {
+            val scroll = rememberScrollState()
+            Column(modifier = Modifier.fillMaxSize().padding(padding).scrollEdgeCue(scroll, scrollCueColors()).verticalScroll(scroll).padding(horizontal = 16.dp, vertical = 12.dp)) {
                 MonthGrid(month = month, trips = inMonth, today = today, uid = uid, onOpenTrip = onOpenTrip)
                 if (inMonth.isEmpty()) {
                     Text(

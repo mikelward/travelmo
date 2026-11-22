@@ -101,7 +101,8 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
         },
     ) { padding ->
         // Scrolls, so a short window with large text still reaches every control.
-        Column(modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp)) {
+        val scroll = rememberScrollState()
+        Column(modifier = Modifier.fillMaxSize().padding(padding).scrollEdgeCue(scroll, scrollCueColors()).verticalScroll(scroll).padding(16.dp)) {
             Text(stringResource(R.string.signed_in_as, user.email ?: user.uid), style = MaterialTheme.typography.bodyLarge)
             OutlinedButton(onClick = { scope.launch { account.signOut(context) } }, modifier = Modifier.padding(top = 12.dp)) {
                 Text(stringResource(R.string.sign_out))
