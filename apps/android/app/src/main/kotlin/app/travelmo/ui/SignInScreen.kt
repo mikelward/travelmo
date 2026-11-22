@@ -1,10 +1,12 @@
 package app.travelmo.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -18,7 +20,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.R
@@ -27,7 +31,7 @@ import app.travelmo.auth.SignInResult
 import app.travelmo.ui.theme.Wordmark
 import kotlinx.coroutines.launch
 
-/** The entry: the name, the tagline, and Sign in with Google, as on the web; after a deletion, that the account is gone. */
+/** The entry: the logo, the name, the tagline, and Sign in with Google, as on the web; after a deletion, that the account is gone. */
 @Composable
 fun SignInScreen(account: GoogleAccount) {
     val context = LocalContext.current
@@ -45,14 +49,17 @@ fun SignInScreen(account: GoogleAccount) {
                 Text(
                     stringResource(R.string.account_deleted),
                     style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
                     modifier = Modifier.padding(bottom = 24.dp),
                 )
             }
+            Image(painterResource(R.drawable.logo), contentDescription = null, modifier = Modifier.size(96.dp).padding(bottom = 16.dp))
             Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineMedium, fontFamily = Wordmark)
             Text(
                 stringResource(R.string.sign_in_tagline),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
             )
             Button(
@@ -78,6 +85,7 @@ fun SignInScreen(account: GoogleAccount) {
                     stringResource(it),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error,
+                    textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 16.dp),
                 )
             }

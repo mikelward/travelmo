@@ -33,6 +33,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.R
@@ -49,8 +50,8 @@ import app.travelmo.core.relativeTime
 import app.travelmo.core.WarningWhen
 import app.travelmo.core.tripStatus
 import app.travelmo.core.warningText
+import app.travelmo.ui.theme.Brand
 import app.travelmo.ui.theme.SharedBadge
-import app.travelmo.ui.theme.Wordmark
 
 /** Now, Upcoming and Past, each card with what comes next (SPEC.md "The trip list"). */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -60,7 +61,7 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.app_name), fontFamily = Wordmark) },
+                title = { Brand() },
                 actions = {
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings))
@@ -74,9 +75,9 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
         when {
             groups == null -> Message(stringResource(R.string.trips_loading), Modifier.padding(padding))
             groups.current.isEmpty() && groups.upcoming.isEmpty() && groups.past.isEmpty() ->
-                Column(Modifier.fillMaxSize().padding(padding).padding(top = 64.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(stringResource(R.string.trips_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(stringResource(R.string.trips_empty_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+                Column(Modifier.fillMaxSize().padding(padding).padding(start = 24.dp, end = 24.dp, top = 64.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(stringResource(R.string.trips_empty), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                    Text(stringResource(R.string.trips_empty_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
                 }
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
