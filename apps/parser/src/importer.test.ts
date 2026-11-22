@@ -381,6 +381,44 @@ describe("tripTitle", () => {
     };
     expect(tripTitle([film])).toBe("Toy Story 5 at Everyman Muswell Hill");
   });
+
+  it("names a course of several days after the course", () => {
+    const place = { name: "Holiday Camp East Finchley", city: "London", country: "GB" };
+    const days = [1, 2, 3].map((n) => ({
+      type: "activity" as const,
+      title: `Holiday Camp East Finchley - Junior Group (Day ${n})`,
+      start: `2026-08-1${n}T09:00:00+01:00`,
+      end: `2026-08-1${n}T17:00:00+01:00`,
+      destination: place,
+    }));
+    expect(tripTitle(days)).toBe("Holiday Camp East Finchley - Junior Group");
+    const course = {
+      type: "activity" as const,
+      title: "5 Day Summer Holiday Course: Peter Pan",
+      start: "2026-08-24T09:30:00+01:00",
+      end: "2026-08-28T15:30:00+01:00",
+      destination: { name: "N10 3BG", city: "London", country: "GB" },
+    };
+    expect(tripTitle([course])).toBe("5 Day Summer Holiday Course: Peter Pan");
+  });
+
+  it("names a trip after where it goes, not the car to the airport", () => {
+    const car = {
+      type: "other" as const,
+      title: "Abetta car to Stansted Airport",
+      start: "2026-08-15T10:30:00+01:00",
+      origin: { name: "N10 3AR", city: "London", country: "GB" },
+      destination: { name: "Stansted Airport", code: "STN", city: "Stansted", country: "GB" },
+    };
+    const express = {
+      type: "train" as const,
+      title: "Arlanda Express",
+      start: "2026-08-15T13:28:00+02:00",
+      origin: { name: "Stockholm Arlanda Airport", city: "Stockholm", country: "SE" },
+      destination: { name: "Stockholm Central", city: "Stockholm", country: "SE" },
+    };
+    expect(tripTitle([car, express], [{ city: "London", country: "GB" }])).toBe("Stockholm");
+  });
 });
 
 // Invented data in the export's shape.
@@ -1225,11 +1263,209 @@ describe("fileBooking with home known", () => {
     expect(titles(store)).toEqual(["Liverpool 2026-05-23..2026-05-25"]);
   });
 
-  it("joins nearby bookings as before while home is unknown", async () => {
+  it("keeps a journey out of a day out the day before while home is unknown", async () => {
     const store = memoryStore();
     await file(store, "c22", [club22]);
     await file(store, "out", [trains[0]!]);
-    expect(store.trips.size).toBe(1);
+    expect(store.trips.size).toBe(2);
+  });
+});
+
+describe("fileBooking a summer of camps and trips", () => {
+  // What production filed as one "Tower of London" trip from 10 Aug to
+  // 13 Nov: a day camp and a course at home, a trip to Stockholm, one to
+  // Boston, and a day at the Tower.
+  const gb = (name: string, city: string) => ({ name, city, country: "GB" });
+  const camp: ExtractedSegment[] = [1, 2, 3, 4, 5].map((n) => ({
+    type: "activity",
+    title: `Holiday Camp East Finchley - Junior Group (Day ${n})`,
+    start: `2026-08-${9 + n}T09:00:00+01:00`,
+    end: `2026-08-${9 + n}T17:00:00+01:00`,
+    destination: gb("N2 9JP", "London"),
+  }));
+  const car: ExtractedSegment = {
+    type: "other",
+    title: "Abetta car to Stansted Airport",
+    start: "2026-08-15T10:30:00+01:00",
+    origin: gb("N10 3AR", "London"),
+    destination: { ...gb("Stansted Airport", "Stansted"), code: "STN" },
+  };
+  const express: ExtractedSegment = {
+    type: "train",
+    title: "Arlanda Express Stockholm → Stockholm",
+    start: "2026-08-15T13:28:00+02:00",
+    end: "2026-11-13T23:59:00+01:00",
+    origin: { name: "Stockholm Arlanda Airport", city: "Stockholm", country: "SE" },
+    destination: { name: "Stockholm Central", city: "Stockholm", country: "SE" },
+  };
+  const course: ExtractedSegment = {
+    type: "activity",
+    title: "5 Day Summer Holiday Course: Peter Pan",
+    start: "2026-08-24T09:30:00+01:00",
+    end: "2026-08-28T15:30:00+01:00",
+    destination: gb("N10 3BG", "Muswell Hill"),
+  };
+  const boston: ExtractedSegment[] = [
+    {
+      type: "flight",
+      title: "VS157 LHR to BOS",
+      start: "2026-08-25T11:20:00+01:00",
+      end: "2026-08-25T13:50:00-04:00",
+      origin: { name: "Heathrow", code: "LHR", city: "London", country: "GB" },
+      destination: { name: "Logan", code: "BOS", city: "Boston", country: "US" },
+    },
+    {
+      type: "flight",
+      title: "VS158 BOS to LHR",
+      start: "2026-09-04T19:00:00-04:00",
+      end: "2026-09-05T06:30:00+01:00",
+      origin: { name: "Logan", code: "BOS", city: "Boston", country: "US" },
+      destination: { name: "Heathrow", code: "LHR", city: "London", country: "GB" },
+    },
+  ];
+  const tower: ExtractedSegment = { type: "activity", title: "Tower of London Admission", start: "2026-11-01T10:00:00+00:00", destination: gb("Tower of London", "London") };
+  const bookings: [string, ExtractedSegment[]][] = [
+    ["camp", camp],
+    ["car", [car]],
+    ["express", [express]],
+    ["course", [course]],
+    ["boston", boston],
+    ["tower", [tower]],
+  ];
+  const file = (store: Memory, sourceId: string, segments: ExtractedSegment[]) =>
+    fileBooking("u1", { sourceId, source: "gmail", segments }, deps(store, async () => ({ isBooking: false, segments: [] })));
+  const trips = (store: Memory) =>
+    [...store.trips.values()]
+      .map((t) => ({
+        start: t.start,
+        end: t.end,
+        bookings: [...new Set([...store.segments.values()].filter((s) => s.tripId === t.id).map((s) => s.id.replace(/-\d+$/, "")))].sort(),
+      }))
+      .sort((a, b) => a.start.localeCompare(b.start));
+
+  it.each([
+    ["oldest first", bookings],
+    ["newest first", [...bookings].reverse()],
+    ["the tower first", [bookings[5]!, ...bookings.slice(0, 5)]],
+  ])("keeps the outings at home apart from both trips, read %s", async (_, order) => {
+    const store = memoryStore();
+    for (const [id, segments] of order) await file(store, id, segments);
+    expect(trips(store)).toEqual([
+      { start: "2026-08-10", end: "2026-08-14", bookings: ["camp"] },
+      { start: "2026-08-15", end: "2026-08-15", bookings: ["car", "express"] },
+      { start: "2026-08-24", end: "2026-08-28", bookings: ["course"] },
+      { start: "2026-08-25", end: "2026-09-05", bookings: ["boston"] },
+      { start: "2026-11-01", end: "2026-11-01", bookings: ["tower"] },
+    ]);
+  });
+});
+
+describe("fileBooking a return flight booked alone", () => {
+  const museum: ExtractedSegment = {
+    type: "activity",
+    title: "Vasa Museum",
+    start: "2026-08-21T11:00:00+02:00",
+    destination: { name: "Vasa Museum", city: "Stockholm", country: "SE" },
+  };
+  const back: ExtractedSegment = {
+    type: "flight",
+    title: "SK 1529 ARN to LHR",
+    start: "2026-08-22T08:00:00+02:00",
+    end: "2026-08-22T09:50:00+01:00",
+    origin: { name: "Arlanda", code: "ARN", city: "Stockholm", country: "SE" },
+    destination: { name: "Heathrow", code: "LHR", city: "London", country: "GB" },
+  };
+  const london = async () => [{ city: "London", country: "GB", from: "2020-01-01" }];
+
+  it.each([
+    ["the museum first", [["museum", museum], ["back", back]]],
+    ["the flight first", [["back", back], ["museum", museum]]],
+  ] as const)("keeps a museum in the town it leaves from in its trip, read %s", async (_, order) => {
+    const store = memoryStore();
+    for (const [id, segment] of order) {
+      await fileBooking("u1", { sourceId: id, source: "gmail", segments: [segment] }, { ...deps(store, async () => ({ isBooking: false, segments: [] })), homeOverrides: london });
+    }
+    expect([...store.trips.values()].map((t) => `${t.start}..${t.end}`)).toEqual(["2026-08-21..2026-08-22"]);
+  });
+});
+
+describe("fileBooking one showing confirmed twice", () => {
+  const film: ExtractedSegment = {
+    type: "activity",
+    title: "Wild Horse Nine at Muswell Hill",
+    provider: "Everyman Cinemas",
+    confirmation: "615858",
+    start: "2026-11-08T12:00:00+00:00",
+    destination: { name: "Everyman Muswell Hill", city: "London", country: "GB" },
+    notes: "Screen 3, seats C8 and C7",
+  };
+  const reservation: ExtractedSegment = {
+    type: "activity",
+    title: "Wild Horse Nine at Everyman Muswell Hill",
+    provider: "Everyman",
+    confirmation: "WQFXR5T",
+    start: "2026-11-08T12:00:00+00:00",
+    destination: { name: "Everyman", city: "London", country: "GB" },
+  };
+  const club: ExtractedSegment = {
+    type: "activity",
+    title: "Junior Adventures Group Club",
+    provider: "Junior Adventures Group",
+    confirmation: "PSAD8686493/38",
+    start: "2026-11-09T12:02:00+00:00",
+    destination: { name: "BR1 2SQ", city: "Bromley", country: "GB" },
+  };
+  const file = (store: Memory, sourceId: string, segments: ExtractedSegment[], sender?: string) =>
+    fileBooking("u1", { sourceId, source: "gmail", segments, ...(sender ? { sender } : {}) }, deps(store, async () => ({ isBooking: false, segments: [] })));
+
+  it.each([
+    ["the confirmation first", [["615858", [film]], ["WQFXR5T", [reservation]], ["club", [club]]]],
+    ["the club first", [["club", [club]], ["WQFXR5T", [reservation]], ["615858", [film]]]],
+  ] as const)("keeps one booking with its seats and a day out of its own each, read %s", async (_, order) => {
+    const store = memoryStore();
+    for (const [id, segments] of order) await file(store, id, [...segments], id === "club" ? "junioradventures.example" : "everymancinema.com");
+    const films = [...store.segments.values()].filter((s) => s.title.startsWith("Wild Horse Nine"));
+    expect(films).toHaveLength(1);
+    expect(films[0]!.notes).toContain("Screen 3, seats C8 and C7");
+    expect(films[0]!.sources?.map((s) => s.id).sort()).toEqual(["615858", "WQFXR5T"]);
+    expect([...store.trips.values()].map((t) => `${t.start} ${t.title}`).sort()).toEqual([
+      expect.stringMatching(/^2026-11-08 Wild Horse Nine at /),
+      "2026-11-09 Junior Adventures Group Club",
+    ]);
+  });
+
+  it("stretches the trip when the second email gives the end the first lacked", async () => {
+    const store = memoryStore();
+    const stay = lodging.segments[0]!;
+    const { end: _end, ...open } = stay;
+    await file(store, "first", [open], "cove.example");
+    expect([...store.trips.values()][0]).toMatchObject({ start: "2026-12-12", end: "2026-12-12" });
+    await file(store, "second", [{ ...stay, end: "2026-12-16T11:00:00+00:00", confirmation: "C1" }], "cove.example");
+    expect(store.segments.size).toBe(1);
+    expect([...store.trips.values()][0]).toMatchObject({ start: "2026-12-12", end: "2026-12-16", updatedAt: "2026-11-01T12:00:00Z" });
+  });
+
+  it("queues the booking for the daily sweep when the place the second email adds is put off", async () => {
+    const store = memoryStore();
+    const { destination: _d, ...placeless } = film;
+    await file(store, "615858", [placeless], "everymancinema.com");
+    const retries = memoryRetryStore();
+    await fileBooking(
+      "u1",
+      { sourceId: "WQFXR5T", source: "gmail", segments: [reservation], sender: "everymancinema.com" },
+      { ...deps(store, async () => ({ isBooking: false, segments: [] })), geocode: async () => "later", geocodeRetries: retries },
+    );
+    const kept = [...store.segments.values()];
+    expect(kept).toHaveLength(1);
+    expect(kept[0]!.destination).toEqual(reservation.destination);
+    expect([...retries.entries.values()]).toEqual([{ uid: "u1", tripId: kept[0]!.tripId, segmentId: kept[0]!.id, at: "2026-11-01T12:00:00Z" }]);
+  });
+
+  it("keeps two films at the same time apart", async () => {
+    const store = memoryStore();
+    await file(store, "a", [film], "everymancinema.com");
+    await file(store, "b", [{ ...reservation, title: "Toy Story 5 at Everyman Muswell Hill" }], "everymancinema.com");
+    expect(store.segments.size).toBe(2);
   });
 });
 

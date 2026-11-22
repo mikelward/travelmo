@@ -84,6 +84,16 @@ class TripsTest {
     }
 
     @Test
+    fun `a journey's end more than a week after it leaves does not stretch the dates`() {
+        val express = Segment("e", "t", SegmentType.TRAIN, "Arlanda Express", "2026-08-15T13:28:00+02:00", "2026-11-13T23:59:00+01:00")
+        segmentDateRange(listOf(express)) shouldBe ("2026-08-15" to "2026-08-15")
+        val sleeper = express.copy(end = "2026-08-21T10:00:00+07:00")
+        segmentDateRange(listOf(sleeper)) shouldBe ("2026-08-15" to "2026-08-21")
+        val course = Segment("c", "t", SegmentType.ACTIVITY, "Summer course", "2026-07-01T09:00:00+01:00", "2026-08-28T16:00:00+01:00")
+        segmentDateRange(listOf(course)) shouldBe ("2026-07-01" to "2026-08-28")
+    }
+
+    @Test
     fun `other trips leave out this one and any being deleted, by start`() {
         val trips = listOf(
             Trip("b", "B", "2026-12-01", "2026-12-02", "u"),

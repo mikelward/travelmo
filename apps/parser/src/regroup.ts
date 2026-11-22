@@ -108,7 +108,7 @@ export function planRegroup(
     .sort((a, b) => compareInstants(first(a), first(b)) || a.key.localeCompare(b.key));
 
   // File the bookings into trips that exist only here.
-  type Group = { trip: Trip; share: string; sharedWith: string[]; segments: Segment[]; title: string };
+  type Group = { trip: Trip; share: string; sharedWith: string[]; segments: Segment[] };
   const groups: Group[] = [];
   const shareOf = new Map(eligible.map((trip) => [trip.id, trip.sharedWith]));
   for (const unit of ordered) {
@@ -130,7 +130,6 @@ export function planRegroup(
         share: unit.share,
         sharedWith: [...(shareOf.get(unit.segments[0]!.tripId) ?? [])],
         segments: [...unit.segments],
-        title: tripTitle(unit.segments, periods, overrides),
       });
     }
   }
@@ -154,14 +153,14 @@ export function planRegroup(
     const existing = keeps.get(g);
     const range = segmentDateRange(group.segments)!;
     const segments = group.segments;
-    if (!existing) return { id: newId(), title: group.title, start: range.start, end: range.end, sharedWith: group.sharedWith, segments, changed: true };
+    if (!existing) return { id: newId(), title: tripTitle(group.segments, periods, overrides), start: range.start, end: range.end, sharedWith: group.sharedWith, segments, changed: true };
     const before = new Set((segmentsByTrip.get(existing.id) ?? []).map(segmentKey));
     const after = new Set(segments.map(segmentKey));
     const holdsAll = [...before].every((key) => after.has(key));
     const changed = !holdsAll || after.size !== before.size;
     return holdsAll
       ? { id: existing.id, existing, title: existing.title, start: min(existing.start, range.start), end: max(existing.end, range.end), sharedWith: existing.sharedWith, segments, changed }
-      : { id: existing.id, existing, title: group.title, start: range.start, end: range.end, sharedWith: existing.sharedWith, segments, changed };
+      : { id: existing.id, existing, title: tripTitle(group.segments, periods, overrides), start: range.start, end: range.end, sharedWith: existing.sharedWith, segments, changed };
   });
   const deleted = eligible.filter((trip) => !keptEmpty.has(trip.id) && !kept.has(trip.id)).map((trip) => trip.id);
   return { trips: planned, deleted };

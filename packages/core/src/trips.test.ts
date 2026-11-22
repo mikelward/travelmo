@@ -1,4 +1,4 @@
-import { daysBetween, eventVerb, findTripForRange, groupTrips, mergePlace, nextEvent, overlappingTrips, sameBooking, segmentDateRange } from "./trips";
+import { daysBetween, eventVerb, findTripForRange, groupTrips, mergeDetails, mergePlace, nextEvent, overlappingTrips, sameBooking, sameEvent, segmentDateRange } from "./trips";
 
 describe("nextEvent", () => {
   const stay = { type: "lodging" as const, title: "Cove Liverpool", start: "2026-12-12T15:00:00+00:00", end: "2026-12-14T11:00:00+00:00" };
@@ -62,7 +62,7 @@ describe("mergePlace", () => {
     expect(mergePlace(picked, "Hotel Example", "", undefined, { address: "  " })).toEqual({ name: "Hotel Example", city: "Exampleville" });
   });
 });
-import { ExtractedBooking, Trip } from "./schema";
+import { ExtractedBooking, Trip, type ExtractedSegment } from "./schema";
 
 const trip = (id: string, start: string, end: string): Trip => ({
   id,
@@ -116,6 +116,20 @@ describe("segmentDateRange", () => {
 
   it("is undefined with no segments", () => {
     expect(segmentDateRange([])).toBeUndefined();
+  });
+
+  it("ignores a journey's end more than a week after it leaves, such as a ticket's expiry", () => {
+    const express = {
+      type: "train" as const,
+      title: "Arlanda Express",
+      start: "2026-08-15T13:28:00+02:00",
+      end: "2026-11-13T23:59:00+01:00",
+    };
+    expect(segmentDateRange([express])).toEqual({ start: "2026-08-15", end: "2026-08-15" });
+    const sleeper = { ...express, title: "Trans-Siberian", end: "2026-08-21T10:00:00+07:00" };
+    expect(segmentDateRange([sleeper])).toEqual({ start: "2026-08-15", end: "2026-08-21" });
+    const course = { type: "activity" as const, title: "Summer course", start: "2026-07-01T09:00:00+01:00", end: "2026-08-28T16:00:00+01:00" };
+    expect(segmentDateRange([course])).toEqual({ start: "2026-07-01", end: "2026-08-28" });
   });
 });
 
@@ -212,6 +226,75 @@ describe("sameBooking", () => {
   it("lets confirmation numbers decide when both have one", () => {
     expect(sameBooking({ ...stay, confirmation: "ab-123" }, { ...stay, confirmation: "AB123" })).toBe(true);
     expect(sameBooking({ ...stay, confirmation: "AB123" }, { ...stay, confirmation: "XY999" })).toBe(false);
+  });
+});
+
+// Two emails from one cinema about the same showing, under different
+// references.
+const booked: ExtractedSegment = {
+  type: "activity" as const,
+  title: "Wild Horse Nine at Muswell Hill",
+  provider: "Everyman Cinemas",
+  confirmation: "615858",
+  start: "2026-11-08T12:00:00+00:00",
+  destination: { name: "Everyman Muswell Hill", city: "London", country: "GB" },
+  notes: "Screen 3, seats C8 and C7",
+};
+const reserved: ExtractedSegment = {
+  type: "activity" as const,
+  title: "Wild Horse Nine at Everyman Muswell Hill",
+  provider: "Everyman",
+  confirmation: "WQFXR5T",
+  start: "2026-11-08T12:00:00+00:00",
+  destination: { name: "Everyman", city: "London", country: "GB" },
+};
+
+describe("sameEvent", () => {
+  it("matches one showing confirmed twice under different references", () => {
+    expect(sameBooking(booked, reserved)).toBe(false);
+    expect(sameEvent(booked, reserved)).toBe(true);
+    expect(sameEvent({ ...booked, provider: undefined }, { ...reserved, provider: undefined }, "everymancinema.com", "everymancinema.com")).toBe(true);
+  });
+
+  it("keeps two films at the same cinema and time apart", () => {
+    expect(sameEvent(booked, { ...reserved, title: "Toy Story 5 at Everyman Muswell Hill" })).toBe(false);
+    expect(sameEvent(booked, { ...booked, title: "Toy Story 5 at Muswell Hill", confirmation: "615859" })).toBe(false);
+    const four = { ...reserved, title: "Toy Story 4 at Everyman" };
+    expect(sameEvent(four, { ...four, title: "Toy Story 5 at Everyman", confirmation: "XYZ" })).toBe(false);
+    expect(sameEvent(four, { ...four, title: "Toy Story 4 (2D) at Everyman", confirmation: "XYZ" })).toBe(true);
+    const muswell = { ...reserved, title: "Wild Horse Nine at Everyman Muswell Hill", destination: { name: "Everyman Muswell Hill", city: "London", country: "GB" } };
+    const hampstead = { ...reserved, title: "Wild Horse Nine at Everyman Hampstead", confirmation: "XYZ", destination: { name: "Everyman Hampstead", city: "London", country: "GB" } };
+    expect(sameEvent(muswell, hampstead)).toBe(false);
+    expect(sameEvent(muswell, { ...hampstead, title: "Wild Horse Nine at Everyman", destination: { name: "Everyman", city: "London", country: "GB" } })).toBe(true);
+    expect(sameEvent(muswell, { ...hampstead, title: "Wild Horse Nine", destination: { name: "Everyman Hampstead" } })).toBe(false);
+    const out = { ...reserved, title: "Inside Out at Everyman" };
+    expect(sameEvent(out, { ...out, title: "Inside Man at Everyman", confirmation: "XYZ" })).toBe(false);
+    expect(sameEvent(out, { ...out, title: "The Inside Out at Everyman", confirmation: "XYZ" })).toBe(true);
+  });
+
+  it("needs the same time, type, seller and town", () => {
+    expect(sameEvent(booked, { ...reserved, start: "2026-11-08T15:00:00+00:00" })).toBe(false);
+    expect(sameEvent(booked, { ...reserved, type: "other" as const })).toBe(false);
+    expect(sameEvent(booked, { ...reserved, provider: "Odeon" })).toBe(false);
+    expect(sameEvent({ ...booked, provider: undefined }, { ...reserved, provider: undefined }, "everymancinema.com", "odeon.co.uk")).toBe(false);
+    expect(sameEvent(booked, { ...reserved, destination: { name: "Everyman", city: "Leeds", country: "GB" } })).toBe(false);
+  });
+});
+
+describe("mergeDetails", () => {
+  it("keeps what either email said: seats, screen and the other reference", () => {
+    const merged = mergeDetails(reserved, booked);
+    expect(merged).toMatchObject({ title: reserved.title, confirmation: "WQFXR5T", provider: "Everyman" });
+    expect(merged.notes).toBe("Screen 3, seats C8 and C7\nOther reference: 615858");
+    expect(mergeDetails(booked, reserved).notes).toBe("Screen 3, seats C8 and C7\nOther reference: WQFXR5T");
+  });
+
+  it("fills only what is missing and adds nothing twice", () => {
+    const bare: ExtractedSegment = { type: "activity", title: "Wild Horse Nine", start: booked.start };
+    expect(mergeDetails(bare, booked)).toEqual({ ...bare, provider: "Everyman Cinemas", confirmation: "615858", destination: booked.destination, notes: booked.notes });
+    expect(mergeDetails(booked, booked)).toEqual(booked);
+    const twice = mergeDetails(mergeDetails(reserved, booked), booked);
+    expect(twice.notes).toBe("Screen 3, seats C8 and C7\nOther reference: 615858");
   });
 });
 
