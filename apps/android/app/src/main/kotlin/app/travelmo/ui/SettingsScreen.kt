@@ -107,12 +107,12 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
             OutlinedButton(onClick = { scope.launch { account.signOut(context) } }, modifier = Modifier.padding(top = 12.dp)) {
                 Text(stringResource(R.string.sign_out))
             }
-            Text(stringResource(R.string.reminders), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
-            Text(stringResource(R.string.reminders_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.reminders), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+            Text(stringResource(R.string.reminders_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 Text(
                     if (user.email != null) stringResource(R.string.email_me_to, user.email) else stringResource(R.string.email_me),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.weight(1f),
                 )
                 Switch(
@@ -124,14 +124,14 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
                     enabled = stored != null && outcome !is Outcome.Busy,
                 )
             }
-            (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
             PushSwitch(viewModel)
             TextSizeSection()
             DebugLogSection(signedIn = true)
             DeleteAccountSection(account, viewModel)
             Text(
                 stringResource(R.string.version, BuildConfig.VERSION_NAME),
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 24.dp),
             )
@@ -176,7 +176,7 @@ private fun PushSwitch(viewModel: TripsViewModel) {
         if (granted) turnOn() else blocked = true
     }
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        Text(stringResource(R.string.notify_me), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Text(stringResource(R.string.notify_me), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Switch(
             checked = chosen ?: ready.on,
             onCheckedChange = { on ->
@@ -193,8 +193,8 @@ private fun PushSwitch(viewModel: TripsViewModel) {
             enabled = outcome !is Outcome.Busy,
         )
     }
-    if (blocked) Text(stringResource(R.string.notifications_blocked), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+    if (blocked) Text(stringResource(R.string.notifications_blocked), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
 }
 
 /**
@@ -208,10 +208,10 @@ private fun DeleteAccountSection(account: GoogleAccount, viewModel: TripsViewMod
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
     val outcome = outcomes[DELETE_ACCOUNT_TOKEN]
     var confirming by remember { mutableStateOf(false) }
-    Text(stringResource(R.string.delete_account), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
-    Text(stringResource(R.string.delete_account_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(R.string.delete_account), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(R.string.delete_account_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (!viewModel.canDeleteAccount) {
-        Text(stringResource(R.string.delete_account_on_web), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+        Text(stringResource(R.string.delete_account_on_web), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
         return
     }
     OutlinedButton(
@@ -220,7 +220,7 @@ private fun DeleteAccountSection(account: GoogleAccount, viewModel: TripsViewMod
         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
         modifier = Modifier.padding(top = 8.dp),
     ) { Text(stringResource(if (outcome is Outcome.Busy) R.string.deleting else R.string.delete_account)) }
-    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
     if (confirming) {
         AppAlertDialog(
             onDismissRequest = { confirming = false },
@@ -255,10 +255,10 @@ private fun DebugLogSection(signedIn: Boolean) {
     var saveFailed by remember { mutableStateOf(false) }
     var sharing by remember { mutableStateOf(false) }
     var shareNote by remember { mutableStateOf<Int?>(null) }
-    Text(stringResource(R.string.debug_log), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
-    Text(stringResource(R.string.debug_log_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(R.string.debug_log), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(R.string.debug_log_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        Text(stringResource(R.string.debug_log_record), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Text(stringResource(R.string.debug_log_record), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Switch(
             checked = enabled,
             onCheckedChange = { on ->
@@ -267,7 +267,7 @@ private fun DebugLogSection(signedIn: Boolean) {
             },
         )
     }
-    if (saveFailed) Text(stringResource(R.string.setting_not_saved), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+    if (saveFailed) Text(stringResource(R.string.setting_not_saved), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
     OutlinedButton(
         onClick = {
             sharing = true
@@ -285,7 +285,7 @@ private fun DebugLogSection(signedIn: Boolean) {
         enabled = !sharing,
         modifier = Modifier.padding(top = 8.dp),
     ) { Text(stringResource(if (sharing) R.string.sharing else R.string.share_debug_log)) }
-    shareNote?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+    shareNote?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
 }
 
 /**
@@ -301,10 +301,10 @@ internal fun TextSizeSection() {
     val scale = fontSize.scale
     val percent = stringResource(R.string.text_size_value, fontScalePercent(scale))
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 4.dp)) {
-        Text(stringResource(R.string.text_size), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-        Text(percent, style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.text_size), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+        Text(percent, style = MaterialTheme.typography.titleLarge)
     }
-    Text(stringResource(R.string.text_size_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(R.string.text_size_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     // Where the drag last was, so the release saves exactly that: [scale]
     // comes back through recomposition, which a release in the same frame
     // as the last movement would beat.
@@ -358,8 +358,8 @@ internal fun TextSizeSection() {
         ) { Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.text_size_larger)) }
     }
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        Text(stringResource(R.string.pinch_to_resize), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Text(stringResource(R.string.pinch_to_resize), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Switch(checked = fontSize.pinchEnabled, onCheckedChange = fontSize::choosePinch)
     }
-    if (TextSizeSetting.saveFailed) Text(stringResource(R.string.setting_not_saved), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+    if (TextSizeSetting.saveFailed) Text(stringResource(R.string.setting_not_saved), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
 }
