@@ -5,7 +5,7 @@ import { Logo } from "@/components/Logo";
 import { useAuth } from "@/lib/auth";
 
 export function Nav() {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   return (
     <header className="border-b border-zinc-200 dark:border-zinc-800">
       {/* Wraps on a phone, where the links do not fit beside the wordmark. */}
@@ -16,6 +16,9 @@ export function Nav() {
         </Link>
         {user && (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+            <Link href="/" className="hover:underline">
+              Trips
+            </Link>
             <Link href="/calendar" className="hover:underline">
               Calendar
             </Link>
@@ -28,9 +31,6 @@ export function Nav() {
             <Link href="/settings" className="hover:underline">
               Settings
             </Link>
-            <button type="button" onClick={() => signOut()} className="text-zinc-500 hover:underline">
-              Sign out
-            </button>
           </div>
         )}
       </nav>

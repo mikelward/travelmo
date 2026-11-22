@@ -1038,6 +1038,28 @@ function DeleteAccountSection({ user, onDeleted }: { user: User; onDeleted: () =
   );
 }
 
+function SignOutSection() {
+  const { signOut } = useAuth();
+  const [error, setError] = useState<string>();
+  const signOutNow = async () => {
+    setError(undefined);
+    try {
+      await signOut();
+    } catch (e) {
+      console.error("Signing out failed", e);
+      setError(`Couldn't sign out: ${(e as Error).message}. Try again.`);
+    }
+  };
+  return (
+    <section className="mt-10 border-t border-zinc-200 pt-6 dark:border-zinc-800">
+      <button type="button" onClick={() => void signOutNow()} className={buttonClass}>
+        Sign out
+      </button>
+      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+    </section>
+  );
+}
+
 export default function SettingsPage() {
   useSaveForOffline();
   const { signOut } = useAuth();
@@ -1087,6 +1109,7 @@ export default function SettingsPage() {
           <PatternsSection user={user} />
           <ReviewSection user={user} />
           <DeleteAccountSection user={user} onDeleted={() => void accountDeleted()} />
+          <SignOutSection />
         </>
       )}
     </SignInGate>

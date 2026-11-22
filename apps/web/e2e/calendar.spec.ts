@@ -50,6 +50,6 @@ test.describe("on a phone", () => {
     await expect(page.getByRole("heading", { level: 1, name: "November 2026" })).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBe(0);
-    for (const name of ["Calendar", "Reports", "Profile", "Settings"]) await expect(page.getByRole("link", { name })).toBeInViewport();
+    for (const name of ["Trips", "Calendar", "Reports", "Profile", "Settings"]) await expect(page.getByRole("link", { name })).toBeInViewport();
   });
 });
