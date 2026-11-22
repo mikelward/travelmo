@@ -16,12 +16,17 @@ class GoogleAccountTest {
     private val account = GoogleAccount(firebaseAvailable = { false }, webClientId = null)
 
     @Test
-    fun `a cancellation stays quiet on screen and logs Play services' status code alone`() {
+    fun `a cancellation with a status code is a refusal, logged by its code alone`() {
         val result = account.failure(GetCredentialCancellationException("[16] Account reauth failed for someone@example.com."))
-        result shouldBe SignInResult.Canceled
+        result shouldBe SignInResult.Refused
         val log = TravelmoLog.snapshot().joinToString("\n")
         log shouldContain "Sign-in canceled, status 16"
         log shouldNotContain "example.com"
+    }
+
+    @Test
+    fun `a cancellation without a status code is the user backing out`() {
+        account.failure(GetCredentialCancellationException("activity is cancelled by the user.")) shouldBe SignInResult.Canceled
     }
 
     @Test

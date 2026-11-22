@@ -1,5 +1,6 @@
 package app.travelmo.ui
 
+import android.content.Context
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,17 +30,32 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.R
 import app.travelmo.auth.GoogleAccount
 import app.travelmo.auth.SignInResult
+import app.travelmo.log.DebugLogging
 import app.travelmo.ui.theme.Wordmark
+import com.mikelward.androidlog.android.ShareOutcome
 import kotlinx.coroutines.launch
 
-/** The entry: the logo, the name, the tagline, and Sign in with Google, as on the web; after a deletion, that the account is gone. */
+/**
+ * The entry: the logo, the name, the tagline, and Sign in with Google, as on
+ * the web; after a deletion, that the account is gone. A sign-in that fails
+ * for a reason the user can't fix offers the debug log, since Settings, where
+ * it otherwise lives, is behind sign-in.
+ */
 @Composable
-fun SignInScreen(account: GoogleAccount) {
+fun SignInScreen(
+    account: GoogleAccount,
+    /** Sign-in and the debug-log share; a test hands in its own. */
+    signIn: suspend (Context) -> SignInResult = account::signIn,
+    shareLog: suspend (Context) -> ShareOutcome = { DebugLogging.share(it, signedIn = false) },
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val deleted by account.deleted.collectAsStateWithLifecycle()
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<Int?>(if (account.available) null else R.string.sign_in_unavailable) }
+    var offerLog by remember { mutableStateOf(false) }
+    var sharing by remember { mutableStateOf(false) }
+    var shareNote by remember { mutableStateOf<Int?>(null) }
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp),
@@ -67,14 +84,17 @@ fun SignInScreen(account: GoogleAccount) {
                 onClick = {
                     busy = true
                     message = null
+                    shareNote = null
                     scope.launch {
-                        val result = account.signIn(context)
+                        val result = signIn(context)
                         busy = false
                         message = when (result) {
                             SignInResult.Success, SignInResult.Canceled -> null
                             SignInResult.NoAccount -> R.string.sign_in_no_account
+                            SignInResult.Refused -> R.string.sign_in_refused
                             SignInResult.Failed -> R.string.sign_in_failed
                         }
+                        offerLog = result == SignInResult.Refused || result == SignInResult.Failed
                     }
                 },
             ) {
@@ -88,6 +108,34 @@ fun SignInScreen(account: GoogleAccount) {
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 16.dp),
                 )
+            }
+            if (offerLog) {
+                OutlinedButton(
+                    enabled = !sharing,
+                    onClick = {
+                        sharing = true
+                        shareNote = null
+                        scope.launch {
+                            val outcome = shareLog(context)
+                            sharing = false
+                            shareNote = when (outcome) {
+                                ShareOutcome.SHARED -> null
+                                ShareOutcome.COPIED_ONLY -> R.string.debug_log_copied_only
+                                ShareOutcome.FAILED -> R.string.debug_log_share_failed
+                            }
+                        }
+                    },
+                    modifier = Modifier.padding(top = 16.dp),
+                ) { Text(stringResource(if (sharing) R.string.sharing else R.string.share_debug_log)) }
+                shareNote?.let {
+                    Text(
+                        stringResource(it),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
             }
         }
     }
