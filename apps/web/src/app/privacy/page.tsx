@@ -5,7 +5,9 @@ export const metadata = { title: "Privacy" };
 // The privacy policy the Play listing and Google's OAuth consent screen link
 // to. Readable without signing in. Keep it in step with what the code does
 // (SPEC.md "Data model", "Import pipeline"); a change in what is collected or
-// who receives it changes this page in the same pull request.
+// who receives it changes this page in the same pull request, and
+// docs/PRIVACY.md (the same text for GitHub Pages and repository readers)
+// with it: e2e/privacy.spec.ts fails when the two say different things.
 const CONTACT = "play@mikelward.com";
 const UPDATED = "22 November 2026";
 
