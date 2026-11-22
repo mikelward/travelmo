@@ -110,6 +110,14 @@ jobs:
           fi
       - name: Unit tests, lint and a debug build
         run: ./gradlew -PtravelmoFixedVersion :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
+      # The open-source licenses list (app/src/main/res/raw/aboutlibraries.json)
+      # is committed and only regenerated on demand, so a dependency change
+      # could otherwise ship a stale list that no build step catches.
+      # Regenerate it and fail on any diff, as the sibling apps do.
+      - name: Licenses export is up to date
+        run: |
+          ./gradlew :app:exportBundledLicenses --rerun
+          git diff --exit-code app/src/main/res/raw/aboutlibraries.json
       # The screens rendered under Robolectric against the PNGs in
       # app/snapshots: a UI change must come with its re-recorded PNGs, so the
       # diff is in the PR. The run above records nothing; this one compares.

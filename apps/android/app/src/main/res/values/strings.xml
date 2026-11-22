@@ -12,6 +12,9 @@
     <string name="report_a_bug">Report a bug</string>
     <string name="about">About</string>
     <string name="about_version">Version %1$s</string>
+    <string name="licenses">Open-source licenses</string>
+    <string name="licenses_by">By %1$s</string>
+    <string name="licenses_link_failed">No app can open the link.</string>
     <string name="sign_in_refused">Google didn’t finish signing you in. Sharing the debug log helps get it fixed.</string>
 
     <!-- Trip list. -->

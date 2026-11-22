@@ -7,11 +7,14 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.travelmo.R
 import app.travelmo.auth.GoogleAccount
 import app.travelmo.auth.SignInResult
 import app.travelmo.auth.SignedIn
 import app.travelmo.ui.theme.TravelmoTheme
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.mikepenz.aboutlibraries.Libs
+import com.mikepenz.aboutlibraries.util.withJson
 import java.time.Instant
 import java.util.TimeZone
 import org.junit.Rule
@@ -194,5 +197,13 @@ class ScreenScreenshotTest {
         capture("settings") {
             SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
         }
+    }
+
+    // The committed export, loaded here rather than off the main thread as
+    // the screen does, so the list is there when the picture is taken.
+    @Test
+    fun licenses() {
+        val libraries = Libs.Builder().withJson(composeRule.activity, R.raw.aboutlibraries).build()
+        capture("licenses") { LicensesContent(libraries = libraries) }
     }
 }

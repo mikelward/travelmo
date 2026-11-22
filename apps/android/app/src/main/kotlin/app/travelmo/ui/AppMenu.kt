@@ -42,8 +42,9 @@ val LocalReportBug = staticCompositionLocalOf<suspend (Context) -> ShareOutcome>
 /**
  * The overflow every screen's top bar ends with, as in the sibling apps
  * (stopdash's AppMenuOverflow, clothescast's BugReportOverflowMenu): Report a
- * bug, which shares the debug log as Settings does, and About. [items] are a
- * screen's own, first, each given a `close` to call as it acts.
+ * bug, which shares the debug log as Settings does, and About, which leads
+ * to the open-source licenses. [items] are a screen's own, first, each given
+ * a `close` to call as it acts.
  */
 @Composable
 fun AppMenu(modifier: Modifier = Modifier, items: @Composable (close: () -> Unit) -> Unit = {}) {
@@ -87,16 +88,38 @@ fun AppMenu(modifier: Modifier = Modifier, items: @Composable (close: () -> Unit
             )
         }
     }
-    if (showAbout) AboutDialog(onDismiss = { showAbout = false })
+    val openLicenses = LocalOpenLicenses.current
+    if (showAbout) {
+        AboutDialog(
+            onOpenLicenses = openLicenses?.let { open ->
+                {
+                    showAbout = false
+                    open()
+                }
+            },
+            onDismiss = { showAbout = false },
+        )
+    }
 }
 
-/** The app's name and the build, as a bug report names it. */
+/**
+ * The app's name and the build, as a bug report names it, and the one
+ * action: the open-source licenses, as in stopdash's About. Without
+ * [onOpenLicenses] (a test, a preview) it offers none.
+ */
 @Composable
-fun AboutDialog(onDismiss: () -> Unit) {
+fun AboutDialog(onOpenLicenses: (() -> Unit)?, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.app_name)) },
         text = { Text(stringResource(R.string.about_version, "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")) },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok)) } },
+        confirmButton = {
+            if (onOpenLicenses != null) {
+                TextButton(onClick = onOpenLicenses) { Text(stringResource(R.string.licenses)) }
+            } else {
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok)) }
+            }
+        },
+        dismissButton = onOpenLicenses?.let { { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok)) } } },
     )
 }

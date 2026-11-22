@@ -79,8 +79,8 @@ Gradle). `:core` is plain Kotlin with the models and the logic the web's
 formatting), tested without an SDK and kept free of Android by
 `:core:verifyNoAndroid`; `:app` is the Compose app: sign-in, the trip list,
 a trip's bookings with adding, editing and deleting, the calendar's month
-view, the travel profile with its document warnings, reports, and Settings
-with sign-out, the reminders switches (by email, and as notifications on
+view, the travel profile with its document warnings, reports, the
+open-source licenses, and Settings with sign-out, the reminders switches (by email, and as notifications on
 the phone over Firebase Cloud Messaging, which asks for the notification
 permission), the debug log and deleting the account. Deleting calls the
 parser at `travelmoParserUrl` in `apps/android/gradle.properties` (the
@@ -107,6 +107,17 @@ version CI uses, so the Settings screen reads the same on both):
 
 ```sh
 ./gradlew :app:testDebugUnitTest --tests app.travelmo.ui.ScreenScreenshotTest -Proborazzi.test.record
+```
+
+About's open-source licenses list is the committed
+`app/src/main/res/raw/aboutlibraries.json`, which the AboutLibraries plugin
+exports and `exportBundledLicenses` filters to what the release APK bundles;
+items that aren't Maven dependencies (the Fira Sans font) are JSON files in
+`app/aboutlibraries/libraries/`. CI regenerates it and fails on a diff, so
+after changing a dependency regenerate it and commit the result:
+
+```sh
+./gradlew :app:exportBundledLicenses --rerun
 ```
 
 The writes behind the screens (`FirestoreTrips`: saving, moving and

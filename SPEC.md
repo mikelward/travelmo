@@ -1111,7 +1111,11 @@ and a report shared through the share sheet, also offered on the sign-in
 screen when Google refuses a sign-in or it fails, since Settings is behind
 sign-in; every screen's top bar, and the sign-in screen's corner, ends
 with the same ⋮ menu, as in the sibling apps: Report a bug shares that
-report, and About names the version) and deletes the account
+report, and About names the version and opens the open-source licenses:
+every component the release APK bundles, Fira Sans included, by name, each
+tapping through to its version, authors and a link to its license text,
+from an export committed with the app so the list needs no network) and
+deletes the account
 through the parser ("Deleting an account"), the app's one call to it,
 while the import settings stay on the web; a navigation bar switches between Trips,
 the Calendar (the month view of `/calendar`, with the same weeks, bars and
