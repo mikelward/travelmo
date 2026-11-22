@@ -302,9 +302,11 @@ One Google Cloud project holds everything.
    (the parser's `renew_watch_failed` log line) and a dead-lettered
    notification. Create the notification channel (email, Slack, …) first;
    Cloud Monitoring's alerting is free at this volume.
-7. **Web** on Firebase App Hosting: connect the repository, set the root
-   directory to `apps/web`, and set the variables in
-   `apps/web/apphosting.yaml` (committed: App Hosting reads them from the
+7. **Web** on Firebase App Hosting: connect the repository, leave the root
+   directory at the repository root (`/`: the build finds the pnpm
+   workspace only there, and `apphosting.yaml` builds and starts
+   `apps/web`), pick the `nodejs22` runtime, and set the variables in
+   `apphosting.yaml` (committed: App Hosting reads them from the
    repository, and they ship in the client bundle anyway; the optional ones
    stay commented out until they have a value, as any value turns a feature
    on), whose build command runs the app's `build`

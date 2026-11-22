@@ -1,9 +1,12 @@
-# Firebase App Hosting backend for apps/web. Set the backend's root directory
-# to apps/web in the console; the monorepo's pnpm workspace is detected from
-# the repository root.
-# The build script bundles the service worker before `next build`.
+# Firebase App Hosting backend for apps/web. The backend's root directory is
+# the repository root, not apps/web: Google's Node.js build looks for
+# pnpm-lock.yaml there, and without it falls back to npm, which can't
+# install the workspace's "workspace:*" dependencies. So the build and run
+# commands point at the web app themselves.
+# The web app's build script bundles the service worker before `next build`.
 scripts:
-  buildCommand: pnpm build
+  buildCommand: pnpm --filter @travelmo/web build
+  runCommand: node apps/web/node_modules/next/dist/bin/next start apps/web
 
 runConfig:
   minInstances: 0
