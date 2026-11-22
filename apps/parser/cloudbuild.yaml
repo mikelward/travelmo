@@ -7,3 +7,8 @@ steps:
   - name: gcr.io/cloud-builders/docker
     args: [build, -f, apps/parser/Dockerfile, -t, "${_IMAGE}", .]
 images: ["${_IMAGE}"]
+# The log goes to Cloud Logging alone, which gcloud streams to a caller with
+# Logs Viewer; the default logs bucket streams only to a project Viewer, and
+# CI's deployer (deploy/github-deploy.sh) is not one.
+options:
+  logging: CLOUD_LOGGING_ONLY

@@ -79,6 +79,11 @@ jobs:
       - name: Test the release-publishing script
         working-directory: .
         run: python3 scripts/publish_github_release_test.py
+      # The Deploy job is main-only too, so its plan and record scripts are
+      # tested here: a tag moved too far would skip a part's changes for good.
+      - name: Test the deploy scripts
+        working-directory: .
+        run: python3 scripts/deploy_plan_test.py
       # The Play listing (apps/android/play) is published only from main, so
       # a pull request checks it against Play's limits here instead.
       - name: Icon sources match their generator
@@ -436,3 +441,128 @@ jobs:
             exit 0
           fi
           node scripts/publish-play-listing.mjs
+  # A push to main deploys what it changed: the Firestore rules and indexes,
+  # the parser (built on Cloud Build, then a new Cloud Run revision) and the
+  # forwarding Worker on Cloudflare (README "Continuous deployment"). Google
+  # Cloud is reached through Workload Identity Federation, so no key is
+  # stored; deploy/github-deploy.sh sets it up. Like Publish, a part whose
+  # variables or secret aren't set yet warns and is skipped rather than
+  # failing the job. The web app deploys itself: App Hosting builds main.
+  deploy:
+    name: Deploy
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [check]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    # One deploy at a time, so an older commit's revision never lands after
+    # a newer one's. The group holds one pending job, so a third
+    # back-to-back push evicts the second's; each part measures from the
+    # commit it was last deployed at (its deployed/<part> tag), not from
+    # this push's `before`, so the evicted push's changes ride along with
+    # the next one instead of being lost.
+    concurrency:
+      group: deploy-main
+      cancel-in-progress: false
+    permissions:
+      # To move the deployed/<part> tags (the last step).
+      contents: write
+      id-token: write
+    env:
+      GCP_PROJECT: ${{ vars.GCP_PROJECT }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      GCP_DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      GCP_SOURCE_BUCKET: ${{ vars.GCP_SOURCE_BUCKET }}
+      PARSER_IMAGE: ${{ vars.PARSER_IMAGE }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      PARSER_URL: ${{ vars.PARSER_URL }}
+      HAS_CLOUDFLARE_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # What to deploy, part by part: each part's deployed/<part> tag marks
+      # the commit it was last deployed at (or found unchanged at), and the
+      # part is due when its files changed since, when it has no tag yet, or
+      # when its tag isn't behind this push (a force push), since what is
+      # live then can't be told from history; every deploy here is safe to
+      # repeat. A part due but not configured is skipped with a warning and
+      # its tag stays put, so it deploys once its settings are set. A run
+      # whose push main has since moved past deploys nothing and moves no
+      # tag: its check can finish after a newer push's, and deploying its
+      # older checkout would roll back the newer deploy; the newer run
+      # measures from the tags, so this push's changes go out with it.
+      - name: Choose what to deploy
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AFTER_SHA: ${{ github.sha }}
+        run: scripts/deploy-plan.sh
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3.0.0
+        if: steps.plan.outputs.firestore == 'true' || steps.plan.outputs.parser == 'true'
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db  # v3.0.1
+        if: steps.plan.outputs.parser == 'true'
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320  # v4.4.0
+        if: steps.plan.outputs.firestore == 'true' || steps.plan.outputs.worker == 'true'
+      # No dependency cache: a job holding deploy credentials restores
+      # nothing another job could have written.
+      - uses: actions/setup-node@v5
+        if: steps.plan.outputs.firestore == 'true' || steps.plan.outputs.worker == 'true'
+        with:
+          node-version-file: .node-version
+      # firebase-tools is the rules package's devDependency, and finds the
+      # credentials the auth step left (GOOGLE_APPLICATION_CREDENTIALS).
+      - name: Deploy the Firestore rules and indexes
+        if: steps.plan.outputs.firestore == 'true'
+        working-directory: packages/rules
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile --filter @travelmo/rules
+          pnpm exec firebase deploy --only firestore --project "$GCP_PROJECT" --config ../../firebase.json --non-interactive
+          echo "Deployed the Firestore rules and indexes at $GITHUB_SHA."
+      # The image is tagged with the commit. The deploy names only the image,
+      # so the new revision keeps the service's environment variables,
+      # secrets, service account and other settings: gcloud run deploy
+      # changes only what its flags name. Cloud Run moves traffic only once
+      # the new revision is ready; until then the previous one serves.
+      - name: Build and deploy the parser
+        if: steps.plan.outputs.parser == 'true'
+        run: |
+          set -euo pipefail
+          image="$PARSER_IMAGE:$GITHUB_SHA"
+          bucket="${GCP_SOURCE_BUCKET:-$GCP_PROJECT-deploy-source}"
+          echo "Building $image on Cloud Build."
+          gcloud builds submit . --project="$GCP_PROJECT" --config=apps/parser/cloudbuild.yaml \
+            --substitutions="_IMAGE=$image" --gcs-source-staging-dir="gs://$bucket/source"
+          echo "Deploying $image to Cloud Run service parser in $GCP_REGION."
+          gcloud run deploy parser --project="$GCP_PROJECT" --region="$GCP_REGION" --image="$image" --quiet
+          echo "Deployed the parser at $GITHUB_SHA."
+      # wrangler.toml commits a placeholder PARSER_URL, and a deploy replaces
+      # every [vars] value, so the real URL comes from the PARSER_URL
+      # variable. INBOUND_SECRET is a Worker secret, which deploys keep.
+      - name: Deploy the forwarding Worker
+        if: steps.plan.outputs.worker == 'true'
+        working-directory: apps/inbound
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WRANGLER_SEND_METRICS: "false"
+        run: |
+          set -euo pipefail
+          pnpm dlx wrangler@4 deploy --var "PARSER_URL:$PARSER_URL"
+          echo "Deployed the forwarding Worker at $GITHUB_SHA."
+      # Moves each deployed (or found unchanged) part's tag to this push, so
+      # the next run measures from here. Only when every step above
+      # succeeded: a part left behind by a failure deploys again next time.
+      - name: Record what is deployed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AFTER_SHA: ${{ github.sha }}
+          RECORD_FIRESTORE: ${{ steps.plan.outputs.record_firestore }}
+          RECORD_PARSER: ${{ steps.plan.outputs.record_parser }}
+          RECORD_WORKER: ${{ steps.plan.outputs.record_worker }}
+        run: scripts/deploy-record.sh

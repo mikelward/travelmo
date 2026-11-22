@@ -22,7 +22,7 @@ apps/inbound    Cloudflare Email Worker: relays mail for the forwarding domain t
 packages/core   Shared zod schemas, Firestore paths, trip grouping, formatting, airport tables, travel reports, TripIt mapping
 packages/rules  Firestore security-rules tests (run against the emulator)
 firestore.rules Who may read and write what
-deploy/         gcloud scripts for the Pub/Sub subscription and the alerting policies
+deploy/         gcloud scripts for Pub/Sub, the daily jobs, alerting and CI deploys
 design/android  Clickable Material 3 mockups of the Android app (also a Design canvas)
 ```
 
@@ -396,6 +396,66 @@ One Google Cloud project holds everything.
    a message to a retired or unknown address, or one over 2 MB, bounces to
    the sender with the reason. Email Routing and the Worker are free at
    this volume on Cloudflare's free plan; attachments are not read.
+
+### Continuous deployment
+
+Once the steps above have been done by hand, CI's Deploy job
+(`.github/workflows/ci.yml`) keeps them current: after `check` passes on a
+push to `main`, it deploys each part whose files changed since it was last
+deployed, which a `deployed/<part>` tag marks (a part with no tag yet, or
+whose tag a force push left off `main`, deploys in full). A run that `main`
+has already moved past deploys nothing; the newer run carries its changes:
+
+| Changed | Deployed |
+|---|---|
+| `firestore.rules`, `firestore.indexes.json`, `firebase.json` | `firebase deploy --only firestore` |
+| `apps/parser/`, `packages/core/`, the lockfile or the root build files | a Cloud Build image tagged with the commit, then a new revision of the `parser` Cloud Run service |
+| `apps/inbound/` | the forwarding Worker, with `wrangler deploy` |
+
+The web app needs nothing here: App Hosting builds `main` itself. The parser's
+deploy names only the image, so the service keeps its environment variables,
+secrets and service account; change those with `gcloud run services update`.
+
+Set it up once:
+
+1. `PROJECT=… REGION=<the parser's region> REPO=<owner>/<name>
+   PARSER_SA=<the parser's service account> deploy/github-deploy.sh`
+   creates a `github-deployer` service account and a Workload Identity pool
+   whose GitHub provider accepts only this repository's `ci.yml` running on
+   `main`, so no key is stored anywhere. The deployer gets only what the
+   deploys need: starting Cloud Builds (into a bucket of its own,
+   `<project>-deploy-source`, that deletes uploads after a week) and reading
+   their logs, running them as the project's default Cloud Build service
+   account, reading the parser's image repository,
+   deploying Cloud Run revisions as the parser's service account and no
+   other, and deploying Firestore rules and indexes. A run that `main` has
+   moved past deploys nothing, so a slow older run never rolls back a newer
+   deploy, and `.gcloudignore` keeps the job's credentials file out of the
+   build upload. It prints the
+   values below. Rerun it to change a setting.
+2. In the repository's `production` environment (Settings, Environments),
+   add the variables `GCP_PROJECT`, `GCP_REGION`,
+   `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT` and
+   `PARSER_IMAGE` (and `GCP_SOURCE_BUCKET` if the script was given another
+   bucket) as printed. For the Worker, add the variables
+   `CLOUDFLARE_ACCOUNT_ID` and `PARSER_URL` (the parser's URL, without a
+   trailing slash: the committed `wrangler.toml` holds only a placeholder,
+   and every deploy replaces its `[vars]`), and the secret
+   `CLOUDFLARE_API_TOKEN`, a token made from the "Edit Cloudflare Workers"
+   template and limited to that account.
+
+A part whose settings are missing is skipped with a warning rather than
+failing the job, and its tag stays put, so the first push after its
+settings are set deploys it. A failed deploy fails the job and moves no
+tag, so the next push deploys that part again; meanwhile Cloud Run keeps serving the
+previous revision, which it replaces only once the new one is ready, and the
+Worker and the rules stay as they were.
+
+Cost: the parser's build runs on Cloud Build's default `e2-standard-2`
+machine, whose monthly free allowance of build-minutes (2,500 at the time of
+writing) covers a few minutes per change many times over. Each build adds an
+image to Artifact Registry, so keep the cleanup policy from step 3. The
+Firestore and Worker deploys are free.
 
 ## Costs
 

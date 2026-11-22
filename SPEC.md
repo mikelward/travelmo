@@ -1132,7 +1132,8 @@ are free; the daily job is the fourth Cloud Scheduler job, about ten cents
 a month. Forwarding addresses ride Cloudflare Email Routing (free, unlimited
 inbound) and one Email Worker (free plan: 100,000 requests a day), with
 the model cost of a Gmail import per forwarded email. The rules tests and CI run
-on GitHub-hosted runners.
+on GitHub-hosted runners; CI's deploys of the parser build on Cloud Build
+within its monthly free build-minutes.
 
 ## Android app
 
