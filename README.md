@@ -55,15 +55,17 @@ fetched), and `pnpm --filter @travelmo/web worldmap` the reports page's
 world map from Natural Earth (public domain) packaged in `world-atlas`; the
 results are committed, so a normal build needs nothing.
 
-The install icons and the Play listing icon are PNGs rendered from SVGs and
-committed; after changing `apps/web/src/app/icon.svg`, `apps/web/icons/*.svg`
-or `apps/android/play/icon.svg`, rerun `pnpm --filter @travelmo/web icons`.
-The mark is a white paper plane with a dotted trail on orange (`#F26B1D`):
-three dots on the web, launcher and 512 px Play icons
-(`apps/android/play/icon-512.png`), two bigger ones on the notification
-icon. The Android vectors (`res/drawable/ic_launcher_foreground.xml`,
-`ic_notification.xml`) carry the same geometry by hand, so change them
-together.
+The mark is a white paper plane with a trail of three curved dashes on
+orange (`#F26B1D`), on the web, the launcher and the 512 px Play icon
+(`apps/android/play/icon-512.png`), and one curved dash on the
+notification icon. `scripts/icon-sources.mjs` holds its geometry and writes
+every source from it: the web SVGs, the Play SVG, the Android vectors
+(`res/drawable/ic_launcher_foreground.xml`, `ic_notification.xml`) and the
+web's inline `components/Logo.tsx`; CI fails when they differ from what it
+writes. After changing it, run `node scripts/icon-sources.mjs`, then
+`pnpm --filter @travelmo/web icons` for the committed PNGs and
+`pnpm --filter @travelmo/web play-graphics` for the listing's feature
+graphic.
 
 The web app's `build` script bundles the service worker (`src/sw.ts` to
 `public/sw.js`) before `next build`; the worker registers in production
