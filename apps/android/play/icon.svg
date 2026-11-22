@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- The Play listing icon, 512 px full bleed: Play rounds the corners. The
+       mark fills the same safe zone as the launcher icon. -->
+  <rect width="512" height="512" fill="#F26B1D"/>
+  <g transform="translate(-91.547 -53.407) scale(1.15053)">
+    <path d="M186.8 247.6 430 126 357 344.9 308.4 259.8Z" fill="none" stroke="#fff" stroke-width="24.3" stroke-linejoin="round"/>
+    <path d="M308.4 259.8 430 126" stroke="#fff" stroke-width="24.3" stroke-linecap="round"/>
+    <circle cx="178" cy="408" r="16" fill="#fff"/>
+    <circle cx="219.5" cy="370.4" r="16" fill="#fff"/>
+    <circle cx="259.3" cy="331" r="16" fill="#fff"/>
+  </g>
+</svg>

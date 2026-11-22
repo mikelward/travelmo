@@ -1,4 +1,4 @@
-// Renders the PNG icons installs need from the SVG sources, with the same
+// Renders the PNG icons installs and the Play listing need from the SVG sources, with the same
 // Chromium the end-to-end tests use: `pnpm --filter @travelmo/web icons`.
 // The PNGs are committed; rerun this after changing an SVG.
 import { chromium } from "@playwright/test";
@@ -12,6 +12,7 @@ const outputs = [
   { source: "src/app/icon.svg", out: "public/icons/icon-512.png", size: 512 },
   { source: "icons/maskable.svg", out: "public/icons/maskable-512.png", size: 512 },
   { source: "icons/apple.svg", out: "src/app/apple-icon.png", size: 180 },
+  { source: "../android/play/icon.svg", out: "../android/play/icon-512.png", size: 512 },
 ];
 
 const browser = await chromium.launch();
