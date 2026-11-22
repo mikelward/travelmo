@@ -170,6 +170,8 @@
       GitHub prerelease per versionCode through the shared
       `scripts/publish-github-release.sh`, the Play internal track once a
       service account exists).
+- [x] App icon: a white paper plane with a dotted trail on orange, on the
+      web, the Android launcher and notification, and a 512 px Play icon.
 - [ ] Android app, maintainer steps: register the Android app in the Firebase
       project (package `app.travelmo` and `app.travelmo.debug`, the signing
       SHA-1, Google sign-in enabled) and keep `google-services.json` out of

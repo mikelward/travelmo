@@ -1,5 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#171717"/>
-  <path d="M96 288 416 128 320 416 256 304Z" fill="none" stroke="#fff" stroke-width="28" stroke-linejoin="round"/>
-  <path d="M256 304 416 128" stroke="#fff" stroke-width="28" stroke-linecap="round"/>
+  <!-- The launcher mark: a paper plane with three dots of trail, on orange. -->
+  <rect width="512" height="512" rx="96" fill="#F26B1D"/>
+  <g transform="translate(-34.281 -2.425) scale(0.96096)">
+    <path d="M186.8 247.6 430 126 357 344.9 308.4 259.8Z" fill="none" stroke="#fff" stroke-width="24.3" stroke-linejoin="round"/>
+    <path d="M308.4 259.8 430 126" stroke="#fff" stroke-width="24.3" stroke-linecap="round"/>
+    <circle cx="178" cy="408" r="16" fill="#fff"/>
+    <circle cx="219.5" cy="370.4" r="16" fill="#fff"/>
+    <circle cx="259.3" cy="331" r="16" fill="#fff"/>
+  </g>
 </svg>

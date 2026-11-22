@@ -1,12 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The status-bar icon for a reminder: Material Symbols "flight" (Apache 2.0),
-     white on transparent as the system requires. -->
+<!-- The status-bar icon: the launcher's paper plane with two dots of trail,
+     in the 20dp live area, white on transparent as the system requires. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M21,16v-2l-8,-5V3.5c0,-0.83 -0.67,-1.5 -1.5,-1.5S10,2.67 10,3.5V9l-8,5v2l8,-2.5V19l-2,1.5V22l3.5,-1 3.5,1v-1.5L13,19v-5.5l8,2.5z" />
+    <group
+        android:scaleX="0.07088"
+        android:scaleY="0.07088"
+        android:translateX="-9.861"
+        android:translateY="-6.07">
+        <path
+            android:pathData="M186.8 247.6 430 126 357 344.9 308.4 259.8Z"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="24.3"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M308.4 259.8 430 126"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="24.3"
+            android:strokeLineCap="round" />
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M194,376 a20,20 0 1,0 40,0 a20,20 0 1,0 -40,0 Z" />
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M234.3,337.2 a20,20 0 1,0 40,0 a20,20 0 1,0 -40,0 Z" />
+    </group>
 </vector>

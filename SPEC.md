@@ -380,7 +380,8 @@ SVG icon and PNGs at 192 and 512 px plus a maskable 512 px one for Android
 launchers; iOS takes `app/apple-icon.png` (180 px, full bleed) and the
 `appleWebApp` metadata, opening without Safari's bars. `scripts/icons.mjs`
 renders the PNGs from the SVGs in `apps/web/icons` with Playwright's
-Chromium; they are committed. Settings shows an Install button where the
+Chromium; they are committed, as is the Play listing's 512 px icon
+(`apps/android/play/icon.svg`). Settings shows an Install button where the
 browser offers its install prompt (`beforeinstallprompt`), and on iPhone and
 iPad, where Safari has none, says how to add it to the Home Screen; neither
 shows once Travelmo runs installed.
