@@ -99,7 +99,7 @@ fun CalendarScreen(
                 if (inMonth.isEmpty()) {
                     Text(
                         stringResource(R.string.no_trips_in, monthLabel(month)),
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 16.dp),
                     )
@@ -117,7 +117,7 @@ private fun MonthGrid(month: String, trips: List<Trip>, today: String, uid: Stri
             for (day in weekdays) {
                 Text(
                     day.uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.weight(1f),
@@ -144,7 +144,7 @@ private fun Week(week: List<String>, trips: List<Trip>, month: String, today: St
                 Box(modifier = Modifier.weight(1f).padding(start = 6.dp, top = 6.dp, bottom = 2.dp)) {
                     Text(
                         date.substring(8, 10).trimStart('0'),
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
                         fontWeight = if (isToday) FontWeight.Medium else null,
                         color = when {
                             isToday -> MaterialTheme.colorScheme.onPrimary
@@ -184,7 +184,7 @@ private fun Bar(bar: TripBar, shared: Boolean, modifier: Modifier = Modifier, on
     val foreground = if (shared) Color.White else MaterialTheme.colorScheme.onPrimary
     Text(
         (if (bar.continuesBefore) "… " else "") + bar.trip.title,
-        style = MaterialTheme.typography.bodySmall,
+        style = MaterialTheme.typography.bodyMedium,
         color = foreground,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,

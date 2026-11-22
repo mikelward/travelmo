@@ -125,7 +125,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.section(title: Int, t
     item(key = "section-$title") {
         Text(
             stringResource(title),
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.padding(top = 8.dp),
         )
     }
@@ -159,9 +159,9 @@ fun TripCard(trip: Trip, shared: Boolean, segments: List<Segment>?, now: String,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            badge?.let { (text, color) -> Text(text.uppercase(), style = MaterialTheme.typography.labelSmall, color = color) }
+            badge?.let { (text, color) -> Text(text.uppercase(), style = MaterialTheme.typography.labelMedium, color = color) }
         }
-        Text(formatDateRange(trip.start, trip.end), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+        Text(formatDateRange(trip.start, trip.end), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
         if (segments != null) StatusLines(segments, now)
     }
 }
@@ -173,7 +173,7 @@ private fun StatusLines(segments: List<Segment>, now: String) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     status.stay?.let { stay ->
         val until = stay.end?.let { " · until ${formatDate(localDate(it))} ${localTime(it)}" } ?: ""
-        Text(stringResource(R.string.staying_at, stay.title) + until, style = MaterialTheme.typography.bodyMedium, color = muted, modifier = Modifier.padding(top = 8.dp))
+        Text(stringResource(R.string.staying_at, stay.title) + until, style = MaterialTheme.typography.bodyLarge, color = muted, modifier = Modifier.padding(top = 8.dp))
     }
     status.next?.let { event ->
         val soon = relativeTime(now, event.at)?.let { " · $it" } ?: ""
@@ -185,7 +185,7 @@ private fun StatusLines(segments: List<Segment>, now: String) {
                 append(" ${event.segment.title}")
                 withStyle(SpanStyle(color = muted)) { append(" · ${formatDate(localDate(event.at))} ${localTime(event.at)}$soon") }
             },
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyLarge,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 8.dp),
@@ -194,7 +194,7 @@ private fun StatusLines(segments: List<Segment>, now: String) {
     status.checkIn?.let { checkIn ->
         Text(
             checkInLine(checkIn),
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyLarge,
             color = if (checkIn.open) MaterialTheme.colorScheme.tertiary else muted,
             modifier = Modifier.padding(top = 4.dp),
         )
@@ -217,7 +217,7 @@ private fun ListWarnings(warnings: List<ListWarning>, today: String, onOpenTrip:
         for (w in warnings) {
             Text(
                 warningText(w.warning, today, w.trip.title),
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyLarge,
                 color = if (w.warning.warning.`when` == WarningWhen.BEFORE) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary,
                 modifier = Modifier.fillMaxWidth().clickable { onOpenTrip(w.trip.id) },
             )
