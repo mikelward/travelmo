@@ -1,3 +1,5 @@
+// First, so every module below reads the trimmed environment.
+import "./envTrim";
 import { serve } from "@hono/node-server";
 import { GoogleGenAI } from "@google/genai";
 import {
