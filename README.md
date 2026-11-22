@@ -275,6 +275,9 @@ One Google Cloud project holds everything.
    `GOOGLE_OAUTH_REDIRECT_URL`, `INTERNAL_AUDIENCE` (the service URL),
    `INTERNAL_CALLERS`, and either `GEMINI_API_KEY` or Vertex AI access through
    the service account (`GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`).
+   Make the key in AI Studio on a project with billing on: the free tier's
+   terms let Google use prompts to improve its products, and the privacy
+   policy (`/privacy`) promises email is never used to train AI models.
    `GEMINI_MODEL` defaults to `gemini-flash-lite-latest` and
    `GEMINI_EMBEDDING_MODEL` to `gemini-embedding-001` (the similarity
    pre-filter). `GEOCODING_API_KEY` (from Secret Manager; an API key

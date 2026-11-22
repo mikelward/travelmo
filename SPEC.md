@@ -375,6 +375,11 @@ and `navigator.onLine`, so a page loaded while already offline shows it too.
 The worker registers only in production builds, where assets are hashed, so
 the end-to-end tests run against `next build && next start`.
 
+`/privacy` is the privacy policy the Play listing and Google's OAuth
+consent screen link to, readable signed out and linked from every page's
+footer; it changes in the same pull request as any change to what is
+collected or who receives it.
+
 Installing: the manifest (`app/manifest.ts`) gives a standalone window, the
 SVG icon and PNGs at 192 and 512 px plus a maskable 512 px one for Android
 launchers; iOS takes `app/apple-icon.png` (180 px, full bleed) and the
