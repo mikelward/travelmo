@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The release resource shrinker keeps these: the app and Firebase look up the
+     google-services plugin's strings by name, which the shrinker can't always see. Missing on a build without google-services.json; that's fine. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@string/default_web_client_id,@string/google_app_id" />

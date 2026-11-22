@@ -125,9 +125,25 @@ jobs:
           retention-days: 7
       # The only R8 coverage: debug builds never minify. On a push to main
       # the release job builds the bundle instead, so this is for pull requests.
+      # It builds with a placeholder google-services.json, as a release does
+      # with the real one, and checks that resource shrinking kept the web
+      # client ID that sign-in looks up by name (v150 shipped without it).
       - name: Release build
         if: github.event_name != 'push'
-        run: ./gradlew :app:assembleRelease
+        run: |
+          cp ci/google-services.fixture.json app/google-services.json
+          ./gradlew :app:assembleRelease
+      - name: Check the release build can sign in
+        if: github.event_name != 'push'
+        run: |
+          aapt2=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)aapt2
+          dump=$("$aapt2" dump resources app/build/outputs/apk/release/app-release-unsigned.apk)
+          for name in google_app_id default_web_client_id; do
+            if ! grep -q "string/$name" <<<"$dump"; then
+              echo "::error::The release APK has no $name, so it couldn't sign in. See app/src/main/res/raw/keep.xml."
+              exit 1
+            fi
+          done
   # The app's instrumented tests (app/src/androidTest): FirestoreTrips'
   # writes against the Firestore emulator with the real rules, on an Android
   # emulator the runner boots with hardware acceleration. Its own job, so the
@@ -259,6 +275,13 @@ jobs:
             echo "::error::GOOGLE_SERVICES_JSON is set but is not a google-services.json (no project_info or client)."
             exit 1
           fi
+          # Sign-in needs the web OAuth client (client_type 3), which the plugin
+          # turns into default_web_client_id; a JSON downloaded before Google
+          # sign-in was enabled lacks it, and the app then can't sign in.
+          if ! jq -e '[.client[] | select(.client_info.android_client_info.package_name == "app.travelmo") | .oauth_client[]? | select(.client_type == 3)] | length > 0' apps/android/app/google-services.json >/dev/null; then
+            echo "::error::GOOGLE_SERVICES_JSON has no web OAuth client for app.travelmo, so the app couldn't sign in. Enable Google sign-in in Firebase Authentication, download google-services.json again and replace the secret (README 'Release')."
+            exit 1
+          fi
       - name: Build the release bundle
         if: env.RELEASE_KEYSTORE_FILE != ''
         working-directory: apps/android
@@ -267,6 +290,16 @@ jobs:
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: ./gradlew :app:bundleRelease
+      - name: Check the bundle can sign in
+        if: env.RELEASE_KEYSTORE_FILE != ''
+        run: |
+          unzip -p apps/android/app/build/outputs/bundle/release/app-release.aab base/resources.pb > "$RUNNER_TEMP/resources.pb"
+          for name in google_app_id default_web_client_id; do
+            if ! grep -aq "$name" "$RUNNER_TEMP/resources.pb"; then
+              echo "::error::The release bundle has no $name, so it couldn't sign in."
+              exit 1
+            fi
+          done
       - uses: actions/upload-artifact@v4
         if: env.RELEASE_KEYSTORE_FILE != ''
         with:

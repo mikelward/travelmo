@@ -5,7 +5,7 @@
     <!-- Sign-in. The strings follow the web app (apps/web) exactly. -->
     <string name="sign_in_tagline">Your trips in one place, imported from your inbox.</string>
     <string name="sign_in_google">Sign in with Google</string>
-    <string name="sign_in_unavailable">This build has no Firebase project behind it: add app/google-services.json and build again.</string>
+    <string name="sign_in_unavailable">Sign-in isn’t set up in this build.</string>
     <string name="sign_in_no_account">No Google account on this device to sign in with.</string>
     <string name="sign_in_failed">Sign-in failed. Try again.</string>
 
