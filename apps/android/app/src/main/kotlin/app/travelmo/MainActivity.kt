@@ -32,6 +32,7 @@ import app.travelmo.ui.HomeNavigationBar
 import app.travelmo.ui.HomeTab
 import app.travelmo.ui.LicensesHost
 import app.travelmo.ui.LocalReportBug
+import app.travelmo.ui.LocalUpdateAvailable
 import app.travelmo.ui.ProfileScreen
 import app.travelmo.ui.ReportsScreen
 import app.travelmo.ui.SettingsScreen
@@ -40,6 +41,7 @@ import app.travelmo.ui.TripDetailScreen
 import app.travelmo.ui.TripListScreen
 import app.travelmo.ui.TripsViewModel
 import app.travelmo.ui.theme.TravelmoTheme
+import app.travelmo.update.PlayUpdateChecker
 import com.mikelward.androidlog.android.ShareOutcome
 import kotlinx.serialization.Serializable
 
@@ -67,6 +69,11 @@ class MainActivity : ComponentActivity() {
     // kept across a recreation.
     private var licensesOpen by mutableStateOf(false)
 
+    // Whether Google Play has a newer version, for the menu's update dot;
+    // rechecked on each foreground (onResume). Always false in debug builds.
+    private var updateAvailable by mutableStateOf(false)
+    private val playUpdateChecker by lazy { PlayUpdateChecker(application) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -79,7 +86,7 @@ class MainActivity : ComponentActivity() {
                 val signedIn = user
                 val isSignedIn = signedIn != null
                 val reportBug: suspend (Context) -> ShareOutcome = remember(isSignedIn) { { DebugLogging.share(it, signedIn = isSignedIn) } }
-                CompositionLocalProvider(LocalReportBug provides reportBug) {
+                CompositionLocalProvider(LocalReportBug provides reportBug, LocalUpdateAvailable provides updateAvailable) {
                     LicensesHost(
                         open = licensesOpen,
                         onOpenChange = { licensesOpen = it },
@@ -94,6 +101,13 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // On every foreground: the first launch (onResume follows onCreate),
+        // and a return from the Play listing or the background.
+        playUpdateChecker.checkForUpdate { updateAvailable = it }
     }
 
     // singleTask: a tap while the app is open arrives here, not in onCreate.

@@ -2285,6 +2285,21 @@
             ]
         },
         {
+            "uniqueId": "com.google.android.play:app-update",
+            "artifactVersion": "2.1.0",
+            "name": "app-update",
+            "description": "",
+            "developers": [
+                
+            ],
+            "licenses": [
+                "PCSDKToS"
+            ],
+            "funding": [
+                
+            ]
+        },
+        {
             "uniqueId": "com.google.android.play:core-common",
             "artifactVersion": "2.0.3",
             "name": "core-common",
