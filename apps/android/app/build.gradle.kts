@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.roborazzi)
+    alias(libs.plugins.aboutlibraries)
 }
 
 // Firebase's plugin is applied only when app/google-services.json is present
@@ -206,6 +207,81 @@ kotlin {
     }
 }
 
+// The open-source licenses export is committed, as in the sibling apps, and
+// regenerated with `./gradlew :app:exportBundledLicenses` (below), which
+// filters it to what the release APK bundles; CI regenerates it and fails on
+// a diff. The Licenses screen reads R.raw.aboutlibraries.
+aboutLibraries {
+    // The release variant's runtime classpath, so test and debug-only
+    // artifacts (JUnit, Robolectric, Roborazzi, Compose tooling) stay out;
+    // includePlatform = false drops BOM POMs that ship no artifact.
+    collect {
+        filterVariants.add("release")
+        includePlatform = false
+        // What the APK bundles that isn't a Maven dependency: the Fira Sans
+        // font (res/font, fonts/FiraSans-OFL.txt), one JSON per item under
+        // aboutlibraries/libraries.
+        configPath = file("aboutlibraries")
+    }
+    export {
+        outputFile = file("src/main/res/raw/aboutlibraries.json")
+        prettyPrint = true
+        // The full license text comes from a network-fetched SPDX list whose
+        // wording varies, which would make CI's regenerate-and-diff flaky.
+        // The screen shows each license's name and links to its text.
+        excludeFields.add("License.content")
+    }
+}
+
+// The plugin also exports, unfiltered, into each variant's generated
+// resources (prepareLibraryDefinitions<Variant>), and that copy would replace
+// the committed one in the APK. The committed, filtered export is the list.
+tasks.matching { it.name.startsWith("prepareLibraryDefinitions") }.configureEach { enabled = false }
+
+// The plugin walks the dependency graph, so its export also lists nodes that
+// resolve to no bundled artifact, and org.jetbrains.compose modules that
+// alias the androidx ones on Android. This keeps only coordinates on the
+// release runtime classpath: what the APK bundles. A Kotlin Multiplatform
+// library is listed by its root coordinate (androidx.compose.ui:ui for the
+// bundled ui-android).
+@Suppress("UNCHECKED_CAST")
+tasks.register("exportBundledLicenses") {
+    description = "Exports open-source attributions filtered to the release APK's bundled artifacts."
+    group = "build"
+    dependsOn("exportLibraryDefinitions")
+    val licensesFile = file("src/main/res/raw/aboutlibraries.json")
+    // The hand-written entries (configPath above) are bundled but on no
+    // classpath, so they're kept by name.
+    val customIds = fileTree("aboutlibraries/libraries") { include("*.json") }.files
+        .map { (groovy.json.JsonSlurper().parse(it) as Map<String, Any?>)["uniqueId"] as String }
+        .toSet()
+    // A provider of the resolved artifacts, not the configuration itself, so
+    // the task works with the configuration cache (gradle.properties).
+    val releaseArtifacts = configurations.named("releaseRuntimeClasspath")
+        .flatMap { it.incoming.artifactView { lenient(true) }.artifacts.resolvedArtifacts }
+    doLast {
+        val bundled = releaseArtifacts.get()
+            .mapNotNull { it.id.componentIdentifier as? org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+            .map { "${it.moduleIdentifier.group}:${it.moduleIdentifier.name}" }
+            .flatMap { listOf(it, it.removeSuffix("-android"), it.removeSuffix("-jvm")) }
+            .toSet() + customIds
+        val root = groovy.json.JsonSlurper().parse(licensesFile) as MutableMap<String, Any?>
+        val libraries = root["libraries"] as List<Map<String, Any?>>
+        val ids = libraries.map { it["uniqueId"] as String }.filter { it in bundled }.toSet()
+        // An org.jetbrains.compose module that redirects to its androidx
+        // namesake is that library under a second name; the androidx row stays.
+        val kept = libraries.filter {
+            val id = it["uniqueId"] as String
+            id in bundled && !(id.startsWith("org.jetbrains.compose.") && id.replaceFirst("org.jetbrains.compose.", "androidx.compose.") in ids)
+        }
+        root["libraries"] = kept
+        // Drop licenses no kept library uses.
+        val used = kept.flatMap { (it["licenses"] as? List<String>).orEmpty() }.toSet()
+        (root["licenses"] as? MutableMap<String, Any?>)?.keys?.retainAll(used)
+        licensesFile.writeText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(root)) + "\n")
+    }
+}
+
 val checkReleaseVersionDerivation = tasks.register("checkReleaseVersionDerivation") {
     description = "Fails a release build whose version was not derived from real git history."
     val problems = versionProblems.toList() + (if (fixedTestVersion) listOf("-PtravelmoFixedVersion is set") else emptyList())
@@ -244,6 +320,8 @@ dependencies {
     implementation(libs.firebase.messaging)
     implementation(libs.androidlog.logging.core)
     implementation(libs.androidlog.logging.android)
+    // Reads the committed res/raw/aboutlibraries.json for the Licenses screen.
+    implementation(libs.aboutlibraries.compose.m3)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation(platform(libs.junit.bom))

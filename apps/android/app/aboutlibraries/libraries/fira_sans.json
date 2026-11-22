@@ -1,0 +1,14 @@
+{
+  "uniqueId": "fonts:fira-sans",
+  "name": "Fira Sans",
+  "description": "The typeface of the app's name.",
+  "website": "https://github.com/mozilla/Fira",
+  "developers": [
+    {
+      "name": "The Mozilla Foundation and Telefonica S.A."
+    }
+  ],
+  "licenses": [
+    "OFL-1.1"
+  ]
+}

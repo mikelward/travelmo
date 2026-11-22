@@ -94,3 +94,10 @@ jobs:
       no-cooldown-for: |
         com.mikelward.androidlog:logging-core
         com.mikelward.androidlog:logging-android
+      # The licenses export follows the dependency set, so the batch
+      # regenerates it and commits it with the catalog; otherwise CI's
+      # drift check would fail every bump, as in the sibling apps.
+      regenerate: |
+        cd apps/android && ./gradlew :app:exportBundledLicenses --rerun
+      regenerated-files: |
+        apps/android/app/src/main/res/raw/aboutlibraries.json

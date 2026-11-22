@@ -30,6 +30,7 @@ import app.travelmo.ui.BookingFormScreen
 import app.travelmo.ui.CalendarScreen
 import app.travelmo.ui.HomeNavigationBar
 import app.travelmo.ui.HomeTab
+import app.travelmo.ui.LicensesHost
 import app.travelmo.ui.LocalReportBug
 import app.travelmo.ui.ProfileScreen
 import app.travelmo.ui.ReportsScreen
@@ -62,10 +63,15 @@ class MainActivity : ComponentActivity() {
     // it; kept across a recreation (a rotation on the sign-in screen, say).
     private var requestedTrip by mutableStateOf<String?>(null)
 
+    // Whether the Licenses screen is up in place of the app (LicensesHost);
+    // kept across a recreation.
+    private var licensesOpen by mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         requestedTrip = if (savedInstanceState == null) tripFrom(intent) else savedInstanceState.getString(STATE_REQUESTED_TRIP)
+        licensesOpen = savedInstanceState?.getBoolean(STATE_LICENSES_OPEN) ?: false
         val app = application as TravelmoApplication
         setContent {
             TravelmoTheme {
@@ -74,10 +80,16 @@ class MainActivity : ComponentActivity() {
                 val isSignedIn = signedIn != null
                 val reportBug: suspend (Context) -> ShareOutcome = remember(isSignedIn) { { DebugLogging.share(it, signedIn = isSignedIn) } }
                 CompositionLocalProvider(LocalReportBug provides reportBug) {
-                    if (signedIn == null) {
-                        SignInScreen(account = app.account)
-                    } else {
-                        SignedInApp(app, signedIn, requestedTrip, onTripOpened = { requestedTrip = null })
+                    LicensesHost(
+                        open = licensesOpen,
+                        onOpenChange = { licensesOpen = it },
+                        appKey = if (signedIn == null) "signedOut" else "signedIn:${signedIn.uid}",
+                    ) {
+                        if (signedIn == null) {
+                            SignInScreen(account = app.account)
+                        } else {
+                            SignedInApp(app, signedIn, requestedTrip, onTripOpened = { requestedTrip = null })
+                        }
                     }
                 }
             }
@@ -87,12 +99,17 @@ class MainActivity : ComponentActivity() {
     // singleTask: a tap while the app is open arrives here, not in onCreate.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        tripFrom(intent)?.let { requestedTrip = it }
+        tripFrom(intent)?.let {
+            requestedTrip = it
+            // The trip, not the licenses, is what the tap asked for.
+            licensesOpen = false
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putString(STATE_REQUESTED_TRIP, requestedTrip)
+        outState.putBoolean(STATE_LICENSES_OPEN, licensesOpen)
     }
 
     // A tapped reminder carries the trip's URL (ReminderNotifications.show).
@@ -100,6 +117,7 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val STATE_REQUESTED_TRIP = "requestedTrip"
+        const val STATE_LICENSES_OPEN = "licensesOpen"
     }
 }
 
