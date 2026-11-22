@@ -115,8 +115,9 @@ export type Trip = z.infer<typeof Trip>;
 
 // What the web client may see about a Gmail connection; the refresh token
 // stays in the server-only GmailState document.
-// How far a reading of the whole mailbox has got: it runs in batches, each
-// carrying on from Gmail's page cursor, so it survives closing the page.
+// How far a reading of the whole mailbox has got: it runs on the server in
+// batches, each carrying on from Gmail's page cursor, so it survives closing
+// the page.
 export const BackfillProgress = z.object({
   cursor: z.string().optional(),
   // The last message read on the cursor's page, when a batch ran short of
@@ -128,6 +129,23 @@ export const BackfillProgress = z.object({
   failed: z.number().int().nonnegative().optional(),
   done: z.boolean(),
   updatedAt: isoDateTime,
+  // The reading under way: each start gets a new id, and each batch of it a
+  // step, so a queued batch of an older reading, or one delivered twice,
+  // finds its id or step out of date and does nothing.
+  run: z.string().optional(),
+  step: z.number().int().nonnegative().optional(),
+  // The reading carries on by itself after this batch; Stop clears it.
+  running: z.boolean().optional(),
+  // The message for `step` is on the topic. False between saving a batch
+  // and queueing the next, so a redelivered batch can queue it again.
+  queued: z.boolean().optional(),
+  // A batch is being read until then, so no other starts meanwhile.
+  leaseUntil: isoDateTime.optional(),
+  // After a failed batch, no batch reads until then: the email it was
+  // importing stays claimed by it that long.
+  retryAfter: isoDateTime.optional(),
+  // Emails whose import failed in the last batch, which paused the reading.
+  lastFailed: z.number().int().positive().optional(),
 });
 export type BackfillProgress = z.infer<typeof BackfillProgress>;
 

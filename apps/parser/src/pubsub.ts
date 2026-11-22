@@ -25,22 +25,24 @@ export type GmailNotification = {
 
 export class BadPushEnvelope extends Error {}
 
-export function parseGmailPush(body: unknown): GmailNotification {
+// The decoded JSON a push carries, with its Pub/Sub message id and attempt.
+export function parsePush(body: unknown): { data: unknown; pubsubMessageId: string | undefined; deliveryAttempt: number | undefined } {
   const envelope = envelopeSchema.safeParse(body);
   if (!envelope.success) throw new BadPushEnvelope("Not a Pub/Sub push envelope with message data");
-  let decoded: unknown;
+  let data: unknown;
   try {
-    decoded = JSON.parse(Buffer.from(envelope.data.message.data, "base64").toString("utf8"));
+    data = JSON.parse(Buffer.from(envelope.data.message.data, "base64").toString("utf8"));
   } catch {
     throw new BadPushEnvelope("Pub/Sub message data is not base64 JSON");
   }
-  const notification = notificationSchema.safeParse(decoded);
+  return { data, pubsubMessageId: envelope.data.message.messageId, deliveryAttempt: envelope.data.deliveryAttempt };
+}
+
+export function parseGmailPush(body: unknown): GmailNotification {
+  const { data, pubsubMessageId, deliveryAttempt } = parsePush(body);
+  const notification = notificationSchema.safeParse(data);
   if (!notification.success) throw new BadPushEnvelope("Pub/Sub message is not a Gmail notification");
-  return {
-    ...notification.data,
-    pubsubMessageId: envelope.data.message.messageId,
-    deliveryAttempt: envelope.data.deliveryAttempt,
-  };
+  return { ...notification.data, pubsubMessageId, deliveryAttempt };
 }
 
 export type NotificationResult<C> =

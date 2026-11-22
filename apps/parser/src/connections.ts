@@ -113,7 +113,9 @@ function updateLive(db: Firestore, uid: string, emailAddress: string, fields: Pa
     if (generation !== undefined && generationOf(await t.get(db.doc(paths.importLock(uid)))) !== generation) return false;
     if (!snap.exists || GmailState.parse(snap.data()).emailAddress !== emailAddress) return false;
     t.update(stateRef, fields);
-    t.set(db.doc(paths.user(uid)), { gmail: fields }, { merge: true });
+    // Each field replaced whole, as on the state document: a deep merge
+    // would keep nested values the new one no longer has.
+    t.set(db.doc(paths.user(uid)), { gmail: fields }, { mergeFields: Object.keys(fields).map((key) => `gmail.${key}`) });
     return true;
   });
 }
@@ -122,8 +124,27 @@ export function updateWatch(db: Firestore, uid: string, emailAddress: string, wa
   return updateLive(db, uid, emailAddress, { watchExpiration });
 }
 
-export function updateBackfill(db: Firestore, uid: string, emailAddress: string, backfill: BackfillProgress, generation?: number): Promise<boolean> {
-  return updateLive(db, uid, emailAddress, { backfill }, generation);
+// Changes how far the reading of the mailbox has got, as `change` decides
+// from the stored progress and the trips' reset generation, read in the same
+// transaction; undefined when Gmail is not connected.
+export function changeBackfill<R>(
+  db: Firestore,
+  uid: string,
+  change: (current: BackfillProgress | undefined, generation: number) => { next?: BackfillProgress | undefined; result: R },
+): Promise<{ state: GmailState; generation: number; result: R } | undefined> {
+  return db.runTransaction(async (t) => {
+    const stateRef = db.doc(paths.gmailState(uid));
+    const [snap, lock] = await Promise.all([t.get(stateRef), t.get(db.doc(paths.importLock(uid)))]);
+    if (!snap.exists) return undefined;
+    const state = GmailState.parse(snap.data());
+    const generation = generationOf(lock);
+    const { next, result } = change(state.backfill, generation);
+    if (next) {
+      t.update(stateRef, { backfill: next });
+      t.set(db.doc(paths.user(uid)), { gmail: { backfill: next } }, { mergeFields: ["gmail.backfill"] });
+    }
+    return { state, generation, result };
+  });
 }
 
 export function updateHistoryId(db: Firestore, uid: string, emailAddress: string, historyId: string, generation?: number): Promise<boolean> {

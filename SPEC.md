@@ -50,7 +50,8 @@ viewer's zone. Trip bounds are calendar dates.
   {emailAddress, connectedAt, calendars[]}, reminders {email, push}, forward
   {address, createdAt}`. `gmail`, `googleCalendar` and `forward` are
   server-written; `reminders` is the owner's choice; `backfill` is how far a reading of the whole mailbox has
-  got (`cursor, scanned, imported, failed, done, updatedAt`); each calendar
+  got (`cursor, after, scanned, imported, failed, done, updatedAt`, and the
+  reading under way: `run, step, running, queued, leaseUntil, retryAfter, lastFailed`); each calendar
   is `{id, summary, primary, selected, lastReadAt, lastResult, lastError}`.
 - `users/{uid}/pushSubscriptions/{id}` — `endpoint, keys {p256dh, auth},
   createdAt`: one per browser that asked for notifications, written by that
@@ -896,17 +897,63 @@ removes its booking, unless the user edited the booking or another email or
 import has since been matched to it; those stay. A feed that cannot be read
 keeps its bookings and shows why in Settings.
 
-Backfill (`POST /gmail/backfill`, `apps/parser/src/backfill.ts`) runs the
-same path over a Gmail search for booking-like subjects across the whole
-mailbox, in batches of 300 messages. Each batch carries on from Gmail's page
-cursor, which is kept with its progress (`scanned`, `imported`, `done`) on the
-connection, so Settings shows how far it has got and a stopped or closed
-reading picks up where it left off. Settings calls batch after batch until
-the mailbox is done or the user stops, or a batch has failed imports (the
-model or Gmail may be down), which pauses it with the reason shown. A
-finished reading can start over, and starting over tries failed emails again.
-A cursor Gmail no longer accepts restarts the search; messages already read
-are skipped by their claims, so only Gmail reads repeat.
+Backfill (`apps/parser/src/backfill.ts`) runs the same path over a Gmail
+search for booking-like subjects across the whole mailbox, in batches of up
+to 300 messages, each stopping after three minutes. Each batch carries on
+from Gmail's page cursor, which is kept with its progress (`scanned`,
+`imported`, `failed`, `done`) on the connection, where Settings shows how far
+it has got. A cursor Gmail no longer accepts restarts the search; messages
+already read are skipped by their claims, so only Gmail reads repeat.
+
+The reading runs on the server, so closing the page does not stop it
+(`apps/parser/src/backfillChain.ts`):
+
+```
+Settings ─POST /gmail/backfill─▶ new run id, step 0, running ─publish─▶ gmail-backfill
+                                                                            │ push (OIDC)
+         ┌──────────────────────────────────────────────────────────────────┘
+         ▼
+/internal/backfill {uid, run, step}
+   │ run or step not the stored one, or stopped ─▶ 204, dropped
+   │ read already, next never queued ─▶ publish {uid, run, step + 1}, 204
+   │ another copy holds the lease ─▶ 503, Pub/Sub retries later
+   ▼
+take a sixteen-minute lease ─▶ read one batch ─▶ save place, step + 1, lease off
+   │ failed ─▶ lease off, wait fifteen minutes (retryAfter), 5xx, Pub/Sub retries;
+   │           10 failures ─▶ gmail-dead-letter
+   ▼
+more to read, nothing failed, still running ─▶ publish {uid, run, step + 1}, mark queued
+```
+
+Pub/Sub delivers at least once and in any order, so a message only runs
+when its run id and step are the ones stored: each start makes a new run
+id, so an older reading's messages are dropped; a batch that saved moves
+the step on, so a late copy of its message is dropped; and a copy that
+arrives while its batch still reads finds the lease taken and fails, to be
+tried again (and dropped) later. A batch saves `queued: false` with its
+place and sets it once the next batch is published; if the worker dies or
+publishing fails in between, the push fails, and the copy Pub/Sub delivers
+again publishes the next batch instead of reading (a second copy of that
+next batch, at worst, is dropped by its step). A batch that fails fails the
+push, gives up its lease and sets `retryAfter` fifteen minutes on, as long
+as the claim it may have left on the email it was importing (`claimLeaseMs`)
+blocks that email: read sooner, the batch would skip the email as another
+import's and pass it by, so no batch of any reading runs before then. One
+whose process died frees its lease after sixteen minutes for the same
+reason. A delivery that comes while its batch waits like that is retried,
+not dropped, even if the reading was stopped meanwhile, so a Continue that
+joins a dead worker's reading has a delivery to carry it on. Stop (`POST /gmail/backfill/stop`) clears `running`: the batch
+under way saves its place and queues nothing. Pressing Import while a batch
+reads joins that reading instead of starting another. A batch with failed
+imports (the model or Gmail may be down) saves `lastFailed` and stops, and
+Settings shows why and offers Continue. "Delete all trips" removes the
+progress and moves the reset generation on, so the batch under way cannot
+save and every queued message is dropped. If queueing the first batch
+fails, the reading stops, and a reading with no batch saved or reading for
+half an hour (dead-lettered, say) shows as stopped, so Settings offers to
+continue it. A finished reading can start over, and starting over tries
+failed emails again. The parser logs each start, batch, stop and end, and
+each failure with the run and step.
 
 Gmail watches expire after seven days; `/internal/renew-watches`, called
 daily by Cloud Scheduler, renews those within two days of expiry. A history
@@ -946,6 +993,12 @@ for a week. Each failed attempt is logged as `notification_failed` with the
 Pub/Sub message id and attempt number, so the dead-lettered message can be
 matched to its errors. A dead-lettered notification loses nothing: the next
 notification for that mailbox resumes from the stored history id.
+
+The mailbox reading's push subscription (`gmail-backfill-parser`) works the
+same way, with ten attempts, a ten-minute acknowledgement deadline (a batch
+runs for up to five minutes), and the same dead-letter topic; each failed
+attempt is logged as `backfill_batch_failed`. A dead-lettered batch stalls
+that reading, which Settings then offers to continue.
 
 Two alerting policies (`deploy/monitoring.sh`, `deploy/alerts/`) page the
 operator: a `renew_watch_failed` log line, meaning a user's imports will stop
@@ -1027,7 +1080,8 @@ build without one points to the web instead.
 | `POST /gmail/connect` | Firebase ID token | Returns the Google OAuth URL; stores a nonce for 10 minutes |
 | `GET /gmail/callback` | OAuth state | Exchanges the code, parks the refresh token under a one-time completion token, redirects to `/settings?gmail=pending&state=…` |
 | `POST /gmail/complete` | Firebase ID token | Redeems the completion token; refuses (and revokes) if the caller is not the user who started the flow or the mailbox belongs to another user; starts the watch and stores the connection |
-| `POST /gmail/backfill` | Firebase ID token | Reads the next batch of past emails (`restart: true` starts over); returns counts per outcome and the reading's progress |
+| `POST /gmail/backfill` | Firebase ID token | Starts reading past emails on the server (`restart: true` from the beginning) and returns its progress at once; 409 when starting over while a batch reads |
+| `POST /gmail/backfill/stop` | Firebase ID token | Stops the reading after the batch under way |
 | `POST /gmail/reimport` | Firebase ID token | Imports one message again, skipping the pre-filter; returns its outcome |
 | `POST /gmail/disconnect` | Firebase ID token | Stops the watch, revokes the token, deletes the connection |
 | `POST /trips/regroup` | Firebase ID token | Rebuilds the user's trips from their bookings with the current grouping ("Home"); returns how many trips changed and how many were merged away |
@@ -1042,6 +1096,7 @@ build without one points to the web instead.
 | `POST /import/ics` | Firebase ID token | Imports an `.ics` file's text (up to 10 MB), reading at most 100 events with the model; returns counts per outcome, repeating and cancelled events skipped, and events left for the next upload |
 | `POST /import/tripit` | Firebase ID token | Imports a TripIt JSON export (up to 20 MB); returns counts of trips, bookings, duplicates, items imported before, failures and items not importable; 409 while another TripIt upload of the same user runs |
 | `POST /internal/pubsub/gmail` | OIDC from `INTERNAL_CALLERS` | Pub/Sub push target |
+| `POST /internal/backfill` | OIDC from `INTERNAL_CALLERS` | Pub/Sub push target for the mailbox reading's next batch |
 | `POST /internal/renew-watches` | OIDC from `INTERNAL_CALLERS` | Cloud Scheduler target |
 | `POST /forward/issue` | Firebase ID token | Issues the user's forwarding address, retiring any old one; returns it; 503 without `FORWARD_DOMAIN` |
 | `POST /forward/stop` | Firebase ID token | Retires the user's forwarding address |
