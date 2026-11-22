@@ -73,6 +73,11 @@ class ScreenScreenshotTest {
     }
 
     @Test
+    fun sign_in_dark() = capture("sign_in_dark", dark = true) {
+        SignInScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"))
+    }
+
+    @Test
     fun sign_in_without_firebase() = capture("sign_in_without_firebase") {
         SignInScreen(account = GoogleAccount(firebaseAvailable = { false }, webClientId = null))
     }
@@ -120,6 +125,16 @@ class ScreenScreenshotTest {
         }
     }
 
+    @Test
+    fun trip_list_crash_banner_dark() {
+        val viewModel = viewModel()
+        capture("trip_list_crash_banner_dark", dark = true) {
+            CompositionLocalProvider(LocalCrashReport provides crashed) {
+                TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.TRIPS) {} })
+            }
+        }
+    }
+
     // Signed out, the same banner above the sign-in.
     @Test
     fun sign_in_crash_banner() = capture("sign_in_crash_banner") {
@@ -131,11 +146,16 @@ class ScreenScreenshotTest {
     // Report a bug's first question, over the screen it was opened from. The
     // dialog is a window of its own, so the whole screen is captured.
     @Test
-    fun report_consent() {
+    fun report_consent() = reportConsent("report_consent", dark = false)
+
+    @Test
+    fun report_consent_dark() = reportConsent("report_consent_dark", dark = true)
+
+    private fun reportConsent(name: String, dark: Boolean) {
         val viewModel = viewModel()
         val fontSize = FontSizeState(FontSizeSettings(scale = 1f), onScaleSettled = {}, onPinchEnabledChange = {})
         composeRule.setContent {
-            TravelmoTheme(fontSize = fontSize) {
+            TravelmoTheme(darkTheme = dark, fontSize = fontSize) {
                 TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.TRIPS) {} })
             }
         }
@@ -143,7 +163,7 @@ class ScreenScreenshotTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Report a bug").performClick()
         composeRule.waitForIdle()
-        captureScreenRoboImage(filePath = "$outputDir/report_consent.png")
+        captureScreenRoboImage(filePath = "$outputDir/$name.png")
     }
 
     // The red dot on ⋮ while Play has a newer version.
@@ -187,9 +207,28 @@ class ScreenScreenshotTest {
     }
 
     @Test
+    fun profile_dark() {
+        val viewModel = viewModel()
+        capture("profile_dark", dark = true) { ProfileScreen(viewModel = viewModel, bottomBar = { HomeNavigationBar(HomeTab.PROFILE) {} }) }
+    }
+
+    @Test
     fun trip_detail() {
         val viewModel = viewModel()
         capture("trip_detail") { TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+    }
+
+    @Test
+    fun trip_detail_dark() {
+        val viewModel = viewModel()
+        capture("trip_detail_dark", dark = true) { TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+    }
+
+    // A trip shared with the viewer: its violet SHARED label.
+    @Test
+    fun trip_detail_shared_dark() {
+        val viewModel = viewModel()
+        capture("trip_detail_shared_dark", dark = true) { TripDetailScreen(viewModel = viewModel, tripId = "edinburgh", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
     // The stay's Sources, from its ⋮ menu: the owner's own emails link into
@@ -248,6 +287,12 @@ class ScreenScreenshotTest {
     }
 
     @Test
+    fun edit_booking_dark() {
+        val viewModel = viewModel()
+        capture("edit_booking_dark", dark = true) { BookingFormScreen(viewModel = viewModel, tripId = "liverpool", segmentId = "l-stay", defaultDate = "", onDone = {}) }
+    }
+
+    @Test
     fun calendar() {
         val viewModel = viewModel()
         capture("calendar") {
@@ -276,13 +321,18 @@ class ScreenScreenshotTest {
     }
 
     @Test
-    fun settings() {
+    fun settings() = settings("settings", dark = false)
+
+    @Test
+    fun settings_dark() = settings("settings_dark", dark = true)
+
+    private fun settings(name: String, dark: Boolean) {
         // With a messaging token, so the notifications switch is on the screen.
         // With a parser address, so Delete account is a button.
         val viewModel = TripsViewModel(
             FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, pushDevice = FakePushDevice(), accountDeletion = FakeAccountDeletion(),
         )
-        capture("settings") {
+        capture(name, dark = dark) {
             SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
         }
     }

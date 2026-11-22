@@ -26,7 +26,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
@@ -52,7 +51,7 @@ import app.travelmo.core.WarningWhen
 import app.travelmo.core.tripStatus
 import app.travelmo.core.warningText
 import app.travelmo.ui.theme.Brand
-import app.travelmo.ui.theme.SharedBadge
+import app.travelmo.ui.theme.TravelmoTheme
 
 /** Now, Upcoming and Past, each card with what comes next (SPEC.md "The trip list"). */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -139,7 +138,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.section(title: Int, t
 fun TripCard(trip: Trip, shared: Boolean, segments: List<Segment>?, now: String, onClick: () -> Unit) {
     val badge = when {
         trip.deleting -> stringResource(R.string.badge_deleting) to MaterialTheme.colorScheme.onSurfaceVariant
-        shared -> stringResource(R.string.badge_shared) to SharedBadge
+        shared -> stringResource(R.string.badge_shared) to TravelmoTheme.colors.shared
         else -> null
     }
     Column(
@@ -148,7 +147,6 @@ fun TripCard(trip: Trip, shared: Boolean, segments: List<Segment>?, now: String,
             .clip(RoundedCornerShape(12.dp))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
-            .alpha(if (trip.deleting) 0.6f else 1f)
             .padding(16.dp),
     ) {
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(16.dp)) {

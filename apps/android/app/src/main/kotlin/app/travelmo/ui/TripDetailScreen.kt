@@ -87,7 +87,7 @@ import app.travelmo.core.segmentsByDay
 import app.travelmo.core.timesLine
 import app.travelmo.core.tripWarnings
 import app.travelmo.log.TravelmoLog
-import app.travelmo.ui.theme.SharedBadge
+import app.travelmo.ui.theme.TravelmoTheme
 import app.travelmo.ui.theme.TextButtonInset
 import com.mikelward.androidzoom.compose.pinchFontSizeHost
 
@@ -276,7 +276,7 @@ private fun TripBody(
         item(key = "dates") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(formatDateRange(trip.start, trip.end), style = MaterialTheme.typography.bodyMedium, color = muted)
-                if (shared) Text(stringResource(R.string.badge_shared).uppercase(), style = MaterialTheme.typography.labelSmall, color = SharedBadge)
+                if (shared) Text(stringResource(R.string.badge_shared).uppercase(), style = MaterialTheme.typography.labelSmall, color = TravelmoTheme.colors.shared)
             }
             if (canManage && tripActions != null) {
                 // Renaming and fitting the dates sit by the dates, as on the web;

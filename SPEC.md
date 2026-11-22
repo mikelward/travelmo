@@ -1244,6 +1244,16 @@ the user's, only what Play already knows as the app's distributor (its
 package and installed version), so the Play data safety answers are
 unchanged.
 
+### Light and dark
+
+The app follows the phone's dark theme, with no setting of its own, and
+switches as soon as the phone does; the status and navigation bars' icons
+switch with it. Both palettes are fixed, not the wallpaper's dynamic colors,
+and meet WCAG AA: text is at least 4.5:1 against what it sits on, and the
+edges of text fields and switches 3:1. A trip being deleted keeps readable
+text: its card is not faded, and its calendar bar is gray rather than a
+faded color.
+
 ### Text size
 
 The app's text can be made larger or smaller than the rest of the phone, as
