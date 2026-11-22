@@ -494,6 +494,36 @@ still learned from, so an "import anyway" on a wrongly filtered email
 teaches the filter. An embedding failure is logged and the email goes to
 the model.
 
+What isn't a booking: a membership, an annual or season pass, a
+subscription, a gift card or voucher, or a donation buys no visit, so the
+prompt marks it not a booking, and the importer drops any the model still
+returns as an untimed activity (below), recording the email as not a
+booking when nothing else is left. A ticket is a booking only for a
+specific date, and has a time only when the event has one: an activity
+the email gives only a date for is extracted at local 00:00 with no end
+(`isUntimed`), and the trip page shows it with no time. A journey's end is
+its arrival, never a ticket's validity: an end at 23:59 on a later day, or
+more than a week on, is dropped (`withoutValidityEnds`). A payment receipt
+for something already booked is the same booking: an untimed activity
+titled as a payment (`isPaymentReceipt`) matches one dated up to 31 days
+away when both carry the same reference, or, without one on both, the same
+provider and a distinctive title word (not "payment" or the like), with no
+known city, country or code differing, and is added to it as a source. A
+receipt filed first, and not edited since, takes the booking's date, time,
+details and places when the booking arrives, keeping both sources: it is
+written as a booking filed now would be (a fresh, unedited revision, queued
+for the place sweep when lookups were put off), and its trip's dates are
+worked out from every booking the trip ends up with. A booking an import fills out (another email's
+reference or seats) is not edited: one unedited stays so, with a fresh
+revision, so a receipt filled out by a second one still becomes its booking.
+Without a shared reference, a receipt and the booking must not
+disagree on the event or the venue as `sameEvent` tells them
+(`eventIdentities`, `identitiesConflict`; Toy Story 4 is not 5, nor
+Everyman Hampstead Everyman Muswell Hill, wherever the title or the place
+names it), the words every receipt has aside. Two dated visits on
+different days (day 1 and day 2 of a camp, often on one order) never
+match.
+
 Everything below the model is source-agnostic (`fileBooking` in
 `apps/parser/src/importer.ts`): a source hands over bookings and a stable
 source id, and gets the same duplicate check, trip assignment, segment ids

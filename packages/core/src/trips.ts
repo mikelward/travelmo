@@ -149,6 +149,39 @@ export function findTripForRange(
   );
 }
 
+// An activity with no time of its own: the extractor's convention for a
+// dated thing with no stated time is local midnight and no end. It is shown
+// without a time.
+export function isUntimed(segment: Pick<ExtractedSegment, "type" | "start" | "end">): boolean {
+  return (segment.type === "activity" || segment.type === "other") && !segment.end && segment.start.slice(11, 16) === "00:00";
+}
+
+const notBookingTitle = /\b(memberships?|annual pass(es)?|season (ticket|pass)(es|s)?|subscriptions?|gift (card|voucher)s?|vouchers?|donations?)\b/i;
+
+// Things bought, not booked: a membership, pass, subscription, voucher or
+// donation has no visit of its own, so it is no trip. Only untimed ones: a
+// members' event at a set time is a booking.
+export function notBookings<S extends ExtractedSegment>(segments: readonly S[]): S[] {
+  return segments.filter((segment) => isUntimed(segment) && notBookingTitle.test(segment.title));
+}
+
+// A journey's end is its arrival. One that ends at 23:59 on a later day, or
+// more than maxJourneyDays on, is a ticket's validity read as an arrival (an open
+// airport train ticket valid for three months), so it is dropped.
+export function withoutValidityEnds<S extends ExtractedSegment>(segments: readonly S[]): S[] {
+  return segments.map((segment) => {
+    if (!segment.end || !journeyTypes.has(segment.type)) return segment;
+    const days = daysBetween(localDate(segment.start), localDate(segment.end));
+    if (days <= maxJourneyDays && !(days >= 1 && segment.end.slice(11, 16) === "23:59")) return segment;
+    const { end: _validity, ...rest } = segment;
+    return rest as S;
+  });
+}
+
+// How far apart a payment receipt with no time of its own and the booking it
+// pays for may be dated, in days.
+export const untimedMatchDays = 31;
+
 const timedTypes: ReadonlySet<SegmentType> = new Set(["flight", "train", "bus", "ferry", "activity", "other"]);
 
 // Words too common in booking titles to say two bookings are one.
@@ -190,6 +223,7 @@ const normalizeReference = (ref: string) => ref.toUpperCase().replace(/[^A-Z0-9]
 export function sameBooking(a: ExtractedSegment, b: ExtractedSegment): boolean {
   if (a.type !== b.type) return false;
   const wall = (instant: string) => instant.slice(0, 16);
+  if ((isPaymentReceipt(a) || isPaymentReceipt(b)) && wall(a.start) !== wall(b.start)) return sameUntimed(a, b);
   if (timedTypes.has(a.type)) {
     if (wall(a.start) !== wall(b.start)) return false;
   } else {
@@ -197,15 +231,7 @@ export function sameBooking(a: ExtractedSegment, b: ExtractedSegment): boolean {
     if (a.end && b.end && localDate(a.end) !== localDate(b.end)) return false;
   }
   if (a.confirmation && b.confirmation) return normalizeReference(a.confirmation) === normalizeReference(b.confirmation);
-  const codesDiffer = (x?: Place, y?: Place) =>
-    x?.code !== undefined && y?.code !== undefined && x.code.toUpperCase() !== y.code.toUpperCase();
-  if (codesDiffer(a.origin, b.origin) || codesDiffer(a.destination, b.destination)) return false;
-  // Places both sides know must agree: two stays on the same nights in
-  // London and Manchester are two, whatever the chain.
-  const known = (x?: string, y?: string) => x !== undefined && y !== undefined && x.trim().toLowerCase() !== y.trim().toLowerCase();
-  for (const [x, y] of [[a.origin, b.origin], [a.destination, b.destination]] as const) {
-    if (known(x?.city, y?.city) || known(x?.country, y?.country)) return false;
-  }
+  if (placesConflict(a, b)) return false;
   if (a.origin?.code && b.origin?.code && a.destination?.code && b.destination?.code) return true;
   // A city or a chain is shared by many bookings; what is left of the
   // names (the property, the route) says which one this is. When the
@@ -259,32 +285,41 @@ export function sameEvent(a: ExtractedSegment, b: ExtractedSegment, senderA?: st
   if (!sameSeller) return false;
   const differ = (x?: string, y?: string) => x !== undefined && y !== undefined && x.trim().toLowerCase() !== y.trim().toLowerCase();
   if (differ(a.destination?.city, b.destination?.city) || differ(a.destination?.country, b.destination?.country)) return false;
+  const [ours, theirs] = eventIdentities(a, b);
+  if (ours.event.size === 0 || theirs.event.size === 0) return false;
+  return !identitiesConflict(ours, theirs);
+}
+
+export type EventIdentity = { event: Set<string>; venue: Set<string> };
+
+// What two activities each are and where, as they are told apart: the event
+// is the title before any " at <venue>", every word counting however short
+// (Toy Story 4 is not Toy Story 5, nor Inside Out Inside Man), less the
+// places' and the sellers' words; the venue is what follows " at ", or the
+// place's name, less the sellers' and the towns' words. `ignore` leaves out
+// more (a receipt's own words).
+export function eventIdentities(a: ExtractedSegment, b: ExtractedSegment, ignore: readonly string[] = []): [EventIdentity, EventIdentity] {
   const seller = eventWords(a.provider, b.provider);
   const cities = eventWords(a.destination?.city, b.destination?.city);
-  // Where each says it is, after " at " or in its place, less the seller's
-  // and the city's words. Two named venues must agree, one may shorten the
-  // other ("Everyman" for "Everyman Muswell Hill"), but Muswell Hill is not
-  // Hampstead.
-  const split = (s: ExtractedSegment) => s.title.split(/\s+(?:at|@)\s+/i);
-  const where = (s: ExtractedSegment) => {
-    const found = eventWords(split(s).slice(1).join(" "), s.destination?.name);
-    for (const word of [...seller, ...cities]) found.delete(word);
-    return found;
+  const places = eventWords(a.destination?.name, a.destination?.city, b.destination?.name, b.destination?.city);
+  const identity = (s: ExtractedSegment): EventIdentity => {
+    const [name = "", ...at] = s.title.split(/\s+(?:at|@)\s+/i);
+    const venue = eventWords(at.join(" "), s.destination?.name);
+    for (const word of [...seller, ...cities, ...ignore]) venue.delete(word);
+    const event = eventWords(name);
+    for (const word of [...places, ...seller, ...ignore]) event.delete(word);
+    return { event, venue };
   };
-  const within = (x: Set<string>, y: Set<string>) => [...x].every((word) => y.has(word));
-  const [here, there] = [where(a), where(b)];
-  if (here.size > 0 && there.size > 0 && !within(here, there) && !within(there, here)) return false;
-  // Every word of the name counts here, however short: Toy Story 4 is not
-  // Toy Story 5, nor Inside Out Inside Man.
-  const venue = eventWords(a.destination?.name, a.destination?.city, b.destination?.name, b.destination?.city);
-  const event = (s: ExtractedSegment) => {
-    const found = eventWords(s.title.split(/\s+(?:at|@)\s+/i)[0]);
-    for (const word of [...venue, ...seller]) found.delete(word);
-    return found;
-  };
-  const [ours, theirs] = [event(a), event(b)];
-  if (ours.size === 0 || theirs.size === 0) return false;
-  return within(ours, theirs) || within(theirs, ours);
+  return [identity(a), identity(b)];
+}
+
+// Whether two named venues, or two event names, disagree: where both have
+// one, one must hold every word of the other ("Everyman" may shorten
+// "Everyman Muswell Hill", but Muswell Hill is not Hampstead).
+export function identitiesConflict(x: EventIdentity, y: EventIdentity): boolean {
+  const within = (p: Set<string>, q: Set<string>) => [...p].every((word) => q.has(word));
+  const differ = (p: Set<string>, q: Set<string>) => p.size > 0 && q.size > 0 && !within(p, q) && !within(q, p);
+  return differ(x.venue, y.venue) || differ(x.event, y.event);
 }
 
 // A booking found again, with what the new email adds to it: fields it
@@ -307,6 +342,74 @@ export function mergeDetails<S extends ExtractedSegment>(existing: S, found: Ext
   }
   if (notes.length) merged.notes = notes.join("\n");
   return merged;
+}
+
+// Places both sides know must agree: two stays on the same nights in
+// London and Manchester are two, whatever the chain; codes too.
+function placesConflict(a: ExtractedSegment, b: ExtractedSegment): boolean {
+  const codesDiffer = (x?: Place, y?: Place) =>
+    x?.code !== undefined && y?.code !== undefined && x.code.toUpperCase() !== y.code.toUpperCase();
+  if (codesDiffer(a.origin, b.origin) || codesDiffer(a.destination, b.destination)) return true;
+  const known = (x?: string, y?: string) => x !== undefined && y !== undefined && x.trim().toLowerCase() !== y.trim().toLowerCase();
+  for (const [x, y] of [[a.origin, b.origin], [a.destination, b.destination]] as const) {
+    if (known(x?.city, y?.city) || known(x?.country, y?.country)) return true;
+  }
+  return false;
+}
+
+const paymentWords = /\b(payments?|paid|receipts?|invoices?|deposit|balance)\b/i;
+
+// A payment for a booking, not a visit: untimed, and called one.
+export function isPaymentReceipt(segment: Pick<ExtractedSegment, "type" | "title" | "start" | "end">): boolean {
+  return isUntimed(segment) && paymentWords.test(segment.title);
+}
+
+const dayNumber = (title: string) => /\bday\s*(\d+)\b/i.exec(title)?.[1];
+
+// Two bookings at different times are one only when one of them is a
+// payment receipt (dated the day it was paid, for a holiday club the week
+// after, or the club's day with no time), never two dated visits: day 1 and day 2 of a camp share a
+// provider, a name and often one order's reference. The receipt then needs
+// the same reference, or, without one on both, the same provider and a
+// distinctive word of both titles, within untimedMatchDays.
+function sameUntimed(a: ExtractedSegment, b: ExtractedSegment): boolean {
+  if (!isPaymentReceipt(a) && !isPaymentReceipt(b)) return false;
+  if (placesConflict(a, b)) return false;
+  if (Math.abs(daysBetween(localDate(a.start), localDate(b.start))) > untimedMatchDays) return false;
+  const [dayA, dayB] = [dayNumber(a.title), dayNumber(b.title)];
+  if (dayA && dayB && dayA !== dayB) return false;
+  if (a.confirmation && b.confirmation) return normalizeReference(a.confirmation) === normalizeReference(b.confirmation);
+  // The same event at the same venue as sameEvent tells them, the words
+  // every receipt has aside.
+  if (identitiesConflict(...eventIdentities(a, b, receiptWords))) return false;
+  if (!a.provider || !b.provider || a.provider.trim().toLowerCase() !== b.provider.trim().toLowerCase()) return false;
+  // What names the thing paid for: not the provider, the place's city, or
+  // the words every receipt has ("Ballet payment" and "Swimming payment"
+  // are two).
+  const shared = new Set([...words(a.provider), ...words(a.destination?.city, b.destination?.city), ...receiptWords]);
+  const ours = words(a.title);
+  for (const word of words(b.title)) if (ours.has(word) && !shared.has(word)) return true;
+  return false;
+}
+
+const receiptWords = ["payment", "payments", "paid", "receipt", "receipts", "invoice", "invoices", "deposit", "balance", "order", "confirmation", "booking", "fees"];
+
+// Of several bookings sameBooking says a segment is, which it most likely
+// is: lower is better, compared in order as a tuple. The same reference
+// first; then, within either group, the same start minute, the same day and
+// the nearest date, so of two lessons on one order the receipt goes to the
+// one it is dated nearest.
+export function matchRank(existing: ExtractedSegment, incoming: ExtractedSegment): [number, number, number, number] {
+  const sameReference =
+    !!existing.confirmation && !!incoming.confirmation && normalizeReference(existing.confirmation) === normalizeReference(incoming.confirmation);
+  const days = Math.abs(daysBetween(localDate(existing.start), localDate(incoming.start)));
+  return [sameReference ? 0 : 1, existing.start.slice(0, 16) === incoming.start.slice(0, 16) ? 0 : 1, days === 0 ? 0 : 1, days];
+}
+
+// Orders two matchRanks: negative when the first is the better match.
+export function compareMatchRanks(a: readonly number[], b: readonly number[]): number {
+  for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return a[i]! - b[i]!;
+  return a.length - b.length;
 }
 
 // Trips whose dates touch the range at all (no gap allowed), the candidates

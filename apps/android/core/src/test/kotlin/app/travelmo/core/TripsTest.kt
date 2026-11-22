@@ -48,6 +48,12 @@ class TripsTest {
         timesLine(train) shouldBe "09:07 – 11:25"
         referenceLine(train) shouldBe "Avanti West Coast · Ref ABC123"
         timesLine(stay) shouldBe "Check-in 15:00 · Check-out Mon 14 Dec 11:00"
+        // A day out with no time of its own shows none, not 00:00.
+        val dayOut = Segment("a", "t", SegmentType.ACTIVITY, "Zoo day tickets", "2026-08-01T00:00:00+01:00")
+        isUntimed(dayOut) shouldBe true
+        timesLine(dayOut).shouldBeNull()
+        timesLine(dayOut.copy(start = "2026-08-01T10:00:00+01:00")) shouldBe "10:00"
+        isUntimed(flightOut.copy(start = "2026-12-12T00:00:00+00:00", end = null)) shouldBe false
         routeLine(stay).shouldBeNull()
         referenceLine(stay).shouldBeNull()
         placeLabel(Place("Cove Liverpool", city = "Liverpool")) shouldBe "Liverpool"

@@ -37,6 +37,12 @@ val fixtureTrips = listOf(
     trip("paris", "Paris", "2026-03-20", "2026-03-22"),
 )
 
+// A day out the email gave only a date for: shown with no time, not 00:00.
+val fixtureUntimedActivity = Segment(
+    "l-gallery", "liverpool", SegmentType.ACTIVITY, "Walker Art Gallery", "2026-12-14T00:00:00+00:00",
+    provider = "Example Museums", destination = Place("Walker Art Gallery", city = "Liverpool", country = "GB"),
+)
+
 val fixtureSegments: Map<String, List<Segment>> = mapOf(
     "edinburgh" to listOf(
         Segment("e-stay", "edinburgh", SegmentType.LODGING, "Grassmarket Hotel", "2026-10-31T15:00:00+00:00", "2026-11-03T11:00:00+00:00", provider = "Grassmarket", confirmation = "GM-2210"),

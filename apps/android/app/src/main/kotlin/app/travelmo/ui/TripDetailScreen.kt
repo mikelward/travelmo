@@ -450,7 +450,7 @@ fun SegmentRow(segment: Segment, actions: BookingActions? = null, programs: List
         Column(modifier = Modifier.weight(1f)) {
             Text(segment.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
             routeLine(segment)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = muted) }
-            Text(timesLine(segment), style = MaterialTheme.typography.bodyMedium, color = muted)
+            timesLine(segment)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = muted) }
             referenceLine(segment)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp)) }
             if (programs.isNotEmpty()) {
                 Text(programs.joinToString(" · ", transform = ::loyaltyLine), style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp))

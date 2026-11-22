@@ -13,10 +13,12 @@ const instructions = `You read a single email and extract any travel bookings it
 
 Rules:
 - Set isBooking=false with no segments for marketing, reminders about unrelated things, receipts for non-travel purchases, or messages that only mention travel in passing.
+- Memberships, annual or season passes, subscriptions, gift cards and vouchers, and donations are not bookings: set isBooking=false. A ticket is a booking only for a specific date; a date it was bought or becomes valid is not a visit.
+- A payment receipt or invoice for something already booked is the same booking: give it the booked event's date, time, provider and booking reference, not the payment date, and title it the event's name followed by "payment".
 - One segment per leg or stay: each flight leg, each train leg, each hotel stay, each car rental period, each ticketed activity. A return journey is two segments.
 - type: flight, train, bus, ferry, lodging, car_rental, activity, or other.
 - title: short and specific, e.g. "BA 117 LHR to JFK", "Cove Liverpool", "Hertz Manchester Airport".
-- start/end: ISO 8601 with the local UTC offset of the place where the event happens. Infer the offset from the airport/city. For lodging, start is check-in and end is check-out; if times are not stated use 15:00 and 11:00. If a year is missing, use the email's Date header to infer it.
+- start/end: ISO 8601 with the local UTC offset of the place where the event happens. Infer the offset from the airport/city. For lodging, start is check-in and end is check-out; if times are not stated use 15:00 and 11:00. For an activity, use the time the event starts if the email gives one; if it gives only a date, use 00:00 local time and no end. Never use 00:00 as a guess otherwise. end is when the journey arrives or the event ends: never a ticket's validity or expiry date; leave end out when the email does not say. An airport train runs between the airport and the city, not from a city to itself. If a year is missing, use the email's Date header to infer it.
 - origin/destination: for transport, where it departs and arrives (name, IATA/station code, city, ISO 3166-1 alpha-2 country). For lodging and activities use destination only.
 - confirmation: the booking reference / PNR / confirmation number if present.
 - provider: airline, hotel brand, rental company or booking site.
