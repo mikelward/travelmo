@@ -75,7 +75,7 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, botto
     val whole = remember(input, today) { input?.let { travelReport(it, today) } }
     val report = remember(input, today, year) { if (year == null) whole else input?.let { travelReport(it, today, year) } }
     val favorites = remember(input) { input?.let { trips -> favoritePlaces(trips.map { TripWithBookings(it.trip, it.segments) }) }.orEmpty() }
-    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.reports_title)) }) }, bottomBar = bottomBar) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.reports_title)) }, actions = { AppMenu() }) }, bottomBar = bottomBar) { padding ->
         if (whole == null || report == null) {
             Text(stringResource(R.string.reports_loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp))
             return@Scaffold

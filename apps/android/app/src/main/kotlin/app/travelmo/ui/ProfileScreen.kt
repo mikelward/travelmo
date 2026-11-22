@@ -58,7 +58,7 @@ fun ProfileScreen(viewModel: TripsViewModel, bottomBar: @Composable () -> Unit) 
     val loaded by viewModel.profileLoaded.collectAsStateWithLifecycle()
     // A finished share is acknowledged so a later one starts afresh.
     LaunchedEffect(outcomes[SHARE_TOKEN]) { if (outcomes[SHARE_TOKEN] is Outcome.Done) viewModel.outcomeSeen(SHARE_TOKEN) }
-    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.profile)) }) }, bottomBar = bottomBar) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.profile)) }, actions = { AppMenu() }) }, bottomBar = bottomBar) { padding ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
             val own = profile
             if (own == null || !own.hasDetails) {

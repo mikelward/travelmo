@@ -144,6 +144,7 @@ fun BookingForm(
                     TextButton(onClick = { save() }, enabled = !busy) {
                         Text(stringResource(if (existing == null) R.string.add else R.string.save))
                     }
+                    AppMenu()
                 },
             )
         },

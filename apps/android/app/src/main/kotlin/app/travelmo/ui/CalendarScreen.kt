@@ -82,6 +82,7 @@ fun CalendarScreen(
                     IconButton(onClick = { onMonthChange(addMonths(month, 1)) }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.next_month), modifier = Modifier.scale(scaleX = -1f, scaleY = 1f))
                     }
+                    AppMenu()
                 },
             )
         },
