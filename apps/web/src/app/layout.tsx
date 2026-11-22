@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist } from "next/font/google";
+import { Fira_Sans, Geist } from "next/font/google";
 import { Nav } from "@/components/Nav";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { ServiceWorker } from "@/components/ServiceWorker";
@@ -7,6 +7,9 @@ import { AuthProvider } from "@/lib/auth";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
+// The "Travelmo" wordmark only, as on the Play listing and in the Android
+// app; everything else stays Geist.
+const wordmark = Fira_Sans({ variable: "--font-fira-sans", weight: "500", subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: { default: "Travelmo", template: "%s · Travelmo" },
@@ -26,7 +29,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geistSans.variable} h-full antialiased`}>
+    <html lang="en" className={`${geistSans.variable} ${wordmark.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
         <AuthProvider>
           <OfflineBanner />

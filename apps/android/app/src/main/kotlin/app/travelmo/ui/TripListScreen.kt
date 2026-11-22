@@ -50,6 +50,7 @@ import app.travelmo.core.WarningWhen
 import app.travelmo.core.tripStatus
 import app.travelmo.core.warningText
 import app.travelmo.ui.theme.SharedBadge
+import app.travelmo.ui.theme.Wordmark
 
 /** Now, Upcoming and Past, each card with what comes next (SPEC.md "The trip list"). */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -59,7 +60,7 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.app_name)) },
+                title = { Text(stringResource(R.string.app_name), fontFamily = Wordmark) },
                 actions = {
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings))

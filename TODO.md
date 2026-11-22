@@ -213,6 +213,9 @@
       labeled mail, and record a drop as "filtered" so it still shows in
       the Import review list with "import anyway". Docs: https://aistudio.google.com/docs/decisions-api
 
+- [ ] Consider Fira Sans for headings in the app (screen titles, trip
+      names) on Android and the web; only the wordmark uses it so far.
+
 ## Decisions needing review
 
 Guesses made on autopilot; change any of them freely.
