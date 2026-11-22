@@ -199,6 +199,17 @@ export const ForwardAddress = z.object({
 });
 export type ForwardAddress = z.infer<typeof ForwardAddress>;
 
+// A correction the user made to where home was: home is this town from this
+// date, until the next correction's date (homeCorrections in home.ts). At
+// most fifty, on the user's own profile document.
+export const HomeCorrection = z.object({
+  city: z.string().trim().min(1).max(100),
+  country: z.string().length(2).optional(),
+  from: isoDate,
+});
+export type HomeCorrection = z.infer<typeof HomeCorrection>;
+export const maxHomeCorrections = 50;
+
 export const UserProfile = z.object({
   email: z.string().optional(),
   displayName: z.string().optional(),
@@ -207,6 +218,7 @@ export const UserProfile = z.object({
   googleCalendar: GoogleCalendarConnection.optional(),
   reminders: ReminderSettings.optional(),
   forward: ForwardAddress.optional(),
+  homes: z.array(HomeCorrection).max(maxHomeCorrections).optional(),
 });
 export type UserProfile = z.infer<typeof UserProfile>;
 

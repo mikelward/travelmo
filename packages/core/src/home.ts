@@ -1,5 +1,5 @@
 import { compareInstants } from "./instant";
-import type { ExtractedSegment, Place, SegmentType, Trip } from "./schema";
+import type { ExtractedSegment, HomeCorrection, Place, SegmentType, Trip } from "./schema";
 import { findTripForRange, segmentDateRange } from "./trips";
 
 // Where someone lives, over time. Nobody types it in: it is worked out from
@@ -172,4 +172,61 @@ export function awayPlace(
     segments.find((s) => away(s.destination, s.start))?.destination ??
     segments.find((s) => away(s.origin, s.start))?.origin
   );
+}
+
+// A user's corrections as periods: each from its date until the day before
+// the next one's, the last open-ended. Two on one date keep the later.
+export function homeCorrections(corrections: readonly HomeCorrection[]): HomePeriod[] {
+  const byDate = new Map<string, HomeCorrection>();
+  for (const c of corrections) byDate.set(c.from, c);
+  const sorted = [...byDate.values()].sort((a, b) => a.from.localeCompare(b.from));
+  return sorted.map((c, i) => {
+    const next = sorted[i + 1];
+    return {
+      city: c.city,
+      ...(c.country ? { country: c.country } : {}),
+      from: c.from,
+      ...(next ? { until: dayBefore(next.from) } : {}),
+    };
+  });
+}
+
+// Home over time as the app uses it: what the journeys say, overridden from
+// the first correction's date on. Neighbouring periods in one town merge.
+export function effectiveHomes(inferred: readonly HomePeriod[], corrections: readonly HomeCorrection[]): HomePeriod[] {
+  const corrected = homeCorrections(corrections);
+  const cut = corrected[0]?.from;
+  const before = inferred.flatMap((p): HomePeriod[] => {
+    if (!cut) return [p];
+    if (p.from && p.from >= cut) return [];
+    if (p.until && p.until < cut) return [p];
+    return [{ ...p, until: dayBefore(cut) }];
+  });
+  const merged: HomePeriod[] = [];
+  for (const p of [...before, ...corrected]) {
+    const last = merged[merged.length - 1];
+    if (last && sameTown(last, p)) {
+      const { until: _until, ...rest } = last;
+      merged[merged.length - 1] = p.until ? { ...rest, until: p.until } : rest;
+    } else merged.push({ ...p });
+  }
+  return merged;
+}
+
+const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const monthYear = (date: string) => `${months[Number(date.slice(5, 7)) - 1]} ${date.slice(0, 4)}`;
+
+// Home over time in a line, newest first: "London since Mar 2021 · Boston
+// 2018–2021". Empty when nothing is known.
+export function describeHomes(periods: readonly HomePeriod[]): string {
+  return [...periods]
+    .reverse()
+    .map((p) => {
+      if (!p.from && !p.until) return p.city;
+      if (!p.until) return `${p.city} since ${monthYear(p.from!)}`;
+      if (!p.from) return `${p.city} until ${p.until.slice(0, 4)}`;
+      const [a, b] = [p.from.slice(0, 4), p.until.slice(0, 4)];
+      return `${p.city} ${a === b ? a : `${a}–${b}`}`;
+    })
+    .join(" · ");
 }

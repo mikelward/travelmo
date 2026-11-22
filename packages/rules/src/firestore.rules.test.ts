@@ -205,6 +205,16 @@ describe("users", () => {
     await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { forward: { address: "abcdefghijklmnopqrst@travelmo.app", createdAt: "2026-11-08T00:00:00Z" } }, { merge: true }));
   });
 
+  it("a user keeps their own corrections to where home was, and nobody else sees them", async () => {
+    const homes = [{ city: "London", country: "GB", from: "2021-03-12" }];
+    await assertSucceeds(setDoc(doc(as(owner), paths.user(owner.uid)), { homes }, { merge: true }));
+    await assertSucceeds(updateDoc(doc(as(owner), paths.user(owner.uid)), { homes: [] }));
+    await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { homes: "London" }, { merge: true }));
+    await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { homes: Array.from({ length: 51 }, () => homes[0]) }, { merge: true }));
+    await assertFails(setDoc(doc(as(partner), paths.user(owner.uid)), { homes }, { merge: true }));
+    await assertFails(getDoc(doc(as(partner), paths.user(owner.uid))));
+  });
+
   it("a user may turn reminders on, but not read or write what was mailed", async () => {
     await assertSucceeds(setDoc(doc(as(owner), paths.user(owner.uid)), { reminders: { email: true } }, { merge: true }));
     await assertFails(getDoc(doc(as(owner), paths.reminderLog(owner.uid, "t1"))));

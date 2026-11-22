@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { awayPlace, findTripForBooking, homeAt, homeTimeline, isAtHome, isHomeTrip } from "./home";
+import { awayPlace, describeHomes, effectiveHomes, findTripForBooking, homeAt, homeCorrections, homeTimeline, isAtHome, isHomeTrip } from "./home";
 import type { ExtractedSegment, Place, Trip } from "./schema";
 
 const london: Place = { name: "London Euston", code: "EUS", city: "London", country: "GB" };
@@ -205,5 +205,63 @@ describe("awayPlace", () => {
     expect(awayPlace([may[1]!, may[2]!], periods)?.city).toBe("Liverpool");
     expect(awayPlace([may[2]!], periods)?.city).toBe("Liverpool");
     expect(awayPlace([may[0]!], periods)).toBeUndefined();
+  });
+});
+
+describe("homeCorrections", () => {
+  it("runs each correction until the next one", () => {
+    expect(
+      homeCorrections([
+        { city: "London", country: "GB", from: "2021-03-12" },
+        { city: "Boston", country: "US", from: "2018-09-01" },
+      ]),
+    ).toEqual([
+      { city: "Boston", country: "US", from: "2018-09-01", until: "2021-03-11" },
+      { city: "London", country: "GB", from: "2021-03-12" },
+    ]);
+  });
+
+  it("keeps the later of two on one date", () => {
+    expect(homeCorrections([{ city: "Leeds", from: "2021-03-12" }, { city: "London", from: "2021-03-12" }])).toEqual([
+      { city: "London", from: "2021-03-12" },
+    ]);
+  });
+});
+
+describe("effectiveHomes", () => {
+  const inferred = [
+    { city: "Boston", until: "2021-03-11" },
+    { city: "London", from: "2021-03-12" },
+  ];
+
+  it("is what the journeys say without corrections", () => {
+    expect(effectiveHomes(inferred, [])).toEqual(inferred);
+  });
+
+  it("follows a correction from its date on", () => {
+    expect(effectiveHomes(inferred, [{ city: "Cambridge", country: "GB", from: "2020-09-01" }])).toEqual([
+      { city: "Boston", until: "2020-08-31" },
+      { city: "Cambridge", country: "GB", from: "2020-09-01" },
+    ]);
+  });
+
+  it("merges a correction into the same town before it", () => {
+    expect(effectiveHomes([{ city: "London" }], [{ city: "London", from: "2024-01-01" }])).toEqual([{ city: "London" }]);
+  });
+});
+
+describe("describeHomes", () => {
+  it("says home over time, newest first", () => {
+    expect(
+      describeHomes([
+        { city: "Boston", from: "2018-09-01", until: "2021-03-11" },
+        { city: "London", from: "2021-03-12" },
+      ]),
+    ).toBe("London since Mar 2021 · Boston 2018–2021");
+    expect(describeHomes([{ city: "Boston", until: "2021-03-11" }, { city: "London", from: "2021-03-12" }])).toBe(
+      "London since Mar 2021 · Boston until 2021",
+    );
+    expect(describeHomes([{ city: "London" }])).toBe("London");
+    expect(describeHomes([])).toBe("");
   });
 });

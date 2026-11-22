@@ -541,6 +541,19 @@ at its start and the last at its end. Corrections the person makes are
 periods too and win over the worked-out ones for the dates they cover
 (`homeAt`).
 
+The Profile shows home over time in a line ("Home: London since Mar 2021 ·
+Boston 2018–2021", `describeHomes`), worked out from the user's own trips
+with their corrections over it (`effectiveHomes`), and takes corrections:
+home is a town (and optionally a two-letter country) from a date. They live
+as `homes` on the user's own document (`users/{uid}`, `HomeCorrection`, at
+most fifty), which only the owner reads or writes; rules check it is a list
+of at most fifty, and the parser parses it (`loadHomeOverrides` in
+`apps/parser/src/homeOverrides.ts`), logging and ignoring a list that does
+not parse. Each correction runs until the next one's date
+(`homeCorrections`), and from the first correction's date on they replace
+the worked-out home. Imports and regrouping read them for every booking
+filed (`ImportDeps.homeOverrides`).
+
 Grouping uses it (`findTripForBooking`, also in `home.ts`). Each import
 works out home from the bookings of the trips within a year either side of
 the new one, plus the new one itself (a return ticket is a round trip on

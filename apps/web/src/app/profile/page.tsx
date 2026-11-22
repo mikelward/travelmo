@@ -5,6 +5,7 @@ import type { User } from "firebase/auth";
 import Link from "next/link";
 import { useState } from "react";
 import { SignInGate } from "@/components/SignInGate";
+import { correctionText, failedReadsText, homeLine, logged, parseCorrection, saveCorrections, useHomes } from "@/lib/home";
 import { useSaveForOffline } from "@/lib/offline";
 import { maxTrusted, saveTrusted, useSharedProfiles, useTravelProfile } from "@/lib/travelProfile";
 
@@ -147,6 +148,111 @@ function SharingSection({ user, profile }: { user: User; profile: TravelProfile 
   );
 }
 
+// Where home has been, worked out from the user's trips, with their own
+// corrections: home is this town from this date.
+function HomeSection({ user }: { user: User }) {
+  const homes = useHomes(user);
+  const [city, setCity] = useState("");
+  const [country, setCountry] = useState("");
+  const [from, setFrom] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  const save = async (operation: string, next: Parameters<typeof saveCorrections>[1]) => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await logged(operation, () => saveCorrections(user.uid, next));
+      return true;
+    } catch (e) {
+      setError((e as Error).message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+  const add = async () => {
+    const correction = parseCorrection(city, country, from);
+    if (typeof correction === "string") return setError(correction);
+    if (await save("adding one", [...(homes?.corrections ?? []).filter((c) => c.from !== correction.from), correction])) {
+      setCity("");
+      setCountry("");
+      setFrom("");
+    }
+  };
+
+  const line = homes && homeLine(homes.periods);
+  return (
+    <section className="mt-10">
+      <h2 className="text-lg font-medium">Home</h2>
+      {homes === undefined ? (
+        <p className="mt-2 text-sm text-zinc-500">Loading…</p>
+      ) : (
+        <>
+          <p className="mt-2 text-sm" data-testid="home-line">
+            {line ?? "Not known yet."}
+          </p>
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Worked out from your trips.</p>
+          {homes.failed > 0 && <p className="mt-2 text-sm text-red-600">{failedReadsText(homes.failed)}</p>}
+          {homes.corrections.length > 0 && (
+            <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
+              {homes.corrections.map((c) => (
+                <li key={c.from} className="flex items-center justify-between gap-3 py-2 text-sm">
+                  <span>{correctionText(c)}</span>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className={buttonClass}
+                    onClick={() => void save("removing one", homes.corrections.filter((x) => x.from !== c.from))}
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <form
+            className="mt-3 flex flex-wrap items-center gap-2 text-sm"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void add();
+            }}
+          >
+            <span>Home is</span>
+            <input
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              placeholder="City"
+              aria-label="City"
+              className="w-32 rounded-lg border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700"
+            />
+            <input
+              value={country}
+              onChange={(e) => setCountry(e.target.value)}
+              placeholder="GB"
+              aria-label="Country code"
+              maxLength={2}
+              className="w-16 rounded-lg border border-zinc-300 bg-transparent px-3 py-2 uppercase dark:border-zinc-700"
+            />
+            <span>from</span>
+            <input
+              type="date"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              aria-label="From"
+              className="rounded-lg border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700"
+            />
+            <button type="submit" disabled={busy || !city.trim() || !from} className={buttonClass}>
+              Set
+            </button>
+          </form>
+          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+        </>
+      )}
+    </section>
+  );
+}
+
 function SharedWithYou({ user }: { user: User }) {
   const shared = useSharedProfiles(user)?.filter((p) => p.ownerUid !== user.uid);
   if (!shared?.length) return null;
@@ -176,6 +282,7 @@ function ProfilePage({ user }: { user: User }) {
         </p>
       )}
       {profile && hasDetails(profile) && <ProfileSections profile={profile} />}
+      <HomeSection user={user} />
       {profile !== undefined && <SharingSection user={user} profile={profile} />}
       <SharedWithYou user={user} />
     </>

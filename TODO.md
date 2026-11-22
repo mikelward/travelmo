@@ -235,8 +235,11 @@
       a trip away and journeys from home and back bound a trip (a holiday
       club in London either side of a Liverpool weekend came in as one
       "London" trip).
-- [ ] Home, step 3: show home over time on Profile, web and Android, with
-      a way to correct it (stored as override periods).
+- [x] Home, step 3: show home over time on the web's Profile, with a way to
+      correct it (`homes` on the user document; imports and regrouping
+      honor it).
+- [ ] Home on Android's Profile tab, as the web has it (`describeHomes`,
+      `effectiveHomes` and `HomeCorrection` are already in `:core`).
 - [x] Home, step 4: regroup existing trips under the new rule ("Regroup
       trips" in Settings on the web, `POST /trips/regroup`).
 - [ ] Android: a "Regroup trips" action in Settings, calling
