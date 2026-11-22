@@ -23,6 +23,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -70,10 +73,14 @@ fun LicensesHost(open: Boolean, onOpenChange: (Boolean) -> Unit, appKey: String,
     val currentOnOpenChange by rememberUpdatedState(onOpenChange)
     val openLicenses: () -> Unit = remember { { currentOnOpenChange(true) } }
     CompositionLocalProvider(LocalOpenLicenses provides openLicenses) {
-        if (open) {
-            LicensesScreen(onBack = { onOpenChange(false) })
-        } else {
-            saved.SaveableStateProvider(appKey, app)
+        // Slides over the app and back as a page on the back stack does.
+        val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+        AnimatedContent(open, transitionSpec = { if (targetState) pageOpens(rtl) else pageCloses(rtl) }, label = "licenses") { shown ->
+            if (shown) {
+                LicensesScreen(onBack = { onOpenChange(false) })
+            } else {
+                saved.SaveableStateProvider(appKey, app)
+            }
         }
     }
 }

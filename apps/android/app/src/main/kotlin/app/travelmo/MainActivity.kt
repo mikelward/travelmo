@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
@@ -34,6 +36,8 @@ import app.travelmo.ui.CrashReport
 import app.travelmo.ui.LicensesHost
 import app.travelmo.ui.LocalCrashReport
 import app.travelmo.ui.LocalReportBug
+import app.travelmo.ui.pageCloses
+import app.travelmo.ui.pageOpens
 import app.travelmo.ui.LocalUpdateAvailable
 import app.travelmo.ui.ProfileScreen
 import app.travelmo.ui.ReportsScreen
@@ -163,9 +167,13 @@ private fun SignedInApp(app: TravelmoApplication, user: SignedIn, requestedTrip:
             onTripOpened()
         }
     }
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     NavDisplay(
         backStack = backStack,
         onBack = { backStack.removeLastOrNull() },
+        transitionSpec = { pageOpens(rtl) },
+        popTransitionSpec = { pageCloses(rtl) },
+        predictivePopTransitionSpec = { pageCloses(rtl) },
         entryProvider = entryProvider {
             entry<Home> {
                 var tab by rememberSaveable { mutableStateOf(HomeTab.TRIPS) }
