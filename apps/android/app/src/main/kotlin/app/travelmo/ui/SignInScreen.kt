@@ -68,8 +68,9 @@ fun SignInScreen(
         // Centered when it fits; when it doesn't (the crash banner, large
         // text, a small phone), it scrolls rather than push Sign in off the screen.
         BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
+            val scroll = rememberScrollState()
             Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()).heightIn(min = maxHeight).fillMaxWidth().padding(24.dp),
+                modifier = Modifier.scrollEdgeCue(scroll, scrollCueColors(MaterialTheme.colorScheme.surface)).verticalScroll(scroll).heightIn(min = maxHeight).fillMaxWidth().padding(24.dp),
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {

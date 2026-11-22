@@ -1205,6 +1205,22 @@ the read lands resizes a frame later rather than waiting on the disk). A
 save storage refuses stays in force until a restart, and Settings says it
 wasn't saved.
 
+### Scroll cue
+
+A scrolling screen marks its top or bottom edge while there is more to
+scroll past that edge, and marks nothing where the content ends, so a list
+that stops near the bottom of the screen doesn't read the same as one cut
+off mid-content. The mark is a short fade into the background with an up or
+down chevron on a gray plate centered over it, as in stopdash (whose code
+this ports; no shared library carries it yet). A tap on the chevron scrolls
+a page that way. Only the chevron's own 48dp target takes the tap; a drag
+starting there still scrolls, the rest of the row stays the row's, and a
+second finger or a pinch makes it no tap. Screen readers skip it, since
+their users already scroll by gesture. It covers every scrolling screen:
+the trip list, a trip's page, the calendar, Reports, Profile, Settings, the
+booking form, Licenses and Sign in. Dialogs and menus are left as the
+platform draws them.
+
 ## Later
 
 Itinerary ideas and

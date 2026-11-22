@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -137,7 +138,8 @@ internal fun LicensesContent(libraries: Libs?, onBack: () -> Unit = {}, onOpenLi
         },
     ) { padding ->
         // Names only, one row each; the version, authors and license are a tap away.
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 8.dp)) {
+        val list = rememberLazyListState()
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).scrollEdgeCue(list, scrollCueColors()), state = list, contentPadding = PaddingValues(bottom = 8.dp)) {
             items(items = sorted, key = { it.uniqueId }) { library ->
                 Text(
                     text = library.name,

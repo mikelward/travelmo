@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.border
@@ -59,7 +60,8 @@ fun ProfileScreen(viewModel: TripsViewModel, bottomBar: @Composable () -> Unit) 
     // A finished share is acknowledged so a later one starts afresh.
     LaunchedEffect(outcomes[SHARE_TOKEN]) { if (outcomes[SHARE_TOKEN] is Outcome.Done) viewModel.outcomeSeen(SHARE_TOKEN) }
     Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.profile)) }, actions = { AppMenu() }) }, bottomBar = bottomBar) { padding ->
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
+        val list = rememberLazyListState()
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).scrollEdgeCue(list, scrollCueColors()), state = list, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
             val own = profile
             if (own == null || !own.hasDetails) {
                 item(key = "empty") {
