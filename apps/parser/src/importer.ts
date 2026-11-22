@@ -739,7 +739,22 @@ export async function importMessages(
   return counts;
 }
 
+// A trip is named after where it goes: the destination's city, which suits
+// flights and stays. A day out, nothing but tickets with no travel or stay
+// and all on one day, is named after what it is: the place when the ticket
+// is for the place itself, its title starting with the place's name
+// (Hampton Court Palace for "Hampton Court Palace Admission", not the town it
+// stands in), otherwise the event ("Toy Story 5 at Everyman Muswell Hill",
+// The Graham Norton Show, not London or Television Centre). Dates are
+// compared as written, in local time.
 export function tripTitle(segments: readonly ExtractedSegment[]): string {
+  const days = new Set(segments.flatMap((s) => [s.start, s.end].filter((t) => t !== undefined).map((t) => t.slice(0, 10))));
+  const first = segments[0];
+  if (first && days.size === 1 && segments.every((s) => s.type === "activity")) {
+    const venue = first.destination?.name;
+    if (venue && first.title.toLowerCase().startsWith(venue.toLowerCase())) return venue;
+    if (first.title) return first.title;
+  }
   const place = segments.find((s) => s.destination)?.destination;
   return place?.city ?? place?.name ?? segments[0]?.title ?? "Trip";
 }

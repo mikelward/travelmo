@@ -354,8 +354,31 @@ describe("importMessages", () => {
 describe("tripTitle", () => {
   it("prefers the destination city, then its name, then the segment title", () => {
     expect(tripTitle(lodging.segments)).toBe("Liverpool");
-    expect(tripTitle([{ type: "activity", title: "Museum", start: "2026-01-01T10:00:00Z", destination: { name: "Tate" } }])).toBe("Tate");
+    expect(tripTitle([{ type: "other", title: "Museum", start: "2026-01-01T10:00:00Z", destination: { name: "Tate" } }])).toBe("Tate");
     expect(tripTitle([{ type: "other", title: "Thing", start: "2026-01-01T10:00:00Z" }])).toBe("Thing");
+  });
+
+  it("names a one-day outing after the place or the event, not its town", () => {
+    const palace = { name: "Hampton Court Palace", city: "East Molesey", country: "GB" };
+    const admission = { type: "activity" as const, title: "Hampton Court Palace Admission", start: "2026-12-20T12:00:00+00:00", destination: palace };
+    expect(tripTitle([admission])).toBe("Hampton Court Palace");
+    expect(tripTitle([{ ...lodging.segments[0]!, destination: { ...palace } }, admission])).toBe("East Molesey");
+    expect(tripTitle([admission, { ...admission, start: "2026-12-21T12:00:00+00:00" }])).toBe("East Molesey");
+    const show = {
+      type: "activity" as const,
+      title: "The Graham Norton Show",
+      start: "2026-09-24T18:00:00+01:00",
+      end: "2026-09-24T21:00:00+01:00",
+      destination: { name: "Television Centre", city: "London", country: "GB" },
+    };
+    expect(tripTitle([show])).toBe("The Graham Norton Show");
+    const film = {
+      type: "activity" as const,
+      title: "Toy Story 5 at Everyman Muswell Hill",
+      start: "2026-07-04T12:00:00+01:00",
+      destination: { name: "Everyman", city: "London", country: "GB" },
+    };
+    expect(tripTitle([film])).toBe("Toy Story 5 at Everyman Muswell Hill");
   });
 });
 
