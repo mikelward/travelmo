@@ -1,6 +1,10 @@
 package app.travelmo.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,7 +22,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -51,10 +57,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,7 +71,10 @@ import app.travelmo.core.PersonWarning
 import app.travelmo.core.ProfileEntry
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentType
+import app.travelmo.core.SourceKind
+import app.travelmo.core.SourceRef
 import app.travelmo.core.Trip
+import app.travelmo.core.emailLinkFor
 import app.travelmo.core.fittedRange
 import app.travelmo.core.formatDate
 import app.travelmo.core.formatDateRange
@@ -75,6 +86,7 @@ import app.travelmo.core.routeLine
 import app.travelmo.core.segmentsByDay
 import app.travelmo.core.timesLine
 import app.travelmo.core.tripWarnings
+import app.travelmo.log.TravelmoLog
 import app.travelmo.ui.theme.SharedBadge
 import app.travelmo.ui.theme.TextButtonInset
 import com.mikelward.androidzoom.compose.pinchFontSizeHost
@@ -186,6 +198,7 @@ fun TripDetailScreen(
                 current, segments, shared = current.ownerUid != uid, errors = errors, busy = busy,
                 warnings = tripWarnings(people, current, segments, viewModel.today()), today = viewModel.today(),
                 programsFor = { provider -> programsFor(provider, ownProfile?.loyalty.orEmpty()) },
+                emailLink = { source -> emailLinkFor(source, uid, ownsTrip = isOwner) },
                 bookingActions = if (canEdit) {
                     BookingActions(onEdit = { onEditBooking(it.id) }, onDelete = { deleting = it }, onMove = if (targets.isEmpty()) null else { segment -> moving = segment })
                 } else {
@@ -227,6 +240,7 @@ private fun TripBody(
     today: String,
     programsFor: (String?) -> List<ProfileEntry>,
     bookingActions: BookingActions?,
+    emailLink: (SourceRef) -> String?,
     tripActions: TripActions?,
     canManage: Boolean,
     targets: List<Trip>,
@@ -298,7 +312,7 @@ private fun TripBody(
                 Text(formatDate(date), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 20.dp, bottom = 4.dp))
             }
             items(items, key = { it.id }) { segment ->
-                SegmentRow(segment, bookingActions, programs = programsFor(segment.provider))
+                SegmentRow(segment, bookingActions, programs = programsFor(segment.provider), emailLink = emailLink)
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
         }
@@ -439,11 +453,28 @@ private fun MoveDialog(segment: Segment, targets: List<Trip>, onDismiss: () -> U
     )
 }
 
-/** One booking: its kind, title, route, times, reference, verdict, sources and sender, and its actions when the viewer may edit. */
+/**
+ * One booking: its kind, title, route, times, reference and verdict, and a ⋮
+ * menu: copying the reference and the sources for anyone, the actions when
+ * the viewer may edit. [emailLink] is the Gmail link of a source the viewer
+ * imported, else null.
+ */
 @Composable
-fun SegmentRow(segment: Segment, actions: BookingActions? = null, programs: List<ProfileEntry> = emptyList()) {
+fun SegmentRow(
+    segment: Segment,
+    actions: BookingActions? = null,
+    programs: List<ProfileEntry> = emptyList(),
+    emailLink: (SourceRef) -> String? = { null },
+) {
+    val context = LocalContext.current
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     var menu by remember { mutableStateOf(false) }
+    var showingSources by rememberSaveable(segment.id) { mutableStateOf(false) }
+    val hasSources = segment.sources.isNotEmpty() || segment.sender != null
+    val reference = segment.confirmation?.trim()?.takeIf { it.isNotEmpty() }
+    if (showingSources && hasSources) {
+        SourcesDialog(segment, emailLink, onDismiss = { showingSources = false })
+    }
     Row(modifier = Modifier.padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Icon(
             painterResource(segmentIcon(segment.type)),
@@ -455,36 +486,103 @@ fun SegmentRow(segment: Segment, actions: BookingActions? = null, programs: List
             Text(segment.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
             routeLine(segment)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = muted) }
             timesLine(segment)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = muted) }
-            referenceLine(segment)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp)) }
+            referenceLine(segment)?.let { line ->
+                // A long press on the line copies the reference too, as ⋮ does.
+                val copy = reference?.let { ref -> Modifier.longPressUnlessPinch(stringResource(R.string.copy_reference)) { copyReference(context, ref) } } ?: Modifier
+                Text(line, style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp).then(copy))
+            }
             if (programs.isNotEmpty()) {
                 Text(programs.joinToString(" · ", transform = ::loyaltyLine), style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp))
             }
             segment.notes?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp)) }
             Verdict(segment)
-            // The sources and the sender share one line.
-            val provenance = listOfNotNull(
-                segment.sourceCount.takeIf { it > 0 }?.let { pluralStringResource(R.plurals.sources, it, it) },
-                segment.sender?.let { stringResource(R.string.from_sender, it) },
-            )
-            if (provenance.isNotEmpty()) {
-                Text(provenance.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp))
-            }
         }
-        if (actions != null) {
+        if (actions != null || hasSources || reference != null) {
             Box {
                 IconButton(onClick = { menu = true }, modifier = Modifier.size(32.dp)) {
                     Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.booking_actions), tint = muted)
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, modifier = Modifier.pinchFontSizeHost()) {
-                    DropdownMenuItem(text = { Text(stringResource(R.string.edit)) }, onClick = { menu = false; actions.onEdit(segment) })
-                    actions.onMove?.let { move ->
-                        DropdownMenuItem(text = { Text(stringResource(R.string.move_to)) }, onClick = { menu = false; move(segment) })
+                    reference?.let { ref ->
+                        DropdownMenuItem(text = { Text(stringResource(R.string.copy_reference)) }, onClick = { menu = false; copyReference(context, ref) })
                     }
-                    DropdownMenuItem(text = { Text(stringResource(R.string.delete)) }, onClick = { menu = false; actions.onDelete(segment) })
+                    if (hasSources) {
+                        DropdownMenuItem(text = { Text(stringResource(R.string.sources)) }, onClick = { menu = false; showingSources = true })
+                    }
+                    if (actions != null) {
+                        DropdownMenuItem(text = { Text(stringResource(R.string.edit)) }, onClick = { menu = false; actions.onEdit(segment) })
+                        actions.onMove?.let { move ->
+                            DropdownMenuItem(text = { Text(stringResource(R.string.move_to)) }, onClick = { menu = false; move(segment) })
+                        }
+                        DropdownMenuItem(text = { Text(stringResource(R.string.delete)) }, onClick = { menu = false; actions.onDelete(segment) })
+                    }
                 }
             }
         }
     }
+}
+
+/**
+ * Every email, TripIt trip or calendar event the booking was read from, as
+ * the web's trip page lists them, then the sender. An email the viewer
+ * imported opens in Gmail; others' are in a mailbox the viewer can't open.
+ */
+@Composable
+private fun SourcesDialog(segment: Segment, emailLink: (SourceRef) -> String?, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val openLabel = stringResource(R.string.open_in_gmail)
+    AppAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.sources)) },
+        text = {
+            Column(modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                for (source in segment.sources) {
+                    val kind = stringResource(sourceKindLabel(source.kind))
+                    val link = emailLink(source)
+                    val open = if (link != null) {
+                        Modifier.clickable(onClickLabel = openLabel, role = Role.Button) { openLink(context, link, "a booking's email") }
+                    } else {
+                        Modifier
+                    }
+                    Column(modifier = Modifier.fillMaxWidth().then(open).padding(vertical = 8.dp)) {
+                        Text(
+                            source.label ?: kind,
+                            style = MaterialTheme.typography.bodyLarge,
+                            // Underlined as a link: the theme's primary is near-black, as on the web.
+                            textDecoration = if (link != null) TextDecoration.Underline else null,
+                        )
+                        if (source.label != null) Text(kind, style = MaterialTheme.typography.bodySmall, color = muted)
+                    }
+                }
+                segment.sender?.let {
+                    Text(stringResource(R.string.from_sender, it), style = MaterialTheme.typography.bodyMedium, color = muted, modifier = Modifier.padding(vertical = 8.dp))
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
+    )
+}
+
+/**
+ * Puts a booking's reference, alone, on the clipboard. No toast: Android 13
+ * and later (all the app runs on) confirm a copy themselves.
+ */
+private fun copyReference(context: Context, reference: String) {
+    val clipboard = context.getSystemService(ClipboardManager::class.java)
+    if (clipboard == null) {
+        TravelmoLog.warning("No clipboard to copy a booking reference to")
+        return
+    }
+    clipboard.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.booking_reference), reference))
+}
+
+@StringRes
+private fun sourceKindLabel(kind: SourceKind): Int = when (kind) {
+    SourceKind.GMAIL -> R.string.source_gmail
+    SourceKind.TRIPIT -> R.string.source_tripit
+    SourceKind.ICS -> R.string.source_ics
+    SourceKind.FORWARD -> R.string.source_forward
 }
 
 /** The traveler's stars and heart, shown when there are any. */

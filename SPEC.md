@@ -1216,8 +1216,19 @@ profiles shared with the viewer, and shares it as the web does), and the
 same document warnings as the web stand in one card at the top of the trip
 list and on trip pages, from the same logic in `:core` with the
 airport-country table read as a resource; as on the web, an upcoming card is
-its title and dates, and a booking row's sources and sender share a line; a
-booking row carries the viewer's matching loyalty programs. CI builds it beside the web app
+its title and dates; a booking row carries the viewer's matching loyalty
+programs. A booking's ⋮ menu, for anyone who sees the trip, starts with
+"Copy reference" (when it has one) and "Sources" (when it has sources or a
+sender), then Edit, Move to and Delete for those who may edit. Copy
+reference puts the reference alone on the clipboard, with no toast since
+Android (13 and later, all the app runs on) confirms a copy itself; a long
+press on the reference line does the same (TalkBack offers it as the
+long-click action). Sources opens a dialog listing them as the web's trip
+page does (each source's label and kind, then "From" the sender), the same
+`segmentSources` in `:core`; an email the viewer imported, by the source's
+`uid` or as the trip's owner for one without, opens in Gmail at that
+message (the default account: the app does not read the connected
+address). CI builds it beside the web app
 (`ci / android`).
 
 When Google Play has a newer version, the ⋮ menu's icon carries a small red
@@ -1248,9 +1259,10 @@ at its end of the range. A two-finger pinch anywhere in the app, dropdown
 menus, dialogs and the date picker included, resizes the app live and saves
 once when the fingers lift; it takes over only once the fingers have spread
 past androidzoom's slop, so a two-finger scroll still scrolls, and a
-"Pinch to resize" switch turns it off. No screen has a long press, so a
-pinch can't trigger one; a long press added later must ignore a gesture
-with two fingers down (stopdash's `unlessPinch`). A menu's popup inherits
+"Pinch to resize" switch turns it off. A long press (only a booking's
+reference line has one) ignores a gesture with two fingers down
+(`longPressUnlessPinch`, after stopdash's `unlessPinch`), so a pinch can't
+trigger it. A menu's popup inherits
 the size and hosts the pinch itself; a dialog, a window of its own,
 re-applies both (`AppAlertDialog`). The value is one number and one
 boolean in a SharedPreferences file on the phone, not synced to Firestore

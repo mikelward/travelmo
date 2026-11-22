@@ -4,6 +4,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -189,6 +190,24 @@ class ScreenScreenshotTest {
     fun trip_detail() {
         val viewModel = viewModel()
         capture("trip_detail") { TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+    }
+
+    // The stay's Sources, from its ⋮ menu: the owner's own emails link into
+    // Gmail, the partner's reminder doesn't. A dialog, so the whole screen.
+    @Test
+    fun trip_detail_sources() {
+        val viewModel = viewModel()
+        val fontSize = FontSizeState(FontSizeSettings(scale = 1f), onScaleSettled = {}, onPinchEnabledChange = {})
+        composeRule.setContent {
+            TravelmoTheme(fontSize = fontSize) {
+                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
+            }
+        }
+        composeRule.onAllNodesWithContentDescription("Booking actions")[1].performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Sources").performClick()
+        composeRule.waitForIdle()
+        captureScreenRoboImage(filePath = "$outputDir/trip_detail_sources.png")
     }
 
     @Test

@@ -8,6 +8,9 @@ import app.travelmo.core.TravelProfile
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentDraft
 import app.travelmo.core.SegmentType
+import app.travelmo.core.SourceKind
+import app.travelmo.core.SourceRef
+import app.travelmo.core.segmentSources
 import app.travelmo.core.Trip
 
 // Firestore documents into the models, by hand and leniently: a document
@@ -22,6 +25,16 @@ private fun Map<String, Any?>.strings(key: String): List<String> =
 
 @Suppress("UNCHECKED_CAST")
 private fun Map<String, Any?>.map(key: String): Map<String, Any?>? = this[key] as? Map<String, Any?>
+
+@Suppress("UNCHECKED_CAST")
+private fun Map<String, Any?>.sourceRefs(): List<SourceRef> =
+    (this["sources"] as? List<*>).orEmpty().mapNotNull { raw ->
+        val ref = raw as? Map<String, Any?> ?: return@mapNotNull null
+        val kind = SourceKind.fromWire(ref.text("kind")) ?: return@mapNotNull null
+        val id = ref.text("id") ?: return@mapNotNull null
+        // The schema requires `at`; one without it takes the booking's creation rather than being dropped.
+        SourceRef(kind, id, label = ref.text("label"), uid = ref.text("uid"), at = ref.text("at") ?: text("createdAt") ?: "")
+    }
 
 fun tripFromDocument(id: String, data: Map<String, Any?>): Trip? {
     val title = data.text("title") ?: return null
@@ -51,8 +64,6 @@ fun segmentFromDocument(id: String, tripId: String, data: Map<String, Any?>): Se
     val type = SegmentType.fromWire(data.text("type")) ?: return null
     val title = data.text("title") ?: return null
     val start = data.text("start") ?: return null
-    val sources = (data["sources"] as? List<*>)?.size ?: 0
-    val gmailIds = data.strings("gmailMessageIds").size
     return Segment(
         id = id,
         tripId = tripId,
@@ -70,7 +81,7 @@ fun segmentFromDocument(id: String, tripId: String, data: Map<String, Any?>): Se
         favorite = data["favorite"] == true,
         // Imports record every source they were read from; older documents
         // only list their Gmail message ids.
-        sourceCount = if (sources > 0) sources else gmailIds,
+        sources = segmentSources(data.sourceRefs(), data.strings("gmailMessageIds"), data.text("createdAt") ?: ""),
     )
 }
 

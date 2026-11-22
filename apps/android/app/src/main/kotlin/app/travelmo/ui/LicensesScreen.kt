@@ -1,8 +1,5 @@
 package app.travelmo.ui
 
-import android.content.ActivityNotFoundException
-import android.content.Intent
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -41,10 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import app.travelmo.R
-import app.travelmo.log.TravelmoLog
-import com.mikelward.androidlog.safe
 import com.mikepenz.aboutlibraries.Libs
 import com.mikepenz.aboutlibraries.entity.Library
 import com.mikepenz.aboutlibraries.ui.compose.android.produceLibraries
@@ -95,21 +89,12 @@ fun LicensesHost(open: Boolean, onOpenChange: (Boolean) -> Unit, appKey: String,
 fun LicensesScreen(onBack: () -> Unit) {
     BackHandler(onBack = onBack)
     val context = LocalContext.current
-    val linkFailed = stringResource(R.string.licenses_link_failed)
     // Parsed off the main thread; the title shows at once and the list fills in.
     val libraries by produceLibraries(R.raw.aboutlibraries)
     LicensesContent(
         libraries = libraries,
         onBack = onBack,
-        onOpenLicenseUrl = { url ->
-            try {
-                context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
-            } catch (e: ActivityNotFoundException) {
-                // No browser on the device: say so rather than let the tap do nothing.
-                TravelmoLog.warning("No app to open a license link: %s", safe(e.javaClass.simpleName))
-                Toast.makeText(context, linkFailed, Toast.LENGTH_SHORT).show()
-            }
-        },
+        onOpenLicenseUrl = { url -> openLink(context, url, "a license link") },
     )
 }
 
