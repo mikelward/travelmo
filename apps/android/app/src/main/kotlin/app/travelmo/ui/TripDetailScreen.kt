@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -73,6 +74,7 @@ import app.travelmo.core.segmentsByDay
 import app.travelmo.core.timesLine
 import app.travelmo.core.tripWarnings
 import app.travelmo.ui.theme.SharedBadge
+import app.travelmo.ui.theme.TextButtonInset
 
 /**
  * A trip's bookings by day, as the web's trip page lists them. The owner and
@@ -259,7 +261,12 @@ private fun TripBody(
             if (canManage && tripActions != null) {
                 // Renaming and fitting the dates sit by the dates, as on the web;
                 // fitting is offered only when the bookings span less than the trip.
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                // Shifted by the buttons' own padding so their labels line up with the dates.
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.offset(x = -TextButtonInset),
+                ) {
                     TextButton(onClick = { renaming = true }, enabled = !busy) { Text(stringResource(R.string.rename)) }
                     fittedRange(trip, segments)?.let { range ->
                         TextButton(onClick = tripActions.fit, enabled = !busy) { Text(stringResource(R.string.fit_dates, formatDateRange(range.first, range.second))) }
@@ -296,7 +303,7 @@ private fun TripBody(
                 item(key = "merge") { MergeInto(targets, busy, tripActions.merge) }
             }
             item(key = "delete") {
-                TextButton(onClick = { confirmingDelete = true }, enabled = !busy, modifier = Modifier.padding(top = 24.dp)) {
+                TextButton(onClick = { confirmingDelete = true }, enabled = !busy, modifier = Modifier.padding(top = 24.dp).offset(x = -TextButtonInset)) {
                     Text(stringResource(R.string.delete_trip), color = MaterialTheme.colorScheme.error)
                 }
             }

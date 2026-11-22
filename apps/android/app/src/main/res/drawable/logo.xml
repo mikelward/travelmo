@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Written by scripts/icon-sources.mjs; edit that instead. The logo beside the
+     "Travelmo" wordmark: the web app's icon (apps/web/src/app/icon.svg). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <path
+        android:pathData="M96 0H416A96 96 0 0 1 512 96V416A96 96 0 0 1 416 512H96A96 96 0 0 1 0 416V96A96 96 0 0 1 96 0Z"
+        android:fillColor="#F26B1D" />
+    <group
+        android:scaleX="0.82463"
+        android:scaleY="0.82463"
+        android:translateX="29.577"
+        android:translateY="17.331">
+        <path
+            android:pathData="M186.8 247.6 430 126 357 344.9 308.4 259.8Z"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="24.3"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M308.4 259.8 430 126"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="24.3"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M120 452 C129.7 437.4 139.4 427 149 419.1"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="26"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M177.7 401 C190.8 394.5 203.9 389.5 217.1 381.4"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="26"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M243.4 360 C249.6 353.5 255.8 345.6 262 336"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="26"
+            android:strokeLineCap="round" />
+    </group>
+</vector>

@@ -146,6 +146,34 @@ writeFileSync(join(res, "drawable/ic_launcher_foreground.xml"),
 writeFileSync(join(res, "drawable/ic_notification.xml"),
   vector("The status-bar icon: the launcher's paper plane with one curved dash of\n     trail, in the 20dp live area, white on transparent as the system requires.", 24, ART.notification, fitSquare(ART.notification, 12, 20), "#FFFFFFFF"));
 
+// The in-app logo beside the wordmark: the web icon (app/icon.svg) as a vector,
+// orange rounded square and all, so Compose draws it without a bitmap.
+function logoVector(art, f) {
+  const pl = art.plane;
+  const square = "M96 0H416A96 96 0 0 1 512 96V416A96 96 0 0 1 416 512H96A96 96 0 0 1 0 416V96A96 96 0 0 1 96 0Z";
+  return `<?xml version="1.0" encoding="utf-8"?>
+<!-- Written by scripts/icon-sources.mjs; edit that instead. The logo beside the
+     "Travelmo" wordmark: the web app's icon (apps/web/src/app/icon.svg). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <path
+        android:pathData="${square}"
+        android:fillColor="${ORANGE}" />
+    <group
+        android:scaleX="${f.s}"
+        android:scaleY="${f.s}"
+        android:translateX="${f.tx}"
+        android:translateY="${f.ty}">
+${[strokePath(polygon(pl), "#FFFFFF", pl.sw, true), strokePath(foldLine(pl), "#FFFFFF", pl.sw), ...art.strokes.map(c => strokePath(curvePath(c), "#FFFFFF", art.width))].join("\n")}
+    </group>
+</vector>
+`;
+}
+writeFileSync(join(res, "drawable/logo.xml"), logoVector(ART.launcher, fitCircle(ART.launcher, 256, 196)));
+
 // The web app's inline logo, the same mark as app/icon.svg.
 function logo(art, f) {
   const pl = art.plane;
@@ -168,4 +196,4 @@ ${strokes}
 `;
 }
 writeFileSync(join(web, "src/components/Logo.tsx"), logo(ART.launcher, fitCircle(ART.launcher, 256, 196)));
-console.log("icon-sources: wrote the web icons, the Play icon, the Android vectors and Logo.tsx");
+console.log("icon-sources: wrote the web icons, the Play icon, the Android vectors, the in-app logo and Logo.tsx");
