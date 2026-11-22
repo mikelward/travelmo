@@ -1,4 +1,4 @@
-import type { ParsedMessage, Segment, Trip } from "@travelmo/core";
+import type { ParsedMessage, PendingCancellation, Segment, Trip } from "@travelmo/core";
 import { changeClaimable, claimable, reclaimable, retryable, type TripStore, type TripTx } from "./importer";
 import { addExample, emptyExamples, type Examples } from "./similarity";
 
@@ -9,6 +9,8 @@ export type Memory = TripStore & {
   segments: Map<string, Segment>;
   parsed: Map<string, ParsedMessage>;
   examplesOf: Map<string, Examples>;
+  // Keyed by "uid/messageId".
+  pending: Map<string, PendingCancellation>;
 };
 
 export function memoryStore(): Memory {
@@ -16,6 +18,7 @@ export function memoryStore(): Memory {
   const segments = new Map<string, Segment>();
   const parsed = new Map<string, ParsedMessage>();
   const examplesOf = new Map<string, Examples>();
+  const pending = new Map<string, PendingCancellation>();
   const locks = new Map<string, Promise<unknown>>();
   const generations = new Map<string, number>();
   let ids = 0;
@@ -47,7 +50,16 @@ export function memoryStore(): Memory {
       if (!trip) throw new Error(`trip ${id} missing`);
       trips.set(id, { ...trip, ...fields });
     },
+    setLiveBounds: (id, bounds) => {
+      const trip = trips.get(id);
+      if (!trip) throw new Error(`trip ${id} missing`);
+      const { liveStart: _start, liveEnd: _end, ...rest } = trip;
+      trips.set(id, bounds ? { ...rest, liveStart: bounds.start, liveEnd: bounds.end } : rest);
+    },
     deleteTrip: (id) => void trips.delete(id),
+    listPendingCancellations: async (uid) => [...pending.values()].filter((p) => p.uid === uid),
+    putPendingCancellation: (p) => void pending.set(`${p.uid}/${p.messageId}`, p),
+    deletePendingCancellation: (uid, messageId) => void pending.delete(`${uid}/${messageId}`),
     addSource: (_tripId, id, source) => {
       const s = segments.get(id);
       if (!s) throw new Error(`segment ${id} missing`);
@@ -59,6 +71,7 @@ export function memoryStore(): Memory {
     segments,
     parsed,
     examplesOf,
+    pending,
     examples: async (uid) => examplesOf.get(uid) ?? emptyExamples(),
     saveExample: async (uid, label, example) => {
       examplesOf.set(uid, addExample(examplesOf.get(uid) ?? emptyExamples(), label, example));

@@ -13,8 +13,11 @@ export type SenderPatterns = {
   deny: readonly string[];
 };
 
+// A cancellation is a booking signal too: it marks a booking cancelled
+// (markCancelled), whoever sent it. Every spelling: cancellation,
+// cancelation, cancelled, canceled.
 const subjectKeywords =
-  /\b(booking|reservation|confirmation|confirmed|itinerary|e-?ticket|tickets?|boarding pass|check-?in|flight|hotel|your (trip|stay|journey|rental|ride|car)|car (hire|rental)|rail|train|ferry|cruise|accommodation|lodging)\b/i;
+  /\b(booking|reservation|confirmation|confirmed|itinerary|e-?ticket|tickets?|boarding pass|check-?in|flight|hotel|your (trip|stay|journey|rental|ride|car)|car (hire|rental)|rail|train|ferry|cruise|accommodation|lodging|cancell?ation|cancell?ed)\b/i;
 
 const subjectNoise =
   /\b(newsletter|sale|deal|offer|discount|% off|save up to|last chance|flash|points|miles|survey|feedback|how was|rate your|unsubscribe|password|verify your|welcome to)\b/i;

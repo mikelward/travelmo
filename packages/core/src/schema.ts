@@ -47,9 +47,29 @@ export const ExtractedSegment = z.object({
 });
 export type ExtractedSegment = z.infer<typeof ExtractedSegment>;
 
+// A booking an email says was cancelled, as much of it as the email gives:
+// enough to find the booking it cancels among those already imported.
+export const ExtractedCancellation = z.object({
+  type: SegmentType.optional(),
+  provider: z.string().min(1).optional(),
+  confirmation: z.string().min(1).optional(),
+  // The hotel, venue or route, as the email names it.
+  place: z.string().min(1).optional(),
+  // The city of a stay or event, when the email gives it.
+  city: z.string().min(1).optional(),
+  // A journey's ends, as the email names them (a code or a name).
+  origin: z.string().min(1).optional(),
+  destination: z.string().min(1).optional(),
+  start: isoDateTime.optional(),
+  end: isoDateTime.optional(),
+});
+export type ExtractedCancellation = z.infer<typeof ExtractedCancellation>;
+
 export const ExtractedBooking = z.object({
   isBooking: z.boolean(),
   segments: z.array(ExtractedSegment),
+  // Bookings the email cancels; absent from older extractions.
+  cancellations: z.array(ExtractedCancellation).optional(),
 });
 export type ExtractedBooking = z.infer<typeof ExtractedBooking>;
 
@@ -74,6 +94,9 @@ export const SourceRef = z.object({
   // move to a trip someone else owns.
   uid: z.string().min(1).optional(),
   at: isoDateTime,
+  // When an email source was sent (its Date), if known: a cancellation
+  // sent before it doesn't cancel what it confirms.
+  sentAt: isoDateTime.optional(),
 });
 export type SourceRef = z.infer<typeof SourceRef>;
 
@@ -91,6 +114,23 @@ export const Segment = ExtractedSegment.extend({
   // and whether the place is a favorite. Never set by an import.
   rating: z.number().int().min(1).max(5).optional(),
   favorite: z.boolean().optional(),
+  // When a cancellation email was matched to this booking, and that email's
+  // id. A cancelled booking stays on its trip, struck through, but counts
+  // for nothing: not the trip's dates, what's next, reminders, the
+  // calendar export or reports. Cleared when the user restores it.
+  cancelledAt: isoDateTime.optional(),
+  cancelledBy: z.string().min(1).optional(),
+  // When that email was sent, if known: what a later confirmation is weighed
+  // against, kept with the booking so it outlives the cancellation's own
+  // waiting record.
+  cancelledSentAt: isoDateTime.optional(),
+  // The cancellation emails the user took back (Restore): never applied to
+  // this booking again, however often a confirmation of it is read.
+  restoredFrom: z.array(z.string().min(1)).optional(),
+  // When the user last took a cancellation back: no cancellation sent (or,
+  // undated, read) by then applies to this booking again, whichever one
+  // had won; one sent later still does.
+  restoredAt: isoDateTime.optional(),
   createdAt: isoDateTime,
   updatedAt: isoDateTime,
 });
@@ -108,6 +148,12 @@ export const Trip = z.object({
   // Set first when a trip is deleted; every segment writer refuses a trip
   // carrying it, so the segment sweep that follows cannot leave orphans.
   deleting: z.boolean().optional(),
+  // When the person now travels, once cancellations have taken bookings
+  // that set the trip's dates (liveBounds): what every screen shows
+  // (displayBounds). The trip's own dates stay its full span, for finding
+  // its bookings again and for editing. Absent when nothing is cancelled.
+  liveStart: isoDate.optional(),
+  liveEnd: isoDate.optional(),
   createdAt: isoDateTime,
   updatedAt: isoDateTime,
 });
@@ -271,7 +317,9 @@ export const ParsedMessage = z.object({
   messageId: z.string().min(1),
   source: z.enum(["gmail", "tripit", "ics", "forward"]).optional(),
   uid: z.string().min(1),
-  outcome: z.enum(["processing", "filtered", "not_booking", "imported", "failed"]),
+  // `cancellation`: an email cancelling bookings; `reason` says how many
+  // were found and marked.
+  outcome: z.enum(["processing", "filtered", "not_booking", "imported", "failed", "cancellation"]),
   reason: z.string().optional(),
   // Enough of the email to recognize it in a review list.
   from: z.string().optional(),
@@ -289,6 +337,21 @@ export const ParsedMessage = z.object({
   processedAt: isoDateTime,
 });
 export type ParsedMessage = z.infer<typeof ParsedMessage>;
+
+// A cancellation email's bookings not found when it was read: the mailbox
+// is read newest first, so a cancellation often arrives before the booking
+// it cancels. Each booking filed later is checked against these and marked
+// cancelled if one names it. Parser-only.
+export const PendingCancellation = z.object({
+  messageId: z.string().min(1),
+  uid: z.string().min(1),
+  cancellations: z.array(ExtractedCancellation),
+  at: isoDateTime,
+  // When the cancellation email was sent, if known: a booking from an email
+  // sent after it is a new one (made again), which it doesn't cancel.
+  sentAt: isoDateTime.optional(),
+});
+export type PendingCancellation = z.infer<typeof PendingCancellation>;
 
 // A calendar feed the parser polls daily. The URL often carries a secret
 // token (TripIt's does), so it is readable by its owner only and never

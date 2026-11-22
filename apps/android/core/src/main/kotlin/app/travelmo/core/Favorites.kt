@@ -36,7 +36,8 @@ fun favoritePlaces(all: List<TripWithBookings>): List<FavoritePlace> {
     val seen = mutableSetOf<String>()
     for ((trip, segments) in all) {
         if (!seen.add(trip.id)) continue
-        for (s in segments) {
+        // A cancelled booking was never a stay there.
+        for (s in liveSegments(segments)) {
             val place = bookingPlace(s)
             val key = placeKey(place)
             val entry = byPlace[key] ?: FavoritePlace(place.name, place.city, place.country?.uppercase(), s.type, favorite = false, rating = null, trips = emptyList())

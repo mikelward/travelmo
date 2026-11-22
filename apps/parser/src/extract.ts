@@ -22,6 +22,7 @@ Rules:
 - origin/destination: for transport, where it departs and arrives (name, IATA/station code, city, ISO 3166-1 alpha-2 country). For lodging and activities use destination only.
 - confirmation: the booking reference / PNR / confirmation number if present.
 - provider: airline, hotel brand, rental company or booking site.
+- If the email cancels a booking (a cancellation confirmation, not a change or a reminder), set isBooking=false with no segments, and list each cancelled booking in cancellations with whatever the email gives: type, provider, confirmation, place (the hotel, venue or route as named), for a stay or event its city when the email gives it, for a flight, train, bus or ferry its origin and destination (the codes or names the email gives), and start/end in the same form as above (with the time the email gives, or 00:00 when it gives none).
 - Do not invent details that are not in the email.`;
 
 export function geminiExtractor(client: GoogleGenAI, model: string): Extractor {

@@ -1,6 +1,6 @@
 import { countryCodeOf, countryName } from "./countries";
 import { formatDate } from "./format";
-import { daysBetween } from "./trips";
+import { allCancelled, daysBetween, displayBounds } from "./trips";
 import { tripPlaces, type PlaceLookup } from "./reports";
 import type { ExtractedSegment, ProfileEntry, TravelProfile, Trip } from "./schema";
 
@@ -122,10 +122,12 @@ export type TripPlaces = {
 // country.
 export function documentWarnings(
   documents: readonly TravelDocument[],
-  trip: { start: string; end: string },
+  shown: { start: string; end: string; liveStart?: string | undefined; liveEnd?: string | undefined },
   today: string,
   places?: TripPlaces,
 ): DocumentWarning[] {
+  // When the person travels, not the trip's full span (displayBounds).
+  const trip = displayBounds(shown);
   if (trip.end < today) return [];
   const known = places?.complete && places.countries.size > 0 ? places.countries : undefined;
   return documents.flatMap((document): DocumentWarning[] => {
@@ -170,6 +172,9 @@ export function tripWarnings(
   today: string,
   lookup?: PlaceLookup,
 ): PersonWarning[] {
+  // Every booking cancelled: nobody is going, so no document matters for it.
+  // (No bookings at all is different: where it goes is just unknown.)
+  if (segments && allCancelled(segments)) return [];
   const places = segments ? tripPlaces(segments, lookup) : undefined;
   return people
     .filter((p) => onTrip(p, trip))

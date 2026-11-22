@@ -20,6 +20,34 @@ describe("parseExtraction", () => {
     expect(booking.segments[0]?.destination?.city).toBe("Liverpool");
   });
 
+  it("keeps the bookings a cancellation email cancels", () => {
+    // An invented Booking.com cancellation, in the shape the model returns.
+    const booking = parseExtraction(
+      JSON.stringify({
+        isBooking: false,
+        segments: [],
+        cancellations: [
+          {
+            type: "lodging",
+            provider: "Booking.com",
+            confirmation: "1234567890",
+            place: "Example Hotel Gamla Stan",
+            start: "2026-06-10T15:00:00+02:00",
+            end: "2026-06-13T11:00:00+02:00",
+          },
+        ],
+      }),
+      "m4",
+    );
+    expect(booking.cancellations).toEqual([
+      expect.objectContaining({ confirmation: "1234567890", place: "Example Hotel Gamla Stan", type: "lodging" }),
+    ]);
+  });
+
+  it("reads an older extraction without cancellations", () => {
+    expect(parseExtraction(JSON.stringify({ isBooking: false, segments: [] }), "m5").cancellations).toBeUndefined();
+  });
+
   it("rejects malformed JSON with the message id in the error", () => {
     expect(() => parseExtraction("{nope", "m2")).toThrow(/m2/);
   });

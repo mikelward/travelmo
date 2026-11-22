@@ -93,7 +93,7 @@ viewer's zone. Trip bounds are calendar dates.
   the key its booking names, never list them; the parser alone writes all
   four, and alone reads the other three.
 - `users/{uid}/parsedMessages/{sourceId}` — `outcome` (processing,
-  filtered, not_booking, imported, failed), `source` (absent for Gmail,
+  filtered, not_booking, imported, failed, cancellation), `source` (absent for Gmail,
   `tripit` or `ics` otherwise), `reason, from, subject, segmentIds[],
   processedAt`, one per Gmail message, TripIt trip, unfiled TripIt item or
   calendar event. Claimed atomically as `processing` before any
@@ -348,7 +348,7 @@ mirrored in the Android app's core).
 
 The flight is read from the booking's title, which imports write as the
 airline code and number first ("BA 117 LHR to JFK"); a booking with no
-number there gets no status. The source is FlightAware AeroAPI
+number there gets no status, nor does a cancelled booking. The source is FlightAware AeroAPI
 (`apps/parser/src/aeroapi.ts`), asked for the number around the booked
 departure (twelve hours either side), taking the leg from the booking's
 airport that leaves closest to the booked time; FlightAware's own
@@ -675,6 +675,8 @@ Gmail ─watch─▶ Pub/Sub ─push(OIDC)─▶ parser /internal/pubsub/gmail
                                Gemini, JSON-schema output, validated by
                                ExtractedBooking                ── throw ─▶ record "failed"
                                         │
+                               cancels bookings, no segments?  ── yes ───▶ mark them cancelled,
+                                        │                               record "cancellation"
                                isBooking && segments?          ── no ────▶ record "not_booking"
                                         │              and save the embedding as a non-booking
                                         │ yes, and save it as a booking
@@ -820,6 +822,136 @@ journey's end more than eight days after it leaves (a ticket's expiry read
 as its arrival) is not trusted for a trip's dates; its start stands for
 both (`segmentDateRange`, also in the Android `:core`).
 
+### Cancellations
+
+An email that cancels a booking (Booking.com's "Booking cancelled for …",
+an airline's cancellation; a subject saying "cancellation", "cancelled" or
+"canceled" passes the prefilter and the mailbox backfill's query, whoever
+sent it) comes back from the model with no segments and
+a `cancellations` list: as much of each cancelled booking as the email
+gives (type, provider, confirmation, the place as named, start and end).
+The importer looks through the user's own trips, never one shared with
+them, for bookings each names (`cancels` in `packages/core/src/trips.ts`):
+a confirmation number decides which reservation when both have one, and
+any leg the email names in it (a date, a time, a flight number, a
+direction) which of its bookings, the reference alone cancelling them all
+of those near the email (ended no more than a month before it was sent,
+or starting within two years after: references are recycled);
+otherwise the dates must
+agree and the named place must share a distinctive word with the booking's
+title, place or provider. When the email gives a time, anything but a stay
+must start at that minute (a 14:00 cancellation leaves the 19:30
+performance alone; a stay's check-in time is generic, so only its date
+counts), and a flight, train, bus or ferry must also go the same way (the
+email's origin and destination are the booking's, by code when the
+booking has one and the email gives three capital letters, else by a word
+of the name that isn't the city's: London Heathrow is not London Gatwick,
+and "Luton" is a name, not a code): the same-day return is another booking.
+A flight or train number tells legs apart: an operator's code and number
+("BA 117", "ICE 578") or, for a journey, a number after the operator's full
+name ("Eurostar 9014", the same train as "ES 9014"); when only one side
+gives a number, the route's words alone don't match it. The bookings carry nothing else that tells them apart
+(seats or rooms are only in free-text notes), and the provider rules one
+out only when both name plainly different companies (no shared distinctive
+word, neither the other's initials, as BA is British Airways, nor a code
+too short to tell): a booking site or agency (Expedia, Trip.com,
+Booking.com) sells others' bookings, so it can cancel any of them. A
+booking a later email fills in (mergeDetails) is checked against waiting
+cancellations too. Cancelling the wrong booking hides a real one, so
+anything weaker matches nothing. A match gets `cancelledAt` and
+`cancelledBy` (the email's id); it is not deleted. Marking is an import's
+write, not an edit: an unedited booking (`updatedAt` still its
+`createdAt`) stays unedited, so a calendar change or a booking upgrading a
+receipt can still replace it, and a receipt upgraded into a booking is
+checked against waiting cancellations like any other. Restore is the
+user's edit, so a restored booking is no longer replaceable. The email is recorded
+with outcome `cancellation` and a reason ("cancelled 1 booking", or "no
+matching booking found"), so it shows in the Import review list either
+way. Reading the email again changes nothing.
+
+A mailbox is read newest first, so a cancellation usually arrives before
+the booking it cancels, and another leg under the same reference may come
+later still. So every cancellation also waits in
+`users/{uid}/pendingCancellations/{messageId}` (`messageId, uid,
+cancellations[], at, sentAt`; the parser's alone), and every booking filed after
+is checked against it in the same transaction: a booking one names is
+written already cancelled and the email's record is updated to say so.
+Whichever order the emails arrive in, every leg it names ends up
+cancelled. A booking from an email sent after the cancellation's is one
+made again since, which it leaves alone, whichever is read first (each
+email source records its `sentAt`); a cancelled booking such an email
+confirms again comes back live. Each time an email touches a booking, its
+state is weighed afresh from every cancellation read and every email that
+confirmed it, by date (`standingCancellation`), so the order they are read
+in never matters: a cancellation stands unless a confirmation was sent
+after it (at the same time, it still stands), the latest that stands is
+the one the booking records (with its date, `cancelledSentAt`, so
+deleting a cancellation that stopped waiting changes nothing), and one of
+unknown date always stands. A forward (by the forwarding address, or a
+Gmail message whose subject starts "Fwd:") is dated by its original's
+Date: or Sent: line in the forwarding block, never by the forward; when
+that line is missing or unreadable, the email orders against nothing. A
+receipt, invoice or refund books nothing, so it dates nothing either: one
+sent after a cancellation neither revives the booking nor shields it. Each booking a cancellation names stops
+waiting a month after it was read once that booking has ended, or after a
+year if it gives no dates (`stillWaiting`), and only those still waiting
+are matched; the cancellation stops waiting when all of them have
+(`pendingCancellationExpired`), and the next import deletes it then. Deleting
+all trips clears them too, and deleting the account removes them with
+everything else under the user.
+
+A cancelled booking stays on its trip, struck through under a "Cancelled"
+label (web and Android), and counts for nothing else: the trip's dates,
+Fit dates, what's next, the current stay, check-in, document reminders,
+the calendar export, reports, favorite places and working out where home
+is all leave it out. A trip whose every booking was cancelled
+(`allCancelled`) isn't happening: it gets no document warnings or
+reminders, no calendar event and no report counts, done or ahead, and
+its card says "Every booking cancelled"; a trip with no bookings yet (planned by
+hand) still gets all of them
+(`liveSegments`). Two kinds of trip dates, kept apart:
+
+- **Its own dates** (`start`, `end`) always cover every booking in it,
+  cancelled ones too (`bookedDateRange`): they are how an import finds
+  its bookings again (a cancelled stay weeks after the rest is still found,
+  and revived, when it is booked again), and what editing works on (the
+  trip's dates, Fit dates, a booking saved, moved or merged in, Restore).
+  An import also finds a booking by its reference in any trip of the year
+  either side, whatever the trip's dates.
+- **When the person now travels** (`liveStart`, `liveEnd`, from
+  `liveBounds`): an end only a cancelled booking reached moves in to what
+  is still booked; an end set beyond the bookings (planned by hand) stays;
+  absent when nothing is cancelled or nothing is left booked. Read through
+  `displayBounds`, which falls back to its own dates, by everything that
+  groups bookings into trips (an import choosing a trip, regrouping) or
+  shows when the person travels (the trip list and card, the trip's
+  header, upcoming or past, the calendar, reminders, document and visa
+  checks, Android's screens), so a cancelled stay at a trip's end draws
+  nothing else in.
+
+The importer sets the second once it has written everything for an email
+(and regrouping once per pass), whichever path cancelled or revived a
+booking; the apps widen it with a booking still booked and keep it apart
+when a cancelled one widens only the trip's own dates; Fit dates sets both
+from the bookings. The calendar export's trip event and reports span what
+is still booked (`reportBounds`). **Restore** on the booking takes the cancellation
+back (adding the email's id to the booking's `restoredFrom`, and the time
+to its `restoredAt`: no cancellation sent before then, or read before then
+when it has no date, cancels it again, whichever one had won, while those
+still apply to other legs; one sent later still does)
+and widens the trip to include it again; **Delete** removes it. An
+edit or a move to another trip keeps it cancelled and widens only the
+trip's own dates. An import finds a
+cancelled booking again (as a duplicate) only by its confirmation number
+or its own source: a booking alike in all else, made again after
+cancelling, is filed as a new, live one. Live first, wherever a trip is
+chosen or named (an import, a receipt it upgrades, a duplicate it finds,
+regrouping): what a booking still books decides, and its cancelled parts
+only when nothing in it is live, so a cancelled stay never pulls a live
+one into its trip. A
+calendar's own cancelled events are handled apart, by removing what they
+made (see "Calendar files").
+
 ### Home
 
 Trips are travel away from home, so the app needs to know where home is,
@@ -936,14 +1068,18 @@ above.
 
 To start over instead, "Delete all trips" in Settings (`POST /trips/delete-all`,
 `apps/parser/src/tripsReset.ts`) deletes every trip the user owns, its
-bookings (with their ratings and favorites) and every import record, in
+bookings (with their ratings and favorites), every import record and every
+cancellation still waiting for its booking, in
 passes in the import's per-user transaction until none is left. Every pass
 moves on a reset generation kept on the import lock; every import (an
 email, a calendar event, a TripIt item, a calendar upload or a mailbox
 reading as a whole) reads it before any state it acts on, and every write it
 makes checks it in the write's own transaction: the claim, the booking and
-its trip, removing the bookings of a changed or cancelled event, the record
-and its revision, a place queued for another look, the mailbox reading's
+its trip (and marking it cancelled as it's filed), a cancellation marking
+bookings and waiting for more (written, kept or expired), removing the
+bookings of a changed or cancelled event, the record and its revision (a
+cancellation's included, when a booking filed later names it), a place
+queued for another look, the mailbox reading's
 position, and how far new mail has been read (a Gmail notification the
 reset overtook fails, so Pub/Sub delivers it again). Each goes ahead only
 while the generation is unchanged

@@ -239,6 +239,67 @@ class FirestoreTripsTest {
     }
 
     @Test
+    fun cancelledBooking_movesStillCancelledWideningOnlyTheTargetsOwnDates() = runBlocking {
+        val from = seedTrip()
+        val to = seedTrip(title = "Dublin", start = "2026-12-20", end = "2026-12-22")
+        seedSegment(from)
+        tripRef(from).collection("segments").document("s1").update(mapOf("cancelledAt" to "2026-11-05T09:00:00Z", "cancelledBy" to "m2")).await()
+        owner.store.moveSegment(from, "s1", to)
+        val moved = segments(to)["s1"]!!
+        assertEquals("2026-11-05T09:00:00Z", moved["cancelledAt"])
+        assertEquals("m2", moved["cancelledBy"])
+        // Its own dates cover the cancelled stay; it is still shown by what is booked.
+        assertEquals("2026-12-12", trip(to)["start"])
+        assertEquals("2026-12-22", trip(to)["end"])
+        assertEquals("2026-12-20", trip(to)["liveStart"])
+        assertEquals("2026-12-22", trip(to)["liveEnd"])
+    }
+
+    @Test
+    fun cancelledBooking_staysCancelledWhenEditedWideningOnlyTheTripsOwnDates() = runBlocking {
+        val id = seedTrip()
+        seedSegment(id)
+        tripRef(id).collection("segments").document("s1").update(mapOf("cancelledAt" to "2026-11-05T09:00:00Z", "cancelledBy" to "m2")).await()
+        tripRef(id).update(mapOf("start" to "2026-12-13", "end" to "2026-12-13")).await()
+        owner.store.saveSegment(id, flight("2026-12-12").copy(title = "Renamed"), "s1")
+        assertEquals("2026-11-05T09:00:00Z", segments(id)["s1"]!!["cancelledAt"])
+        assertEquals("2026-12-12", trip(id)["start"])
+        assertEquals("2026-12-13", trip(id)["end"])
+        assertEquals("2026-12-13", trip(id)["liveStart"])
+        assertEquals("2026-12-13", trip(id)["liveEnd"])
+    }
+
+    @Test
+    fun cancelledBooking_restoredByAShareeWidensTheTripAgain() = runBlocking {
+        val id = seedTrip()
+        seedSegment(id)
+        tripRef(id).collection("segments").document("s1").update(mapOf("cancelledAt" to "2026-11-05T09:00:00Z", "cancelledBy" to "m2")).await()
+        tripRef(id).update(mapOf("start" to "2026-12-13", "end" to "2026-12-13")).await()
+        sharee.store.restoreSegment(id, "s1")
+        val restored = segments(id)["s1"]!!
+        assertFalse(restored.containsKey("cancelledAt"))
+        assertFalse(restored.containsKey("cancelledBy"))
+        // Remembered, so the importer doesn't cancel it again.
+        assertEquals(listOf("m2"), restored["restoredFrom"])
+        // And when, so no cancellation sent before it applies again.
+        assertTrue(restored["restoredAt"] is String)
+        assertEquals("2026-12-12", trip(id)["start"])
+        assertEquals("2026-12-14", trip(id)["end"])
+    }
+
+    @Test
+    fun cancelledBooking_restoredShowsTheTripForAllItsDatesAgain() = runBlocking {
+        val id = seedTrip()
+        seedSegment(id)
+        tripRef(id).collection("segments").document("s1").update(mapOf("cancelledAt" to "2026-11-05T09:00:00Z", "cancelledBy" to "m2")).await()
+        // As the parser leaves it: shown as the 14th only while the stay is cancelled.
+        tripRef(id).update(mapOf("liveStart" to "2026-12-14", "liveEnd" to "2026-12-14")).await()
+        sharee.store.restoreSegment(id, "s1")
+        assertFalse(trip(id).containsKey("liveStart"))
+        assertFalse(trip(id).containsKey("liveEnd"))
+    }
+
+    @Test
     fun moveSegment_refusesABookingThatIsGoneAndATargetBeingDeleted() = runBlocking {
         val from = seedTrip()
         val to = seedTrip(title = "Dublin", start = "2026-12-20", end = "2026-12-22")

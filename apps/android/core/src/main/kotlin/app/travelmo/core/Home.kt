@@ -49,7 +49,8 @@ private const val STAY_DAYS = 60L
 // leave, by instant, since local times misorder them across the date line; a
 // journey within one town goes nowhere and says nothing.
 private fun roundTrips(segments: List<Segment>): List<RoundTrip> {
-    val journeys = segments
+    // A cancelled journey was never travelled, so it says nothing about home.
+    val journeys = liveSegments(segments)
         .filter {
             val from = town(it.origin)
             val to = town(it.destination)

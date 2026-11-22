@@ -45,7 +45,7 @@ data class CheckIn(val segment: Segment, val opensAt: String, val open: Boolean)
  * until it departs; nothing once it has gone or while it is further off.
  */
 fun flightCheckIn(segments: List<Segment>, now: String): CheckIn? {
-    val next = segments
+    val next = liveSegments(segments)
         .filter { it.type == SegmentType.FLIGHT && compareInstants(it.start, now) >= 0 }
         .minByOrNull { instantMillis(it.start) } ?: return null
     val opensAt = shiftInstant(next.start, -CHECK_IN_OPENS_HOURS_BEFORE * HOUR)
@@ -54,7 +54,7 @@ fun flightCheckIn(segments: List<Segment>, now: String): CheckIn? {
 }
 
 /** The stay the traveler is in the middle of, if any: checked in, not yet out. */
-fun currentStay(segments: List<Segment>, now: String): Segment? = segments.firstOrNull {
+fun currentStay(segments: List<Segment>, now: String): Segment? = liveSegments(segments).firstOrNull {
     it.type == SegmentType.LODGING && it.end != null && compareInstants(it.start, now) <= 0 && compareInstants(now, it.end) < 0
 }
 

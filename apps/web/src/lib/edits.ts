@@ -1,5 +1,6 @@
-import { Segment, Trip, paths, segmentDateRange, type ExtractedSegment } from "@travelmo/core";
+import { Segment, Trip, bookedDateRange, displayBounds, liveBounds, paths, segmentDateRange, type ExtractedSegment } from "@travelmo/core";
 import {
+  arrayUnion,
   collection,
   deleteDoc,
   deleteField,
@@ -16,6 +17,24 @@ const now = () => new Date().toISOString();
 
 const min = (a: string, b: string) => (a < b ? a : b);
 const max = (a: string, b: string) => (a > b ? a : b);
+
+type Range = { start: string; end: string };
+
+// A trip's dates once bookings are in it: its own widen to cover every one,
+// cancelled ones too (`booked`), so an import finds each again by date; the
+// dates it is shown with (displayBounds) widen only for those still booked
+// (`live`), and are kept apart (liveStart, liveEnd) only while they differ.
+// Nothing narrows here; the parser settles the rest.
+function widened(trip: Trip, booked: Range | undefined, live: Range | undefined): Record<string, unknown> {
+  if (!booked) return {};
+  const start = min(trip.start, booked.start);
+  const end = max(trip.end, booked.end);
+  const shown = displayBounds(trip);
+  const liveStart = live ? min(shown.start, live.start) : shown.start;
+  const liveEnd = live ? max(shown.end, live.end) : shown.end;
+  if (liveStart === start && liveEnd === end) return trip.liveStart ? { start, end, liveStart: deleteField(), liveEnd: deleteField() } : { start, end };
+  return { start, end, liveStart, liveEnd };
+}
 
 // A segment write widens the trip's bounds to include it, in a transaction
 // that reads the trip, so two tabs saving at once both land. Bounds never
@@ -34,8 +53,7 @@ export async function saveSegment(db: Firestore, tripId: string, extracted: Extr
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: timestamp,
   };
-  const range = segmentDateRange([segment]);
-  if (!range) throw new Error("Segment has no dates");
+  if (!segmentDateRange([segment])) throw new Error("Segment has no dates");
   const tripRef = doc(db, paths.trip(tripId));
   const segmentRef = doc(db, paths.segment(tripId, id));
   let saved = segment;
@@ -56,9 +74,16 @@ export async function saveSegment(db: Firestore, tripId: string, extracted: Extr
       if (current.data.sources) saved.sources = current.data.sources;
       if (current.data.rating !== undefined) saved.rating = current.data.rating;
       if (current.data.favorite !== undefined) saved.favorite = current.data.favorite;
+      // An edit doesn't undo a cancellation; Restore does.
+      if (current.data.cancelledAt) saved.cancelledAt = current.data.cancelledAt;
+      if (current.data.cancelledBy) saved.cancelledBy = current.data.cancelledBy;
+      if (current.data.cancelledSentAt) saved.cancelledSentAt = current.data.cancelledSentAt;
+      if (current.data.restoredFrom) saved.restoredFrom = current.data.restoredFrom;
+      if (current.data.restoredAt) saved.restoredAt = current.data.restoredAt;
     }
     t.set(segmentRef, saved);
-    t.update(tripRef, { start: min(trip.start, range.start), end: max(trip.end, range.end), updatedAt: timestamp });
+    // A cancelled booking widens only the trip's own dates.
+    t.update(tripRef, { ...widened(trip, bookedDateRange([saved]), segmentDateRange([saved])), updatedAt: timestamp });
   });
   return saved;
 }
@@ -80,6 +105,38 @@ export async function favoriteSegment(db: Firestore, tripId: string, segmentId: 
   batch.update(doc(db, paths.segment(tripId, segmentId)), { favorite, updatedAt: timestamp });
   batch.update(doc(db, paths.trip(tripId)), { updatedAt: timestamp });
   await batch.commit();
+}
+
+// Takes back a cancellation an email set: the booking counts again, so the
+// trip widens to include it, as a save does (Fit dates may have narrowed
+// the trip while the booking was cancelled).
+export async function restoreSegment(db: Firestore, tripId: string, segmentId: string): Promise<void> {
+  const timestamp = now();
+  const tripRef = doc(db, paths.trip(tripId));
+  const segmentRef = doc(db, paths.segment(tripId, segmentId));
+  await runTransaction(db, async (t) => {
+    const [tripSnap, segmentSnap] = [await t.get(tripRef), await t.get(segmentRef)];
+    if (!tripSnap.exists()) throw new Error("Trip no longer exists");
+    if (!segmentSnap.exists()) throw new Error("Booking no longer exists");
+    const trip = Trip.parse(tripSnap.data());
+    if (trip.deleting) throw new Error("This trip is being deleted");
+    // The booking's span as it will be once restored.
+    const stored = Segment.parse(segmentSnap.data());
+    const restored: Segment = { ...stored, cancelledAt: undefined };
+    const range = bookedDateRange([restored]);
+    // The cancellation is remembered as taken back, and when: reading the
+    // booking's confirmation again, or any cancellation sent before now,
+    // doesn't cancel it again.
+    t.update(segmentRef, {
+      cancelledAt: deleteField(),
+      cancelledBy: deleteField(),
+      cancelledSentAt: deleteField(),
+      ...(stored.cancelledBy ? { restoredFrom: arrayUnion(stored.cancelledBy) } : {}),
+      restoredAt: timestamp,
+      updatedAt: timestamp,
+    });
+    t.update(tripRef, { ...widened(trip, range, range), updatedAt: timestamp });
+  });
 }
 
 export async function deleteSegment(db: Firestore, tripId: string, segmentId: string): Promise<void> {
@@ -108,8 +165,10 @@ export async function fitTripDates(
     if (!before.exists()) throw new Error("Trip no longer exists");
     const seen = Trip.parse(before.data());
     if (seen.deleting) throw new Error("This trip is being deleted");
-    const segments = await getDocs(collection(db, paths.segments(tripId)));
-    const range = segmentDateRange(segments.docs.map((d) => Segment.parse(d.data())));
+    const bookings = (await getDocs(collection(db, paths.segments(tripId)))).docs.map((d) => Segment.parse(d.data()));
+    // Every booking's dates, cancelled ones too, as the trip's own dates
+    // must cover; shown with what is still booked (liveBounds).
+    const range = bookedDateRange(bookings);
     await hooks.afterRead?.();
     if (!range) return false;
     const applied = await runTransaction(db, async (t) => {
@@ -118,7 +177,14 @@ export async function fitTripDates(
       const trip = Trip.parse(snap.data());
       if (trip.deleting) throw new Error("This trip is being deleted");
       if (trip.updatedAt !== seen.updatedAt) return false;
-      t.update(tripRef, { start: range.start, end: range.end, updatedAt: now() });
+      const live = liveBounds(range, bookings);
+      t.update(tripRef, {
+        start: range.start,
+        end: range.end,
+        liveStart: live ? live.start : deleteField(),
+        liveEnd: live ? live.end : deleteField(),
+        updatedAt: now(),
+      });
       return true;
     });
     if (applied) return true;
@@ -144,11 +210,13 @@ export async function moveSegment(db: Firestore, fromTripId: string, segmentId: 
     const target = Trip.parse(to.data());
     if (Trip.parse(from.data()).deleting || target.deleting) throw new Error("This trip is being deleted");
     const segment = Segment.parse(current.data());
-    const range = segmentDateRange([segment]);
-    if (!range) throw new Error("Segment has no dates");
+    // A cancelled booking moves as it is, still cancelled, and has no dates
+    // that count, so the target widens only for a live one.
+    const range = bookedDateRange([segment]);
+    const live = segmentDateRange([segment]);
     t.set(doc(db, paths.segment(toTripId, segmentId)), { ...segment, tripId: toTripId, updatedAt: timestamp });
     t.delete(segmentRef);
-    t.update(toRef, { start: min(target.start, range.start), end: max(target.end, range.end), updatedAt: timestamp });
+    t.update(toRef, { ...widened(target, range, live), updatedAt: timestamp });
     t.update(fromRef, { updatedAt: timestamp });
   });
 }
@@ -174,7 +242,8 @@ export async function mergeTrips(
     if (seen.deleting) throw new Error("This trip is being deleted");
     const segments = (await getDocs(collection(db, paths.segments(sourceId)))).docs.map((d) => Segment.parse(d.data()));
     await hooks.afterRead?.();
-    const range = segmentDateRange(segments);
+    const range = bookedDateRange(segments);
+    const live = segmentDateRange(segments);
     const timestamp = now();
     const applied = await runTransaction(db, async (t) => {
       const [s, g] = await Promise.all([t.get(sourceRef), t.get(targetRef)]);
@@ -187,10 +256,7 @@ export async function mergeTrips(
         t.set(doc(db, paths.segment(targetId, segment.id)), { ...segment, tripId: targetId, updatedAt: timestamp });
         t.delete(doc(db, paths.segment(sourceId, segment.id)));
       }
-      t.update(targetRef, {
-        ...(range ? { start: min(target.start, range.start), end: max(target.end, range.end) } : {}),
-        updatedAt: timestamp,
-      });
+      t.update(targetRef, { ...widened(target, range, live), updatedAt: timestamp });
       t.delete(sourceRef);
       return true;
     });

@@ -1,6 +1,6 @@
 "use client";
 
-import { displayTitles, formatDate, formatDateRange, localDate, normalizeEmail, paths, programsFor, segmentDateRange, type Segment, type Trip } from "@travelmo/core";
+import { bookedDateRange, displayBounds, displayTitles, formatDate, formatDateRange, localDate, normalizeEmail, paths, programsFor, type Segment, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { arrayRemove, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -9,7 +9,7 @@ import { Suspense, use, useMemo, useState, type FormEvent } from "react";
 import { SegmentForm } from "@/components/SegmentForm";
 import { SegmentRow } from "@/components/SegmentRow";
 import { SignInGate } from "@/components/SignInGate";
-import { deleteSegment, deleteTrip, favoriteSegment, fitTripDates, mergeTrips, moveSegment, rateSegment, renameTrip, saveSegment } from "@/lib/edits";
+import { deleteSegment, deleteTrip, favoriteSegment, fitTripDates, mergeTrips, moveSegment, rateSegment, renameTrip, restoreSegment, saveSegment } from "@/lib/edits";
 import { shareTrip } from "@/lib/access";
 import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
@@ -93,7 +93,8 @@ function Title({ trip, canEdit }: { trip: Trip; canEdit: boolean }) {
 // deletions because saving only ever widens the dates.
 function FitDates({ trip, segments }: { trip: Trip; segments: Segment[] }) {
   const [error, setError] = useState<string>();
-  const range = segmentDateRange(segments);
+  // The trip's own dates cover every booking, cancelled ones too.
+  const range = bookedDateRange(segments);
   if (!range || (range.start === trip.start && range.end === trip.end)) return null;
   return (
     <>
@@ -321,7 +322,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
       </Link>
       <Title trip={trip} canEdit={canManage} />
       <p className="mt-1 text-zinc-600 dark:text-zinc-400" data-testid="trip-dates">
-        {formatDateRange(trip.start, trip.end)}
+        {formatDateRange(displayBounds(trip).start, displayBounds(trip).end)}
         {canManage && segments && <FitDates trip={trip} segments={segments} />}
       </p>
       {isOwner && trip.deleting && <DangerZone trip={trip} />}
@@ -376,6 +377,11 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
                       ? {
                           onRate: (rating: number | null) => rateSegment(firestore(), trip.id, segment.id, rating).catch((e: Error) => setError(e.message)),
                           onFavorite: (favorite: boolean) => favoriteSegment(firestore(), trip.id, segment.id, favorite).catch((e: Error) => setError(e.message)),
+                          onRestore: () =>
+                            restoreSegment(firestore(), trip.id, segment.id).catch((e: Error) => {
+                              console.error("Restoring a cancelled booking failed", e);
+                              setError(e.message);
+                            }),
                         }
                       : {})}
                   />

@@ -40,11 +40,14 @@ import app.travelmo.R
 import app.travelmo.core.ListWarning
 import app.travelmo.core.Segment
 import app.travelmo.core.Trip
+import app.travelmo.core.allCancelled
 import app.travelmo.core.checkInLine
 import app.travelmo.core.displayTitles
 import app.travelmo.core.eventVerb
 import app.travelmo.core.formatDate
 import app.travelmo.core.formatDateRange
+import app.travelmo.core.shownEnd
+import app.travelmo.core.shownStart
 import app.travelmo.core.localDate
 import app.travelmo.core.localTime
 import app.travelmo.core.relativeTime
@@ -161,7 +164,7 @@ fun TripCard(trip: Trip, title: String = trip.title, shared: Boolean, segments: 
             )
             badge?.let { (text, color) -> Text(text.uppercase(), style = MaterialTheme.typography.labelMedium, color = color) }
         }
-        Text(formatDateRange(trip.start, trip.end), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+        Text(formatDateRange(trip.shownStart, trip.shownEnd), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
         if (segments != null) StatusLines(segments, now)
     }
 }
@@ -171,6 +174,9 @@ fun TripCard(trip: Trip, title: String = trip.title, shared: Boolean, segments: 
 private fun StatusLines(segments: List<Segment>, now: String) {
     val status = tripStatus(segments, now)
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    if (allCancelled(segments)) {
+        Text(stringResource(R.string.trip_all_cancelled), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
+    }
     status.stay?.let { stay ->
         val until = stay.end?.let { " · until ${formatDate(localDate(it))} ${localTime(it)}" } ?: ""
         Text(stringResource(R.string.staying_at, stay.title) + until, style = MaterialTheme.typography.bodyLarge, color = muted, modifier = Modifier.padding(top = 8.dp))

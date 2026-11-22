@@ -41,6 +41,8 @@ export const paths = {
   parsedMessages: (uid: string) => `users/${uid}/parsedMessages`,
   parsedMessage: (uid: string, messageId: string) =>
     `users/${uid}/parsedMessages/${messageId}`,
+  pendingCancellations: (uid: string) => `users/${uid}/pendingCancellations`,
+  pendingCancellation: (uid: string, messageId: string) => `users/${uid}/pendingCancellations/${messageId}`,
   gmailAccount: (emailAddress: string) => `gmailAccounts/${emailAddress}`,
   oauthState: (nonce: string) => `oauthStates/${nonce}`,
   pendingConnection: (token: string) => `pendingConnections/${token}`,

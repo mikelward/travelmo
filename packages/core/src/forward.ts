@@ -44,6 +44,9 @@ export type ForwardedParts = {
   subject: string;
   // Whether such a block was found.
   unwrapped: boolean;
+  // When the original was sent (an instant), from the block's Date: or
+  // Sent: line, when it reads as one; never the forward's own date.
+  date?: string;
 };
 
 // The header block Gmail, Apple Mail, Outlook and Thunderbird put above a
@@ -74,5 +77,25 @@ export function unwrapForwarded(message: { from: string; subject: string; text: 
   const from = headerAfter(block, "From");
   const innerSubject = headerAfter(block, "Subject");
   if (!from) return { from: message.from, subject, unwrapped: false };
-  return { from, subject: innerSubject ? stripForwardPrefix(innerSubject) : subject, unwrapped: true };
+  const date = forwardedDate(headerAfter(block, "Date") ?? headerAfter(block, "Sent"));
+  return { from, subject: innerSubject ? stripForwardPrefix(innerSubject) : subject, unwrapped: true, ...(date ? { date } : {}) };
+}
+
+// A forwarding block's date as an instant, in the forms the clients write:
+// "Mon, 1 May 2026 10:00:00 +0100" (Thunderbird), "Mon, May 1, 2026 at
+// 10:00 AM" (Gmail), "1 May 2026 at 10:00:00 BST" (Apple Mail), "Monday,
+// May 1, 2026 10:00 AM" (Outlook's Sent:). A zone it doesn't name by offset
+// is dropped, and a date without one is read as UTC: hours out at worst. A
+// date in numbers only (01/05/2026) is refused, as the day and month could
+// be either way round; so is anything else unreadable.
+export function forwardedDate(text: string | undefined): string | undefined {
+  if (!text) return undefined;
+  if (/\b\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}\b/.test(text)) return undefined;
+  const cleaned = text
+    .replace(/\s+at\s+/i, " ")
+    .replace(/\s+(?!GMT|UTC|AM$|PM$)[A-Z]{2,5}$/, "")
+    .trim();
+  const zoned = /(?:[+-]\d{2}:?\d{2}|GMT|UTC|Z)\b/.test(cleaned) || /GMT[+-]\d/.test(cleaned);
+  const ms = Date.parse(zoned ? cleaned : `${cleaned} UTC`);
+  return Number.isNaN(ms) ? undefined : new Date(ms).toISOString();
 }

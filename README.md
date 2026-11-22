@@ -122,7 +122,7 @@ after changing a dependency regenerate it and commit the result:
 ./gradlew :app:exportBundledLicenses --rerun
 ```
 
-The writes behind the screens (`FirestoreTrips`: saving, moving and
+The writes behind the screens (`FirestoreTrips`: saving, moving, restoring and
 merging bookings, fitting a trip's dates, deleting a trip and finishing a
 deletion the app interrupted) are tested against the Firestore emulator
 with the real rules, as the web's `edits.test.ts` tests their twins, in

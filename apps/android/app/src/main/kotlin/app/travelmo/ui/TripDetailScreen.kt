@@ -83,6 +83,9 @@ import app.travelmo.core.emailLinkFor
 import app.travelmo.core.fittedRange
 import app.travelmo.core.formatDate
 import app.travelmo.core.formatDateRange
+import app.travelmo.core.shownEnd
+import app.travelmo.core.shownStart
+import app.travelmo.core.isCancelled
 import app.travelmo.core.loyaltyLine
 import app.travelmo.core.otherTrips
 import app.travelmo.core.programsFor
@@ -220,7 +223,12 @@ fun TripDetailScreen(
                 flightLines = { segment -> viewModel.flightLines(segment, flightStatuses) },
                 emailLink = { source -> emailLinkFor(source, uid, ownsTrip = isOwner, account = gmailAccount) },
                 bookingActions = if (canEdit) {
-                    BookingActions(onEdit = { onEditBooking(it.id) }, onDelete = { deleting = it }, onMove = if (targets.isEmpty()) null else { segment -> moving = segment })
+                    BookingActions(
+                        onEdit = { onEditBooking(it.id) },
+                        onDelete = { deleting = it },
+                        onMove = if (targets.isEmpty()) null else { segment -> moving = segment },
+                        onRestore = { segment -> viewModel.restoreSegment("${prefix}segment/${segment.id}/restore", tripId, segment.id) },
+                    )
                 } else {
                     null
                 },
@@ -237,7 +245,12 @@ fun TripDetailScreen(
 }
 
 /** What a viewer who may edit can do to a booking. */
-class BookingActions(val onEdit: (Segment) -> Unit, val onDelete: (Segment) -> Unit, val onMove: ((Segment) -> Unit)? = null)
+class BookingActions(
+    val onEdit: (Segment) -> Unit,
+    val onDelete: (Segment) -> Unit,
+    val onMove: ((Segment) -> Unit)? = null,
+    val onRestore: ((Segment) -> Unit)? = null,
+)
 
 /** What the owner can do to the trip. */
 class TripActions(
@@ -299,7 +312,7 @@ private fun TripBody(
     LazyColumn(modifier = modifier.fillMaxSize().scrollEdgeCue(list, scrollCueColors()), state = list, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp)) {
         item(key = "dates") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(formatDateRange(trip.start, trip.end), style = MaterialTheme.typography.bodyMedium, color = muted)
+                Text(formatDateRange(trip.shownStart, trip.shownEnd), style = MaterialTheme.typography.bodyMedium, color = muted)
                 if (shared) Text(stringResource(R.string.badge_shared).uppercase(), style = MaterialTheme.typography.labelSmall, color = TravelmoTheme.colors.shared)
             }
             if (canManage && tripActions != null) {
@@ -445,7 +458,7 @@ private fun MergeInto(targets: List<Trip>, titles: Map<String, String>, busy: Bo
 }
 
 /** A trip as a choice reads as its title and dates. */
-private fun tripChoice(trip: Trip) = "${trip.title} (${formatDateRange(trip.start, trip.end)})"
+private fun tripChoice(trip: Trip) = "${trip.title} (${formatDateRange(trip.shownStart, trip.shownEnd)})"
 
 @Composable
 private fun RenameDialog(current: String, onDismiss: () -> Unit, onRename: (String) -> Unit) {
@@ -509,7 +522,16 @@ fun SegmentRow(
             modifier = Modifier.padding(top = 2.dp).size(24.dp),
         )
         Column(modifier = Modifier.weight(1f)) {
-            Text(segment.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            // As on the web: a cancelled booking stays listed, struck through.
+            if (segment.isCancelled) {
+                Text(stringResource(R.string.cancelled).uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+            }
+            Text(
+                segment.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                textDecoration = if (segment.isCancelled) TextDecoration.LineThrough else null,
+            )
             routeLine(segment)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = muted) }
             timesLine(segment)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = muted) }
             if (flightLines.isNotEmpty()) {
@@ -540,6 +562,11 @@ fun SegmentRow(
                     }
                     if (actions != null) {
                         DropdownMenuItem(text = { Text(stringResource(R.string.edit)) }, onClick = { menu = false; actions.onEdit(segment) })
+                        if (segment.isCancelled) {
+                            actions.onRestore?.let { restore ->
+                                DropdownMenuItem(text = { Text(stringResource(R.string.restore)) }, onClick = { menu = false; restore(segment) })
+                            }
+                        }
                         actions.onMove?.let { move ->
                             DropdownMenuItem(text = { Text(stringResource(R.string.move_to)) }, onClick = { menu = false; move(segment) })
                         }

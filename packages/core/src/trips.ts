@@ -1,6 +1,6 @@
 import type { Location } from "./geocode";
 import { compareInstants } from "./instant";
-import type { ExtractedSegment, Place, SegmentType, Trip } from "./schema";
+import type { ExtractedCancellation, ExtractedSegment, Place, SegmentType, Trip } from "./schema";
 
 export type TripGroups = {
   current: Trip[];
@@ -12,15 +12,17 @@ export function groupTrips(trips: readonly Trip[], today: string): TripGroups {
   const current: Trip[] = [];
   const upcoming: Trip[] = [];
   const past: Trip[] = [];
+  // When the person travels (displayBounds), not the trip's full span.
   for (const trip of trips) {
-    if (trip.end < today) past.push(trip);
-    else if (trip.start > today) upcoming.push(trip);
+    const { start, end } = displayBounds(trip);
+    if (end < today) past.push(trip);
+    else if (start > today) upcoming.push(trip);
     else current.push(trip);
   }
-  const byStart = (a: Trip, b: Trip) => a.start.localeCompare(b.start);
+  const byStart = (a: Trip, b: Trip) => displayBounds(a).start.localeCompare(displayBounds(b).start);
   current.sort(byStart);
   upcoming.sort(byStart);
-  past.sort((a, b) => b.end.localeCompare(a.end));
+  past.sort((a, b) => displayBounds(b).end.localeCompare(displayBounds(a).end));
   return { current, upcoming, past };
 }
 
@@ -33,6 +35,29 @@ const journeyTypes: ReadonlySet<SegmentType> = new Set(["flight", "train", "bus"
 // Trans-Siberian, with a day to spare.
 const maxJourneyDays = 8;
 
+// A booking a cancellation email was matched to. It stays on the trip,
+// shown struck through, but nothing else counts it.
+export function isCancelled(segment: object): boolean {
+  return typeof (segment as { cancelledAt?: unknown }).cancelledAt === "string";
+}
+
+export function liveSegments<S extends object>(segments: readonly S[]): S[] {
+  return segments.filter((s) => !isCancelled(s));
+}
+
+// A trip whose every booking was cancelled isn't happening: no document
+// warnings, reminders, calendar event or report counts for it. A trip with
+// no bookings yet (planned by hand, or not imported) is still a trip.
+export function allCancelled(segments: readonly object[]): boolean {
+  return segments.length > 0 && segments.every(isCancelled);
+}
+
+// Every booking's dates, cancelled ones too: what a trip's own dates must
+// always cover, so an import finds each of its bookings again by date.
+export function bookedDateRange(segments: readonly ExtractedSegment[]): { start: string; end: string } | undefined {
+  return segmentDateRange(segments.map((s) => (isCancelled(s) ? ({ ...s, cancelledAt: undefined } as ExtractedSegment) : s)));
+}
+
 export function segmentDateRange(
   segments: readonly ExtractedSegment[],
 ): { start: string; end: string } | undefined {
@@ -43,7 +68,7 @@ export function segmentDateRange(
   // trip: its start stands for both.
   let start: string | undefined;
   let end: string | undefined;
-  for (const segment of segments) {
+  for (const segment of liveSegments(segments)) {
     const tooLong = !!segment.end && journeyTypes.has(segment.type) && daysBetween(localDate(segment.start), localDate(segment.end)) > maxJourneyDays;
     const last = segment.end && !tooLong ? segment.end : segment.start;
     for (const date of [localDate(segment.start), localDate(last)]) {
@@ -52,6 +77,32 @@ export function segmentDateRange(
     }
   }
   return start !== undefined && end !== undefined ? { start, end } : undefined;
+}
+
+// When the person now travels, once cancellations have taken some of a
+// trip's bookings: an end only a cancelled booking reached moves in to what
+// is still booked; an end set beyond the bookings (planned by hand) stays.
+// None when nothing is cancelled, nothing is left booked, or it is the
+// trip's own dates. Kept on the trip as liveStart and liveEnd, so screens
+// that read only the trip show it (displayBounds); the trip's own dates
+// stay, so its bookings are still found by date.
+export function liveBounds(
+  trip: { start: string; end: string },
+  segments: readonly ExtractedSegment[],
+): { start: string; end: string } | undefined {
+  if (!segments.some(isCancelled)) return undefined;
+  const live = segmentDateRange(segments);
+  if (!live) return undefined;
+  const booked = segments.filter(isCancelled).flatMap((s) => bookedDateRange([s]) ?? []);
+  const start = trip.start < live.start && booked.some((r) => r.start === trip.start) ? live.start : live.start < trip.start ? live.start : trip.start;
+  const end = trip.end > live.end && booked.some((r) => r.end === trip.end) ? live.end : live.end > trip.end ? live.end : trip.end;
+  return start === trip.start && end === trip.end ? undefined : { start, end };
+}
+
+// The dates a trip is shown with: when the person now travels (liveBounds),
+// else its own.
+export function displayBounds(trip: { start: string; end: string; liveStart?: string | undefined; liveEnd?: string | undefined }): { start: string; end: string } {
+  return trip.liveStart && trip.liveEnd ? { start: trip.liveStart, end: trip.liveEnd } : { start: trip.start, end: trip.end };
 }
 
 export type UpcomingEvent<S extends ExtractedSegment = ExtractedSegment> = {
@@ -64,7 +115,7 @@ export type UpcomingEvent<S extends ExtractedSegment = ExtractedSegment> = {
 // is under way (a stay's check-out, a flight's arrival).
 export function nextEvent<S extends ExtractedSegment>(segments: readonly S[], now: string): UpcomingEvent<S> | undefined {
   let best: UpcomingEvent<S> | undefined;
-  for (const segment of segments) {
+  for (const segment of liveSegments(segments)) {
     let candidate: UpcomingEvent<S> | undefined;
     if (compareInstants(segment.start, now) >= 0) candidate = { segment, kind: "start", at: segment.start };
     else if (segment.end && compareInstants(segment.end, now) >= 0) candidate = { segment, kind: "end", at: segment.end };
@@ -137,16 +188,17 @@ export function daysBetween(start: string, end: string): number {
 
 // A booking belongs to an existing trip when its dates fall within, or within
 // `gapDays` of, that trip. Flights home after a long gap start a new trip.
+// A trip is grouped by when the person travels (displayBounds): a cancelled
+// stay at its end draws nothing else in.
 export function findTripForRange(
   trips: readonly Trip[],
   range: { start: string; end: string },
   gapDays = 2,
 ): Trip | undefined {
-  return trips.find(
-    (trip) =>
-      daysBetween(trip.end, range.start) <= gapDays &&
-      daysBetween(range.end, trip.start) <= gapDays,
-  );
+  return trips.find((trip) => {
+    const shown = displayBounds(trip);
+    return daysBetween(shown.end, range.start) <= gapDays && daysBetween(range.end, shown.start) <= gapDays;
+  });
 }
 
 // An activity with no time of its own: the extractor's convention for a
@@ -191,10 +243,60 @@ const genericWords = new Set([
   "booking", "reservation", "confirmation", "trip", "tour", "ticket", "tickets", "from", "with", "the", "and",
 ]);
 
+// A text's words, for every comparison of names here (words, eventWords,
+// and through them sameBooking, sameEvent, receipts and cancels): letters
+// and digits of any script (東京旅館 and となりのトトロ are names too), in
+// lower case, accents aside.
+function tokens(text: string | undefined): string[] {
+  return (text ?? "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+}
+
+// The cities a text names, of those the time-zone names know ("Europe/
+// Paris", "America/New_York"): a few hundred of the world's larger cities,
+// with no table of our own to keep.
+let knownCities: Set<string> | undefined;
+function citiesNamed(text: string | undefined): Set<string> {
+  knownCities ??= new Set(
+    Intl.supportedValuesOf("timeZone")
+      .map((zone) => tokens(zone.split("/").pop()!.replace(/_/g, " ")).join(" "))
+      .filter(Boolean),
+  );
+  const found = new Set<string>();
+  const t = tokens(text);
+  for (let i = 0; i < t.length; i++) {
+    for (let n = 1; n <= 3 && i + n <= t.length; n++) {
+      const phrase = t.slice(i, i + n).join(" ");
+      if (knownCities.has(phrase)) found.add(phrase);
+    }
+  }
+  return found;
+}
+
+// Whether what an email names is somewhere else than the booking it might
+// be: one rule for stays, events and journeys' ends. A city the email gives
+// as such (`namedCity`) decides when the booking has one too. Otherwise a
+// city named in the text counts only if it isn't in the booking's own name:
+// "ibis Paris City" is not in London, but "Chicago at Phoenix Theatre" is a
+// show in London and "Hotel Berlin" may be in Munich.
+export function localityConflict(
+  named: string | undefined,
+  city: string | undefined,
+  own: readonly (string | undefined)[] = [],
+  namedCity?: string,
+): boolean {
+  if (!city) return false;
+  const theirs = tokens(city).join(" ");
+  if (namedCity) return tokens(namedCity).join(" ") !== theirs;
+  if (!named) return false;
+  const inOwnName = new Set(own.flatMap((text) => [...citiesNamed(text)]));
+  const cities = [...citiesNamed(named)].filter((c) => !inOwnName.has(c));
+  return cities.length > 0 && !cities.includes(theirs);
+}
+
 function words(...texts: (string | undefined)[]): Set<string> {
   const out = new Set<string>();
   for (const text of texts) {
-    for (const word of (text ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().split(/[^a-z0-9]+/)) {
+    for (const word of tokens(text)) {
       // Names of four letters or more, and numbers such as a flight's.
       if ((word.length >= 4 || (/\d/.test(word) && word.length >= 2)) && !genericWords.has(word)) out.add(word);
     }
@@ -202,7 +304,47 @@ function words(...texts: (string | undefined)[]): Set<string> {
   return out;
 }
 
-const normalizeReference = (ref: string) => ref.toUpperCase().replace(/[^A-Z0-9]/g, "");
+// The flight or train numbers a text names: an airline's or operator's
+// designator in capitals, then the number ("BA 117", "BA117", "U2 8001",
+// "ICE 578"), as "BA117"; and, for a journey (`named`), the number after an
+// operator's full name ("Eurostar 9014", "Flight 117"), as "#9014", which
+// is the same service as any designator with that number ("ES 9014").
+// Words that number a place rather than a service (Terminal 5, Platform 9,
+// Coach 12) aren't operators.
+export function serviceNumbers(text: string | undefined, named = false): Set<string> {
+  const out = new Set<string>();
+  for (const m of (text ?? "").matchAll(/\b([A-Z]{2,3}|[A-Z]\d|\d[A-Z])\s?(\d{1,4})\b/g)) out.add(`${m[1]}${Number(m[2])}`);
+  if (named) {
+    for (const m of (text ?? "").matchAll(/\b(\p{Lu}\p{Ll}+)\s(\d{2,5})\b/gu)) {
+      if (!placeNumberWords.has(m[1]!.toLowerCase())) out.add(`#${Number(m[2])}`);
+    }
+  }
+  return out;
+}
+
+const placeNumberWords = new Set([
+  "terminal", "platform", "gate", "coach", "car", "carriage", "seat", "seats", "row", "room", "deck", "cabin", "berth",
+  "pier", "track", "zone", "level", "floor", "stand", "hall", "day", "suite", "apartment", "unit", "number", "no",
+]);
+
+// Whether two of serviceNumbers' services are one: the same designator and
+// number, or a number after a full name and any designator with it.
+function sameService(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (!a.startsWith("#") && !b.startsWith("#")) return false;
+  const number = (s: string) => s.match(/\d+$/)?.[0];
+  return number(a) === number(b);
+}
+
+// Whether two texts name different services: both name one, and none in
+// common. BA 999 is not BA 117, however alike the route; nor Eurostar 9014
+// Eurostar 9024 (`named`, for a journey).
+export function servicesConflict(a: string | undefined, b: string | undefined, named = false): boolean {
+  const [x, y] = [serviceNumbers(a, named), serviceNumbers(b, named)];
+  return x.size > 0 && y.size > 0 && ![...x].some((n) => [...y].some((m) => sameService(n, m)));
+}
+
+export const normalizeReference = (ref: string) => ref.toUpperCase().replace(/[^A-Z0-9]/g, "");
 
 // Whether two bookings from different sources are the same reservation, for
 // imports that carry no shared reference (a TripIt export has no
@@ -312,8 +454,8 @@ const joiningWords = new Set(["the", "a", "an", "at", "of", "and"]);
 function eventWords(...texts: (string | undefined)[]): Set<string> {
   const out = new Set<string>();
   for (const text of texts) {
-    for (const word of (text ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().split(/[^a-z0-9]+/)) {
-      if (word && !joiningWords.has(word)) out.add(word);
+    for (const word of tokens(text)) {
+      if (!joiningWords.has(word)) out.add(word);
     }
   }
   return out;
@@ -413,11 +555,17 @@ function placesConflict(a: ExtractedSegment, b: ExtractedSegment): boolean {
   return false;
 }
 
-const paymentWords = /\b(payments?|paid|receipts?|invoices?|deposit|balance)\b/i;
+// Words that say a text is about a payment (a receipt, an invoice, a
+// refund), not a booking: one list for every receipt check.
+const paymentWords = /\b(payments?|paid|receipts?|invoices?|deposit|balance|refunds?|refunded)\b/i;
+
+export function mentionsPayment(text: string | undefined): boolean {
+  return !!text && paymentWords.test(text);
+}
 
 // A payment for a booking, not a visit: untimed, and called one.
 export function isPaymentReceipt(segment: Pick<ExtractedSegment, "type" | "title" | "start" | "end">): boolean {
-  return isUntimed(segment) && paymentWords.test(segment.title);
+  return isUntimed(segment) && mentionsPayment(segment.title);
 }
 
 const dayNumber = (title: string) => /\bday\s*(\d+)\b/i.exec(title)?.[1];
@@ -466,6 +614,226 @@ export function matchRank(existing: ExtractedSegment, incoming: ExtractedSegment
 export function compareMatchRanks(a: readonly number[], b: readonly number[]): number {
   for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return a[i]! - b[i]!;
   return a.length - b.length;
+}
+
+// Whether a cancellation email names this booking. Cancelling the wrong
+// booking hides a real one, so a weak match never counts: a confirmation
+// number decides when both have one; otherwise the dates must agree and the
+// email's place must share a word with the booking's title or place that
+// names this property or route, not its city or its chain ("Hilton London
+// Kensington" doesn't cancel "Hilton London Paddington"). As in
+// `sameBooking`, when the provider is the property itself (an independent
+// hotel) and nothing is left on either side without it, its name is the
+// evidence. Two providers that are plainly different companies never match
+// (see `providersDiffer`). `sent` is when the email was sent, or read when
+// that is unknown: references are recycled, so one alone reaches only
+// bookings near it (`nearReference`).
+export function cancels(c: ExtractedCancellation, s: ExtractedSegment, sent?: string): boolean {
+  if (c.type && c.type !== s.type) return false;
+  if (providersDiffer(c.provider, s.provider)) return false;
+  // A journey's number may follow its operator's full name (Eurostar 9014).
+  const journey = journeyTypes.has(s.type);
+  // A shared reference decides which reservation; any part of it the email
+  // names (a date, a time, a flight number, a direction) decides which of
+  // its bookings. "BA 117 LHR to JFK on 10 June" is not the BA 116 return
+  // under the same reference; the reference alone cancels them all, of
+  // those near the email: an airline's ABC123 of two years ago is another
+  // reservation.
+  if (c.confirmation && s.confirmation) {
+    if (normalizeReference(c.confirmation) !== normalizeReference(s.confirmation)) return false;
+    if (!c.start && sent && !nearReference(s, sent)) return false;
+    if (servicesConflict(c.place, s.title, journey)) return false;
+    if (c.start) {
+      if (localDate(c.start) !== localDate(s.start)) return false;
+      if (s.type !== "lodging" && c.start.slice(11, 16) !== "00:00" && c.start.slice(11, 16) !== s.start.slice(11, 16)) return false;
+    }
+    if (c.end && s.end && localDate(c.end) !== localDate(s.end)) return false;
+    if (journeyTypes.has(s.type)) {
+      if (c.origin && s.origin && !sameEnd(c.origin, s.origin)) return false;
+      if (c.destination && s.destination && !sameEnd(c.destination, s.destination)) return false;
+    }
+    return true;
+  }
+  if (!c.start || localDate(c.start) !== localDate(s.start)) return false;
+  if (c.end && s.end && localDate(c.end) !== localDate(s.end)) return false;
+  // Anything but a stay starts at the minute the email gives: a 14:00
+  // Hamlet cancellation leaves the 19:30 performance alone. A stay's times
+  // are the hotel's usual check-in, so its date is enough. Midnight is the
+  // extraction's "no time given".
+  const timed = c.start.slice(11, 16) !== "00:00";
+  if (s.type !== "lodging" && timed && c.start.slice(11, 16) !== s.start.slice(11, 16)) return false;
+  // A flight or train number on both sides must agree, before anything else
+  // counts.
+  if (servicesConflict(c.place, s.title, journey)) return false;
+  // A journey must also go the same way: an 08:00 LHR to CDG cancellation
+  // leaves the 20:00 CDG to LHR return alone.
+  if (journeyTypes.has(s.type)) {
+    if (!sameEnd(c.origin, s.origin) || !sameEnd(c.destination, s.destination)) return false;
+    // The same way at the same minute is that leg. Without a time, the same
+    // way on the same day is too, unless the email names something more
+    // (a flight number), which must then agree, as below: "LHR to CDG" has
+    // no word left once its codes and cities are set aside.
+    if (timed) return true;
+    // The same flight or train number, however spaced ("BA117", "BA 117"),
+    // is that leg. A number on one side only leaves it open which service
+    // this is, and the route's words alone don't say.
+    const ours = serviceNumbers(c.place, true);
+    const theirs = serviceNumbers(s.title, true);
+    if ([...theirs].some((n) => [...ours].some((m) => sameService(n, m)))) return true;
+    if (ours.size > 0 || theirs.size > 0) return false;
+    const aside = words(s.origin?.city, s.destination?.city, c.provider, s.provider);
+    if ([...words(c.place)].every((word) => aside.has(word))) return true;
+  }
+  // An event the email names must be this one, by the rule sameEvent uses:
+  // Toy Story 4 is not Toy Story 5, at the same time and cinema.
+  if (s.type === "activity" && c.place) {
+    const named: ExtractedSegment = { type: s.type, title: c.place, start: c.start, ...(c.provider ? { provider: c.provider } : {}) };
+    if (identitiesConflict(...eventIdentities(named, s))) return false;
+  }
+  // What the email names and what the booking is called, one tokenizer for
+  // both the identity check and the evidence. Anything but a journey reads
+  // names with eventWords, short words included ("The Ned", "ibis London
+  // Bow"); a journey's ends and numbers were settled above, and its names
+  // read with words, as there.
+  const without = (found: Set<string>, drop: Set<string>) => new Set([...found].filter((w) => !drop.has(w)));
+  // Somewhere else by name: not this booking, whatever else agrees.
+  if (!journey && localityConflict(c.place, s.destination?.city ?? s.origin?.city, [s.title, s.destination?.name, s.origin?.name], c.city)) return false;
+  const read = journey ? words : eventWords;
+  const aside = journey ? words(s.origin?.city, s.destination?.city) : new Set([...eventWords(s.origin?.city, s.destination?.city), ...genericWords]);
+  const brand = read(c.provider, s.provider);
+  const withoutBrand = new Set([...aside, ...brand]);
+  let ours = without(read(c.place), withoutBrand);
+  let theirs = without(read(s.title, s.destination?.name, s.origin?.name), withoutBrand);
+  if (ours.size === 0 && theirs.size === 0) {
+    ours = without(read(c.place), aside);
+    theirs = without(read(s.title, s.destination?.name, s.origin?.name), aside);
+  }
+  // A stay must be this hotel, as sameEvent tells events apart: one name
+  // holds every word of the other, the city, the provider and the generic
+  // words aside. A chain word alone is two hotels: "Hilton London
+  // Kensington" and "Hilton London Paddington", "ibis London Bow" and
+  // "ibis London City".
+  const within = (p: Set<string>, q: Set<string>) => [...p].every((word) => q.has(word));
+  if (s.type === "lodging" && ours.size > 0 && theirs.size > 0 && !within(ours, theirs) && !within(theirs, ours)) return false;
+  for (const word of ours) if (theirs.has(word)) return true;
+  return false;
+}
+
+// How far from a cancellation email a booking it names by reference alone
+// can be: one that ended a month before it was sent (a late notice), or
+// starts within two years after (about as far ahead as anything sells).
+const referenceDaysBefore = 30;
+const referenceDaysAfter = 730;
+
+function nearReference(s: ExtractedSegment, sent: string): boolean {
+  const at = Date.parse(sent);
+  if (Number.isNaN(at)) return true;
+  const day = (offset: number) => new Date(at + offset * 86_400_000).toISOString().slice(0, 10);
+  return localDate(s.end ?? s.start) >= day(-referenceDaysBefore) && localDate(s.start) <= day(referenceDaysAfter);
+}
+
+// Sites and agencies that sell others' bookings under their own name: the
+// airline, hotel or railway they sold is theirs to cancel too. Matched in
+// the name run together ("Trip.com" is "tripcom").
+const bookingSellers = [
+  "expedia", "tripcom", "bookingcom", "hotelscom", "priceline", "orbitz", "travelocity", "agoda", "kayak", "hopper",
+  "edreams", "opodo", "kiwicom", "lastminute", "ctrip", "gotogate", "mytrip", "hotwire", "egencia", "trainline",
+  "raileurope", "sncf", "omio", "flightcentre", "trailfinders", "navan", "tripactions", "amextravel",
+];
+const sellerWords = new Set(["travel", "travels", "tours", "agency", "agent", "holidays", "vacations"]);
+// What company names share without being one company.
+const companyWords = new Set([
+  "air", "airways", "airline", "airlines", "aer", "hotel", "hotels", "resort", "resorts", "group", "inc", "ltd",
+  "limited", "plc", "co", "company", "corp", "sa", "ag", "gmbh", "the", "and", "by", "of", "de", "rail", "railway",
+  "railways", "cruise", "cruises", "line", "lines", "international",
+]);
+
+// Whether two providers are plainly different companies: both named, no
+// booking site or agency (which sells others' bookings) among them, no
+// distinctive word in common, neither the other's initials (BA is British
+// Airways) nor a code too short to tell (LH could be Lufthansa).
+export function providersDiffer(a: string | undefined, b: string | undefined): boolean {
+  const [x, y] = [tokens(a), tokens(b)];
+  if (x.length === 0 || y.length === 0) return false;
+  const [joinedX, joinedY] = [x.join(""), y.join("")];
+  if (joinedX === joinedY) return false;
+  const seller = (t: string[], joined: string) => bookingSellers.some((name) => joined.includes(name)) || t.some((w) => sellerWords.has(w));
+  if (seller(x, joinedX) || seller(y, joinedY)) return false;
+  const initials = (t: string[]) => t.map((w) => w[0]).join("");
+  if (joinedX === initials(y) || joinedY === initials(x)) return false;
+  const distinctive = (t: string[]) => t.filter((w) => !companyWords.has(w));
+  const theirs = new Set(distinctive(y));
+  if (distinctive(x).some((w) => theirs.has(w))) return false;
+  if (joinedX.length <= 3 || joinedY.length <= 3) return false;
+  return true;
+}
+
+// Whether a cancellation's end of a journey (a code or a name) is the
+// booking's. A code decides when both have one (LHR is not LGW); otherwise
+// the name must share a word that isn't the city's: London Heathrow and
+// London Gatwick are both London.
+function sameEnd(named: string | undefined, place: Place | undefined): boolean {
+  if (!named || !place) return false;
+  const code = place.code?.trim().toUpperCase();
+  // Given as a code: three capital letters, as an airport's or a station's
+  // is written ("LTN", "KGX"). A name such as "Luton" never is one.
+  const given = named.trim();
+  if (code && /^[A-Z]{3}$/.test(given)) return given === code;
+  if (localityConflict(given, place.city, [place.name])) return false;
+  // Named exactly as the booking names it ("Dublin Airport"), case,
+  // accents and spacing aside: that end, though no word of it is left once
+  // the city and "airport" are set aside.
+  // Letters and digits of any script count (成田空港 is not 羽田空港), and
+  // two names with none at all are never the same name.
+  const plain = (text: string) => tokens(text).join(" ");
+  const plainGiven = plain(given);
+  if (plainGiven !== "" && plainGiven === plain(place.name)) return true;
+  // Beyond an exact name, a word that names this end: not its city, and not
+  // a word every airport or station has ("Newark Liberty International" is
+  // not "John F Kennedy International").
+  const aside = new Set([...words(place.city), ...endpointWords]);
+  const ours = [...words(named)].filter((word) => !aside.has(word));
+  const theirs = words(place.name, place.code);
+  return ours.some((word) => theirs.has(word));
+}
+
+// What airports, stations and ports are called, in the languages their
+// names are often given in: never evidence of which one.
+const endpointWords = [
+  "international", "intl", "airport", "aeroport", "aeropuerto", "aeroporto", "flughafen", "lufthavn", "airfield",
+  "regional", "domestic", "terminal", "station", "central", "centrale", "centraal", "main", "hbf", "hauptbahnhof",
+  "bahnhof", "gare", "estacion", "stazione", "railway", "rail", "port", "pier", "harbour", "harbor", "ferry", "coach",
+  "bus", "north", "south", "east", "west",
+];
+
+// A cancellation keeps waiting after it finds a booking, since another leg
+// under the same reference can still arrive. Each booking an email names
+// stops waiting once nothing more can come for it: a month after the email
+// was read (long enough for a backfill to reach the older confirmations)
+// when that booking has ended, or after a year when it gives no dates. The
+// email stops waiting when every booking it names has (a dated stay that has
+// passed doesn't end the wait for a flight named by its reference only).
+export const pendingCancellationGraceDays = 30;
+export const pendingCancellationUndatedDays = 365;
+
+type Waiting = { cancellations: readonly ExtractedCancellation[]; at: string };
+
+function entryExpired(c: ExtractedCancellation, ageDays: number, today: string): boolean {
+  if (ageDays < pendingCancellationGraceDays) return false;
+  const dates = [c.start, c.end].filter((d): d is string => !!d);
+  if (dates.length === 0) return ageDays >= pendingCancellationUndatedDays;
+  return dates.every((d) => localDate(d) < today);
+}
+
+// The bookings a cancellation email still waits for.
+export function stillWaiting(p: Waiting, now: string): ExtractedCancellation[] {
+  const ageDays = (Date.parse(now) - Date.parse(p.at)) / 86_400_000;
+  const today = now.slice(0, 10);
+  return p.cancellations.filter((c) => !entryExpired(c, ageDays, today));
+}
+
+export function pendingCancellationExpired(p: Waiting, now: string): boolean {
+  return stillWaiting(p, now).length === 0;
 }
 
 // Trips whose dates touch the range at all (no gap allowed), the candidates

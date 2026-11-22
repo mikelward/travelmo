@@ -4,7 +4,7 @@ import { formatDate, formatDateRange } from "./format";
 import type { PlaceLookup } from "./reports";
 import { tripPlaces } from "./reports";
 import type { ExtractedSegment, Trip } from "./schema";
-import { daysBetween } from "./trips";
+import { daysBetween, displayBounds } from "./trips";
 import { entryLabel, needsAction, travelerEntry, type EntryNeed, type VisaTable } from "./visas";
 
 // Reminders before a trip: the document warnings and the entry
@@ -20,10 +20,13 @@ const addDays = (date: string, n: number): string => {
   return d.toISOString().slice(0, 10);
 };
 
-// Trips under way or starting within the window, soonest first.
+// Trips under way or starting within the window, soonest first, by when the
+// person travels (displayBounds).
 export function dueForReminders(trips: readonly Trip[], today: string): Trip[] {
   const horizon = addDays(today, reminderWindowDays);
-  return trips.filter((t) => !t.deleting && t.end >= today && t.start <= horizon).sort((a, b) => a.start.localeCompare(b.start));
+  return trips
+    .filter((t) => !t.deleting && displayBounds(t).end >= today && displayBounds(t).start <= horizon)
+    .sort((a, b) => displayBounds(a).start.localeCompare(displayBounds(b).start));
 }
 
 // One entry requirement as a line: the country, the rule, whose passport.
@@ -67,7 +70,7 @@ export type ReminderNotification = { title: string; body: string; url: string; t
 
 // Whether the trip is under way or how soon it starts.
 function startsWhen(trip: Trip, today: string, capital = false): string {
-  const days = daysBetween(today, trip.start);
+  const days = daysBetween(today, displayBounds(trip).start);
   const when = days <= 0 ? "under way" : days === 1 ? "starts tomorrow" : `starts in ${days} days`;
   return capital ? when[0]!.toUpperCase() + when.slice(1) : when;
 }
@@ -77,7 +80,7 @@ export function reminderEmail(reminders: readonly TripReminder[], options: { ori
   const first = reminders[0]!;
   const subject = reminders.length === 1 ? `Before your trip to ${first.trip.title}` : `Before your next ${reminders.length} trips`;
   const sections = reminders.map(({ trip, lines }) => {
-    return [`${trip.title} (${formatDateRange(trip.start, trip.end)}), ${startsWhen(trip, options.today)}:`, ...lines.map((l) => `  - ${l}`), `  ${options.origin}/trips/${trip.id}`].join("\n");
+    return [`${trip.title} (${formatDateRange(displayBounds(trip).start, displayBounds(trip).end)}), ${startsWhen(trip, options.today)}:`, ...lines.map((l) => `  - ${l}`), `  ${options.origin}/trips/${trip.id}`].join("\n");
   });
   const text = [
     ...sections,
@@ -100,7 +103,7 @@ const utf8Length = (text: string): number => new TextEncoder().encode(text).leng
 // waits on its page.
 export function reminderNotifications(reminders: readonly TripReminder[], options: { origin: string; today: string }): ReminderNotification[] {
   return reminders.map(({ trip, lines }) => {
-    const head = `${startsWhen(trip, options.today, true)}, ${formatDateRange(trip.start, trip.end)}.`;
+    const head = `${startsWhen(trip, options.today, true)}, ${formatDateRange(displayBounds(trip).start, displayBounds(trip).end)}.`;
     const base = { title: `Before your trip to ${trip.title}`, url: `${options.origin}/trips/${trip.id}`, tag: `reminder-${trip.id}` };
     const build = (kept: number): ReminderNotification => {
       const more = lines.length - kept;

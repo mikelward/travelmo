@@ -46,4 +46,11 @@ class FavoritesTest {
         )
         favoritePlaces(emptyList()) shouldBe emptyList()
     }
+
+    @Test
+    fun `leaves out a cancelled booking, which was never a stay`() {
+        val trip = Trip("t1", "Liverpool", "2026-05-01", "2026-05-03", "u")
+        val cancelled = booking("s1", destination = cove, favorite = true).copy(cancelledAt = "2026-01-01T00:00:00Z", cancelledBy = "m2")
+        favoritePlaces(listOf(TripWithBookings(trip, listOf(cancelled)))) shouldBe emptyList()
+    }
 }

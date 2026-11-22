@@ -50,7 +50,26 @@ data class Segment(
     val favorite: Boolean = false,
     /** The emails, TripIt trips and calendar events it was read from, oldest first ([segmentSources]). */
     val sources: List<SourceRef> = emptyList(),
+    /**
+     * When a cancellation email was matched to it. A cancelled booking stays on
+     * its trip but counts for nothing: not the trip's dates, what's next,
+     * check-in, reminders or reports.
+     */
+    val cancelledAt: String? = null,
+    /** The id of the cancellation email that cancelled it. */
+    val cancelledBy: String? = null,
 )
+
+val Segment.isCancelled: Boolean get() = cancelledAt != null
+
+fun liveSegments(segments: List<Segment>): List<Segment> = segments.filter { !it.isCancelled }
+
+/**
+ * A trip whose every booking was cancelled isn't happening: no document
+ * warnings, reminders or report counts for it. A trip with no bookings yet is
+ * still a trip.
+ */
+fun allCancelled(segments: List<Segment>): Boolean = segments.isNotEmpty() && segments.all { it.isCancelled }
 
 data class Trip(
     val id: String,
@@ -61,7 +80,33 @@ data class Trip(
     val ownerUid: String,
     val sharedWith: List<String> = emptyList(),
     val deleting: Boolean = false,
+    /** When the person now travels, once cancellations narrowed it (liveBounds in packages/core). */
+    val liveStart: String? = null,
+    val liveEnd: String? = null,
 )
+
+/** The dates a trip is shown with: when the person now travels, else its own (displayBounds). */
+fun displayBounds(trip: Trip): Pair<String, String> =
+    if (trip.liveStart != null && trip.liveEnd != null) trip.liveStart to trip.liveEnd else trip.start to trip.end
+
+val Trip.shownStart: String get() = displayBounds(this).first
+val Trip.shownEnd: String get() = displayBounds(this).second
+
+/**
+ * The trip once bookings are in it, as the web's edits do: its own dates
+ * widen to cover every one, cancelled ones too (`booked`); the dates it is
+ * shown with widen only for those still booked (`live`), and are kept apart
+ * only while they differ. Nothing narrows here.
+ */
+fun widenedFor(trip: Trip, booked: Pair<String, String>, live: Pair<String, String>?): Trip {
+    val start = minOf(trip.start, booked.first)
+    val end = maxOf(trip.end, booked.second)
+    val shown = displayBounds(trip)
+    val liveStart = if (live != null) minOf(shown.first, live.first) else shown.first
+    val liveEnd = if (live != null) maxOf(shown.second, live.second) else shown.second
+    return if (liveStart == start && liveEnd == end) trip.copy(start = start, end = end, liveStart = null, liveEnd = null)
+    else trip.copy(start = start, end = end, liveStart = liveStart, liveEnd = liveEnd)
+}
 
 /**
  * An address as the data stores it: trimmed and lowercase. Shared-with

@@ -144,6 +144,14 @@ describe("tripWarnings", () => {
     ]);
   });
 
+  it("warns of nothing for a trip whose every booking was cancelled, but still for one with none", () => {
+    const people = peopleDocuments(profile("me", "2027-02-01"), [], "me");
+    const stay = { type: "lodging" as const, title: "Example Hotel", start: "2026-12-12T15:00:00+00:00", destination: { name: "Example Hotel", country: "FR" } };
+    expect(tripWarnings(people, trip, [Object.assign({}, stay, { cancelledAt: "2026-11-02T00:00:00Z" })], "2026-11-01")).toEqual([]);
+    expect(tripWarnings(people, trip, [stay], "2026-11-01")).toHaveLength(1);
+    expect(tripWarnings(people, trip, [], "2026-11-01")).toHaveLength(1);
+  });
+
   it("counts the trip's owner as on it", () => {
     const people = peopleDocuments(null, [profile("me-too", "2026-12-20", "owner@example.com")], "viewer");
     expect(tripWarnings(people, { ...trip, ownerUid: "me-too" }, undefined, "2026-11-01")).toHaveLength(1);

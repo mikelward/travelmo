@@ -4,6 +4,7 @@ import type { EmailLinks } from "@/lib/sourceLinks";
 import {
   formatDate,
   isUntimed,
+  isCancelled,
   localDate,
   localTime,
   loyaltyLine,
@@ -102,6 +103,7 @@ export function SegmentRow({
   onRate,
   onFavorite,
   flightLines,
+  onRestore,
 }: {
   segment: Segment;
   onEdit?: () => void;
@@ -117,7 +119,10 @@ export function SegmentRow({
   onFavorite?: (favorite: boolean) => void;
   // A flight's live gates and carousel (flightStatusLines).
   flightLines?: readonly string[];
+  // Takes back a cancellation; offered only on a cancelled booking.
+  onRestore?: () => void;
 }) {
+  const cancelled = isCancelled(segment);
   const route = [place(segment.origin), place(segment.destination)].filter(Boolean).join(" → ");
   // Addresses an address pick recorded, under the route they belong to.
   const addresses = [segment.origin?.address, segment.destination?.address].filter(Boolean).join(" → ");
@@ -132,9 +137,14 @@ export function SegmentRow({
     <li className="flex gap-4 py-3">
       <SegmentIcon type={segment.type} label={labels[segment.type]} className="mt-0.5 shrink-0 text-muted" />
       <div className="min-w-0 flex-1">
-        <p className="font-medium">{segment.title}</p>
-        {route && <p className="text-sm text-zinc-600 dark:text-zinc-400">{route}</p>}
-        {times && <p className="text-sm text-zinc-600 dark:text-zinc-400">{times}</p>}
+        {cancelled && (
+          <p className="text-xs font-medium uppercase tracking-wide text-danger" data-testid="segment-cancelled">
+            Cancelled
+          </p>
+        )}
+        <p className={`font-medium${cancelled ? " text-muted line-through" : ""}`}>{segment.title}</p>
+        {route && <p className={`text-sm text-zinc-600 dark:text-zinc-400${cancelled ? " line-through" : ""}`}>{route}</p>}
+        {times && <p className={`text-sm text-zinc-600 dark:text-zinc-400${cancelled ? " line-through" : ""}`}>{times}</p>}
         {flightLines && flightLines.length > 0 && (
           <p className="text-sm font-medium text-amber-800 dark:text-amber-300" data-testid="segment-flight-status">
             {flightLines.join(" · ")}
@@ -157,6 +167,7 @@ export function SegmentRow({
       <BookingMenu
         segment={segment}
         {...(onEdit ? { onEdit } : {})}
+        {...(cancelled && onRestore ? { onRestore } : {})}
         {...(onDelete ? { onDelete } : {})}
         {...(moveTargets ? { moveTargets } : {})}
         {...(onMove ? { onMove } : {})}

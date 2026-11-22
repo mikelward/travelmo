@@ -100,17 +100,19 @@ fun daysBetween(start: String, end: String): Long = ChronoUnit.DAYS.between(Loca
  * country that issued it, nor a visa for a trip known not to go to its country.
  */
 fun documentWarnings(documents: List<TravelDocument>, trip: Trip, today: String, places: TripPlaces? = null): List<DocumentWarning> {
-    if (trip.end < today) return emptyList()
+    // When the person travels, not the trip's full span (displayBounds).
+    val end = trip.shownEnd
+    if (end < today) return emptyList()
     val known = places?.takeIf { it.complete && it.countries.isNotEmpty() }?.countries
     return documents.mapNotNull { document ->
         if (document.country != null && known != null) {
             if (document.kind == DocumentKind.PASSPORT && known.all { it == document.country }) return@mapNotNull null
             if (document.kind == DocumentKind.VISA && document.country !in known) return@mapNotNull null
         }
-        val daysAfterTrip = daysBetween(trip.end, document.expires)
+        val daysAfterTrip = daysBetween(end, document.expires)
         when {
-            document.expires < trip.end -> DocumentWarning(document, WarningWhen.BEFORE, daysAfterTrip)
-            document.kind == DocumentKind.PASSPORT && document.expires < LocalDate.parse(trip.end).plusMonths(PASSPORT_MARGIN_MONTHS).toString() ->
+            document.expires < end -> DocumentWarning(document, WarningWhen.BEFORE, daysAfterTrip)
+            document.kind == DocumentKind.PASSPORT && document.expires < LocalDate.parse(end).plusMonths(PASSPORT_MARGIN_MONTHS).toString() ->
                 DocumentWarning(document, WarningWhen.SOON, daysAfterTrip)
             else -> null
         }
@@ -137,6 +139,9 @@ fun onTrip(person: PersonDocuments, trip: Trip): Boolean =
     person.own || person.uid == trip.ownerUid || (person.email != null && trip.sharedWith.contains(person.email.lowercase()))
 
 fun tripWarnings(people: List<PersonDocuments>, trip: Trip, segments: List<Segment>?, today: String, lookup: (String) -> AirportPlace? = ::airportPlace): List<PersonWarning> {
+    // Every booking cancelled: nobody is going, so no document matters for it.
+    // (No bookings at all is different: where it goes is just unknown.)
+    if (segments != null && allCancelled(segments)) return emptyList()
     val places = segments?.let { tripPlaces(it, lookup) }
     return people.filter { onTrip(it, trip) }.flatMap { person -> documentWarnings(person.documents, trip, today, places).map { PersonWarning(person, it) } }
 }

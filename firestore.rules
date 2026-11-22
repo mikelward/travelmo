@@ -88,10 +88,14 @@ service cloud.firestore {
     }
 
     function validTrip(trip) {
-      return trip.keys().hasOnly(['id', 'title', 'start', 'end', 'ownerUid', 'sharedWith', 'deleting', 'createdAt', 'updatedAt'])
+      return trip.keys().hasOnly(['id', 'title', 'start', 'end', 'liveStart', 'liveEnd', 'ownerUid', 'sharedWith', 'deleting', 'createdAt', 'updatedAt'])
         && (!('deleting' in trip) || trip.deleting is bool)
         && trip.title is string && trip.title.size() > 0 && trip.title.size() <= 200
         && isDate(trip.start) && isDate(trip.end) && trip.start <= trip.end
+        // When the person now travels, within the trip's own dates; both or neither.
+        && (('liveStart' in trip) == ('liveEnd' in trip))
+        && (!('liveStart' in trip) || (isDate(trip.liveStart) && isDate(trip.liveEnd)
+            && trip.start <= trip.liveStart && trip.liveStart <= trip.liveEnd && trip.liveEnd <= trip.end))
         && trip.sharedWith is list && trip.sharedWith.size() <= 20
         && trip.createdAt is string && trip.updatedAt is string;
     }
@@ -109,12 +113,23 @@ service cloud.firestore {
         && request.resource.data.ownerUid == resource.data.ownerUid
         && request.resource.data.id == tripId
         && validTrip(request.resource.data);
-      // A sharee adding a booking may only widen the dates to hold it.
+      // The dates a trip is shown with: when the person now travels, else
+      // its own (displayBounds).
+      function shownStart(trip) {
+        return 'liveStart' in trip ? trip.liveStart : trip.start;
+      }
+      function shownEnd(trip) {
+        return 'liveEnd' in trip ? trip.liveEnd : trip.end;
+      }
+      // A sharee adding or restoring a booking may only widen the dates to
+      // hold it, both its own and those it is shown with.
       allow update: if member()
         && isSharee(resource.data)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['start', 'end', 'updatedAt'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['start', 'end', 'liveStart', 'liveEnd', 'updatedAt'])
         && request.resource.data.start <= resource.data.start
         && request.resource.data.end >= resource.data.end
+        && shownStart(request.resource.data) <= shownStart(resource.data)
+        && shownEnd(request.resource.data) >= shownEnd(resource.data)
         && validTrip(request.resource.data);
       allow delete: if approved() && isOwner(resource.data);
 
@@ -128,7 +143,7 @@ service cloud.firestore {
         function validSegment(segment) {
           return segment.keys().hasOnly(['id', 'tripId', 'type', 'title', 'provider', 'confirmation', 'start', 'end',
               'origin', 'destination', 'notes', 'source', 'gmailMessageIds', 'sources', 'sender', 'rating', 'favorite',
-              'createdAt', 'updatedAt'])
+              'cancelledAt', 'cancelledBy', 'cancelledSentAt', 'restoredFrom', 'restoredAt', 'createdAt', 'updatedAt'])
             && segment.id == segmentId && segment.tripId == tripId
             && segment.type in ['flight', 'train', 'bus', 'ferry', 'lodging', 'car_rental', 'activity', 'other']
             && segment.title is string && segment.title.size() > 0 && segment.title.size() <= 200
@@ -139,6 +154,11 @@ service cloud.firestore {
             && (!('sources' in segment) || segment.sources is list)
             && (!('rating' in segment) || (segment.rating is int && segment.rating >= 1 && segment.rating <= 5))
             && (!('favorite' in segment) || segment.favorite is bool)
+            && (!('cancelledAt' in segment) || isInstant(segment.cancelledAt))
+            && (!('cancelledBy' in segment) || (segment.cancelledBy is string && segment.cancelledBy.size() > 0))
+            && (!('cancelledSentAt' in segment) || isInstant(segment.cancelledSentAt))
+            && (!('restoredFrom' in segment) || (segment.restoredFrom is list && segment.restoredFrom.size() <= 50))
+            && (!('restoredAt' in segment) || isInstant(segment.restoredAt))
             && segment.createdAt is string && segment.updatedAt is string;
         }
         function canEdit() {

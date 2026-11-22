@@ -1,4 +1,5 @@
 import type { Place, Segment, SegmentType, Trip } from "./schema";
+import { liveSegments } from "./trips";
 
 // The places the traveler rated or marked as favorites, gathered across
 // their trips for the reports page: one entry per place (by name and
@@ -34,7 +35,8 @@ export function favoritePlaces(all: readonly TripWithBookings[]): FavoritePlace[
   for (const { trip, segments } of all) {
     if (seen.has(trip.id)) continue;
     seen.add(trip.id);
-    for (const s of segments) {
+    // A cancelled booking was never a stay there.
+    for (const s of liveSegments(segments)) {
       const place = bookingPlace(s);
       const key = placeKey(place);
       const entry = byPlace.get(key) ?? {

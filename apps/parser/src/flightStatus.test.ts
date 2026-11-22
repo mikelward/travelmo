@@ -184,6 +184,12 @@ describe("checkFlights", () => {
     expect(t.queries).toEqual([]);
   });
 
+  it("asks AeroAPI nothing for a cancelled booking", async () => {
+    const t = setup({ segments: [booking("t1", { cancelledAt: at, cancelledBy: "m1" })] });
+    expect(await checkFlights(t.io, t.options("2026-12-12T21:00:00Z"))).toMatchObject({ flights: 0, checked: 0 });
+    expect(t.queries).toEqual([]);
+  });
+
   it("asks only about the open trip's flights, from six hours before, once a minute", async () => {
     const t = setup({ segments: [booking("t1"), booking("t3", { title: "YY 200 SYD to AKL" })], trips: [trip("t1", "owner"), trip("t3", "owner")] });
     const run = await checkFlights(t.io, t.options("2026-12-12T16:30:00Z"), { tripId: "t1" });

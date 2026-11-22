@@ -1,4 +1,4 @@
-import { ParsedMessage, Segment, SenderPatterns, Trip, paths } from "@travelmo/core";
+import { ParsedMessage, PendingCancellation, Segment, SenderPatterns, Trip, paths } from "@travelmo/core";
 import { FieldValue, type DocumentSnapshot, type Firestore, type Transaction } from "firebase-admin/firestore";
 import { AccountDeletedError, wasDeleted } from "./deleted";
 import { changeClaimable, claimable, reclaimable, retryable, type TripStore } from "./importer";
@@ -162,6 +162,12 @@ export function firestoreStore(db: Firestore): TripStore {
           updateTrip(tripId, fields) {
             t.update(db.doc(paths.trip(tripId)), fields);
           },
+          setLiveBounds(tripId, bounds) {
+            t.update(
+              db.doc(paths.trip(tripId)),
+              bounds ? { liveStart: bounds.start, liveEnd: bounds.end } : { liveStart: FieldValue.delete(), liveEnd: FieldValue.delete() },
+            );
+          },
           deleteTrip(tripId) {
             t.delete(db.doc(paths.trip(tripId)));
           },
@@ -171,6 +177,16 @@ export function firestoreStore(db: Firestore): TripStore {
           },
           deleteParsed(messageId) {
             t.delete(db.doc(paths.parsedMessage(uid, messageId)));
+          },
+          async listPendingCancellations(owner) {
+            const snap = await t.get(db.collection(paths.pendingCancellations(owner)));
+            return snap.docs.map((d) => PendingCancellation.parse(d.data()));
+          },
+          putPendingCancellation(pending) {
+            t.set(db.doc(paths.pendingCancellation(pending.uid, pending.messageId)), pending);
+          },
+          deletePendingCancellation(owner, messageId) {
+            t.delete(db.doc(paths.pendingCancellation(owner, messageId)));
           },
           addSource(tripId, segmentId, source) {
             t.update(db.doc(paths.segment(tripId, segmentId)), { sources: FieldValue.arrayUnion(source) });

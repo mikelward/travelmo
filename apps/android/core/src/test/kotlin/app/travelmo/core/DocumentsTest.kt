@@ -91,6 +91,15 @@ class DocumentsTest {
     }
 
     @Test
+    fun `warns of nothing for a trip whose every booking was cancelled, but still for one with none`() {
+        val people = peopleDocuments(profile("me", "2027-02-01"), emptyList(), "me")
+        val stay = Segment("s", trip.id, SegmentType.LODGING, "Example Hotel", "2026-12-12T15:00:00+00:00", destination = Place("Example Hotel", country = "FR"))
+        tripWarnings(people, trip, listOf(stay.copy(cancelledAt = "2026-11-02T00:00:00Z")), today) shouldBe emptyList()
+        tripWarnings(people, trip, listOf(stay), today).size shouldBe 1
+        tripWarnings(people, trip, emptyList(), today).size shouldBe 1
+    }
+
+    @Test
     fun `words a warning as the web does`() {
         val me = PersonDocuments("me", null, true, listOf(passport))
         warningText(PersonWarning(me, DocumentWarning(passport, WarningWhen.SOON, 67)), today) shouldBe

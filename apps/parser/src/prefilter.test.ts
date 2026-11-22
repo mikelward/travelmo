@@ -15,6 +15,12 @@ describe("prefilter", () => {
     ).toMatchObject({ pass: true });
   });
 
+  it("passes a cancellation from an unknown sender, however it's spelled", () => {
+    for (const subject of ["Cancellation: Gamla Stan, 10 June", "Your stay has been cancelled", "Canceled: Hamlet, 10 June", "Cancelation notice"]) {
+      expect(prefilter({ from: "Example Hotel <stay@hotel.example>", subject })).toMatchObject({ pass: true, reason: "subject keyword" });
+    }
+  });
+
   it("passes any non-promotional mail from a seed domain", () => {
     expect(
       prefilter({ from: "Airbnb <automated@airbnb.com>", subject: "Reservation reminder: Lisbon" }),

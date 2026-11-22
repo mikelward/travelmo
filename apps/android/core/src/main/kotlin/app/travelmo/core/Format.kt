@@ -45,6 +45,6 @@ fun displayTitles(trips: List<Trip>): Map<String, String> {
     fun key(title: String) = title.trim().replace(Regex("\\s+"), " ").lowercase()
     val count = trips.groupingBy { key(it.title) }.eachCount()
     return trips.associate { trip ->
-        trip.id to if ((count[key(trip.title)] ?: 0) > 1) "${trip.title.trim()} (${formatDateRange(trip.start, trip.end)})" else trip.title
+        trip.id to if ((count[key(trip.title)] ?: 0) > 1) "${trip.title.trim()} (${formatDateRange(trip.shownStart, trip.shownEnd)})" else trip.title
     }
 }

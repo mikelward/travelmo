@@ -1,4 +1,5 @@
 import type { TravelDocument } from "./documents";
+import { displayBounds } from "./trips";
 
 // What a passport needs to enter a country, from the generated table
 // (visaRules.json, scripts/visas.mjs): the rule for one passport and one
@@ -94,8 +95,9 @@ export function travelerEntry(
   table: VisaTable,
   documents: readonly TravelDocument[],
   countries: ReadonlySet<string>,
-  trip: { start: string; end: string },
+  shown: { start: string; end: string; liveStart?: string | undefined; liveEnd?: string | undefined },
 ): TravelerEntry {
+  const trip = displayBounds(shown);
   const passports = passportsOf(documents, trip.start);
   if (!passports.length) return { passports, needs: [] };
   const needs: EntryNeed[] = [];

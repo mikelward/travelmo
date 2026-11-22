@@ -2,13 +2,16 @@ import {
   compareInstants,
   findTripForBooking,
   homeTimeline,
+  isCancelled,
+  liveSegments,
+  bookedDateRange,
   segmentDateRange,
   segmentSources,
   type HomePeriod,
   type Segment,
   type Trip,
 } from "@travelmo/core";
-import { importGaveTitle, sourceTripPrefix, tripTitle, type ImportDeps, type TripTx } from "./importer";
+import { importGaveTitle, settlingTripDates, sourceTripPrefix, tripTitle, type ImportDeps, type TripTx } from "./importer";
 
 // Rebuilding a user's trips from their bookings with the grouping imports
 // use now (findTripForBooking, tripTitle), for trips filed before it knew
@@ -113,18 +116,39 @@ export function planRegroup(
   const groups: Group[] = [];
   const shareOf = new Map(eligible.map((trip) => [trip.id, trip.sharedWith]));
   for (const unit of ordered) {
+    // A cancelled booking still belongs somewhere: it is filed by its own
+    // dates, but only live ones widen the trip it joins. A unit that is all
+    // cancelled has no live range, so it goes by its dates as booked.
+    // Live first, as an import files it: what it still books chooses the
+    // trip, and its cancelled parts only when nothing in it is live.
+    const asBooked = unit.segments.map((s) => (isCancelled(s) ? { ...s, cancelledAt: undefined } : s));
+    const stillBooked = liveSegments(unit.segments);
+    const live = segmentDateRange(unit.segments);
+    const range = live ?? segmentDateRange(asBooked)!;
+    const groupSegments = (id: string) => {
+      const all = groups.find((g) => g.trip.id === id)?.segments ?? [];
+      const booked = liveSegments(all);
+      return booked.length > 0 ? booked : all;
+    };
     const target = findTripForBooking(
       groups.filter((g) => g.share === unit.share).map((g) => g.trip),
-      (id) => groups.find((g) => g.trip.id === id)?.segments ?? [],
-      unit.segments,
+      groupSegments,
+      stillBooked.length > 0 ? stillBooked : asBooked,
       periods,
       overrides,
     );
-    const range = segmentDateRange(unit.segments)!;
     const group = groups.find((g) => g.trip.id === target?.id);
     if (group) {
       group.segments.push(...unit.segments);
-      group.trip = { ...group.trip, start: min(group.trip.start, range.start), end: max(group.trip.end, range.end) };
+      // Its bounds are its live bookings' span once it has any: a cancelled
+      // stay that seeded it by its booked dates no longer stretches it to
+      // catch what's live weeks later. Booked dates only while all cancelled.
+      // While it is all cancelled, each unit's booked dates widen it, as
+      // they set it when a unit started it.
+      const span = segmentDateRange(group.segments);
+      group.trip = span
+        ? { ...group.trip, start: span.start, end: span.end }
+        : { ...group.trip, start: min(group.trip.start, range.start), end: max(group.trip.end, range.end) };
     } else {
       groups.push({
         trip: { id: `group-${groups.length}`, title: "", start: range.start, end: range.end, ownerUid: "", sharedWith: [], createdAt: "", updatedAt: "" },
@@ -152,9 +176,15 @@ export function planRegroup(
 
   const planned = groups.map((group, g): PlannedTrip => {
     const existing = keeps.get(g);
-    const range = segmentDateRange(group.segments)!;
+    // Its own dates cover every booking in it, cancelled ones too, so an
+    // import finds each again by date; when the person now travels on it is
+    // settled after the pass (settlingTripDates). Grouping above went by
+    // what is still booked.
+    const range = bookedDateRange(group.segments) ?? { start: group.trip.start, end: group.trip.end };
     const segments = group.segments;
-    if (!existing) return { id: newId(), title: tripTitle(group.segments, periods, overrides), start: range.start, end: range.end, sharedWith: group.sharedWith, segments, changed: true };
+    // Named for what it still books, as an import names it.
+    const naming = liveSegments(group.segments).length > 0 ? liveSegments(group.segments) : group.segments;
+    if (!existing) return { id: newId(), title: tripTitle(naming, periods, overrides), start: range.start, end: range.end, sharedWith: group.sharedWith, segments, changed: true };
     const before = new Set((segmentsByTrip.get(existing.id) ?? []).map(segmentKey));
     const after = new Set(segments.map(segmentKey));
     const holdsAll = [...before].every((key) => after.has(key));
@@ -296,7 +326,10 @@ export async function regroupTrips(
   let changed: number | undefined;
   let deleted = 0;
   for (let pass = 0; pass < 50; pass++) {
-    const { more } = await deps.store.withUserLock(uid, async (tx) => {
+    const { more } = await deps.store.withUserLock(uid, async (lockTx) => {
+      // Bookings moved between trips change when each trip's person now
+      // travels (liveBounds), settled once the pass has written them.
+      const tx = settlingTripDates(lockTx, deps.now());
       const trips = await tx.listTrips();
       const segmentsByTrip = new Map(await Promise.all(trips.map(async (trip) => [trip.id, await tx.listSegments(trip.id)] as const)));
       // Within the transaction, so a retried first pass reads it afresh.
@@ -305,6 +338,7 @@ export async function regroupTrips(
       const changedTrips = plan.trips.filter((t) => t.changed).length;
       const applied =
         changedTrips === 0 && plan.deleted.length === 0 ? { deleted: [], more: false } : applyPlan(tx, uid, plan, deps.now(), budget);
+      tx.settle(trips, (tripId) => segmentsByTrip.get(tripId) ?? []);
       return { ...applied, empty, changedTrips };
     }).then((r) => {
       keptEmpty ??= r.empty;

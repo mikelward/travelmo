@@ -6,8 +6,9 @@ import { firestoreStore } from "./store";
 
 // Deleting all of a user's trips so they can import again from scratch:
 // every trip they own, with its bookings (ratings and favorites are on the
-// bookings, so they go too), and every import record, so the same emails,
-// files and events are read again. Trips others share with them, their
+// bookings, so they go too), every import record, so the same emails,
+// files and events are read again, and every cancellation still waiting for
+// its booking. Trips others share with them, their
 // travel profile, home corrections, connections and feeds all stay.
 
 // Most writes one transaction makes: Firestore allows 500.
@@ -45,6 +46,11 @@ export async function deleteOwnTrips(uid: string, store: TripStore, budget = wri
         room -= take.length + (whole ? 1 : 0);
       }
       const records = room > 0 ? await tx.listParsedIds(room) : [];
+      room -= records.length;
+      // Cancellations still waiting for their bookings go too, so the next
+      // import starts from nothing.
+      const pending = room > 0 ? (await tx.listPendingCancellations(uid)).slice(0, room) : [];
+      room -= pending.length;
       // Then writes.
       let deleted = 0;
       for (const { tripId, segmentIds, whole } of plan) {
@@ -55,8 +61,9 @@ export async function deleteOwnTrips(uid: string, store: TripStore, budget = wri
         }
       }
       for (const id of records) tx.deleteParsed(id);
+      for (const p of pending) tx.deletePendingCancellation(uid, p.messageId);
       if (gmail) tx.clearBackfill();
-      return { deleted, writes: budget - 2 - room + records.length };
+      return { deleted, writes: budget - 2 - room };
     });
     trips += done.deleted;
     if (done.writes === 0) return { trips };

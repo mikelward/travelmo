@@ -130,6 +130,16 @@ describe("sendReminders", () => {
     expect(mails).toHaveLength(1);
   });
 
+  it("sends nothing for a trip whose every booking was cancelled", async () => {
+    const { mails, run } = setup({
+      trips: [trip("Dubai", "u1", "2026-11-20", "2026-11-25")],
+      segments: [{ ...flight("Dubai", "DXB", "AE"), cancelledAt: "2026-11-02T00:00:00Z", cancelledBy: "m2" }],
+      profiles: { u1: profile("u1", "2026-12-30") },
+    });
+    expect(await run()).toMatchObject({ mailed: 0, lines: 0 });
+    expect(mails).toHaveLength(0);
+  });
+
   it("notifies every subscribed browser once per trip, drops a subscription the push service lost, and needs no email for it", async () => {
     const { run, mails, pushes, subscriptions, logs } = setup({
       users: [{ uid: "u1", settings: { push: true } }],

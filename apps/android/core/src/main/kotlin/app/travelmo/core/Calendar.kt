@@ -53,12 +53,12 @@ fun weekBars(week: List<String>, trips: List<Trip>): List<TripBar> {
     val monday = week.first()
     val sunday = week.last()
     val touching = trips
-        .filter { it.start <= sunday && it.end >= monday }
-        .sortedWith(compareBy<Trip> { it.start }.thenByDescending { it.end }.thenBy { it.title })
+        .filter { it.shownStart <= sunday && it.shownEnd >= monday }
+        .sortedWith(compareBy<Trip> { it.shownStart }.thenByDescending { it.shownEnd }.thenBy { it.title })
     val laneEnds = mutableListOf<Int>()
     return touching.map { trip ->
-        val from = if (trip.start < monday) 0 else week.indexOf(trip.start)
-        val to = if (trip.end > sunday) week.size - 1 else week.indexOf(trip.end)
+        val from = if (trip.shownStart < monday) 0 else week.indexOf(trip.shownStart)
+        val to = if (trip.shownEnd > sunday) week.size - 1 else week.indexOf(trip.shownEnd)
         var lane = laneEnds.indexOfFirst { it < from }
         if (lane == -1) {
             lane = laneEnds.size
@@ -66,7 +66,7 @@ fun weekBars(week: List<String>, trips: List<Trip>): List<TripBar> {
         } else {
             laneEnds[lane] = to
         }
-        TripBar(trip, from, to, continuesBefore = trip.start < monday, continuesAfter = trip.end > sunday, lane = lane)
+        TripBar(trip, from, to, continuesBefore = trip.shownStart < monday, continuesAfter = trip.shownEnd > sunday, lane = lane)
     }
 }
 
@@ -74,8 +74,8 @@ fun weekBars(week: List<String>, trips: List<Trip>): List<TripBar> {
 fun tripMonths(trips: List<Trip>): List<String> {
     val months = sortedSetOf<String>()
     for (trip in trips) {
-        var m = monthOf(trip.start)
-        while (m <= monthOf(trip.end)) {
+        var m = monthOf(trip.shownStart)
+        while (m <= monthOf(trip.shownEnd)) {
             months += m
             m = addMonths(m, 1)
         }

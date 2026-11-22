@@ -264,6 +264,8 @@ class TripsViewModel(
 
     fun deleteSegment(token: String, tripId: String, segmentId: String) = run(token) { store.deleteSegment(tripId, segmentId) }
 
+    fun restoreSegment(token: String, tripId: String, segmentId: String) = run(token) { store.restoreSegment(tripId, segmentId) }
+
     fun moveSegment(token: String, fromTripId: String, segmentId: String, toTripId: String) = run(token) { store.moveSegment(fromTripId, segmentId, toTripId) }
 
     fun renameTrip(token: String, tripId: String, title: String) = run(token) {

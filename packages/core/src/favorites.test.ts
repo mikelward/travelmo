@@ -65,4 +65,10 @@ describe("favoritePlaces", () => {
     ]);
     expect(favoritePlaces([])).toEqual([]);
   });
+
+  it("leaves out a cancelled booking, which was never a stay", () => {
+    const trip = { id: "t1", title: "Liverpool", start: "2026-05-01" };
+    const cancelled = booking("s1", { destination: cove, favorite: true, cancelledAt: at, cancelledBy: "m2" });
+    expect(favoritePlaces([{ trip, segments: [cancelled] }])).toEqual([]);
+  });
 });

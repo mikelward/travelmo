@@ -32,8 +32,9 @@ data class TripPlaces(val countries: Set<String>, val complete: Boolean)
 
 fun tripPlaces(segments: List<Segment>, lookup: (String) -> AirportPlace? = ::airportPlace): TripPlaces {
     val countries = mutableSetOf<String>()
-    var complete = segments.isNotEmpty()
-    for (s in segments) {
+    val live = liveSegments(segments)
+    var complete = live.isNotEmpty()
+    for (s in live) {
         val places = listOfNotNull(s.origin, s.destination)
         // A journey with an end missing went somewhere unknown; a stay or activity has one place.
         if (places.isEmpty() || (s.type in transport && places.size < 2)) complete = false
