@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The launcher mark (apps/web/src/app/icon.svg): a paper plane with three dots of
-     trail, filling the adaptive icon's 66dp safe zone. Also the themed icon. -->
+<!-- The launcher mark (apps/web/src/app/icon.svg): a paper plane with a trail of
+     curved dashes, filling the adaptive icon's 66dp safe zone. Also the themed icon. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <group
-        android:scaleX="0.16179"
-        android:scaleY="0.16179"
-        android:translateX="5.126"
-        android:translateY="10.49">
+        android:scaleX="0.13884"
+        android:scaleY="0.13884"
+        android:translateX="15.878"
+        android:translateY="13.816">
         <path
             android:pathData="M186.8 247.6 430 126 357 344.9 308.4 259.8Z"
             android:strokeColor="#FFFFFF"
@@ -23,13 +23,19 @@
             android:strokeWidth="24.3"
             android:strokeLineCap="round" />
         <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M162,408 a16,16 0 1,0 32,0 a16,16 0 1,0 -32,0 Z" />
+            android:pathData="M120 452 C129.7 437.4 139.4 427 149 419.1"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="26"
+            android:strokeLineCap="round" />
         <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M203.5,370.4 a16,16 0 1,0 32,0 a16,16 0 1,0 -32,0 Z" />
+            android:pathData="M177.7 401 C190.8 394.5 203.9 389.5 217.1 381.4"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="26"
+            android:strokeLineCap="round" />
         <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M243.3,331 a16,16 0 1,0 32,0 a16,16 0 1,0 -32,0 Z" />
+            android:pathData="M243.4 360 C249.6 353.5 255.8 345.6 262 336"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="26"
+            android:strokeLineCap="round" />
     </group>
 </vector>

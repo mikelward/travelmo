@@ -81,6 +81,9 @@ jobs:
         run: python3 scripts/publish_github_release_test.py
       # The Play listing (apps/android/play) is published only from main, so
       # a pull request checks it against Play's limits here instead.
+      - name: Icon sources match their generator
+        working-directory: .
+        run: node scripts/icon-sources.mjs && git diff --exit-code
       - name: Test the Play listing script
         working-directory: .
         run: node --test scripts/publish-play-listing.test.mjs
