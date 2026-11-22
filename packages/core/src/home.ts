@@ -1,5 +1,6 @@
 import { compareInstants } from "./instant";
-import type { ExtractedSegment, Place, SegmentType } from "./schema";
+import type { ExtractedSegment, Place, SegmentType, Trip } from "./schema";
+import { findTripForRange, segmentDateRange } from "./trips";
 
 // Where someone lives, over time. Nobody types it in: it is worked out from
 // their journeys, since a round trip leaves from home and comes back to it.
@@ -119,4 +120,56 @@ export function isAtHome(
   const place = town(segment.destination);
   const home = homeAt(periods, localDate(segment.start), overrides);
   return !!place && !!home && sameTown(place, home);
+}
+
+// A trip made of nothing but bookings at home: a day out, which a trip away
+// never joins by nearness of dates. An empty trip says nothing.
+export function isHomeTrip(
+  segments: readonly Pick<ExtractedSegment, "type" | "start" | "destination">[],
+  periods: readonly HomePeriod[],
+  overrides: readonly HomePeriod[] = [],
+): boolean {
+  return segments.length > 0 && segments.every((s) => isAtHome(s, periods, overrides));
+}
+
+// The trip a new booking joins by its dates, knowing where home is. With
+// home unknown, the nearest trip within a couple of days (findTripForRange).
+// A booking all at home joins only a day out on the same dates, so two
+// tickets on one day stay together but nothing at home chains into a trip
+// away; a booking away never joins a day out at home, and a journey, even
+// one leaving from home, is never at home.
+export function findTripForBooking(
+  trips: readonly Trip[],
+  segmentsOf: (tripId: string) => readonly Pick<ExtractedSegment, "type" | "start" | "destination">[],
+  booking: readonly ExtractedSegment[],
+  periods: readonly HomePeriod[],
+  overrides: readonly HomePeriod[] = [],
+): Trip | undefined {
+  const range = segmentDateRange(booking);
+  if (!range) return undefined;
+  if (periods.length === 0 && overrides.length === 0) return findTripForRange(trips, range);
+  const atHome = isHomeTrip(booking, periods, overrides);
+  const homeTrip = (trip: Trip) => isHomeTrip(segmentsOf(trip.id), periods, overrides);
+  return atHome
+    ? findTripForRange(trips.filter(homeTrip), range, 0)
+    : findTripForRange(trips.filter((trip) => !homeTrip(trip)), range);
+}
+
+// Where a booking goes away from home, for naming its trip: the first
+// destination that is not the home of its day, else the first origin that is
+// not (a return journey booked on its own), else nothing.
+export function awayPlace(
+  segments: readonly Pick<ExtractedSegment, "start" | "origin" | "destination">[],
+  periods: readonly HomePeriod[],
+  overrides: readonly HomePeriod[] = [],
+): Place | undefined {
+  const away = (place: Place | undefined, start: string) => {
+    const where = town(place);
+    const home = homeAt(periods, localDate(start), overrides);
+    return !!where && (!home || !sameTown(where, home));
+  };
+  return (
+    segments.find((s) => away(s.destination, s.start))?.destination ??
+    segments.find((s) => away(s.origin, s.start))?.origin
+  );
 }

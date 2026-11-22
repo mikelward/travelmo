@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { homeAt, homeTimeline, isAtHome } from "./home";
-import type { ExtractedSegment, Place } from "./schema";
+import { awayPlace, findTripForBooking, homeAt, homeTimeline, isAtHome, isHomeTrip } from "./home";
+import type { ExtractedSegment, Place, Trip } from "./schema";
 
 const london: Place = { name: "London Euston", code: "EUS", city: "London", country: "GB" };
 const liverpool: Place = { name: "Liverpool Lime Street", code: "LIV", city: "Liverpool", country: "GB" };
@@ -142,5 +142,68 @@ describe("isAtHome", () => {
   it("says nothing is at home when home is unknown or the place is missing", () => {
     expect(isAtHome(may[0]!, [])).toBe(false);
     expect(isAtHome({ type: "activity", start: "2026-05-22T09:00:00+01:00" }, periods)).toBe(false);
+  });
+});
+
+describe("findTripForBooking", () => {
+  const periods = homeTimeline(may);
+  const [club22, out, back, club26] = may as [ExtractedSegment, ExtractedSegment, ExtractedSegment, ExtractedSegment];
+  const trip = (id: string, start: string, end: string): Trip => ({
+    id,
+    title: id,
+    start,
+    end,
+    ownerUid: "u1",
+    sharedWith: [],
+    createdAt: "2026-01-01T00:00:00Z",
+    updatedAt: "2026-01-01T00:00:00Z",
+  });
+  const clubTrip = trip("club", "2026-05-26", "2026-05-26");
+  const awayTrip = trip("liverpool", "2026-05-23", "2026-05-25");
+  const segments: Record<string, ExtractedSegment[]> = { club: [club26], liverpool: [out, back] };
+  const of = (id: string) => segments[id] ?? [];
+
+  it("keeps a trip away out of a day out at home two days later", () => {
+    expect(findTripForBooking([clubTrip], of, [out, back], periods)).toBeUndefined();
+  });
+
+  it("keeps a day out at home out of the trip away the day after", () => {
+    expect(findTripForBooking([awayTrip, clubTrip], of, [club22], periods)).toBeUndefined();
+  });
+
+  it("puts two tickets at home on the same day together", () => {
+    const show = { ...club26, title: "Evening show", start: "2026-05-26T19:00:00+01:00" };
+    expect(findTripForBooking([awayTrip, clubTrip], of, [show], periods)?.id).toBe("club");
+  });
+
+  it("keeps a stay in the destination with its trains", () => {
+    const hotel: ExtractedSegment = {
+      type: "lodging",
+      title: "Hotel",
+      start: "2026-05-23T15:00:00+01:00",
+      end: "2026-05-25T11:00:00+01:00",
+      destination: { name: "Hotel", city: "Liverpool", country: "GB" },
+    };
+    expect(findTripForBooking([awayTrip, clubTrip], of, [hotel], periods)?.id).toBe("liverpool");
+  });
+
+  it("joins the nearest trip as before when home is unknown", () => {
+    expect(findTripForBooking([clubTrip], of, [out, back], [])?.id).toBe("club");
+  });
+
+  it("calls only a trip of bookings all at home a day out", () => {
+    expect(isHomeTrip([club26], periods)).toBe(true);
+    expect(isHomeTrip([out, back], periods)).toBe(false);
+    expect(isHomeTrip([], periods)).toBe(false);
+  });
+});
+
+describe("awayPlace", () => {
+  const periods = homeTimeline(may);
+
+  it("finds where a trip goes, not home", () => {
+    expect(awayPlace([may[1]!, may[2]!], periods)?.city).toBe("Liverpool");
+    expect(awayPlace([may[2]!], periods)?.city).toBe("Liverpool");
+    expect(awayPlace([may[0]!], periods)).toBeUndefined();
   });
 });
