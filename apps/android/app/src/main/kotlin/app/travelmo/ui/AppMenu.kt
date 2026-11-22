@@ -5,13 +5,19 @@ import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -32,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -46,11 +53,12 @@ import com.mikelward.androidzoom.compose.pinchFontSizeHost
 import kotlinx.coroutines.launch
 
 /**
- * What Report a bug shares. The activity provides it once, knowing whether
+ * What Report a bug shares: the debug report with a screenshot of the screen
+ * it was opened from. The activity provides it once, knowing whether
  * someone is signed in, so a screen several layers down offers the same
  * report without each layer passing it on; a test hands in its own.
  */
-val LocalReportBug = staticCompositionLocalOf<suspend (Context) -> ShareOutcome> { { DebugLogging.share(it, signedIn = false) } }
+val LocalReportBug = staticCompositionLocalOf<suspend (Context) -> ShareOutcome> { { DebugLogging.share(it, signedIn = false, screenshot = true) } }
 
 /**
  * Whether Google Play has a newer version (PlayUpdateChecker). The activity
@@ -62,7 +70,8 @@ val LocalUpdateAvailable = compositionLocalOf { false }
 /**
  * The overflow every screen's top bar ends with, as in the sibling apps
  * (stopdash's AppMenuOverflow, clothescast's BugReportOverflowMenu): Report a
- * bug, which shares the debug log as Settings does, and About, which leads
+ * bug, which shares the debug log as Settings does plus a screenshot of the
+ * screen it was opened from, and About, which leads
  * to the open-source licenses. [items] are a screen's own, first, each given
  * a `close` to call as it acts. While Play has a newer version
  * ([LocalUpdateAvailable]) the button carries a red dot and "Update
@@ -77,6 +86,21 @@ fun AppMenu(modifier: Modifier = Modifier, items: @Composable (close: () -> Unit
     var expanded by rememberSaveable { mutableStateOf(false) }
     var showAbout by rememberSaveable { mutableStateOf(false) }
     var sharing by remember { mutableStateOf(false) }
+    var showConsent by rememberSaveable { mutableStateOf(false) }
+    val shareReport = {
+        sharing = true
+        scope.launch {
+            val outcome = reportBug(context)
+            sharing = false
+            val note = when (outcome) {
+                ShareOutcome.SHARED -> null
+                ShareOutcome.COPIED_ONLY -> R.string.debug_log_copied_only
+                ShareOutcome.FAILED -> R.string.debug_log_share_failed
+            }
+            note?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+        }
+        Unit
+    }
     // Button and menu in one Box, so the menu drops from the button rather than the row slot.
     Box(modifier) {
         IconButton(onClick = { expanded = true }) {
@@ -105,17 +129,8 @@ fun AppMenu(modifier: Modifier = Modifier, items: @Composable (close: () -> Unit
                 enabled = !sharing,
                 onClick = {
                     expanded = false
-                    sharing = true
-                    scope.launch {
-                        val outcome = reportBug(context)
-                        sharing = false
-                        val note = when (outcome) {
-                            ShareOutcome.SHARED -> null
-                            ShareOutcome.COPIED_ONLY -> R.string.debug_log_copied_only
-                            ShareOutcome.FAILED -> R.string.debug_log_share_failed
-                        }
-                        note?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
-                    }
+                    // What goes, said once before it first does, as in the sibling apps.
+                    if (DebugLogging.reportConsentNeeded(context)) showConsent = true else shareReport()
                 },
             )
             DropdownMenuItem(
@@ -137,6 +152,16 @@ fun AppMenu(modifier: Modifier = Modifier, items: @Composable (close: () -> Unit
             }
         }
     }
+    if (showConsent) {
+        ReportConsentDialog(
+            onContinue = { dontShowAgain ->
+                showConsent = false
+                if (dontShowAgain) DebugLogging.skipReportConsent(context)
+                shareReport()
+            },
+            onCancel = { showConsent = false },
+        )
+    }
     val openLicenses = LocalOpenLicenses.current
     if (showAbout) {
         AboutDialog(
@@ -149,6 +174,37 @@ fun AppMenu(modifier: Modifier = Modifier, items: @Composable (close: () -> Unit
             onDismiss = { showAbout = false },
         )
     }
+}
+
+/**
+ * What Report a bug shares, before it first does: the log and a screenshot
+ * of the screen, which can show trips and names, and where it goes. As
+ * clothescast's BugReportConsentDialog, with stopdash's list of what is
+ * shared. "Don't show again" counts only with Continue; Cancel shares
+ * nothing.
+ */
+@Composable
+fun ReportConsentDialog(onContinue: (dontShowAgain: Boolean) -> Unit, onCancel: () -> Unit) {
+    var dontShowAgain by rememberSaveable { mutableStateOf(false) }
+    AppAlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(stringResource(R.string.report_a_bug)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.report_consent_body))
+                // The whole row toggles, so a tap on the words ticks the box too.
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.toggleable(value = dontShowAgain, role = Role.Checkbox, onValueChange = { dontShowAgain = it }),
+                ) {
+                    Checkbox(checked = dontShowAgain, onCheckedChange = null)
+                    Text(stringResource(R.string.dont_show_again), modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onContinue(dontShowAgain) }) { Text(stringResource(R.string.report_consent_continue)) } },
+        dismissButton = { TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel)) } },
+    )
 }
 
 // The app's Play listing, in the Play Store app first, then on the web; the

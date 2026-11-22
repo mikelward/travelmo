@@ -25,6 +25,20 @@
             </intent-filter>
         </activity>
 
+        <!-- Serves a bug report's screenshot to the app the user picks in the
+             share sheet. Not exported: only that app, granted a read of that
+             one file for that share, can open it, and nothing else in the
+             cache (@xml/file_paths). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- Reminders from the parser over Cloud Messaging, drawn by the
              service from each message's data; a refreshed token is
              re-registered. -->

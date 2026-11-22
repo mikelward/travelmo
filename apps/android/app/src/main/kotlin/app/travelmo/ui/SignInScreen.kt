@@ -36,6 +36,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.R
 import app.travelmo.auth.GoogleAccount
 import app.travelmo.auth.SignInResult
+import app.travelmo.log.DebugLogging
 import app.travelmo.ui.theme.Wordmark
 import com.mikelward.androidlog.android.ShareOutcome
 import kotlinx.coroutines.launch
@@ -52,7 +53,7 @@ fun SignInScreen(
     account: GoogleAccount,
     /** Sign-in and the debug-log share; a test hands in its own. */
     signIn: suspend (Context) -> SignInResult = account::signIn,
-    shareLog: suspend (Context) -> ShareOutcome = LocalReportBug.current,
+    shareLog: suspend (Context) -> ShareOutcome = { DebugLogging.share(it, signedIn = false) },
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()

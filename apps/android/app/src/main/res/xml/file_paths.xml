@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Bug-report screenshots, written to cacheDir/bug-reports/ and shared
+         through the FileProvider. Only that directory, so the rest of the
+         cache stays private. -->
+    <cache-path
+        name="bug_reports"
+        path="bug-reports/" />
+</paths>

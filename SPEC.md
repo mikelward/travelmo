@@ -1115,7 +1115,16 @@ a screenshot: the crash was in an earlier run) or Dismiss, and comes down
 when the report's clipboard copy lands or on Dismiss, the crashed run
 staying on the phone; every screen's top bar, and the sign-in screen's corner, ends
 with the same ⋮ menu, as in the sibling apps: Report a bug shares that
-report, and About names the version and opens the open-source licenses:
+report with a screenshot of the screen it was opened from, after a dialog
+that says what goes (the log, never bookings or addresses, and a
+screenshot that can show trips and names) and where (the clipboard and an
+app the user picks), with Continue, Cancel and "Don't show again" (kept
+on the phone), as in the sibling apps; the screenshot is served to the
+chosen app alone through the app's FileProvider (the screenshot is an
+extra: the text is the whole report, and a capture that fails shares the
+text alone; Settings' and the sign-in screen's "Share the debug log" send
+the text alone, as the screen they show is not the one the bug is on),
+and About names the version and opens the open-source licenses:
 every component the release APK bundles, Fira Sans included, by name, each
 tapping through to its version, authors and a link to its license text,
 from an export committed with the app so the list needs no network) and

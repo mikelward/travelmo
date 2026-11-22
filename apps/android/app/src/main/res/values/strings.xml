@@ -197,6 +197,9 @@
     <string name="sharing">Sharing…</string>
     <string name="debug_log_copied_only">No app would take the report, so it is on the clipboard instead.</string>
     <string name="debug_log_share_failed">Couldn\'t share the debug log.</string>
+    <string name="report_consent_body">To help fix the problem, this shares:\n\n• a diagnostic log (what the app did, never your bookings or addresses)\n• a screenshot of this screen, which can show trips and names\n\nOn Continue, the report is copied to the clipboard and offered to an app you pick.</string>
+    <string name="report_consent_continue">Continue</string>
+    <string name="dont_show_again">Don\'t show again</string>
     <string name="crash_banner_title">Travelmo crashed</string>
     <string name="crash_banner_body">Share the debug log to help fix it? Nothing is sent until you choose where.</string>
     <string name="crash_banner_share">Share</string>
