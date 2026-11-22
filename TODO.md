@@ -219,6 +219,9 @@
       yes/no answers are clamped to 0.01–0.99, so pick the threshold from
       labeled mail, and record a drop as "filtered" so it still shows in
       the Import review list with "import anyway". Docs: https://aistudio.google.com/docs/decisions-api
+- [ ] Make connecting Gmail obvious: after the consent screen, Settings
+      shows only a small green notice. Show the connected state and the
+      next step (import past bookings) prominently in the Gmail section.
 
 - [ ] Consider Fira Sans for headings in the app (screen titles, trip
       names) on Android and the web; only the wordmark uses it so far.
