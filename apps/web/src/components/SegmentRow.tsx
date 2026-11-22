@@ -1,3 +1,4 @@
+import { SegmentIcon } from "@/components/SegmentIcon";
 import { emailLinkFor, type EmailLinks } from "@/lib/sourceLinks";
 import {
   formatDate,
@@ -175,7 +176,7 @@ export function SegmentRow({
     // On a phone the actions drop below the details, in line with them,
     // rather than squeezing them into a narrow column.
     <li className="flex flex-wrap gap-x-4 gap-y-2 py-3">
-      <span className="w-16 shrink-0 text-xs font-medium uppercase tracking-wide text-zinc-500">{labels[segment.type]}</span>
+      <SegmentIcon type={segment.type} label={labels[segment.type]} className="mt-0.5 shrink-0 text-zinc-500" />
       <div className="min-w-0 flex-1">
         <p className="font-medium">{segment.title}</p>
         {route && <p className="text-sm text-zinc-600 dark:text-zinc-400">{route}</p>}
