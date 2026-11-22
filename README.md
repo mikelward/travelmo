@@ -279,7 +279,8 @@ One Google Cloud project holds everything.
    to it), a push subscription to `https://<parser>/internal/pubsub/gmail`
    authenticated with an OIDC token from that service account, and a
    `gmail-dead-letter` topic and subscription that receive a notification the
-   parser failed five times. Rerun it to change a setting.
+   parser failed five times. Rerun it to change a setting. It uses
+   `gcloud beta`, which gcloud offers to install on first use.
 5. **Daily jobs**: `PROJECT=… LOCATION=<region> PARSER_URL=https://<parser>
    SCHEDULER_SA=<service account> deploy/scheduler.sh` creates four Cloud
    Scheduler jobs that POST with an OIDC token from that service account
