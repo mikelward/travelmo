@@ -188,7 +188,7 @@ function MergeInto({ trip, targets }: { trip: Trip; targets: Trip[] }) {
         <select
           value={target?.id ?? ""}
           onChange={(e) => setTarget(targets.find((t) => t.id === e.target.value))}
-          className="rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
+          className="min-w-0 max-w-full rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
         >
           <option value="">Choose a trip…</option>
           {targets.map((t) => (

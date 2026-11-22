@@ -60,3 +60,22 @@ test("a stranger sees no trips", async ({ page }) => {
   await signIn(page, "stranger@example.com");
   await expect(page.getByText("No trips yet.")).toBeVisible();
 });
+
+test.describe("on a phone", () => {
+  test.use({ viewport: { width: 375, height: 667 } });
+
+  test("a booking's details keep the width beside its actions, and the page fits", async ({ page }) => {
+    const ownerUid = await signIn(page, owner);
+    await seedTrip(ownerUid, "e2e-trip");
+    // Another trip with a long name widens the "Move to…" list.
+    await seedTrip(ownerUid, "e2e-other", {}, { title: "Junior Adventures Group Club Weekend Away", start: "2027-01-08", end: "2027-01-09" });
+    await page.getByRole("link", { name: /^Liverpool/ }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Liverpool" })).toBeVisible();
+    await expect(page.getByTitle("Move to another trip")).toBeInViewport({ ratio: 1 });
+    // Squeezed beside the actions, the title had no width left at all.
+    const title = page.getByText("Cove Liverpool", { exact: true });
+    expect((await title.boundingBox())?.width).toBeGreaterThan(200);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBe(0);
+  });
+});
