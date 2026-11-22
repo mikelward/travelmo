@@ -79,6 +79,14 @@ jobs:
       - name: Test the release-publishing script
         working-directory: .
         run: python3 scripts/publish_github_release_test.py
+      # The Play listing (apps/android/play) is published only from main, so
+      # a pull request checks it against Play's limits here instead.
+      - name: Test the Play listing script
+        working-directory: .
+        run: node --test scripts/publish-play-listing.test.mjs
+      - name: Check the Play listing
+        working-directory: .
+        run: node scripts/publish-play-listing.mjs --check
       - name: Check the core module stays free of Android
         run: ./gradlew :core:verifyNoAndroid :core:test
       - name: Prove that guard actually fails
@@ -362,3 +370,25 @@ jobs:
           tracks: internal
           status: completed
           whatsNewDirectory: ${{ env.PLAY_WHATSNEW_DIR }}
+      # Last, so a listing problem (such as a service account without
+      # "Manage store presence") fails the job without holding back the
+      # release above. The script compares the listing with Play's copy and
+      # sends only what differs, committing nothing when they match, so a
+      # change whose run was cancelled still goes up with the next push. Only
+      # the run for main's current tip publishes: release-main serializes
+      # these jobs but not in push order, and a late older run would put an
+      # older listing back; the tip's own run sends the newest one. It needs
+      # no keystore, only the service account (README "Release").
+      - name: Update the Play listing
+        if: ${{ !cancelled() && env.HAS_PLAY_SA == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          tip=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [ "$tip" != "$GITHUB_SHA" ]; then
+            echo "main has moved on to $tip; its run publishes the newer listing."
+            exit 0
+          fi
+          node scripts/publish-play-listing.mjs
