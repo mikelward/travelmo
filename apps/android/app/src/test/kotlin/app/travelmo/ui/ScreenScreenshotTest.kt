@@ -4,6 +4,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -14,6 +15,7 @@ import app.travelmo.auth.SignInResult
 import app.travelmo.auth.SignedIn
 import app.travelmo.ui.theme.TravelmoTheme
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.github.takahirom.roborazzi.captureScreenRoboImage
 import com.mikelward.androidzoom.FontSizeSettings
 import com.mikelward.androidzoom.compose.FontSizeState
 import com.mikepenz.aboutlibraries.Libs
@@ -123,6 +125,24 @@ class ScreenScreenshotTest {
         CompositionLocalProvider(LocalCrashReport provides crashed) {
             SignInScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"))
         }
+    }
+
+    // Report a bug's first question, over the screen it was opened from. The
+    // dialog is a window of its own, so the whole screen is captured.
+    @Test
+    fun report_consent() {
+        val viewModel = viewModel()
+        val fontSize = FontSizeState(FontSizeSettings(scale = 1f), onScaleSettled = {}, onPinchEnabledChange = {})
+        composeRule.setContent {
+            TravelmoTheme(fontSize = fontSize) {
+                TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.TRIPS) {} })
+            }
+        }
+        composeRule.onNodeWithContentDescription("More options").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Report a bug").performClick()
+        composeRule.waitForIdle()
+        captureScreenRoboImage(filePath = "$outputDir/report_consent.png")
     }
 
     // The red dot on ⋮ while Play has a newer version.

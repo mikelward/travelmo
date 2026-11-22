@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performClick
 import androidx.core.net.toUri
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.travelmo.BuildConfig
+import app.travelmo.log.DebugLogging
 import app.travelmo.ui.theme.TravelmoTheme
 import com.mikelward.androidlog.android.ShareOutcome
 import io.kotest.matchers.shouldBe
@@ -121,17 +122,60 @@ class AppMenuTest {
         ShadowToast.getTextOfLatestToast() shouldBe "No app can open Google Play."
     }
 
-    @Test
-    fun `report a bug shares the provided report`() {
-        show()
-        composeRule.onNodeWithText("Report a bug").performClick()
+    private fun tap(text: String) {
+        composeRule.onNodeWithText(text).performClick()
         composeRule.waitForIdle()
+    }
+
+    private val consent = "To help fix the problem, this shares:"
+
+    @Test
+    fun `report a bug says what it shares before it first does`() {
+        show()
+        tap("Report a bug")
+        composeRule.onNodeWithText(consent, substring = true).assertExists()
+        composeRule.onNodeWithText("a screenshot of this screen", substring = true).assertExists()
+        reports shouldBe 0
+    }
+
+    @Test
+    fun `cancel shares nothing`() {
+        show()
+        tap("Report a bug")
+        tap("Cancel")
+        composeRule.onNodeWithText(consent, substring = true).assertDoesNotExist()
+        reports shouldBe 0
+    }
+
+    @Test
+    fun `continue shares the provided report and asks again next time`() {
+        show()
+        tap("Report a bug")
+        tap("Continue")
         reports shouldBe 1
         ShadowToast.shownToastCount() shouldBe 0
+        composeRule.onNodeWithContentDescription("More options").performClick()
+        tap("Report a bug")
+        composeRule.onNodeWithText(consent, substring = true).assertExists()
+        reports shouldBe 1
+    }
+
+    @Test
+    fun `don't show again skips the question next time`() {
+        show()
+        tap("Report a bug")
+        tap("Don't show again")
+        tap("Continue")
+        reports shouldBe 1
+        composeRule.onNodeWithContentDescription("More options").performClick()
+        tap("Report a bug")
+        composeRule.onNodeWithText(consent, substring = true).assertDoesNotExist()
+        reports shouldBe 2
     }
 
     @Test
     fun `a report only the clipboard took says so`() {
+        DebugLogging.skipReportConsent(composeRule.activity)
         show(ShareOutcome.COPIED_ONLY)
         composeRule.onNodeWithText("Report a bug").performClick()
         composeRule.waitForIdle()

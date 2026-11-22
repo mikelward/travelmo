@@ -87,7 +87,8 @@ class MainActivity : ComponentActivity() {
                 val user by app.account.user.collectAsStateWithLifecycle()
                 val signedIn = user
                 val isSignedIn = signedIn != null
-                val reportBug: suspend (Context) -> ShareOutcome = remember(isSignedIn) { { DebugLogging.share(it, signedIn = isSignedIn) } }
+                // Report a bug, from the ⋮ menu, shows the screen it was opened from.
+                val reportBug: suspend (Context) -> ShareOutcome = remember(isSignedIn) { { DebugLogging.share(it, signedIn = isSignedIn, screenshot = true) } }
                 val crashReport = remember(isSignedIn) {
                     CrashReport(
                         crashed = DebugLogging.unacknowledgedCrash,
