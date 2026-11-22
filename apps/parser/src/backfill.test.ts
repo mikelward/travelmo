@@ -1,4 +1,4 @@
-import { backfillRequest, runBackfillBatch, type BackfillIo } from "./backfill";
+import { runBackfillBatch, type BackfillIo } from "./backfill";
 import { searchMessagePage, type Gmail, type MessagePage } from "./gmail";
 import { emptyCounts } from "./importer";
 
@@ -180,49 +180,5 @@ describe("searchMessagePage", () => {
     const second = await runBackfillBatch(first.progress, false, io);
     expect(attempts).toEqual(["a", "b", "c", "d"]);
     expect(second.progress.done).toBe(true);
-  });
-});
-
-describe("backfillRequest", () => {
-  const io = (): BackfillIo => ({
-    page: async () => ({ ids: ["m1"], nextPageToken: "next" }),
-    importIds: async (ids) => ({ ...emptyCounts(), imported: ids.length }),
-    isStaleCursor: () => false,
-    now: () => "2026-11-22T12:00:00Z",
-    log: () => {},
-  });
-
-  it("saves under the generation read before the connection, so a reset between them refuses the save", async () => {
-    // A reset ("Delete all trips") lands while the connection, with its
-    // place from before the reset, is being read.
-    let generation = 0;
-    const before = { backfill: { cursor: "old-place", scanned: 300, imported: 4, done: false, updatedAt: "2026-11-22T11:00:00Z" } };
-    const result = await backfillRequest(false, {
-      resetGeneration: async () => generation,
-      loadState: async () => {
-        generation += 1;
-        return before;
-      },
-      io,
-      // As updateBackfill does: only while the generation is unchanged.
-      save: async (_state, _progress, read) => read === generation,
-    });
-    expect(result?.saved).toBe(false);
-  });
-
-  it("saves when nothing was reset", async () => {
-    const result = await backfillRequest(false, {
-      resetGeneration: async () => 3,
-      loadState: async () => ({}),
-      io,
-      save: async (_state, progress, read) => read === 3 && progress.cursor === "next",
-    });
-    expect(result?.saved).toBe(true);
-  });
-
-  it("does nothing without a connection", async () => {
-    const save = vi.fn(async () => true);
-    expect(await backfillRequest(false, { resetGeneration: async () => 0, loadState: async () => undefined, io, save })).toBeUndefined();
-    expect(save).not.toHaveBeenCalled();
   });
 });

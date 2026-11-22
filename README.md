@@ -246,6 +246,7 @@ Run the parser locally (needs application-default credentials for Firestore):
 ```sh
 WEB_ORIGIN=http://localhost:3000 \
 GMAIL_PUBSUB_TOPIC=projects/<project>/topics/gmail \
+BACKFILL_PUBSUB_TOPIC=projects/<project>/topics/gmail-backfill \
 GOOGLE_OAUTH_CLIENT_ID=... GOOGLE_OAUTH_CLIENT_SECRET=... \
 GOOGLE_OAUTH_REDIRECT_URL=http://localhost:8080/gmail/callback \
 INTERNAL_AUDIENCE=http://localhost:8080 INTERNAL_CALLERS=none \
@@ -294,7 +295,8 @@ One Google Cloud project holds everything.
    token from the service accounts named in `INTERNAL_CALLERS`. `--set-env-vars`
    splits on commas, so pass a list such as `INTERNAL_CALLERS` with another
    delimiter (`--set-env-vars="^;^A=1;INTERNAL_CALLERS=a,b"`). Environment:
-   `WEB_ORIGIN`, `GMAIL_PUBSUB_TOPIC`, `GOOGLE_OAUTH_CLIENT_ID`,
+   `WEB_ORIGIN`, `GMAIL_PUBSUB_TOPIC`, `BACKFILL_PUBSUB_TOPIC` (both printed
+   by `deploy/pubsub.sh`, step 4), `GOOGLE_OAUTH_CLIENT_ID`,
    `GOOGLE_OAUTH_CLIENT_SECRET` (from Secret Manager),
    `GOOGLE_OAUTH_REDIRECT_URL`, `INTERNAL_AUDIENCE` (the service URL),
    `INTERNAL_CALLERS`, and either `GEMINI_API_KEY` or Vertex AI access through
@@ -327,12 +329,19 @@ One Google Cloud project holds everything.
    (`roles/firebasecloudmessaging.admin`); without them the daily job logs
    `reminder_failed` for anyone with a registered phone.
 4. **Push**: `PROJECT=… PARSER_URL=https://<parser> PUSH_SA=<service account>
-   deploy/pubsub.sh` creates the `gmail` topic (with Gmail allowed to publish
-   to it), a push subscription to `https://<parser>/internal/pubsub/gmail`
-   authenticated with an OIDC token from that service account, and a
-   `gmail-dead-letter` topic and subscription that receive a notification the
-   parser failed five times. Rerun it to change a setting. It uses
-   `gcloud beta`, which gcloud offers to install on first use.
+   PARSER_SA=<the parser's service account> deploy/pubsub.sh` creates the
+   `gmail` topic (with Gmail allowed to publish to it), a push subscription
+   to `https://<parser>/internal/pubsub/gmail` authenticated with an OIDC
+   token from that service account, and a `gmail-dead-letter` topic and
+   subscription that receive a notification the parser failed five times.
+   It also creates the `gmail-backfill` topic, which the parser publishes to
+   (the parser's service account gets `roles/pubsub.publisher` on it) so that
+   "Import past bookings" reads batch after batch on its own, and its push
+   subscription to `https://<parser>/internal/backfill`, dead-lettered to the
+   same topic after ten attempts. It prints the `GMAIL_PUBSUB_TOPIC` and
+   `BACKFILL_PUBSUB_TOPIC` values for the parser. Rerun it to change a
+   setting. It uses `gcloud beta`, which gcloud offers to install on first
+   use.
 5. **Daily jobs**: `PROJECT=… LOCATION=<region> PARSER_URL=https://<parser>
    SCHEDULER_SA=<service account> deploy/scheduler.sh` creates four Cloud
    Scheduler jobs that POST with an OIDC token from that service account

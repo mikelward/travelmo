@@ -8,7 +8,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { SignInGate } from "@/components/SignInGate";
 import { api } from "@/lib/api";
 import { exportLinks, useCalendarExport } from "@/lib/calendarExport";
-import { describeBackfill, pausedReason, readWholeMailbox } from "@/lib/backfill";
+import { describeBackfill, isReading, pausedReason } from "@/lib/backfill";
 import { useAuth } from "@/lib/auth";
 import { firestore, forgetFirestoreCache } from "@/lib/firebase";
 import { describeDeletedTrips, describeRegroup } from "@/lib/regroup";
@@ -25,16 +25,12 @@ const buttonClass =
 
 function GmailSection({ user }: { user: User }) {
   const profile = useProfile(user.uid);
-  const [reading, setReading] = useState(false);
-  const stopReading = useRef(false);
-  // Leaving the page stops a reading after its current batch, as Stop does;
-  // its saved position lets it continue later.
-  useEffect(
-    () => () => {
-      stopReading.current = true;
-    },
-    [],
-  );
+  // The clock a stalled reading is judged by; a minute is fine enough.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
   const params = useSearchParams();
   const router = useRouter();
   const status = params.get("gmail");
@@ -75,27 +71,17 @@ function GmailSection({ user }: { user: User }) {
     }
   };
 
-  // Reads batch after batch; progress lands on the profile, so the line
-  // below follows it, and it survives closing the page.
-  const readMailbox = (restart: boolean) =>
-    run(async () => {
-      stopReading.current = false;
-      setReading(true);
-      try {
-        const last = await readWholeMailbox((r) => api.backfill(user, r), {
-          restart,
-          onBatch: () => {},
-          stopped: () => stopReading.current,
-        });
-        const paused = pausedReason(last);
-        if (paused) setError(paused);
-      } finally {
-        setReading(false);
-      }
+  // The parser reads the mailbox on its own once started, and records its
+  // progress on the profile, which the line below follows.
+  const startReading = (restart: boolean) => run(async () => {
+      await api.startBackfill(user, restart);
     });
+  const stopReading = () => run(() => api.stopBackfill(user));
 
   const gmail = profile?.gmail;
   const progress = gmail?.backfill;
+  const reading = isReading(progress, now);
+  const paused = pausedReason(progress, reading);
   return (
     <section>
       <h2 className="text-lg font-medium">Gmail</h2>
@@ -125,15 +111,15 @@ function GmailSection({ user }: { user: User }) {
         <>
           <p className="mt-2 text-sm">
             Connected as <span className="font-medium">{gmail.emailAddress}</span>. New bookings import automatically;
-            past ones come in when you read your mailbox, in batches of 300 emails, as far back as it goes.
+            past ones come in when you import them, as far back as your mailbox goes.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             {reading ? (
-              <button type="button" className={buttonClass} onClick={() => (stopReading.current = true)}>
+              <button type="button" disabled={busy} className={buttonClass} onClick={stopReading}>
                 Stop
               </button>
             ) : (
-              <button type="button" disabled={busy} className={buttonClass} onClick={() => readMailbox(!!progress?.done)}>
+              <button type="button" disabled={busy} className={buttonClass} onClick={() => startReading(!!progress?.done)}>
                 {!progress ? "Import past bookings" : progress.done ? "Read again from the start" : "Continue reading past emails"}
               </button>
             )}
@@ -151,6 +137,7 @@ function GmailSection({ user }: { user: User }) {
               {describeBackfill(progress, reading)}
             </p>
           )}
+          {paused && <p className="mt-3 text-sm text-red-600">{paused}</p>}
         </>
       )}
       {notice && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{notice}</p>}

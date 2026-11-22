@@ -19,7 +19,7 @@ import {
   savePending,
   takeOAuthState,
   takePending,
-  updateBackfill,
+  changeBackfill,
   updateHistoryId,
   updateWatch,
 } from "./connections";
@@ -136,11 +136,16 @@ describe("mailbox ownership", () => {
     const email = unique("backfill") + "@example.com";
     const a = unique("a");
     await saveConnection(db, a, state(email));
-    const progress = { cursor: "p1", scanned: 300, imported: 4, done: false, updatedAt: "2026-11-02T00:00:00Z" };
-    expect(await updateBackfill(db, a, email, progress)).toBe(true);
+    const progress = { cursor: "p1", after: "m9", scanned: 300, imported: 4, done: false, updatedAt: "2026-11-02T00:00:00Z" };
+    expect((await changeBackfill(db, a, () => ({ next: progress, result: "saved" })))?.result).toBe("saved");
     expect((await db.doc(paths.user(a)).get()).data()?.gmail?.backfill).toEqual(progress);
+    // The user's copy is replaced whole, so a field the new progress lacks goes.
+    const { after: _after, ...finished } = { ...progress, scanned: 400 };
+    await changeBackfill(db, a, (current) => ({ next: current && finished, result: undefined }));
+    expect((await db.doc(paths.user(a)).get()).data()?.gmail?.backfill).toEqual(finished);
+    expect((await db.doc(paths.user(a)).get()).data()?.gmail?.emailAddress).toBe(email);
     await removeConnection(db, a, email);
-    expect(await updateBackfill(db, a, email, { ...progress, scanned: 600 })).toBe(false);
+    expect(await changeBackfill(db, a, () => ({ next: { ...progress, scanned: 600 }, result: "saved" }))).toBeUndefined();
     expect((await db.doc(paths.gmailState(a)).get()).exists).toBe(false);
   });
 

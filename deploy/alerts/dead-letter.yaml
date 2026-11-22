@@ -14,6 +14,10 @@ documentation:
 
     Nothing is lost by dropping it: the next notification for that mailbox
     resumes from the stored history id.
+
+    A message with `uid`, `run` and `step` is a batch of a mailbox reading
+    (`backfill_batch_failed` in the logs); the reading stalled there, and
+    Settings offers to continue it after half an hour.
 combiner: OR
 conditions:
   - displayName: "dead-letter subscription has messages"

@@ -39,7 +39,7 @@ import {
   savePending,
   takeOAuthState,
   takePending,
-  updateBackfill,
+  changeBackfill,
   updateCalendars,
   updateHistoryId,
   updateWatch,
@@ -80,7 +80,9 @@ import { BadPushEnvelope, parseGmailPush, processNotification, type GmailNotific
 import { firestoreStore } from "./store";
 import { FeedLimitReached, addFeed, feedFailure, firestoreFeeds, pollAllFeeds, type FeedIo } from "./feeds";
 import { fetchFeed } from "./safefetch";
-import { backfillBatch, backfillQuery, backfillRequest } from "./backfill";
+import { backfillBatch, backfillQuery, runBackfillBatch } from "./backfill";
+import { continueBackfill, parseContinuePush, startBackfill, stopBackfill, type ChainIo, type ContinueMessage } from "./backfillChain";
+import { pubsubPublisher } from "./publish";
 
 // How long one backfill batch may spend importing. Leaves two minutes of Cloud Run's default five for the last message and
 // saving progress.
@@ -111,6 +113,8 @@ import {
 
 const webOrigin = requireEnv("WEB_ORIGIN");
 const pubsubTopic = requireEnv("GMAIL_PUBSUB_TOPIC");
+// Where each batch of a mailbox reading queues the next (deploy/pubsub.sh).
+const publishBackfill = pubsubPublisher(requireEnv("BACKFILL_PUBSUB_TOPIC"));
 const oauth: OAuthConfig = {
   clientId: requireEnv("GOOGLE_OAUTH_CLIENT_ID"),
   clientSecret: requireEnv("GOOGLE_OAUTH_CLIENT_SECRET"),
@@ -364,21 +368,18 @@ function importIds(uid: string, gmail: ReturnType<typeof gmailFor>, ids: readonl
   return importMessages(uid, ids, (id) => fetchMessage(gmail, id), deps, options);
 }
 
-// One batch of reading the whole mailbox: it carries on from where the last
-// batch stopped (or starts over when asked), and records how far it got on
-// the connection, where Settings shows it. The page calls this until done.
-app.post("/gmail/backfill", async (c) => {
-  const uid = await requireUser(c);
-  const body = (await c.req.json().catch(() => ({}))) as { restart?: unknown };
-  // Stop importing well before Cloud Run's request limit, leaving time to
-  // save progress; the page then asks for the next batch.
-  const deadline = Date.now() + backfillBudgetMs;
-  const result = await backfillRequest(body.restart === true, {
-    resetGeneration: () => deps.store.resetGeneration(uid),
-    loadState: async () => (await loadState(db, uid)) ?? undefined,
-    io: (state, generation) => {
+// Reading the whole mailbox runs on the server (backfillChain.ts): each
+// batch carries on from where the last stopped, records how far it got on
+// the connection, where Settings shows it, and queues the next on Pub/Sub.
+function backfillIo(uid: string): ChainIo<GmailState> {
+  return {
+    change: (fn) => changeBackfill(db, uid, fn),
+    runBatch: (state, from, generation) => {
       const gmail = gmailFor(oauth, state.refreshToken);
-      return {
+      // Stop importing well before Cloud Run's request limit, leaving time
+      // to save progress; the next batch carries on.
+      const deadline = Date.now() + backfillBudgetMs;
+      return runBackfillBatch(from, false, {
         timeLeftMs: () => deadline - Date.now(),
         page: (token) => searchMessagePage(gmail, backfillQuery, backfillBatch, token),
         // An email whose import failed (the model was down, say) is read
@@ -387,16 +388,35 @@ app.post("/gmail/backfill", async (c) => {
         isStaleCursor: isBadRequest,
         now: () => new Date().toISOString(),
         log: (event, fields) => log("WARNING", event, { uid, ...fields }),
-      };
+      });
     },
-    save: (state, progress, generation) => updateBackfill(db, uid, state.emailAddress, progress, generation),
-  });
-  if (!result) throw new HTTPException(409, { message: "Gmail not connected" });
-  const { batch } = result;
-  if (!result.saved) log("WARNING", "backfill_progress_not_saved", { uid });
-  const { cursor: _cursor, ...progress } = batch.progress;
-  log("INFO", "backfill", { uid, candidates: batch.candidates, ...batch.counts, ...progress });
-  return c.json({ candidates: batch.candidates, ...batch.counts, progress });
+    publish: (message: ContinueMessage) => publishBackfill(message),
+    now: () => new Date().toISOString(),
+    log: (severity, event, fields) => log(severity, event, fields),
+  };
+}
+
+// Starts reading the whole mailbox (`restart: true` from the beginning) and
+// returns at once; the batches run on the server, so closing the page does
+// not stop them.
+app.post("/gmail/backfill", async (c) => {
+  const uid = await requireUser(c);
+  const body = (await c.req.json().catch(() => ({}))) as { restart?: unknown };
+  const restart = body.restart === true;
+  const result = await startBackfill(uid, randomBytes(12).toString("base64url"), restart, backfillIo(uid));
+  if (result.kind === "disconnected") throw new HTTPException(409, { message: "Gmail not connected" });
+  if (result.kind === "busy") throw new HTTPException(409, { message: "A batch is still being read. Try again in a few minutes." });
+  log("INFO", "backfill_started", { uid, restart, joined: result.kind === "joined", run: result.progress.run });
+  const { cursor: _cursor, after: _after, ...progress } = result.progress;
+  return c.json({ progress });
+});
+
+// Stop: the batch under way saves its place, and no more are queued.
+app.post("/gmail/backfill/stop", async (c) => {
+  const uid = await requireUser(c);
+  const stopped = await stopBackfill(backfillIo(uid));
+  log("INFO", "backfill_stopped", { uid, stopped });
+  return c.body(null, 204);
 });
 
 // Rebuilds the signed-in user's trips from their bookings with the grouping
@@ -926,6 +946,55 @@ app.post("/internal/pubsub/gmail", async (c) => {
   }
 });
 
+// The next batch of a mailbox reading, queued by the one before. A non-2xx
+// response makes Pub/Sub try again with backoff, so only a transient
+// failure gets one: a batch that failed (tried again once the email claims
+// it left lapse), one whose earlier copy is still reading, or one read but
+// whose next batch could not be queued (the next attempt queues it). A message the stored progress no
+// longer expects (a newer start, Stop, a reset, a copy of a batch already
+// read) is acknowledged and dropped.
+app.post("/internal/backfill", async (c) => {
+  await requireInternalCaller(c);
+  let message: ReturnType<typeof parseContinuePush>;
+  try {
+    message = parseContinuePush(await c.req.json());
+  } catch (error) {
+    if (error instanceof BadPushEnvelope) throw new HTTPException(400, { message: error.message });
+    throw error;
+  }
+  const { uid, run, step, pubsubMessageId, deliveryAttempt } = message;
+  const fields = { uid, run, step, pubsubMessageId, deliveryAttempt };
+  try {
+    const result = await continueBackfill({ uid, run, step }, backfillIo(uid));
+    switch (result.kind) {
+      case "disconnected":
+        log("WARNING", "backfill_for_disconnected_user", fields);
+        return c.body(null, 204);
+      case "stale":
+        log("INFO", "backfill_message_dropped", { ...fields, reason: result.reason });
+        return c.body(null, 204);
+      case "requeued":
+        log("WARNING", "backfill_requeued", fields);
+        return c.body(null, 204);
+      case "busy":
+        log("INFO", "backfill_batch_busy", fields);
+        return c.body(null, 503);
+      case "superseded":
+        log("WARNING", "backfill_progress_not_saved", { ...fields, candidates: result.batch.candidates, ...result.batch.counts });
+        return c.body(null, 204);
+      case "ran": {
+        const { cursor: _cursor, after: _after, ...progress } = result.progress;
+        log("INFO", "backfill", { ...fields, candidates: result.batch.candidates, ...result.batch.counts, ...progress });
+        if (!result.progress.running) log("INFO", "backfill_ended", { uid, run, done: result.progress.done, failed: result.batch.counts.failed });
+        return c.body(null, 204);
+      }
+    }
+  } catch (error) {
+    log("ERROR", "backfill_batch_failed", { ...fields, ...errorFields(error) });
+    throw error;
+  }
+});
+
 // Gmail watches last seven days; Cloud Scheduler calls this daily.
 app.post("/internal/renew-watches", async (c) => {
   await requireInternalCaller(c);
@@ -951,7 +1020,7 @@ app.post("/internal/renew-watches", async (c) => {
 
 app.onError((error, c) => {
   if (error instanceof HTTPException) return error.getResponse();
-  if (c.req.path !== "/internal/pubsub/gmail") log("ERROR", "unhandled", { path: c.req.path, ...errorFields(error) });
+  if (c.req.path !== "/internal/pubsub/gmail" && c.req.path !== "/internal/backfill") log("ERROR", "unhandled", { path: c.req.path, ...errorFields(error) });
   return c.text("Internal error", 500);
 });
 

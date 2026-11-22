@@ -3,9 +3,11 @@ import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { describe, expect, it } from "vitest";
 import type { EmailMessage } from "./gmail";
-import { loadState, updateBackfill, updateHistoryId } from "./connections";
+import type { BackfillBatch } from "./backfill";
+import { continueBackfill, startBackfill, type ChainIo, type ContinueMessage } from "./backfillChain";
+import { changeBackfill, loadState, updateHistoryId } from "./connections";
 import { AccountDeletedError } from "./deleted";
-import { cancelImported, importMessage, importStructured, importTripIt, type ImportDeps } from "./importer";
+import { cancelImported, emptyCounts, importMessage, importStructured, importTripIt, type ImportDeps } from "./importer";
 import { firestoreRetryStore, memoryRetryStore } from "./geocodeSweep";
 import { firestoreStore } from "./store";
 import { memoryStore } from "./testStore";
@@ -300,19 +302,40 @@ describe("resetTrips", () => {
     expect((await db.doc(paths.parsedMessage(uid, "gone")).get()).exists).toBe(false);
   });
 
-  it("does not write a mailbox reading's place back over a reset", async () => {
+  it("does not write a mailbox reading's place back over a reset, and stops the reading", async () => {
     const uid = "reset-u5";
-    const store = firestoreStore(db);
-    const progress = { cursor: "page-9", scanned: 2700, imported: 40, done: false, updatedAt: at };
     await db.doc(paths.user(uid)).set({ gmail: { emailAddress: "owner@example.com", connectedAt: at } });
     await db.doc(paths.gmailState(uid)).set({ emailAddress: "owner@example.com", connectedAt: at, refreshToken: "token" });
-    const before = await store.resetGeneration(uid);
-    await resetTrips(db, uid, quiet);
-    expect(await updateBackfill(db, uid, "owner@example.com", progress, before)).toBe(false);
+    const queued: ContinueMessage[] = [];
+    let duringBatch = async () => {};
+    const io: ChainIo<unknown> = {
+      change: (fn) => changeBackfill(db, uid, fn),
+      runBatch: async (): Promise<BackfillBatch> => {
+        await duringBatch();
+        return { counts: { ...emptyCounts(), imported: 3 }, candidates: 300, progress: { cursor: "page-9", scanned: 300, imported: 3, failed: 0, done: false, updatedAt: at } };
+      },
+      publish: async (message) => {
+        queued.push(message);
+      },
+      now: () => at,
+      log: quiet,
+    };
+    expect((await startBackfill(uid, "run-1", false, io)).kind).toBe("started");
+    // "Delete all trips" lands while the first batch reads.
+    duringBatch = async () => {
+      await resetTrips(db, uid, quiet);
+    };
+    expect((await continueBackfill(queued[0]!, io)).kind).toBe("superseded");
     expect((await db.doc(paths.gmailState(uid)).get()).get("backfill")).toBeUndefined();
     expect((await db.doc(paths.user(uid)).get()).get("gmail.backfill")).toBeUndefined();
-    // A reading that began after the reset saves as before.
-    expect(await updateBackfill(db, uid, "owner@example.com", progress, await store.resetGeneration(uid))).toBe(true);
+    expect(queued).toHaveLength(1);
+    // A copy of the queued batch delivered after the reset is dropped.
+    duringBatch = async () => {};
+    expect(await continueBackfill(queued[0]!, io)).toEqual({ kind: "stale", reason: "superseded" });
+    // A reading started after the reset saves as before.
+    expect((await startBackfill(uid, "run-2", false, io)).kind).toBe("started");
+    expect((await continueBackfill(queued[1]!, io)).kind).toBe("ran");
+    expect((await db.doc(paths.user(uid)).get()).get("gmail.backfill")).toMatchObject({ cursor: "page-9", run: "run-2", step: 1, running: true });
   });
 
   it("keeps the mailbox's history position for a notification the reset overtook", async () => {
@@ -341,7 +364,7 @@ describe("resetTrips", () => {
     // ...and must not find the old place to carry on from and save again.
     expect(state?.backfill).toBeUndefined();
     expect((await db.doc(paths.user(uid)).get()).get("gmail.backfill")).toBeUndefined();
-    expect(await updateBackfill(db, uid, "owner@example.com", { scanned: 300, imported: 0, done: false, updatedAt: at }, generation)).toBe(true);
+    expect(generation).toBeGreaterThan(0);
   });
 
   it("queues no place for another look once the trips were reset", async () => {

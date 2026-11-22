@@ -4,14 +4,8 @@ import type { CalendarResult } from "./ics";
 import type { RegroupResult } from "./regroup";
 import type { TripItResult } from "./tripit";
 
-export type BackfillResult = {
-  candidates: number;
-  progress: { scanned: number; imported: number; failed?: number; done: boolean; updatedAt: string };
-  skipped: number;
-  filtered: number;
-  not_booking: number;
-  imported: number;
-  failed: number;
+export type BackfillStarted = {
+  progress: { scanned: number; imported: number; failed?: number; done: boolean; running?: boolean; updatedAt: string };
 };
 
 export function parserUrl(): string {
@@ -40,7 +34,8 @@ export const api = {
     post<{ emailAddress: string; calendars: number }>(user, "/calendar/complete", { state }),
   selectCalendars: (user: User, ids: string[]) => post<{ read: number; failed: number }>(user, "/calendar/select", { ids }),
   disconnectCalendar: (user: User) => post<void>(user, "/calendar/disconnect"),
-  backfill: (user: User, restart = false) => post<BackfillResult>(user, "/gmail/backfill", restart ? { restart } : {}),
+  startBackfill: (user: User, restart = false) => post<BackfillStarted>(user, "/gmail/backfill", restart ? { restart } : {}),
+  stopBackfill: (user: User) => post<void>(user, "/gmail/backfill/stop"),
   reimport: (user: User, messageId: string) => post<{ outcome: string }>(user, "/gmail/reimport", { messageId }),
   importTripIt: (user: User, exported: unknown) => post<TripItResult>(user, "/import/tripit", { export: exported }),
   importIcs: (user: User, text: string) => post<CalendarResult>(user, "/import/ics", { text }),

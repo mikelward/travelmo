@@ -376,10 +376,10 @@ Guesses made on autopilot; change any of them freely.
 
 - Partner sharing is per trip, by email. A sharee edits bookings; only the
   owner renames, shares or deletes the trip. Not whole-account sharing.
-- Backfill: on demand from Settings, the whole mailbox in batches of 300
-  that the page keeps requesting until done (the user can stop and
-  continue later); nothing automatic at connect time, and no background job
-  driving it server-side.
+- Backfill: started on demand from Settings, then the whole mailbox read
+  on the server in batches of up to 300, each queueing the next through
+  Pub/Sub, so closing the page does not stop it (the user can stop and
+  continue later); nothing automatic at connect time.
 - Gemini is the extraction model (`gemini-flash-lite-latest` by default,
   configurable); Claude Haiku was the alternative.
 - Refresh tokens are stored in Firestore under `users/{uid}/private`,
