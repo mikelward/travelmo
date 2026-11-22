@@ -175,8 +175,8 @@
 - [x] Play store listing in the repo (`apps/android/play`): texts, feature
       graphic and six screenshots framed from the snapshots, checked on
       every pull request and published by the `Publish` job when it changes.
-- [ ] Privacy policy page on the web app, for the Play listing and Google's
-      OAuth verification.
+- [x] Privacy policy page on the web app (`/privacy`), for the Play listing
+      and Google's OAuth verification.
 - [x] Account deletion in the app and on the web (Play requires both for
       an app with sign-in): Settings' "Delete account" calls the parser's
       `POST /account/delete` (SPEC "Deleting an account"). The Play

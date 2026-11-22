@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Link from "next/link";
 import { Fira_Sans, Geist } from "next/font/google";
 import { Nav } from "@/components/Nav";
 import { OfflineBanner } from "@/components/OfflineBanner";
@@ -35,6 +36,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <OfflineBanner />
           <Nav />
           <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">{children}</main>
+          <footer className="mx-auto w-full max-w-3xl px-4 pb-6 text-sm text-zinc-500">
+            <Link href="/privacy" className="hover:underline">
+              Privacy
+            </Link>
+          </footer>
         </AuthProvider>
         <ServiceWorker />
       </body>
