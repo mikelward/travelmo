@@ -1,0 +1,8 @@
+# What gcloud builds submit leaves out of the parser's source upload: what
+# git ignores, git's own files, and the credentials file the deploy job's
+# auth step writes into the checkout (gha-creds-*.json), which holds a
+# GitHub OIDC token and must never reach the source bucket or the image.
+.git
+.gitignore
+gha-creds-*.json
+#!include:.gitignore

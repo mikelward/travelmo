@@ -4,3 +4,6 @@
 apps/web
 .git
 .github
+
+# The deploy job's credentials file (.gcloudignore keeps it out of the upload too).
+gha-creds-*.json
