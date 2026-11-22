@@ -80,6 +80,10 @@ import { firestoreStore } from "./store";
 import { FeedLimitReached, addFeed, feedFailure, firestoreFeeds, pollAllFeeds, type FeedIo } from "./feeds";
 import { fetchFeed } from "./safefetch";
 import { backfillBatch, backfillQuery, runBackfillBatch } from "./backfill";
+
+// How long one backfill batch may spend importing. Leaves two minutes of Cloud Run's default five for the last message and
+// saving progress.
+const backfillBudgetMs = 3 * 60 * 1000;
 import { LeaseLost, UploadRunning, withUploadLease } from "./leases";
 import { calendarForToken, firestoreExportIo, hashToken, issueExport, stopExport } from "./calendarExport";
 import {
@@ -368,7 +372,11 @@ app.post("/gmail/backfill", async (c) => {
   if (!state) throw new HTTPException(409, { message: "Gmail not connected" });
   const body = (await c.req.json().catch(() => ({}))) as { restart?: unknown };
   const gmail = gmailFor(oauth, state.refreshToken);
+  // Stop importing well before Cloud Run's request limit, leaving time to
+  // save progress; the page then asks for the next batch.
+  const deadline = Date.now() + backfillBudgetMs;
   const batch = await runBackfillBatch(state.backfill, body.restart === true, {
+    timeLeftMs: () => deadline - Date.now(),
     page: (token) => searchMessagePage(gmail, backfillQuery, backfillBatch, token),
     // An email whose import failed (the model was down, say) is read again
     // when the reading passes it again, as after starting over.

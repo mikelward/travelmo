@@ -119,6 +119,9 @@ export type Trip = z.infer<typeof Trip>;
 // carrying on from Gmail's page cursor, so it survives closing the page.
 export const BackfillProgress = z.object({
   cursor: z.string().optional(),
+  // The last message read on the cursor's page, when a batch ran short of
+  // time partway through it; the next batch carries on after it.
+  after: z.string().optional(),
   scanned: z.number().int().nonnegative(),
   imported: z.number().int().nonnegative(),
   // Emails whose import failed in this reading; starting over tries them again.
