@@ -252,6 +252,19 @@
       those headers, what an extra request per passing message costs in
       quota and time, and update `/privacy` to match if it changes.
 
+- [ ] Analytics, server side: a parser job that counts, across all users,
+      bookings and import outcomes (imported, skipped, failed) per sender
+      domain (the travel company) and per source, and forwarded email per
+      sender's mail provider (well-known providers only, the rest as
+      "other"). Counts name companies, never people; buckets under 5 are
+      dropped; nothing goes to an analytics service, so no consent prompt
+      is needed. `/privacy` and `docs/PRIVACY.md` describe this as
+      planned: when it ships or the plan changes, update both, their date,
+      and Play's data safety form.
+- [ ] Maybe later: opt-in Android crash reports (Firebase Crashlytics),
+      as in the sibling apps, behind a Settings switch that is off by
+      default. The privacy policy already promises the opt-in.
+
 ## Decisions needing review
 
 Guesses made on autopilot; change any of them freely.

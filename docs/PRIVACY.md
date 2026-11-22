@@ -2,7 +2,7 @@
 
 Last updated 22 November 2026
 
-Travelmo keeps your trips in one place, on the web and in the Android app. This page says what it stores, why, who else handles it, and how to remove it. Travelmo has no ads and no analytics, and it never sells your data.
+Travelmo keeps your trips in one place, on the web and in the Android app. This page says what it stores, why, who else handles it, and how to remove it. Travelmo has no ads and never sells your data.
 
 ## What Travelmo stores
 
@@ -35,6 +35,10 @@ People you share a trip with see its bookings. People you share your travel prof
 ## On your phone
 
 The Android app keeps a debug log on the phone to help fix bugs. It records what the app did, never your bookings or addresses, and leaves the phone only if you share it from Settings.
+
+## Analytics and telemetry (planned)
+
+Travelmo doesn't collect analytics yet. The plan is to count, on its own servers and across all its users, which travel companies and email services bookings come from and how often reading them fails, to improve how Travelmo reads them. The counts will name companies, never people: no email addresses, subjects or email text, and a company with too few bookings to keep its users anonymous will be left out. Nothing will be stored on your device for this and nothing will go to an analytics service. If the Android app later sends crash reports, it will ask first, with a switch in Settings that is off until you turn it on. This page will change, with a new date, before any of this starts or if the plan changes.
 
 ## Keeping and deleting your data
 
