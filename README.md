@@ -259,8 +259,10 @@ One Google Cloud project holds everything.
    can be set before the parser exists. Create service accounts for Pub/Sub
    to push as and for Cloud Scheduler to call as (they need no roles of
    their own), and one for the parser to run as with
-   `roles/datastore.user`, `roles/secretmanager.secretAccessor` and
-   `roles/firebasecloudmessaging.admin`.
+   `roles/datastore.user`, `roles/secretmanager.secretAccessor`,
+   `roles/firebasecloudmessaging.admin` and `roles/firebaseauth.admin`
+   (Delete account removes the sign-in account; without it the data goes
+   but the request fails with "insufficient permission").
 3. **Parser** on Cloud Run. Build the image from the repository root with
    `gcloud builds submit . --config=apps/parser/cloudbuild.yaml
    --substitutions=_IMAGE=<region>-docker.pkg.dev/<project>/travelmo/parser`
