@@ -34,6 +34,9 @@ $gcloud pubsub topics add-iam-policy-binding "$TOPIC" \
 
 # Dead-lettering is done by the Pub/Sub service agent, which must be allowed
 # to publish to the dead-letter topic and to acknowledge on the subscription.
+# A new project has no agent until something asks for it, and granting it a
+# role before then fails with "does not exist".
+$gcloud beta services identity create --service=pubsub.googleapis.com >/dev/null
 PROJECT_NUMBER=$($gcloud projects describe "$PROJECT" --format='value(projectNumber)')
 PUBSUB_AGENT="serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-pubsub.iam.gserviceaccount.com"
 $gcloud pubsub topics add-iam-policy-binding "$DEAD_LETTER_TOPIC" \
