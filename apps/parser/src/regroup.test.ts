@@ -101,6 +101,28 @@ describe("regroupTrips", () => {
     expect(store.trips.get("palace")).toEqual(trip("palace", "Palace with Nan", "2026-12-20", "2026-12-20"));
   });
 
+  it("moves a ride from the airport into the trip of the flight it meets", async () => {
+    const store = memoryStore();
+    const lhr = { name: "London Heathrow", code: "LHR", city: "London", country: "GB" };
+    const jfk = { name: "John F. Kennedy International", code: "JFK", city: "New York", country: "US" };
+    store.trips.set("usa", trip("usa", "New York", "2026-07-10", "2026-07-23"));
+    store.trips.set("ride", trip("ride", "London", "2026-07-23", "2026-07-23"));
+    const put = (s: Segment) => store.segments.set(s.id, s);
+    put(segment("usa", "f-0", "f", { type: "flight", title: "BA 117", start: "2026-07-10T08:25:00+01:00", end: "2026-07-10T11:10:00-04:00", origin: lhr, destination: jfk }));
+    put(segment("usa", "f-1", "f", { type: "flight", title: "BA 112", start: "2026-07-22T18:30:00-04:00", end: "2026-07-23T06:35:00+01:00", origin: jfk, destination: lhr }));
+    put(
+      segment("ride", "r-0", "r", {
+        type: "car_rental",
+        title: "Abetta Car from Heathrow Terminal 3 to London",
+        start: "2026-07-23T15:27:00+01:00",
+        origin: { name: "Heathrow Terminal 3 - LHR, TW6 1SX", city: "London", country: "GB" },
+        destination: { name: "1 Example Road, London N1 1AA", city: "London", country: "GB" },
+      }),
+    );
+    await regroupTrips("u1", deps(store));
+    expect(summary(store).map((t) => [t.title, t.segments])).toEqual([["New York", ["f-0", "f-1", "r-0"]]]);
+  });
+
   it("merges trips one import split, deleting the one left empty", async () => {
     const store = memoryStore();
     store.trips.set("a", trip("a", "Liverpool", "2026-05-23", "2026-05-23"));

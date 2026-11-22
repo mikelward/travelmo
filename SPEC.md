@@ -569,6 +569,22 @@ that is not home, or failing that its first origin that is not (a return
 leg booked alone). While home is unknown, nothing changes: a booking joins
 the trip within two days of it.
 
+A car or taxi booked from one place to another (`isTransfer`: a car or
+"other" booking whose origin and destination differ by code, name and
+address) is a ground transfer, such as a car home from Heathrow. Like a
+journey it is never at home, but it is no round trip and says nothing about
+where home is. Before any of the above, a transfer joins the trip of a
+flight, train, bus or ferry it meets (`connects`): it leaves the airport or
+station the journey arrives at up to 12 hours after it lands, or reaches
+the one it leaves from up to 12 hours before it departs; of several, the
+trip with the shortest wait wins (`connectionGap`). The place matches on the
+same code, the code written in it in any case ("Heathrow Terminal 3 - LHR"),
+or a word of the hub's name that is not its town's ("Heathrow" of London
+Heathrow). Whichever is imported first, the other joins its trip. A trip of nothing but a transfer is named by its route
+(`transferTitle`): "Heathrow to home" when it ends in the home of its day,
+else "Heathrow to London"; when a journey later joins it and the owner has
+not renamed it, it takes the name the whole trip would get ("New York").
+
 Trips filed before home was known are rebuilt on request ("Regroup trips"
 in Settings, `POST /trips/regroup`, `apps/parser/src/regroup.ts`), in the
 import's per-user transaction. Each booking, the segments that share any

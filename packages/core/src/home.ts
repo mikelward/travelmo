@@ -109,14 +109,113 @@ export function homeAt(periods: readonly HomePeriod[], date: string, overrides: 
   return overrides.find((p) => covers(p, date)) ?? periods.find((p) => covers(p, date));
 }
 
+// Whether two places are one: the same code where both have one, else the
+// same name or the same address.
+function samePlace(a: Place, b: Place): boolean {
+  const norm = (text: string | undefined) => text?.trim().toLowerCase();
+  if (a.code && b.code) return norm(a.code) === norm(b.code);
+  return norm(a.name) === norm(b.name) || (!!a.address && norm(a.address) === norm(b.address));
+}
+
+// A ground transfer: a car or taxi booked from one place to another (an
+// airport to home), as opposed to a car hired and returned in one place.
+// It travels like a journey, so it is never a day out at home, but it is
+// no round trip and says nothing about where home is (roundTrips).
+export function isTransfer(segment: Pick<ExtractedSegment, "type" | "origin" | "destination">): boolean {
+  if (segment.type !== "car_rental" && segment.type !== "other") return false;
+  return !!segment.origin && !!segment.destination && !samePlace(segment.origin, segment.destination);
+}
+
+// Words that say nothing about which airport or station a place is.
+const hubWords = new Set(["airport", "international", "terminal", "station", "central", "railway", "rail", "city"]);
+const wordsOf = (text: string) => text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+
+// Whether a place in a ride's booking is the airport or station a journey
+// leaves from or arrives at: the same code, the code written in it
+// ("Heathrow Terminal 3 - LHR"), or a word of the hub's name that is not
+// its town's ("Heathrow" of London Heathrow).
+function atHub(place: Place, hub: Place): boolean {
+  if (place.code && hub.code) return place.code.toUpperCase() === hub.code.toUpperCase();
+  const text = `${place.name} ${place.address ?? ""}`;
+  const code = hub.code?.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (code && new RegExp(`\\b${code}\\b`, "i").test(text)) return true;
+  const townWords = new Set(wordsOf(`${hub.city ?? ""} ${hub.country ?? ""}`));
+  const words = new Set(wordsOf(text));
+  return wordsOf(hub.name).some((w) => w.length >= 4 && !hubWords.has(w) && !townWords.has(w) && words.has(w));
+}
+
+// How close a ride must be to a journey at the same airport or station to
+// belong with it: a car home after a delayed long-haul flight, or to the
+// airport for the morning's first one.
+const connectionHours = 12;
+
+type Located = Pick<ExtractedSegment, "type" | "start" | "origin" | "destination"> & Partial<Pick<ExtractedSegment, "end">>;
+
+// How long a traveler waits between a transfer and the journey it meets, in
+// milliseconds: from landing to the ride leaving the airport, or from the
+// ride reaching the airport to take-off. Undefined when they do not meet:
+// another place, the wrong order (a ride from the airport before the flight
+// lands), or more than `connectionHours` apart. Either may be given first.
+export function connectionGap(a: Located, b: Located): number | undefined {
+  const [ride, journey] = isTransfer(a) ? [a, b] : [b, a];
+  if (!isTransfer(ride) || !journeyTypes.has(journey.type)) return undefined;
+  const wait = (from: string, to: string) => {
+    const ms = Date.parse(to) - Date.parse(from);
+    return ms >= 0 && ms <= connectionHours * 3_600_000 ? ms : undefined;
+  };
+  const gaps = [
+    journey.destination && atHub(ride.origin!, journey.destination) ? wait(journey.end ?? journey.start, ride.start) : undefined,
+    journey.origin && atHub(ride.destination!, journey.origin) ? wait(ride.end ?? ride.start, journey.start) : undefined,
+  ].filter((gap): gap is number => gap !== undefined);
+  return gaps.length > 0 ? Math.min(...gaps) : undefined;
+}
+
+// Whether a transfer meets a journey (connectionGap).
+export function connects(a: Located, b: Located): boolean {
+  return connectionGap(a, b) !== undefined;
+}
+
+// A place's short name in a route: "Heathrow" for "Heathrow Terminal 3 -
+// LHR, TW6 1SX", "London Heathrow" for "London Heathrow Airport (LHR)".
+function shortName(place: Place): string {
+  const first = place.name.split(/\s+[-–—]\s+|,/)[0] ?? place.name;
+  const short = first
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\b(terminal\s*\w{0,2}|international|airport)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return short || place.city || place.name;
+}
+
+// A transfer named by its route, for a trip that is nothing else: "Heathrow
+// to home" when it ends in the home of its day, else "Heathrow to London".
+// An airport or station is named for itself, even in the home town.
+export function transferTitle(
+  segment: Pick<ExtractedSegment, "type" | "start" | "origin" | "destination">,
+  periods: readonly HomePeriod[],
+  overrides: readonly HomePeriod[] = [],
+): string | undefined {
+  if (!isTransfer(segment)) return undefined;
+  const home = homeAt(periods, localDate(segment.start), overrides);
+  const label = (place: Place) => {
+    if (place.code || /\b(airport|terminal|station)\b/i.test(`${place.name} ${place.address ?? ""}`)) return shortName(place);
+    const where = town(place);
+    if (home && where && sameTown(where, home)) return "home";
+    return place.city ?? shortName(place);
+  };
+  const route = `${label(segment.origin!)} to ${label(segment.destination!)}`;
+  return route.charAt(0).toUpperCase() + route.slice(1);
+}
+
 // Whether a booking that is not a journey (a stay, a ticket, a car) happens
-// in the home of its day: a day out, not part of a trip away.
+// in the home of its day: a day out, not part of a trip away. A transfer
+// travels, so it is not.
 export function isAtHome(
-  segment: Pick<ExtractedSegment, "type" | "start" | "destination">,
+  segment: Pick<ExtractedSegment, "type" | "start" | "destination"> & Partial<Pick<ExtractedSegment, "origin">>,
   periods: readonly HomePeriod[],
   overrides: readonly HomePeriod[] = [],
 ): boolean {
-  if (journeyTypes.has(segment.type)) return false;
+  if (journeyTypes.has(segment.type) || isTransfer(segment)) return false;
   const place = town(segment.destination);
   const home = homeAt(periods, localDate(segment.start), overrides);
   return !!place && !!home && sameTown(place, home);
@@ -125,7 +224,7 @@ export function isAtHome(
 // A trip made of nothing but bookings at home: a day out, which a trip away
 // never joins by nearness of dates. An empty trip says nothing.
 export function isHomeTrip(
-  segments: readonly Pick<ExtractedSegment, "type" | "start" | "destination">[],
+  segments: readonly (Pick<ExtractedSegment, "type" | "start" | "destination"> & Partial<Pick<ExtractedSegment, "origin">>)[],
   periods: readonly HomePeriod[],
   overrides: readonly HomePeriod[] = [],
 ): boolean {
@@ -137,16 +236,29 @@ export function isHomeTrip(
 // A booking all at home joins only a day out on the same dates, so two
 // tickets on one day stay together but nothing at home chains into a trip
 // away; a booking away never joins a day out at home, and a journey, even
-// one leaving from home, is never at home.
+// one leaving from home, is never at home. Before any of that, a transfer
+// joins the trip of the flight or train it meets (connects), and a journey
+// the trip of a transfer that meets it, whichever came in first.
 export function findTripForBooking(
   trips: readonly Trip[],
-  segmentsOf: (tripId: string) => readonly Pick<ExtractedSegment, "type" | "start" | "destination">[],
+  segmentsOf: (tripId: string) => readonly Located[],
   booking: readonly ExtractedSegment[],
   periods: readonly HomePeriod[],
   overrides: readonly HomePeriod[] = [],
 ): Trip | undefined {
   const range = segmentDateRange(booking);
   if (!range) return undefined;
+  // The trip whose journey the transfer meets soonest, when several do.
+  let met: { trip: Trip; gap: number } | undefined;
+  for (const trip of trips) {
+    for (const s of segmentsOf(trip.id)) {
+      for (const b of booking) {
+        const gap = connectionGap(b, s);
+        if (gap !== undefined && (!met || gap < met.gap)) met = { trip, gap };
+      }
+    }
+  }
+  if (met) return met.trip;
   if (periods.length === 0 && overrides.length === 0) return findTripForRange(trips, range);
   const atHome = isHomeTrip(booking, periods, overrides);
   const homeTrip = (trip: Trip) => isHomeTrip(segmentsOf(trip.id), periods, overrides);

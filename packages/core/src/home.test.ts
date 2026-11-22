@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { awayPlace, describeHomes, effectiveHomes, findTripForBooking, homeAt, homeCorrections, homeTimeline, isAtHome, isHomeTrip } from "./home";
+import {
+  awayPlace,
+  connects,
+  describeHomes,
+  effectiveHomes,
+  findTripForBooking,
+  homeAt,
+  homeCorrections,
+  homeTimeline,
+  isAtHome,
+  isHomeTrip,
+  isTransfer,
+  transferTitle,
+} from "./home";
 import type { ExtractedSegment, Place, Trip } from "./schema";
 
 const london: Place = { name: "London Euston", code: "EUS", city: "London", country: "GB" };
@@ -263,5 +276,123 @@ describe("describeHomes", () => {
     );
     expect(describeHomes([{ city: "London" }])).toBe("London");
     expect(describeHomes([])).toBe("");
+  });
+});
+
+// A car booked home from the airport after a flight from New York: before
+// it was a transfer, it was a day out at home and became a trip of its own.
+describe("transfers", () => {
+  const periods = [{ city: "London", country: "GB" }];
+  const lhr: Place = { name: "London Heathrow", code: "LHR", city: "London", country: "GB" };
+  const jfk: Place = { name: "John F. Kennedy International", code: "JFK", city: "New York", country: "US" };
+  const homeAddress: Place = { name: "1 Example Road, London N1 1AA", city: "London", country: "GB" };
+  const out: ExtractedSegment = { type: "flight", title: "BA 117", start: "2026-07-10T08:25:00+01:00", end: "2026-07-10T11:10:00-04:00", origin: lhr, destination: jfk };
+  const back: ExtractedSegment = { type: "flight", title: "BA 112", start: "2026-07-22T18:30:00-04:00", end: "2026-07-23T06:35:00+01:00", origin: jfk, destination: lhr };
+  const ride: ExtractedSegment = {
+    type: "car_rental",
+    title: "Abetta Car from Heathrow Terminal 3 to London",
+    start: "2026-07-23T15:27:00+01:00",
+    origin: { name: "Heathrow Terminal 3 - LHR, TW6 1SX", city: "London", country: "GB" },
+    destination: homeAddress,
+  };
+  const hire: ExtractedSegment = {
+    type: "car_rental",
+    title: "Hertz",
+    start: "2026-07-23T09:00:00+01:00",
+    end: "2026-07-25T09:00:00+01:00",
+    origin: { name: "Hertz Islington", city: "London", country: "GB" },
+    destination: { name: "Hertz Islington", city: "London", country: "GB" },
+  };
+  const trip = (id: string, start: string, end: string): Trip => ({
+    id,
+    title: id,
+    start,
+    end,
+    ownerUid: "u1",
+    sharedWith: [],
+    createdAt: "2026-01-01T00:00:00Z",
+    updatedAt: "2026-01-01T00:00:00Z",
+  });
+  // A show at home that evening and a trip to Paris the next day lie as
+  // near by date as the trip to New York does.
+  const show: ExtractedSegment = { type: "activity", title: "Show", start: "2026-07-23T19:30:00+01:00", destination: { name: "Theatre", city: "London", country: "GB" } };
+  const toParis: ExtractedSegment = {
+    type: "train",
+    title: "Eurostar",
+    start: "2026-07-24T09:01:00+01:00",
+    origin: { name: "London St Pancras", city: "London" },
+    destination: { name: "Paris Nord", city: "Paris" },
+  };
+  const segments: Record<string, ExtractedSegment[]> = { show: [show], paris: [toParis], usa: [out, back], ride: [ride] };
+  const of = (id: string) => segments[id] ?? [];
+  const showTrip = trip("show", "2026-07-23", "2026-07-23");
+  const parisTrip = trip("paris", "2026-07-24", "2026-07-24");
+
+  it("tells a ride between two places from a car hired in one", () => {
+    expect(isTransfer(ride)).toBe(true);
+    expect(isTransfer(hire)).toBe(false);
+    expect(isTransfer({ ...ride, destination: undefined })).toBe(false);
+    expect(isTransfer({ ...ride, type: "lodging" })).toBe(false);
+  });
+
+  it("does not call a ride home from the airport a day out at home", () => {
+    expect(isAtHome(ride, periods)).toBe(false);
+    expect(isAtHome(hire, periods)).toBe(true);
+  });
+
+  it("joins the ride to the trip of the flight it meets, filed after it", () => {
+    const usa = trip("usa", "2026-07-10", "2026-07-23");
+    expect(findTripForBooking([showTrip, parisTrip, usa], of, [ride], periods)?.id).toBe("usa");
+  });
+
+  it("joins the flight to the trip of the ride it meets, filed before it", () => {
+    const rideTrip = trip("ride", "2026-07-23", "2026-07-23");
+    expect(findTripForBooking([showTrip, parisTrip, rideTrip], of, [out, back], periods)?.id).toBe("ride");
+  });
+
+  it("meets a flight at its airport within hours, not days", () => {
+    expect(connects(ride, back)).toBe(true);
+    expect(connects(back, ride)).toBe(true);
+    expect(connects(ride, out)).toBe(false);
+    expect(connects({ ...ride, start: "2026-07-24T15:27:00+01:00" }, back)).toBe(false);
+    expect(connects({ ...ride, origin: { name: "Gatwick South Terminal", city: "Crawley" } }, back)).toBe(false);
+    const toAirport = { ...ride, start: "2026-07-10T05:00:00+01:00", origin: homeAddress, destination: { name: "Heathrow Airport T5", city: "London" } };
+    expect(connects(toAirport, out)).toBe(true);
+  });
+
+  it("meets a flight only in the order a traveler would take them", () => {
+    // A ride out of Heathrow before the flight lands, and one to Heathrow
+    // after the flight has left.
+    expect(connects({ ...ride, start: "2026-07-23T05:00:00+01:00" }, back)).toBe(false);
+    const toAirport = { ...ride, origin: homeAddress, destination: lhr };
+    expect(connects({ ...toAirport, start: "2026-07-10T06:00:00+01:00" }, out)).toBe(true);
+    expect(connects({ ...toAirport, start: "2026-07-10T10:00:00+01:00" }, out)).toBe(false);
+  });
+
+  it("joins the ride to the trip whose flight it meets soonest", () => {
+    const early: ExtractedSegment = { ...back, title: "VS 4", start: "2026-07-22T15:00:00-04:00", end: "2026-07-23T04:00:00+01:00" };
+    const both: Record<string, ExtractedSegment[]> = { ...segments, early: [early] };
+    const usa = trip("usa", "2026-07-10", "2026-07-23");
+    const earlyTrip = trip("early", "2026-07-22", "2026-07-23");
+    expect(findTripForBooking([earlyTrip, usa], (id) => both[id] ?? [], [ride], periods)?.id).toBe("usa");
+  });
+
+  it("reads an airport code in a place in any case, as a whole word", () => {
+    expect(connects({ ...ride, origin: { name: "lhr terminal 3", city: "London" } }, back)).toBe(true);
+    expect(connects({ ...ride, origin: { name: "Flhr House terminal", city: "London" } }, back)).toBe(false);
+  });
+
+  it("names a ride by its route", () => {
+    expect(transferTitle(ride, periods)).toBe("Heathrow to home");
+    expect(transferTitle(ride, [])).toBe("Heathrow to London");
+    const toAirport = { ...ride, origin: homeAddress, destination: { name: "London Heathrow Airport (LHR)", city: "London" } };
+    expect(transferTitle(toAirport, periods)).toBe("Home to London Heathrow");
+    expect(transferTitle(hire, periods)).toBeUndefined();
+  });
+
+  it("keeps rides to and from the airport out of where home is", () => {
+    const fromBristol: ExtractedSegment = { ...ride, start: "2026-07-10T04:00:00+01:00", origin: { name: "Bristol", city: "Bristol" }, destination: lhr };
+    const toBristol: ExtractedSegment = { ...ride, origin: lhr, destination: { name: "Bristol", city: "Bristol" } };
+    expect(homeTimeline([fromBristol, out, back, toBristol])).toEqual([{ city: "London", country: "GB" }]);
   });
 });
