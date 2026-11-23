@@ -74,4 +74,8 @@ export const paths = {
   flightStatusNewsEntry: (id: string) => `flightStatusNews/${id}`,
   // Flight-status calls per day across every user, against the daily cap.
   flightStatusBudget: (day: string) => `flightStatusBudget/${day}`,
+  // Who has been reminded that a booking's online check-in is open, one per
+  // booking (`<ownerUid>__<segmentId>`); the parser's alone.
+  checkInReminders: () => "checkInReminders",
+  checkInReminder: (id: string) => `checkInReminders/${id}`,
 } as const;

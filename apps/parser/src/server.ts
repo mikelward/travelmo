@@ -55,6 +55,7 @@ import { fcmSender } from "./fcm";
 import { pushConfig, webPushSender } from "./push";
 import { firestoreReminderIo, sendReminders } from "./reminders";
 import { aeroApiLookup } from "./aeroapi";
+import { firestoreCheckInIo, sendCheckInReminders } from "./checkIn";
 import { canSeeTrip, checkFlights, defaultFlightStatusDailyLimit, firestoreFlightIo, retryPendingNews, type FlightOptions } from "./flightStatus";
 import { airportPlace } from "@travelmo/core/airportPlaces";
 import { visaTable } from "@travelmo/core/visaRules";
@@ -1038,16 +1039,51 @@ const flightOptions = (): FlightOptions | undefined =>
     approved: (uid) => approvedUid(db, uid, verifiedEmail, log),
   };
 
-// Cloud Scheduler calls this every minute (deploy/scheduler.sh): the
-// flights near departure or arrival get their look, and their news goes out.
+// Check-in reminders (checkIn.ts) ride the flight-status job: they need
+// its minute to go out when check-in opens, not the daily reminder run's
+// morning, and the same bookings query and index. They need no AeroAPI key.
+const checkInIo = firestoreCheckInIo(db, {
+  flightSegments: flightIo.flightSegments,
+  trip: flightIo.trip,
+  uidForEmail: flightIo.uidForEmail,
+  verifiedEmail,
+  pushSubscriptions: reminderIo.pushSubscriptions,
+  removePushSubscription: reminderIo.removePushSubscription,
+  devices: reminderIo.devices,
+  removeDevice: reminderIo.removeDevice,
+});
+
+async function remindCheckIns(): Promise<Record<string, unknown>> {
+  try {
+    const run = await sendCheckInReminders(checkInIo, {
+      now: deps.now(),
+      clock: deps.now,
+      origin: webOrigin,
+      channels: reminderChannels,
+      log: (level, event, fields) => log(level, event, fields),
+      approved: (uid) => approvedUid(db, uid, verifiedEmail, log),
+    });
+    if (run.reminded || run.failed || run.swept) log("INFO", "check_in_reminders_sent", run);
+    return run;
+  } catch (error) {
+    // Logged, and the flights still get their look; the next minute tries again.
+    log("ERROR", "check_in_reminders_failed", errorFields(error));
+    return { failed: true };
+  }
+}
+
+// Cloud Scheduler calls this every minute (deploy/scheduler.sh): flights
+// whose online check-in opened get their reminder, flights near departure
+// or arrival get their look, and their news goes out.
 app.post("/internal/flight-status", async (c) => {
   await requireInternalCaller(c);
+  const checkIn = await remindCheckIns();
   const options = flightOptions();
-  if (!options) return c.json({ enabled: false });
+  if (!options) return c.json({ enabled: false, checkIn });
   const retried = await retryPendingNews(flightIo, options);
   const run = await checkFlights(flightIo, options);
   if (run.checked || run.failed || run.capped || retried.delivered || retried.dropped) log("INFO", "flight_status_checked", { ...run, retried });
-  return c.json({ enabled: true, ...run, retried });
+  return c.json({ enabled: true, ...run, retried, checkIn });
 });
 
 // An open trip page asks for its flights now, at most once a minute each;

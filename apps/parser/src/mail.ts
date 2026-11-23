@@ -48,6 +48,11 @@ export function smtpTransport(config: SmtpConfig): Transport {
     host: config.host,
     port: config.port,
     secure: config.secure,
+    // Bounded, so one slow server can't hold a job past the claims it took
+    // (nodemailer waits up to ten minutes on a quiet socket by default).
+    connectionTimeout: 30_000,
+    greetingTimeout: 30_000,
+    socketTimeout: 60_000,
     ...(config.user && config.pass ? { auth: { user: config.user, pass: config.pass } } : {}),
   });
 }

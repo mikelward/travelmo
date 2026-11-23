@@ -21,6 +21,8 @@ export * from "./favorites";
 export * from "./visas";
 export * from "./reminders";
 export * from "./status";
+export * from "./airlines";
+export * from "./checkIn";
 export * from "./forward";
 export * from "./review";
 export * from "./flightStatus";

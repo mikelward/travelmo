@@ -39,3 +39,14 @@ test("before the window, the card says when online check-in opens; an upcoming t
   await expect(card.getByTestId("trip-next")).toHaveCount(0);
   await expect(card.getByTestId("trip-checkin")).toHaveCount(0);
 });
+
+test("the card uses the airline's own check-in window", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  await seedTrip(ownerUid, "e2e-status");
+  // Emirates opens check-in two days before departure, at 09:00 Dubai time on the 11th.
+  await seedFlight("e2e-status", { title: "EK 18 MAN to DXB" });
+  await page.clock.setSystemTime(new Date("2026-12-12T02:00:00Z"));
+  await page.goto("/");
+  const card = page.getByRole("link", { name: /Liverpool/ });
+  await expect(card.getByTestId("trip-checkin")).toHaveText("Online check-in open, usually until departure");
+});

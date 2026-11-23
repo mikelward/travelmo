@@ -47,6 +47,20 @@ class StatusTest {
     }
 
     @Test
+    fun `uses the airline's own window, a day for one not listed`() {
+        checkInOpensAt(flight) shouldBe "2026-12-12T09:00:00+05:00"
+        // Emirates opens two days ahead, Lufthansa 23 hours, both in the departure's offset.
+        val emirates = flight.copy(title = "EK 18 MAN to DXB")
+        checkInOpensAt(emirates) shouldBe "2026-12-11T09:00:00+05:00"
+        checkInOpensAt(flight.copy(title = "LH 400 FRA to JFK", start = "2026-12-13T10:30:00+01:00")) shouldBe "2026-12-12T11:30:00+01:00"
+        // So the card names its window from the 10th, and calls it open on the 11th.
+        flightCheckIn(listOf(emirates), "2026-12-10T03:00:00Z").shouldBeNull()
+        flightCheckIn(listOf(emirates), "2026-12-10T05:00:00Z") shouldBe CheckIn(emirates, "2026-12-11T09:00:00+05:00", false)
+        checkInLine(flightCheckIn(listOf(emirates), "2026-12-10T05:00:00Z")!!) shouldBe "Online check-in usually opens Fri 11 Dec 09:00 · Ref XX1234"
+        flightCheckIn(listOf(emirates), "2026-12-11T05:00:00Z")!!.open shouldBe true
+    }
+
+    @Test
     fun `knows the stay under way, the next event and the check-in together`() {
         currentStay(listOf(stay, flight), "2026-12-12T14:00:00Z").shouldBeNull()
         currentStay(listOf(stay, flight), "2026-12-12T20:00:00Z") shouldBe stay

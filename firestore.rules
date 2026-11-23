@@ -394,6 +394,10 @@ service cloud.firestore {
     match /flightStatusNews/{id} {
       allow read, write: if false;
     }
+    // Who was reminded that a booking's online check-in is open.
+    match /checkInReminders/{id} {
+      allow read, write: if false;
+    }
     // The geocoder's cache and daily budget: the parser's alone.
     match /geocodes/{key} {
       allow read, write: if false;

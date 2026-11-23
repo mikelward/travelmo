@@ -132,6 +132,8 @@ export async function deleteAccount(uid: string, email: string | undefined, deps
     for (const collection of ["gmailAccounts", "forwardAddresses", "calendarExports", "pendingConnections", "oauthStates", "geocodeRetries"]) {
       await deleteMatching(db, db.collection(collection).where("uid", "==", uid));
     }
+    // Check-in reminders that reached them keep the booking, not the uid.
+    await removeFromArray(db, db.collection(paths.checkInReminders()).where("sent", "array-contains", uid), "sent", uid);
 
     // Their trips, each with its segments. Looked for again until none is
     // left, in case an import that was already running made one meanwhile.

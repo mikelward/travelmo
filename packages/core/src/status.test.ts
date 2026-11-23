@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { currentStay, flightCheckIn, localDateAt, relativeTime, shiftInstant, tripStatus } from "./status";
+import { checkInLine, checkInOpensAt, currentStay, flightCheckIn, localDateAt, relativeTime, shiftInstant, tripStatus } from "./status";
 
 // Invented bookings: a stay in Liverpool and a flight out, in their own offsets.
 const stay = { type: "lodging" as const, title: "Cove Liverpool", start: "2026-12-12T15:00:00+00:00", end: "2026-12-14T11:00:00+00:00" };
@@ -38,6 +38,24 @@ describe("flightCheckIn", () => {
     // Departed: the next flight's window is what counts, a week off.
     expect(flightCheckIn([stay, flight, later], "2026-12-13T05:00:00Z")).toBeUndefined();
     expect(flightCheckIn([stay], "2026-12-12T20:00:00Z")).toBeUndefined();
+  });
+
+  it("uses the airline's own window, a day for one not listed", () => {
+    expect(checkInOpensAt(flight)).toBe("2026-12-12T09:00:00+05:00");
+    // Emirates opens two days ahead, Lufthansa 23 hours, both in the departure's offset.
+    const emirates = { ...flight, title: "EK 18 MAN to DXB" };
+    expect(checkInOpensAt(emirates)).toBe("2026-12-11T09:00:00+05:00");
+    expect(checkInOpensAt({ ...flight, title: "LH 400 FRA to JFK", start: "2026-12-13T10:30:00+01:00" })).toBe("2026-12-12T11:30:00+01:00");
+    // So the card names its window from the 10th, and calls it open on the 11th.
+    expect(flightCheckIn([emirates], "2026-12-10T03:00:00Z")).toBeUndefined();
+    expect(flightCheckIn([emirates], "2026-12-10T05:00:00Z")).toMatchObject({ opensAt: "2026-12-11T09:00:00+05:00", open: false });
+    expect(flightCheckIn([emirates], "2026-12-11T05:00:00Z")).toMatchObject({ open: true });
+  });
+
+  it("says when it opens or that it is open, with the booking reference", () => {
+    const open = flightCheckIn([flight], "2026-12-12T20:00:00Z")!;
+    expect(checkInLine(open)).toBe("Online check-in open, usually until departure · Ref XX1234");
+    expect(checkInLine({ ...open, open: false, segment: { ...flight, confirmation: undefined } })).toBe("Online check-in usually opens Sat 12 Dec 09:00");
   });
 });
 

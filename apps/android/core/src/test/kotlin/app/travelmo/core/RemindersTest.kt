@@ -25,4 +25,13 @@ class RemindersTest {
         tripIdFromReminderUrl("https://travelmo.example/trips/") shouldBe null
         tripIdFromReminderUrl(null) shouldBe null
     }
+
+    @Test
+    fun `a check-in reminder's airline site opens in the browser, a trip in the app`() {
+        externalReminderUrl("https://www.emirates.com/") shouldBe "https://www.emirates.com/"
+        externalReminderUrl("https://travelmo.example/trips/dublin") shouldBe null
+        externalReminderUrl("http://www.emirates.com/") shouldBe null
+        externalReminderUrl("intent://scan/#Intent;end") shouldBe null
+        externalReminderUrl(null) shouldBe null
+    }
 }

@@ -35,8 +35,13 @@ fun relativeTime(now: String, at: String): String? {
     }
 }
 
-/** Most airlines open online check-in a day before departure; the card says "usually". */
-const val CHECK_IN_OPENS_HOURS_BEFORE = 24
+/**
+ * When online check-in opens for a flight: the airline's window before
+ * departure ([checkInHoursBefore]; a day for any airline not listed),
+ * written in the departure's own offset. The window is the airline's to
+ * change, so the card says "usually".
+ */
+fun checkInOpensAt(segment: Segment): String = shiftInstant(segment.start, -checkInHoursBefore(segment) * HOUR)
 
 data class CheckIn(val segment: Segment, val opensAt: String, val open: Boolean)
 
@@ -48,7 +53,7 @@ fun flightCheckIn(segments: List<Segment>, now: String): CheckIn? {
     val next = liveSegments(segments)
         .filter { it.type == SegmentType.FLIGHT && compareInstants(it.start, now) >= 0 }
         .minByOrNull { instantMillis(it.start) } ?: return null
-    val opensAt = shiftInstant(next.start, -CHECK_IN_OPENS_HOURS_BEFORE * HOUR)
+    val opensAt = checkInOpensAt(next)
     if (instantMillis(now) < instantMillis(opensAt) - DAY) return null
     return CheckIn(next, opensAt, compareInstants(now, opensAt) >= 0)
 }
