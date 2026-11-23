@@ -3,6 +3,11 @@ package app.travelmo.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.travelmo.core.FlightStatus
+import app.travelmo.core.RideNeed
+import app.travelmo.core.effectiveHomes
+import app.travelmo.core.homeTimeline
+import app.travelmo.core.rideNeedKey
+import app.travelmo.core.rideNeeds
 import app.travelmo.core.PersonDocuments
 import app.travelmo.core.flightRefreshDue
 import app.travelmo.core.flightStatusKey
@@ -29,6 +34,7 @@ import app.travelmo.data.NoFlightRefresh
 import app.travelmo.data.NoAccessCheck
 import app.travelmo.data.NoAccountDeletion
 import app.travelmo.data.OwnProfile
+import app.travelmo.data.RideSettings
 import app.travelmo.data.TripStore
 import app.travelmo.log.TravelmoLog
 import app.travelmo.notify.NoPushDevice
@@ -290,6 +296,23 @@ class TripsViewModel(
     val reminderEmail: StateFlow<Boolean?> = store.reminderEmail(uid).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun setReminderEmail(token: String, on: Boolean) = run(token) { store.setReminderEmail(uid, on) }
+
+    /** The user's ride companies, hidden suggestions and home corrections; null until the user document answers. */
+    val rideSettings: StateFlow<RideSettings?> = accessSettled.flatMapLatest { store.rideSettings(uid) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /**
+     * A trip's flights with no car or ride booked (SPEC "Car and ride
+     * suggestions"): home is the trip's own round trip unless the user
+     * corrected it, as on the web.
+     */
+    fun rideNeedsFor(segments: List<Segment>, settings: RideSettings?): List<RideNeed> {
+        if (settings == null) return emptyList()
+        val periods = effectiveHomes(homeTimeline(segments), settings.homes)
+        return rideNeeds(segments, periods, clock().toString(), hidden = settings.hidden)
+    }
+
+    fun hideRideNeed(token: String, need: RideNeed) = run(token) { store.hideRideNeed(uid, rideNeedKey(need)) }
 
     /**
      * This phone's messaging token is asked for once per view model, and a
