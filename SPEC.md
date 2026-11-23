@@ -646,7 +646,13 @@ dropping a real booking loses it: equal confirmation numbers when both have
 one, otherwise agreeing codes at both ends of a journey, or a distinctive
 word shared by the two titles or place names other than their city and,
 unless it is all the name there is, their chain or provider. Known cities
-and countries that differ rule a match out. In doubt, both are kept. One
+and countries that differ rule a match out, except for one stay told by two
+emails (a booking request or receipt and its confirmation): the same
+provider, the same listing title (case, accents and punctuation aside) and
+the same check-in and check-out instants are one stay, whichever town or
+suburb each names (letters of every script count, so "東京" and "大阪"
+listings stay two), unless both carry references that differ or name
+different countries. In doubt, both are kept. One
 event confirmed by two emails under two references (a cinema's booking
 confirmation and its reservation email) is one booking too (`sameEvent`):
 two activities at the same local minute from the same seller, by a shared
@@ -675,7 +681,12 @@ false match (a second room after all) and anything the extraction missed
 stay one click away. What the new one adds is merged into the booking
 kept (`mergeDetails`): fields it lacked, notes it does not already hold
 (seats, a screen) and, when the references differ, "Other reference: …";
-nothing it already says is replaced. Its trip widens in the same
+nothing else it already says is replaced, except a stay's place, which
+gives way to a more specific one (an address, then coordinates, then a
+city, or as much from the email with the reference the booking lacked),
+keeping what only the old place said (its country, say), so
+the confirmation's "St Kilda" and address replace the request's
+"Melbourne"; a booking the user edited keeps its place. The kept booking's trip widens in the same
 transaction when the booking now ends later (a checkout only the second
 email gave), and a place it gains that the geocoding budget put off is
 queued for the daily sweep like a new booking's, all under the reset
@@ -771,7 +782,9 @@ else does. When a booking joins a trip still named as an import named it
 (the name its bookings, or the bookings of any one email, give it, by the
 current rules or the earlier ones that named a trip after a place with no
 town, or the name of one of its bookings or their places), the trip is
-named again from all its bookings; a trip the owner renamed keeps its name
+named again from all its bookings, as it is when a booking found again
+changes what its bookings say (a stay's confirmation giving the town its
+request lacked); a trip the owner renamed keeps its name
 (`importGaveTitle`). A day
 out is named after what it is, and so is a course of several days at one
 place: one ticket spanning them, or one a day whose titles differ only in
@@ -849,7 +862,9 @@ sharee could by filling a shared trip until it won the regroup, and nobody
 loses it. A trip left with
 none of its bookings is deleted; one that never had any is left alone, and
 a TripIt trip keeps its own grouping. Bookings are moved, never changed or
-deleted, so ratings and favorites go with them; an import record still
+deleted, so ratings and favorites go with them, and two bookings an earlier
+import failed to match (a stay requested and confirmed, filed twice) stay
+two, for the owner to delete one; an import record still
 names the trip a booking was first filed in, and a later calendar change
 treats a regrouped booking as one the user moved, keeping it. Running it
 again changes nothing. A plan too large for one transaction (Firestore's

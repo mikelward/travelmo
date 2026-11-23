@@ -58,8 +58,9 @@ export type TripTx = {
   deleteSegment(tripId: string, segmentId: string): void;
   // Writes an import record in the same transaction as the bookings it names.
   putParsed(record: ParsedMessage): void;
-  // Moves the trip's revision, as any change to its bookings must.
-  touchTrip(tripId: string, updatedAt: string): void;
+  // Moves the trip's revision, as any change to its bookings must, and
+  // renames it when given a title (settleTitles in fileBooking).
+  touchTrip(tripId: string, updatedAt: string, title?: string): void;
   // A new title and bounds for a trip regrouping reshaped (regroup.ts).
   updateTrip(tripId: string, fields: Pick<Trip, "title" | "start" | "end" | "updatedAt">): void;
   // Removes a trip regrouping emptied of bookings.
@@ -560,7 +561,8 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
           upgradedSegments.set(`${segment.tripId}/${segment.id}`, upgraded);
           continue;
         }
-        const merged = mergeDetails(segment, found);
+        // A place the user corrected by hand stays (mergeDetails).
+        const merged = mergeDetails(segment, found, { edited: segment.updatedAt !== segment.createdAt });
         if (JSON.stringify(merged) === JSON.stringify(segment)) {
           tx.addSource(segment.tripId, segment.id, ref);
           continue;
@@ -582,6 +584,29 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
         if (trip && want && (want.start < trip.start || want.end > trip.end)) {
           tx.extendTrip(tripId, { start: min(trip.start, want.start), end: max(trip.end, want.end), updatedAt: timestamp });
         } else tx.touchTrip(tripId, timestamp);
+      }
+    };
+    // Each existing trip this email changed, while still named as an
+    // import named it (importGaveTitle, judged by its bookings as they were
+    // before this email), is named again from its bookings as they end up:
+    // those it held, as this email filled them out or upgraded them, and
+    // those it adds (`written`). One path whatever the email brought: a
+    // flight joining a trip a stay with no town started, or a stay's
+    // confirmation giving the town its request lacked, with or without new
+    // bookings. Written last, over the bounds already set.
+    const settleTitles = (written: readonly Segment[]) => {
+      const changed = [...merges, ...upgradedSegments.values()];
+      for (const tripId of new Set([...changed, ...written].map((segment) => segment.tripId))) {
+        const trip = live.find((t) => t.id === tripId);
+        const before = segmentsOf(tripId);
+        if (!trip || tripId.startsWith(sourceTripPrefix) || before.length === 0) continue;
+        if (!importGaveTitle(trip.title, before, periods, overrides)) continue;
+        const final = [
+          ...before.map((segment) => changed.find((c) => c.tripId === tripId && c.id === segment.id) ?? segment),
+          ...written.filter((segment) => segment.tripId === tripId),
+        ].sort((a, b) => compareInstants(a.start, b.start));
+        const title = tripTitle(final, periods, overrides);
+        if (title !== trip.title) tx.touchTrip(tripId, timestamp, title);
       }
     };
     // A trip holding an upgraded receipt spans what it ends up with: its
@@ -653,6 +678,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     if (!freshRange) {
       recordSources();
       settleUpgradedTrips([]);
+      settleTitles([]);
       return { segmentIds: [], duplicates, matched, written: [...merges, ...upgradedSegments.values()] };
     }
 
@@ -683,29 +709,18 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     let tripId: string;
     if (target) {
       tripId = target.id;
-      // Only the bounds: sharing and title belong to the owner, who may be
-      // editing them right now.
+      // Only the bounds: sharing belongs to the owner, who may be editing
+      // it right now, and so does the title once they renamed the trip (one
+      // an import gave it is settled last, settleTitles).
       // A source's own trip dates (a TripIt itinerary) widen it too, so a
       // later booking within them finds this trip.
       const own = hint ? { start: min(hint.start, freshRange.start), end: max(hint.end, freshRange.end) } : freshRange;
       const filled = growth(tripId);
       const want = filled ? { start: min(own.start, filled.start), end: max(own.end, filled.end) } : own;
       wanted.set(tripId, want);
-      // A trip still named as an import named it (importGaveTitle) is
-      // named again from all its bookings once this one joins: a ride from
-      // the airport ("Heathrow to London") takes the name of the flight's
-      // trip, and a trip a stay with no town started ("Designer Collingwood
-      // Terrace") the town the flight goes to. Home may have been unknown
-      // when it was named.
-      const held = segmentsOf(tripId);
-      const renamed =
-        held.length > 0 && importGaveTitle(target.title, held, periods, overrides)
-          ? tripTitle([...held, ...booking.segments].sort((a, b) => compareInstants(a.start, b.start)), periods, overrides)
-          : undefined;
       tx.extendTrip(tripId, {
         start: min(target.start, want.start),
         end: max(target.end, want.end),
-        ...(renamed && renamed !== target.title ? { title: renamed } : {}),
         updatedAt: timestamp,
       });
     } else {
@@ -736,6 +751,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     }));
     for (const segment of written) tx.putSegment(segment);
     settleUpgradedTrips(written);
+    settleTitles(written);
     return { tripId, segmentIds: written.map((s) => s.id), duplicates, matched, written: [...written, ...merges, ...upgradedSegments.values()] };
   });
   // A place the budget put off is asked about again by the daily sweep,

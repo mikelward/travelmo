@@ -38,9 +38,9 @@ export function memoryStore(): Memory {
     },
     deleteSegment: (_tripId, id) => void segments.delete(id),
     putParsed: (r) => void parsed.set(`${r.uid}/${r.messageId}`, r),
-    touchTrip: (id, updatedAt) => {
+    touchTrip: (id, updatedAt, title) => {
       const trip = trips.get(id);
-      if (trip) trips.set(id, { ...trip, updatedAt });
+      if (trip) trips.set(id, { ...trip, ...(title === undefined ? {} : { title }), updatedAt });
     },
     updateTrip: (id, fields) => {
       const trip = trips.get(id);
