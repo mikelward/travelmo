@@ -27,9 +27,10 @@ const segment: Segment = {
   updatedAt: "2026-11-01T00:00:00Z",
 };
 
-function io(token: string, calls: string[] = []): ExportIo {
+function io(token: string, calls: string[] = [], approved = true): ExportIo {
   return {
     uidForToken: async (h) => (h === hashToken(token) ? "u1" : undefined),
+    approved: async (uid) => uid === "u1" && approved,
     verifiedEmail: async () => "me@example.com",
     trips: async (uid, email, since) => {
       calls.push(`${uid} ${email} ${since}`);
@@ -56,6 +57,14 @@ describe("calendarForToken", () => {
     const token = newToken();
     expect(await calendarForToken(newToken(), io(token), options)).toBeUndefined();
     expect(await calendarForToken("../x", io(token), options)).toBeUndefined();
+  });
+
+  it("serves nothing, as for an unknown link, once the owner's access is revoked", async () => {
+    const token = newToken();
+    const calls: string[] = [];
+    expect(await calendarForToken(token, io(token, calls, false), options)).toBeUndefined();
+    // Not a single trip is read for them.
+    expect(calls).toEqual([]);
   });
 
   it("issues tokens that pass its own check and differ each time", () => {

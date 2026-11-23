@@ -158,6 +158,27 @@ class DeployPlanTest(unittest.TestCase):
         self.assertIn("CLOUDFLARE_API_TOKEN", self.log)
         self.assertEqual(out["parser"], "true")
 
+    def test_rules_wait_for_a_due_parser_that_cannot_deploy(self):
+        # The rules rely on the parser of the same push (SPEC "Access"), so
+        # they never go out while it is held back.
+        for part in ("firestore", "parser", "worker"):
+            self.tag(part, self.base)
+        after = self.commit({"firestore.rules": "x", "apps/parser/index.ts": "x"})
+        out = self.plan(after, settings={**CONFIGURED, "PARSER_IMAGE": ""})
+        self.assertEqual((out["parser"], out["record_parser"]), ("false", "false"))
+        self.assertEqual((out["firestore"], out["record_firestore"]), ("false", "false"))
+        self.assertIn("until the parser deploys too", self.log)
+        out = self.plan(after)
+        self.assertEqual((out["parser"], out["firestore"]), ("true", "true"))
+
+    def test_rules_alone_deploy_when_the_parser_is_unchanged(self):
+        for part in ("firestore", "parser", "worker"):
+            self.tag(part, self.base)
+        after = self.commit({"firestore.rules": "x"})
+        out = self.plan(after, settings={**CONFIGURED, "PARSER_IMAGE": ""})
+        self.assertEqual((out["firestore"], out["record_firestore"]), ("true", "true"))
+        self.assertEqual((out["parser"], out["record_parser"]), ("false", "true"))
+
     def test_a_tag_a_force_push_left_behind_deploys_in_full(self):
         stray = self.commit({"apps/parser/index.ts": "abandoned"})
         self.git("reset", "-q", "--hard", self.base)

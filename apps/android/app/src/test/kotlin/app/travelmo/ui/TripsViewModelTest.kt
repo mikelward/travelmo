@@ -7,6 +7,11 @@ import app.travelmo.core.SegmentDraft
 import app.travelmo.core.deviceId
 import app.travelmo.core.SegmentType
 import app.travelmo.data.FlightRefresh
+import app.travelmo.core.AccountAccess
+import app.travelmo.core.Trip
+import app.travelmo.core.TravelProfile
+import app.travelmo.data.AccessCheck
+import app.travelmo.data.OwnProfile
 import app.travelmo.data.TripStore
 import java.time.Instant
 import kotlinx.coroutines.flow.first
@@ -14,6 +19,10 @@ import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -34,6 +43,40 @@ class TripsViewModelTest {
             saves++
             gate.await()
             if (fail) throw IllegalStateException("Trip no longer exists")
+        }
+    }
+
+    /**
+     * A store whose queries the rules refuse until [approved], as Firestore
+     * answers them: trips and shared profiles load empty, and the profile
+     * listener waits without answering.
+     */
+    private class RefusingStore : TripStore by FakeTripStore() {
+        var asked = 0
+        var profileAsked = 0
+        var sharedAsked = 0
+        var approved = false
+        override fun trips(uid: String, email: String?): Flow<List<Trip>> {
+            asked++
+            return flowOf(if (approved) fixtureTrips else emptyList())
+        }
+        override fun ownProfile(uid: String): Flow<OwnProfile> {
+            profileAsked++
+            return if (approved) flowOf(OwnProfile(fixtureProfile)) else flow { awaitCancellation() }
+        }
+        override fun sharedProfiles(email: String?): Flow<List<TravelProfile>> {
+            sharedAsked++
+            return flowOf(if (approved) listOf(fixtureSharedProfile) else emptyList())
+        }
+    }
+
+    /** An access check that answers once [answer] completes, letting [store] in when it says approved. */
+    private class FakeAccessCheck(private val store: RefusingStore) : AccessCheck {
+        val answer = CompletableDeferred<AccountAccess?>()
+        var calls = 0
+        override suspend fun check(): AccountAccess? {
+            calls++
+            return answer.await().also { if (it == AccountAccess.APPROVED) store.approved = true }
         }
     }
 
@@ -210,6 +253,59 @@ class TripsViewModelTest {
         viewModel.deleteAccount("delete") { signedOut++ }
         signedOut shouldBe 0
         viewModel.outcomes.value shouldBe mapOf("delete" to Outcome.Failed("Delete your account from Settings on the web."))
+    }
+
+    @Test
+    fun `an account the access check lets in sees its trips`() = runTest {
+        val store = RefusingStore()
+        val check = FakeAccessCheck(store)
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, accessCheck = check)
+        val watching = launch { viewModel.trips.collect {} }
+        runCurrent()
+        viewModel.trips.value shouldBe emptyList()
+        check.answer.complete(AccountAccess.APPROVED)
+        runCurrent()
+        check.calls shouldBe 1
+        store.asked shouldBe 2
+        viewModel.trips.value shouldBe fixtureTrips
+        watching.cancel()
+    }
+
+    @Test
+    fun `an account the access check lets in sees its profiles`() = runTest {
+        val store = RefusingStore()
+        val check = FakeAccessCheck(store)
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, accessCheck = check)
+        val watching = launch { viewModel.trips.collect {} }
+        val profile = launch { viewModel.profileLoaded.collect {} }
+        val people = launch { viewModel.people.collect {} }
+        runCurrent()
+        viewModel.profileLoaded.value shouldBe false
+        viewModel.sharedProfiles.value shouldBe emptyList()
+        check.answer.complete(AccountAccess.APPROVED)
+        runCurrent()
+        viewModel.profileLoaded.value shouldBe true
+        viewModel.ownProfile.value shouldBe fixtureProfile
+        viewModel.sharedProfiles.value shouldBe listOf(fixtureSharedProfile)
+        listOf(watching, profile, people).forEach { it.cancel() }
+    }
+
+    @Test
+    fun `an account still waiting is not asked for its trips again`() = runTest {
+        val store = RefusingStore()
+        val check = FakeAccessCheck(store)
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, accessCheck = check)
+        val watching = launch { viewModel.trips.collect {} }
+        val people = launch { viewModel.people.collect {} }
+        check.answer.complete(AccountAccess.REQUESTED)
+        runCurrent()
+        check.calls shouldBe 1
+        store.asked shouldBe 1
+        store.profileAsked shouldBe 1
+        store.sharedAsked shouldBe 1
+        viewModel.trips.value shouldBe emptyList()
+        watching.cancel()
+        people.cancel()
     }
 
     @Test

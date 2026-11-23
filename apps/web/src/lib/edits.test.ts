@@ -77,6 +77,9 @@ beforeEach(async () => {
     await setDoc(doc(db, paths.trip(trip.id)), trip);
     await setDoc(doc(db, paths.trip(other.id)), other);
     await setDoc(doc(db, paths.segment(trip.id, imported.id)), imported);
+    // Accounts from before approvals (SPEC "Access").
+    await setDoc(doc(db, paths.user(owner.uid)), { email: owner.email });
+    await setDoc(doc(db, paths.user(partner.uid)), { email: partner.email });
   });
 });
 

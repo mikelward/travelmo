@@ -1,5 +1,13 @@
 export const paths = {
   user: (uid: string) => `users/${uid}`,
+  // Who may use the app (access.ts): one record per lowercased email, and
+  // the admins' list, written by hand in the console.
+  accessRecords: () => "access",
+  access: (email: string) => `access/${email}`,
+  accessConfig: () => "config/access",
+  // Server-only: when the parser last recorded the accounts from before
+  // approvals (apps/parser/src/access.ts's grandfatherAccounts).
+  accessGrandfathered: () => "config/accessGrandfathered",
   // Server-only: written first when an account is deleted and kept, so an
   // import already under way cannot recreate the user's data (holds the uid
   // and when; Firebase never reuses a uid).

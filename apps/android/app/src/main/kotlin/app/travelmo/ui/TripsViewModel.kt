@@ -21,9 +21,12 @@ import app.travelmo.core.TripWithSegments
 import app.travelmo.core.groupTrips
 import app.travelmo.core.listWarnings
 import app.travelmo.core.deviceId
+import app.travelmo.core.AccountAccess
+import app.travelmo.data.AccessCheck
 import app.travelmo.data.AccountDeletion
 import app.travelmo.data.FlightRefresh
 import app.travelmo.data.NoFlightRefresh
+import app.travelmo.data.NoAccessCheck
 import app.travelmo.data.NoAccountDeletion
 import app.travelmo.data.OwnProfile
 import app.travelmo.data.TripStore
@@ -95,6 +98,8 @@ class TripsViewModel(
     private val accountDeletion: AccountDeletion = NoAccountDeletion,
     /** The parser's look at an open trip's flights; none by default. */
     private val flightRefresh: FlightRefresh = NoFlightRefresh,
+    /** The parser's access check; none by default. */
+    private val accessCheck: AccessCheck = NoAccessCheck,
 ) : ViewModel() {
     /** Today's date on this device, as grouping and the calendar read it. */
     fun today(): String = LocalDate.ofInstant(clock(), ZoneId.systemDefault()).toString()
@@ -107,8 +112,15 @@ class TripsViewModel(
         }
     }
 
+    /**
+     * Bumped once the access check has let the account in, so every query
+     * the rules refused before then (SPEC "Access") is asked again: each
+     * listener below restarts on it.
+     */
+    private val accessSettled = MutableStateFlow(0)
+
     /** Every trip of the user's, own and shared; null until the first answer. */
-    val trips: StateFlow<List<Trip>?> = store.trips(uid, email).map<List<Trip>, List<Trip>?> { it }
+    val trips: StateFlow<List<Trip>?> = accessSettled.flatMapLatest { store.trips(uid, email) }.map<List<Trip>, List<Trip>?> { it }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val groups: Flow<TripGroups?> = combine(trips, now) { trips, _ -> trips?.let { groupTrips(it, today()) } }
@@ -122,22 +134,34 @@ class TripsViewModel(
         }
     }
 
-    /** The user's own travel profile; null while loading or when there is none. */
     /** The profile document's answer; null until it has answered once. */
-    private val ownProfileAnswer: StateFlow<OwnProfile?> = store.ownProfile(uid).map<OwnProfile, OwnProfile?> { it }
+    private val ownProfileAnswer: StateFlow<OwnProfile?> = accessSettled.flatMapLatest { store.ownProfile(uid) }.map<OwnProfile, OwnProfile?> { it }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    /** The user's own travel profile; null while loading or when there is none. */
     val ownProfile: StateFlow<TravelProfile?> = ownProfileAnswer.map { it?.profile }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /** Whether the profile document has answered, so sharing knows what list it is replacing. */
     val profileLoaded: StateFlow<Boolean> = ownProfileAnswer.map { it != null }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     /** The profiles shared with the user. */
-    val sharedProfiles: StateFlow<List<TravelProfile>> = store.sharedProfiles(email).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val sharedProfiles: StateFlow<List<TravelProfile>> = accessSettled.flatMapLatest { store.sharedProfiles(email) }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Whose documents a trip may need: the user's and those of people who shared their profile. */
     val people: StateFlow<List<PersonDocuments>> = combine(ownProfile, sharedProfiles) { own, shared -> peopleDocuments(own, shared, uid) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    init {
+        // Once per signed-in view model (SPEC "Access"): the parser lets in
+        // an account from before approvals that the rules cannot tell is
+        // one. The rules refuse its queries until then: the trips and shared
+        // profiles load empty and the profile never answers. An account
+        // whose trips came back empty may be one, so its queries are asked
+        // again once it is in.
+        viewModelScope.launch {
+            if (accessCheck.check() == AccountAccess.APPROVED && trips.value.isNullOrEmpty()) accessSettled.update { it + 1 }
+        }
+    }
 
     val state: StateFlow<TripListState> = combine(groups, details, now, people) { groups, details, now, people ->
         val today = today()

@@ -96,6 +96,9 @@ export type ReceiveIo = {
   domain: string;
   limit: number;
   deps: ImportDeps;
+  // Whether the address's owner may use the app (access.ts); a message for
+  // one who may not is refused as an unknown address is, and not read.
+  approved?: (uid: string) => Promise<boolean>;
 };
 
 export type Received =
@@ -108,6 +111,7 @@ export type Received =
   // not acknowledged either, and the retry finds the outcome.
   | { status: "pending"; uid: string; messageId: string }
   | { status: "unknown_address" }
+  | { status: "unapproved"; uid: string }
   | { status: "limit"; uid: string };
 
 // One relayed message: whose address it was sent to, whether they have room
@@ -119,6 +123,7 @@ export async function receiveForwarded(input: { to: string; raw: Uint8Array }, i
   if (!token) return { status: "unknown_address" };
   const uid = await io.store.uidForToken(hashToken(token));
   if (!uid) return { status: "unknown_address" };
+  if (io.approved && !(await io.approved(uid))) return { status: "unapproved", uid };
   const mail = await parseInbound(input.raw);
   const messageId = inboundMessageId(mail, input.raw);
   const now = io.deps.now();

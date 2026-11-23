@@ -375,9 +375,11 @@ export async function continueBackfill<S>(message: ContinueMessage, io: ChainIo<
   return { kind: "ran", batch, progress };
 }
 
-export async function stopBackfill<S>(io: ChainIo<S>): Promise<boolean> {
+// With `message`, stops only the run and step that message continues: a
+// later run started since is left alone.
+export async function stopBackfill<S>(io: ChainIo<S>, message?: ContinueMessage): Promise<boolean> {
   const changed = await io.change((current) => {
-    const next = decideStop(current);
+    const next = decideStop(current, message);
     return { next, result: next !== undefined };
   });
   return changed?.result ?? false;

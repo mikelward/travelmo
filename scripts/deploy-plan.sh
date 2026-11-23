@@ -7,7 +7,8 @@
 # (a force push). A due part missing settings is skipped with a warning and
 # not recorded, so it deploys once configured. A run whose push main has
 # since moved past deploys and records nothing: its check can finish after
-# a newer push's, and the newer run measures from the tags anyway.
+# a newer push's, and the newer run measures from the tags anyway. Rules
+# due while the parser is due but skipped wait for it, unrecorded.
 #
 # Inputs (environment): AFTER_SHA (this push), GITHUB_REPOSITORY,
 # GITHUB_OUTPUT, GH_TOKEN for `gh api`, and the deploy settings
@@ -35,9 +36,11 @@ missing() {
   done
   printf '%s' "$out"
 }
-# decide <part> <label> <path pattern> <missing settings>
+# decide <part> <label> <path pattern> <missing settings> [<held by>]
+# Sets held_<part>=true when the part is due but skipped. A part held by
+# another (the rules by the parser) waits, unrecorded, while that one is.
 decide() {
-  local base due reason
+  local base due reason held_var="held_$1"
   base=$(git rev-parse --quiet --verify "refs/tags/deployed/$1^{commit}" || true)
   if [ -z "$base" ]; then
     due=true reason="never deployed from CI"
@@ -51,12 +54,19 @@ decide() {
   else
     due=false reason="unchanged since $base"
   fi
+  printf -v "$held_var" '%s' false
   if [ "$due" != true ]; then
     echo "Skipping $2: $reason."
     echo "$1=false" >> "$GITHUB_OUTPUT"
     echo "record_$1=true" >> "$GITHUB_OUTPUT"
   elif [ -n "$4" ]; then
     echo "::warning::Skipping $2 ($reason): set$4 in the production environment (README 'Continuous deployment')."
+    printf -v "$held_var" '%s' true
+    echo "$1=false" >> "$GITHUB_OUTPUT"
+    echo "record_$1=false" >> "$GITHUB_OUTPUT"
+  elif [ -n "${5:-}" ]; then
+    echo "::warning::Skipping $2 ($reason) until $5 deploys too: it relies on $5's changes."
+    printf -v "$held_var" '%s' true
     echo "$1=false" >> "$GITHUB_OUTPUT"
     echo "record_$1=false" >> "$GITHUB_OUTPUT"
   else
@@ -66,11 +76,17 @@ decide() {
   fi
 }
 gcp_missing=$(missing GCP_PROJECT GCP_WORKLOAD_IDENTITY_PROVIDER GCP_DEPLOY_SERVICE_ACCOUNT)
-decide firestore "the Firestore rules and indexes" \
-  '^(firestore\.rules|firestore\.indexes\.json|firebase\.json)$' "$gcp_missing"
 decide parser "the parser" \
   '^(apps/parser/|packages/core/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|tsconfig\.base\.json$|\.dockerignore$|\.gcloudignore$)' \
   "$gcp_missing$(missing GCP_REGION PARSER_IMAGE)"
+# The rules go out after the parser of the same push, never without it: a
+# parser change the rules rely on (the parser letting in the accounts from
+# before approvals before the rules ask for approval, SPEC "Access") is
+# live first. Rules due while a due parser is held wait for it.
+parser_hold=""
+[ "$held_parser" = true ] && parser_hold="the parser"
+decide firestore "the Firestore rules and indexes" \
+  '^(firestore\.rules|firestore\.indexes\.json|firebase\.json)$' "$gcp_missing" "$parser_hold"
 worker_missing=$(missing CLOUDFLARE_ACCOUNT_ID PARSER_URL)
 [ "$HAS_CLOUDFLARE_TOKEN" = true ] || worker_missing="$worker_missing CLOUDFLARE_API_TOKEN"
 decide worker "the forwarding Worker" '^apps/inbound/' "$worker_missing"

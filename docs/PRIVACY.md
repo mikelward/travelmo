@@ -7,6 +7,7 @@ Travelmo keeps your trips in one place, on the web and in the Android app. This 
 ## What Travelmo stores
 
 - **Your account:** the name, email address and photo of the Google account you sign in with.
+- **Your access:** whether you asked to use Travelmo, who invited you or which admin approved or declined you, or that you used it before approvals, and when.
 - **Your trips and bookings:** titles, dates, times, places, providers, confirmation numbers, notes, ratings, and where each booking came from.
 - **Your travel profile,** if you import a TripIt export: travelers, documents such as passports and visas with their numbers and expiry dates, and loyalty programs.
 - **Connections you turn on:** access to read your Gmail or Google Calendar, calendar feed addresses, your forwarding address, your calendar export link, and the devices and browsers you asked to notify.
@@ -31,7 +32,9 @@ Travelmo uses these services to run, and they handle data only to provide them:
 - **Cloudflare** receives emails you forward to your Travelmo address and passes them on.
 - **An email delivery service** sends the reminders you ask for by email, and your browser's push service delivers the notifications you turn on in a browser.
 
-People you share a trip with see its bookings. People you share your travel profile with see all of it, documents included.
+People you share a trip with see its bookings. People you share your travel profile with see all of it, documents included. Sharing with an email address also lets it use Travelmo.
+
+Travelmo's admins see the email address of everyone who asks to use it, and are sent it by email and notification when someone asks.
 
 ## On your phone
 
@@ -43,7 +46,7 @@ Travelmo doesn't collect analytics yet. The plan is to count, on its own servers
 
 ## Keeping and deleting your data
 
-Your data stays until you delete it. Deleting a trip or booking removes it; disconnecting Gmail or Google Calendar removes Travelmo's access. Deleting your account in Settings removes your trips, bookings, travel profile and connections, and takes you off trips others shared with you; bookings you added to someone else's trip stay with that trip. Service logs are kept for 30 days.
+Your data stays until you delete it. Deleting a trip or booking removes it; disconnecting Gmail or Google Calendar removes Travelmo's access. Deleting your account in Settings removes your trips, bookings, travel profile, connections and access record, and takes you off trips others shared with you; bookings you added to someone else's trip stay with that trip. Service logs are kept for 30 days.
 
 To ask about your data or have it deleted without signing in, email [play@mikelward.com](mailto:play@mikelward.com).
 

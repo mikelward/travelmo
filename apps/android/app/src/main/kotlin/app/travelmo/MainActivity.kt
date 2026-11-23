@@ -156,7 +156,7 @@ private fun SignedInApp(app: TravelmoApplication, user: SignedIn, requestedTrip:
     val factory = remember(user.uid) {
         object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T = TripsViewModel(app.trips, user.uid, user.email, pushDevice = app.pushDevice, accountDeletion = app.accountDeletion, flightRefresh = app.flightRefresh) as T
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = TripsViewModel(app.trips, user.uid, user.email, pushDevice = app.pushDevice, accountDeletion = app.accountDeletion, flightRefresh = app.flightRefresh, accessCheck = app.accessCheck) as T
         }
     }
     val viewModel: TripsViewModel = viewModel(key = user.uid, factory = factory)

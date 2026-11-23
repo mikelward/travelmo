@@ -16,6 +16,53 @@ service cloud.firestore {
       return signedIn() && !exists(/databases/$(database)/documents/deletedAccounts/$(request.auth.uid));
     }
 
+    // Approval (SPEC "Access"; packages/core/src/access.ts decides the
+    // same). An account is approved when it is an admin's, when it has a
+    // user document (every account made before approvals has one, and a
+    // new one may make it only once approved) or when its verified email's
+    // record is approved by an admin or by someone sharing with it, unless
+    // an admin declined or revoked that address.
+    function verifiedEmail() {
+      return request.auth.token.email != null && request.auth.token.email_verified == true;
+    }
+    function myEmail() {
+      return request.auth.token.email.lower();
+    }
+    function accessPath(email) {
+      return /databases/$(database)/documents/access/$(email);
+    }
+    function configPath() {
+      return /databases/$(database)/documents/config/access;
+    }
+    function admins() {
+      return get(configPath()).data.get('admins', []);
+    }
+    function isAdmin() {
+      return signedIn() && verifiedEmail() && exists(configPath()) && admins() is list && myEmail() in admins();
+    }
+    function hasProfile() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+    function hasRecord() {
+      return verifiedEmail() && exists(accessPath(myEmail()));
+    }
+    function myRecord() {
+      return get(accessPath(myEmail())).data;
+    }
+    function declined() {
+      return hasRecord() && myRecord().get('status', '') == 'declined';
+    }
+    function approvedByRecord() {
+      return hasRecord() && (myRecord().get('status', '') == 'approved' || 'invitedBy' in myRecord());
+    }
+    function approved() {
+      return signedIn() && (isAdmin() || (!declined() && (approvedByRecord() || hasProfile())));
+    }
+    // Approved and not deleted: what every create and update needs.
+    function member() {
+      return active() && approved();
+    }
+
     function isOwner(trip) {
       return trip.ownerUid == request.auth.uid;
     }
@@ -52,24 +99,24 @@ service cloud.firestore {
     match /trips/{tripId} {
       // A missing trip reads as absent rather than forbidden, so a client can
       // tell a deleted trip from one it may not see.
-      allow read: if signedIn() && (resource == null || isOwner(resource.data) || isSharee(resource.data));
-      allow create: if active()
+      allow read: if approved() && (resource == null || isOwner(resource.data) || isSharee(resource.data));
+      allow create: if member()
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.id == tripId
         && validTrip(request.resource.data);
-      allow update: if active()
+      allow update: if member()
         && isOwner(resource.data)
         && request.resource.data.ownerUid == resource.data.ownerUid
         && request.resource.data.id == tripId
         && validTrip(request.resource.data);
       // A sharee adding a booking may only widen the dates to hold it.
-      allow update: if active()
+      allow update: if member()
         && isSharee(resource.data)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['start', 'end', 'updatedAt'])
         && request.resource.data.start <= resource.data.start
         && request.resource.data.end >= resource.data.end
         && validTrip(request.resource.data);
-      allow delete: if signedIn() && isOwner(resource.data);
+      allow delete: if approved() && isOwner(resource.data);
 
       match /segments/{segmentId} {
         function trip() {
@@ -95,10 +142,10 @@ service cloud.firestore {
             && segment.createdAt is string && segment.updatedAt is string;
         }
         function canEdit() {
-          return signedIn() && (isOwner(trip()) || isSharee(trip()));
+          return approved() && (isOwner(trip()) || isSharee(trip()));
         }
         allow read: if canEdit();
-        allow create, update: if active() && canEdit()
+        allow create, update: if member() && canEdit()
           && trip().get('deleting', false) == false
           && validSegment(request.resource.data);
         allow delete: if canEdit();
@@ -117,10 +164,12 @@ service cloud.firestore {
       function validHomes(data) {
         return !('homes' in data) || (data.homes is list && data.homes.size() <= 50);
       }
+      // Readable to its owner even before approval: the app reads it to
+      // tell an account from before approvals from a new one.
       allow read: if isSelf();
-      allow create: if active() && isSelf() && !request.resource.data.keys().hasAny(['gmail', 'googleCalendar', 'forward'])
+      allow create: if member() && isSelf() && !request.resource.data.keys().hasAny(['gmail', 'googleCalendar', 'forward'])
         && validHomes(request.resource.data);
-      allow update: if active() && isSelf()
+      allow update: if member() && isSelf()
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['gmail', 'googleCalendar', 'forward'])
         && validHomes(request.resource.data);
 
@@ -132,8 +181,8 @@ service cloud.firestore {
       // A browser's push subscription, written by that browser: the
       // endpoint the push service gave it and the keys that encrypt to it.
       match /pushSubscriptions/{id} {
-        allow read, delete: if isSelf();
-        allow create, update: if active() && isSelf()
+        allow read, delete: if isSelf() && approved();
+        allow create, update: if member() && isSelf()
           && request.resource.data.keys().hasOnly(['endpoint', 'keys', 'createdAt'])
           && request.resource.data.endpoint is string
           && request.resource.data.endpoint.matches('https://.*')
@@ -147,8 +196,8 @@ service cloud.firestore {
       // A phone's Cloud Messaging registration, written by the app on that
       // phone: the token the parser sends to, and nothing else.
       match /devices/{id} {
-        allow read, delete: if isSelf();
-        allow create, update: if active() && isSelf()
+        allow read, delete: if isSelf() && approved();
+        allow create, update: if member() && isSelf()
           && request.resource.data.keys().hasOnly(['token', 'platform', 'createdAt'])
           && request.resource.data.token is string
           && request.resource.data.token.size() > 0
@@ -164,33 +213,33 @@ service cloud.firestore {
         function trustedList(list) {
           return list is list && list.size() <= 20;
         }
-        allow read: if isSelf() || isTrusted(resource.data);
-        allow create: if active() && isSelf() && document == 'main'
+        allow read: if approved() && (isSelf() || isTrusted(resource.data));
+        allow create: if member() && isSelf() && document == 'main'
           && request.resource.data.keys().hasOnly(['ownerUid', 'ownerEmail', 'trustedEmails', 'updatedAt'])
           && request.resource.data.ownerUid == uid
           && (!('ownerEmail' in request.resource.data) || request.resource.data.ownerEmail == request.auth.token.email.lower())
           && trustedList(request.resource.data.trustedEmails);
-        allow update: if active() && isSelf()
+        allow update: if member() && isSelf()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['trustedEmails', 'updatedAt'])
           && trustedList(request.resource.data.trustedEmails);
       }
 
       match /settings/{document} {
-        allow read, write: if isSelf();
+        allow read, write: if isSelf() && approved();
       }
       match /parsedMessages/{messageId} {
-        allow read: if isSelf();
+        allow read: if isSelf() && approved();
       }
       // Feed links carry secrets: the owner reads them, the parser alone
       // writes them, after checking the address.
       match /feeds/{feedId} {
-        allow read: if isSelf();
+        allow read: if isSelf() && approved();
         allow write: if false;
       }
       // The calendar export link is a secret: the owner reads it, the parser
       // alone issues or withdraws it.
       match /calendarExport/{document} {
-        allow read: if isSelf();
+        allow read: if isSelf() && approved();
         allow write: if false;
       }
       // Refresh tokens live here; only the Admin SDK touches it.
@@ -204,10 +253,84 @@ service cloud.firestore {
     // Queries are checked against their filter, so this rule names the
     // field directly; the client asks with its own (lowercase) email.
     match /{path=**}/travelProfile/{document} {
-      allow get: if isTrusted(resource.data);
-      allow list: if signedIn()
+      allow get: if approved() && isTrusted(resource.data);
+      allow list: if approved()
         && request.auth.token.email_verified == true
         && request.auth.token.email.lower() in resource.data.trustedEmails;
+    }
+
+    // Who may use the app, one record per lowercased verified email
+    // (packages/core/src/access.ts). The parser alone writes `notifiedAt`.
+    match /access/{email} {
+      function isMine() {
+        return signedIn() && verifiedEmail() && myEmail() == email;
+      }
+      function decisionKeys() {
+        return ['status', 'approvedBy', 'approvedAt', 'declinedBy', 'declinedAt'];
+      }
+      // Approving sets who and when; declining too, and never for an admin,
+      // so no admin locks out another or themselves.
+      function validDecision(data) {
+        return (data.status == 'approved' && data.approvedBy == request.auth.uid && data.approvedAt is string)
+          || (data.status == 'declined' && data.declinedBy == request.auth.uid && data.declinedAt is string
+            && !(email in admins()));
+      }
+      allow get: if isMine() || isAdmin();
+      allow list: if isAdmin();
+
+      // Asking for access: one's own address, only as a request, and again
+      // only while the request waits; a decision stands.
+      allow create: if active() && isMine()
+        && request.resource.data.keys().hasOnly(['email', 'status', 'uid', 'requestedAt'])
+        && request.resource.data.email == email
+        && request.resource.data.status == 'requested'
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.requestedAt is string;
+      allow update: if active() && isMine()
+        && resource.data.get('status', '') == 'requested'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid', 'requestedAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.requestedAt is string;
+
+      // An account from before approvals records itself, so admins see it
+      // and can revoke it.
+      allow create: if member() && isMine() && hasProfile()
+        && request.resource.data.keys().hasOnly(['email', 'status', 'uid', 'approvedBy', 'approvedAt'])
+        && request.resource.data.email == email
+        && request.resource.data.status == 'approved'
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.approvedBy == request.auth.uid
+        && request.resource.data.approvedAt is string;
+
+      // Sharing a trip or a profile with an address invites it: any approved
+      // user may, as anyone may already share with any address. An admin's
+      // decline still wins.
+      allow create: if member()
+        && request.resource.data.keys().hasOnly(['email', 'invitedBy', 'invitedAt'])
+        && request.resource.data.email == email
+        && request.resource.data.invitedBy == request.auth.uid
+        && request.resource.data.invitedAt is string;
+      allow update: if member()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['invitedBy', 'invitedAt'])
+        && request.resource.data.invitedBy == request.auth.uid
+        && request.resource.data.invitedAt is string;
+
+      // Admins approve, decline, invite and revoke.
+      allow create: if member() && isAdmin()
+        && request.resource.data.keys().hasOnly(['email'].concat(decisionKeys()))
+        && request.resource.data.email == email
+        && validDecision(request.resource.data);
+      allow update: if member() && isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(decisionKeys())
+        && validDecision(request.resource.data);
+    }
+
+    // Settings kept by hand in the console; `config/access` lists the
+    // admins and is readable by them alone, so the app can tell who is one.
+    match /config/{document} {
+      allow get: if document == 'access' && signedIn() && verifiedEmail()
+        && resource.data.get('admins', []) is list && myEmail() in resource.data.get('admins', []);
+      allow list, write: if false;
     }
 
     // Export-link token hashes to their owner: the parser's alone.

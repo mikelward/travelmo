@@ -1,5 +1,5 @@
 import type { User } from "firebase/auth";
-import type { CalendarExport, ForwardAddress } from "@travelmo/core";
+import type { AccountAccess, CalendarExport, ForwardAddress } from "@travelmo/core";
 import type { CalendarResult } from "./ics";
 import type { RegroupResult } from "./regroup";
 import type { TripItResult } from "./tripit";
@@ -47,6 +47,7 @@ export const api = {
   issueForward: (user: User) => post<ForwardAddress>(user, "/forward/issue"),
   stopForward: (user: User) => post<void>(user, "/forward/stop"),
   deleteAccount: (user: User) => post<void>(user, "/account/delete"),
+  checkAccess: (user: User) => post<{ status: AccountAccess }>(user, "/access/check"),
   regroupTrips: (user: User) => post<RegroupResult>(user, "/trips/regroup"),
   deleteAllTrips: (user: User) => post<{ trips: number }>(user, "/trips/delete-all"),
   refreshFlights: (user: User, tripId: string) => post<{ enabled: boolean; checked?: number }>(user, "/flights/refresh", { tripId }),

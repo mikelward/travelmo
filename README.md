@@ -409,6 +409,23 @@ One Google Cloud project holds everything.
    a message to a retired or unknown address, or one over 2 MB, bounces to
    the sender with the reason. Email Routing and the Worker are free at
    this volume on Cloudflare's free plan; attachments are not read.
+9. **Admins**: only approved accounts may use Travelmo (SPEC "Access").
+   Nobody already using it is locked out, and there is nothing to run by
+   hand: as the parser starts, before it serves, it records as approved
+   every owner of a trip or travel profile that nothing else lets in (an
+   Android-only account has no user document) and everyone an approved
+   owner shared one with (`access_grandfathered` in its log). Deploy the
+   parser before the rules, as CI does: a parser whose first such run
+   fails does not start, and its previous revision keeps serving. Name the admins by hand in the Firebase
+   console: in Firestore, a collection `config` with a document `access`
+   whose field `admins` is an array of lowercase email addresses (no client
+   can write `config`, so this is the only way to change them). Admins are
+   always let in, see Access in the menu, and approve or decline requests,
+   invite addresses and revoke access there. Each new request reaches them
+   once by email (with the SMTP settings above) and as a notification on
+   the browsers and phones they turned reminder notifications on for.
+   Without the document nobody is an admin: everyone already in carries on,
+   and requests wait unseen (the parser logs `access_request_no_admins`).
 
 ### Continuous deployment
 
@@ -424,6 +441,11 @@ has already moved past deploys nothing; the newer run carries its changes:
 | `firestore.rules`, `firestore.indexes.json`, `firebase.json` | `firebase deploy --only firestore` |
 | `apps/parser/`, `packages/core/`, the lockfile or the root build files | a Cloud Build image tagged with the commit, then a new revision of the `parser` Cloud Run service |
 | `apps/inbound/` | the forwarding Worker, with `wrangler deploy` |
+
+The parser deploys before the rules, and rules due while a due parser is
+skipped for missing settings wait for it (unrecorded), since rules can rely
+on what the parser does as it starts (the accounts it lets in, SPEC
+"Access"); a failed parser deploy stops the job before the rules.
 
 The web app needs nothing here: App Hosting builds `main` itself. The parser's
 deploy names only the image, so the service keeps its environment variables,
@@ -483,4 +505,5 @@ by email ride the account's own SMTP service, by push the browsers' own
 push services and Firebase Cloud Messaging (both free), and all a fourth Cloud Scheduler job (about ten
 cents a month); forwarding addresses ride Cloudflare Email Routing and a
 Worker, free at this volume, with the model cost of a Gmail import per
-forwarded email; see `SPEC.md`.
+forwarded email; checking who may use the app adds a few Firestore reads
+per page and per import; see `SPEC.md`.

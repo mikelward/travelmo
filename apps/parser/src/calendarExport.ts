@@ -17,6 +17,9 @@ export const exportHistoryDays = 365;
 
 export type ExportIo = {
   uidForToken: (tokenHash: string) => Promise<string | undefined>;
+  // Whether the link's owner may still use the app (SPEC "Access"): a
+  // revoked account's link stops serving its trips.
+  approved: (uid: string) => Promise<boolean>;
   // The user's verified email, for the trips shared with them.
   verifiedEmail: (uid: string) => Promise<string | undefined>;
   trips: (uid: string, email: string | undefined, endsOnOrAfter: string) => Promise<Trip[]>;
@@ -32,7 +35,8 @@ function daysBefore(instant: string, days: number): string {
 }
 
 // The calendar text for a link's token, or undefined for a link that is not
-// (or no longer) anyone's.
+// (or no longer) anyone's, or whose owner may no longer use the app; the
+// two look the same to whoever holds the link.
 export async function calendarForToken(
   token: string,
   io: ExportIo,
@@ -41,13 +45,18 @@ export async function calendarForToken(
   if (!validToken(token)) return undefined;
   const uid = await io.uidForToken(hashToken(token));
   if (!uid) return undefined;
+  if (!(await io.approved(uid))) return undefined;
   const email = await io.verifiedEmail(uid);
   const trips = (await io.trips(uid, email, daysBefore(options.now, exportHistoryDays))).filter((t) => !t.deleting);
   const items = await Promise.all(trips.map(async (trip) => ({ trip, segments: await io.segments(trip.id) })));
   return exportCalendar(items, { stamp: options.now, tripUrl: options.tripUrl });
 }
 
-export function firestoreExportIo(db: Firestore, verifiedEmail: (uid: string) => Promise<string | undefined>): ExportIo {
+export function firestoreExportIo(
+  db: Firestore,
+  verifiedEmail: (uid: string) => Promise<string | undefined>,
+  approved: (uid: string) => Promise<boolean>,
+): ExportIo {
   const parse = <T>(schema: { safeParse: (v: unknown) => { success: true; data: T } | { success: false } }, data: unknown): T[] => {
     const r = schema.safeParse(data);
     return r.success ? [r.data] : [];
@@ -58,6 +67,7 @@ export function firestoreExportIo(db: Firestore, verifiedEmail: (uid: string) =>
       const uid = snap.get("uid");
       return typeof uid === "string" ? uid : undefined;
     },
+    approved,
     verifiedEmail,
     trips: async (uid, email, endsOnOrAfter) => {
       const queries = [db.collection(paths.trips()).where("ownerUid", "==", uid).where("end", ">=", endsOnOrAfter).get()];

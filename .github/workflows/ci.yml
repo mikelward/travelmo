@@ -515,16 +515,6 @@ jobs:
         if: steps.plan.outputs.firestore == 'true' || steps.plan.outputs.worker == 'true'
         with:
           node-version-file: .node-version
-      # firebase-tools is the rules package's devDependency, and finds the
-      # credentials the auth step left (GOOGLE_APPLICATION_CREDENTIALS).
-      - name: Deploy the Firestore rules and indexes
-        if: steps.plan.outputs.firestore == 'true'
-        working-directory: packages/rules
-        run: |
-          set -euo pipefail
-          pnpm install --frozen-lockfile --filter @travelmo/rules
-          pnpm exec firebase deploy --only firestore --project "$GCP_PROJECT" --config ../../firebase.json --non-interactive
-          echo "Deployed the Firestore rules and indexes at $GITHUB_SHA."
       # The image is tagged with the commit. The deploy names only the image,
       # so the new revision keeps the service's environment variables,
       # secrets, service account and other settings: gcloud run deploy
@@ -542,6 +532,20 @@ jobs:
           echo "Deploying $image to Cloud Run service parser in $GCP_REGION."
           gcloud run deploy parser --project="$GCP_PROJECT" --region="$GCP_REGION" --image="$image" --quiet
           echo "Deployed the parser at $GITHUB_SHA."
+      # After the parser, which lets in the accounts from before approvals
+      # as its new revision starts, before it serves (SPEC "Access"): the
+      # rules then never ask for an approval that is not yet recorded, and a
+      # parser deploy that fails stops the job before the rules. firebase-
+      # tools is the rules package's devDependency, and finds the
+      # credentials the auth step left (GOOGLE_APPLICATION_CREDENTIALS).
+      - name: Deploy the Firestore rules and indexes
+        if: steps.plan.outputs.firestore == 'true'
+        working-directory: packages/rules
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile --filter @travelmo/rules
+          pnpm exec firebase deploy --only firestore --project "$GCP_PROJECT" --config ../../firebase.json --non-interactive
+          echo "Deployed the Firestore rules and indexes at $GITHUB_SHA."
       # wrangler.toml commits a placeholder PARSER_URL, and a deploy replaces
       # every [vars] value, so the real URL comes from the PARSER_URL
       # variable. INBOUND_SECRET is a Worker secret, which deploys keep.

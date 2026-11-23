@@ -295,14 +295,18 @@
 - [ ] Live flight updates, second part: delays, cancellations and
       diversions on the flight's card and as notifications, from the same
       AeroAPI polling.
-- [ ] Approve sign-ups by hand: a new account waits until an admin
+- [x] Approve sign-ups by hand: a new account waits until an admin
       approves it (Firestore rules and the parser refuse its writes and
       imports meanwhile; trips shared with it stay readable), the admin is
       told of each request, and accounts made before this ships stay in.
       AeroAPI's Personal license covers personal and household use only;
       the next tier up (Standard) costs $100 a month.
-- [ ] Invites: an admin invites an email address, and an account signing
+- [x] Invites: an admin invites an email address, and an account signing
       in with that verified address is approved without waiting.
+- [ ] Android: the "Travelmo is invite-only" screen with Request access
+      (writing `access/{email}` and calling `/access/check`, as the web
+      does), invites written with shares, and the Access page for admins;
+      meanwhile an account not approved sees an empty trip list.
 - [ ] Read PDF attachments (tickets, booking confirmations) when an email
       passes the filter: an SJ "Tickets for booking …" email was read as
       not a booking, most likely because the journey is only in the PDF.

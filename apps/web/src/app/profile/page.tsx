@@ -95,7 +95,7 @@ function SharingSection({ user, profile }: { user: User; profile: TravelProfile 
     setBusy(true);
     setError(undefined);
     try {
-      await saveTrusted(user, profile !== null, next);
+      await saveTrusted(user, profile !== null, next, trusted);
       setEmail("");
     } catch (e) {
       setError((e as Error).message);

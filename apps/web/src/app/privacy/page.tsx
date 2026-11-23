@@ -36,6 +36,10 @@ export default function PrivacyPage() {
             <strong>Your account:</strong> the name, email address and photo of the Google account you sign in with.
           </li>
           <li>
+            <strong>Your access:</strong> whether you asked to use Travelmo, who invited you or which admin approved or
+            declined you, or that you used it before approvals, and when.
+          </li>
+          <li>
             <strong>Your trips and bookings:</strong> titles, dates, times, places, providers, confirmation numbers, notes,
             ratings, and where each booking came from.
           </li>
@@ -105,7 +109,11 @@ export default function PrivacyPage() {
         </ul>
         <p>
           People you share a trip with see its bookings. People you share your travel profile with see all of it, documents
-          included.
+          included. Sharing with an email address also lets it use Travelmo.
+        </p>
+        <p>
+          Travelmo&apos;s admins see the email address of everyone who asks to use it, and are sent it by email and
+          notification when someone asks.
         </p>
       </Section>
 
@@ -131,8 +139,8 @@ export default function PrivacyPage() {
       <Section title="Keeping and deleting your data">
         <p>
           Your data stays until you delete it. Deleting a trip or booking removes it; disconnecting Gmail or Google Calendar
-          removes Travelmo&apos;s access. Deleting your account in Settings removes your trips, bookings, travel profile and
-          connections, and takes you off trips others shared with you; bookings you added to someone else&apos;s trip stay
+          removes Travelmo&apos;s access. Deleting your account in Settings removes your trips, bookings, travel profile,
+          connections and access record, and takes you off trips others shared with you; bookings you added to someone else&apos;s trip stay
           with that trip. Service logs are kept for 30 days.
         </p>
         <p>
