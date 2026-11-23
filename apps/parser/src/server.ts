@@ -65,17 +65,13 @@ import { app as firebaseApp, auth, db } from "./firebase";
 import { getMessaging } from "firebase-admin/messaging";
 import {
   currentHistoryId,
-  fetchMessage,
   gmailFor,
   gmailPacer,
   gmailScopes,
-  gmailUnits,
   withRateLimitRetry,
   isNotFound,
   listAddedSince,
   oauthClient,
-  isBadRequest,
-  searchMessagePage,
   stopWatch,
   watch,
   type OAuthConfig,
@@ -89,7 +85,8 @@ import { BadPushEnvelope, parseGmailPush, processNotification, type GmailNotific
 import { firestoreStore } from "./store";
 import { FeedLimitReached, addFeed, feedFailure, firestoreFeeds, pollAllFeeds, type FeedIo } from "./feeds";
 import { fetchFeed } from "./safefetch";
-import { backfillBatch, backfillQuery, runBackfillBatch } from "./backfill";
+import { runBackfillBatch } from "./backfill";
+import { gmailSource, type MailSource } from "./mailSource";
 import { continueBackfill, parseContinuePush, startBackfill, stopBackfill, type ChainIo, type ContinueMessage } from "./backfillChain";
 import { pubsubPublisher } from "./publish";
 
@@ -398,10 +395,10 @@ app.post("/gmail/disconnect", async (c) => {
 });
 
 // Imports new mail by id, waiting out Gmail's rate limit for up to a minute.
-function importIds(uid: string, gmail: ReturnType<typeof gmailFor>, ids: readonly string[], options: ImportOptions = {}) {
+function importIds(uid: string, source: MailSource, ids: readonly string[], options: ImportOptions = {}) {
   const deadline = Date.now() + notificationRateLimitWaitMs;
   const retry = { timeLeftMs: () => deadline - Date.now(), sleep, log: (event: string, fields: Record<string, unknown>) => log("WARNING", event, { uid, ...fields }) };
-  return importMessages(uid, ids, (id) => withRateLimitRetry(() => fetchMessage(gmail, id), retry), deps, options);
+  return importMessages(uid, ids, (id) => withRateLimitRetry(() => source.fetch(id), retry), deps, options);
 }
 
 // Reading the whole mailbox runs on the server (backfillChain.ts): each
@@ -415,30 +412,16 @@ function backfillIo(uid: string): ChainIo<GmailState> {
   return {
     change: (fn) => changeBackfill(db, uid, fn),
     runBatch: (state, from, generation) => {
-      const gmail = gmailFor(oauth, state.refreshToken);
-      const pace = gmailPacer(backfillUnitsPerMinute, { nowMs: Date.now, sleep });
+      const source = gmailSource(gmailFor(oauth, state.refreshToken), gmailPacer(backfillUnitsPerMinute, { nowMs: Date.now, sleep }));
       return runBackfillBatch(from, false, {
         timeLeftMs: () => deadline - Date.now(),
         sleep,
-        page: async (token) => {
-          await pace(gmailUnits.list);
-          return searchMessagePage(gmail, backfillQuery, backfillBatch, token);
-        },
+        page: source.searchPage,
         // An email whose import failed (the model was down, say) is read
         // again when the reading passes it again, as after starting over.
         // Gmail's rate limit is waited out by the batch, within its time.
-        importIds: (ids) =>
-          importMessages(
-            uid,
-            ids,
-            async (id) => {
-              await pace(gmailUnits.getFull);
-              return fetchMessage(gmail, id);
-            },
-            deps,
-            { retryFailed: true, generation },
-          ),
-        isStaleCursor: isBadRequest,
+        importIds: (ids) => importMessages(uid, ids, source.fetch, deps, { retryFailed: true, generation }),
+        isStaleCursor: source.isStaleCursor,
         now: () => new Date().toISOString(),
         log: (event, fields) => log("WARNING", event, { uid, ...fields }),
       });
@@ -504,12 +487,12 @@ app.post("/gmail/reimport", async (c) => {
   if (!state) throw new HTTPException(409, { message: "Gmail not connected" });
   const body = (await c.req.json().catch(() => ({}))) as { messageId?: string };
   if (!body.messageId) throw new HTTPException(400, { message: "Missing messageId" });
-  const gmail = gmailFor(oauth, state.refreshToken);
+  const source = gmailSource(gmailFor(oauth, state.refreshToken));
   let message;
   try {
-    message = await fetchMessage(gmail, body.messageId);
+    message = await source.fetch(body.messageId);
   } catch (error) {
-    if (isNotFound(error)) throw new HTTPException(404, { message: "That email is no longer in Gmail" });
+    if (source.isNotFound(error)) throw new HTTPException(404, { message: "That email is no longer in Gmail" });
     throw error;
   }
   const outcome = await importMessage(uid, message, deps, { force: true, reclaim: true });
@@ -1240,7 +1223,7 @@ app.post("/internal/pubsub/gmail", async (c) => {
       resetGeneration: () => deps.store.resetGeneration(uid),
       loadState: async () => (await loadState(db, uid)) ?? undefined,
       listAdded: (state, since) => listAddedSince(gmailFor(oauth, state.refreshToken), since),
-      importIds: (state, ids, generation) => importIds(uid, gmailFor(oauth, state.refreshToken), ids, { generation }),
+      importIds: (state, ids, generation) => importIds(uid, gmailSource(gmailFor(oauth, state.refreshToken)), ids, { generation }),
       saveHistoryId: (state, historyId, generation) => updateHistoryId(db, uid, state.emailAddress, historyId, generation),
     });
     if (result.kind === "disconnected") {
