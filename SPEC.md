@@ -1296,7 +1296,11 @@ such as "UK", saved as its code) from a date. A correction saved before the
 form took names ("UK") is read as its code. Towns are one when their
 cities and countries are, however written: case, accents and a city's local
 or English name don't count ("Göteborg" is "Gothenburg", `sameCity`), nor a
-country's name or short form ("UK" is GB, `countryCode`). They live
+country's name or short form ("UK" is GB, `countryCode`). Two places that
+both have coordinates are also one town within 20 km of each other
+(`nearKm`), in no two countries: a hotel in Solna is in Stockholm, and a
+car hired in Hounslow is at Heathrow. Home is a typed town with no point,
+so it still matches by name. They live
 as `homes` on the user's own document (`users/{uid}`, `HomeCorrection`, at
 most fifty), which only the owner reads or writes; rules check it is a list
 of at most fifty, and the parser parses it (`loadHomeOverrides` in
@@ -1339,7 +1343,8 @@ the town of a stay (`onTheWay`). Abroad, the country is enough: a dinner at
 a resort down the coast from the airport a flight lands at, while the trip
 is in that country, joins it (a Crete holiday's restaurant bookings are one
 trip, not seven); in the home country only the same town counts, so a show
-in Hove is not part of a train from London to Brighton. An outing with no time of its own
+in Hove is not part of a train from London to Brighton unless both say where
+they are (Hove is next to Brighton). An outing with no time of its own
 (`isUntimed`) is on all its day, so a ticket for the day a flight lands
 comes after it, and one for the day a flight leaves before it. Direction and time matter: a ticket in
 Stockholm joins the flight there before it and a return flight booked alone

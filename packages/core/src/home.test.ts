@@ -4,6 +4,7 @@ import {
   connects,
   countryCode,
   describeHomes,
+  distanceKm,
   effectiveHomes,
   findTripForBooking,
   homeAt,
@@ -13,6 +14,7 @@ import {
   isHomeTrip,
   sameCity,
   isTransfer,
+  nearHub,
   outingRuns,
   transferTitle,
 } from "./home";
@@ -605,6 +607,34 @@ describe("towns written differently", () => {
   it("puts a car hired in Göteborg with the flight home from Gothenburg", () => {
     const car = { type: "car_rental" as const, title: "Car", start: "2026-08-19T10:00:00+02:00", end: "2026-08-21T10:00:00+02:00", origin: { name: "Göteborg Central", city: "Göteborg", country: "SE" }, destination: { name: "Göteborg Central", city: "Göteborg", country: "SE" } };
     expect(findTripForBooking([trip], () => [ride, out, back], [car], [{ city: "London", country: "GB" }])?.id).toBe("t");
+  });
+});
+
+describe("towns near each other", () => {
+  const at = "2026-11-01T12:00:00Z";
+  const trip = { id: "edinburgh", title: "Edinburgh", start: "2026-07-10", end: "2026-07-13", ownerUid: "u1", sharedWith: [], createdAt: at, updatedAt: at };
+  const london = [{ city: "London", country: "GB" }];
+  const train = { type: "train" as const, title: "Train", start: "2026-07-10T09:00:00+01:00", end: "2026-07-10T13:30:00+01:00", origin: { name: "King's Cross", city: "London", country: "GB" }, destination: { name: "Waverley", city: "Edinburgh", country: "GB" } };
+  const hotel = { type: "lodging" as const, title: "Hotel", start: "2026-07-10T15:00:00+01:00", end: "2026-07-13T11:00:00+01:00", destination: { name: "Hotel", city: "Edinburgh", country: "GB", lat: 55.953, lon: -3.188 } };
+  const outing = (city: string, lat: number, lon: number) => ({ type: "activity" as const, title: "Show", start: "2026-07-11T19:30:00+01:00", destination: { name: "Theatre", city, country: "GB", lat, lon } });
+
+  it("measures the distance between two points", () => {
+    expect(Math.round(distanceKm({ lat: 51.507, lon: -0.128 }, { lat: 48.857, lon: 2.352 }))).toBe(343);
+  });
+
+  it("joins an outing in a town next to where the trip is staying", () => {
+    expect(findTripForBooking([trip], () => [train, hotel], [outing("Musselburgh", 55.942, -3.054)], london)?.id).toBe("edinburgh");
+  });
+
+  it("puts a car hired in a town next to the airport with its flight", () => {
+    const heathrow = { name: "London Heathrow", code: "LHR", city: "London", country: "GB", lat: 51.47, lon: -0.454 };
+    expect(nearHub({ name: "Car hire", city: "Hounslow", country: "GB", lat: 51.468, lon: -0.361 }, heathrow)).toBe(true);
+    expect(nearHub({ name: "Car hire", city: "Reading", country: "GB", lat: 51.454, lon: -0.973 }, heathrow)).toBe(false);
+    expect(nearHub({ name: "Car hire", city: "Hounslow", country: "GB" }, heathrow)).toBe(false);
+  });
+
+  it("keeps apart an outing in a town further away in the home country", () => {
+    expect(findTripForBooking([trip], () => [train, hotel], [outing("Stirling", 56.117, -3.936)], london)).toBeUndefined();
   });
 });
 
