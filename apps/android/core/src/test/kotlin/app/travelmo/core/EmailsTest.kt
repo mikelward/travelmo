@@ -87,7 +87,9 @@ class EmailsTest {
         refusalOf("""{"refusal":"taken"}""") shouldBe LinkRefusal.TAKEN
         refusalOf("""{"refusal":"other"}""").shouldBeNull()
         refusalOf("Internal error").shouldBeNull()
-        LinkRefusal.entries.map { it.wire } shouldBe listOf("invalid", "yours", "full", "limit", "taken", "expired")
+        refusalOf("""{"refusal":"notInvited"}""") shouldBe LinkRefusal.NOT_INVITED
+        LinkRefusal.entries.map { it.wire } shouldBe listOf("invalid", "yours", "full", "limit", "taken", "expired", "notInvited")
+        LinkRefusal.NOT_INVITED.text shouldBe "That address hasn't been invited to Travelmo."
     }
 
     @Test

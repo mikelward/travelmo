@@ -109,6 +109,73 @@ test("linking an admin's address opens the Access page without a reload", async 
   await expect(page.getByRole("link", { name: "Access" })).toBeVisible();
 });
 
+// Someone invited at a work address who signs in with another links the
+// work one from the invite-only screen (SPEC "Linked email addresses"). The
+// parser is stubbed: which addresses it mails is its own tests' concern.
+test("an account without access sends a link to the address it was invited at", async ({ page }) => {
+  await stubCheck(page);
+  const work = "newcomer@work.example";
+  const asked: unknown[] = [];
+  await page.route("http://localhost:8080/emails/add", async (route) => {
+    const body = route.request().postDataJSON() as { email: string };
+    asked.push(body);
+    if (body.email === work) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ email: work }) });
+    } else {
+      await route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ refusal: "notInvited" }) });
+    }
+  });
+  await signIn(page, newcomer, { approved: false });
+  await expect(page.getByRole("heading", { name: "Invited at another address?" })).toBeVisible();
+
+  await page.getByRole("textbox", { name: "Email address" }).fill("stranger@work.example");
+  await page.getByRole("button", { name: "Add email address" }).click();
+  await expect(page.getByText("That address hasn't been invited to Travelmo.")).toBeVisible();
+
+  await page.getByRole("textbox", { name: "Email address" }).fill(" Newcomer@Work.example ");
+  await page.getByRole("button", { name: "Add email address" }).click();
+  await expect(page.getByText(`We sent a link to ${work}. Open it here to confirm.`)).toBeVisible();
+  expect(asked).toEqual([{ email: "stranger@work.example" }, { email: work }]);
+  // Still waiting until the link is opened.
+  await expect(page.getByRole("heading", { name: "Travelmo is invite-only" })).toBeVisible();
+});
+
+test("an account without access opens its confirmation link, which lets it in", async ({ page }) => {
+  await stubCheck(page);
+  const work = "newcomer@work.example";
+  let uid = "";
+  const tokens: string[] = [];
+  // As the parser does once the invited address is confirmed: it links the
+  // address and writes the user document, which approves the account.
+  await page.route("http://localhost:8080/emails/confirm", async (route) => {
+    tokens.push((route.request().postDataJSON() as { token: string }).token);
+    await seedLinkedEmails(uid, [work]);
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ email: work }) });
+  });
+  uid = await signIn(page, newcomer, { approved: false });
+  await expect(page.getByRole("heading", { name: "Travelmo is invite-only" })).toBeVisible();
+
+  await page.goto("/settings/email?token=a-token");
+  await expect(page.getByText(`${work} is now yours on Travelmo.`)).toBeVisible();
+  expect(tokens).toEqual(["a-token"]);
+  // In without a reload.
+  await page.getByRole("link", { name: "Trips" }).click();
+  await expect(page.getByText("No trips yet.")).toBeVisible();
+});
+
+test("the confirmation page opens to an account without access, but not the rest of Settings", async ({ page }) => {
+  await stubCheck(page);
+  await page.route("http://localhost:8080/emails/confirm", (route) =>
+    route.fulfill({ status: 410, contentType: "application/json", body: JSON.stringify({ refusal: "expired" }) }),
+  );
+  await signIn(page, newcomer, { approved: false });
+  await page.goto("/settings/email?token=old-token");
+  await expect(page.getByText("This link has expired or is for another account. Add the address again.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Settings" })).toHaveCount(0);
+  await page.goto("/settings");
+  await expect(page.getByRole("heading", { name: "Travelmo is invite-only" })).toBeVisible();
+});
+
 // Settings, where accounts are deleted, is closed to an account without
 // access, so the invite-only screen offers deletion too.
 test("an account without access can still delete itself", async ({ page }) => {

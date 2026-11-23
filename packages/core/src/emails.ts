@@ -85,8 +85,9 @@ export function emailRows(
 export const isRemovable = (row: EmailRow): boolean => row.kind === "confirmed" || row.kind === "pending";
 
 // Why an address cannot be linked. The first three a client can tell
-// before asking; the parser tells the rest.
-export type LinkRefusal = "invalid" | "yours" | "full" | "limit" | "taken" | "expired";
+// before asking; the parser tells the rest. `notInvited` answers an account
+// not approved yet that asks for an address that would not let it in.
+export type LinkRefusal = "invalid" | "yours" | "full" | "limit" | "taken" | "expired" | "notInvited";
 
 export const linkRefusalText: Record<LinkRefusal, string> = {
   invalid: "Enter one email address.",
@@ -95,6 +96,7 @@ export const linkRefusalText: Record<LinkRefusal, string> = {
   limit: "Too many confirmation emails today. Try again tomorrow.",
   taken: "That address belongs to another Travelmo account.",
   expired: "This link has expired or is for another account. Add the address again.",
+  notInvited: "That address hasn't been invited to Travelmo.",
 };
 
 // The address to link, normalized, or why not: one already the account's
@@ -117,7 +119,7 @@ export function checkNewLink(
 // The parser answers a refusal as `{"refusal":"taken"}`; anything else is
 // not one.
 export function refusalOf(body: string): LinkRefusal | undefined {
-  const refusal = /"refusal"\s*:\s*"([a-z]+)"/.exec(body)?.[1];
+  const refusal = /"refusal"\s*:\s*"([a-zA-Z]+)"/.exec(body)?.[1];
   return refusal && Object.hasOwn(linkRefusalText, refusal) ? (refusal as LinkRefusal) : undefined;
 }
 

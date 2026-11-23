@@ -1,8 +1,11 @@
 import {
+  AccessConfig,
+  AccessRecord,
   canSendLink,
   checkNewLink,
   confirmationMessage,
   confirmationUrl,
+  letsIn,
   maxLinkedEmails,
   myAddresses,
   normalizeEmail,
@@ -18,7 +21,7 @@ import {
   type PendingEmail,
   type PendingLink,
 } from "@travelmo/core";
-import type { Firestore, Transaction } from "firebase-admin/firestore";
+import type { DocumentSnapshot, Firestore, Transaction } from "firebase-admin/firestore";
 import { hashToken, newToken } from "./calendarExport";
 import { refuseIfDeleted } from "./deleted";
 import type { Mailer } from "./mail";
@@ -30,6 +33,11 @@ import type { Mailer } from "./mail";
 // confirmed list, which the rules and access checks read, the hashes of the
 // links sent and the day's count; `users/{uid}.emails` is a copy for the
 // apps, never trusted (a client could write it before these rules).
+//
+// An account not approved yet may link too, but only an address that lets
+// it in (SPEC "Access"): one an admin approved, someone invited, or an
+// admin's. Until it confirms one, nothing creates its user document, whose
+// existence would approve it; confirming writes it, which lets it in.
 
 type Severity = "INFO" | "WARNING" | "ERROR";
 export type EmailsLog = (severity: Severity, event: string, fields: Record<string, unknown>) => void;
@@ -133,12 +141,23 @@ export function readLinks(data: Record<string, unknown> | undefined): EmailLinks
 // Writes the parser's record and what the apps show of it together: the
 // profile's copy of the confirmed list is set whole from the record, which
 // also wipes any list a client wrote there before the rules locked it. The
-// user document is updated only while it exists (account deletion).
-function writeLinks(db: Firestore, t: Transaction, uid: string, links: EmailLinks, userExists: boolean) {
+// user document is updated while it exists, and created only when `create`
+// says the account may have one: its existence approves the account.
+function writeLinks(db: Firestore, t: Transaction, uid: string, links: EmailLinks, userExists: boolean, create: boolean) {
   t.set(db.doc(paths.emailLinks(uid)), links);
   const fields = { pendingEmails: shownPending(links), emails: links.confirmed ?? [] };
   if (userExists) t.update(db.doc(paths.user(uid)), fields);
-  else t.set(db.doc(paths.user(uid)), fields);
+  else if (create) t.set(db.doc(paths.user(uid)), fields);
+}
+
+// Whether confirming `email` would let an account not approved yet in, from
+// its access record and `config/access` (core `letsIn`). A malformed one
+// lets no one in.
+function letsInFrom(email: string, record: DocumentSnapshot, config: DocumentSnapshot, log: EmailsLog): boolean {
+  const parsedRecord = record.exists ? AccessRecord.safeParse(record.data()) : undefined;
+  const parsedConfig = config.exists ? AccessConfig.safeParse(config.data()) : undefined;
+  if (parsedRecord?.success === false || parsedConfig?.success === false) log("WARNING", "email_link_access_malformed", {});
+  return letsIn(email, parsedRecord?.data, parsedConfig?.data);
 }
 
 // Refuses an address another account signs in with, linked or connected
@@ -149,7 +168,17 @@ async function refuseOthers(deps: EmailDeps, uid: string, email: string): Promis
 }
 
 // Sends a confirmation link for `raw` to that address, at most a few a day.
-export async function requestLink(deps: EmailDeps, uid: string, signIn: string | undefined, raw: string): Promise<{ email: string }> {
+// `approved` is whether the account may use the app already (server.ts asks
+// gateLinking). One that may not is refused an address that would not let
+// it in, before anything says whether another account has it, so it cannot
+// have us mail anyone or tell it who signed up.
+export async function requestLink(
+  deps: EmailDeps,
+  uid: string,
+  signIn: string | undefined,
+  raw: string,
+  approved = true,
+): Promise<{ email: string }> {
   const { db, log } = deps;
   if (!deps.mail) throw new Error("Email is not set up on this server");
   const now = deps.now();
@@ -157,6 +186,10 @@ export async function requestLink(deps: EmailDeps, uid: string, signIn: string |
   const first = checkNewLink(raw, signIn, (await trustedLinked(db, uid)).holder, now);
   if ("refusal" in first) throw new LinkRefused(first.refusal);
   const { email } = first;
+  if (!approved) {
+    const [record, config] = await Promise.all([db.doc(paths.access(email)).get(), db.doc(paths.accessConfig()).get()]);
+    if (!letsInFrom(email, record, config, log)) throw new LinkRefused("notInvited");
+  }
   await refuseOthers(deps, uid, email);
 
   const token = newToken();
@@ -169,7 +202,7 @@ export async function requestLink(deps: EmailDeps, uid: string, signIn: string |
     const check = checkNewLink(raw, signIn, trustedHolder(user.data(), current), now);
     if ("refusal" in check) throw new LinkRefused(check.refusal);
     if (!canSendLink(current, now)) throw new LinkRefused("limit");
-    writeLinks(db, t, uid, withSentLink(current, email, tokenHash, now), user.exists);
+    writeLinks(db, t, uid, withSentLink(current, email, tokenHash, now), user.exists, approved);
   });
 
   const message = confirmationMessage(email, confirmationUrl(deps.origin, token));
@@ -186,19 +219,24 @@ export async function requestLink(deps: EmailDeps, uid: string, signIn: string |
   return { email };
 }
 
+// Takes a link back. Never creates the user document: with none there is
+// no copy to correct, and creating one could approve the account.
 async function withdraw(db: Firestore, uid: string, change: (links: EmailLinks) => EmailLinks): Promise<void> {
   await db.runTransaction(async (t) => {
     const userRef = db.doc(paths.user(uid));
     const [user, links] = await Promise.all([t.get(userRef), t.get(db.doc(paths.emailLinks(uid)))]);
     if (!links.exists) return;
-    writeLinks(db, t, uid, change(readLinks(links.data())), user.exists);
+    writeLinks(db, t, uid, change(readLinks(links.data())), user.exists, false);
   });
 }
 
 // Links the address a confirmation link was sent to, for the account that
 // asked: its claim made in the same transaction as the list changes, so an
-// address is never linked to two accounts.
-export async function confirmLink(deps: EmailDeps, uid: string, token: string): Promise<{ email: string }> {
+// address is never linked to two accounts. For an account not approved yet
+// (`approved`, as requestLink), the address must still let it in (an admin
+// may have declined it meanwhile); confirming then writes the user
+// document, which lets the account in.
+export async function confirmLink(deps: EmailDeps, uid: string, token: string, approved = true): Promise<{ email: string }> {
   const { db, log } = deps;
   const now = deps.now();
   const tokenHash = hashToken(token);
@@ -222,20 +260,34 @@ export async function confirmLink(deps: EmailDeps, uid: string, token: string): 
     const userRef = db.doc(paths.user(uid));
     const claimRef = db.doc(paths.linkedEmail(email));
     const mailboxRef = db.doc(paths.gmailAccount(email));
-    const [user, links, claim, mailbox] = await Promise.all([t.get(userRef), t.get(linksRef), t.get(claimRef), t.get(mailboxRef)]);
+    const [user, links, claim, mailbox, invite] = await Promise.all([
+      t.get(userRef),
+      t.get(linksRef),
+      t.get(claimRef),
+      t.get(mailboxRef),
+      approved ? undefined : Promise.all([t.get(db.doc(paths.access(email))), t.get(db.doc(paths.accessConfig()))]),
+    ]);
     const current = readLinks(links.data());
     if (!pendingLink(current, tokenHash, now)) return "expired" as const;
     const rest = withoutLink(current, email, now);
+    if (invite && !letsInFrom(email, invite[0], invite[1], log)) {
+      // No longer invited: the link is withdrawn, as it can no longer let
+      // the account in.
+      writeLinks(db, t, uid, rest, user.exists, false);
+      return "notInvited" as const;
+    }
     const owner = claim.get("uid") ?? mailbox.get("uid");
     if (typeof owner === "string" && owner !== uid) {
       // Taken meanwhile: the link is withdrawn, as it can never work.
-      writeLinks(db, t, uid, rest, user.exists);
+      writeLinks(db, t, uid, rest, user.exists, false);
       return "taken" as const;
     }
     const emails = current.confirmed ?? [];
     if (!emails.includes(email) && emails.length >= maxLinkedEmails) return "full" as const;
     t.set(claimRef, { uid, linkedAt: now });
-    writeLinks(db, t, uid, { ...rest, confirmed: [...emails.filter((e) => e !== email), email] }, user.exists);
+    // Created if missing: an approved account may have one, and one not
+    // approved yet is let in by the address it just confirmed.
+    writeLinks(db, t, uid, { ...rest, confirmed: [...emails.filter((e) => e !== email), email] }, user.exists, true);
     return "linked" as const;
   });
   if (outcome !== "linked") {
@@ -260,7 +312,7 @@ export async function removeLink(deps: Pick<EmailDeps, "db" | "now" | "log">, ui
     if (claim.get("uid") === uid) t.delete(claimRef);
     if (!user.exists) return;
     const rest = withoutLink(readLinks(links.data()), email, now);
-    writeLinks(db, t, uid, { ...rest, confirmed: (rest.confirmed ?? []).filter((e) => e !== email) }, true);
+    writeLinks(db, t, uid, { ...rest, confirmed: (rest.confirmed ?? []).filter((e) => e !== email) }, true, false);
   });
   deps.log("INFO", "email_unlinked", { uid });
 }

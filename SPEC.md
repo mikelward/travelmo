@@ -678,8 +678,9 @@ have checked that a share exists, which a user can make for any address
 anyway.
 
 Asking. An account that is not approved sees "Travelmo is invite-only" on
-every page instead of the app, with "Request access", "Sign out" and
-"Delete account" (as in Settings, which it cannot open). Asking
+every page but a confirmation link's (below) instead of the app, with
+"Request access", "Sign out" and "Delete account" (as in Settings, which
+it cannot open). Asking
 writes `access/{email}` as `requested` with its uid and the time (the rules
 allow only that, for one's own verified address, and asking again only
 while the request waits, so a decision stands). The page then calls the
@@ -702,6 +703,25 @@ parser's `POST /access/check`, as it also does on opening, which:
 It answers where the account stands. The page follows the record live, so
 an approval opens the app at once.
 
+Invited at another address. Someone invited at one address (a work one,
+say) who signs in with another sees "Invited at another address?" on the
+same page, unless their sign-in was declined: an email field and "Send
+link", which mails a confirmation link as Settings' Add does ("Linked
+email addresses"), then "We sent a link to <address>. Open it here to
+confirm." For an account not approved yet the parser sends one only to an
+address that would let it in (`letsIn` in `packages/core/src/access.ts`:
+an admin's, or one whose record is approved or invited and not declined),
+refusing any other with "That address hasn't been invited to Travelmo."
+(`notInvited`, 403) before it checks whether another account has the
+address, so a waiting account can neither have Travelmo mail anyone nor
+learn who signed up. Asking writes only the parser's private record, never
+the user document, whose existence would approve the account. The link's
+page, `/settings/email`, is the one page open to a waiting account (the
+rest of Settings is not); confirming checks the address still lets it in
+(an admin may have declined it meanwhile, which withdraws the link), links
+it and writes the user document, which lets the account in: the app follows
+that document live, so it opens without a reload.
+
 Admins see Access in the menu: requests waiting, oldest first, each with
 Approve and Decline; everyone approved by a record, each with Revoke (never
 an admin's own address or another admin's, which the rules refuse too); and
@@ -721,6 +741,9 @@ Enforced in three places:
   answers 403 for an account not approved (`gateUser` in
   `apps/parser/src/access.ts`). `/account/delete` and `/access/check` take
   any signed-in account, so anyone can still delete their account.
+  `/emails/add` and `/emails/confirm` take one not approved yet too, but
+  not one declined (`gateLinking`), and hold it to addresses that let it
+  in (above).
 - Background work: a Gmail notification or a mailbox reading's batch for an
   account no longer approved is acknowledged and dropped
   (`notification_for_unapproved_user`, `backfill_for_unapproved_user`;
@@ -772,7 +795,10 @@ consent's `claimPending` checks), and in one transaction the claim
 profile's `emails` copy);
 an address another account claimed meanwhile is refused ("That address
 belongs to another Travelmo account."). Removing deletes the claim.
-Without SMTP the endpoint answers 503.
+Without SMTP the endpoint answers 503. An account not approved yet may add
+and confirm too, from the invite-only page, but only an address that lets
+it in, and it gets no user document until it confirms one ("Access",
+"Invited at another address"); removing needs an approved account.
 
 The Gmail mailbox connected for import counts as confirmed, since the
 consent proved it is the user's, for as long as it stays connected:
@@ -1829,8 +1855,8 @@ build without one points to the web instead.
 | `POST /export/calendar/stop` | Firebase ID token | Turns the calendar export link off |
 | `GET /cal/{token}.ics` | the token | The calendar export itself, for calendar apps; 404 for a link not in use or whose owner may no longer use the app |
 | `POST /account/delete` | Firebase ID token | Deletes the caller's account and everything they own ("Deleting an account"); 204, and a retry finishes an interrupted run |
-| `POST /emails/add` | Firebase ID token | Mails a confirmation link for `email` ("Linked email addresses"); returns `{email}`; a refusal answers `{refusal}` (400 invalid, yours or full; 409 taken; 429 the day's links spent); 503 without SMTP |
-| `POST /emails/confirm` | Firebase ID token | Links the address a link (`token`) was sent to, for the account that asked; returns `{email}`; 410 `{refusal: "expired"}` for a link unknown, used, expired or another account's; 409 taken |
+| `POST /emails/add` | Firebase ID token, approved or waiting | Mails a confirmation link for `email` ("Linked email addresses"); returns `{email}`; a refusal answers `{refusal}` (400 invalid, yours or full; 403 notInvited, for an account not approved yet; 409 taken; 429 the day's links spent); 503 without SMTP |
+| `POST /emails/confirm` | Firebase ID token, approved or waiting | Links the address a link (`token`) was sent to, for the account that asked; returns `{email}`; 410 `{refusal: "expired"}` for a link unknown, used, expired or another account's; 403 notInvited, for an account not approved yet whose address no longer lets it in; 409 taken |
 | `POST /emails/remove` | Firebase ID token | Unlinks `email` or withdraws its pending link |
 | `POST /access/check` | Firebase ID token, approved or not | Settles the caller's access ("Access"): lets in an account from before approvals or one already shared with, otherwise tells the admins of a waiting request once; returns `{status}` (approved, requested, declined, none) |
 | `GET /healthz` | none | Liveness |

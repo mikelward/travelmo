@@ -307,6 +307,8 @@
       one) from Settings by an emailed link, and trips, profiles, invites,
       reminders and flight news for any of them reach you; the connected
       Gmail counts too.
+- [x] Invited at another address: the invite-only page links the address
+      someone was invited at, and confirming it lets them in.
 - [ ] Android: the "Travelmo is invite-only" screen with Request access
       (writing `access/{email}` and calling `/access/check`, as the web
       does), invites written with shares, and the Access page for admins;
@@ -388,11 +390,9 @@ Guesses made on autopilot; change any of them freely.
   list is Avis, Enterprise, Hertz, Budget, Sixt, National and Alamo, and no
   shuttle directory.
 - Linked email addresses: the connected Gmail counts as confirmed only
-  while connected (no stored claim of its own); an account must already be
-  approved to link an address, so a linked address's invite cannot let in
-  someone the invite-only page holds back (the page could offer it later);
-  only the sign-in's decline locks an account out; at most ten linked and
-  pending addresses and five links a day; trips shared with a linked
+  while connected (no stored claim of its own); only the sign-in's decline
+  locks an account out; at most ten linked and pending addresses and five
+  links a day; trips shared with a linked
   address keep it when the account is deleted; another account signing up
   later with a linked address is not stopped (both count it). A fellow
   traveler's document warnings show on a trip shared with their sign-in or

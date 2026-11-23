@@ -1,6 +1,7 @@
 import { paths } from "@travelmo/core";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { gateUser } from "./access";
 import { MailboxConflict, saveConnection } from "./connections";
 import { addressesOf, confirmLink, LinkRefused, removeLink, requestLink, uidForAddress, type EmailDeps } from "./emails";
 import type { Mail } from "./mail";
@@ -190,6 +191,92 @@ describe("linking an address", () => {
     await db.doc(paths.linkedEmail(work)).set({ uid: other.uid, linkedAt: now });
     await removeLink(setup().deps, me.uid, work);
     expect(await claim(work)).toBe(other.uid);
+  });
+});
+
+// SPEC "Linked email addresses": someone invited at one address who signs
+// in with another links the invited one from the invite-only page.
+describe("linking from an account not approved yet", () => {
+  // No user document: its existence would approve the account.
+  const waiting = () => {
+    const uid = unique("waiting");
+    return { uid, email: `${uid}@example.com` };
+  };
+  const token = (who: { uid: string; email: string }) => ({ uid: who.uid, email: who.email, email_verified: true });
+  const invite = (email: string) => db.doc(paths.access(email)).set({ email, invitedBy: "someone", invitedAt: now });
+
+  it("links an address it was invited at, which lets it in", async () => {
+    const me = waiting();
+    const work = `${unique("work")}@company.example`;
+    await invite(work);
+    const { deps, mails, tokenOf } = setup();
+
+    expect(await requestLink(deps, me.uid, me.email, work, false)).toEqual({ email: work });
+    expect(mails.map((m) => m.to)).toEqual([work]);
+    // Asking creates no user document, so the account is still waiting.
+    expect((await db.doc(paths.user(me.uid)).get()).exists).toBe(false);
+    expect(await gateUser(db, token(me))).toBe("unapproved");
+
+    expect(await confirmLink(deps, me.uid, tokenOf(mails[0]!), false)).toEqual({ email: work });
+    expect((await user(me.uid)).emails).toEqual([work]);
+    expect(await claim(work)).toBe(me.uid);
+    expect(await gateUser(db, token(me))).toBe("ok");
+  });
+
+  it("refuses, without mailing, an address no one invited", async () => {
+    const me = waiting();
+    const asked = `${unique("asked")}@company.example`;
+    const declined = `${unique("declined")}@company.example`;
+    await db.doc(paths.access(asked)).set({ email: asked, status: "requested", requestedAt: now });
+    await db.doc(paths.access(declined)).set({ email: declined, invitedBy: "someone", status: "declined", declinedBy: "admin", declinedAt: now });
+    const { deps, mails } = setup();
+    for (const email of [`${unique("stranger")}@company.example`, asked, declined]) {
+      expect(await refusal(requestLink(deps, me.uid, me.email, email, false))).toBe("notInvited");
+    }
+    expect(mails).toHaveLength(0);
+    expect((await db.doc(paths.user(me.uid)).get()).exists).toBe(false);
+    expect((await db.doc(paths.emailLinks(me.uid)).get()).exists).toBe(false);
+  });
+
+  it("refuses an address no one invited before telling whether another account has it", async () => {
+    const [me, other] = [waiting(), await person()];
+    const { deps } = setup({ signIns: { [other.email]: other.uid } });
+    expect(await refusal(requestLink(deps, me.uid, me.email, other.email, false))).toBe("notInvited");
+  });
+
+  it("refuses to confirm an address whose invite was declined meanwhile, and withdraws the link", async () => {
+    const me = waiting();
+    const work = `${unique("work")}@company.example`;
+    await invite(work);
+    const { deps, mails, tokenOf } = setup();
+    await requestLink(deps, me.uid, me.email, work, false);
+    await db.doc(paths.access(work)).set({ status: "declined", declinedBy: "admin", declinedAt: now }, { merge: true });
+
+    expect(await refusal(confirmLink(deps, me.uid, tokenOf(mails[0]!), false))).toBe("notInvited");
+    expect(await claim(work)).toBeUndefined();
+    expect((await db.doc(paths.user(me.uid)).get()).exists).toBe(false);
+    expect((await db.doc(paths.emailLinks(me.uid)).get()).get("pending")).toEqual([]);
+    expect(await gateUser(db, token(me))).toBe("unapproved");
+  });
+
+  it("withdraws a link that could not be mailed without creating a user document", async () => {
+    const me = waiting();
+    const work = `${unique("work")}@company.example`;
+    await invite(work);
+    const { deps } = setup({
+      mail: async () => {
+        throw new Error("smtp down");
+      },
+    });
+    expect(await refusal(requestLink(deps, me.uid, me.email, work, false))).toBe("error: smtp down");
+    expect((await db.doc(paths.user(me.uid)).get()).exists).toBe(false);
+    expect((await db.doc(paths.emailLinks(me.uid)).get()).get("pending")).toEqual([]);
+  });
+
+  it("lets an approved account link any address, as before", async () => {
+    const me = await person();
+    const { deps } = setup();
+    expect(await refusal(requestLink(deps, me.uid, me.email, `${unique("anyone")}@company.example`, true))).toBe("linked");
   });
 });
 

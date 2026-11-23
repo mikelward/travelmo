@@ -8,6 +8,7 @@ import {
   canRevoke,
   grandfatheredAccess,
   isApproved,
+  letsIn,
   needsGrandfathering,
   normalizeEmail,
   type AccessRecord,
@@ -83,6 +84,23 @@ describe("accessStatus", () => {
         linkedRecords: [{ email: "work@company.example", status: "approved" }],
       }),
     ).toBe("declined");
+  });
+});
+
+describe("letsIn", () => {
+  const invited: AccessRecord = { email: "work@example.com", invitedBy: "u1", invitedAt: now };
+  it("is an admin's address, or one an admin approved or someone invited", () => {
+    expect(letsIn("admin@example.com", undefined, config)).toBe(true);
+    expect(letsIn("work@example.com", invited, config)).toBe(true);
+    expect(letsIn("work@example.com", { email: "work@example.com", status: "approved" }, undefined)).toBe(true);
+  });
+  it("is not one that only asked, was declined, or has no record", () => {
+    expect(letsIn("work@example.com", undefined, config)).toBe(false);
+    expect(letsIn("work@example.com", { email: "work@example.com", status: "requested" }, config)).toBe(false);
+    expect(letsIn("work@example.com", { ...invited, status: "declined" }, config)).toBe(false);
+  });
+  it("reads a record only for its own address", () => {
+    expect(letsIn("other@example.com", invited, config)).toBe(false);
   });
 });
 

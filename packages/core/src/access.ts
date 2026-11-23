@@ -71,6 +71,14 @@ export type AccessInputs = {
 const lets = (record: AccessRecord | undefined): boolean =>
   !!record && record.status !== "declined" && (record.status === "approved" || !!record.invitedBy);
 
+// Whether an address, once confirmed as the account's, would let it in: an
+// admin's, or one whose record an admin approved or someone invited (and no
+// admin declined). What an account not approved yet may link (SPEC "Linked
+// email addresses"). A record speaks only for its own address.
+export function letsIn(email: string, record: AccessRecord | undefined, config: AccessConfig | undefined): boolean {
+  return isAdminEmail(email, config) || (record?.email === email && lets(record));
+}
+
 export function accessStatus({ email, hasProfile, record, config, linked = [], linkedRecords = [] }: AccessInputs): AccountAccess {
   if (isAdminEmail(email, config) || linked.some((address) => isAdminEmail(address, config))) return "approved";
   // A record speaks only for a verified address.

@@ -1,8 +1,9 @@
 import { paths, type Device, type PushSubscription, type ReminderNotification, type Trip } from "@travelmo/core";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import { approvedUid, gateUser, onlyApproved, settleAccess, type SettleDeps } from "./access";
+import { approvedUid, gateLinking, gateUser, onlyApproved, settleAccess, type SettleDeps } from "./access";
 import { calendarForToken, firestoreExportIo, issueExport } from "./calendarExport";
+import { confirmLink, removeLink, requestLink } from "./emails";
 import type { Mail } from "./mail";
 
 // Runs inside `firebase emulators:exec`, which sets FIRESTORE_EMULATOR_HOST.
@@ -58,6 +59,44 @@ function fakeDeps(overrides: Partial<SettleDeps> = {}, emails: Record<string, st
   };
   return { deps, logged, sent };
 }
+
+// The linking routes (SPEC "Linked email addresses") take an account not
+// approved yet, so it can link the address it was invited at.
+describe("gateLinking", () => {
+  it("takes an approved account, and one waiting, but not one declined or deleted", async () => {
+    const [approved, waiting, declined, deleted] = [person("approved"), person("waiting"), person("declined"), person("deleted")];
+    await db.doc(paths.user(approved.uid)).set({ email: approved.email });
+    await db.doc(paths.access(waiting.email)).set({ email: waiting.email, status: "requested", uid: waiting.uid, requestedAt: iso });
+    await db.doc(paths.access(declined.email)).set({ email: declined.email, status: "declined", declinedBy: adminUid, declinedAt: iso });
+    await db.doc(paths.deletedAccount(deleted.uid)).set({ uid: deleted.uid, requestedAt: iso });
+    expect(await gateLinking(db, approved)).toBe("ok");
+    expect(await gateLinking(db, waiting)).toBe("waiting");
+    expect(await gateLinking(db, person("never-asked"))).toBe("waiting");
+    expect(await gateLinking(db, declined)).toBe("declined");
+    expect(await gateLinking(db, deleted)).toBe("deleted");
+  });
+
+  it("lets a waiting account link an admin's address, which lets it in", async () => {
+    const me = person("waiting-admin");
+    const mails: Mail[] = [];
+    const deps = {
+      db,
+      mail: async (mail: Mail) => void mails.push(mail),
+      origin: "https://travelmo.example",
+      now: () => iso,
+      log: () => {},
+      signInOwner: async () => undefined,
+    };
+    expect(await gateLinking(db, me)).toBe("waiting");
+    await requestLink(deps, me.uid, me.email, adminEmail, false);
+    expect((await db.doc(paths.user(me.uid)).get()).exists).toBe(false);
+    const token = decodeURIComponent(/token=([^\s]+)/.exec(mails[0]!.text)![1]!);
+    expect(await confirmLink(deps, me.uid, token, false)).toEqual({ email: adminEmail });
+    expect(await gateUser(db, me)).toBe("ok");
+    // The claim is given back, so other tests may link the address.
+    await removeLink(deps, me.uid, adminEmail);
+  });
+});
 
 describe("gateUser", () => {
   it("lets in an admin listed by an address they linked, whatever their sign-in's record says", async () => {
