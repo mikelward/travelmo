@@ -65,11 +65,24 @@ export const ExtractedCancellation = z.object({
 });
 export type ExtractedCancellation = z.infer<typeof ExtractedCancellation>;
 
+// A loyalty program membership a booking email shows: a frequent flyer or
+// hotel rewards number, never the booking's own reference.
+export const ExtractedMembership = z.object({
+  program: z.string().min(1),
+  number: z.string().min(1),
+  // The member's name as the email gives it.
+  holder: z.string().min(1).optional(),
+  status: z.string().min(1).optional(),
+});
+export type ExtractedMembership = z.infer<typeof ExtractedMembership>;
+
 export const ExtractedBooking = z.object({
   isBooking: z.boolean(),
   segments: z.array(ExtractedSegment),
   // Bookings the email cancels; absent from older extractions.
   cancellations: z.array(ExtractedCancellation).optional(),
+  // Loyalty numbers the email shows; absent from older extractions.
+  memberships: z.array(ExtractedMembership).optional(),
 });
 export type ExtractedBooking = z.infer<typeof ExtractedBooking>;
 
@@ -411,6 +424,18 @@ export type ProfileEntry = z.infer<typeof ProfileEntry>;
 // users/{uid}/travelProfile/main. The parser writes the imported sections;
 // the owner alone sets who else may read it (`trustedEmails`, lowercased
 // verified emails, such as a spouse's), and nobody else writes anything.
+// A loyalty membership read from one of the owner's booking emails
+// (SPEC "Loyalty from emails"): kept beside what TripIt imported, so an
+// upload does not drop it, and removable by the owner.
+export const FoundLoyalty = ExtractedMembership.extend({
+  // The email it was last seen in: its id and subject, and when.
+  messageId: z.string().min(1),
+  label: z.string().optional(),
+  at: isoDateTime,
+});
+export type FoundLoyalty = z.infer<typeof FoundLoyalty>;
+export const maxFoundLoyalty = 50;
+
 export const TravelProfile = z.object({
   ownerUid: z.string().min(1),
   ownerEmail: z.string().optional(),
@@ -418,6 +443,16 @@ export const TravelProfile = z.object({
   travelers: z.array(ProfileEntry).default([]),
   loyalty: z.array(ProfileEntry).default([]),
   documents: z.array(ProfileEntry).default([]),
+  // An entry that does not parse is left out, not the whole profile.
+  foundLoyalty: z
+    .array(z.unknown())
+    .transform((entries) =>
+      entries.flatMap((e) => {
+        const parsed = FoundLoyalty.safeParse(e);
+        return parsed.success ? [parsed.data] : [];
+      }),
+    )
+    .optional(),
   importedAt: isoDateTime.optional(),
   updatedAt: isoDateTime.optional(),
 });

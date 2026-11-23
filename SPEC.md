@@ -69,7 +69,10 @@ viewer's zone. Trip bounds are calendar dates.
 - `users/{uid}/travelProfile/main` — `ownerUid, ownerEmail, trustedEmails[],
   travelers[], loyalty[], documents[], importedAt, updatedAt`: the traveler's
   own details from a TripIt export, each entry a `{title, fields[{label,
-  value}]}`. The parser writes the sections; the owner sets `trustedEmails`.
+  value}]}`, and `foundLoyalty[]` (`program, number, holder, status,
+  messageId, label, at`), loyalty numbers read from booking emails. The
+  parser writes the sections and adds to `foundLoyalty`; the owner sets
+  `trustedEmails` and may remove from `foundLoyalty`.
 - `users/{uid}/feeds/{feedId}` — `url, label, addedAt, lastFetchedAt,
   lastResult, lastError`: subscribed calendar feeds. The owner reads them;
   the parser alone writes them.
@@ -1309,6 +1312,25 @@ viewer's own programs ("Example Air" and "Example Air Miles"; words like
 "air", "hotels" and "rewards" count for nothing) shows that program's name,
 number and status under the provider, so the number is at hand at check-in;
 a fellow traveler's programs are theirs alone.
+
+#### Loyalty from emails
+
+The same model call that reads a booking email lists the loyalty numbers it
+shows (`memberships`: program, number, the member's name, status), never a
+booking reference or card number. Once the email is imported as a booking,
+the parser keeps those whose name could be the account's (a name shared
+with the Google profile's `displayName`; with either unknown, it could) in
+`foundLoyalty` on the travel profile, starting the profile if need be: a
+number seen again (ignoring spaces, dashes and case, in a program sharing a
+distinctive word) is refreshed rather than added, and the newest fifty are
+kept. A TripIt upload replaces its own sections and leaves these alone.
+Profile's table and a booking's loyalty line read both (`allLoyalty`): what
+TripIt imported, then what emails showed that it did not have by number,
+each noting the email it came from. "Found in your emails" on the owner's
+own Profile lists them with Remove, since the extraction is sometimes
+wrong. Nothing is logged but counts. Balances and status from loyalty
+statement emails (an Emerald Club eStatement, say) are not read: those are
+not bookings, and the pre-filter drops them.
 
 ### Calendar files
 

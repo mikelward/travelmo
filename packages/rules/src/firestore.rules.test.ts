@@ -445,6 +445,23 @@ describe("travel profiles", () => {
     await assertFails(setDoc(doc(as(stranger), paths.travelProfile(owner.uid)), { ownerUid: owner.uid, trustedEmails: [stranger.email] }));
     await assertFails(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { trustedEmails: Array.from({ length: 21 }, (_, i) => `p${i}@example.com`) }));
   });
+
+  it("lets the owner remove loyalty numbers found in emails, and nobody else touch them", async () => {
+    const found = { program: "Example Air Club", number: "EA123", messageId: "m1", at: "2026-11-01T00:00:00Z" };
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), paths.travelProfile(owner.uid)), { ownerUid: owner.uid, trustedEmails: [partner.email], foundLoyalty: [found, { ...found, number: "EA456" }] });
+    });
+    await assertSucceeds(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { foundLoyalty: [found], updatedAt: "2026-11-03T00:00:00Z" }));
+    await assertFails(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { foundLoyalty: "EA123" }));
+    await assertFails(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { foundLoyalty: Array.from({ length: 51 }, () => found) }));
+    await assertFails(updateDoc(doc(as(partner), paths.travelProfile(owner.uid)), { foundLoyalty: [] }));
+    // A profile an import started, with no sharing list yet.
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), paths.travelProfile(owner.uid)), { ownerUid: owner.uid, loyalty: [], foundLoyalty: [found] });
+    });
+    await assertSucceeds(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { foundLoyalty: [], updatedAt: "2026-11-03T00:00:00Z" }));
+    await assertFails(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { trustedEmails: "everyone" }));
+  });
 });
 
 describe("access", () => {

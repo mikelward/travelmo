@@ -90,6 +90,28 @@ describe("firestoreStore examples", () => {
   });
 });
 
+describe("firestoreStore loyalty from emails", () => {
+  it("starts the profile, then refreshes a number seen again, leaving TripIt's sections alone", async () => {
+    const uid = unique();
+    const seen = { program: "Example Air Club", number: "EA 123", messageId: "m1", label: "Your flight", at: at(0) };
+    await store.addFoundLoyalty(uid, [seen]);
+    const ref = db.doc(paths.travelProfile(uid));
+    expect((await ref.get()).data()).toMatchObject({ ownerUid: uid, trustedEmails: [], foundLoyalty: [seen] });
+    await ref.set({ loyalty: [{ title: "Imported", fields: [] }] }, { merge: true });
+    await store.addFoundLoyalty(uid, [{ ...seen, number: "EA123", messageId: "m2", status: "Gold" }]);
+    const data = (await ref.get()).data();
+    expect(data?.foundLoyalty).toEqual([{ ...seen, number: "EA123", messageId: "m2", status: "Gold" }]);
+    expect(data?.loyalty).toEqual([{ title: "Imported", fields: [] }]);
+  });
+
+  it("reads the name on the account", async () => {
+    const uid = unique();
+    expect(await store.ownerName(uid)).toBeUndefined();
+    await db.doc(paths.user(uid)).set({ displayName: "Jane Example" });
+    expect(await store.ownerName(uid)).toBe("Jane Example");
+  });
+});
+
 describe("firestoreStore.withUserLock", () => {
   it("lists a trip's segments inside the transaction, as duplicate detection needs", async () => {
     const uid = unique();

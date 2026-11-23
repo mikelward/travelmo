@@ -1,8 +1,8 @@
 "use client";
 
-import { TravelProfile, accessInvite, normalizeEmail, paths } from "@travelmo/core";
+import { TravelProfile, accessInvite, normalizeEmail, paths, type FoundLoyalty } from "@travelmo/core";
 import type { User } from "firebase/auth";
-import { collectionGroup, doc, onSnapshot, query, where, writeBatch, type Firestore } from "firebase/firestore";
+import { collectionGroup, doc, onSnapshot, query, runTransaction, where, writeBatch, type Firestore } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { firestore } from "./firebase";
 
@@ -78,4 +78,19 @@ export async function saveTrusted(
     if (!before.includes(email) && normalizeEmail(email)) batch.set(doc(db, paths.access(email)), accessInvite(email, user.uid, now), { merge: true });
   }
   await batch.commit();
+}
+
+// Removes one loyalty number found in the owner's emails, from the list as
+// stored now, so an import adding another meanwhile keeps it.
+export async function removeFoundLoyalty(uid: string, found: FoundLoyalty, db: Firestore = firestore()): Promise<void> {
+  const ref = doc(db, paths.travelProfile(uid));
+  await runTransaction(db, async (tx) => {
+    const stored: unknown = (await tx.get(ref)).data()?.foundLoyalty;
+    const current: unknown[] = Array.isArray(stored) ? stored : [];
+    const next = current.filter((f) => {
+      const entry = f as Partial<FoundLoyalty> | null;
+      return !(entry?.program === found.program && entry?.number === found.number);
+    });
+    tx.update(ref, { foundLoyalty: next, updatedAt: new Date().toISOString() });
+  });
 }

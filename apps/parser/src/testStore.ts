@@ -1,4 +1,4 @@
-import type { ParsedMessage, PendingCancellation, Segment, Trip } from "@travelmo/core";
+import { withFoundLoyalty, type FoundLoyalty, type ParsedMessage, type PendingCancellation, type Segment, type Trip } from "@travelmo/core";
 import { changeClaimable, claimable, reclaimable, retryable, type TripStore, type TripTx } from "./importer";
 import { addExample, emptyExamples, type Examples } from "./similarity";
 
@@ -11,6 +11,9 @@ export type Memory = TripStore & {
   examplesOf: Map<string, Examples>;
   // Keyed by "uid/messageId".
   pending: Map<string, PendingCancellation>;
+  // Loyalty found in emails, and the name on each account, by uid.
+  foundLoyalty: Map<string, FoundLoyalty[]>;
+  ownerNames: Map<string, string>;
 };
 
 export function memoryStore(): Memory {
@@ -19,6 +22,8 @@ export function memoryStore(): Memory {
   const parsed = new Map<string, ParsedMessage>();
   const examplesOf = new Map<string, Examples>();
   const pending = new Map<string, PendingCancellation>();
+  const foundLoyalty = new Map<string, FoundLoyalty[]>();
+  const ownerNames = new Map<string, string>();
   const locks = new Map<string, Promise<unknown>>();
   const generations = new Map<string, number>();
   let ids = 0;
@@ -67,6 +72,8 @@ export function memoryStore(): Memory {
     },
   };
   return {
+    foundLoyalty,
+    ownerNames,
     trips,
     segments,
     parsed,
@@ -140,6 +147,10 @@ export function memoryStore(): Memory {
       return run;
     },
     senderPatterns: async () => ({ allow: [], deny: [] }),
+    ownerName: async (uid) => ownerNames.get(uid),
+    addFoundLoyalty: async (uid, found) => {
+      foundLoyalty.set(uid, found.reduce(withFoundLoyalty, foundLoyalty.get(uid) ?? []));
+    },
     newId: () => `trip${++ids}`,
   };
 }

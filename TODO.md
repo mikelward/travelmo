@@ -354,10 +354,26 @@
 - [ ] Car suggestions: open each rental company's search at the arrival
       airport and dates in place of its home page, once each link is
       checked from a browser.
+- [x] Loyalty numbers from booking emails: the extraction lists them, the
+      owner's are kept beside TripIt's, shown in Profile's table and the
+      booking line, and removable.
+- [ ] Android: loyalty numbers found in emails on the Profile tab and the
+      booking line (`:core`'s `allLoyalty` is in; the app still needs to read
+      `foundLoyalty`), with Remove.
+- [ ] Loyalty balances and status from statement emails ("Emerald Club •
+      EmeraldClub@email.emeraldclub.com", "Account notification: we're
+      pleased to present your Emerald Club eStatement"): let loyalty senders
+      past the pre-filter and read balance and tier; costs a model call per
+      statement.
 
 ## Decisions needing review
 
 Guesses made on autopilot; change any of them freely.
+
+- Loyalty from emails: a number is kept when the name on it could be the
+  account's (shares a name with the Google profile's), or no name is given;
+  a fellow traveler's number on the same booking is left out. Kept only from
+  emails imported as bookings.
 
 - Car and ride suggestions: home is this trip's own round trip (or Profile's
   corrections), not the timeline of every trip, to save reads; rides at

@@ -41,4 +41,17 @@ class LoyaltyTest {
         loyaltyLine(air) shouldBe "Example Air Miles · EA123 · Gold"
         loyaltyLine(bare) shouldBe "Loyalty program 3"
     }
+
+    @Test
+    fun `lists what TripIt imported, then what emails showed that it did not have`() {
+        fun seen(program: String, number: String, status: String? = null) =
+            FoundLoyalty(program, number, status = status, messageId = "m1", label = "Your booking", at = "2026-11-01T00:00:00Z")
+        val imported = entry("Example Air Club", "Account Number" to "12345678")
+        val profile = TravelProfile("u", loyalty = listOf(imported), foundLoyalty = listOf(seen("Example Air Club", "12 345 678"), seen("Sample Hotels Rewards", "777", "Gold")))
+        val all = allLoyalty(profile)
+        all.size shouldBe 2
+        loyaltySummary(all[1]) shouldBe LoyaltySummary("Sample Hotels Rewards", "777", status = "Gold")
+        all[1].fields.last() shouldBe ProfileField("From email", "Your booking")
+        programsFor("Sample Hotels", all) shouldBe listOf(all[1])
+    }
 }

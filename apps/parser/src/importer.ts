@@ -49,6 +49,9 @@ import {
   type Trip,
   type TripItImport,
   untimedMatchDays,
+  couldBeOwner,
+  type ExtractedMembership,
+  type FoundLoyalty,
 } from "@travelmo/core";
 import { airportPlace } from "@travelmo/core/airportPlaces";
 import type { Extractor } from "./extract";
@@ -185,6 +188,11 @@ export type TripStore = {
   // decide to create a trip for the same dates.
   withUserLock<T>(uid: string, fn: (tx: TripTx) => Promise<T>): Promise<T>;
   senderPatterns(uid: string): Promise<SenderPatterns>;
+  // The name on the user's account (their Google profile's), if known.
+  ownerName(uid: string): Promise<string | undefined>;
+  // Adds loyalty memberships read from the user's booking emails to their
+  // travel profile (withFoundLoyalty), starting the profile if need be.
+  addFoundLoyalty(uid: string, found: readonly FoundLoyalty[]): Promise<void>;
   // Embeddings of emails the model has judged for this user (see similarity.ts).
   examples(uid: string): Promise<Examples>;
   saveExample(uid: string, label: ExampleLabel, example: Example): Promise<void>;
@@ -449,8 +457,29 @@ export async function importMessage(
     }),
   );
   await learn("bookings");
+  if (isEmail && booking.memberships?.length) await keepMemberships(uid, message, booking.memberships, timestamp, deps);
   log("imported", { uid, messageId: message.id, tripId, segments: segmentIds.length, duplicates });
   return "imported";
+}
+
+// Loyalty numbers a booking email showed, kept on the user's travel profile
+// (SPEC "Loyalty from emails"). Only the user's own: a fellow traveler's
+// number on the same booking is theirs. Nothing here fails the import; the
+// numbers never reach the logs, only counts.
+async function keepMemberships(uid: string, message: EmailMessage, memberships: readonly ExtractedMembership[], at: string, deps: ImportDeps): Promise<void> {
+  try {
+    const owner = await deps.store.ownerName(uid);
+    const mine = memberships.filter((m) => couldBeOwner(m.holder, owner));
+    if (mine.length) {
+      await deps.store.addFoundLoyalty(
+        uid,
+        mine.map((m) => ({ ...m, messageId: message.id, label: message.subject, at })),
+      );
+    }
+    deps.log("memberships", { uid, messageId: message.id, found: memberships.length, kept: mine.length });
+  } catch (error) {
+    deps.log("memberships_failed", { uid, messageId: message.id, reason: (error as Error).message });
+  }
 }
 
 const duplicateReason = (n: number) => `${n} already imported from elsewhere`;

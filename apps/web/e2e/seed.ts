@@ -146,6 +146,11 @@ export async function seedTravelProfile(uid: string, profile: Omit<TravelProfile
   await db.doc(paths.travelProfile(uid)).set({ ownerUid: uid, ...profile });
 }
 
+export async function readTravelProfile(uid: string): Promise<TravelProfile | undefined> {
+  const snap = await db.doc(paths.travelProfile(uid)).get();
+  return snap.exists ? (snap.data() as TravelProfile) : undefined;
+}
+
 // The user's own document, for settings the page writes.
 export async function readUser(uid: string): Promise<UserProfile | undefined> {
   const snap = await db.doc(paths.user(uid)).get();

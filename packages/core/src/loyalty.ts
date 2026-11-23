@@ -1,4 +1,4 @@
-import type { ProfileEntry } from "./schema";
+import { maxFoundLoyalty, type FoundLoyalty, type ProfileEntry, type TravelProfile } from "./schema";
 
 // A loyalty program at a glance. An imported program is a list of labeled
 // values in whatever order and wording its source used (travelProfile.ts
@@ -116,4 +116,57 @@ export function programsFor(provider: string | undefined, programs: readonly Pro
 export function loyaltyLine(entry: ProfileEntry): string {
   const s = loyaltySummary(entry);
   return [s.title, s.account, s.status].filter(Boolean).join(" · ");
+}
+
+// A number as written, for telling two sightings of one membership apart:
+// spaces, dashes and case do not count.
+const plainNumber = (n: string) => n.replace(/[\s-]/g, "").toUpperCase();
+// One program by its name as written (for "BA", which has no distinctive
+// word), else by a distinctive word in common.
+const sameProgram = (a: string, b: string) =>
+  a.trim().toLowerCase() === b.trim().toLowerCase() || [...nameWords(a)].some((w) => nameWords(b).has(w));
+const sameMembership = (a: Pick<FoundLoyalty, "program" | "number">, b: Pick<FoundLoyalty, "program" | "number">) =>
+  plainNumber(a.number) === plainNumber(b.number) && sameProgram(a.program, b.program);
+
+// The found list with one more sighting: one already there is refreshed
+// (moved to the end, with what the new email adds), the oldest dropped when
+// the list is full.
+export function withFoundLoyalty(found: readonly FoundLoyalty[], seen: FoundLoyalty): FoundLoyalty[] {
+  const before = found.find((f) => sameMembership(f, seen));
+  const holder = seen.holder ?? before?.holder;
+  const status = seen.status ?? before?.status;
+  const merged = before ? { ...before, ...seen, ...(holder ? { holder } : {}), ...(status ? { status } : {}) } : seen;
+  return [...found.filter((f) => f !== before), merged].slice(-maxFoundLoyalty);
+}
+
+// Whether a name on a membership could be the account's owner: they share
+// a name of two or more letters ("MR J SMITH" and "Jane Smith"). With either
+// unknown, it could.
+export function couldBeOwner(holder: string | undefined, ownerName: string | undefined): boolean {
+  if (!holder || !ownerName) return true;
+  const titles = new Set(["mr", "mrs", "ms", "miss", "mx", "dr"]);
+  const names = (s: string) => (s.toLowerCase().match(/\p{L}{2,}/gu) ?? []).filter((w) => !titles.has(w));
+  const owner = new Set(names(ownerName));
+  return names(holder).some((w) => owner.has(w));
+}
+
+// A found membership as the profile shows a program: labeled fields the
+// loyalty table reads, and the email it came from.
+export function foundLoyaltyEntry(found: FoundLoyalty): ProfileEntry {
+  return {
+    title: found.program,
+    fields: [
+      { label: "Account number", value: found.number },
+      ...(found.status ? [{ label: "Status", value: found.status }] : []),
+      ...(found.holder ? [{ label: "Name", value: found.holder }] : []),
+      { label: "From email", value: found.label ?? "A booking email" },
+    ],
+  };
+}
+
+// Every program on a profile: what TripIt imported, then what emails showed
+// that TripIt did not already have (by number).
+export function allLoyalty(profile: Pick<TravelProfile, "loyalty" | "foundLoyalty">): ProfileEntry[] {
+  const imported = new Set(profile.loyalty.map((e) => loyaltySummary(e).account).filter((a): a is string => !!a).map(plainNumber));
+  return [...profile.loyalty, ...(profile.foundLoyalty ?? []).filter((f) => !imported.has(plainNumber(f.number))).map(foundLoyaltyEntry)];
 }
