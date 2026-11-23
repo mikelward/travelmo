@@ -114,6 +114,12 @@ class LoyaltyTest {
     }
 
     @Test
+    fun `shows a number TripIt has written with padding zeros once`() {
+        val tripIt = entry("Emirates Skywards", "Account number" to "EK557710580")
+        allLoyalty(TravelProfile("u1", loyalty = listOf(tripIt), foundLoyalty = listOf(seen("Emirates Skywards", "EK00557710580")))).size shouldBe 1
+    }
+
+    @Test
     fun `shows a number TripIt has under a program name with nothing distinctive once`() {
         val qatar = entry("QATAR AIRWAYS", "Account number" to "820342520")
         allLoyalty(TravelProfile("u1", loyalty = listOf(qatar), foundLoyalty = listOf(seen("Privilege Club", "820342520")))).map { it.title } shouldBe listOf("QATAR AIRWAYS")

@@ -77,8 +77,9 @@ fun loyaltyLine(entry: ProfileEntry): String {
     return listOfNotNull(s.title, s.account, s.status, s.person).joinToString(" · ")
 }
 
-// A number as written: spaces, dashes and case do not count.
-private fun plainNumber(n: String) = n.replace(Regex("[\\s-]"), "").uppercase()
+// A number as written: spaces, dashes, case and zeros padding the digits
+// ("EK00557710580" is "EK557710580") do not count.
+private fun plainNumber(n: String) = n.replace(Regex("[\\s-]"), "").uppercase().replace(Regex("^([A-Z]*)0+(?=\\d)"), "$1")
 
 /** A found membership as the profile shows a program: labeled fields the table reads, and the email it came from. */
 fun foundLoyaltyEntry(found: FoundLoyalty): ProfileEntry = ProfileEntry(

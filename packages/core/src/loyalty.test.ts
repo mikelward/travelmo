@@ -242,6 +242,11 @@ describe("whose a membership is", () => {
     expect(withFoundLoyalty(withFoundLoyalty([], seen("Privilege Club", "820342520")), seen("Qatar Airways Privilege Club", "820342520"))[0]!.program).toBe("Qatar Airways Privilege Club");
   });
 
+  it("shows a number written with padding zeros once", () => {
+    const all = allLoyalty({ loyalty: [], foundLoyalty: withFoundLoyalty(withFoundLoyalty([], seen("Emirates Skywards", "EK557710580")), seen("Emirates Skywards", "EK00557710580", { status: "BLUE" })) });
+    expect(all.map(loyaltySummary)).toEqual([expect.objectContaining({ account: "EK00557710580", status: "BLUE" })]);
+  });
+
   it("shows a number TripIt has under a program name with nothing distinctive once", () => {
     const qatar: ProfileEntry = { title: "QATAR AIRWAYS", fields: [{ label: "Account number", value: "820342520" }] };
     const all = allLoyalty({ loyalty: [qatar], foundLoyalty: [seen("Privilege Club", "820342520")] });

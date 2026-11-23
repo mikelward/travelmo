@@ -126,8 +126,13 @@ export function loyaltyLine(entry: ProfileEntry): string {
 }
 
 // A number as written, for telling two sightings of one membership apart:
-// spaces, dashes and case do not count.
-const plainNumber = (n: string) => n.replace(/[\s-]/g, "").toUpperCase();
+// spaces, dashes, case and zeros padding the digits ("EK00557710580" is
+// "EK557710580") do not count.
+const plainNumber = (n: string) =>
+  n
+    .replace(/[\s-]/g, "")
+    .toUpperCase()
+    .replace(/^([A-Z]*)0+(?=\d)/, "$1");
 // One program by its name as written (for "BA", which has no distinctive
 // word), else by a distinctive word in common. A name with no distinctive
 // word ("Privilege Club") could be any program's.
