@@ -284,9 +284,25 @@
 - [ ] Maybe later: opt-in Android crash reports (Firebase Crashlytics),
       as in the sibling apps, behind a Settings switch that is off by
       default. The privacy policy already promises the opt-in.
-- [ ] Live flight updates: gate changes, delays and the baggage carousel
-      on arrival, on the flight's card and as a notification. Needs a
-      flight-status data source (and its cost) chosen first.
+- [ ] Live flight updates, first part: the departure and arrival gate and
+      terminal and the baggage carousel, on the flight's card and as a
+      notification when one is set or changes, from FlightAware AeroAPI
+      (Personal tier), polled by the parser every minute from two hours
+      before departure and from half an hour before landing to 45 minutes
+      after, every 15 minutes between, and when the trip page is open (at
+      most once a minute per flight, shared by everyone on it); about $1 a
+      flight, with a daily cap.
+- [ ] Live flight updates, second part: delays, cancellations and
+      diversions on the flight's card and as notifications, from the same
+      AeroAPI polling.
+- [ ] Approve sign-ups by hand: a new account waits until an admin
+      approves it (Firestore rules and the parser refuse its writes and
+      imports meanwhile; trips shared with it stay readable), the admin is
+      told of each request, and accounts made before this ships stay in.
+      AeroAPI's Personal license covers personal and household use only;
+      the next tier up (Standard) costs $100 a month.
+- [ ] Invites: an admin invites an email address, and an account signing
+      in with that verified address is approved without waiting.
 - [ ] Read PDF attachments (tickets, booking confirmations) when an email
       passes the filter: an SJ "Tickets for booking …" email was read as
       not a booking, most likely because the journey is only in the PDF.
