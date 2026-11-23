@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { HomePeriod } from "./home";
-import { rentalCompanies, rideCompaniesFor, rideNeedKey, rideNeeds } from "./rides";
+import { rentalCompanies, rideCompaniesFor, rideNeedKey, rideNeeds, withRideCompany, withoutRideCompany } from "./rides";
 import { RideCompany, UserProfile, type Place, type Segment } from "./schema";
 
 const lhr: Place = { name: "London Heathrow", code: "LHR", city: "London", country: "GB" };
@@ -102,5 +102,18 @@ describe("rideCompaniesFor", () => {
     const profile = UserProfile.parse({ email: "traveler@example.com", rideCompanies: [abc, { ...abc, url: "javascript:alert(1)" }] });
     expect(profile.rideCompanies).toEqual([abc]);
     expect(profile.email).toBe("traveler@example.com");
+  });
+});
+
+describe("withRideCompany", () => {
+  const cabs = { name: "Cabs", url: "https://cabs.example/", near: "home" as const };
+  it("adds a company once and takes it away", () => {
+    expect(withRideCompany([], cabs)).toEqual([cabs]);
+    expect(withRideCompany([cabs], cabs)).toEqual([cabs]);
+    expect(withoutRideCompany([cabs], { ...cabs })).toEqual([]);
+  });
+  it("refuses one past the limit", () => {
+    const full = Array.from({ length: 20 }, (_, i) => ({ ...cabs, name: `Cabs ${i}` }));
+    expect(() => withRideCompany(full, cabs)).toThrow("At most 20.");
   });
 });

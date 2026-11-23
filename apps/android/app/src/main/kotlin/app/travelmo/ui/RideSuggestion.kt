@@ -40,7 +40,7 @@ private fun rideQuestion(kind: RideNeedKind, flight: Segment): String {
 /**
  * Under a flight with no car or ride booked: links to book one, the
  * traveler's own companies among them, and Hide. Nothing shows for a ride at
- * home until the traveler adds a company near home (on the web's Settings).
+ * home until the traveler adds a company near home (in Settings).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

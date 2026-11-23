@@ -625,7 +625,8 @@ airport (`rideToDeparture`) covers the ride there, one from it
 them. Android's `:core` mirrors this in `Rides.kt`, and its trip page shows
 the same cards under the same flights, reading the user document's
 `rideCompanies`, `hiddenRideNeeds` and `homes` and hiding through the same
-transaction; companies are added and removed on the web's Settings only.
+transaction; companies are added and removed in Settings on either, each
+in a transaction over the stored list (`withRideCompany`, `withoutRideCompany`).
 Home is where this trip's round trip starts (`homeTimeline` of its own
 bookings), or the viewer's corrections on Profile when there are any; it is
 not worked out from every trip, which would read them all on each visit.

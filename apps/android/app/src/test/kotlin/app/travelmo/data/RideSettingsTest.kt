@@ -2,6 +2,7 @@ package app.travelmo.data
 
 import app.travelmo.core.HomeCorrection
 import app.travelmo.core.MAX_HIDDEN_RIDE_NEEDS
+import app.travelmo.core.MAX_RIDE_COMPANIES
 import app.travelmo.core.RideCompany
 import app.travelmo.core.RideNear
 import io.kotest.matchers.shouldBe
@@ -36,5 +37,25 @@ class RideSettingsTest {
             it.first() shouldBe "s2/car"
             it.last() shouldBe "new/car"
         }
+    }
+
+    @Test
+    fun `adds and removes a company leaving every other stored entry as it was`() {
+        // The web's schema takes a link with a space in its query; this one doesn't, but keeps it.
+        val fromWeb = mapOf("name" to "Web Cars", "url" to "https://cars.example/book?pickup=London Heathrow", "near" to "anywhere")
+        val cabs = RideCompany("Village Cabs", "https://cabs.example/", RideNear.HOME)
+        val cabsStored = mapOf("name" to "Village Cabs", "url" to "https://cabs.example/", "near" to "home")
+        val added = rideCompaniesAdding(listOf(fromWeb), cabs)
+        added shouldBe listOf(fromWeb, cabsStored)
+        rideCompaniesAdding(added!!, cabs) shouldBe null
+        rideCompaniesRemoving(added, cabs) shouldBe listOf(fromWeb)
+        rideCompaniesRemoving(listOf(fromWeb), cabs) shouldBe null
+    }
+
+    @Test
+    fun `counts entries it cannot read towards the limit`() {
+        val fromWeb = mapOf("name" to "Web Cars", "url" to "https://cars.example/book?pickup=London Heathrow", "near" to "anywhere")
+        val stored = listOf(fromWeb) + (1 until MAX_RIDE_COMPANIES).map { mapOf("name" to "Cabs $it", "url" to "https://cabs.example/", "near" to "home") }
+        org.junit.jupiter.api.assertThrows<IllegalStateException> { rideCompaniesAdding(stored, RideCompany("Island Cars", "https://cars.example/", RideNear.ANYWHERE)) }.message shouldBe "At most 20."
     }
 }
