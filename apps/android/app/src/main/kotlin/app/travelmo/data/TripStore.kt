@@ -26,6 +26,7 @@ import app.travelmo.core.MAX_HIDDEN_RIDE_NEEDS
 import app.travelmo.core.MAX_RIDE_COMPANIES
 import app.travelmo.core.RideCompany
 import app.travelmo.core.rideCompanyOrNull
+import app.travelmo.core.sameRideCompany
 import app.travelmo.core.queryAddresses
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentDraft
@@ -239,7 +240,7 @@ data class RideSettings(
 
 private fun storedCompany(entry: Any?): RideCompany? {
     val map = entry as? Map<*, *> ?: return null
-    return rideCompanyOrNull(map["name"] as? String, map["url"] as? String, map["near"] as? String)
+    return rideCompanyOrNull(map["name"] as? String, map["url"] as? String, map["near"] as? String, map["countries"] as? List<*>)
 }
 
 /**
@@ -249,15 +250,16 @@ private fun storedCompany(entry: Any?): RideCompany? {
  */
 internal fun rideCompaniesAdding(stored: List<*>, company: RideCompany): List<Any?>? {
     val known = stored.mapNotNull(::storedCompany)
-    if (company in known) return null
+    if (known.any { sameRideCompany(it, company) }) return null
     // Every stored entry counts towards the limit, as the rules count them.
     check(stored.size < MAX_RIDE_COMPANIES) { "At most $MAX_RIDE_COMPANIES." }
-    return stored + mapOf("name" to company.name, "url" to company.url, "near" to company.near.wire)
+    val entry = mapOf("name" to company.name, "url" to company.url, "near" to company.near.wire)
+    return stored + if (company.countries.isEmpty()) entry else entry + ("countries" to company.countries)
 }
 
 /** The stored `rideCompanies` without [company], every other entry as stored; null when it isn't there. */
 internal fun rideCompaniesRemoving(stored: List<*>, company: RideCompany): List<Any?>? {
-    val kept = stored.filterNot { storedCompany(it) == company }
+    val kept = stored.filterNot { entry -> storedCompany(entry)?.let { sameRideCompany(it, company) } == true }
     return if (kept.size == stored.size) null else kept
 }
 
@@ -265,7 +267,7 @@ internal fun rideCompaniesRemoving(stored: List<*>, company: RideCompany): List<
 internal fun rideSettingsOf(data: Map<String, Any?>?): RideSettings {
     val companies = (data?.get("rideCompanies") as? List<*>).orEmpty().mapNotNull { entry ->
         val map = entry as? Map<*, *> ?: return@mapNotNull null
-        rideCompanyOrNull(map["name"] as? String, map["url"] as? String, map["near"] as? String)
+        rideCompanyOrNull(map["name"] as? String, map["url"] as? String, map["near"] as? String, map["countries"] as? List<*>)
     }
     val hidden = (data?.get("hiddenRideNeeds") as? List<*>).orEmpty().filterIsInstance<String>()
     val homes = (data?.get("homes") as? List<*>).orEmpty().mapNotNull { entry ->

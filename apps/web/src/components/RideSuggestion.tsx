@@ -1,6 +1,6 @@
 "use client";
 
-import { rideCompaniesFor, type RideCompany, type RideNeedKind, type Segment } from "@travelmo/core";
+import { rideCompaniesFor, rideCountry, type RideCompany, type RideNeedKind, type Segment } from "@travelmo/core";
 
 // Where the suggestion is: the airport by its name, a city by its own.
 function question(kind: RideNeedKind, flight: Segment): string {
@@ -27,7 +27,7 @@ export function RideSuggestion({
   companies: readonly RideCompany[];
   onHide: () => void;
 }) {
-  const offers = rideCompaniesFor(kind, companies);
+  const offers = rideCompaniesFor(kind, companies, rideCountry(kind, flight));
   if (offers.length === 0) return null;
   return (
     <li className="py-3 pl-10" data-testid="ride-suggestion">

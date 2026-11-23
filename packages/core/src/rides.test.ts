@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { HomePeriod } from "./home";
-import { rentalCompanies, rideCompaniesFor, rideNeedKey, rideNeeds, withRideCompany, withoutRideCompany } from "./rides";
+import { rentalCompanies, rideCompaniesFor, rideNeedKey, rideNeeds, withRideCompany, withoutRideCompany, parseCountries, rideCountry } from "./rides";
 import { RideCompany, UserProfile, type Place, type Segment } from "./schema";
 
 const lhr: Place = { name: "London Heathrow", code: "LHR", city: "London", country: "GB" };
@@ -89,6 +89,31 @@ describe("rideCompaniesFor", () => {
     expect(rideCompaniesFor("car", [abc, own]).map((c) => c.name)).toEqual([...rentalCompanies.map((c) => c.name), "Example Rentals"]);
     expect(rideCompaniesFor("toAirport", [abc, own])).toEqual([{ name: "Example Cars", url: "https://cars.example.com/book" }]);
     expect(rideCompaniesFor("fromAirport", [])).toEqual([]);
+  });
+
+  it("offers a company limited to some countries only in them, and everywhere when the country is unknown", () => {
+    const greek = { ...own, name: "Cretan Cars", countries: ["GR"] };
+    expect(rideCompaniesFor("car", [greek, own], "GR").map((c) => c.name).slice(-2)).toEqual(["Cretan Cars", "Example Rentals"]);
+    expect(rideCompaniesFor("car", [greek, own], "SE").map((c) => c.name)).not.toContain("Cretan Cars");
+    expect(rideCompaniesFor("car", [greek], undefined).map((c) => c.name)).toContain("Cretan Cars");
+    const london = { ...abc, countries: ["GB"] };
+    expect(rideCompaniesFor("toAirport", [london], "gb")).toHaveLength(1);
+    expect(rideCompaniesFor("toAirport", [london], "US")).toEqual([]);
+  });
+
+  it("finds a ride's country at the airport it goes to or from", () => {
+    const flight = { origin: { name: "Heathrow", country: "GB" }, destination: { name: "Heraklion", country: "GR" } };
+    expect(rideCountry("toAirport", flight)).toBe("GB");
+    expect(rideCountry("fromAirport", flight)).toBe("GR");
+    expect(rideCountry("car", { origin: flight.origin, destination: { name: "Heraklion" } })).toBeUndefined();
+  });
+
+  it("reads countries typed by name or code, and names the first that is none", () => {
+    expect(parseCountries("UK, france ,GR, United Kingdom")).toEqual({ countries: ["GB", "FR", "GR"] });
+    expect(parseCountries(" ")).toEqual({ countries: [] });
+    expect(parseCountries("Sweden, Narnia")).toEqual({ unknown: "Narnia" });
+    expect(RideCompany.safeParse({ ...abc, countries: ["GB"] }).success).toBe(true);
+    expect(RideCompany.safeParse({ ...abc, countries: ["uk"] }).success).toBe(false);
   });
 
   it("takes only a named https link", () => {

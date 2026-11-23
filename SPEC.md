@@ -644,8 +644,12 @@ trip, then the viewer's own companies for "Cars wherever I land". A ride at
 home links only to the viewer's companies for "Rides to and from home",
 such as a local minicab firm, and shows nothing until they add one.
 Settings ("Car and ride companies") lists them: a name, an `https://`
-booking link and which suggestions it joins, at most twenty
-(`users/{uid}.rideCompanies`; an entry that does not parse is left out).
+booking link, which suggestions it joins, and optionally the countries it
+works in (typed by name or code, "UK, France", `parseCountries`), at most
+twenty (`users/{uid}.rideCompanies`; an entry that does not parse is left
+out). A company with countries is offered only where the ride or car is: the
+country of the airport a ride to it leaves for, else of the one the flight
+lands at (`rideCountry`); where the booking doesn't say, every company is.
 "Hide" removes one suggestion for good (`hiddenRideNeeds`, the newest two
 hundred `segmentId/kind` keys). Both are the viewer's own, so a sharee sees
 their own companies and hides their own suggestions.

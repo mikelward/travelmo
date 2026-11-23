@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.travelmo.auth.GoogleAccount
 import app.travelmo.auth.SignedIn
@@ -84,5 +85,24 @@ class RideCompaniesSettingTest {
         composeRule.onNodeWithText("Village Cabs").performClick()
         composeRule.waitForIdle()
         ShadowToast.getTextOfLatestToast() shouldBe composeRule.activity.getString(app.travelmo.R.string.link_failed)
+    }
+
+    @Test
+    fun `limits a company to the countries typed and names one that is not a country`() {
+        val store = show()
+        composeRule.onNodeWithText("Company name").performScrollTo().performTextInput("Cretan Cars")
+        composeRule.onNodeWithText("Booking page").performScrollTo().performTextInput("https://cretan.example/")
+        composeRule.onNodeWithText("Countries").performScrollTo().performTextInput("Greece, Narnia")
+        composeRule.onNodeWithText("Add").performScrollTo()
+        composeRule.onNodeWithText("Cars wherever I land").performClick()
+        composeRule.onNodeWithText("Add").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Narnia isn't a country.").performScrollTo()
+        store.rides.value.companies shouldBe listOf(cabs)
+        composeRule.onNodeWithText("Greece, Narnia").performTextReplacement("Greece")
+        composeRule.onNodeWithText("Add").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        store.rides.value.companies shouldBe listOf(cabs, RideCompany("Cretan Cars", "https://cretan.example/", RideNear.ANYWHERE, listOf("GR")))
+        composeRule.onNodeWithText("Cars wherever I land · Greece").performScrollTo()
     }
 }

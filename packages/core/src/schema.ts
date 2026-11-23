@@ -318,7 +318,8 @@ export const maxHomeCorrections = 50;
 // A company the traveler books cars or rides with, added in Settings: a
 // minicab firm near home, or a rental company they like. `near` says which
 // suggestions it joins: rides to and from the airport at home, or a car
-// wherever a flight lands.
+// wherever a flight lands. `countries`, when given, are the only ones it
+// is offered in (ISO codes); none means everywhere.
 export const RideCompany = z.object({
   name: z.string().trim().min(1).max(60),
   url: z
@@ -328,6 +329,7 @@ export const RideCompany = z.object({
     .url()
     .refine((u) => u.startsWith("https://"), "Use a link that starts with https://"),
   near: z.enum(["home", "anywhere"]),
+  countries: z.array(z.string().regex(/^[A-Z]{2}$/)).max(50).optional(),
 });
 export type RideCompany = z.infer<typeof RideCompany>;
 export const maxRideCompanies = 20;

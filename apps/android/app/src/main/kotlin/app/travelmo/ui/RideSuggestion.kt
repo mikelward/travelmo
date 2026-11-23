@@ -23,6 +23,7 @@ import app.travelmo.core.RideCompany
 import app.travelmo.core.RideNeedKind
 import app.travelmo.core.Segment
 import app.travelmo.core.rideCompaniesFor
+import app.travelmo.core.rideCountry
 
 /** The question a suggestion asks: the airport by its name, a city by its own, as on the web. */
 @Composable
@@ -45,7 +46,7 @@ private fun rideQuestion(kind: RideNeedKind, flight: Segment): String {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun RideSuggestion(kind: RideNeedKind, flight: Segment, companies: List<RideCompany>, onHide: () -> Unit, modifier: Modifier = Modifier) {
-    val offers = rideCompaniesFor(kind, companies)
+    val offers = rideCompaniesFor(kind, companies, rideCountry(kind, flight))
     if (offers.isEmpty()) return
     val context = LocalContext.current
     OutlinedCard(modifier = modifier.fillMaxWidth().padding(start = 40.dp, bottom = 12.dp)) {

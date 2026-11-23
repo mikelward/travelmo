@@ -69,9 +69,12 @@ import app.travelmo.auth.SignedIn
 import app.travelmo.core.EmailRowKind
 import app.travelmo.core.MAX_GMAIL_MAILBOXES
 import app.travelmo.core.MAX_RIDE_COMPANIES
+import app.travelmo.core.ParsedCountries
 import app.travelmo.core.RideNear
+import app.travelmo.core.countryName
 import app.travelmo.core.describeBackfill
 import app.travelmo.core.emailRows
+import app.travelmo.core.parseCountries
 import app.travelmo.core.pausedReason
 import app.travelmo.core.rideCompanyOrNull
 import app.travelmo.log.DebugLogging
@@ -202,12 +205,16 @@ private fun RideCompaniesSection(viewModel: TripsViewModel) {
     var name by rememberSaveable { mutableStateOf("") }
     var url by rememberSaveable { mutableStateOf("") }
     var near by rememberSaveable { mutableStateOf(RideNear.HOME) }
+    var countries by rememberSaveable { mutableStateOf("") }
+    // What is wrong with the company as typed, and the text it names, if any.
     var invalid by rememberSaveable { mutableStateOf<Int?>(null) }
+    var invalidText by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     LaunchedEffect(adding) {
         if (adding is Outcome.Done) {
             name = ""
             url = ""
+            countries = ""
             viewModel.outcomeSeen(ADD_COMPANY_TOKEN)
         }
     }
@@ -224,7 +231,11 @@ private fun RideCompaniesSection(viewModel: TripsViewModel) {
                     style = MaterialTheme.typography.bodyLarge.copy(textDecoration = TextDecoration.Underline),
                     modifier = Modifier.clickable(onClickLabel = stringResource(R.string.open_company, company.name)) { openLink(context, company.url, "a car or ride company") },
                 )
-                Text(stringResource(nearLabel(company.near)), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    (listOf(stringResource(nearLabel(company.near))) + company.countries.map(::countryName).joinToString(", ").ifEmpty { null }).filterNotNull().joinToString(" · "),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             IconButton(onClick = { viewModel.removeRideCompany(REMOVE_COMPANY_TOKEN, company) }, enabled = !busy) {
                 Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.remove_company, company.name))
@@ -249,6 +260,15 @@ private fun RideCompaniesSection(viewModel: TripsViewModel) {
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
     )
+    OutlinedTextField(
+        value = countries,
+        onValueChange = { countries = it; invalid = null },
+        label = { Text(stringResource(R.string.company_countries)) },
+        placeholder = { Text(stringResource(R.string.company_countries_hint)) },
+        singleLine = true,
+        enabled = !busy,
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+    )
     Column(modifier = Modifier.selectableGroup().padding(top = 4.dp)) {
         for (where in RideNear.entries) {
             Row(
@@ -262,18 +282,21 @@ private fun RideCompaniesSection(viewModel: TripsViewModel) {
     }
     Button(
         onClick = {
-            val company = rideCompanyOrNull(name, url, near.wire)
+            val where = parseCountries(countries)
+            val company = (where as? ParsedCountries.Countries)?.let { rideCompanyOrNull(name, url, near.wire, it.codes) }
             invalid = when {
                 name.isBlank() -> R.string.enter_a_name
+                where is ParsedCountries.Unknown -> R.string.not_a_country
                 company == null -> R.string.use_https_link
                 else -> null
             }
+            invalidText = (where as? ParsedCountries.Unknown)?.text
             if (company != null) viewModel.addRideCompany(ADD_COMPANY_TOKEN, company)
         },
         enabled = !busy && name.isNotBlank() && url.isNotBlank() && companies.size < MAX_RIDE_COMPANIES,
         modifier = Modifier.padding(top = 4.dp),
     ) { Text(stringResource(R.string.add)) }
-    invalid?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+    invalid?.let { Text(invalidText?.let { text -> stringResource(it, text) } ?: stringResource(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
     for (outcome in listOf(adding, removing)) {
         (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
     }

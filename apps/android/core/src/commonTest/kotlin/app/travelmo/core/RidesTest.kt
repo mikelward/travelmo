@@ -109,7 +109,40 @@ class RidesTest {
         withRideCompany(emptyList(), cabs) shouldBe listOf(cabs)
         withRideCompany(listOf(cabs), cabs) shouldBe listOf(cabs)
         withoutRideCompany(listOf(cabs), cabs.copy()) shouldBe emptyList()
+        // Countries in another order are the same company.
+        val both = cabs.copy(countries = listOf("GB", "FR"))
+        withRideCompany(listOf(both), cabs.copy(countries = listOf("FR", "GB"))) shouldBe listOf(both)
+        withoutRideCompany(listOf(both), cabs.copy(countries = listOf("FR", "GB"))) shouldBe emptyList()
         val full = (0 until 20).map { cabs.copy(name = "Cabs $it") }
         kotlin.test.assertFailsWith<IllegalStateException> { withRideCompany(full, cabs) }.message shouldBe "At most 20."
+    }
+
+    @Test
+    fun `offers a company limited to some countries only in them and everywhere when the country is unknown`() {
+        val own = RideCompany("Example Rentals", "https://rentals.example.com/", RideNear.ANYWHERE)
+        val greek = own.copy(name = "Cretan Cars", countries = listOf("GR"))
+        rideCompaniesFor(RideNeedKind.CAR, listOf(greek, own), "GR").map { it.name }.takeLast(2) shouldBe listOf("Cretan Cars", "Example Rentals")
+        rideCompaniesFor(RideNeedKind.CAR, listOf(greek, own), "SE").map { it.name } shouldNotContain "Cretan Cars"
+        rideCompaniesFor(RideNeedKind.CAR, listOf(greek), null).map { it.name } shouldContain "Cretan Cars"
+        val london = RideCompany("Example Cars", "https://cars.example.com/", RideNear.HOME, listOf("GB"))
+        rideCompaniesFor(RideNeedKind.TO_AIRPORT, listOf(london), "gb").size shouldBe 1
+        rideCompaniesFor(RideNeedKind.TO_AIRPORT, listOf(london), "US") shouldBe emptyList()
+    }
+
+    @Test
+    fun `finds a ride's country at the airport it goes to or from`() {
+        val flight = Segment("f", "t", SegmentType.FLIGHT, "Out", "2026-04-01T09:00:00+01:00", origin = Place("Heathrow", country = "GB"), destination = Place("Heraklion", country = "GR"))
+        rideCountry(RideNeedKind.TO_AIRPORT, flight) shouldBe "GB"
+        rideCountry(RideNeedKind.FROM_AIRPORT, flight) shouldBe "GR"
+        rideCountry(RideNeedKind.CAR, flight.copy(destination = Place("Heraklion"))).shouldBeNull()
+    }
+
+    @Test
+    fun `reads countries typed by name or code and names the first that is none`() {
+        parseCountries("UK, france ,GR, United Kingdom") shouldBe ParsedCountries.Countries(listOf("GB", "FR", "GR"))
+        parseCountries(" ") shouldBe ParsedCountries.Countries(emptyList())
+        parseCountries("Sweden, Narnia") shouldBe ParsedCountries.Unknown("Narnia")
+        rideCompanyOrNull("Example Cars", "https://cars.example.com/", "home", listOf("GB"))?.countries shouldBe listOf("GB")
+        rideCompanyOrNull("Example Cars", "https://cars.example.com/", "home", listOf("uk")).shouldBeNull()
     }
 }
