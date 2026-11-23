@@ -1314,26 +1314,40 @@ groups a plain-number balance), with the full entries folded below. On a
 trip page, a booking whose provider shares a distinctive word with one of the
 viewer's own programs ("Example Air" and "Example Air Miles"; words like
 "air", "hotels" and "rewards" count for nothing) shows that program's name,
-number and status under the provider, so the number is at hand at check-in;
-a fellow traveler's programs are theirs alone.
+number and status under the provider, one program a line, so the number is
+at hand at check-in; a number that is someone else's (below) says whose.
+A fellow traveler's own travel profile stays theirs alone.
 
 #### Loyalty from emails
 
 The same model call that reads a booking email lists the loyalty numbers it
 shows (`memberships`: program, number, the member's name, status), never a
 booking reference or card number. Once the email is imported as a booking,
-the parser keeps those whose name could be the account's (a name shared
-with the Google profile's `displayName`; with either unknown, it could) in
-`foundLoyalty` on the travel profile, starting the profile if need be: a
-number seen again (ignoring spaces, dashes and case, in a program sharing a
-distinctive word) is refreshed rather than added, and the newest fifty are
-kept. A TripIt upload replaces its own sections and leaves these alone.
+the parser keeps them in `foundLoyalty` on the travel profile, starting the
+profile if need be. One whose name could not be the account's (it shares no
+name with the Google profile's `displayName`) is someone the owner books
+for, a partner or a child: it is kept as theirs (`person`, the name as a
+person is called: "MR ALEX SAMPLE" and "SAMPLE/ALEX MR" become "Alex
+Sample"). A number that is a balance read as one ("9,600 Points": a comma,
+or points, miles, credits or nights) is never kept, and one already stored
+is left out when read. A number seen again (ignoring spaces, dashes and
+case, in a program sharing a distinctive word, or one whose name has none,
+such as "Privilege Club") is refreshed rather than added, keeping whose it
+was first seen to be, and the newest fifty are kept. A TripIt upload replaces its own sections and leaves these alone.
 Profile's table and a booking's loyalty line read both (`allLoyalty`): what
 TripIt imported, then what emails showed that it did not have by number,
 each noting the email it came from. "Found in your emails" on the owner's
 own Profile lists them with Remove, since the extraction is sometimes
 wrong; the Android Profile tab and booking rows show them the same way,
 with the same Remove. Nothing is logged but counts.
+
+The loyalty table is grouped by person: the owner's ("You") first, then
+each other person's under their name, the headings shown once any number is
+someone else's. On the owner's own Profile each row's ⋮ asks "Whose is …?":
+Mine, a person already named, or someone else by name. The answer goes in
+`loyaltyPeople` on the travel profile (program, number, and the person or
+nobody for the owner; the newest hundred, owner-writable only), which wins
+over what the email said and covers TripIt's programs too.
 
 Numbers are kept only from an email that books travel (a flight, train,
 bus, ferry, stay or car): a ticket or an appointment that shows a member

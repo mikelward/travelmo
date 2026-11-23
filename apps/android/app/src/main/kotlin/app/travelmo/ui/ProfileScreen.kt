@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -43,6 +44,13 @@ import app.travelmo.R
 import app.travelmo.core.FoundLoyalty
 import app.travelmo.core.ProfileEntry
 import app.travelmo.core.allLoyalty
+import app.travelmo.core.loyaltyByPerson
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import app.travelmo.core.TravelProfile
 import app.travelmo.core.loyaltySummary
 
@@ -65,6 +73,23 @@ fun ProfileScreen(viewModel: TripsViewModel, bottomBar: @Composable () -> Unit) 
     val removals = outcomes.filterKeys { it.startsWith(FOUND_PREFIX) }
     val removalError = removals.values.filterIsInstance<Outcome.Failed>().lastOrNull()?.message
     LaunchedEffect(removals) { for ((token, outcome) in removals) if (outcome is Outcome.Done) viewModel.outcomeSeen(token) }
+    // Likewise saying whose a number is.
+    val whose = outcomes.filterKeys { it.startsWith(PERSON_PREFIX) }
+    val whoseError = whose.values.filterIsInstance<Outcome.Failed>().lastOrNull()?.message
+    LaunchedEffect(whose) { for ((token, outcome) in whose) if (outcome is Outcome.Done) viewModel.outcomeSeen(token) }
+    var editing by rememberSaveable { mutableStateOf<List<String>?>(null) }
+    editing?.let { (program, number) ->
+        PersonDialog(
+            program = program,
+            number = number,
+            people = profile?.let { p -> loyaltyByPerson(allLoyalty(p)).mapNotNull { it.person } }.orEmpty(),
+            onPick = { person ->
+                whose.keys.forEach(viewModel::outcomeSeen)
+                viewModel.setLoyaltyPerson("$PERSON_PREFIX$program/$number", program, number, person)
+            },
+            onDismiss = { editing = null },
+        )
+    }
     Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.profile)) }, actions = { AppMenu() }) }, bottomBar = bottomBar) { padding ->
         val list = rememberLazyListState()
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).scrollEdgeCue(list, scrollCueColors()), state = list, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
@@ -83,6 +108,8 @@ fun ProfileScreen(viewModel: TripsViewModel, bottomBar: @Composable () -> Unit) 
                         viewModel.removeFoundLoyalty("$FOUND_PREFIX${found.program}/${found.number}", found)
                     },
                     removalError = removalError,
+                    onWhose = { program, number -> editing = listOf(program, number) },
+                    whoseError = whoseError,
                 )
             }
             item(key = "shared-with") { SectionTitle(stringResource(R.string.shared_with)) }
@@ -112,13 +139,43 @@ fun ProfileScreen(viewModel: TripsViewModel, bottomBar: @Composable () -> Unit) 
     }
 }
 
-/** [onRemoveFound] is set on the viewer's own profile, where what emails showed can be removed. */
-private fun LazyListScope.profileSections(profile: TravelProfile, prefix: String, onRemoveFound: ((FoundLoyalty) -> Unit)? = null, removalError: String? = null) {
+/**
+ * [onRemoveFound] and [onWhose] are set on the viewer's own profile, where
+ * what emails showed can be removed and each number said to be someone's.
+ */
+private fun LazyListScope.profileSections(
+    profile: TravelProfile,
+    prefix: String,
+    onRemoveFound: ((FoundLoyalty) -> Unit)? = null,
+    removalError: String? = null,
+    onWhose: ((program: String, number: String) -> Unit)? = null,
+    whoseError: String? = null,
+) {
     entries(stringResource = R.string.documents, entries = profile.documents, prefix = "$prefix-doc")
     val loyalty = allLoyalty(profile)
     if (loyalty.isNotEmpty()) {
         item(key = "$prefix-loyalty-title") { SectionTitle(stringResource(R.string.loyalty_programs)) }
-        item(key = "$prefix-loyalty-table") { LoyaltyTable(loyalty) }
+        // The owner's first, then each other person's, named whenever any is someone else's.
+        val groups = loyaltyByPerson(loyalty)
+        for (group in groups) {
+            item(key = "$prefix-loyalty-table-${group.person.orEmpty()}") {
+                Column {
+                    if (groups.size > 1 || group.person != null) {
+                        val name = group.person ?: stringResource(if (onWhose != null) R.string.loyalty_you else R.string.loyalty_theirs)
+                        Text(
+                            name,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp).semantics { heading() },
+                        )
+                    }
+                    LoyaltyTable(group.entries, onWhose)
+                }
+            }
+        }
+        whoseError?.let { message ->
+            item(key = "$prefix-whose-error") { Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+        }
     }
     if (onRemoveFound != null && profile.foundLoyalty.isNotEmpty()) {
         item(key = "$prefix-found-title") { SectionTitle(stringResource(R.string.found_in_emails)) }
@@ -162,6 +219,51 @@ private fun FoundRow(found: FoundLoyalty, onRemove: () -> Unit) {
 
 private const val SHARE_TOKEN = "profile/share"
 private const val FOUND_PREFIX = "profile/found/"
+private const val PERSON_PREFIX = "profile/person/"
+
+/**
+ * Who a membership belongs to: the owner, someone already named, or, as a
+ * second step, someone new by name.
+ */
+@Composable
+private fun PersonDialog(program: String, number: String, people: List<String>, onPick: (String?) -> Unit, onDismiss: () -> Unit) {
+    var naming by rememberSaveable { mutableStateOf(false) }
+    var name by rememberSaveable { mutableStateOf("") }
+    val pick = { person: String? ->
+        onPick(person)
+        onDismiss()
+    }
+    AppAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.whose_is, program, number)) },
+        text = {
+            if (naming) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it.take(80) },
+                    label = { Text(stringResource(R.string.someone_else)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                Column {
+                    for ((label, person) in listOf(stringResource(R.string.loyalty_mine) to null) + people.map { it to it }) {
+                        TextButton(onClick = { pick(person) }, modifier = Modifier.fillMaxWidth()) {
+                            Text(label, modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                    TextButton(onClick = { naming = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.someone_else_more), modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (naming) TextButton(onClick = { pick(name.trim()) }, enabled = name.isNotBlank()) { Text(stringResource(R.string.save)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
+}
 
 /**
  * Who the profile is shared with, as the web's page has it: each address
@@ -240,9 +342,9 @@ private fun FoldingEntry(entry: ProfileEntry) {
     }
 }
 
-/** Every program at a glance: the number, the balance and the status. */
+/** Every program at a glance: the number, the balance and the status, and with [onWhose], a way to say whose it is. */
 @Composable
-private fun LoyaltyTable(entries: List<ProfileEntry>) {
+private fun LoyaltyTable(entries: List<ProfileEntry>, onWhose: ((program: String, number: String) -> Unit)? = null) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.padding(vertical = 4.dp)) {
@@ -250,11 +352,12 @@ private fun LoyaltyTable(entries: List<ProfileEntry>) {
             Text(stringResource(R.string.col_account), style = MaterialTheme.typography.labelLarge, color = muted, modifier = Modifier.weight(1f))
             Text(stringResource(R.string.col_balance), style = MaterialTheme.typography.labelLarge, color = muted, textAlign = TextAlign.End, modifier = Modifier.weight(0.8f))
             Text(stringResource(R.string.col_status), style = MaterialTheme.typography.labelLarge, color = muted, modifier = Modifier.weight(0.9f).padding(start = 8.dp))
+            if (onWhose != null) Spacer(Modifier.width(40.dp))
         }
         for (entry in entries) {
             val s = loyaltySummary(entry)
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Row(modifier = Modifier.padding(vertical = 6.dp)) {
+            Row(modifier = Modifier.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(s.title, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1.4f))
                 Text(s.account ?: "", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                 Text(s.balance ?: "", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.End, modifier = Modifier.weight(0.8f))
@@ -263,6 +366,16 @@ private fun LoyaltyTable(entries: List<ProfileEntry>) {
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(0.9f).padding(start = 8.dp),
                 )
+                if (onWhose != null) {
+                    val account = s.account
+                    if (account != null) {
+                        IconButton(onClick = { onWhose(s.title, account) }, modifier = Modifier.size(40.dp)) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.whose_is, s.title, account))
+                        }
+                    } else {
+                        Spacer(Modifier.size(40.dp))
+                    }
+                }
             }
         }
     }

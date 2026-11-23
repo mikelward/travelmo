@@ -50,6 +50,8 @@ import {
   type TripItImport,
   untimedMatchDays,
   couldBeOwner,
+  isMembershipNumber,
+  personName,
   type ExtractedMembership,
   type FoundLoyalty,
 } from "@travelmo/core";
@@ -499,14 +501,17 @@ async function keepMemberships(
 ): Promise<void> {
   try {
     const owner = await deps.store.ownerName(uid);
-    const mine = memberships.filter((m) => couldBeOwner(m.holder, owner));
-    if (mine.length) {
+    // A balance read as a number is no membership. One whose name is not
+    // the owner's is someone they book for: kept as theirs (`person`).
+    const kept = memberships.filter((m) => isMembershipNumber(m.number));
+    if (kept.length) {
       await deps.store.addFoundLoyalty(
         uid,
         // A balance and a status are as of when the email was sent, so an
         // older one never replaces a newer (withFoundLoyalty).
-        mine.map((m) => ({
+        kept.map((m) => ({
           ...m,
+          ...personOf(m.holder, owner),
           messageId: message.id,
           label: message.subject,
           at,
@@ -515,10 +520,16 @@ async function keepMemberships(
         })),
       );
     }
-    deps.log("memberships", { uid, messageId: message.id, found: memberships.length, kept: mine.length });
+    deps.log("memberships", { uid, messageId: message.id, found: memberships.length, kept: kept.length });
   } catch (error) {
     deps.log("memberships_failed", { uid, messageId: message.id, reason: (error as Error).message });
   }
+}
+
+// Whose a membership is, when the email names someone other than the owner.
+function personOf(holder: string | undefined, owner: string | undefined): { person?: string } {
+  const person = holder && !couldBeOwner(holder, owner) ? personName(holder) : undefined;
+  return person ? { person } : {};
 }
 
 // What a membership number is kept from: an email booking one of these.

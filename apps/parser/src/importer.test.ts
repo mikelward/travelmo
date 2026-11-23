@@ -138,14 +138,15 @@ describe("importMessage", () => {
     expect(shop.foundLoyalty.get("u1")).toBeUndefined();
   });
 
-  it("keeps the owner's loyalty numbers from a booking email, not a fellow traveler's", async () => {
+  it("keeps the loyalty numbers from a booking email, a fellow traveler's as theirs, and no balance read as one", async () => {
     const store = memoryStore();
     store.ownerNames.set("u1", "Jane Example");
     const withNumbers: ExtractedBooking = {
       ...flight,
       memberships: [
         { program: "Example Air Club", number: "EA 123 456", holder: "MS J EXAMPLE", status: "Silver" },
-        { program: "Example Air Club", number: "EA 999 000", holder: "Alex Sample" },
+        { program: "Example Air Club", number: "EA 999 000", holder: "MR ALEX SAMPLE" },
+        { program: "Example Air Club", number: "9,600 Points" },
       ],
     };
     const logged: unknown[] = [];
@@ -153,9 +154,10 @@ describe("importMessage", () => {
     expect(outcome).toBe("imported");
     expect(store.foundLoyalty.get("u1")).toEqual([
       { program: "Example Air Club", number: "EA 123 456", holder: "MS J EXAMPLE", status: "Silver", statusAt: "2026-11-01T10:00:00.000Z", messageId: "m1", label: "Your flight to Dublin", at: expect.any(String) },
+      { program: "Example Air Club", number: "EA 999 000", holder: "MR ALEX SAMPLE", person: "Alex Sample", messageId: "m1", label: "Your flight to Dublin", at: expect.any(String) },
     ]);
     // Counts only: the numbers never reach the logs.
-    expect(logged).toContainEqual({ event: "memberships", uid: "u1", messageId: "m1", found: 2, kept: 1 });
+    expect(logged).toContainEqual({ event: "memberships", uid: "u1", messageId: "m1", found: 3, kept: 2 });
     expect(JSON.stringify(logged)).not.toContain("EA 123 456");
   });
 

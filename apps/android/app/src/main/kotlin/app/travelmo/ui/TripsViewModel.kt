@@ -328,6 +328,18 @@ class TripsViewModel(
         }
     }
 
+    fun setLoyaltyPerson(token: String, program: String, number: String, person: String?) = run(token) {
+        try {
+            store.setLoyaltyPerson(uid, program, number, person)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Logged by kind only: the number and the name are the user's.
+            TravelmoLog.error(e, "Saving whose a loyalty number is failed")
+            throw e
+        }
+    }
+
     /**
      * This phone's messaging token is asked for once per view model, and a
      * registration remembered under an older token is moved to it (a refresh

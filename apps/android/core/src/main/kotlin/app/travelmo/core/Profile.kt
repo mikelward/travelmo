@@ -20,6 +20,8 @@ data class TravelProfile(
     val foundLoyalty: List<FoundLoyalty> = emptyList(),
     /** When TripIt's sections were last uploaded, for telling a newer statement's balance from them. */
     val importedAt: String? = null,
+    /** Whom the owner says each membership belongs to, over what the email said ([allLoyalty]). */
+    val loyaltyPeople: List<LoyaltyPerson> = emptyList(),
 ) {
     val hasDetails: Boolean get() = documents.isNotEmpty() || loyalty.isNotEmpty() || foundLoyalty.isNotEmpty() || travelers.isNotEmpty()
 }
@@ -40,7 +42,21 @@ data class FoundLoyalty(
     val balanceLabel: String? = null,
     /** When the status was as of. */
     val statusAt: String? = null,
+    /** Whose it is, when the email named someone other than the owner. */
+    val person: String? = null,
 )
+
+/** Whom the owner says a membership belongs to: a name, or null for themself. */
+data class LoyaltyPerson(val program: String, val number: String, val person: String? = null)
+
+/** How many words on whose a membership is a profile keeps, as the rules allow. */
+const val MAX_LOYALTY_PEOPLE = 100
+
+private val balanceWords = Regex("""\b(points?|pts|miles?|credits?|nights?)\b""", RegexOption.IGNORE_CASE)
+
+/** Whether a membership number could be one: it has a digit, and is not a balance read as one ("9,600 Points"). */
+fun isMembershipNumber(number: String): Boolean =
+    number.any { it.isDigit() } && !number.contains(',') && !balanceWords.containsMatchIn(number)
 
 /** How many people a profile may be shared with, as the rules allow. */
 const val MAX_TRUSTED = 20

@@ -370,9 +370,10 @@ Guesses made on autopilot; change any of them freely.
   "Regroup trips" does, so a booking moved by hand during the import may
   be filed again by the grouping rules.
 
-- Loyalty from emails: a number is kept when the name on it could be the
-  account's (shares a name with the Google profile's), or no name is given;
-  a fellow traveler's number on the same booking is left out. Kept only from
+- Loyalty from emails: a number whose name could not be the account's
+  (shares no name with the Google profile's) is kept as that person's, as
+  the maintainer asked, and shown on bookings too; whose a number is stays
+  as first seen unless the owner says otherwise. Kept only from
   emails that book travel, and from travel programs' statements, which pass
   the pre-filter only from the travel domains listed in `prefilter.ts` or a
   sender the user always imports; statements over 60 days old are skipped.

@@ -2,6 +2,8 @@ package app.travelmo.data
 
 import app.travelmo.core.FlightStatus
 import app.travelmo.core.FoundLoyalty
+import app.travelmo.core.LoyaltyPerson
+import app.travelmo.core.isMembershipNumber
 import app.travelmo.core.Place
 import app.travelmo.core.PlaceDraft
 import app.travelmo.core.ProfileEntry
@@ -186,16 +188,17 @@ fun profileFromDocument(data: Map<String, Any?>): TravelProfile? {
         documents = data.entries("documents"),
         foundLoyalty = foundLoyaltyOf(data["foundLoyalty"]),
         importedAt = data.text("importedAt"),
+        loyaltyPeople = loyaltyPeopleOf(data["loyaltyPeople"]),
     )
 }
 
-/** Loyalty numbers read from booking emails; an entry missing its program, number, email or time is left out, as on the web. */
+/** Loyalty numbers read from booking emails; an entry missing its program, number, email or time, or whose number is a balance, is left out, as on the web. */
 internal fun foundLoyaltyOf(value: Any?): List<FoundLoyalty> = (value as? List<*>).orEmpty().mapNotNull { item ->
     @Suppress("UNCHECKED_CAST")
     val map = item as? Map<String, Any?> ?: return@mapNotNull null
     FoundLoyalty(
         program = map.text("program") ?: return@mapNotNull null,
-        number = map.text("number") ?: return@mapNotNull null,
+        number = map.text("number")?.takeIf(::isMembershipNumber) ?: return@mapNotNull null,
         holder = map.text("holder"),
         status = map.text("status"),
         messageId = map.text("messageId") ?: return@mapNotNull null,
@@ -205,5 +208,16 @@ internal fun foundLoyaltyOf(value: Any?): List<FoundLoyalty> = (value as? List<*
         balanceAt = map.text("balanceAt"),
         balanceLabel = map.text("balanceLabel"),
         statusAt = map.text("statusAt"),
+        person = map.text("person"),
+    )
+}
+
+/** Whose each membership is, as the owner said; an entry missing its program or number is left out. */
+internal fun loyaltyPeopleOf(value: Any?): List<LoyaltyPerson> = (value as? List<*>).orEmpty().mapNotNull { item ->
+    val map = item as? Map<*, *> ?: return@mapNotNull null
+    LoyaltyPerson(
+        program = (map["program"] as? String)?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null,
+        number = (map["number"] as? String)?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null,
+        person = (map["person"] as? String)?.trim()?.takeIf { it.isNotEmpty() },
     )
 }

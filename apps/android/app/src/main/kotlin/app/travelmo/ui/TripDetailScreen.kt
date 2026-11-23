@@ -563,8 +563,9 @@ fun SegmentRow(
                 val copy = reference?.let { ref -> Modifier.longPressUnlessPinch(stringResource(R.string.copy_reference)) { copyReference(context, ref) } } ?: Modifier
                 Text(line, style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp).then(copy))
             }
+            // One program a line, so whose each number is stays plain.
             if (programs.isNotEmpty()) {
-                Text(programs.joinToString(" · ", transform = ::loyaltyLine), style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp))
+                Text(programs.joinToString("\n", transform = ::loyaltyLine), style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp))
             }
             segment.notes?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp)) }
             Verdict(segment)

@@ -176,6 +176,12 @@
     <string name="found_from_email">From “%1$s”</string>
     <string name="a_booking_email">a booking email</string>
     <string name="remove_found_loyalty">Remove %1$s</string>
+    <string name="whose_is">Whose is %1$s %2$s?</string>
+    <string name="loyalty_mine">Mine</string>
+    <string name="loyalty_you">You</string>
+    <string name="loyalty_theirs">Theirs</string>
+    <string name="someone_else">Someone else</string>
+    <string name="someone_else_more">Someone else…</string>
     <string name="loyalty_details">Loyalty program details</string>
     <string name="travelers">Travelers</string>
     <string name="shared_with_you">Shared with you</string>

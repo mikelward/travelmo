@@ -10,7 +10,7 @@ const buttonClass = "rounded-lg border border-field px-3 py-2 text-sm hover:bg-z
 
 // A modal on the browser's own <dialog>: it traps focus, closes on Escape
 // and hands focus back to whatever opened it.
-function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const dialog = ref.current;

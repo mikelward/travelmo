@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { allLoyalty, couldBeOwner, foundLoyaltyEntry, formatBalance, loyaltyLine, loyaltySummary, nameWords, programsFor, withFoundLoyalty } from "./loyalty";
-import { maxFoundLoyalty, type FoundLoyalty, type ProfileEntry } from "./schema";
+import { allLoyalty, couldBeOwner, foundLoyaltyEntry, formatBalance, loyaltyByPerson, loyaltyLine, loyaltySummary, nameWords, personName, programsFor, withFoundLoyalty, withLoyaltyPerson } from "./loyalty";
+import { isMembershipNumber, maxFoundLoyalty, TravelProfile, type FoundLoyalty, type ProfileEntry } from "./schema";
 
 // Invented programs and numbers.
 const air: ProfileEntry = {
@@ -194,5 +194,76 @@ describe("loyalty from emails", () => {
     expect(loyaltySummary(all[1]!)).toEqual({ title: "Sample Hotels Rewards", account: "777", status: "Gold" });
     expect(all[1]!.fields.at(-1)).toEqual({ label: "From email", value: "Your booking" });
     expect(programsFor("Sample Hotels", all)).toEqual([all[1]]);
+  });
+});
+
+describe("whose a membership is", () => {
+  const seen = (program: string, number: string, extra: Partial<FoundLoyalty> = {}): FoundLoyalty => ({ program, number, messageId: "m1", at: "2026-11-01T00:00:00Z", ...extra });
+  const tripIt: ProfileEntry = { title: "Example Air", fields: [{ label: "Account number", value: "111222333" }] };
+  const people = (entries: ProfileEntry[]) => loyaltyByPerson(entries).map((g) => [g.person ?? "You", g.entries.map((e) => loyaltySummary(e).account)]);
+
+  it("groups the owner's first, then each person an email named, and says whose on a booking's line", () => {
+    const found = [seen("SkyMiles", "9168692292", { person: "Sam Ward" }), seen("SkyMiles", "9099656416"), seen("SkyMiles", "9368712163", { person: "Alex Ward" })];
+    const all = allLoyalty({ loyalty: [tripIt], foundLoyalty: found });
+    expect(people(all)).toEqual([
+      ["You", ["111222333", "9099656416"]],
+      ["Alex Ward", ["9368712163"]],
+      ["Sam Ward", ["9168692292"]],
+    ]);
+    expect(all.map(loyaltyLine)).toContain("SkyMiles · 9168692292 · Sam Ward");
+  });
+
+  it("follows the owner's word over the email's, for TripIt's programs too", () => {
+    const found = [seen("SkyMiles", "9168692292", { person: "Sam Ward" })];
+    let said = withLoyaltyPerson([], { program: "SkyMiles", number: "9168692292" }, undefined);
+    said = withLoyaltyPerson(said, { program: "Example Air", number: "111 222 333" }, " Sam Ward ");
+    expect(said).toHaveLength(2);
+    expect(people(allLoyalty({ loyalty: [tripIt], foundLoyalty: found, loyaltyPeople: said }))).toEqual([
+      ["You", ["9168692292"]],
+      ["Sam Ward", ["111222333"]],
+    ]);
+    // A second word on one membership replaces the first.
+    expect(withLoyaltyPerson(said, { program: "SkyMiles", number: "9168692292" }, "Alex Ward").filter((p) => p.number === "9168692292")).toEqual([
+      { program: "SkyMiles", number: "9168692292", person: "Alex Ward" },
+    ]);
+  });
+
+  it("keeps whose it is as first seen when the membership is seen again", () => {
+    const first = withFoundLoyalty([], seen("SkyMiles", "9168692292", { person: "Sam Ward" }));
+    expect(withFoundLoyalty(first, seen("SkyMiles", "9168692292", { messageId: "m2" }))[0]).toMatchObject({ person: "Sam Ward", messageId: "m2" });
+  });
+
+  it("keeps the program's distinctive name when an email calls it something generic", () => {
+    const first = withFoundLoyalty([], seen("QATAR AIRWAYS", "820342520"));
+    const both = withFoundLoyalty(first, seen("Privilege Club", "820342520", { messageId: "m2" }));
+    expect(both).toEqual([expect.objectContaining({ program: "QATAR AIRWAYS", messageId: "m2" })]);
+    expect(programsFor("Qatar Airways", allLoyalty({ loyalty: [], foundLoyalty: both }))).toHaveLength(1);
+    // A distinctive name later still replaces a generic one.
+    expect(withFoundLoyalty(withFoundLoyalty([], seen("Privilege Club", "820342520")), seen("Qatar Airways Privilege Club", "820342520"))[0]!.program).toBe("Qatar Airways Privilege Club");
+  });
+
+  it("shows a number TripIt has under a program name with nothing distinctive once", () => {
+    const qatar: ProfileEntry = { title: "QATAR AIRWAYS", fields: [{ label: "Account number", value: "820342520" }] };
+    const all = allLoyalty({ loyalty: [qatar], foundLoyalty: [seen("Privilege Club", "820342520")] });
+    expect(all.map((e) => e.title)).toEqual(["QATAR AIRWAYS"]);
+  });
+
+  it("drops a balance read as a membership number", () => {
+    const profile = TravelProfile.parse({
+      ownerUid: "u1",
+      foundLoyalty: [seen("Marriott Bonvoy", "9,600 Points"), seen("Marriott Bonvoy", "XXXXX8400"), seen("Example Air", "1200 miles")],
+    });
+    expect(profile.foundLoyalty?.map((f) => f.number)).toEqual(["XXXXX8400"]);
+    expect(["9,600 Points", "XXXXX8400", "1200 miles", "UA-XXXXX166", "Gold"].map(isMembershipNumber)).toEqual([false, true, false, true, false]);
+  });
+});
+
+describe("personName", () => {
+  it("calls a member as a person is called", () => {
+    expect(personName("MR ALEX SAMPLE")).toBe("Alex Sample");
+    expect(personName("SAMPLE/ALEX MS")).toBe("Alex Sample");
+    expect(personName("Jo O'Brien-Smith")).toBe("Jo O'Brien-Smith");
+    expect(personName("MRS")).toBe("Mrs");
+    expect(personName("  ")).toBeUndefined();
   });
 });

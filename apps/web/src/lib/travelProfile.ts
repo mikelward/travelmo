@@ -1,6 +1,6 @@
 "use client";
 
-import { TravelProfile, accessInvite, normalizeEmail, paths, type FoundLoyalty } from "@travelmo/core";
+import { LoyaltyPerson, TravelProfile, accessInvite, normalizeEmail, paths, withLoyaltyPerson, type FoundLoyalty } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { collectionGroup, doc, onSnapshot, query, runTransaction, where, writeBatch, type Firestore } from "firebase/firestore";
 import { useEffect, useState } from "react";
@@ -92,5 +92,24 @@ export async function removeFoundLoyalty(uid: string, found: FoundLoyalty, db: F
       return !(entry?.program === found.program && entry?.number === found.number);
     });
     tx.update(ref, { foundLoyalty: next, updatedAt: new Date().toISOString() });
+  });
+}
+
+// Says whose a membership is (`person` undefined: the owner's), on the list
+// as stored now, so a word given meanwhile on another one stays.
+export async function setLoyaltyPerson(
+  uid: string,
+  membership: { program: string; number: string },
+  person: string | undefined,
+  db: Firestore = firestore(),
+): Promise<void> {
+  const ref = doc(db, paths.travelProfile(uid));
+  await runTransaction(db, async (tx) => {
+    const stored: unknown = (await tx.get(ref)).data()?.loyaltyPeople;
+    const current = (Array.isArray(stored) ? stored : []).flatMap((p) => {
+      const parsed = LoyaltyPerson.safeParse(p);
+      return parsed.success ? [parsed.data] : [];
+    });
+    tx.update(ref, { loyaltyPeople: withLoyaltyPerson(current, membership, person), updatedAt: new Date().toISOString() });
   });
 }

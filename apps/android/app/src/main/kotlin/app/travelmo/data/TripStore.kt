@@ -2,6 +2,7 @@ package app.travelmo.data
 
 import app.travelmo.core.FlightStatus
 import app.travelmo.core.FoundLoyalty
+import app.travelmo.core.withLoyaltyPerson
 import app.travelmo.core.HomeCorrection
 import app.travelmo.core.MAX_HIDDEN_RIDE_NEEDS
 import app.travelmo.core.RideCompany
@@ -81,6 +82,9 @@ interface TripStore {
 
     /** Removes a loyalty number found in the owner's emails, in a transaction over the stored list, as the web does. */
     suspend fun removeFoundLoyalty(uid: String, found: FoundLoyalty)
+
+    /** Says whose a membership is ([person] null: the owner's), as the web's setLoyaltyPerson. */
+    suspend fun setLoyaltyPerson(uid: String, program: String, number: String, person: String?)
 
     /** Whether this phone (`users/{uid}/devices/{id}`) is registered for reminders as notifications, live; null while it loads. */
     fun pushDevice(uid: String, id: String): Flow<Boolean?>
@@ -283,6 +287,18 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             val stored = (tx.get(ref).get("foundLoyalty") as? List<*>).orEmpty()
             val kept = stored.filterNot { (it as? Map<*, *>)?.let { m -> m["program"] == found.program && m["number"] == found.number } == true }
             tx.update(ref, mapOf("foundLoyalty" to kept, "updatedAt" to Instant.now().toString()))
+        }.await()
+    }
+
+    override suspend fun setLoyaltyPerson(uid: String, program: String, number: String, person: String?) {
+        val ref = db.collection("users").document(uid).collection("travelProfile").document("main")
+        db.runTransaction { tx ->
+            // From the list as stored now, so a word given meanwhile on another one stays.
+            val current = loyaltyPeopleOf(tx.get(ref).get("loyaltyPeople"))
+            val next = withLoyaltyPerson(current, program, number, person).map { p ->
+                buildMap { put("program", p.program); put("number", p.number); p.person?.let { put("person", it) } }
+            }
+            tx.update(ref, mapOf("loyaltyPeople" to next, "updatedAt" to Instant.now().toString()))
         }.await()
     }
 
