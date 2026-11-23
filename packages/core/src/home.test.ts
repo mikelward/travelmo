@@ -110,6 +110,51 @@ describe("homeTimeline", () => {
     expect(homeTimeline([crossing, ...roundTrip("London", "Rome", "2025-03-01", "2025-03-05")])).toEqual([{ city: "London" }]);
   });
 
+  // Someone living in London who visits family in Boston each winter.
+  const londonYears = [
+    ...roundTrip("London", "Paris", "2022-05-02", "2022-05-06"),
+    ...roundTrip("London", "Rome", "2023-04-03", "2023-04-07"),
+    ...roundTrip("London", "Lisbon", "2024-03-04", "2024-03-08"),
+    ...roundTrip("London", "Berlin", "2024-07-01", "2024-07-05"),
+    ...roundTrip("London", "Madrid", "2024-10-07", "2024-10-11"),
+    ...roundTrip("London", "Oslo", "2025-04-07", "2025-04-11"),
+    ...roundTrip("London", "Prague", "2025-09-01", "2025-09-05"),
+  ];
+  const winters = [
+    flight("2024-01-04T18:00:00-05:00", "Boston", "London"),
+    flight("2024-12-20T09:00:00+00:00", "London", "Boston"),
+    flight("2025-01-04T18:00:00-05:00", "Boston", "London"),
+    flight("2025-12-19T09:00:00+00:00", "London", "Boston"),
+    flight("2026-01-03T18:00:00-05:00", "Boston", "London"),
+  ];
+  const sideTrips = [
+    ...roundTrip("Boston", "New York", "2023-12-22", "2023-12-24"),
+    ...roundTrip("Boston", "Portland", "2023-12-28", "2023-12-30"),
+  ];
+
+  it("keeps home through visits whose first outbound flight is missing", () => {
+    expect(homeTimeline([...londonYears, ...winters])).toEqual([{ city: "London" }]);
+    expect(homeTimeline([...londonYears, ...winters, ...sideTrips])).toEqual([{ city: "London" }]);
+    const outbound = flight("2023-12-18T09:00:00+00:00", "London", "Boston");
+    expect(homeTimeline([...londonYears, outbound, ...winters, ...sideTrips])).toEqual([{ city: "London" }]);
+  });
+
+  it("still moves after years of trips from the new home and none from the old", () => {
+    const bookings = [
+      ...roundTrip("London", "Paris", "2020-05-02", "2020-05-06"),
+      ...roundTrip("London", "Rome", "2021-04-03", "2021-04-07"),
+      flight("2022-01-10T09:00:00+00:00", "London", "Boston"),
+      ...roundTrip("Boston", "Chicago", "2022-03-01", "2022-03-05"),
+      ...roundTrip("Boston", "Denver", "2022-08-10", "2022-08-14"),
+      ...roundTrip("Boston", "London", "2023-07-01", "2023-07-15"),
+      ...roundTrip("Boston", "Miami", "2024-01-02", "2024-01-06"),
+    ];
+    expect(homeTimeline(bookings)).toEqual([
+      { city: "London", until: "2022-02-28" },
+      { city: "Boston", from: "2022-03-01" },
+    ]);
+  });
+
   it("knows no home without a round trip", () => {
     expect(homeTimeline([flight("2025-04-01T09:00:00+00:00", "London", "Boston")])).toEqual([]);
     expect(homeTimeline([club("Holiday Club", "2026-05-22T09:00:00+01:00")])).toEqual([]);
@@ -131,7 +176,11 @@ describe("homeAt", () => {
   it("lets a correction win for the dates it covers", () => {
     const overrides = [{ city: "Cambridge", from: "2020-09-01", until: "2021-03-11" }];
     expect(homeAt(periods, "2020-10-01", overrides)?.city).toBe("Cambridge");
-    expect(homeAt(periods, "2020-06-01", overrides)?.city).toBe("Boston");
+  });
+
+  it("knows no home before the first correction", () => {
+    const overrides = [{ city: "Cambridge", from: "2020-09-01" }];
+    expect(homeAt(periods, "2020-06-01", overrides)).toBeUndefined();
   });
 });
 
@@ -184,9 +233,27 @@ describe("findTripForBooking", () => {
     expect(findTripForBooking([awayTrip, clubTrip], of, [club22], periods)).toBeUndefined();
   });
 
-  it("puts two tickets at home on the same day together", () => {
+  it("keeps two outings at home on the same day apart", () => {
     const show = { ...club26, title: "Evening show", start: "2026-05-26T19:00:00+01:00" };
-    expect(findTripForBooking([awayTrip, clubTrip], of, [show], periods)?.id).toBe("club");
+    expect(findTripForBooking([awayTrip, clubTrip], of, [show], periods)).toBeUndefined();
+  });
+
+  it("puts tickets for one event together, at home or not", () => {
+    const seats = { ...club26, title: "STAGE STARS! HOLIDAY CLUB - DAY 1" };
+    const sameTime = { ...club26, title: "Holiday club", destination: { name: "Academy", city: "London" } };
+    for (const known of [[], periods]) {
+      expect(findTripForBooking([awayTrip, clubTrip], of, [seats], known)?.id).toBe("club");
+      expect(findTripForBooking([awayTrip, clubTrip], of, [sameTime], known)?.id).toBe("club");
+    }
+  });
+
+  it("puts the days of a course booked one at a time together, at home or not", () => {
+    const day2 = { ...club26, title: "Stage Stars! Holiday Club - Day 2", start: "2026-05-27T09:00:00+01:00", end: "2026-05-27T16:00:00+01:00" };
+    const other = { ...day2, title: "Drama Club - Day 2" };
+    for (const known of [[], periods]) {
+      expect(findTripForBooking([awayTrip, clubTrip], of, [day2], known)?.id).toBe("club");
+      expect(findTripForBooking([awayTrip, clubTrip], of, [other], known)).toBeUndefined();
+    }
   });
 
   it("keeps a stay in the destination with its trains", () => {
@@ -260,7 +327,8 @@ describe("findTripForBooking with outings", () => {
     expect(findTripForBooking([trip("film", "2026-11-08", "2026-11-08")], of, [club], [])).toBeUndefined();
     expect(findTripForBooking([trip("film", "2026-11-08", "2026-11-08")], of, [club], periods)).toBeUndefined();
     const sameDay = outing("Lunch", "2026-11-08T14:00:00+00:00", "Bromley");
-    expect(findTripForBooking([trip("film", "2026-11-08", "2026-11-08")], of, [sameDay], [])?.id).toBe("film");
+    expect(findTripForBooking([trip("film", "2026-11-08", "2026-11-08")], of, [sameDay], [])).toBeUndefined();
+    expect(findTripForBooking([trip("film", "2026-11-08", "2026-11-08")], of, [sameDay], periods)).toBeUndefined();
   });
 
   it("keeps travel out of a day camp the day before, home known or not", () => {
@@ -315,6 +383,88 @@ describe("findTripForBooking with outings", () => {
     }
   });
 
+  it("puts a ticket after a flight out in the trip, home known or not", () => {
+    const out = flight("2026-08-14T09:00:00+01:00", "London", "Stockholm");
+    const museum = outing("Vasa Museum", "2026-08-16T11:00:00+02:00", "Stockholm");
+    const segments: Record<string, ExtractedSegment[]> = { out: [out] };
+    const of = (id: string) => segments[id] ?? [];
+    for (const known of [[], periods]) {
+      expect(findTripForBooking([trip("out", "2026-08-14", "2026-08-14")], of, [museum], known)?.id).toBe("out");
+    }
+  });
+
+  it("puts a ticket with no time on the day a flight arrives in its trip, home known or not", () => {
+    const out: ExtractedSegment = { ...flight("2026-08-14T09:00:00+01:00", "London", "Stockholm"), end: "2026-08-14T12:30:00+02:00" };
+    const museum = outing("Vasa Museum", "2026-08-14T00:00:00+02:00", "Stockholm");
+    const segments: Record<string, ExtractedSegment[]> = { out: [out], museum: [museum] };
+    const of = (id: string) => segments[id] ?? [];
+    for (const known of [[], periods]) {
+      expect(findTripForBooking([trip("out", "2026-08-14", "2026-08-14")], of, [museum], known)?.id).toBe("out");
+      expect(findTripForBooking([trip("museum", "2026-08-14", "2026-08-14")], of, [out], known)?.id).toBe("museum");
+    }
+  });
+
+  it("puts a ticket with no time on the day a flight back leaves in its trip", () => {
+    const back = { ...flight("2026-08-22T08:00:00+02:00", "Stockholm", "London"), end: "2026-08-22T09:50:00+01:00" };
+    const museum = outing("Vasa Museum", "2026-08-22T00:00:00+02:00", "Stockholm");
+    const segments: Record<string, ExtractedSegment[]> = { back: [back] };
+    const of = (id: string) => segments[id] ?? [];
+    expect(findTripForBooking([trip("back", "2026-08-22", "2026-08-22")], of, [museum], periods)?.id).toBe("back");
+  });
+
+  it("keeps a ticket out of a trip to its town that leaves after it", () => {
+    const out = flight("2026-08-14T09:00:00+01:00", "London", "Stockholm");
+    const museum = outing("Vasa Museum", "2026-08-13T11:00:00+02:00", "Stockholm");
+    const segments: Record<string, ExtractedSegment[]> = { out: [out], museum: [museum] };
+    const of = (id: string) => segments[id] ?? [];
+    for (const known of [[], periods]) {
+      expect(findTripForBooking([trip("out", "2026-08-14", "2026-08-14")], of, [museum], known)).toBeUndefined();
+      expect(findTripForBooking([trip("museum", "2026-08-13", "2026-08-13")], of, [out], known)).toBeUndefined();
+    }
+  });
+
+  // A dinner and a show at home, two days before a train home from a trip
+  // whose way out was never imported: three trips, in any order.
+  it("keeps a day out at home apart from a train back two days later and from each other", () => {
+    const gb = (name: string, city: string, address?: string): Place => ({ name, city, country: "GB", ...(address ? { address } : {}) });
+    const dinner: ExtractedSegment = { type: "other", title: "Fulham Kitchen", provider: "TheFork", start: "2025-06-27T18:00:00+01:00", destination: gb("Fulham Kitchen", "London", "Munster Road, London SW6") };
+    const show: ExtractedSegment = { type: "activity", title: "TREVOR NOAH: LONDON 2025 ALL NEW MATERIAL", provider: "Ticketmaster", start: "2025-06-27T20:00:00+01:00", destination: gb("London", "London") };
+    const back: ExtractedSegment = {
+      type: "train",
+      title: "Southampton Central to London Waterloo",
+      provider: "South Western Railway",
+      start: "2025-06-29T11:25:00+01:00",
+      end: "2025-06-29T12:49:00+01:00",
+      origin: gb("Southampton Central", "Southampton"),
+      destination: gb("London Waterloo", "London"),
+    };
+    const orders = [
+      [dinner, show, back],
+      [dinner, back, show],
+      [show, dinner, back],
+      [show, back, dinner],
+      [back, dinner, show],
+      [back, show, dinner],
+    ];
+    for (const known of [[], [{ city: "London", country: "GB" }]]) {
+      for (const order of orders) {
+        const trips: Trip[] = [];
+        const segments: Record<string, ExtractedSegment[]> = {};
+        for (const booking of order) {
+          const found = findTripForBooking(trips, (id) => segments[id] ?? [], [booking], known);
+          if (found) segments[found.id]!.push(booking);
+          else {
+            const id = `t${trips.length}`;
+            const date = booking.start.slice(0, 10);
+            trips.push(trip(id, date, (booking.end ?? booking.start).slice(0, 10)));
+            segments[id] = [booking];
+          }
+        }
+        expect(trips).toHaveLength(3);
+      }
+    }
+  });
+
   it("keeps two outings away in one town together once home is known", () => {
     const show = outing("Hamilton", "2026-10-10T19:30:00+01:00", "Liverpool");
     const match = outing("Everton v Spurs", "2026-10-11T15:00:00+01:00", "Liverpool");
@@ -364,15 +514,24 @@ describe("effectiveHomes", () => {
     expect(effectiveHomes(inferred, [])).toEqual(inferred);
   });
 
-  it("follows a correction from its date on", () => {
+  it("is the corrections alone once there are any, with no home before them", () => {
     expect(effectiveHomes(inferred, [{ city: "Cambridge", country: "GB", from: "2020-09-01" }])).toEqual([
-      { city: "Boston", until: "2020-08-31" },
       { city: "Cambridge", country: "GB", from: "2020-09-01" },
     ]);
+    expect(effectiveHomes([{ city: "London" }], [{ city: "London", from: "2024-01-01" }])).toEqual([{ city: "London", from: "2024-01-01" }]);
   });
 
-  it("merges a correction into the same town before it", () => {
-    expect(effectiveHomes([{ city: "London" }], [{ city: "London", from: "2024-01-01" }])).toEqual([{ city: "London" }]);
+  it("drops a home inferred before the earliest correction", () => {
+    const corrections = [
+      { city: "London", from: "2022-01-15" },
+      { city: "Mountain View", from: "2011-11-25" },
+      { city: "Elsternwick", from: "2003-03-01" },
+    ];
+    const homes = effectiveHomes([{ city: "London" }], corrections);
+    expect(describeHomes(homes)).toBe("London since Jan 2022 · Mountain View 2011–2022 · Elsternwick 2003–2011");
+    expect(homeAt(homes, "2003-02-28")).toBeUndefined();
+    expect(homeAt([{ city: "London" }], "2003-02-28", homeCorrections(corrections))).toBeUndefined();
+    expect(homeAt(homes, "2015-06-01")?.city).toBe("Mountain View");
   });
 });
 

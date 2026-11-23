@@ -388,6 +388,45 @@ describe("regroupTrips with outings at home", () => {
     ]);
   });
 
+  it("splits a dinner, a show and a train home two days later into a trip each", async () => {
+    const store = memoryStore();
+    store.trips.set("fulham", trip("fulham", "Fulham Kitchen", "2025-06-27", "2025-06-29"));
+    const put = (id: string, extracted: ExtractedSegment) => store.segments.set(id, segment("fulham", id, id.replace(/-\d+$/, ""), extracted));
+    put("dinner-0", {
+      type: "other",
+      title: "Fulham Kitchen",
+      provider: "TheFork",
+      confirmation: "TF000001",
+      start: "2025-06-27T18:00:00+01:00",
+      destination: { ...gb("Fulham Kitchen", "London"), address: "Munster Road, London SW6" },
+    });
+    put("show-0", {
+      type: "activity",
+      title: "TREVOR NOAH: LONDON 2025 ALL NEW MATERIAL",
+      provider: "Ticketmaster",
+      confirmation: "TM-0000-0001",
+      start: "2025-06-27T20:00:00+01:00",
+      destination: gb("London", "London"),
+    });
+    put("train-0", {
+      type: "train",
+      title: "Southampton Central to London Waterloo",
+      provider: "South Western Railway",
+      confirmation: "SWR00001",
+      start: "2025-06-29T11:25:00+01:00",
+      end: "2025-06-29T12:49:00+01:00",
+      origin: gb("Southampton Central", "Southampton"),
+      destination: gb("London Waterloo", "London"),
+    });
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 3, deleted: 0 });
+    expect(summary(store).map((t) => [t.start, t.end, t.segments])).toEqual([
+      ["2025-06-27", "2025-06-27", ["dinner-0"]],
+      ["2025-06-27", "2025-06-27", ["show-0"]],
+      ["2025-06-29", "2025-06-29", ["train-0"]],
+    ]);
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0 });
+  });
+
   it("splits a summer filed as one trip into the outings and the two trips away", async () => {
     const store = memoryStore();
     store.trips.set("tower", trip("tower", "Tower of London", "2026-08-10", "2026-11-13"));

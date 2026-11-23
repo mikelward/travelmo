@@ -697,13 +697,21 @@ and since people move it is a timeline, not one place (`homeTimeline` in
 it in: a round trip, a journey out and the first journey back into the town
 it left, however many legs lie between, says where home was on its date.
 Towns match on the city (or a place's name when it has no city), ignoring
-case, and on the country when both give one. The first round trip's base is
-home until another base holds for two round trips in a row, which is a move
-dated from the first of them; one trip from somewhere else (flying home from
-a relative's) is not. Periods are calendar dates, inclusive, the first open
+case, and on the country when both give one. A round trip away for more
+than 60 days says nothing: either they lived where it went for a while, or
+its way out was never imported and it is really the way back from one visit
+and the way out on the next (Boston to London in January, London to Boston
+the next December), which would otherwise swallow a year of trips from
+London; the round trips within it count instead. The first round trip's
+base is home until another base holds for two round trips in a row, which
+is a move dated from the first of them; one trip from somewhere else
+(flying home from a relative's) is not, and nor are side trips from
+somewhere when the next round trip after them is from home again (New York
+and Maine from Boston on a family visit whose flight out is missing). Periods are calendar dates, inclusive, the first open
 at its start and the last at its end. Corrections the person makes are
-periods too and win over the worked-out ones for the dates they cover
-(`homeAt`).
+periods too, and once there are any they are the whole timeline: there is
+no home before the earliest, since what was worked out is what they
+corrected (`homeAt`).
 
 The Profile shows home over time in a line ("Home: London since Mar 2021 ·
 Boston 2018–2021", `describeHomes`), worked out from the user's own trips
@@ -714,8 +722,11 @@ most fifty), which only the owner reads or writes; rules check it is a list
 of at most fifty, and the parser parses it (`loadHomeOverrides` in
 `apps/parser/src/homeOverrides.ts`), logging and ignoring a list that does
 not parse. Each correction runs until the next one's date
-(`homeCorrections`), and from the first correction's date on they replace
-the worked-out home. Imports and regrouping read them for every booking
+(`homeCorrections`), and with any correction the worked-out home is dropped
+altogether (`effectiveHomes`): corrections of London from 15 Jan 2022,
+Mountain View from 25 Nov 2011 and Elsternwick from 1 Mar 2003 read "London
+since Jan 2022 · Mountain View 2011–2022 · Elsternwick 2003–2011", with no
+home before 2003. Imports and regrouping read them for every booking
 filed (`ImportDeps.homeOverrides`).
 
 Grouping uses it (`findTripForBooking`, also in `home.ts`). Each import
@@ -725,19 +736,27 @@ its own), and corrections win as above. Bookings are outings (an activity,
 a car hired and returned in one place, or another booking in one place) or
 travel (journeys, stays, and transfers, such as a car to the airport, which
 are never at home). Travel joins travel within two days. Outings never
-chain by nearness of dates alone, home known or not, since a town that is
+join by nearness of dates alone, home known or not, since a town that is
 not named as home (Muswell Hill, Bromley) or a home not yet worked out on a
 fresh import would otherwise string a summer of outings and the trips
-between them into one: an outing in the home of its day (`isAtHome`) joins
-only a day out at home on the same dates, so two tickets on one evening
-stay together, and other outings join one another on the same dates. An
-outing and travel, and outings away on different days once home is known,
-join only within two days and when they share a town the travel goes to
-(with home known, every place it goes to or from other than home, so a
-return flight booked alone counts where it leaves from; with home unknown,
-its destinations other than where it set off from): a ticket in
-Stockholm joins the Stockholm trip, while a day camp the day before the car
-to Stansted, or a course while the family flies to Boston, stays apart. So
+between them into one: each outing is a trip of its own, so a dinner at 6pm
+and a show at 8pm at home are two days out. Within two days, an outing
+joins another that is one thing with it: tickets for one event (the same
+title, or the same town, at the same time) or the days of one course (the
+same title but for the day or date, in one town; below). It joins travel
+when it happens where the travel has taken someone at the time, other than
+the home of its day (or, with home unknown, where the travel sets off
+from): before the first journey leaves, where it leaves from; between
+journeys, where the last one arrived; after the last, where it arrived; or
+the town of a stay (`onTheWay`). An outing with no time of its own
+(`isUntimed`) is on all its day, so a ticket for the day a flight lands
+comes after it, and one for the day a flight leaves before it. Direction and time matter: a ticket in
+Stockholm joins the flight there before it and a return flight booked alone
+after it, while a dinner in London two days before a train from Southampton
+to London (the way back from a trip whose way out was never imported) does
+not, nor does a day camp the day before the car to Stansted, or a course
+while the family flies to Boston. With home known, outings away within two
+days in one town join each other, as a weekend of tickets in Liverpool. So
 a holiday club in London either side of a weekend in Liverpool comes in as
 three trips, each club day named as a day out and the weekend "Liverpool":
 a new trip is named after its first destination that is not home, or

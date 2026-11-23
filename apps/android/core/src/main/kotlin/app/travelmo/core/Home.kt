@@ -36,10 +36,17 @@ private fun sameTown(a: Town, b: HomePeriod): Boolean = sameTown(a, Town(b.city,
 
 private data class RoundTrip(val base: Town, val start: String)
 
+// How long someone can be away from a town and still live there, in days: a
+// longer round trip says nothing about where home is (they lived away, or its
+// way out was never imported and it is the way back from one visit and the
+// way out on the next).
+private const val STAY_DAYS = 60L
+
 // Each round trip leaves from a town and ends with the first journey back
-// into it, however many legs lie between; a chain that never returns gives
-// none, and the next journey starts afresh. Legs go in the order they leave,
-// by instant, since local times misorder them across the date line; a
+// into it, however many legs lie between; a chain that never returns, or is
+// away longer than STAY_DAYS, gives none, and the next journey starts afresh,
+// so round trips within a long one count instead. Legs go in the order they
+// leave, by instant, since local times misorder them across the date line; a
 // journey within one town goes nowhere and says nothing.
 private fun roundTrips(segments: List<Segment>): List<RoundTrip> {
     val journeys = segments
@@ -54,7 +61,7 @@ private fun roundTrips(segments: List<Segment>): List<RoundTrip> {
     while (i < journeys.size) {
         val base = town(journeys[i].origin)!!
         val back = (i until journeys.size).firstOrNull { sameTown(town(journeys[it].destination)!!, base) }
-        if (back == null) {
+        if (back == null || instantMillis(journeys[back].start) - instantMillis(journeys[i].start) > STAY_DAYS * 86_400_000L) {
             i++
             continue
         }
@@ -67,33 +74,48 @@ private fun roundTrips(segments: List<Segment>): List<RoundTrip> {
 /**
  * Home over time. The base of the first round trip is home until another
  * base holds for two round trips in a row: a move, dated from the first of
- * them. A single trip from somewhere else is not a move.
+ * them. A single trip from somewhere else is not a move, and nor are trips
+ * from somewhere when the next round trip after them is from home again.
  */
 fun homeTimeline(segments: List<Segment>): List<HomePeriod> {
     val trips = roundTrips(segments)
     val periods = mutableListOf<HomePeriod>()
     var current: Town? = null
-    for ((i, trip) in trips.withIndex()) {
-        if (current == null) {
+    var i = 0
+    while (i < trips.size) {
+        val trip = trips[i]
+        val home = current
+        if (home == null) {
             current = trip.base
             periods += HomePeriod(trip.base.city, trip.base.country)
+            i++
             continue
         }
-        if (sameTown(trip.base, current)) continue
-        val next = trips.getOrNull(i + 1)
-        if (next == null || !sameTown(next.base, trip.base)) continue
-        periods[periods.lastIndex] = periods.last().copy(until = LocalDate.parse(trip.start).minusDays(1).toString())
-        periods += HomePeriod(trip.base.city, trip.base.country, from = trip.start)
-        current = trip.base
+        if (sameTown(trip.base, home)) {
+            i++
+            continue
+        }
+        var end = i
+        while (end + 1 < trips.size && sameTown(trips[end + 1].base, trip.base)) end++
+        val after = trips.getOrNull(end + 1)
+        if (end > i && (after == null || !sameTown(after.base, home))) {
+            periods[periods.lastIndex] = periods.last().copy(until = LocalDate.parse(trip.start).minusDays(1).toString())
+            periods += HomePeriod(trip.base.city, trip.base.country, from = trip.start)
+            current = trip.base
+        }
+        i = end + 1
     }
     return periods
 }
 
 private fun HomePeriod.covers(date: String) = (from == null || from <= date) && (until == null || date <= until)
 
-/** Home on [date]; a correction in [overrides] wins for the dates it covers. */
+/**
+ * Home on [date]. Corrections in [overrides], once there are any, are the
+ * whole timeline: there is no home before the earliest of them.
+ */
 fun homeAt(periods: List<HomePeriod>, date: String, overrides: List<HomePeriod> = emptyList()): HomePeriod? =
-    overrides.firstOrNull { it.covers(date) } ?: periods.firstOrNull { it.covers(date) }
+    overrides.ifEmpty { periods }.firstOrNull { it.covers(date) }
 
 // Whether two places are one: the same code where both have one, else the
 // same name or the same address.
@@ -141,26 +163,13 @@ fun homeCorrections(corrections: List<HomeCorrection>): List<HomePeriod> {
     }
 }
 
-/** Home over time as the app uses it: the journeys' answer, overridden from the first correction's date on. */
-fun effectiveHomes(inferred: List<HomePeriod>, corrections: List<HomeCorrection>): List<HomePeriod> {
-    val corrected = homeCorrections(corrections)
-    val cut = corrected.firstOrNull()?.from
-    val before = inferred.mapNotNull { p ->
-        when {
-            cut == null -> p
-            p.from != null && p.from >= cut -> null
-            p.until != null && p.until < cut -> p
-            else -> p.copy(until = LocalDate.parse(cut).minusDays(1).toString())
-        }
-    }
-    val merged = mutableListOf<HomePeriod>()
-    for (p in before + corrected) {
-        val last = merged.lastOrNull()
-        if (last != null && sameTown(Town(last.city, last.country), p)) merged[merged.lastIndex] = last.copy(until = p.until)
-        else merged += p
-    }
-    return merged
-}
+/**
+ * Home over time as the app uses it: the journeys' answer until the user
+ * corrects it, then their corrections alone, with no home before the
+ * earliest of them.
+ */
+fun effectiveHomes(inferred: List<HomePeriod>, corrections: List<HomeCorrection>): List<HomePeriod> =
+    if (corrections.isEmpty()) inferred else homeCorrections(corrections)
 
 private val months = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 private fun monthYear(date: String) = "${months[date.substring(5, 7).toInt() - 1]} ${date.take(4)}"
