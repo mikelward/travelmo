@@ -380,9 +380,26 @@
       (it counts to today), and the stays and time away past the latest
       five.
 
+## iOS app
+
+Kotlin Multiplatform, sharing the Android app's Kotlin (SPEC "iOS app").
+
+- [x] Build `apps/android/core` for iOS too, its tests on the iOS
+      Simulator in CI.
+- [ ] Move the Compose screens to a module both apps build (Compose
+      Multiplatform).
+- [ ] The iOS app: Firebase Auth and Firestore, Google sign-in, Sign in
+      with Apple (how Apple's private relay addresses meet sharing and
+      Gmail import is the user's call), notifications.
+- [ ] TestFlight builds from CI (needs the Apple Developer Program).
+
 ## Decisions needing review
 
 Guesses made on autopilot; change any of them freely.
+
+- iOS: the shared screens will be Compose Multiplatform rather than SwiftUI,
+  so one UI serves both phones; SwiftUI would feel more native but means a
+  second UI to keep in step.
 
 - Android access: until the server confirms an account is not approved,
   the app shows as before (an empty trip list for one not approved) rather

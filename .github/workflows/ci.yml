@@ -157,6 +157,29 @@ jobs:
               exit 1
             fi
           done
+  # The shared Kotlin (apps/android/core) on the iOS Simulator: the same
+  # tests as the JVM's, run where the iOS app will use them. Linux compiles
+  # the iOS targets but cannot run them; macOS runners cost nothing on a
+  # public repository.
+  ios-core:
+    runs-on: macos-15
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/android
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c  # v5.0.2
+        with:
+          cache-read-only: ${{ github.event_name != 'push' }}
+      - name: Core tests on the iOS Simulator
+        run: ./gradlew :core:iosSimulatorArm64Test
   # The app's instrumented tests (app/src/androidTest): FirestoreTrips'
   # writes against the Firestore emulator with the real rules, on an Android
   # emulator the runner boots with hardware acceleration. Its own job, so the

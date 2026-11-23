@@ -1,7 +1,7 @@
 ---
 trigger: always_on
 alwaysApply: true
-last_modified: 2026-11-12
+last_modified: 2026-11-23
 ---
 
 # travelmo
@@ -126,7 +126,7 @@ Shared by every mikelward repo and the user-level agent config; canonical in mik
   (security-rules tests), `firestore.rules`.
 - **Android**. From `apps/android`: `./gradlew :core:verifyNoAndroid :core:test`, then
   `./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`; `:core` stays
-  pure Kotlin and mirrors `packages/core`, so a change to shared logic lands in both
+  pure Kotlin Multiplatform (JVM and iOS: no `java.*` outside `jvmMain`) and mirrors `packages/core`, so a change to shared logic lands in both
   with matching tests. A UI change re-records `app/snapshots/` (README "Android") and
   the PR shows the diff; look at the PNGs before pushing. No Android emulator in
   this sandbox: `app/src/androidTest` runs in CI's `android-emulator` job (compile it
