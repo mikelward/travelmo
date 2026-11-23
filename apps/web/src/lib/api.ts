@@ -1,5 +1,5 @@
 import type { User } from "firebase/auth";
-import { backfillStartPath, backfillStopPath, deleteAllTripsPath, fastmailBackfillStartPath, fastmailBackfillStopPath, fastmailConnectPath, fastmailDisconnectPath, forwardIssuePath, forwardStopPath, gmailConnectPath, gmailDisconnectPath, linkRefusalText, refusalOf, regroupPath, type AccountAccess, type CalendarExport, type ForwardAddress, type RegroupResult } from "@travelmo/core";
+import { backfillStartPath, backfillStopPath, deleteAllTripsPath, fastmailBackfillStartPath, fastmailBackfillStopPath, fastmailConnectPath, fastmailDisconnectPath, feedAddPath, feedRemovePath, forwardIssuePath, forwardStopPath, gmailConnectPath, gmailDisconnectPath, linkRefusalText, refusalOf, regroupPath, type AccountAccess, type CalendarExport, type ForwardAddress, type RegroupResult } from "@travelmo/core";
 import type { CalendarResult } from "./ics";
 import type { TripItResult } from "./tripit";
 
@@ -64,8 +64,8 @@ export const api = {
   importTripIt: (user: User, exported: unknown) => post<TripItResult>(user, "/import/tripit", { export: exported }),
   importIcs: (user: User, text: string) => post<CalendarResult>(user, "/import/ics", { text }),
   addFeed: (user: User, url: string, label?: string) =>
-    post<CalendarResult & { id: string }>(user, "/feeds/add", { url, ...(label ? { label } : {}) }),
-  removeFeed: (user: User, id: string) => post<void>(user, "/feeds/remove", { id }),
+    post<CalendarResult & { id: string }>(user, feedAddPath, { url, ...(label ? { label } : {}) }),
+  removeFeed: (user: User, id: string) => post<void>(user, feedRemovePath, { id }),
   issueCalendarExport: (user: User) => post<CalendarExport>(user, "/export/calendar"),
   stopCalendarExport: (user: User) => post<void>(user, "/export/calendar/stop"),
   issueForward: (user: User) => post<ForwardAddress>(user, forwardIssuePath),

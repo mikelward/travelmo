@@ -266,6 +266,8 @@ class FakeTripStore(
     }
     override fun addressHolder(uid: String): Flow<AddressHolder> = flowOf(addressHolder)
     val forward = MutableStateFlow(app.travelmo.data.Forwarding(null))
+    val feedList = MutableStateFlow<List<app.travelmo.data.CalendarFeedShown>?>(emptyList())
+    override fun feeds(uid: String): Flow<List<app.travelmo.data.CalendarFeedShown>?> = feedList
     override fun forwarding(uid: String): Flow<app.travelmo.data.Forwarding?> = forward
     override fun ownProfile(uid: String): Flow<OwnProfile> = flowOf(OwnProfile(profile))
     val reminders = mutableListOf<Boolean>()

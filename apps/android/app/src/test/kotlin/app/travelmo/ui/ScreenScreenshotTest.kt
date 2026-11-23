@@ -560,6 +560,34 @@ class ScreenScreenshotTest {
         composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
     }
 
+    // Settings scrolled to the calendar feeds: TripIt's, read yesterday.
+    @Test
+    fun settings_feeds() = settingsFeeds("settings_feeds", dark = false)
+
+    @Test
+    fun settings_feeds_dark() = settingsFeeds("settings_feeds_dark", dark = true)
+
+    private fun settingsFeeds(name: String, dark: Boolean) {
+        val store = FakeTripStore()
+        store.feedList.value = listOf(
+            app.travelmo.data.CalendarFeedShown("f1", "https://www.tripit.com/feed/ical/private/abc/tripit.ics", lastFetchedAt = "2026-11-22T06:00:00Z", lastResult = "2 events imported."),
+        )
+        val actions = object : app.travelmo.data.FeedActions {
+            override val available = true
+            override suspend fun add(url: String) = ""
+            override suspend fun remove(id: String) {}
+        }
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, feedActions = actions)
+        composeRule.setContent {
+            TravelmoTheme(darkTheme = dark) {
+                SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
+            }
+        }
+        composeRule.onNodeWithText("Add feed").performScrollTo()
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
+    }
+
     // Settings scrolled to an address to forward bookings to.
     @Test
     fun settings_forward() = settingsForward("settings_forward", dark = false)
