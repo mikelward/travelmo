@@ -490,6 +490,25 @@ class ScreenScreenshotTest {
         }
     }
 
+    // Settings scrolled to the sender rules: one never-import domain stored.
+    @Test
+    fun settings_senders() = settingsSenders("settings_senders", dark = false)
+
+    @Test
+    fun settings_senders_dark() = settingsSenders("settings_senders_dark", dark = true)
+
+    private fun settingsSenders(name: String, dark: Boolean) {
+        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent {
+            TravelmoTheme(darkTheme = dark) {
+                SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
+            }
+        }
+        composeRule.onNodeWithText("Save").performScrollTo()
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
+    }
+
     // An admin's Access page: two requests waiting, and those let in, the
     // admin's own address with no Revoke.
     @Test

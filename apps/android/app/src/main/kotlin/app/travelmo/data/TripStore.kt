@@ -128,6 +128,9 @@ interface TripStore {
     /** Teaches the parser a sender ([withLearned]), on the rules as stored now. */
     suspend fun learnSender(uid: String, domain: String, which: SenderList)
 
+    /** Replaces both lists of sender rules, as the web's Settings saves them. */
+    suspend fun setSenderPatterns(uid: String, patterns: SenderPatterns)
+
     /** Says whose a membership is ([person] null: the owner's), as the web's setLoyaltyPerson. */
     suspend fun setLoyaltyPerson(uid: String, program: String, number: String, person: String?)
 
@@ -453,6 +456,11 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             trySend(senderPatternsOf(snapshot?.data))
         }
         awaitClose { registration.remove() }
+    }
+
+    override suspend fun setSenderPatterns(uid: String, patterns: SenderPatterns) {
+        // Merged, so any other field of the document stays.
+        db.document("users/$uid/settings/patterns").set(mapOf("allow" to patterns.allow, "deny" to patterns.deny), SetOptions.merge()).await()
     }
 
     override suspend fun learnSender(uid: String, domain: String, which: SenderList) {

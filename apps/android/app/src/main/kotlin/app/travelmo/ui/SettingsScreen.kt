@@ -82,6 +82,7 @@ private const val REGROUP_TOKEN = "settings/trips/regroup"
 private const val DELETE_TRIPS_TOKEN = "settings/trips/delete"
 private const val ADD_EMAIL_TOKEN = "settings/emails/add"
 private const val REMOVE_EMAIL_TOKEN = "settings/emails/remove"
+private const val SENDER_RULES_TOKEN = "settings/senders"
 
 /**
  * The account, Gmail and reading past emails, regrouping or deleting all
@@ -133,6 +134,7 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
             Text(stringResource(R.string.import_review), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
             Text(stringResource(R.string.import_review_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedButton(onClick = onOpenReview, modifier = Modifier.padding(top = 8.dp)) { Text(stringResource(R.string.open_import_review)) }
+            SenderRulesSection(viewModel)
             EmailAddressesSection(user, viewModel)
             Text(stringResource(R.string.reminders), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
             Text(stringResource(R.string.reminders_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -164,6 +166,61 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
             )
         }
     }
+}
+
+/**
+ * Settings' "Sender rules", as on the web: two lists of domains, one a
+ * line, saved together. What is typed stays until saved; the stored lists
+ * show otherwise.
+ */
+@Composable
+private fun SenderRulesSection(viewModel: TripsViewModel) {
+    val saved by viewModel.senderPatterns.collectAsStateWithLifecycle()
+    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val outcome = outcomes[SENDER_RULES_TOKEN]
+    var allow by rememberSaveable { mutableStateOf<String?>(null) }
+    var deny by rememberSaveable { mutableStateOf<String?>(null) }
+    var said by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(outcome) {
+        if (outcome is Outcome.Done) {
+            allow = null
+            deny = null
+            said = true
+            viewModel.outcomeSeen(SENDER_RULES_TOKEN)
+        }
+    }
+    val stored = saved ?: return
+    Text(stringResource(R.string.sender_rules), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(R.string.sender_rules_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    OutlinedTextField(
+        value = allow ?: stored.allow.joinToString("\n"),
+        onValueChange = { allow = it; said = false },
+        // Locked while saving, so nothing typed then is lost when the save clears the edit.
+        enabled = outcome !is Outcome.Busy,
+        label = { Text(stringResource(R.string.always_import_list)) },
+        placeholder = { Text("cove.example") },
+        minLines = 3,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+    )
+    OutlinedTextField(
+        value = deny ?: stored.deny.joinToString("\n"),
+        onValueChange = { deny = it; said = false },
+        enabled = outcome !is Outcome.Busy,
+        label = { Text(stringResource(R.string.never_import_list)) },
+        placeholder = { Text("newsletters.example") },
+        minLines = 3,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+    )
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 8.dp)) {
+        Button(
+            onClick = { viewModel.saveSenderPatterns(SENDER_RULES_TOKEN, allow ?: stored.allow.joinToString("\n"), deny ?: stored.deny.joinToString("\n")) },
+            enabled = (allow != null || deny != null) && outcome !is Outcome.Busy,
+        ) { Text(stringResource(R.string.save)) }
+        if (said) Text(stringResource(R.string.saved), style = MaterialTheme.typography.bodyMedium)
+    }
+    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
 }
 
 /**

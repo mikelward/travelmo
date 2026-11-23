@@ -48,4 +48,9 @@ class ReviewTest {
         effectiveDecision(patterns, "air.example") shouldBe SenderList.ALLOW
         effectiveDecision(patterns, "other.example") shouldBe null
     }
+
+    @Test
+    fun `reads a typed list of senders as one domain a line`() {
+        cleanSenderList(listOf(" Air.Example ", "", "cove.example", "air.example")) shouldBe listOf("air.example", "cove.example")
+    }
 }

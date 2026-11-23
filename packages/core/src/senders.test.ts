@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { domainOf, effectiveDecision, isListed, withLearned } from "./senders";
+import { cleanSenderList, domainOf, effectiveDecision, isListed, withLearned } from "./senders";
+
+describe("cleanSenderList", () => {
+  it("reads a typed list of senders as one domain a line", () => {
+    expect(cleanSenderList([" Air.Example ", "", "cove.example", "air.example"])).toEqual(["air.example", "cove.example"]);
+  });
+});
 
 describe("domainOf", () => {
   it("reads a From header or a bare domain", () => {

@@ -247,6 +247,12 @@ class FakeTripStore(
     override fun allParsed(uid: String): Flow<SearchedRecords> = flowOf(SearchedRecords(parsed, done = true))
     val patterns = MutableStateFlow(SenderPatterns(deny = listOf("news.example")))
     override fun senderPatterns(uid: String): Flow<SenderPatterns> = patterns
+    /** When set, a save of the sender rules waits for it, as a slow write would. */
+    var senderSave: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+    override suspend fun setSenderPatterns(uid: String, patterns: SenderPatterns) {
+        senderSave?.await()
+        this.patterns.value = patterns
+    }
     override suspend fun learnSender(uid: String, domain: String, which: SenderList) {
         patterns.value = withLearned(patterns.value, domain, which)
     }
