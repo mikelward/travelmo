@@ -14,6 +14,7 @@ import {
   reserveByReference,
   tripItUnfiledTripId,
   tripTitle,
+  placeTitle,
   type ImportDeps,
   type TripStore,
   type TripTx,
@@ -653,6 +654,19 @@ describe("tripTitle", () => {
       destination: { name: "Stockholm Central", city: "Stockholm", country: "SE" },
     };
     expect(tripTitle([car, express], [{ city: "London", country: "GB" }])).toBe("Stockholm");
+  });
+
+  it("names a trip of places with no town after the one away from home", () => {
+    const stay = (name: string, day: number) => ({
+      type: "lodging" as const,
+      title: `Stay in ${name}`,
+      start: `2026-09-0${day}T15:00:00+01:00`,
+      end: `2026-09-0${day + 1}T10:00:00+01:00`,
+      destination: { name },
+    });
+    const home = [{ city: "London", country: "GB" }];
+    expect(tripTitle([stay("London", 1), stay("Liverpool", 2)], [], home)).toBe("Liverpool");
+    expect(tripTitle([stay("London", 1), stay("Liverpool", 2)], home)).toBe("Liverpool");
   });
 });
 
@@ -1887,5 +1901,91 @@ describe("fileBooking with a ride from the airport", () => {
     const where = { name: "Hertz Islington", city: "London", country: "GB" };
     await file(store, "hire", [{ type: "car_rental", title: "Hertz", start: "2026-07-24T09:00:00+01:00", end: "2026-07-24T18:00:00+01:00", origin: where, destination: where }]);
     expect(titles(store)).toEqual(["London 2026-07-24..2026-07-24", "New York 2026-07-10..2026-07-23"]);
+  });
+});
+
+// A week in Melbourne as one user's emails gave it (invented references):
+// two emails for one St Kilda stay, a flight in, a terrace whose place has
+// no town, and a car back to the airport.
+describe("fileBooking a week in Melbourne", () => {
+  const listing = "Best balcony in St Kilda & Entire apartment.";
+  const requested: ExtractedSegment = {
+    type: "lodging",
+    title: listing,
+    provider: "Airbnb",
+    start: "2025-12-26T15:00:00+11:00",
+    end: "2025-12-27T10:00:00+11:00",
+    destination: { name: listing, city: "Melbourne", country: "AU" },
+  };
+  const confirmed: ExtractedSegment = {
+    ...requested,
+    confirmation: "HMEXAMPLE01",
+    destination: { name: listing, address: "1 Example Street, St Kilda VIC 3182, Australia", city: "St Kilda", country: "AU" },
+  };
+  const flightIn: ExtractedSegment = {
+    type: "flight",
+    title: "VA 234",
+    provider: "Virgin Australia",
+    start: "2025-12-26T16:50:00+10:30",
+    end: "2025-12-26T18:40:00+11:00",
+    origin: { name: "Adelaide", code: "ADL", city: "Adelaide", country: "AU" },
+    destination: { name: "Melbourne", code: "MEL", city: "Melbourne", country: "AU" },
+  };
+  const terrace: ExtractedSegment = {
+    type: "lodging",
+    title: "Designer Collingwood Terrace",
+    provider: "Airbnb",
+    confirmation: "HMEXAMPLE02",
+    start: "2025-12-27T15:00:00+11:00",
+    end: "2025-12-30T10:00:00+11:00",
+    destination: { name: "Designer Collingwood Terrace" },
+  };
+  const car: ExtractedSegment = {
+    type: "car_rental",
+    title: "Avis",
+    provider: "Avis",
+    confirmation: "EXAMPLE123",
+    start: "2025-12-30T12:00:00+11:00",
+    end: "2026-01-02T12:00:00+11:00",
+    origin: { name: "South Yarra, 650 Chapel Street" },
+    destination: { name: "Melbourne Tullamarine Airport arrivals" },
+  };
+  const file = (store: Memory, sourceId: string, segments: ExtractedSegment[]) =>
+    fileBooking("u1", { sourceId, source: "gmail", segments }, deps(store, async () => ({ isBooking: false, segments: [] })));
+  const titles = (store: Memory) => [...store.trips.values()].map((t) => `${t.title} ${t.start}..${t.end}`);
+
+  it("names the trip after the town the flight goes to, not a stay with no town", () => {
+    expect(tripTitle([terrace, flightIn])).toBe("Melbourne");
+    expect(tripTitle([requested, flightIn, terrace, car])).toBe("Melbourne");
+    expect(tripTitle([confirmed, flightIn])).toBe("Melbourne");
+    // Whatever order they come in, the first journey by date names it.
+    const onToSydney: ExtractedSegment = {
+      ...flightIn,
+      title: "VA 800",
+      start: "2025-12-31T09:00:00+11:00",
+      end: "2025-12-31T10:30:00+11:00",
+      origin: flightIn.destination,
+      destination: { name: "Sydney", code: "SYD", city: "Sydney", country: "AU" },
+    };
+    expect(tripTitle([onToSydney, terrace, flightIn])).toBe("Melbourne");
+    expect(placeTitle([onToSydney, flightIn])).toBe("Melbourne");
+    // Nothing else to go on: the stay's own name, not "Trip".
+    expect(tripTitle([terrace])).toBe("Designer Collingwood Terrace");
+  });
+
+  it("renames a trip the terrace started once the flight joins it", async () => {
+    const store = memoryStore();
+    for (const [id, segments] of [["terrace", [terrace]], ["car", [car]], ["flight", [flightIn]], ["requested", [requested]]] as const) {
+      await file(store, id, [...segments]);
+    }
+    expect(titles(store)).toEqual(["Melbourne 2025-12-26..2026-01-02"]);
+  });
+
+  it("keeps a name the user gave the trip", async () => {
+    const store = memoryStore();
+    const { tripId } = await file(store, "terrace", [terrace]);
+    store.trips.set(tripId!, { ...store.trips.get(tripId!)!, title: "Christmas away" });
+    await file(store, "flight", [flightIn]);
+    expect(titles(store)).toEqual(["Christmas away 2025-12-26..2025-12-30"]);
   });
 });

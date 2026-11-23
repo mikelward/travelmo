@@ -490,3 +490,59 @@ describe("regroupTrips with outings at home", () => {
     expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0 });
   });
 });
+
+describe("regroupTrips with a trip named for a stay with no town", () => {
+  const melbourne = { name: "Melbourne", code: "MEL", city: "Melbourne", country: "AU" };
+  const adelaide = { name: "Adelaide", code: "ADL", city: "Adelaide", country: "AU" };
+  const put = (store: Memory, s: Segment) => store.segments.set(s.id, s);
+  const fill = (store: Memory, title: string) => {
+    store.trips.set("mel", trip("mel", title, "2025-12-26", "2025-12-30"));
+    put(
+      store,
+      segment("mel", "t-0", "t", {
+        type: "lodging",
+        title: "Designer Collingwood Terrace",
+        provider: "Airbnb",
+        confirmation: "HMEXAMPLE02",
+        start: "2025-12-27T15:00:00+11:00",
+        end: "2025-12-30T10:00:00+11:00",
+        destination: { name: "Designer Collingwood Terrace" },
+      }),
+    );
+    put(
+      store,
+      segment("mel", "f-0", "f", {
+        type: "flight",
+        title: "VA 234",
+        start: "2025-12-26T16:50:00+10:30",
+        end: "2025-12-26T18:40:00+11:00",
+        origin: adelaide,
+        destination: melbourne,
+      }),
+    );
+  };
+
+  it("names it after the town the trip goes to", async () => {
+    const store = memoryStore();
+    fill(store, "Designer Collingwood Terrace");
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 1, deleted: 0 });
+    expect(store.trips.get("mel")?.title).toBe("Melbourne");
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0 });
+  });
+
+  it("names it after the town once the stay's place has since gained one", async () => {
+    const store = memoryStore();
+    fill(store, "Designer Collingwood Terrace");
+    const stay = store.segments.get("t-0")!;
+    store.segments.set("t-0", { ...stay, destination: { name: "Designer Collingwood Terrace", city: "Collingwood", country: "AU" } });
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 1, deleted: 0 });
+    expect(store.trips.get("mel")?.title).toBe("Melbourne");
+  });
+
+  it("keeps a name the user gave it", async () => {
+    const store = memoryStore();
+    fill(store, "Christmas away");
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0 });
+    expect(store.trips.get("mel")?.title).toBe("Christmas away");
+  });
+});

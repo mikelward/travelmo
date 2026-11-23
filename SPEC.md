@@ -761,7 +761,18 @@ a holiday club in London either side of a weekend in Liverpool comes in as
 three trips, each club day named as a day out and the weekend "Liverpool":
 a new trip is named after its first destination that is not home, or
 failing that its first origin that is not (a return leg booked alone),
-looking at journeys and stays before a car or transfer's drop-off. A day
+looking at journeys first, then stays and the rest, then a car or
+transfer's drop-off, so a flight to Melbourne makes a Melbourne trip
+whichever suburb the stays are in. Only a town names a trip: a place's city
+(the geocoder's when the source gave none), or for a journey an airport or
+station named without one. A place that is only its own name (a stay's
+listing, "Designer Collingwood Terrace") names the trip only when nothing
+else does. When a booking joins a trip still named as an import named it
+(the name its bookings, or the bookings of any one email, give it, by the
+current rules or the earlier ones that named a trip after a place with no
+town, or the name of one of its bookings or their places), the trip is
+named again from all its bookings; a trip the owner renamed keeps its name
+(`importGaveTitle`). A day
 out is named after what it is, and so is a course of several days at one
 place: one ticket spanning them, or one a day whose titles differ only in
 the day or date ("Holiday Camp East Finchley - Junior Group" for "... (Day
@@ -787,7 +798,8 @@ or a word of the hub's name that is not its town's ("Heathrow" of London
 Heathrow). Whichever is imported first, the other joins its trip. A trip of nothing but a transfer is named by its route
 (`transferTitle`): "Heathrow to home" when it ends in the home of its day,
 else "Heathrow to London"; when a journey later joins it and the owner has
-not renamed it, it takes the name the whole trip would get ("New York").
+not renamed it, it takes the name the whole trip would get ("New York"), as
+above.
 
 To start over instead, "Delete all trips" in Settings (`POST /trips/delete-all`,
 `apps/parser/src/tripsReset.ts`) deletes every trip the user owns, its
@@ -822,10 +834,12 @@ most of its bookings, with its id, sharing and dates; it keeps that trip's
 title too while it still holds every booking the trip had, so a name the
 user gave a trip only added to survives (otherwise it is named from all
 its bookings, so a trip that starts with a car to the airport is named
-after where the flight goes). A course still titled with its venue's name,
-as imports named one before they read dates in its titles ("Weston Park
-School"), is renamed after the course; that title is still the one an
-import gave it. A trip whose bookings are
+after where the flight goes). A trip still titled as an import titled it
+(`importGaveTitle`, above) is named afresh from its bookings: a course
+titled with its venue's name, as imports named one before they read dates
+in its titles ("Weston Park School"), is renamed after the course, and a
+trip named after a stay with no town before a flight to Melbourne joined it
+becomes "Melbourne". A trip whose bookings are
 unchanged is not written at all. Bookings never move between trips shared
 with different people (the maintainer's call: never mix them). Bookings are
 regrouped only among trips with the same share list, compared as a set and
