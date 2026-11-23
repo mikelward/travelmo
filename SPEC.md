@@ -492,7 +492,8 @@ Gmail ─watch─▶ Pub/Sub ─push(OIDC)─▶ parser /internal/pubsub/gmail
 Cost control is the pre-filter plus the parsed-message record: an email is
 shown to the model at most once, and only when it carries a booking signal.
 The seed sender list is in `apps/parser/src/prefilter.ts`; users extend it
-from Settings, where an "Import review" list shows recent emails that did
+from the Import review page (`/settings/review`, linked from Settings),
+which lists recent emails and other imports that did
 not become bookings with three actions: always import that sender, never
 import it, or import this one anyway (`POST /gmail/reimport`, which reclaims
 the record of a message that did not become a booking — never an imported
