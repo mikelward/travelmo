@@ -1,6 +1,6 @@
 import { paths, type CalendarFeed, type GmailConnection, type GoogleCalendarConnection, type ParsedMessage, type TravelProfile, type Segment, type Trip, type UserProfile } from "@travelmo/core";
 import { getApps, initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { FieldPath, FieldValue, getFirestore } from "firebase-admin/firestore";
 
 // The Admin SDK finds the emulator through FIRESTORE_EMULATOR_HOST, which
 // `firebase emulators:exec` exports.
@@ -129,7 +129,18 @@ export async function updateUser(uid: string, data: Partial<UserProfile>): Promi
   await db.doc(paths.user(uid)).set(data, { merge: true });
 }
 
+// A connected mailbox as the parser leaves it: on the profile, one of
+// several by its lowercased address, replaced whole; and in the private
+// record the rules trust, which counts it as the account's.
 export async function seedGmail(uid: string, gmail: GmailConnection): Promise<void> {
+  const ref = db.doc(paths.user(uid));
+  if (!(await ref.get()).exists) await ref.set({});
+  await ref.update(new FieldPath("gmails", gmail.emailAddress.toLowerCase()), { idPrefix: "", ...gmail });
+  await db.doc(paths.emailLinks(uid)).set({ mailboxes: FieldValue.arrayUnion(gmail.emailAddress.toLowerCase()) }, { merge: true });
+}
+
+// One connected before there could be several, as the parser left it then.
+export async function seedLegacyGmail(uid: string, gmail: GmailConnection): Promise<void> {
   await db.doc(paths.user(uid)).set({ gmail }, { merge: true });
 }
 

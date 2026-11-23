@@ -5,6 +5,8 @@ import app.travelmo.core.PendingEmail
 import app.travelmo.core.FlightStatus
 import app.travelmo.core.FoundLoyalty
 import app.travelmo.core.BackfillShown
+import app.travelmo.core.GmailMailbox
+import app.travelmo.core.gmailMailboxes
 import app.travelmo.core.ParsedRecord
 import app.travelmo.core.SenderPatterns
 import app.travelmo.core.LoyaltyPerson
@@ -184,7 +186,7 @@ private fun Map<String, Any?>.entries(key: String): List<ProfileEntry> =
 /** The addresses `users/{uid}` names (SPEC "Linked email addresses"); anything malformed counts as absent. */
 fun addressHolderFromDocument(data: Map<String, Any?>): AddressHolder = AddressHolder(
     emails = data.strings("emails"),
-    gmail = (data["gmail"] as? Map<*, *>)?.get("emailAddress") as? String,
+    gmails = gmailStatusesOf(data).map { it.emailAddress },
     pendingEmails = (data["pendingEmails"] as? List<*>).orEmpty().mapNotNull { p ->
         val entry = p as? Map<*, *> ?: return@mapNotNull null
         PendingEmail(entry["email"] as? String ?: return@mapNotNull null, entry["sentAt"] as? String ?: return@mapNotNull null, entry["expiresAt"] as? String ?: return@mapNotNull null)
@@ -256,12 +258,37 @@ internal fun parsedRecordOf(id: String, data: Map<String, Any?>?): ParsedRecord?
 internal fun senderPatternsOf(data: Map<String, Any?>?): SenderPatterns =
     SenderPatterns(allow = data.orEmpty().strings("allow"), deny = data.orEmpty().strings("deny"))
 
-/** The Gmail connection on the user document: the address, and how far the last reading got. */
-data class GmailStatus(val emailAddress: String, val progress: BackfillShown? = null)
+/**
+ * One connected Gmail mailbox on the user document: the address, how far
+ * the last reading got, and what its emails' sources are named by
+ * ([GmailMailbox]).
+ */
+data class GmailStatus(
+    val emailAddress: String,
+    val progress: BackfillShown? = null,
+    val connectedAt: String = "",
+    val idPrefix: String = "",
+) {
+    val mailbox: GmailMailbox get() = GmailMailbox(emailAddress, connectedAt, idPrefix)
+}
 
-/** The user document's Gmail connection; null when none. A malformed progress reads as none. */
-internal fun gmailStatusOf(data: Map<String, Any?>?): GmailStatus? {
-    val gmail = data?.get("gmail") as? Map<*, *> ?: return null
+/**
+ * The user document's connected mailboxes (`gmails`, and `gmail`, one
+ * connected before there could be several), oldest first. A malformed
+ * entry reads as none, a malformed progress as no progress.
+ */
+internal fun gmailStatusesOf(data: Map<String, Any?>?): List<GmailStatus> {
+    val all = (data?.get("gmails") as? Map<*, *>).orEmpty().values.mapNotNull(::gmailStatusOf)
+    val legacy = gmailStatusOf(data?.get("gmail"))
+    val ordered = gmailMailboxes(all.map { it.mailbox }, legacy?.mailbox)
+    // The frozen `gmail` copy first, so a moved mailbox's live `gmails`
+    // entry, with its reading progress, replaces it.
+    val byAddress = (listOfNotNull(legacy) + all).associateBy { it.mailbox }
+    return ordered.mapNotNull { byAddress[it] }
+}
+
+private fun gmailStatusOf(entry: Any?): GmailStatus? {
+    val gmail = entry as? Map<*, *> ?: return null
     val address = (gmail["emailAddress"] as? String)?.takeIf { it.isNotBlank() } ?: return null
     val p = gmail["backfill"] as? Map<*, *>
     fun count(key: String) = (p?.get(key) as? Number)?.toInt()
@@ -277,5 +304,5 @@ internal fun gmailStatusOf(data: Map<String, Any?>?): GmailStatus? {
             lastFailed = count("lastFailed") ?: 0,
         )
     }
-    return GmailStatus(address, progress)
+    return GmailStatus(address, progress, gmail["connectedAt"] as? String ?: "", gmail["idPrefix"] as? String ?: "")
 }

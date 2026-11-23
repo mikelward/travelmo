@@ -40,16 +40,21 @@ viewer's zone. Trip bounds are calendar dates.
   email, TripIt item or calendar event it was read from (`kind, id, label,
   uid, at`), including later ones dropped as duplicates of it; the trip page
   shows them all, each email linking into Gmail for the user who imported
-  it (`uid`; the trip's owner for sources recorded without one), wherever
-  the booking has since moved.
-  Imported segments use the id `<source id>-<index>` (the Gmail message id,
-  or `tripit-<key>` for a TripIt trip) so a re-import overwrites rather than
-  duplicates.
-- `users/{uid}` — `email, displayName, photoURL, gmail {emailAddress,
-  connectedAt, watchExpiration, historyId, backfill}, googleCalendar
+  it (`uid`; the trip's owner for sources recorded without one), in the
+  mailbox it came from, wherever the booking has since moved.
+  Imported segments use the id `<source id>-<index>` (for an email, its
+  Gmail message id, behind its mailbox's `idPrefix`: see "Several
+  mailboxes"; `tripit-<key>` for a TripIt trip) so a re-import overwrites
+  rather than duplicates.
+- `users/{uid}` — `email, displayName, photoURL, gmails {<lowercased
+  address>: {emailAddress, connectedAt, watchExpiration, historyId,
+  idPrefix, backfill}}` (one entry per connected Gmail mailbox; `gmail`,
+  the same for one connected before there could be several, stays until
+  that mailbox is disconnected, frozen, for rules and apps from before),
+  `googleCalendar
   {emailAddress, connectedAt, calendars[]}, reminders {email, push}, forward
   {address, createdAt}, emails[], pendingEmails[{email, sentAt,
-  expiresAt}]`. `gmail`, `googleCalendar`, `forward`, `emails` (a copy,
+  expiresAt}]`. `gmail`, `gmails`, `googleCalendar`, `forward`, `emails` (a copy,
   for the apps, of the addresses the user confirmed besides their sign-in,
   lowercase; never trusted, see below) and `pendingEmails` (those whose
   confirmation link is still out) are server-written ("Linked email addresses"); `reminders` is the owner's choice; `backfill` is how far a reading of the whole mailbox has
@@ -103,7 +108,8 @@ viewer's zone. Trip bounds are calendar dates.
   reminder reached (uids), `departs` in UTC for the sweep, which moves it
   instead for a booking retimed later; each run moves a due booking's
   marker with it to its trip and departure ("Check-in reminders"). The parser's alone.
-- `users/{uid}/parsedMessages/{sourceId}` — `outcome` (processing,
+- `users/{uid}/parsedMessages/{sourceId}` (for an email, its source id:
+  see "Several mailboxes") — `outcome` (processing,
   filtered, not_booking, imported, failed, cancellation), `source` (absent for Gmail,
   `tripit` or `ics` otherwise), `reason, from, subject, segmentIds[],
   processedAt`, one per Gmail message, TripIt trip, unfiled TripIt item or
@@ -112,7 +118,12 @@ viewer's zone. Trip bounds are calendar dates.
   older than fifteen minutes is a dead worker's and may be taken over. Also
   the audit trail of what the LLM was shown, and the source of the review
   list in Settings.
-- `users/{uid}/private/gmail` — the refresh token and watch state;
+- `users/{uid}/private/gmail-<key>` — one connected mailbox's refresh
+  token and watch state, by its key (`mailboxKey`, a hash of the lowercased
+  address); `users/{uid}/private/gmail` — the same for one connected before
+  there could be several, until the parser moves it;
+  `users/{uid}/private/gmailIds` — `first`, the mailbox whose emails keep
+  Gmail's bare message ids;
   `users/{uid}/private/googleCalendar` — the Calendar refresh token and the
   calendar list, `googleCalendarAliases-<hash>` per calendar the event ids
   of deleted events still need. Server only. `users/{uid}/private/import` is read and written by every import
@@ -125,12 +136,13 @@ viewer's zone. Trip bounds are calendar dates.
   forwarded emails. Server only.
 - `linkedEmails/{email}` → `{uid, linkedAt}`, the one account a confirmed
   address is linked to, made in the same transaction as `confirmed`;
-  `users/{uid}/private/emails` → `{confirmed[], pending[{email, tokenHash,
-  sentAt, expiresAt}], day, sent}`, the confirmed addresses (what the rules
-  and access checks trust), the confirmation links out (by the hash of their
-  token) and the day's count. Server only.
-- `gmailAccounts/{emailAddress}` → `{uid}`, one owner per mailbox, enforced in
-  a transaction; `oauthStates/{nonce}` → `{uid, createdAt}`;
+  `users/{uid}/private/emails` → `{confirmed[], mailboxes[], pending[{email,
+  tokenHash, sentAt, expiresAt}], day, sent}`, the confirmed addresses and
+  the connected mailboxes' (lowercased; what the rules and access checks
+  trust), the confirmation links out (by the hash of their token) and the
+  day's count. Server only.
+- `gmailAccounts/{emailAddress}` → `{uid}`, one owner per mailbox (an
+  account may own several), enforced in a transaction; `oauthStates/{nonce}` → `{uid, createdAt}`;
   `pendingConnections/{token}` → `{uid, refreshToken, createdAt}`, parked
   tokens awaiting an authenticated completion. Server only; each redeemed
   once, within ten minutes.
@@ -841,11 +853,11 @@ a sharee gets; an approval, invite or admin listing of it lets them in
 the sign-in address.
 
 Settings (web and Android) lists "Email addresses": the sign-in (not
-removable), those confirmed (Remove), the connected Gmail, those waiting
+removable), those confirmed (Remove), the connected Gmail mailboxes, those waiting
 for confirmation (Remove withdraws the link), and Add. Add calls the
 parser's `/emails/add`, which refuses an address that is already the
-user's, another account's (its sign-in, an address it linked, or its
-connected Gmail), or past ten linked and pending; at most five links a
+user's, another account's (its sign-in, an address it linked, or a
+mailbox it connected), or past ten linked and pending; at most five links a
 day go out. It keeps a random token's hash (as `forwardAddresses` does) and
 mails the link, `/settings/email?token=…`, through the reminders' SMTP
 mailer; a link works for 24 hours and once. The page calls `/emails/confirm`
@@ -860,9 +872,9 @@ and confirm too, from the invite-only page, but only an address that lets
 it in, and it gets no user document until it confirms one ("Access",
 "Invited at another address"); removing needs an approved account.
 
-The Gmail mailbox connected for import counts as confirmed, since the
+Every Gmail mailbox connected for import counts as confirmed, since the
 consent proved it is the user's, for as long as it stays connected:
-disconnecting drops it unless it was also confirmed by link. Connecting a
+disconnecting one drops it unless it was also confirmed by link. Connecting a
 mailbox whose address another account linked is refused as connecting one
 another account connected is. An address is linked to one account; an
 account that signs up later with an address someone else linked is not
@@ -870,16 +882,23 @@ stopped, and both count it (the parser then names the account signing in
 with it).
 
 Where it is read: the rules check the verified sign-in first, at no cost,
-then `get()` the private record's `confirmed` and the user document's
-`gmail.emailAddress`. They never trust the user document's `emails`: the
-rules before linked addresses let a client write any field of its own user
-document, so a list planted there before they shipped would otherwise have
-counted. The parser's access checks read the same two. Every write of the
+then `get()` the private record's `confirmed` and `mailboxes` (one
+document, so several mailboxes cost no extra read) and the user document's
+`gmail.emailAddress` (one connected before there could be several, which
+clients could never write). They never trust the user document's `emails`
+or `gmails`: the rules before let a client write any other field of its
+own user document, so a list planted there before they shipped would
+otherwise have counted. The parser keeps `mailboxes` in the transaction
+that connects, moves or disconnects a mailbox, and adds it again whenever
+it renews the mailbox's watch, in case a parser from before `mailboxes`
+replaced the record during a rollout. The parser's access checks read the
+same. Every write of the
 private record sets the profile's copy whole from it, which also wipes a
 planted list; until then a planted copy only makes its own account's
 queries fail. The apps read the user document and ask for shared trips and profiles with one
 `array-contains-any` over every address; Firestore allows 30 values there,
-which the ten-address limit (with the sign-in and Gmail) stays well under.
+which the ten-address limit (with the sign-in and five mailboxes) stays
+well under.
 The parser resolves an address to an account (flight news, check-in
 reminders, admins' notifications) by sign-in, then claim, then connected
 mailbox, and finds a user's shared trips and profiles (reminders, the
@@ -903,7 +922,8 @@ approved accounts only ("Access"):
   and sharees alike may add, edit and delete them, and a written segment must
   have the documented shape (known keys, a valid type, ISO instants, ids that
   match its path).
-- A user reads and edits their own profile except the `gmail` field, owns
+- A user reads and edits their own profile except the `gmail` and `gmails`
+  fields, owns
   their sender patterns, can read but not write their parsed-message log,
   and can never read `private`.
 - A travel profile is readable by its owner and by any signed-in user whose
@@ -1675,7 +1695,10 @@ import has since been matched to it; those stay. A feed that cannot be read
 keeps its bookings and shows why in Settings.
 
 Backfill (`apps/parser/src/backfill.ts`) runs the same path over a Gmail
-search for booking-like subjects across the whole mailbox, in batches of up
+search for booking-like subjects across the whole mailbox, each connected
+mailbox on its own (its progress on its connection, its batches' messages
+naming it by key, `mailbox`; one queued before there could be several
+names none and reads the user's first), in batches of up
 to 300 messages found by one search call, each stopping after three minutes.
 Each batch carries on from Gmail's page cursor, which is kept with its
 progress (`scanned`, `imported`, `failed`, `done`) on the connection, where
@@ -1834,6 +1857,45 @@ from `gmail-backfill-parser`).
 
 ## Connecting Gmail
 
+### Several mailboxes
+
+An account may connect up to five Gmail mailboxes (`maxGmailMailboxes` in
+`packages/core/src/gmail.ts`, mirrored in Android's `Gmail.kt`), say a
+personal and a work one. Each has its own refresh token, watch, history
+cursor, reading of past emails ("Import past bookings") and Disconnect; a
+notification names its mailbox (`emailAddress`), which `gmailAccounts`
+maps to its one owner. Connecting a mailbox already connected replaces its
+token; a sixth is refused ("You can connect up to 5 Gmail accounts.
+Disconnect one first."), its new token released.
+
+Gmail's message ids are unique only within a mailbox, so the emails of
+every mailbox but the account's first are recorded (import record ids,
+source ids, `gmailMessageIds`, segment ids) as `gmail-<key>-<message id>`
+(`gmailIdPrefix`, the connection's `idPrefix`), which no bare Gmail id (all
+hexadecimal) can equal. The first mailbox the account ever connected
+(`private/gmailIds`'s `first`) keeps the bare ids it always had, so
+connecting it again after a disconnect finds its emails as read. Imports
+from every mailbox file into the same trips and dedupe as before: one
+booking confirmed in two mailboxes is one booking with both sources. A
+source opens in the mailbox its id names (`gmailSourceLink`), or the bare
+id's first mailbox; once that mailbox is disconnected, in the browser's
+or phone's default account. "Import anyway" in the review list reads the
+email again from the mailbox its record names.
+
+Requests from Settings name the mailbox (`emailAddress`); one that names
+none, from a client from before, means the only one, and is refused while
+there are several.
+
+Mailboxes connected before there could be several move on their own, with
+no manual step: as the parser starts (in the background, since every
+reader reads both places meanwhile), and whenever a user's mailboxes are
+loaded, `private/gmail` moves to `private/gmail-<key>` with `idPrefix` empty
+(its emails keep their ids), `first` and `mailboxes` are recorded, and the
+user document gains the `gmails` entry. Its `gmail` is left in place,
+frozen, until that mailbox is disconnected, so the rules (deployed after
+the parser) and apps from before keep counting and showing it; apps
+prefer the `gmails` entry. A later change can drop the reading of `gmail`.
+
 Google returns the browser to the parser with no Travelmo credentials, so the
 callback alone cannot know who is completing the flow. The parser parks the
 tokens under a one-time code and sends the browser to the web app, which, as
@@ -1842,10 +1904,12 @@ started the flow. A link forwarded to someone else therefore cannot attach
 their mailbox to the sender's account. A mailbox connected to one user is
 refused to any other until the first disconnects.
 
-Android's Settings has the same Gmail section, worded by `backfillText.ts`
-and its Kotlin twin: the address, Import past bookings (Continue, or Read
-again from the start once done), Stop while it reads, Disconnect, and how
-far the reading got. Its Connect Gmail opens Google's consent page in the
+Settings on the web and Android lists each connected mailbox, oldest
+first, worded by `backfillText.ts` and its Kotlin twin: the address, Import
+past bookings (Continue, or Read again from the start once done), Stop
+while it reads, Disconnect, and how far its reading got; then "Connect
+another Gmail account", or, at five, that one must be disconnected first.
+Android's Connect Gmail opens Google's consent page in the
 phone's browser, and the flow finishes there on the web as above, so the
 browser must be signed in to Travelmo as the same user.
 
@@ -1875,11 +1939,11 @@ caller's uid, in this order:
    to an hour after deletion (deletes stay allowed). So nothing already under
    way, on the server or another device, recreates data behind the steps
    below; what committed before the marker is found by them.
-1. Connections, while their tokens are still stored: the Gmail watch is
-   stopped, then the Gmail and Calendar refresh tokens and any consent
+1. Connections, while their tokens are still stored: every mailbox's Gmail
+   watch is stopped, then every Gmail and the Calendar refresh token and any consent
    parked in `pendingConnections` are revoked (all of them, unlike a single
-   disconnect, which keeps a grant another connection rests on), and both
-   connections are removed. A failure to stop or revoke is logged and
+   disconnect, which keeps a grant another connection rests on), and every
+   connection is removed. A failure to stop or revoke is logged and
    deletion goes on: Google may already have withdrawn the grant.
 2. Lookups that name the user outside their own documents: `gmailAccounts`,
    `forwardAddresses` (the forwarding address bounces from then on),
@@ -1917,11 +1981,11 @@ build without one points to the web instead.
 |---|---|---|
 | `POST /gmail/connect` | Firebase ID token | Returns the Google OAuth URL; stores a nonce for 10 minutes |
 | `GET /gmail/callback` | OAuth state | Exchanges the code, parks the refresh token under a one-time completion token, redirects to `/settings?gmail=pending&state=…` |
-| `POST /gmail/complete` | Firebase ID token | Redeems the completion token; refuses (and revokes) if the caller is not the user who started the flow or the mailbox belongs to another user; starts the watch and stores the connection |
-| `POST /gmail/backfill` | Firebase ID token | Starts reading past emails on the server (`restart: true` from the beginning) and returns its progress at once; 409 when starting over while a batch reads |
-| `POST /gmail/backfill/stop` | Firebase ID token | Stops the reading after the batch under way |
-| `POST /gmail/reimport` | Firebase ID token | Imports one message again, skipping the pre-filter; returns its outcome |
-| `POST /gmail/disconnect` | Firebase ID token | Stops the watch, revokes the token, deletes the connection |
+| `POST /gmail/complete` | Firebase ID token | Redeems the completion token; refuses (and revokes) if the caller is not the user who started the flow, the mailbox belongs to another user, or five others are connected; starts the watch and stores the connection beside any others |
+| `POST /gmail/backfill` | Firebase ID token | Starts reading the past emails of the mailbox `emailAddress` names on the server (`restart: true` from the beginning) and returns its progress at once; 409 when starting over while a batch reads |
+| `POST /gmail/backfill/stop` | Firebase ID token | Stops that mailbox's reading after the batch under way |
+| `POST /gmail/reimport` | Firebase ID token | Imports one message again from the mailbox its record id names, skipping the pre-filter; returns its outcome |
+| `POST /gmail/disconnect` | Firebase ID token | Stops the watch of the mailbox `emailAddress` names, revokes its token (unless another connection rests on the grant), deletes its connection |
 | `POST /trips/regroup` | Firebase ID token | Rebuilds the user's trips from their bookings with the current grouping ("Home"); returns how many trips changed and how many were merged away |
 | `POST /trips/delete-all` | Firebase ID token | Deletes every trip the user owns with its bookings, their import records, places waiting for a geocode on those bookings, and how far the last mailbox reading got; returns how many trips went. Trips shared with them, their profile and connections stay |
 | `POST /feeds/add` | Firebase ID token | Subscribes to a calendar feed after checking its address and reading it once; returns counts as for `/import/ics` |
@@ -2097,8 +2161,8 @@ press on the reference line does the same (TalkBack offers it as the
 long-click action). Sources opens a dialog listing them as the web's does (each source's label and kind, then "From" the sender), the same
 `segmentSources` in `:core`; an email the viewer imported, by the source's
 `uid` or as the trip's owner for one without, opens in Gmail at that
-message, in the Gmail account the user connected for importing
-(`gmail.emailAddress`, as the web's links), else the phone's default one. CI builds it beside the web app
+message, in the Gmail mailbox it came from (`gmailSourceLink`, as the
+web's links), else the phone's default account. CI builds it beside the web app
 (`ci / android`). An account not approved sees the web's invite-only page in place of
 the app, and admins have the Access page, from the ⋮ menu or an "Access
 request" notification ("Access").

@@ -1,7 +1,7 @@
 import { paths } from "@travelmo/core";
 import { FieldValue, type DocumentReference, type Firestore, type Query } from "firebase-admin/firestore";
-import { loadCalendarState, loadState, removeCalendarState, removeConnection } from "./connections";
-import { errorFields } from "./log";
+import { loadCalendarState, loadMailboxes, removeCalendarState, removeConnection } from "./connections";
+import { errorFields, errorKind } from "./log";
 
 // Deleting an account: everything the user owns goes, and the trips other
 // people shared with them stop naming them. Every step is idempotent and
@@ -100,21 +100,22 @@ export async function deleteAccount(uid: string, email: string | undefined, deps
     await db.doc(paths.deletedAccount(uid)).set({ uid, at: deps.now() });
 
     step = "connections";
-    // Connections next, while their tokens are still stored: the watch is
-    // stopped with the Gmail token, then every token is revoked, including
-    // any consent still parked for completion.
-    const gmail = await loadState(db, uid);
+    // Connections next, while their tokens are still stored: each mailbox's
+    // watch is stopped with its token, then every token is revoked,
+    // including any consent still parked for completion.
+    const mailboxes = await loadMailboxes(db, uid);
     const calendar = await loadCalendarState(db, uid);
     const pending = await db.collection("pendingConnections").where("uid", "==", uid).get();
-    if (gmail) {
+    for (const mailbox of mailboxes) {
       try {
-        await deps.stopWatch(gmail.refreshToken);
+        await deps.stopWatch(mailbox.refreshToken);
       } catch (error) {
-        deps.log("WARNING", "account_delete_stop_watch_failed", { uid, ...errorFields(error) });
+        // Google may already have withdrawn the grant; the token goes below.
+        deps.log("WARNING", "account_delete_stop_watch_failed", { uid, ...errorKind(error) });
       }
     }
     const tokens = [
-      ...(gmail ? [gmail.refreshToken] : []),
+      ...mailboxes.map((m) => m.refreshToken),
       ...(calendar ? [calendar.refreshToken] : []),
       ...pending.docs.flatMap((d) => {
         const token = d.get("refreshToken");
@@ -122,7 +123,7 @@ export async function deleteAccount(uid: string, email: string | undefined, deps
       }),
     ];
     const revoked = await revokeAll(uid, tokens, deps);
-    if (gmail) await removeConnection(db, uid, gmail.emailAddress);
+    for (const mailbox of mailboxes) await removeConnection(db, uid, mailbox.emailAddress);
     if (calendar) await removeCalendarState(db, uid, calendar.calendars.map((c) => c.id));
 
     // Records outside the user's own documents that name them: a mailbox's

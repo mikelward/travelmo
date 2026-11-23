@@ -62,6 +62,31 @@ describe("my addresses", () => {
   });
 });
 
+describe("every connected mailbox", () => {
+  const two = {
+    emails: ["work@company.example"],
+    gmails: {
+      "mail@example.net": { emailAddress: "Mail@Example.net", connectedAt: "2026-11-01T00:00:00.000Z", idPrefix: "" },
+      "trips@example.org": { emailAddress: "trips@example.org", connectedAt: "2026-11-02T00:00:00.000Z", idPrefix: "gmail-x-" },
+    },
+  };
+
+  it("counts as the account's, as one connected before there could be several does", () => {
+    expect(myAddresses("me@example.com", two)).toEqual(["me@example.com", "work@company.example", "mail@example.net", "trips@example.org"]);
+    expect(linkedEmails({ ...two, gmail: { emailAddress: "old@example.net", connectedAt: "2026-10-01T00:00:00.000Z" } })).toEqual([
+      "work@company.example",
+      "old@example.net",
+      "mail@example.net",
+      "trips@example.org",
+    ]);
+  });
+
+  it("shows in Settings' rows, and is refused as a new link", () => {
+    expect(emailRows("me@example.com", two, now).filter((r) => r.kind === "gmail").map((r) => r.email)).toEqual(["mail@example.net", "trips@example.org"]);
+    expect(checkNewLink("trips@example.org", "me@example.com", two, now)).toEqual({ refusal: "yours" });
+  });
+});
+
 describe("Settings' rows", () => {
   it("list the sign-in, those confirmed, Gmail and live pending ones, removable where linked", () => {
     const rows = emailRows("me@example.com", user, now);

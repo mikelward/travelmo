@@ -1,6 +1,6 @@
 "use client";
 
-import { allLoyalty, bookedDateRange, displayBounds, effectiveHomes, homeTimeline, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, localDate, normalizeEmail, paths, programsFor, sharedWithAny, type Segment, type Trip } from "@travelmo/core";
+import { allLoyalty, bookedDateRange, displayBounds, effectiveHomes, homeTimeline, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, gmailMailboxes, localDate, normalizeEmail, paths, programsFor, sharedWithAny, type Segment, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { arrayRemove, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -382,7 +382,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
                         : {})}
                       {...(learn(segment) ? { onLearnSender: learn(segment) } : {})}
                       // Each email links for whoever imported it, from their mailbox.
-                      emailLinks={{ uid: user.uid, account: profile?.gmail?.emailAddress, ownsTrip: isOwner }}
+                      emailLinks={{ uid: user.uid, mailboxes: gmailMailboxes(profile), ownsTrip: isOwner }}
                       programs={programsFor(segment.provider, loyalty)}
                       flightLines={flightLinesFor(segment, flightStatuses, now)}
                       {...(canEdit

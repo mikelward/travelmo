@@ -42,12 +42,17 @@ import type { Mailer } from "./mail";
 type Severity = "INFO" | "WARNING" | "ERROR";
 export type EmailsLog = (severity: Severity, event: string, fields: Record<string, unknown>) => void;
 
+function mailboxOf(value: unknown): { emailAddress: string } | undefined {
+  const { emailAddress } = (value ?? {}) as { emailAddress?: unknown };
+  return typeof emailAddress === "string" ? { emailAddress } : undefined;
+}
+
 // What `users/{uid}` says about the account's addresses, read leniently:
 // a malformed field counts as absent.
 export function addressHolderOf(data: Record<string, unknown> | undefined): AddressHolder & { pendingEmails?: PendingEmail[] } {
   if (!data) return {};
   const emails = Array.isArray(data.emails) ? data.emails.filter((e): e is string => typeof e === "string") : undefined;
-  const gmail = data.gmail as { emailAddress?: unknown } | undefined;
+  const gmail = mailboxOf(data.gmail);
   const pending = Array.isArray(data.pendingEmails)
     ? data.pendingEmails.filter(
         (p): p is PendingEmail =>
@@ -56,17 +61,20 @@ export function addressHolderOf(data: Record<string, unknown> | undefined): Addr
     : undefined;
   return {
     ...(emails ? { emails } : {}),
-    ...(typeof gmail?.emailAddress === "string" ? { gmail: { emailAddress: gmail.emailAddress } } : {}),
+    ...(gmail ? { gmail } : {}),
     ...(pending ? { pendingEmails: pending } : {}),
   };
 }
 
 // What the account's addresses are, from what the parser itself wrote: the
-// confirmed list in its private record and its connected Gmail (both out of
-// clients' reach), with the pending links the profile shows.
+// confirmed list and the connected Gmail mailboxes in its private record
+// (out of clients' reach), with the pending links the profile shows. Of the user document, only `gmail` counts, a mailbox
+// connected before there could be several, which clients could never
+// write; never `gmails`, which they could before the rules locked it.
 export function trustedHolder(user: Record<string, unknown> | undefined, links: EmailLinks): AddressHolder & { pendingEmails?: PendingEmail[] } {
   const { gmail, pendingEmails } = addressHolderOf(user);
-  return { emails: links.confirmed ?? [], ...(gmail ? { gmail } : {}), ...(pendingEmails ? { pendingEmails } : {}) };
+  const gmails = Object.fromEntries((links.mailboxes ?? []).map((address) => [address, { emailAddress: address }]));
+  return { emails: links.confirmed ?? [], ...(gmail ? { gmail } : {}), gmails, ...(pendingEmails ? { pendingEmails } : {}) };
 }
 
 // The account's confirmed addresses besides its sign-in, as trusted.
@@ -76,7 +84,7 @@ export async function trustedLinked(db: Firestore, uid: string): Promise<{ user:
 }
 
 // Every address that is the account's: its verified sign-in, those it
-// linked and its connected Gmail.
+// linked and its connected Gmail mailboxes.
 export async function addressesOf(db: Firestore, uid: string, verifiedEmail: (uid: string) => Promise<string | undefined>): Promise<string[]> {
   const [email, { holder }] = await Promise.all([verifiedEmail(uid), trustedLinked(db, uid)]);
   return myAddresses(email, holder);
@@ -130,9 +138,11 @@ export function readLinks(data: Record<string, unknown> | undefined): EmailLinks
       )
     : [];
   const confirmed = Array.isArray(data?.confirmed) ? (data.confirmed as unknown[]).filter((e): e is string => typeof e === "string") : [];
+  const mailboxes = Array.isArray(data?.mailboxes) ? (data.mailboxes as unknown[]).filter((e): e is string => typeof e === "string") : undefined;
   return {
     pending,
     confirmed,
+    ...(mailboxes ? { mailboxes } : {}),
     ...(typeof data?.day === "string" ? { day: data.day } : {}),
     ...(typeof data?.sent === "number" ? { sent: data.sent } : {}),
   };

@@ -1,9 +1,35 @@
 import { expect, test } from "@playwright/test";
 import { bookingAction, owner, partner, signIn, signOut } from "./helpers";
-import { clearData, readSegments, seedTrip } from "./seed";
+import { gmailIdPrefix } from "@travelmo/core";
+import { clearData, readSegments, seedGmail, seedTrip } from "./seed";
 
 test.beforeEach(async () => {
   await clearData();
+});
+
+test("an imported email opens in the Gmail account it came from", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  const work = "owner@work.example";
+  await seedGmail(ownerUid, { emailAddress: "owner.mail@example.com", connectedAt: "2026-11-01T00:00:00Z", idPrefix: "" });
+  await seedGmail(ownerUid, { emailAddress: work, connectedAt: "2026-11-02T00:00:00Z", idPrefix: gmailIdPrefix(work) });
+  await seedTrip(ownerUid, "e2e-trip", {
+    sources: [
+      { kind: "gmail", id: "m1", label: "Your stay at Cove", uid: ownerUid, at: "2026-11-01T00:00:00Z" },
+      { kind: "gmail", id: `${gmailIdPrefix(work)}m7`, label: "Your stay is coming up", uid: ownerUid, at: "2026-11-03T00:00:00Z" },
+    ],
+  });
+  await page.goto("/trips/e2e-trip");
+  await expect(page.getByText("Cove Liverpool", { exact: true })).toBeVisible();
+  await bookingAction(page, "Sources");
+  const sources = page.getByRole("dialog", { name: "Sources" });
+  await expect(sources.getByRole("link", { name: "Your stay at Cove" })).toHaveAttribute(
+    "href",
+    "https://mail.google.com/mail/u/?authuser=owner.mail%40example.com#all/m1",
+  );
+  await expect(sources.getByRole("link", { name: "Your stay is coming up" })).toHaveAttribute(
+    "href",
+    "https://mail.google.com/mail/u/?authuser=owner%40work.example#all/m7",
+  );
 });
 
 test("the owner sees an imported trip, shares it, and the partner can add a booking", async ({ page }) => {

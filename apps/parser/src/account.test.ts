@@ -1,4 +1,4 @@
-import { paths, type Segment, type Trip } from "@travelmo/core";
+import { mailboxKey, paths, type Segment, type Trip } from "@travelmo/core";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { deleteAccount, type AccountDeps } from "./account";
@@ -65,12 +65,14 @@ async function seedSegment(tripId: string, id: string, uid: string): Promise<voi
 }
 
 // Everything a fully set-up user has: their profile and its subcollections,
-// both Google connections, a consent in flight, a forwarding address and a
+// both Google connections (two Gmail mailboxes), a consent in flight, a forwarding address and a
 // calendar link.
 async function seedUser(uid: string, email: string) {
   const mailbox = `${unique("mailbox")}@example.com`;
   await db.doc(paths.user(uid)).set({ email });
   await saveConnection(db, uid, { refreshToken: `rt-gmail-${uid}`, emailAddress: mailbox, connectedAt: iso, historyId: "1", watchExpiration: iso });
+  const second = `${unique("second")}@example.com`;
+  await saveConnection(db, uid, { refreshToken: `rt-gmail2-${uid}`, emailAddress: second, connectedAt: iso, historyId: "1", watchExpiration: iso });
   await saveCalendarState(db, uid, {
     refreshToken: `rt-cal-${uid}`,
     emailAddress: mailbox,
@@ -109,6 +111,7 @@ async function seedUser(uid: string, email: string) {
   for (const path of owned) await db.doc(path).set({ at: iso });
   const lookups = [
     paths.gmailAccount(mailbox),
+    paths.gmailAccount(second),
     paths.pendingConnection(pending),
     paths.oauthState(nonce),
     paths.forwardAddress(forwardHash),
@@ -116,7 +119,8 @@ async function seedUser(uid: string, email: string) {
     `geocodeRetries/${retry}`,
     paths.linkedEmail(linked),
   ];
-  return { mailbox, owned, lookups };
+  const mailboxes = [paths.gmailMailbox(uid, mailboxKey(mailbox)), paths.gmailMailbox(uid, mailboxKey(second)), paths.gmailIds(uid)];
+  return { mailbox, second, owned, lookups, mailboxes };
 }
 
 const exists = async (path: string) => (await db.doc(path).get()).exists;
@@ -137,19 +141,37 @@ describe("deleteAccount", () => {
       expect(await segmentCount(id)).toBe(0);
     }
     expect(await exists(paths.user(uid))).toBe(false);
-    for (const path of [...seeded.owned, paths.gmailState(uid), paths.googleCalendarState(uid), paths.calendarExport(uid)]) {
+    for (const path of [...seeded.owned, ...seeded.mailboxes, paths.gmailState(uid), paths.googleCalendarState(uid), paths.calendarExport(uid)]) {
       expect(await exists(path), path).toBe(false);
     }
     for (const path of seeded.lookups) expect(await exists(path), path).toBe(false);
     expect((await db.doc(paths.user(uid)).listCollections()).length).toBe(0);
-    expect(calls.stopWatch).toEqual([`rt-gmail-${uid}`]);
-    expect(calls.revoke.sort()).toEqual([`rt-cal-${uid}`, `rt-gmail-${uid}`, `rt-pending-${uid}`]);
+    expect(calls.stopWatch.sort()).toEqual([`rt-gmail-${uid}`, `rt-gmail2-${uid}`]);
+    expect(calls.revoke.sort()).toEqual([`rt-cal-${uid}`, `rt-gmail-${uid}`, `rt-gmail2-${uid}`, `rt-pending-${uid}`]);
     expect(calls.deleteAuthUser).toEqual([uid]);
-    expect(result).toMatchObject({ revoked: 3, revokeFailures: 0, ownedTrips: 2 });
+    expect(result).toMatchObject({ revoked: 4, revokeFailures: 0, ownedTrips: 2 });
     expect(logged.map((l) => l.event)).toEqual(["account_delete_started", "account_deleted"]);
     // The logs name the account by its id only.
     expect(JSON.stringify(logged)).not.toContain(email);
     expect(JSON.stringify(logged)).not.toContain(seeded.mailbox);
+    expect(JSON.stringify(logged)).not.toContain(seeded.second);
+  });
+
+  it("stops and removes a mailbox connected before there could be several", async () => {
+    const uid = unique("u");
+    const mailbox = `${unique("legacy")}@example.com`;
+    await db.doc(paths.user(uid)).set({ email: `${uid}@example.com`, gmail: { emailAddress: mailbox, connectedAt: iso } });
+    await db.doc(paths.gmailState(uid)).set({ refreshToken: `rt-old-${uid}`, emailAddress: mailbox, connectedAt: iso });
+    await db.doc(paths.gmailAccount(mailbox)).set({ uid });
+    const { deps, calls } = fakeDeps();
+
+    await deleteAccount(uid, undefined, deps);
+
+    expect(calls.stopWatch).toEqual([`rt-old-${uid}`]);
+    expect(calls.revoke).toEqual([`rt-old-${uid}`]);
+    for (const path of [paths.gmailState(uid), paths.gmailMailbox(uid, mailboxKey(mailbox)), paths.gmailAccount(mailbox), paths.user(uid)]) {
+      expect(await exists(path), path).toBe(false);
+    }
   });
 
   it("takes them off trips and profiles others shared with them, which stay with their bookings", async () => {
@@ -207,8 +229,8 @@ describe("deleteAccount", () => {
     expect(await exists(paths.user(uid))).toBe(false);
     expect(await exists(paths.gmailState(uid))).toBe(false);
     expect(calls.deleteAuthUser).toEqual([uid]);
-    expect(result).toMatchObject({ revoked: 0, revokeFailures: 3 });
-    expect(logged.filter((l) => l.event === "account_delete_revoke_failed")).toHaveLength(3);
+    expect(result).toMatchObject({ revoked: 0, revokeFailures: 4 });
+    expect(logged.filter((l) => l.event === "account_delete_revoke_failed")).toHaveLength(4);
     expect(logged.some((l) => l.event === "account_delete_stop_watch_failed" && l.severity === "WARNING")).toBe(true);
     expect(logged.at(-1)?.event).toBe("account_deleted");
   });

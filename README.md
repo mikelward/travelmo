@@ -454,7 +454,9 @@ while a due parser is skipped for missing settings waits for it
 (unrecorded), since rules can rely on what the parser does as it starts
 (the accounts it lets in, SPEC "Access") and a new job can call a route
 the parser has only just gained; a failed parser deploy stops the job
-before them.
+before them. Gmail mailboxes connected before an account could connect
+several move to where each is kept now as the parser starts, with nothing
+to run by hand (`gmail_moved` in its log; SPEC "Several mailboxes").
 
 The web app needs nothing here: App Hosting builds `main` itself. The parser's
 deploy names only the image, so the service keeps its environment variables,

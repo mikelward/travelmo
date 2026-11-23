@@ -1,6 +1,6 @@
 "use client";
 
-import { RideCompany, describeBackfill, describeDeletedTrips, isReading, pausedReason, describeRegroup, groupSkips, maxRideCompanies, paths, type SenderPatterns, type SkipGroup } from "@travelmo/core";
+import { RideCompany, describeBackfill, describeDeletedTrips, gmailMailboxes, isReading, maxGmailMailboxes, pausedReason, describeRegroup, groupSkips, maxRideCompanies, paths, type GmailConnection, type SenderPatterns, type SkipGroup } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -72,78 +72,104 @@ function GmailSection({ user }: { user: User }) {
     }
   };
 
-  // The parser reads the mailbox on its own once started, and records its
-  // progress on the profile, which the line below follows.
-  const startReading = (restart: boolean) => run(async () => {
-      await api.startBackfill(user, restart);
+  const mailboxes = profile ? gmailMailboxes(profile) : [];
+  const connect = () =>
+    run(async () => {
+      const { url } = await api.connectGmail(user);
+      window.location.assign(url);
     });
-  const stopReading = () => run(() => api.stopBackfill(user));
-
-  const gmail = profile?.gmail;
-  const progress = gmail?.backfill;
-  const reading = isReading(progress, now);
-  const paused = pausedReason(progress, reading);
   return (
     <section>
       <h2 className="text-lg font-medium">Gmail</h2>
       {profile === undefined && <p className="mt-2 text-muted">Loading…</p>}
-      {profile && !gmail && (
+      {profile && mailboxes.length === 0 && (
         <>
           <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
             Travelmo reads booking confirmations from your inbox and turns them into trips. It asks for read-only
             access and only sends emails that look like bookings to the extraction model.
           </p>
-          <button
-            type="button"
-            disabled={busy}
-            className={`${buttonClass} mt-3`}
-            onClick={() =>
-              run(async () => {
-                const { url } = await api.connectGmail(user);
-                window.location.assign(url);
-              })
-            }
-          >
+          <button type="button" disabled={busy} className={`${buttonClass} mt-3`} onClick={connect}>
             Connect Gmail
           </button>
         </>
       )}
-      {gmail && (
+      {mailboxes.length > 0 && (
         <>
           <p className="mt-2 text-sm">
-            Connected as <span className="font-medium">{gmail.emailAddress}</span>. New bookings import automatically;
-            past ones come in when you import them, as far back as your mailbox goes.
+            New bookings import automatically; past ones come in when you import them, as far back as each mailbox goes.
           </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {reading ? (
-              <button type="button" disabled={busy} className={buttonClass} onClick={stopReading}>
-                Stop
-              </button>
-            ) : (
-              <button type="button" disabled={busy} className={buttonClass} onClick={() => startReading(!!progress?.done)}>
-                {!progress ? "Import past bookings" : progress.done ? "Read again from the start" : "Continue reading past emails"}
-              </button>
-            )}
-            <button
-              type="button"
-              disabled={busy}
-              className={buttonClass}
-              onClick={() => run(() => api.disconnectGmail(user))}
-            >
-              Disconnect
+          <ul className="mt-3 space-y-4">
+            {mailboxes.map((mailbox) => (
+              <MailboxRow key={mailbox.emailAddress} user={user} mailbox={mailbox} now={now} busy={busy} run={run} />
+            ))}
+          </ul>
+          {mailboxes.length < maxGmailMailboxes ? (
+            <button type="button" disabled={busy} className={`${buttonClass} mt-4`} onClick={connect}>
+              Connect another Gmail account
             </button>
-          </div>
-          {progress && (
-            <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400" data-testid="backfill-progress">
-              {describeBackfill(progress, reading)}
+          ) : (
+            <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
+              You can connect up to {maxGmailMailboxes} Gmail accounts. Disconnect one to connect another.
             </p>
           )}
-          {paused && <p className="mt-3 text-sm text-danger">{paused}</p>}
         </>
       )}
       {notice && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{notice}</p>}
       {error && <p className="mt-3 text-sm text-danger">{error}</p>}
     </section>
+  );
+}
+
+// One connected mailbox: its address, how far reading its past emails has
+// got, and its own Import past bookings and Disconnect. The parser reads
+// the mailbox on its own once started, and records its progress on the
+// profile, which the line below follows.
+function MailboxRow({
+  user,
+  mailbox,
+  now,
+  busy,
+  run,
+}: {
+  user: User;
+  mailbox: GmailConnection;
+  now: number;
+  busy: boolean;
+  run: (action: () => Promise<void>) => Promise<void>;
+}) {
+  const progress = mailbox.backfill;
+  const reading = isReading(progress, now);
+  const paused = pausedReason(progress, reading);
+  const address = mailbox.emailAddress;
+  return (
+    <li className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800" data-testid="gmail-mailbox">
+      <p className="text-sm font-medium">{address}</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {reading ? (
+          <button type="button" disabled={busy} className={buttonClass} onClick={() => run(() => api.stopBackfill(user, address))}>
+            Stop
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={busy}
+            className={buttonClass}
+            onClick={() => run(async () => void (await api.startBackfill(user, address, !!progress?.done)))}
+          >
+            {!progress ? "Import past bookings" : progress.done ? "Read again from the start" : "Continue reading past emails"}
+          </button>
+        )}
+        <button type="button" disabled={busy} className={buttonClass} onClick={() => run(() => api.disconnectGmail(user, address))}>
+          Disconnect
+        </button>
+      </div>
+      {progress && (
+        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="backfill-progress">
+          {describeBackfill(progress, reading)}
+        </p>
+      )}
+      {paused && <p className="mt-2 text-sm text-danger">{paused}</p>}
+    </li>
   );
 }
 

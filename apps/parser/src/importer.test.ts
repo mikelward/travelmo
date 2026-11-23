@@ -1,5 +1,5 @@
-import { parseIcs, parseTripItExport, type ExtractedBooking, type ExtractedSegment, type ParsedMessage, type Segment, type Trip } from "@travelmo/core";
-import type { EmailMessage } from "./gmail";
+import { gmailIdPrefix, parseIcs, parseTripItExport, type ExtractedBooking, type ExtractedSegment, type ParsedMessage, type Segment, type Trip } from "@travelmo/core";
+import { recordedAs, type EmailMessage } from "./gmail";
 import {
   claimLeaseMs,
   changeClaimable,
@@ -209,6 +209,20 @@ describe("importMessage", () => {
     const withNumbers: ExtractedBooking = { ...lodging, memberships: [{ program: "Sample Hotels Rewards", number: "777" }] };
     expect(await importMessage("u1", email(), deps(store, async () => withNumbers))).toBe("imported");
     expect(store.segments.size).toBe(1);
+  });
+
+  it("imports the same message id from two mailboxes as two emails", async () => {
+    const store = memoryStore();
+    const second = gmailIdPrefix("trips@example.org");
+    const fetch = async (id: string) => email({ id });
+    const counts = await importMessages("u1", ["m1"], fetch, deps(store, async () => lodging));
+    const more = await importMessages("u1", ["m1"], recordedAs(second, fetch), deps(store, async () => lodging));
+    expect([counts.imported, more.imported]).toEqual([1, 1]);
+    expect((await store.getParsed("u1", `${second}m1`))?.outcome).toBe("imported");
+    expect((await store.getParsed("u1", "m1"))?.outcome).toBe("imported");
+    // The second email of one booking is kept as its source too, by its own id.
+    const [segment] = [...store.segments.values()];
+    expect(segment?.sources?.map((s) => s.id)).toEqual(["m1", `${second}m1`]);
   });
 
   it("imports a filtered message again when the user asks for it", async () => {

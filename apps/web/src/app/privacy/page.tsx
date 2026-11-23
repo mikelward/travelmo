@@ -49,7 +49,8 @@ export default function PrivacyPage() {
             visas with their numbers and expiry dates, and loyalty programs.
           </li>
           <li>
-            <strong>Connections you turn on:</strong> access to read your Gmail or Google Calendar, calendar feed addresses,
+            <strong>Connections you turn on:</strong> access to read your Gmail accounts or Google Calendar, calendar feed
+            addresses,
             your forwarding address, your calendar export link, and the devices and browsers you asked to notify.
           </li>
           <li>
@@ -61,7 +62,8 @@ export default function PrivacyPage() {
 
       <Section title="Gmail and Google Calendar">
         <p>
-          When you connect Gmail, Travelmo gets read-only access to your mailbox. It downloads each new email to check
+          When you connect Gmail, Travelmo gets read-only access to that mailbox; you can connect up to five. It
+          downloads each new email to check
           whether it is a booking confirmation, judging first by the sender and subject. Emails that look like bookings
           go to Google&apos;s Gemini API, which reads them and returns any booking in them; for some, Gemini first
           compares the subject with earlier ones. Of emails that aren&apos;t bookings, Travelmo keeps the sender, the
@@ -78,7 +80,10 @@ export default function PrivacyPage() {
           trips. It is not used for advertising, not sold, not read by people except to fix a problem you report or where
           the law requires it, and not used to train AI models.
         </p>
-        <p>You can disconnect Gmail or Google Calendar in Settings at any time; Travelmo then revokes its access.</p>
+        <p>
+          You can disconnect each Gmail account, or Google Calendar, in Settings at any time; Travelmo then revokes its
+          access.
+        </p>
       </Section>
 
       <Section title="Who else handles your data">

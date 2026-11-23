@@ -59,6 +59,7 @@ import app.travelmo.BuildConfig
 import app.travelmo.R
 import app.travelmo.auth.GoogleAccount
 import app.travelmo.auth.SignedIn
+import app.travelmo.core.MAX_GMAIL_MAILBOXES
 import app.travelmo.core.EmailRowKind
 import app.travelmo.core.emailRows
 import app.travelmo.core.pausedReason
@@ -295,10 +296,11 @@ private fun EmailAddressesSection(user: SignedIn, viewModel: TripsViewModel) {
 
 /**
  * Settings' "Gmail", as on the web: Connect opens Google's consent page in
- * the browser, which hands back to Travelmo there; once connected, the
- * address, Import past bookings (Continue, or Read again from the start once
- * done) or Stop while it reads, Disconnect, and how far the reading got,
- * which the parser records as it goes.
+ * the browser, which hands back to Travelmo there; once connected, each
+ * mailbox with its address, Import past bookings (Continue, or Read again
+ * from the start once done) or Stop while it reads, Disconnect, and how far
+ * its reading got, which the parser records as it goes; then Connect
+ * another Gmail account, up to the limit.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -330,36 +332,57 @@ private fun GmailSection(viewModel: TripsViewModel) {
             }
         }
         is TripsViewModel.GmailState.Connected -> {
-            Text(stringResource(R.string.gmail_connected_as, state.emailAddress), style = MaterialTheme.typography.bodyMedium)
-            val progress = state.progress
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                if (state.reading) {
-                    OutlinedButton(onClick = { viewModel.stopReading(GMAIL_TOKEN) }, enabled = !busy) { Text(stringResource(R.string.stop)) }
-                } else {
-                    OutlinedButton(onClick = { viewModel.startReading(GMAIL_TOKEN, restart = progress?.done == true) }, enabled = !busy) {
-                        Text(
-                            stringResource(
-                                when {
-                                    progress == null -> R.string.import_past_bookings
-                                    progress.done -> R.string.read_again_from_start
-                                    else -> R.string.continue_reading
-                                },
-                            ),
-                        )
-                    }
+            Text(stringResource(R.string.gmail_connected_hint), style = MaterialTheme.typography.bodyMedium)
+            for (mailbox in state.mailboxes) MailboxRow(viewModel, mailbox, busy)
+            if (state.canConnectMore) {
+                OutlinedButton(onClick = { viewModel.connectGmail(GMAIL_TOKEN) }, enabled = !busy, modifier = Modifier.padding(top = 16.dp)) {
+                    Text(stringResource(R.string.connect_another_gmail))
                 }
-                OutlinedButton(onClick = { viewModel.disconnectGmail(GMAIL_TOKEN) }, enabled = !busy) { Text(stringResource(R.string.disconnect)) }
-            }
-            progress?.let {
-                Text(describeBackfill(it, state.reading), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
-            }
-            pausedReason(progress, state.reading)?.let {
-                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+            } else {
+                Text(
+                    pluralStringResource(R.plurals.gmail_limit, MAX_GMAIL_MAILBOXES, MAX_GMAIL_MAILBOXES),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 16.dp),
+                )
             }
         }
     }
     (outcome as? Outcome.Failed)?.let {
         Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+    }
+}
+
+/** One connected mailbox: its address, its own reading and Disconnect. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MailboxRow(viewModel: TripsViewModel, mailbox: TripsViewModel.MailboxShown, busy: Boolean) {
+    val address = mailbox.emailAddress
+    val progress = mailbox.progress
+    Text(address, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 16.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+        if (mailbox.reading) {
+            OutlinedButton(onClick = { viewModel.stopReading(GMAIL_TOKEN, address) }, enabled = !busy) { Text(stringResource(R.string.stop)) }
+        } else {
+            OutlinedButton(onClick = { viewModel.startReading(GMAIL_TOKEN, address, restart = progress?.done == true) }, enabled = !busy) {
+                Text(
+                    stringResource(
+                        when {
+                            progress == null -> R.string.import_past_bookings
+                            progress.done -> R.string.read_again_from_start
+                            else -> R.string.continue_reading
+                        },
+                    ),
+                )
+            }
+        }
+        OutlinedButton(onClick = { viewModel.disconnectGmail(GMAIL_TOKEN, address) }, enabled = !busy) { Text(stringResource(R.string.disconnect)) }
+    }
+    progress?.let {
+        Text(describeBackfill(it, mailbox.reading), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+    }
+    pausedReason(progress, mailbox.reading)?.let {
+        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
     }
 }
 

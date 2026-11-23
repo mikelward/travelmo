@@ -9,7 +9,10 @@ import {
   isEmptyProfile,
   parseIcs,
   parseTripItExport,
+  mailboxKey,
+  maxGmailMailboxes,
   paths,
+  sourceMailbox,
   type GmailState,
   type GoogleCalendarChoice,
   type ImportedProfile,
@@ -26,13 +29,16 @@ import { deleteAccount } from "./account";
 import { LinkRefused, addressesOf, confirmLink, removeLink, requestLink, uidForAddress } from "./emails";
 import {
   MailboxConflict,
-  OtherMailboxConnected,
+  TooManyMailboxes,
   calendarUsers,
   createOAuthState,
   loadCalendarState,
   loadEventAliases,
-  loadState,
+  loadMailbox,
+  loadMailboxes,
   mailboxOwner,
+  moveLegacyMailboxes,
+  resolveMailbox,
   removeCalendarState,
   removeConnection,
   revocable,
@@ -75,12 +81,13 @@ import {
   stopWatch,
   watch,
   type OAuthConfig,
+  recordedAs,
 } from "./gmail";
 import { importCalendar, importMessage, importMessages, importTripIt, type ImportDeps, type ImportOptions } from "./importer";
 import { regroupTrips } from "./regroup";
 import { resetTrips } from "./tripsReset";
 import { loadHomeOverrides } from "./homeOverrides";
-import { errorFields, log } from "./log";
+import { errorFields, errorKind, log } from "./log";
 import { BadPushEnvelope, parseGmailPush, processNotification, type GmailNotification } from "./pubsub";
 import { firestoreStore } from "./store";
 import { FeedLimitReached, addFeed, feedFailure, firestoreFeeds, pollAllFeeds, type FeedIo } from "./feeds";
@@ -259,7 +266,7 @@ async function requireInternalCaller(c: Context<Env>): Promise<void> {
 // whole grant (see `revocable`), so it is revoked only when nothing else of
 // theirs uses that Google account; otherwise it is just dropped.
 async function releaseToken(refreshToken: string, uid: string, emailAddress?: string): Promise<void> {
-  const connections = await Promise.all([loadState(db, uid), loadCalendarState(db, uid)]);
+  const connections = [...(await loadMailboxes(db, uid)), await loadCalendarState(db, uid)];
   if (!revocable(refreshToken, emailAddress, connections)) {
     log("INFO", "revoke_skipped_shared_grant", { uid });
     return;
@@ -352,9 +359,14 @@ app.post("/gmail/complete", async (c) => {
     await releaseToken(pending.refreshToken, uid, profile.emailAddress);
     throw new HTTPException(409, { message: new MailboxConflict(profile.emailAddress).message });
   }
-  // Connecting a different mailbox replaces the old one, watch and token included.
-  const previous = await loadState(db, uid);
-  if (previous && previous.emailAddress !== profile.emailAddress) await disconnect(uid, previous);
+  // Another mailbox joins those connected, up to the limit; one already
+  // connected is connected again with the new token.
+  const connected = await loadMailboxes(db, uid);
+  const again = connected.some((m) => m.emailAddress.toLowerCase() === profile.emailAddress.toLowerCase());
+  if (!again && connected.length >= maxGmailMailboxes) {
+    await releaseToken(pending.refreshToken, uid, profile.emailAddress);
+    throw new HTTPException(409, { message: new TooManyMailboxes().message });
+  }
   try {
     const watched = await watch(gmail, pubsubTopic);
     await saveConnection(db, uid, {
@@ -367,13 +379,13 @@ app.post("/gmail/complete", async (c) => {
   } catch (error) {
     // The watch, if started, points at our own topic and is left alone.
     await releaseToken(pending.refreshToken, uid, profile.emailAddress);
-    if (error instanceof MailboxConflict || error instanceof OtherMailboxConnected) {
+    if (error instanceof MailboxConflict || error instanceof TooManyMailboxes) {
       throw new HTTPException(409, { message: error.message });
     }
     if (error instanceof AccountDeletedError) throw new HTTPException(410, { message: "This account was deleted" });
     throw error;
   }
-  log("INFO", "gmail_connected", { uid });
+  log("INFO", "gmail_connected", { uid, mailbox: mailboxKey(profile.emailAddress), mailboxes: again ? connected.length : connected.length + 1 });
   return c.json({ emailAddress: profile.emailAddress });
 });
 
@@ -381,36 +393,50 @@ async function disconnect(uid: string, state: GmailState): Promise<void> {
   try {
     await stopWatch(gmailFor(oauth, state.refreshToken));
   } catch (error) {
-    log("WARNING", "stop_watch_failed", { uid, ...errorFields(error) });
+    // Google may already have withdrawn the grant; the connection goes anyway.
+    log("WARNING", "stop_watch_failed", { uid, mailbox: mailboxKey(state.emailAddress), ...errorKind(error) });
   }
   await releaseToken(state.refreshToken, uid, state.emailAddress);
   await removeConnection(db, uid, state.emailAddress);
 }
 
+// The mailbox a Settings request names (`emailAddress`); a client from
+// before there could be several names none, and means the only one.
+async function requestedMailbox(uid: string, body: { emailAddress?: unknown }): Promise<GmailState | undefined> {
+  if (typeof body.emailAddress === "string" && body.emailAddress) return loadMailbox(db, uid, body.emailAddress);
+  const all = await loadMailboxes(db, uid);
+  if (all.length > 1) throw new HTTPException(400, { message: "Say which Gmail account" });
+  return all[0];
+}
+
 app.post("/gmail/disconnect", async (c) => {
   const uid = await requireUser(c);
-  const state = await loadState(db, uid);
+  const body = (await c.req.json().catch(() => ({}))) as { emailAddress?: unknown };
+  const state = await requestedMailbox(uid, body);
   if (state) await disconnect(uid, state);
+  log("INFO", "gmail_disconnected", { uid, found: state !== undefined });
   return c.body(null, 204);
 });
 
 // Imports new mail by id, waiting out Gmail's rate limit for up to a minute.
-function importIds(uid: string, source: MailSource, ids: readonly string[], options: ImportOptions = {}) {
+function importIds(uid: string, state: GmailState, ids: readonly string[], options: ImportOptions = {}) {
+  const source = gmailSource(gmailFor(oauth, state.refreshToken));
   const deadline = Date.now() + notificationRateLimitWaitMs;
   const retry = { timeLeftMs: () => deadline - Date.now(), sleep, log: (event: string, fields: Record<string, unknown>) => log("WARNING", event, { uid, ...fields }) };
-  return importMessages(uid, ids, (id) => withRateLimitRetry(() => source.fetch(id), retry), deps, options);
+  return importMessages(uid, ids, recordedAs(state.idPrefix, (id) => withRateLimitRetry(() => source.fetch(id), retry)), deps, options);
 }
 
 // Reading the whole mailbox runs on the server (backfillChain.ts): each
 // batch carries on from where the last stopped, records how far it got on
 // the connection, where Settings shows it, and queues the next on Pub/Sub.
-function backfillIo(uid: string): ChainIo<GmailState> {
+// One reading per mailbox, each on its own.
+function backfillIo(uid: string, emailAddress: string): ChainIo<GmailState> {
   // Stop importing well before Cloud Run's request limit, leaving time to
   // save progress; the next batch carries on. Time spent waiting for the
   // batch's turn comes out of it.
   const deadline = Date.now() + backfillBudgetMs;
   return {
-    change: (fn) => changeBackfill(db, uid, fn),
+    change: (fn) => changeBackfill(db, uid, emailAddress, fn),
     runBatch: (state, from, generation) => {
       const source = gmailSource(gmailFor(oauth, state.refreshToken), gmailPacer(backfillUnitsPerMinute, { nowMs: Date.now, sleep }));
       return runBackfillBatch(from, false, {
@@ -420,7 +446,7 @@ function backfillIo(uid: string): ChainIo<GmailState> {
         // An email whose import failed (the model was down, say) is read
         // again when the reading passes it again, as after starting over.
         // Gmail's rate limit is waited out by the batch, within its time.
-        importIds: (ids) => importMessages(uid, ids, source.fetch, deps, { retryFailed: true, generation }),
+        importIds: (ids) => importMessages(uid, ids, recordedAs(state.idPrefix, source.fetch), deps, { retryFailed: true, generation }),
         isStaleCursor: source.isStaleCursor,
         now: () => new Date().toISOString(),
         log: (event, fields) => log("WARNING", event, { uid, ...fields }),
@@ -443,12 +469,15 @@ function backfillIo(uid: string): ChainIo<GmailState> {
 // not stop them.
 app.post("/gmail/backfill", async (c) => {
   const uid = await requireUser(c);
-  const body = (await c.req.json().catch(() => ({}))) as { restart?: unknown };
+  const body = (await c.req.json().catch(() => ({}))) as { restart?: unknown; emailAddress?: unknown };
   const restart = body.restart === true;
-  const result = await startBackfill(uid, randomBytes(12).toString("base64url"), restart, backfillIo(uid));
+  const mailbox = await requestedMailbox(uid, body);
+  if (!mailbox) throw new HTTPException(409, { message: "Gmail not connected" });
+  const key = mailboxKey(mailbox.emailAddress);
+  const result = await startBackfill(uid, randomBytes(12).toString("base64url"), restart, backfillIo(uid, mailbox.emailAddress), key);
   if (result.kind === "disconnected") throw new HTTPException(409, { message: "Gmail not connected" });
   if (result.kind === "busy") throw new HTTPException(409, { message: "A batch is still being read. Try again in a few minutes." });
-  log("INFO", "backfill_started", { uid, restart, joined: result.kind === "joined", run: result.progress.run });
+  log("INFO", "backfill_started", { uid, mailbox: key, restart, joined: result.kind === "joined", run: result.progress.run });
   const { cursor: _cursor, after: _after, ...progress } = result.progress;
   return c.json({ progress });
 });
@@ -456,8 +485,10 @@ app.post("/gmail/backfill", async (c) => {
 // Stop: the batch under way saves its place, and no more are queued.
 app.post("/gmail/backfill/stop", async (c) => {
   const uid = await requireUser(c);
-  const stopped = await stopBackfill(backfillIo(uid));
-  log("INFO", "backfill_stopped", { uid, stopped });
+  const body = (await c.req.json().catch(() => ({}))) as { emailAddress?: unknown };
+  const mailbox = await requestedMailbox(uid, body);
+  const stopped = mailbox ? await stopBackfill(backfillIo(uid, mailbox.emailAddress)) : false;
+  log("INFO", "backfill_stopped", { uid, ...(mailbox ? { mailbox: mailboxKey(mailbox.emailAddress) } : {}), stopped });
   return c.body(null, 204);
 });
 
@@ -481,16 +512,19 @@ app.post("/trips/delete-all", async (c) => {
 // A second look at one message the user picked from the review list: the
 // pre-filter is skipped, and an earlier non-booking outcome no longer stands
 // in the way. An import already under way, or already done, does.
+// `messageId` is the import record's id, which names the mailbox the email
+// is in (packages/core's parseGmailSourceId).
 app.post("/gmail/reimport", async (c) => {
   const uid = await requireUser(c);
-  const state = await loadState(db, uid);
-  if (!state) throw new HTTPException(409, { message: "Gmail not connected" });
   const body = (await c.req.json().catch(() => ({}))) as { messageId?: string };
   if (!body.messageId) throw new HTTPException(400, { message: "Missing messageId" });
+  const state = sourceMailbox(body.messageId, await loadMailboxes(db, uid));
+  if (!state) throw new HTTPException(409, { message: "The Gmail account this email is in isn't connected" });
   const source = gmailSource(gmailFor(oauth, state.refreshToken));
+  const prefix = state.idPrefix ?? "";
   let message;
   try {
-    message = await source.fetch(body.messageId);
+    message = await recordedAs(state.idPrefix, source.fetch)(body.messageId.slice(prefix.length));
   } catch (error) {
     if (source.isNotFound(error)) throw new HTTPException(404, { message: "That email is no longer in Gmail" });
     throw error;
@@ -518,7 +552,8 @@ function calendarIo(uid: string, refreshToken: string, mailboxImported: boolean)
 async function readCalendars(uid: string, only?: ReadonlySet<string>): Promise<{ read: number; failed: number }> {
   const state = await loadCalendarState(db, uid);
   if (!state) return { read: 0, failed: 0 };
-  const io = calendarIo(uid, state.refreshToken, sameAccount((await loadState(db, uid))?.emailAddress, state.emailAddress));
+  const mailboxes = await loadMailboxes(db, uid);
+  const io = calendarIo(uid, state.refreshToken, mailboxes.some((m) => sameAccount(m.emailAddress, state.emailAddress)));
   const results: GoogleCalendarChoice[] = [];
   for (const choice of state.calendars) {
     if (!choice.selected || (only && !only.has(choice.id))) continue;
@@ -1221,9 +1256,9 @@ app.post("/internal/pubsub/gmail", async (c) => {
     }
     const result = await processNotification(notification.historyId, {
       resetGeneration: () => deps.store.resetGeneration(uid),
-      loadState: async () => (await loadState(db, uid)) ?? undefined,
+      loadState: () => loadMailbox(db, uid, notification.emailAddress),
       listAdded: (state, since) => listAddedSince(gmailFor(oauth, state.refreshToken), since),
-      importIds: (state, ids, generation) => importIds(uid, gmailSource(gmailFor(oauth, state.refreshToken)), ids, { generation }),
+      importIds: (state, ids, generation) => importIds(uid, state, ids, { generation }),
       saveHistoryId: (state, historyId, generation) => updateHistoryId(db, uid, state.emailAddress, historyId, generation),
     });
     if (result.kind === "disconnected") {
@@ -1268,17 +1303,26 @@ app.post("/internal/backfill", async (c) => {
     if (error instanceof BadPushEnvelope) throw new HTTPException(400, { message: error.message });
     throw error;
   }
-  const { uid, run, step, wake, pubsubMessageId, deliveryAttempt } = message;
-  const fields = { uid, run, step, wake, pubsubMessageId, deliveryAttempt };
+  const { uid, mailbox, run, step, wake, pubsubMessageId, deliveryAttempt } = message;
+  const fields = { uid, mailbox, run, step, wake, pubsubMessageId, deliveryAttempt };
+  const continued: ContinueMessage = { uid, ...(mailbox ? { mailbox } : {}), run, step, ...(wake ? { wake } : {}) };
   try {
+    // A batch queued before there could be several mailboxes names none:
+    // it reads the user's first.
+    const state = await resolveMailbox(db, uid, mailbox);
+    if (!state) {
+      log("WARNING", "backfill_for_disconnected_user", fields);
+      return c.body(null, 204);
+    }
+    const io = backfillIo(uid, state.emailAddress);
     if (!(await approvedUid(db, uid, verifiedEmail, log))) {
       // Marked stopped where it got to, so Settings shows Continue at once
       // if access comes back, rather than a reading nothing is doing.
-      const stopped = await stopBackfill(backfillIo(uid), { uid, run, step });
+      const stopped = await stopBackfill(io, continued);
       log("INFO", "backfill_for_unapproved_user", { ...fields, stopped });
       return c.body(null, 204);
     }
-    const result = await continueBackfill({ uid, run, step, ...(wake ? { wake } : {}) }, backfillIo(uid));
+    const result = await continueBackfill(continued, io);
     switch (result.kind) {
       case "disconnected":
         log("WARNING", "backfill_for_disconnected_user", fields);
@@ -1322,15 +1366,16 @@ app.post("/internal/renew-watches", async (c) => {
   let renewed = 0;
   for (const doc of accounts.docs) {
     const uid = (doc.data() as { uid: string }).uid;
-    const state = await loadState(db, uid);
+    // Keyed by the mailbox's address, as Gmail gives it.
+    const state = await loadMailbox(db, uid, doc.id);
     if (!state) continue;
     if (state.watchExpiration && Date.parse(state.watchExpiration) > soon) continue;
     try {
       const watched = await watch(gmailFor(oauth, state.refreshToken), pubsubTopic);
       if (await updateWatch(db, uid, state.emailAddress, watched.expiration)) renewed += 1;
-      else log("WARNING", "renewed_watch_for_disconnected_user", { uid });
+      else log("WARNING", "renewed_watch_for_disconnected_user", { uid, mailbox: mailboxKey(state.emailAddress) });
     } catch (error) {
-      log("ERROR", "renew_watch_failed", { uid, ...errorFields(error) });
+      log("ERROR", "renew_watch_failed", { uid, mailbox: mailboxKey(state.emailAddress), ...errorKind(error) });
     }
   }
   log("INFO", "watches_renewed", { renewed, accounts: accounts.size });
@@ -1352,6 +1397,14 @@ try {
   log("ERROR", "access_grandfather_first_run_failed", errorFields(error));
   process.exit(1);
 }
+
+// Mailboxes connected before there could be several move to where each is
+// kept now (connections.ts). Every reader reads both places meanwhile, and
+// any user's mailboxes move when next loaded, so this runs alongside
+// serving rather than before it.
+void moveLegacyMailboxes(db, log)
+  .then((result) => log("INFO", "gmail_moved", result))
+  .catch((error: unknown) => log("ERROR", "gmail_move_failed", errorKind(error)));
 
 const port = Number(optionalEnv("PORT", "8080"));
 serve({ fetch: app.fetch, port }, () => log("INFO", "listening", { port, geminiModel, embeddingModel }));
