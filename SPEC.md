@@ -1208,15 +1208,22 @@ the new one, plus the new one itself (a return ticket is a round trip on
 its own), and corrections win as above. Bookings are outings (an activity,
 a car hired and returned in one place, or another booking in one place) or
 travel (journeys, stays, and transfers, such as a car to the airport, which
-are never at home). Travel joins travel within two days. Outings never
+are never at home). Travel joins travel within two days, but never across a
+journey home: once a trip's last journey has brought someone home, what
+starts after it is another trip, however soon (`homeBetween`), so a flight
+to Boston two days after the flight back from Sweden starts a trip of its
+own. Outings never
 join by nearness of dates alone, home known or not, since a town that is
 not named as home (Muswell Hill, Bromley) or a home not yet worked out on a
 fresh import would otherwise string a summer of outings and the trips
 between them into one: each outing is a trip of its own, so a dinner at 6pm
-and a show at 8pm at home are two days out. Within two days, an outing
-joins another that is one thing with it: tickets for one event (the same
-title, or the same town, at the same time) or the days of one course (the
-same title but for the day or date, in one town; below). It joins travel
+and a show at 8pm at home are two days out. On the same or the next day, an
+outing joins another that is one thing with it: tickets for one event (the
+same title, or the same town, at the same time) or the days of one course
+(the same title but for the day or date, in one town; below). One email's
+outings on days more than a day apart (a weekly class booked for a term)
+are filed run by run, each run of consecutive days on its own, keeping the
+ids they have as one list (`outingRuns`). Within two days, an outing joins travel
 when it happens where the travel has taken someone at the time, other than
 the home of its day (or, with home unknown, where the travel sets off
 from): before the first journey leaves, where it leaves from; between

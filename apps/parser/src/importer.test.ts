@@ -87,6 +87,33 @@ describe("importMessage", () => {
     });
   });
 
+  it("files a weekly class from one email as a day out each week", async () => {
+    const store = memoryStore();
+    const session = (date: string) => ({
+      type: "activity" as const,
+      title: "Saturday Drama Club",
+      start: `${date}T12:30:00+01:00`,
+      end: `${date}T13:30:00+01:00`,
+      destination: { name: "Example School", city: "London", country: "GB" },
+    });
+    const term: ExtractedBooking = { isBooking: true, segments: ["2025-09-11", "2025-09-18", "2025-09-25"].map(session) };
+    const mail = email({ from: "Drama Club <hello@drama.example>", subject: "Your drama club booking" });
+    expect(await importMessage("u1", mail, deps(store, async () => term))).toBe("imported");
+    const trips = [...store.trips.values()].sort((a, b) => a.start.localeCompare(b.start));
+    expect(trips.map((t) => [t.start, t.end])).toEqual([
+      ["2025-09-11", "2025-09-11"],
+      ["2025-09-18", "2025-09-18"],
+      ["2025-09-25", "2025-09-25"],
+    ]);
+    const ids = [...store.segments.values()].map((s) => [s.id, s.start.slice(0, 10)]).sort();
+    expect(ids).toEqual([
+      ["m1-0", "2025-09-11"],
+      ["m1-1", "2025-09-18"],
+      ["m1-2", "2025-09-25"],
+    ]);
+    expect(store.parsed.get("u1/m1")).toMatchObject({ outcome: "imported", segmentIds: ["m1-0", "m1-1", "m1-2"] });
+  });
+
   it("keeps a travel statement's balance, though it is no booking, and skips an old one", async () => {
     const store = memoryStore();
     const statement: ExtractedBooking = {
@@ -1207,6 +1234,24 @@ describe("importCalendar", () => {
     expect([...store.parsed.values()][0]).toMatchObject({ outcome: "not_booking", reason: "cancelled in the calendar", segmentIds: [] });
     // Once is enough: the record no longer holds the booking.
     expect(await importCalendar("u1", cancelled, deps(store, async () => flight), 100)).toMatchObject({ removed: 0 });
+  });
+
+  it("keeps a calendar event's outings on days apart in one trip, so cancelling it removes them all", async () => {
+    const store = memoryStore();
+    const session = (date: string) => ({
+      type: "activity" as const,
+      title: "Saturday Drama Club",
+      start: `${date}T12:30:00+01:00`,
+      end: `${date}T13:30:00+01:00`,
+      destination: { name: "Example School", city: "London", country: "GB" },
+    });
+    const term = async (): Promise<ExtractedBooking> => ({ isBooking: true, segments: ["2026-12-05", "2026-12-12"].map(session) });
+    await importCalendar("u1", ics("-//TripIt//EN", [vevent("e1", "Drama Club")]), deps(store, term), 100);
+    expect(store.trips.size).toBe(1);
+    expect(store.segments.size).toBe(2);
+    const cancelled = ics("-//TripIt//EN", [vevent("e1", "Drama Club", ["STATUS:CANCELLED"])]);
+    expect(await importCalendar("u1", cancelled, deps(store, term), 100)).toMatchObject({ cancelled: 1, removed: 2 });
+    expect(store.segments.size).toBe(0);
   });
 
   it("keeps a cancelled event's booking that the user edited or another import matched", async () => {

@@ -1,6 +1,6 @@
 import { compareInstants } from "./instant";
 import type { ExtractedSegment, HomeCorrection, Place, SegmentType, Trip } from "./schema";
-import { findTripForRange, isUntimed, liveSegments, segmentDateRange } from "./trips";
+import { daysBetween, findTripForRange, isUntimed, liveSegments, segmentDateRange } from "./trips";
 
 // Where someone lives, over time. Nobody types it in: it is worked out from
 // their journeys, since a round trip leaves from home and comes back to it.
@@ -369,15 +369,64 @@ function oneThing(a: Grouped, b: Grouped): boolean {
   return dated && norm(courseName(a.title)) === norm(courseName(b.title)) && (!x || !y || sameTown(x, y));
 }
 
+// A booking of nothing but outings in runs of days: each run is the
+// outings on consecutive days (a holiday camp Monday to Friday), and a gap
+// of more than a day starts the next (a weekly class booked for a term is a
+// day out each week, not one trip). A booking with any travel in it is one
+// run, as it came.
+export function outingRuns<S extends Grouped>(segments: readonly S[]): S[][] {
+  if (!allOutings(segments)) return [segments.slice()];
+  const runs: { last: string; segments: S[] }[] = [];
+  for (const s of segments.slice().sort((a, b) => compareInstants(a.start, b.start))) {
+    const run = runs[runs.length - 1];
+    const ends = localDate(s.end ?? s.start);
+    if (run && daysBetween(run.last, localDate(s.start)) <= 1) {
+      run.segments.push(s);
+      if (ends > run.last) run.last = ends;
+    } else {
+      runs.push({ last: ends, segments: [s] });
+    }
+  }
+  return runs.map((run) => run.segments);
+}
+
+// When a booking finishes: a journey when it arrives (arrives), anything
+// else at its end, or its start when it has none.
+const finishes = (s: Grouped) => (goes(s) ? arrives(s) : (s.end ?? s.start));
+
+// Whether `earlier` ends with a journey home that is over before `later`
+// begins: the last thing in it to finish is a journey (a flight, train, bus
+// or ferry; not a ride to the airport) from away into the home of its day,
+// and everything in `later` starts after it arrives. A
+// trip that has come home is over, so the next trip away a day or two
+// later is a trip of its own. False when home is unknown.
+function homeBetween(
+  earlier: readonly Grouped[],
+  later: readonly Grouped[],
+  periods: readonly HomePeriod[],
+  overrides: readonly HomePeriod[],
+): boolean {
+  if (earlier.length === 0 || later.length === 0) return false;
+  const last = earlier.reduce((a, b) => (compareInstants(finishes(b), finishes(a)) > 0 ? b : a));
+  if (!journeyTypes.has(last.type)) return false;
+  const back = finishes(last);
+  if (!inHomeTown(last.destination, localDate(back), periods, overrides)) return false;
+  if (inHomeTown(last.origin, localDate(last.start), periods, overrides)) return false;
+  return later.every((s) => compareInstants(s.start, back) > 0);
+}
+
 // The trip a new booking joins by its dates, knowing where home is if it
 // can. Travel (journeys, stays, a car to the airport) joins travel within a
 // couple of days (findTripForRange). Outings never join by nearness of dates
 // alone, home known or not: each is a trip of its own (a dinner and a show
-// on one evening at home are two) unless it is one thing with another
-// (oneThing: tickets for one event, the days of a course), it happens where
+// on one evening at home are two) unless it is one thing with another on
+// the same or the next day (oneThing: tickets for one event, the days of a
+// course; a weekly class is a day out each week), it happens where
 // travel within two days has taken someone at the time (onTheWay), or, with
 // home known, it and another outing within two days are both away in one
-// town. A journey, even one leaving from home, is never at home. Before any
+// town. A journey, even one leaving from home, is never at home. Nothing
+// joins a trip across a journey home (homeBetween): once a trip has come
+// home, what starts after that is another trip, however soon. Before any
 // of that, a transfer joins the trip of the flight or train it meets
 // (connects), and a journey the trip of a transfer that meets it, whichever
 // came in first.
@@ -411,12 +460,13 @@ export function findTripForBooking(
   const ourTravel = booking.filter((s) => !isOuting(s));
   return trips.find((trip) => {
     const segments = segmentsOf(trip.id);
+    if (homeBetween(segments, booking, periods, overrides) || homeBetween(booking, segments, periods, overrides)) return false;
     if (!allOutings(booking) && !allOutings(segments)) return near(trip, 2);
     if (!near(trip, 2)) return false;
     const theirs = segments.filter(isOuting);
     const theirTravel = segments.filter((s) => !isOuting(s));
     return (
-      ours.some((a) => theirs.some((b) => oneThing(a, b))) ||
+      (near(trip, 1) && ours.some((a) => theirs.some((b) => oneThing(a, b)))) ||
       ours.some((a) => onTheWay(a, theirTravel, periods, overrides)) ||
       theirs.some((b) => onTheWay(b, ourTravel, periods, overrides)) ||
       ours.some((a) => away(a) && theirs.some((b) => away(b) && sameTown(town(a.destination)!, town(b.destination)!)))

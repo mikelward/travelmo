@@ -649,3 +649,37 @@ describe("regroupTrips with a trip named for a stay with no town", () => {
     expect(store.trips.get("mel")?.title).toBe("Christmas away");
   });
 });
+
+describe("regroupTrips after a journey home", () => {
+  it("splits a trip home and the next one away, and a weekly class into its days", async () => {
+    const store = memoryStore();
+    store.trips.set("summer", trip("summer", "Stockholm", "2026-08-15", "2026-09-05"));
+    const stn = { name: "London Stansted", code: "STN", city: "London", country: "GB" };
+    const lhr = { name: "London Heathrow", code: "LHR", city: "London", country: "GB" };
+    const arn = { name: "Stockholm Arlanda", code: "ARN", city: "Stockholm", country: "SE" };
+    const bos = { name: "Boston Logan", code: "BOS", city: "Boston", country: "US" };
+    const put = (s: Segment) => store.segments.set(s.id, s);
+    put(segment("summer", "fr-0", "fr", { type: "flight", title: "FR1401", start: "2026-08-15T13:55:00+01:00", end: "2026-08-15T17:15:00+02:00", origin: stn, destination: arn }));
+    put(segment("summer", "fr-1", "fr", { type: "flight", title: "FR1402", start: "2026-08-23T14:05:00+02:00", end: "2026-08-23T15:00:00+01:00", origin: arn, destination: stn }));
+    put(segment("summer", "vs-0", "vs", { type: "flight", title: "VS157", start: "2026-08-25T16:05:00+01:00", end: "2026-08-25T18:50:00-04:00", origin: lhr, destination: bos }));
+    put(segment("summer", "vs-1", "vs", { type: "flight", title: "VS158", start: "2026-09-04T21:30:00-04:00", end: "2026-09-05T09:15:00+01:00", origin: bos, destination: lhr }));
+    store.trips.set("club", trip("club", "Example School", "2025-09-11", "2025-09-25"));
+    for (const [i, d] of ["2025-09-11", "2025-09-18", "2025-09-25"].entries()) {
+      put(segment("club", `dc-${i}`, "dc", { type: "activity", title: "Saturday Drama Club", start: `${d}T12:30:00+01:00`, end: `${d}T13:30:00+01:00`, destination: academy }));
+    }
+    // A calendar event's stay in one trip, as its record names one.
+    store.trips.set("cal", trip("cal", "Example School", "2025-10-04", "2025-10-11"));
+    for (const [i, d] of ["2025-10-04", "2025-10-11"].entries()) {
+      put(segment("cal", `ev-${i}`, "ev", { type: "activity", title: "Saturday Drama Club", start: `${d}T12:30:00+01:00`, end: `${d}T13:30:00+01:00`, destination: academy }, { source: "ics", gmailMessageIds: [], sources: [{ kind: "ics", id: "ev", uid: "u1", at }] }));
+    }
+    await regroupTrips("u1", deps(store));
+    expect(summary(store).map((t) => [t.start, t.end, t.segments])).toEqual([
+      ["2025-09-11", "2025-09-11", ["dc-0"]],
+      ["2025-09-18", "2025-09-18", ["dc-1"]],
+      ["2025-09-25", "2025-09-25", ["dc-2"]],
+      ["2025-10-04", "2025-10-11", ["ev-0", "ev-1"]],
+      ["2026-08-15", "2026-08-23", ["fr-0", "fr-1"]],
+      ["2026-08-25", "2026-09-05", ["vs-0", "vs-1"]],
+    ]);
+  });
+});

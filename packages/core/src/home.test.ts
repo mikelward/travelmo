@@ -11,6 +11,7 @@ import {
   isAtHome,
   isHomeTrip,
   isTransfer,
+  outingRuns,
   transferTitle,
 } from "./home";
 import type { ExtractedSegment, Place, Trip } from "./schema";
@@ -351,6 +352,38 @@ describe("findTripForBooking with outings", () => {
     }
   });
 
+  it("starts a new trip after the flight home, however soon the next one leaves", () => {
+    const sweden = roundTrip("London", "Stockholm", "2026-08-15", "2026-08-23");
+    const hotel: ExtractedSegment = {
+      type: "lodging",
+      title: "Example Hotel Woburn",
+      start: "2026-08-25T15:00:00-04:00",
+      end: "2026-08-26T12:00:00-04:00",
+      destination: { name: "Example Hotel Woburn", city: "Woburn", country: "US" },
+    };
+    const known = homeTimeline([...sweden, ...boston]);
+    const segments: Record<string, ExtractedSegment[]> = { sweden, boston: [...boston, hotel] };
+    const of = (id: string) => segments[id] ?? [];
+    for (const booking of [boston, [hotel]]) {
+      expect(findTripForBooking([trip("sweden", "2026-08-15", "2026-08-23")], of, booking, known)).toBeUndefined();
+    }
+    expect(findTripForBooking([trip("boston", "2026-08-25", "2026-09-04")], of, sweden, known)).toBeUndefined();
+    // Home unknown, travel still joins travel within two days.
+    expect(findTripForBooking([trip("sweden", "2026-08-15", "2026-08-23")], of, [hotel], [])?.id).toBe("sweden");
+    // A stay away after a flight back to somewhere else is still that trip.
+    const onward = [flight("2026-08-23T09:00:00+00:00", "Stockholm", "Boston")];
+    const away: Record<string, ExtractedSegment[]> = { onward };
+    expect(findTripForBooking([trip("onward", "2026-08-23", "2026-08-23")], (id) => away[id] ?? [], [hotel], known)?.id).toBe("onward");
+  });
+
+  it("keeps the days of a course apart when more than a day lies between them", () => {
+    const day = (d: number) => outing(`Drama Club (Day ${d})`, `2026-09-${String(d).padStart(2, "0")}T12:30:00+01:00`, "London", `2026-09-${String(d).padStart(2, "0")}T13:30:00+01:00`);
+    const segments: Record<string, ExtractedSegment[]> = { first: [day(10)] };
+    const of = (id: string) => segments[id] ?? [];
+    expect(findTripForBooking([trip("first", "2026-09-10", "2026-09-10")], of, [day(11)], periods)?.id).toBe("first");
+    expect(findTripForBooking([trip("first", "2026-09-10", "2026-09-10")], of, [day(12)], periods)).toBeUndefined();
+  });
+
   it("puts the car to the airport and the train at the other end in one trip", () => {
     const segments: Record<string, ExtractedSegment[]> = { stockholm: [car] };
     const of = (id: string) => segments[id] ?? [];
@@ -676,5 +709,27 @@ describe("transfers", () => {
     const fromBristol: ExtractedSegment = { ...ride, start: "2026-07-10T04:00:00+01:00", origin: { name: "Bristol", city: "Bristol" }, destination: lhr };
     const toBristol: ExtractedSegment = { ...ride, origin: lhr, destination: { name: "Bristol", city: "Bristol" } };
     expect(homeTimeline([fromBristol, out, back, toBristol])).toEqual([{ city: "London", country: "GB" }]);
+  });
+});
+
+describe("outingRuns", () => {
+  const session = (date: string, title = "Saturday Drama Club"): ExtractedSegment => ({
+    type: "activity",
+    title,
+    start: `${date}T12:30:00+01:00`,
+    end: `${date}T13:30:00+01:00`,
+    destination: { name: "Example School", city: "London", country: "GB" },
+  });
+
+  it("splits a weekly class into its days and keeps consecutive days together", () => {
+    const weekly = ["2025-09-25", "2025-09-11", "2025-09-18"].map((d) => session(d));
+    expect(outingRuns(weekly).map((run) => run.map((s) => s.start.slice(0, 10)))).toEqual([["2025-09-11"], ["2025-09-18"], ["2025-09-25"]]);
+    const camp = ["2026-08-10", "2026-08-11", "2026-08-12", "2026-08-13", "2026-08-14"].map((d) => session(d));
+    expect(outingRuns(camp)).toEqual([camp]);
+  });
+
+  it("keeps a booking with any travel in it whole", () => {
+    const trip = [session("2026-08-10"), flight("2026-08-20T09:00:00+00:00", "London", "Paris")];
+    expect(outingRuns(trip)).toEqual([trip]);
   });
 });
