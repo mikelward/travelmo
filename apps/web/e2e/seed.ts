@@ -161,6 +161,17 @@ export async function readSegments(tripId: string): Promise<Segment[]> {
 export async function clearData(): Promise<void> {
   await db.recursiveDelete(db.collection("trips"));
   await db.recursiveDelete(db.collection("users"));
+  await db.recursiveDelete(db.collection(paths.accessRecords()));
+  await db.recursiveDelete(db.collection("config"));
+}
+
+// Lets an address use the app, as an admin's approval does (SPEC "Access").
+export async function approve(email: string): Promise<void> {
+  await db.doc(paths.access(email)).set({ email, status: "approved", approvedBy: "e2e", approvedAt: "2026-11-01T00:00:00Z" });
+}
+
+export async function setAdmins(admins: string[]): Promise<void> {
+  await db.doc(paths.accessConfig()).set({ admins });
 }
 
 export async function readPushSubscriptions(uid: string): Promise<PushSubscription[]> {

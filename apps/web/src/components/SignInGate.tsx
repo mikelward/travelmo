@@ -2,13 +2,19 @@
 
 import type { User } from "firebase/auth";
 import { useState, type ReactNode } from "react";
+import { AccountDeleted, useAccountDeletion } from "@/components/DeleteAccount";
 import { Logo } from "@/components/Logo";
+import { RequestAccess } from "@/components/RequestAccess";
 import { useAuth } from "@/lib/auth";
 
 export function SignInGate({ children }: { children: (user: User) => ReactNode }) {
-  const { user, signIn } = useAuth();
+  const { user, access, signIn } = useAuth();
   const [error, setError] = useState<string>();
+  // An account without access deletes itself from the request screen, which
+  // signing out afterwards would otherwise replace with the sign-in prompt.
+  const { deleted, onDeleted } = useAccountDeletion();
 
+  if (deleted) return <AccountDeleted />;
   if (user === undefined) {
     return <p className="text-muted">Loading…</p>;
   }
@@ -31,5 +37,7 @@ export function SignInGate({ children }: { children: (user: User) => ReactNode }
       </div>
     );
   }
+  if (access.state === "loading") return <p className="text-muted">Loading…</p>;
+  if (access.state !== "approved") return <RequestAccess user={user} status={access.state} onDeleted={onDeleted} />;
   return <>{children(user)}</>;
 }

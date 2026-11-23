@@ -6,12 +6,13 @@ import { doc, setDoc } from "firebase/firestore";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
+import { AccountDeleted, DeleteAccountSection, useAccountDeletion } from "@/components/DeleteAccount";
 import { SignInGate } from "@/components/SignInGate";
 import { api } from "@/lib/api";
 import { exportLinks, useCalendarExport } from "@/lib/calendarExport";
 import { describeBackfill, isReading, pausedReason } from "@/lib/backfill";
 import { useAuth } from "@/lib/auth";
-import { firestore, forgetFirestoreCache } from "@/lib/firebase";
+import { firestore } from "@/lib/firebase";
 import { describeDeletedTrips, describeRegroup } from "@/lib/regroup";
 import { useInstall } from "@/lib/install";
 import { useSaveForOffline } from "@/lib/offline";
@@ -907,49 +908,6 @@ function ForwardSection({ user }: { user: User }) {
   );
 }
 
-function DeleteAccountSection({ user, onDeleted }: { user: User; onDeleted: () => void }) {
-  const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  const remove = async () => {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await api.deleteAccount(user);
-    } catch (e) {
-      console.error("Deleting the account failed", e);
-      setError(`Couldn't delete your account: ${(e as Error).message}. Try again.`);
-      setBusy(false);
-      return;
-    }
-    onDeleted();
-  };
-  return (
-    <section className="mt-10 border-t border-zinc-200 pt-6 dark:border-zinc-800">
-      <h2 className="text-lg font-medium">Delete account</h2>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-        This deletes your trips, bookings, travel profile and connections, and people you shared trips with lose them.
-      </p>
-      {!confirming ? (
-        <button type="button" onClick={() => setConfirming(true)} className="mt-3 text-sm text-danger hover:underline">
-          Delete account
-        </button>
-      ) : (
-        <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-          <span>Delete your account and everything in it? This cannot be undone.</span>
-          <button type="button" disabled={busy} onClick={remove} className="rounded-lg bg-red-600 px-3 py-1.5 font-medium text-white disabled:opacity-50">
-            {busy ? "Deleting…" : "Delete"}
-          </button>
-          <button type="button" disabled={busy} onClick={() => setConfirming(false)} className={buttonClass}>
-            Keep
-          </button>
-        </div>
-      )}
-      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
-    </section>
-  );
-}
-
 function SignOutSection() {
   const { signOut } = useAuth();
   const [error, setError] = useState<string>();
@@ -974,31 +932,8 @@ function SignOutSection() {
 
 export default function SettingsPage() {
   useSaveForOffline();
-  const { signOut } = useAuth();
-  const [deleted, setDeleted] = useState(false);
-  // Shown in place of the page, which signing out would otherwise replace
-  // with the sign-in prompt.
-  const accountDeleted = async () => {
-    setDeleted(true);
-    try {
-      await signOut();
-    } catch (error) {
-      console.error("Signing out after deleting the account failed", error);
-    }
-    try {
-      await forgetFirestoreCache();
-    } catch (error) {
-      console.error("Clearing this browser's copy of the deleted account failed", error);
-    }
-  };
-  if (deleted) {
-    return (
-      <>
-        <h1 className="mb-6 text-2xl font-semibold">Account deleted</h1>
-        <p className="text-zinc-600 dark:text-zinc-400">Your account and everything in it are gone.</p>
-      </>
-    );
-  }
+  const { deleted, onDeleted } = useAccountDeletion();
+  if (deleted) return <AccountDeleted />;
   return (
     <SignInGate>
       {(user) => (
@@ -1020,7 +955,7 @@ export default function SettingsPage() {
           <RemindersSection user={user} />
           <PatternsSection user={user} />
           <ReviewSection />
-          <DeleteAccountSection user={user} onDeleted={() => void accountDeleted()} />
+          <DeleteAccountSection user={user} onDeleted={onDeleted} />
           <SignOutSection />
         </>
       )}

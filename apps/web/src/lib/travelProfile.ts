@@ -1,8 +1,8 @@
 "use client";
 
-import { TravelProfile, paths } from "@travelmo/core";
+import { TravelProfile, accessInvite, normalizeEmail, paths } from "@travelmo/core";
 import type { User } from "firebase/auth";
-import { collectionGroup, doc, onSnapshot, query, setDoc, where } from "firebase/firestore";
+import { collectionGroup, doc, onSnapshot, query, where, writeBatch, type Firestore } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { firestore } from "./firebase";
 
@@ -58,10 +58,24 @@ export function normalizeTrusted(emails: readonly string[], ownEmail?: string | 
 }
 
 // A merge, so it starts a profile before any import and, on one that exists,
-// touches only the list (the rules refuse anything else).
-export async function saveTrusted(user: User, exists: boolean, emails: readonly string[]): Promise<void> {
+// touches only the list (the rules refuse anything else). Each address
+// newly trusted is invited in the same write, so it can open the profile
+// without asking for access (SPEC "Access").
+export async function saveTrusted(
+  user: User,
+  exists: boolean,
+  emails: readonly string[],
+  before: readonly string[] = [],
+  db: Firestore = firestore(),
+): Promise<void> {
   const trustedEmails = normalizeTrusted(emails, user.email);
   if (trustedEmails.length > maxTrusted) throw new Error(`Share with at most ${maxTrusted} people.`);
+  const now = new Date().toISOString();
   const owner = exists ? {} : { ownerUid: user.uid, ...(user.email ? { ownerEmail: user.email.toLowerCase() } : {}) };
-  await setDoc(doc(firestore(), paths.travelProfile(user.uid)), { ...owner, trustedEmails, updatedAt: new Date().toISOString() }, { merge: true });
+  const batch = writeBatch(db);
+  batch.set(doc(db, paths.travelProfile(user.uid)), { ...owner, trustedEmails, updatedAt: now }, { merge: true });
+  for (const email of trustedEmails) {
+    if (!before.includes(email) && normalizeEmail(email)) batch.set(doc(db, paths.access(email)), accessInvite(email, user.uid, now), { merge: true });
+  }
+  await batch.commit();
 }

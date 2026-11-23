@@ -34,8 +34,21 @@ seed_user() {
   echo "seeded $email"
 }
 
+firestore="http://${FIRESTORE_EMULATOR_HOST:-localhost:8081}/v1/projects/demo-travelmo/databases/(default)/documents"
+
+# Only approved accounts may use the app (SPEC "Access"); the emulator
+# takes the owner bearer as an admin, past the rules.
+approve() {
+  local email=$1
+  curl -sS -f -o /dev/null -X PATCH "$firestore/access/$email" -H 'Content-Type: application/json' -H 'Authorization: Bearer owner' \
+    -d "{\"fields\":{\"email\":{\"stringValue\":\"$email\"},\"status\":{\"stringValue\":\"approved\"},\"approvedBy\":{\"stringValue\":\"connected-tests\"},\"approvedAt\":{\"stringValue\":\"2026-11-01T00:00:00Z\"}}}"
+  echo "approved $email"
+}
+
 seed_user owner@example.com
 seed_user sharee@example.com
+approve owner@example.com
+approve sharee@example.com
 
 cd "$(dirname "$0")/.."
 exec ./gradlew -PtravelmoFixedVersion :app:connectedDebugAndroidTest "$@"

@@ -20,6 +20,7 @@ import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import type { DecodedIdToken } from "firebase-admin/auth";
+import { approvedUid, gateUser, grandfatherOnStart, onlyApproved, settleAccess } from "./access";
 import { deleteAccount } from "./account";
 import {
   MailboxConflict,
@@ -197,6 +198,7 @@ app.use("/forward/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", 
 app.use("/account/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/trips/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/flights/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
+app.use("/access/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 
 app.get("/healthz", (c) => c.text("ok"));
 
@@ -216,15 +218,25 @@ async function requireIdToken(c: Context<Env>): Promise<DecodedIdToken> {
   }
 }
 
-// Every user endpoint but /account/delete itself: a sign-in token stays
-// valid for up to an hour after its account is deleted, so a deleted
-// account is refused here before any handler can write for it again.
+// Every user endpoint but /account/delete and /access/check: a sign-in
+// token stays valid for up to an hour after its account is deleted, so a
+// deleted account is refused here before any handler can write for it
+// again; and an account not approved to use the app is refused (SPEC
+// "Access").
 async function requireUser(c: Context<Env>): Promise<string> {
-  const { uid } = await requireIdToken(c);
-  if ((await db.doc(paths.deletedAccount(uid)).get()).exists) {
-    throw new HTTPException(410, { message: "This account was deleted" });
+  return (await requireApprovedToken(c)).uid;
+}
+
+// requireUser for a handler that needs the token's claims too.
+async function requireApprovedToken(c: Context<Env>): Promise<Awaited<ReturnType<typeof requireIdToken>>> {
+  const token = await requireIdToken(c);
+  const gate = await gateUser(db, token, log);
+  if (gate === "deleted") throw new HTTPException(410, { message: "This account was deleted" });
+  if (gate === "unapproved") {
+    log("INFO", "user_not_approved", { uid: token.uid, path: c.req.path });
+    throw new HTTPException(403, { message: "This account is not approved yet" });
   }
-  return uid;
+  return token;
 }
 
 async function requireInternalCaller(c: Context<Env>): Promise<void> {
@@ -783,10 +795,17 @@ app.post(
     }
     const to = c.req.header("X-Envelope-To") ?? "";
     const raw = new Uint8Array(await c.req.arrayBuffer());
-    const received = await receiveForwarded({ to, raw }, { store: forwardStore, domain: forwarding.domain, limit: forwardDailyLimit, deps });
+    const received = await receiveForwarded(
+      { to, raw },
+      { store: forwardStore, domain: forwarding.domain, limit: forwardDailyLimit, deps, approved: (uid) => approvedUid(db, uid, verifiedEmail, log) },
+    );
     switch (received.status) {
       case "unknown_address":
         log("INFO", "forward_unknown_address", { bytes: raw.length });
+        return c.text("No such address", 404);
+      case "unapproved":
+        // Bounced as an unknown address is: the account may not use the app.
+        log("INFO", "forward_unapproved_user", { uid: received.uid, bytes: raw.length });
         return c.text("No such address", 404);
       case "limit":
         log("WARNING", "forward_limit_reached", { uid: received.uid, limit: forwardDailyLimit });
@@ -839,14 +858,27 @@ async function verifiedEmail(uid: string): Promise<string | undefined> {
   const record = await auth.getUser(uid);
   return record.emailVerified && record.email ? record.email.toLowerCase() : undefined;
 }
-const exportIo = firestoreExportIo(db, verifiedEmail);
+// A revoked account's link answers as an unknown one does.
+const exportIo = firestoreExportIo(db, verifiedEmail, async (uid) => {
+  const approved = await approvedUid(db, uid, verifiedEmail, log);
+  if (!approved) log("INFO", "calendar_export_unapproved_owner", { uid });
+  return approved;
+});
 
 // Fetched by calendar apps, which send no credentials: the token in the
 // link is the credential.
 app.get("/cal/:file", async (c) => {
   const file = c.req.param("file");
   const token = file.endsWith(".ics") ? file.slice(0, -4) : file;
-  const text = await calendarForToken(token, exportIo, { now: deps.now(), tripUrl: (id) => `${webOrigin}/trips/${id}` });
+  let text: string | undefined;
+  try {
+    text = await calendarForToken(token, exportIo, { now: deps.now(), tripUrl: (id) => `${webOrigin}/trips/${id}` });
+  } catch (error) {
+    // Logged here rather than by onError, whose path would carry the
+    // token; the calendar app asks again later.
+    log("ERROR", "calendar_export_failed", errorFields(error));
+    return c.text("This calendar is unavailable right now.", 503);
+  }
   if (text === undefined) {
     log("INFO", "calendar_export_unknown_link", {});
     return c.text("This calendar link is not in use.", 404);
@@ -862,12 +894,15 @@ app.get("/cal/:file", async (c) => {
 // Cloud Scheduler calls this daily (deploy/scheduler.sh).
 app.post("/internal/poll-feeds", async (c) => {
   await requireInternalCaller(c);
-  const result = await pollAllFeeds(feedIo);
+  // Nobody's feeds or calendars are read once they may not use the app.
+  const isApproved = (uid: string) => approvedUid(db, uid, verifiedEmail, log);
+  const result = await pollAllFeeds({ ...feedIo, feeds: { ...feedIo.feeds, all: async () => onlyApproved(await feedIo.feeds.all(), isApproved, log) } });
   log("INFO", "feeds_polled", result);
   // Google calendars ride the same daily job: one user's failure is logged
   // and the rest carry on.
   const calendars = { users: 0, read: 0, failed: 0 };
-  for (const uid of await calendarUsers(db)) {
+  const calendarUids = (await onlyApproved((await calendarUsers(db)).map((uid) => ({ uid })), isApproved, log)).map(({ uid }) => uid);
+  for (const uid of calendarUids) {
     try {
       const state = await loadCalendarState(db, uid);
       if (state) {
@@ -906,7 +941,12 @@ const reminderChannels = {
   ...(vapid ? { push: webPushSender(vapid) } : {}),
   fcm: fcmSender(getMessaging(firebaseApp)),
 };
-const reminderIo = firestoreReminderIo(db, verifiedEmail);
+// Reminders stop for anyone no longer approved.
+const allReminderIo = firestoreReminderIo(db, verifiedEmail);
+const reminderIo = {
+  ...allReminderIo,
+  users: async () => onlyApproved(await allReminderIo.users(), (uid) => approvedUid(db, uid, verifiedEmail, log), log),
+};
 
 // Cloud Scheduler calls this daily (deploy/scheduler.sh): the document
 // warnings and entry requirements of trips starting within a month, sent
@@ -921,6 +961,38 @@ app.post("/internal/reminders", async (c) => {
   });
   log("INFO", "reminders_sent", run);
   return c.json({ enabled: true, ...run });
+});
+
+// The one endpoint an account not yet approved may call (SPEC "Access"):
+// the app calls it when it finds the account not approved, and again after
+// asking for access. It lets in an account from before approvals or one
+// someone already shared with, and otherwise tells the admins of a new
+// request, once per address; it answers where the account stands.
+app.post("/access/check", async (c) => {
+  const token = await requireIdToken(c);
+  if ((await db.doc(paths.deletedAccount(token.uid)).get()).exists) {
+    throw new HTTPException(410, { message: "This account was deleted" });
+  }
+  const status = await settleAccess(
+    {
+      db,
+      now: deps.now,
+      origin: webOrigin,
+      log,
+      channels: reminderChannels,
+      verifiedEmail,
+      uidForEmail: async (email) => {
+        try {
+          return (await auth.getUserByEmail(email)).uid;
+        } catch (error) {
+          if ((error as { code?: unknown }).code === "auth/user-not-found") return undefined;
+          throw error;
+        }
+      },
+    },
+    token,
+  );
+  return c.json({ status });
 });
 
 // Cloud Scheduler calls this daily (deploy/scheduler.sh): the places a spent
@@ -963,6 +1035,7 @@ const flightOptions = (): FlightOptions | undefined =>
     origin: webOrigin,
     channels: { ...(reminderChannels.push ? { push: reminderChannels.push } : {}), fcm: reminderChannels.fcm },
     log: (level, event, fields) => log(level, event, fields),
+    approved: (uid) => approvedUid(db, uid, verifiedEmail, log),
   };
 
 // Cloud Scheduler calls this every minute (deploy/scheduler.sh): the
@@ -980,8 +1053,7 @@ app.post("/internal/flight-status", async (c) => {
 // An open trip page asks for its flights now, at most once a minute each;
 // what it learns is news for everyone on the flight, as from the job.
 app.post("/flights/refresh", async (c) => {
-  const { uid, email, email_verified } = await requireIdToken(c);
-  if ((await db.doc(paths.deletedAccount(uid)).get()).exists) throw new HTTPException(410, { message: "This account was deleted" });
+  const { uid, email, email_verified } = await requireApprovedToken(c);
   const body = (await c.req.json().catch(() => ({}))) as { tripId?: unknown };
   if (typeof body.tripId !== "string" || !body.tripId) throw new HTTPException(400, { message: "Missing tripId" });
   const trip = await flightIo.trip(body.tripId);
@@ -1013,6 +1085,12 @@ app.post("/internal/pubsub/gmail", async (c) => {
     const uid = (account.data() as { uid?: string } | undefined)?.uid;
     if (!uid) {
       log("WARNING", "notification_for_unknown_account", { pubsubMessageId });
+      return c.body(null, 204);
+    }
+    if (!(await approvedUid(db, uid, verifiedEmail, log))) {
+      // Revoked since connecting: the mail stays unread, and the stored
+      // history id lets a later approval pick up from where it stopped.
+      log("INFO", "notification_for_unapproved_user", { uid, pubsubMessageId });
       return c.body(null, 204);
     }
     const result = await processNotification(notification.historyId, {
@@ -1067,6 +1145,13 @@ app.post("/internal/backfill", async (c) => {
   const { uid, run, step, wake, pubsubMessageId, deliveryAttempt } = message;
   const fields = { uid, run, step, wake, pubsubMessageId, deliveryAttempt };
   try {
+    if (!(await approvedUid(db, uid, verifiedEmail, log))) {
+      // Marked stopped where it got to, so Settings shows Continue at once
+      // if access comes back, rather than a reading nothing is doing.
+      const stopped = await stopBackfill(backfillIo(uid), { uid, run, step });
+      log("INFO", "backfill_for_unapproved_user", { ...fields, stopped });
+      return c.body(null, 204);
+    }
     const result = await continueBackfill({ uid, run, step, ...(wake ? { wake } : {}) }, backfillIo(uid));
     switch (result.kind) {
       case "disconnected":
@@ -1131,6 +1216,16 @@ app.onError((error, c) => {
   if (c.req.path !== "/internal/pubsub/gmail" && c.req.path !== "/internal/backfill") log("ERROR", "unhandled", { path: c.req.path, ...errorFields(error) });
   return c.text("Internal error", 500);
 });
+
+// Accounts from before approvals are let in before this revision serves
+// (SPEC "Access"); a first run that fails stops the start, so Cloud Run
+// keeps the previous revision and CI deploys no rules.
+try {
+  await grandfatherOnStart({ db, now: deps.now, log, verifiedEmail });
+} catch (error) {
+  log("ERROR", "access_grandfather_first_run_failed", errorFields(error));
+  process.exit(1);
+}
 
 const port = Number(optionalEnv("PORT", "8080"));
 serve({ fetch: app.fetch, port }, () => log("INFO", "listening", { port, geminiModel, embeddingModel }));

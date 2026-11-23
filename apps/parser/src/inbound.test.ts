@@ -182,6 +182,17 @@ describe("receiveForwarded", () => {
     expect(await receiveForwarded({ to: `${token}@other.example`, raw: forwarded() }, io)).toEqual({ status: "unknown_address" });
   });
 
+  it("reads nothing for an account that may not use the app", async () => {
+    const store = memoryStore();
+    const extract = vi.fn(async () => lodging);
+    const approved = vi.fn(async () => false);
+    const io = { store: memoryForwardStore(known), domain, limit: 50, deps: deps(store, extract), approved };
+    expect(await receiveForwarded({ to: address, raw: forwarded() }, io)).toEqual({ status: "unapproved", uid: "u1" });
+    expect(approved).toHaveBeenCalledWith("u1");
+    expect(extract).not.toHaveBeenCalled();
+    expect(store.parsed.size).toBe(0);
+  });
+
   it("counts a day's forwards and stops at the limit, without counting a relay retry", async () => {
     const forwardStore = memoryForwardStore(known);
     const store = memoryStore();

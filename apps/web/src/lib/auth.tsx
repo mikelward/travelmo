@@ -11,10 +11,13 @@ import {
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { recordSelf, useAccess, type Access } from "./access";
 import { adoptFirestoreCache, firebaseAuth, firestore } from "./firebase";
 
 type AuthState = {
   user: User | null | undefined;
+  // Whether the signed-in account may use the app (SPEC "Access").
+  access: Access;
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -63,13 +66,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         );
       }
       setUser(next);
-      if (next) saveProfile(next).catch((error) => console.error("Saving profile failed", error));
     });
   }, []);
   useEffect(installTestSignIn, []);
 
+  const access = useAccess(user);
+  const approved = access.state === "approved";
+  // The rules refuse the user document to an account not yet approved.
+  useEffect(() => {
+    if (user && approved) saveProfile(user).catch((error) => console.error("Saving profile failed", error));
+  }, [user, approved]);
+  const email = user?.emailVerified && user.email ? user.email.toLowerCase() : undefined;
+  const unrecorded = access.state === "approved" && access.hasProfile && !access.record && !!email;
+  useEffect(() => {
+    if (user && email && unrecorded) {
+      recordSelf(firestore(), email, user.uid, new Date().toISOString()).catch((error) => console.error("Recording access failed", error));
+    }
+  }, [user, email, unrecorded]);
+
   const value: AuthState = {
     user,
+    access,
     signIn: async () => {
       await signInWithPopup(firebaseAuth(), new GoogleAuthProvider());
     },

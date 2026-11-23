@@ -5,7 +5,7 @@ import {
   type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
 import { paths, type Segment, type Trip } from "@travelmo/core";
-import { collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from "firebase/firestore";
+import { arrayUnion, collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
 import { readFileSync } from "node:fs";
 
 let env: RulesTestEnvironment;
@@ -13,6 +13,10 @@ let env: RulesTestEnvironment;
 const owner = { uid: "owner", email: "owner@example.com" };
 const partner = { uid: "partner", email: "partner@example.com" };
 const stranger = { uid: "stranger", email: "stranger@example.com" };
+// Signed up after approvals began: no user document.
+const newcomer = { uid: "newcomer", email: "newcomer@example.com" };
+// Listed in config/access, with no user document either.
+const admin = { uid: "admin", email: "admin@example.com" };
 
 const trip: Trip = {
   id: "t1",
@@ -59,6 +63,10 @@ beforeEach(async () => {
     await setDoc(doc(db, paths.segment(trip.id, segment.id)), segment);
     await setDoc(doc(db, paths.gmailState(owner.uid)), { refreshToken: "secret", emailAddress: owner.email, connectedAt: trip.createdAt });
     await setDoc(doc(db, paths.user(owner.uid)), { email: owner.email, gmail: { emailAddress: owner.email, connectedAt: trip.createdAt } });
+    // Accounts from before approvals, which every one of them has.
+    await setDoc(doc(db, paths.user(partner.uid)), { email: partner.email });
+    await setDoc(doc(db, paths.user(stranger.uid)), { email: stranger.email });
+    await setDoc(doc(db, paths.accessConfig()), { admins: [admin.email] });
   });
 });
 
@@ -388,5 +396,157 @@ describe("travel profiles", () => {
     await assertFails(updateDoc(doc(as(partner), paths.travelProfile(owner.uid)), { trustedEmails: [stranger.email] }));
     await assertFails(setDoc(doc(as(stranger), paths.travelProfile(owner.uid)), { ownerUid: owner.uid, trustedEmails: [stranger.email] }));
     await assertFails(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { trustedEmails: Array.from({ length: 21 }, (_, i) => `p${i}@example.com`) }));
+  });
+});
+
+describe("access", () => {
+  const at = "2026-11-23T00:00:00Z";
+  const request = { email: newcomer.email, status: "requested", uid: newcomer.uid, requestedAt: at };
+  const record = (email: string) => paths.access(email);
+  const seedRecord = async (email: string, data: Record<string, unknown>) => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), record(email)), { email, ...data });
+    });
+  };
+  const shareWithNewcomer = async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), paths.trip(trip.id)), { sharedWith: [partner.email, newcomer.email] });
+    });
+  };
+
+  it("lets accounts from before approvals carry on, with no record", async () => {
+    await assertSucceeds(getDoc(doc(as(partner), paths.trip(trip.id))));
+    await assertSucceeds(setDoc(doc(as(partner), paths.segment(trip.id, "s2")), { ...segment, id: "s2" }));
+    await assertSucceeds(setDoc(doc(as(stranger), paths.user(stranger.uid)), { displayName: "Stranger" }, { merge: true }));
+  });
+
+  it("keeps a new account out of everything until it is approved", async () => {
+    await shareWithNewcomer();
+    const db = as(newcomer);
+    await assertFails(getDoc(doc(db, paths.trip(trip.id))));
+    await assertFails(getDocs(query(collection(db, paths.trips()), where("sharedWith", "array-contains", newcomer.email))));
+    await assertFails(getDoc(doc(db, paths.trip("nope"))));
+    await assertFails(getDocs(collection(db, paths.segments(trip.id))));
+    await assertFails(setDoc(doc(db, paths.trip("t2")), { ...trip, id: "t2", ownerUid: newcomer.uid, sharedWith: [] }));
+    await assertFails(setDoc(doc(db, paths.user(newcomer.uid)), { email: newcomer.email }));
+    await assertFails(setDoc(doc(db, paths.device(newcomer.uid, "d1")), { token: "t", platform: "android", createdAt: at }));
+    await assertFails(getDocs(query(collectionGroup(db, "travelProfile"), where("trustedEmails", "array-contains", newcomer.email))));
+    // Its own user document reads as missing, which is how the app tells it apart.
+    const own = await assertSucceeds(getDoc(doc(db, paths.user(newcomer.uid))));
+    expect(own.exists()).toBe(false);
+  });
+
+  it("lets an account ask for access for its own verified address, only as a request", async () => {
+    const db = as(newcomer);
+    await assertFails(setDoc(doc(db, record(newcomer.email)), { ...request, status: "approved" }));
+    await assertFails(setDoc(doc(db, record(newcomer.email)), { ...request, notifiedAt: at }));
+    await assertFails(setDoc(doc(db, record(stranger.email)), { ...request, email: stranger.email }));
+    await assertFails(setDoc(doc(db, record(newcomer.email)), { ...request, uid: stranger.uid }));
+    await assertFails(setDoc(doc(as(newcomer, false), record(newcomer.email)), request));
+    await assertSucceeds(setDoc(doc(db, record(newcomer.email)), request));
+    await assertSucceeds(getDoc(doc(db, record(newcomer.email))));
+    // Asking again while it waits is fine; approving oneself is not.
+    await assertSucceeds(updateDoc(doc(db, record(newcomer.email)), { requestedAt: "2026-11-24T00:00:00Z" }));
+    await assertFails(updateDoc(doc(db, record(newcomer.email)), { status: "approved" }));
+    await assertFails(updateDoc(doc(db, record(newcomer.email)), { invitedBy: newcomer.uid, invitedAt: at }));
+    // Nobody but admins reads anyone else's record or lists them.
+    await assertFails(getDoc(doc(as(owner), record(newcomer.email))));
+    await assertFails(getDocs(collection(as(owner), paths.accessRecords())));
+    // Still refused everything else while it waits.
+    await assertFails(setDoc(doc(db, paths.user(newcomer.uid)), { email: newcomer.email }));
+  });
+
+  it("keeps a decision: a declined address cannot ask again", async () => {
+    await seedRecord(newcomer.email, { status: "declined", uid: newcomer.uid, requestedAt: at, declinedBy: admin.uid, declinedAt: at });
+    await assertFails(setDoc(doc(as(newcomer), record(newcomer.email)), request));
+    await assertFails(updateDoc(doc(as(newcomer), record(newcomer.email)), { status: "requested", requestedAt: at }));
+  });
+
+  it("lets an admin approve a request, after which the account may use the app", async () => {
+    await shareWithNewcomer();
+    await seedRecord(newcomer.email, { status: "requested", uid: newcomer.uid, requestedAt: at });
+    await assertSucceeds(getDocs(collection(as(admin), paths.accessRecords())));
+    await assertFails(updateDoc(doc(as(admin), record(newcomer.email)), { status: "approved", approvedBy: owner.uid, approvedAt: at }));
+    await assertSucceeds(updateDoc(doc(as(admin), record(newcomer.email)), { status: "approved", approvedBy: admin.uid, approvedAt: at }));
+    await assertSucceeds(getDoc(doc(as(newcomer), paths.trip(trip.id))));
+    await assertSucceeds(setDoc(doc(as(newcomer), paths.user(newcomer.uid)), { email: newcomer.email }));
+  });
+
+  it("lets an admin decline a request and invite an address that never asked", async () => {
+    await seedRecord(newcomer.email, { status: "requested", uid: newcomer.uid, requestedAt: at });
+    await assertSucceeds(updateDoc(doc(as(admin), record(newcomer.email)), { status: "declined", declinedBy: admin.uid, declinedAt: at }));
+    await assertFails(setDoc(doc(as(newcomer), paths.user(newcomer.uid)), { email: newcomer.email }));
+    const invited = "invited@example.com";
+    await assertFails(setDoc(doc(as(admin), record(invited)), { email: invited, status: "approved", approvedBy: admin.uid, approvedAt: at, notifiedAt: at }));
+    await assertSucceeds(setDoc(doc(as(admin), record(invited)), { email: invited, status: "approved", approvedBy: admin.uid, approvedAt: at }));
+    await assertSucceeds(getDoc(doc(as({ uid: "invited", email: invited }), paths.trip("nope"))));
+  });
+
+  it("lets an admin revoke an account from before approvals, but never an admin", async () => {
+    await assertSucceeds(setDoc(doc(as(admin), record(partner.email)), { email: partner.email, status: "declined", declinedBy: admin.uid, declinedAt: at }));
+    await assertFails(getDoc(doc(as(partner), paths.trip(trip.id))));
+    await assertFails(setDoc(doc(as(partner), paths.user(partner.uid)), { displayName: "Partner" }, { merge: true }));
+    await assertFails(setDoc(doc(as(admin), record(admin.email)), { email: admin.email, status: "declined", declinedBy: admin.uid, declinedAt: at }));
+    // Approving again lets them back in.
+    await assertSucceeds(updateDoc(doc(as(admin), record(partner.email)), { status: "approved", approvedBy: admin.uid, approvedAt: at }));
+    await assertSucceeds(getDoc(doc(as(partner), paths.trip(trip.id))));
+  });
+
+  it("lets nobody but an admin decide", async () => {
+    await seedRecord(newcomer.email, { status: "requested", uid: newcomer.uid, requestedAt: at });
+    await assertFails(updateDoc(doc(as(owner), record(newcomer.email)), { status: "approved", approvedBy: owner.uid, approvedAt: at }));
+    await assertFails(setDoc(doc(as(owner), record(stranger.email)), { email: stranger.email, status: "declined", declinedBy: owner.uid, declinedAt: at }));
+    await assertFails(deleteDoc(doc(as(admin), record(newcomer.email))));
+  });
+
+  it("lets an approved user invite an address by sharing a trip with it", async () => {
+    const db = as(owner);
+    const batch = writeBatch(db);
+    batch.update(doc(db, paths.trip(trip.id)), { sharedWith: arrayUnion(newcomer.email), updatedAt: at });
+    batch.set(doc(db, record(newcomer.email)), { email: newcomer.email, invitedBy: owner.uid, invitedAt: at }, { merge: true });
+    await assertSucceeds(batch.commit());
+    await assertSucceeds(getDoc(doc(as(newcomer), paths.trip(trip.id))));
+    await assertSucceeds(setDoc(doc(as(newcomer), paths.user(newcomer.uid)), { email: newcomer.email }));
+  });
+
+  it("lets an invite approve a waiting request, but not undo an admin's decline", async () => {
+    await seedRecord(newcomer.email, { status: "requested", uid: newcomer.uid, requestedAt: at });
+    const invite = { email: newcomer.email, invitedBy: partner.uid, invitedAt: at };
+    await assertSucceeds(setDoc(doc(as(partner), record(newcomer.email)), invite, { merge: true }));
+    await assertSucceeds(setDoc(doc(as(newcomer), paths.user(newcomer.uid)), { email: newcomer.email }));
+
+    await seedRecord(stranger.email, { status: "declined", declinedBy: admin.uid, declinedAt: at });
+    await assertSucceeds(setDoc(doc(as(partner), record(stranger.email)), { ...invite, email: stranger.email }, { merge: true }));
+    await assertFails(getDoc(doc(as(stranger), paths.trip("nope"))));
+  });
+
+  it("lets nobody invite in someone else's name, nor an account still waiting", async () => {
+    await assertFails(setDoc(doc(as(owner), record(newcomer.email)), { email: newcomer.email, invitedBy: partner.uid, invitedAt: at }, { merge: true }));
+    await assertFails(
+      setDoc(doc(as(owner), record(newcomer.email)), { email: newcomer.email, invitedBy: owner.uid, invitedAt: at, status: "approved" }, { merge: true }),
+    );
+    const other = "other@example.com";
+    await assertFails(setDoc(doc(as(newcomer), record(other)), { email: other, invitedBy: newcomer.uid, invitedAt: at }, { merge: true }));
+  });
+
+  it("lets an account from before approvals record itself, and no one else approve themselves", async () => {
+    const self = { email: partner.email, status: "approved", uid: partner.uid, approvedBy: partner.uid, approvedAt: at };
+    await assertSucceeds(setDoc(doc(as(partner), record(partner.email)), self));
+    await assertFails(
+      setDoc(doc(as(newcomer), record(newcomer.email)), { ...self, email: newcomer.email, uid: newcomer.uid, approvedBy: newcomer.uid }),
+    );
+  });
+
+  it("lets admins alone read the admins' list, and nobody write it", async () => {
+    await assertSucceeds(getDoc(doc(as(admin), paths.accessConfig())));
+    await assertFails(getDoc(doc(as(owner), paths.accessConfig())));
+    await assertFails(getDoc(doc(as(newcomer), paths.accessConfig())));
+    await assertFails(setDoc(doc(as(admin), paths.accessConfig()), { admins: [admin.email, owner.email] }));
+    await assertFails(setDoc(doc(as(owner), paths.accessConfig()), { admins: [owner.email] }));
+    await assertFails(setDoc(doc(as(owner), "config/other"), { x: 1 }));
+  });
+
+  it("lets an admin with no user document use the app", async () => {
+    await assertSucceeds(setDoc(doc(as(admin), paths.user(admin.uid)), { email: admin.email }));
   });
 });

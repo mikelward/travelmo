@@ -140,6 +140,26 @@ describe("checkFlights", () => {
     expect(t.devices.get("friend")).toEqual([]);
   });
 
+  it("tells only the people who may use the app (SPEC \"Access\")", async () => {
+    const t = setup();
+    const run = await checkFlights(t.io, t.options("2026-12-12T21:00:00Z", { approved: async (uid) => uid !== "partner" }));
+    // The owner is told; the partner isn't approved, and the friend's only phone is gone.
+    expect(run.notified).toBe(1);
+    expect(t.pushed.map(([to]) => to)).toEqual(["https://push.example/1", "fcm-2"]);
+    expect(t.logs).toContain("flight_status_skipped_unapproved");
+  });
+
+  it("leaves out someone whose approval can't be looked up and tells the rest", async () => {
+    const t = setup();
+    const approved = async (uid: string) => {
+      if (uid === "partner") throw new Error("auth/user-not-found");
+      return true;
+    };
+    const run = await checkFlights(t.io, t.options("2026-12-12T21:00:00Z", { approved }));
+    expect(run).toMatchObject({ notified: 1, failed: 0 });
+    expect(t.logs).toContain("approval_check_failed");
+  });
+
   it("waits for the next look, and says nothing when nothing changed", async () => {
     const t = setup();
     await checkFlights(t.io, t.options("2026-12-12T21:00:00Z"));
@@ -258,6 +278,16 @@ describe("retryPendingNews", () => {
       ["fcm-1", "Departs from terminal 1, gate 8", `flight-${key}`],
       ["fcm-2", "Departs from terminal 1, gate 8", `flight-${key}`],
     ]);
+  });
+
+  it("drops news owed to someone whose access was revoked since", async () => {
+    const t = setup();
+    await checkFlights(t.io, t.options("2026-12-12T21:00:00Z", { channels: { push: down, fcm: down } }));
+    const sent = await retryPendingNews(t.io, t.options("2026-12-12T21:01:00Z", { approved: async (uid) => uid !== "partner" }));
+    // The owner is told; the partner's news is dropped; the friend's only phone is gone.
+    expect(sent).toEqual({ delivered: 1, dropped: 1 });
+    expect(t.pending.size).toBe(0);
+    expect(t.logs).toContain("flight_status_skipped_unapproved");
   });
 
   it("tells where the flight is now, not where it was when the news failed", async () => {

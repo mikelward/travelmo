@@ -1,8 +1,8 @@
 "use client";
 
-import { displayTitles, formatDate, formatDateRange, localDate, paths, programsFor, segmentDateRange, type Segment, type Trip } from "@travelmo/core";
+import { displayTitles, formatDate, formatDateRange, localDate, normalizeEmail, paths, programsFor, segmentDateRange, type Segment, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
-import { arrayRemove, arrayUnion, doc, updateDoc } from "firebase/firestore";
+import { arrayRemove, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Suspense, use, useMemo, useState, type FormEvent } from "react";
@@ -10,6 +10,7 @@ import { SegmentForm } from "@/components/SegmentForm";
 import { SegmentRow } from "@/components/SegmentRow";
 import { SignInGate } from "@/components/SignInGate";
 import { deleteSegment, deleteTrip, favoriteSegment, fitTripDates, mergeTrips, moveSegment, rateSegment, renameTrip, saveSegment } from "@/lib/edits";
+import { shareTrip } from "@/lib/access";
 import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
 import { effectiveDecision, learnSender } from "@/lib/patterns";
@@ -109,18 +110,19 @@ function FitDates({ trip, segments }: { trip: Trip; segments: Segment[] }) {
   );
 }
 
-function Sharing({ trip }: { trip: Trip }) {
+function Sharing({ trip, user }: { trip: Trip; user: User }) {
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string>();
   const ref = doc(firestore(), paths.trip(trip.id));
 
   const add = async (event: FormEvent) => {
     event.preventDefault();
-    const address = email.trim().toLowerCase();
-    if (!address.includes("@")) return setError("Enter an email address");
+    const address = normalizeEmail(email);
+    if (!address) return setError("Enter an email address");
     setError(undefined);
     try {
-      await updateDoc(ref, { sharedWith: arrayUnion(address), updatedAt: new Date().toISOString() });
+      // Sharing also lets the address into Travelmo (SPEC "Access").
+      await shareTrip(firestore(), trip.id, address, user.uid, new Date().toISOString());
       setEmail("");
     } catch (e) {
       setError((e as Error).message);
@@ -383,7 +385,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
           </section>
         ))}
 
-      {canManage && <Sharing trip={trip} />}
+      {canManage && <Sharing trip={trip} user={user} />}
       {canManage && <MergeInto trip={trip} targets={otherTrips} titles={displayTitles(allTrips ?? [])} />}
       {canManage && <DangerZone trip={trip} />}
     </>

@@ -1,6 +1,6 @@
 import { initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
 import { paths } from "@travelmo/core";
-import { doc, getDoc, type Firestore } from "firebase/firestore";
+import { doc, getDoc, setDoc, type Firestore } from "firebase/firestore";
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { domainOf, effectiveDecision, isListed, learnSender } from "./patterns";
@@ -17,7 +17,11 @@ beforeAll(async () => {
   });
 });
 afterAll(() => env.cleanup());
-beforeEach(() => env.clearFirestore());
+beforeEach(async () => {
+  await env.clearFirestore();
+  // An account from before approvals (SPEC "Access").
+  await env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore() as unknown as Firestore, paths.user(owner.uid)), { email: owner.email }));
+});
 
 describe("domainOf", () => {
   it("reads a From header or a bare domain", () => {

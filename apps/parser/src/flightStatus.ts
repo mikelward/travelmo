@@ -76,6 +76,9 @@ export type FlightOptions = {
   origin: string;
   channels: FlightChannels;
   log: (level: "INFO" | "WARNING" | "ERROR", event: string, fields: Record<string, unknown>) => void;
+  // Whether a person may use the app (SPEC "Access"): news goes only to
+  // those who may. Absent, everyone on the trip may.
+  approved?: (uid: string) => Promise<boolean>;
 };
 
 export type FlightRun = { flights: number; checked: number; notified: number; failed: number; capped: boolean };
@@ -175,6 +178,20 @@ async function notify(
   }
   let reached = 0;
   for (const [uid, { segment }] of people) {
+    if (options.approved) {
+      let approved: boolean;
+      try {
+        approved = await options.approved(uid);
+      } catch (error) {
+        // Left out, as unapproved, rather than ending the run for the rest.
+        options.log("ERROR", "approval_check_failed", { uid, reason: (error as Error).message });
+        approved = false;
+      }
+      if (!approved) {
+        options.log("INFO", "flight_status_skipped_unapproved", { uid, key: flight.key });
+        continue;
+      }
+    }
     const notification: ReminderNotification = {
       title: segment.title,
       body: news.join("\n"),
@@ -256,6 +273,13 @@ export async function retryPendingNews(io: FlightIo, options: FlightOptions): Pr
         await io.dropPendingNews(pending.id, pending.at);
         result.dropped += 1;
         options.log("WARNING", "flight_status_news_dropped", { uid: pending.uid, key: pending.key, attempts: pending.attempts });
+        continue;
+      }
+      // Access revoked since the news was owed: it is dropped, not sent.
+      if (options.approved && !(await options.approved(pending.uid))) {
+        await io.dropPendingNews(pending.id, pending.at);
+        result.dropped += 1;
+        options.log("INFO", "flight_status_skipped_unapproved", { uid: pending.uid, key: pending.key });
         continue;
       }
       const lines = flightStatusLines(await io.status(pending.key));

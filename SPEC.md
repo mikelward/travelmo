@@ -53,6 +53,11 @@ viewer's zone. Trip bounds are calendar dates.
   got (`cursor, after, scanned, imported, failed, done, updatedAt`, and the
   reading under way: `run, step, running, queued, leaseUntil, retryAfter, wake, handoff, failures, lastFailed`); each calendar
   is `{id, summary, primary, selected, lastReadAt, lastResult, lastError}`.
+- `access/{email}` — `email, status (requested | approved | declined), uid,
+  requestedAt, invitedBy, invitedAt, approvedBy, approvedAt, declinedBy,
+  declinedAt, notifiedAt`: who may use the app, one per lowercased verified
+  address ("Access"). `config/access` — `admins[]`, lowercase addresses,
+  written by hand in the console.
 - `users/{uid}/pushSubscriptions/{id}` — `endpoint, keys {p256dh, auth},
   createdAt`: one per browser that asked for notifications, written by that
   browser, read and pruned by the parser.
@@ -503,9 +508,124 @@ browser offers its install prompt (`beforeinstallprompt`), and on iPhone and
 iPad, where Safari has none, says how to add it to the Home Screen; neither
 shows once Travelmo runs installed.
 
+## Access
+
+Only approved accounts use Travelmo. An account is approved when any of
+these holds, unless an admin declined or revoked its address
+(`accessStatus` in `packages/core/src/access.ts`; the rules and the parser
+decide the same way):
+
+- it is an admin's: its verified email is in `config/access`'s `admins`,
+  which the operator writes by hand in the console (README "Deploy");
+- it has a user document (`users/{uid}`): every account that used the web
+  app before approvals has one, since the web app wrote it at each sign-in,
+  and a new account may write it only once approved;
+- its verified email's record (`access/{email}`) is approved by an admin,
+  or names someone who invited it (`invitedBy`).
+
+Accounts from before approvals. An Android-only account never wrote a user
+document, and someone shared with may never have signed in, so the parser
+records them before the rules can ask (`grandfatherAccounts` in
+`apps/parser/src/access.ts`): as it starts, before it serves, it writes
+`access/{email}` as approved (`approvedBy: "migration"`, `grandfathered:
+true`) for every owner of a trip or travel profile, and every address an
+approved owner shared one with, that nothing else lets in yet. It skips an
+account being deleted or gone from Auth, and never overwrites a decline, so
+a revocation stands and running it again changes nothing. The first run
+must succeed before the parser serves (a failure stops the start, so Cloud
+Run keeps the previous revision); once it has (`config/accessGrandfathered`
+records when), each later start runs it again in the background, logging a
+failure, to catch a share an old client made meanwhile. CI deploys the
+parser before the rules, and holds rules due while the parser is due but
+cannot deploy (README "Continuous deployment"), so the rules never enforce
+approval before this has run: in the push that brings approvals both
+change, the parser's deploy waits for its revision to be ready, which is
+after the first run, and a later rules-only deploy finds it done. No one
+already using the app is locked out, and nothing is migrated by hand.
+
+Sharing invites. Sharing a trip or a travel profile with an address writes
+`invitedBy` (the sharer) and `invitedAt` into its record in the same batch
+as the share, so the person can open what was shared without asking. The
+rules let any approved user write those two fields for any address, which
+means any approved user can invite anyone; that is no more than sharing a
+trip already allowed, and an admin's decline still wins. The client writes
+it rather than the parser so the share and the invite land together, work
+offline like any write, and need no new endpoint; a parser endpoint would
+have checked that a share exists, which a user can make for any address
+anyway.
+
+Asking. An account that is not approved sees "Travelmo is invite-only" on
+every page instead of the app, with "Request access", "Sign out" and
+"Delete account" (as in Settings, which it cannot open). Asking
+writes `access/{email}` as `requested` with its uid and the time (the rules
+allow only that, for one's own verified address, and asking again only
+while the request waits, so a decision stands). The page then calls the
+parser's `POST /access/check`, as it also does on opening, which:
+
+1. lets in an account the rules cannot tell is old: one that owns a trip
+   (new accounts cannot make one; an Android-only account never wrote a
+   user document) as approved by itself, or one someone approved shared a
+   trip or a profile with before invites existed, or from an app that writes
+   no invite, as invited by them;
+2. otherwise, for a request admins have not heard of, claims `notifiedAt` in
+   a transaction and sends each admin one plain email ("<address> asked to
+   use Travelmo." and a link to the Access page, through the reminders'
+   SMTP mailer) and a notification ("Access request", opening the Access
+   page) to each of their browsers and phones, as reminders go. So an
+   address is announced once, however often the endpoint is called; if
+   nothing reached any admin (a channel failed, or there is no admin or no
+   channel yet), the claim is given back for the next call.
+
+It answers where the account stands. The page follows the record live, so
+an approval opens the app at once.
+
+Admins see Access in the menu: requests waiting, oldest first, each with
+Approve and Decline; everyone approved by a record, each with Revoke (never
+an admin's own address or another admin's, which the rules refuse too); and
+Invite, which approves an address that never asked. An account from before
+approvals records itself as approved the next time it opens the web app, so
+it is listed and can be revoked. Revoking writes `declined`, which outranks
+the user document and any invite; approving again or inviting from the
+Access page lets the person back in.
+
+Enforced in three places:
+
+- The rules: every read and write of app data needs an approved account.
+  An account not approved may read its own user document (to tell it is
+  missing) and its own access record, and ask; `config/access` is readable
+  by admins alone (so the app can tell who is one) and writable by nobody.
+- The parser: `requireUser`, which every user endpoint passes through,
+  answers 403 for an account not approved (`gateUser` in
+  `apps/parser/src/access.ts`). `/account/delete` and `/access/check` take
+  any signed-in account, so anyone can still delete their account.
+- Background work: a Gmail notification or a mailbox reading's batch for an
+  account no longer approved is acknowledged and dropped
+  (`notification_for_unapproved_user`, `backfill_for_unapproved_user`;
+  a mailbox reading is marked stopped where it got to, so Settings offers
+  Continue once access is back, and the stored history id lets a later
+  approval pick up from there); an email
+  forwarded to its address is refused as an unknown address and bounced;
+  its feeds, Google calendars and reminders are skipped (one whose
+  approval cannot be looked up is skipped and logged, and the rest carry
+  on); flight-status news is not sent to it, and news it was owed is
+  dropped; its calendar link answers 404 as an unknown link does. A new account
+  cannot connect any of these, since connecting goes through `requireUser`.
+
+The Android app calls `/access/check` once each time it opens signed in,
+so an account the rules cannot tell is old is let in going forward; when
+that answers approved while the trip list is empty (a refused query loads
+empty), it asks again for the trips, the travel profile and the profiles
+shared with it. It has no request screen yet. For an
+account not approved,
+its trip list loads empty (the rules refuse the queries, which it logs),
+anything it saves fails with its usual error, and parser features (import,
+deleting all trips) fail with the parser's 403; deleting the account still
+works. The data model and rules are ready for its own request screen.
+
 ## Access rules
 
-`firestore.rules`, tested in `packages/rules`:
+`firestore.rules`, tested in `packages/rules`. Everything below holds for
+approved accounts only ("Access"):
 
 - A trip is readable by its owner and by any signed-in user whose verified
   email is in `sharedWith`. The owner may change and delete it; a sharee may
@@ -1185,7 +1305,11 @@ the credential. The owner reads it from `users/{uid}/calendarExport/main`;
 the parser alone writes it, and keeps only the token's SHA-256 in
 `calendarExports/{hash}` to find whose it is. Replacing the link retires
 the old one in the same transaction; turning it off deletes both. Anyone
-with the link sees the trips, which Settings says. Responses are
+with the link sees the trips, which Settings says. Once the owner may no
+longer use the app ("Access"), the link answers 404 as an unknown one
+does, without saying why; it serves again if they are let back in. If
+whether they may cannot be told, it answers 503, and the calendar app asks
+again later. Responses are
 `Cache-Control: private` so no shared cache keeps them.
 
 Every exported event's UID ends in `@export.travelmo`, and every import (a
@@ -1231,7 +1355,8 @@ refused to any other until the first disconnects.
 
 ## Deleting an account
 
-Settings on the web and in the Android app ends with "Delete account": one
+Settings on the web and in the Android app ends with "Delete account" (on
+the web, so does the invite-only page an account without access sees): one
 sentence on what goes, a confirmation (in the page on the web, a dialog on
 Android), then `POST /account/delete` to the parser, which does the work
 with the Admin SDK (`apps/parser/src/account.ts`), since the rules let no
@@ -1271,7 +1396,8 @@ caller's uid, in this order:
    for again until none is left.
 4. Their verified email (from the ID token, so a retry after the sign-in is
    gone still finds it) comes off `sharedWith` on trips others shared with
-   them and off `trustedEmails` on profiles others trusted them with. Those
+   them and off `trustedEmails` on profiles others trusted them with, and
+   their access record (`access/{email}`) goes. Those
    trips keep every booking, including ones the deleted user added: they
    belong to the trip.
 5. `users/{uid}` and every subcollection under it, whatever it holds.
@@ -1320,8 +1446,9 @@ build without one points to the web instead.
 | `POST /inbound/cloudflare` | Bearer `INBOUND_SECRET` | The Email Worker's relay of one message (raw MIME, up to 2 MB, `X-Envelope-To`); 204 accepted, 404 no such address, 429 over the day's limit, 413 too large, 503 the model could not read it (the sender's server retries) |
 | `POST /export/calendar` | Firebase ID token | Issues the user's calendar export link, retiring any old one; returns its token |
 | `POST /export/calendar/stop` | Firebase ID token | Turns the calendar export link off |
-| `GET /cal/{token}.ics` | the token | The calendar export itself, for calendar apps; 404 for a link not in use |
+| `GET /cal/{token}.ics` | the token | The calendar export itself, for calendar apps; 404 for a link not in use or whose owner may no longer use the app |
 | `POST /account/delete` | Firebase ID token | Deletes the caller's account and everything they own ("Deleting an account"); 204, and a retry finishes an interrupted run |
+| `POST /access/check` | Firebase ID token, approved or not | Settles the caller's access ("Access"): lets in an account from before approvals or one already shared with, otherwise tells the admins of a waiting request once; returns `{status}` (approved, requested, declined, none) |
 | `GET /healthz` | none | Liveness |
 
 ## Costs
@@ -1334,7 +1461,10 @@ of a cent. Firestore
 is the term that grows: one listener per trip list and per open trip, one
 read of every booking each time the reports page opens, and one read of the
 last year's trips and bookings each time a subscribed calendar refreshes (a
-few times a day per subscriber). Gemini
+few times a day per subscriber). Checking approval ("Access") reads up to
+three more documents (the user document, the access record, the admins'
+list) wherever the rules or the parser decide, which Firestore bills as
+reads: a few per page opened or write made, and per background import. Gemini
 Flash-Lite costs a fraction of a cent per booking email, and an embedding
 of a few hundred tokens a hundredth of that; a hundred users importing
 fifty bookings a month is a few dollars. Geocoding is one call per place

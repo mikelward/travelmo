@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { approve } from "./seed";
 
 export const owner = "owner@example.com";
 export const partner = "partner@example.com";
@@ -12,7 +13,9 @@ export const partner = "partner@example.com";
 // hears from the server.
 export const frozenNow = new Date("2026-11-01T12:00:00Z");
 
-export async function signIn(page: Page, email: string): Promise<string> {
+// Signs in as an approved account unless told otherwise (SPEC "Access").
+export async function signIn(page: Page, email: string, { approved = true } = {}): Promise<string> {
+  if (approved) await approve(email);
   await page.clock.setSystemTime(frozenNow);
   await page.goto("/");
   await page.waitForFunction(() => typeof window.travelmoTestSignIn === "function");

@@ -158,6 +158,9 @@ export async function deleteAccount(uid: string, email: string | undefined, deps
         "trustedEmails",
         email,
       );
+      // Their access record (SPEC "Access"): the address, any request and
+      // the admins' decision on it.
+      await db.doc(paths.access(email)).delete();
     }
 
     // The user document and everything under it, whatever subcollections

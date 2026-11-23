@@ -3,11 +3,14 @@ package app.travelmo
 import android.annotation.SuppressLint
 import android.app.Application
 import app.travelmo.auth.GoogleAccount
+import app.travelmo.data.AccessCheck
 import app.travelmo.data.AccountDeletion
 import app.travelmo.data.FirestoreTrips
+import app.travelmo.data.NoAccessCheck
 import app.travelmo.data.NoAccountDeletion
 import app.travelmo.data.FlightRefresh
 import app.travelmo.data.NoFlightRefresh
+import app.travelmo.data.ParserAccessCheck
 import app.travelmo.data.ParserAccountDeletion
 import app.travelmo.data.ParserFlightRefresh
 import app.travelmo.data.TripStore
@@ -54,6 +57,8 @@ class TravelmoApplication : Application() {
 
     /** Looking at an open trip's flights through the parser; nothing without Firebase or a parser address. */
     val flightRefresh: FlightRefresh by lazy { if (firebaseReady) ParserFlightRefresh(BuildConfig.PARSER_URL) else NoFlightRefresh }
+    /** Settling the account's access with the parser; nothing without Firebase or a parser address. */
+    val accessCheck: AccessCheck by lazy { if (firebaseReady) ParserAccessCheck(BuildConfig.PARSER_URL) else NoAccessCheck }
 
     /** This phone as a reminder device; nothing without Firebase. */
     val pushDevice: PushDevice by lazy { if (firebaseReady) FirebasePushDevice(this) else NoPushDevice }

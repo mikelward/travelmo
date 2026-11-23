@@ -279,6 +279,19 @@ describe("continueBackfill", () => {
     expect(w.stored).toMatchObject({ cursor: "1", scanned: 300, running: false });
   });
 
+  it("stops the run a dropped message continues, keeping its place, and leaves a newer run alone", async () => {
+    const w = world();
+    await startBackfill("u1", "r1", false, w.io);
+    await continueBackfill(w.queued.shift()!, w.io);
+    const next = w.queued.shift()!;
+    // A message for another run or step stops nothing.
+    expect(await stopBackfill(w.io, { ...next, run: "r0" })).toBe(false);
+    expect(await stopBackfill(w.io, { ...next, step: next.step + 1 })).toBe(false);
+    expect(w.stored).toMatchObject({ running: true });
+    expect(await stopBackfill(w.io, next)).toBe(true);
+    expect(w.stored).toMatchObject({ cursor: "1", scanned: 300, running: false });
+  });
+
   it("saves the place of a batch stopped while it read, and queues no more", async () => {
     const w = world();
     await startBackfill("u1", "r1", false, w.io);

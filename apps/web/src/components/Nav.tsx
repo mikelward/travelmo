@@ -5,7 +5,8 @@ import { Logo } from "@/components/Logo";
 import { useAuth } from "@/lib/auth";
 
 export function Nav() {
-  const { user } = useAuth();
+  const { user, access } = useAuth();
+  const approved = access.state === "approved";
   return (
     <header className="border-b border-zinc-200 dark:border-zinc-800">
       {/* Wraps on a phone, where the links do not fit beside the wordmark. */}
@@ -14,7 +15,7 @@ export function Nav() {
           <Logo size={28} />
           Travelmo
         </Link>
-        {user && (
+        {user && approved && (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
             <Link href="/" className="hover:underline">
               Trips
@@ -31,6 +32,11 @@ export function Nav() {
             <Link href="/settings" className="hover:underline">
               Settings
             </Link>
+            {access.state === "approved" && access.admin && (
+              <Link href="/access" className="hover:underline">
+                Access
+              </Link>
+            )}
           </div>
         )}
       </nav>
