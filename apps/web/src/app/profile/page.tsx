@@ -375,9 +375,8 @@ function HomeSection({ user }: { user: User }) {
               value={country}
               onChange={(e) => setCountry(e.target.value)}
               placeholder="GB"
-              aria-label="Country code"
-              maxLength={2}
-              className="w-16 rounded-lg border border-field bg-background px-3 py-2 uppercase"
+              aria-label="Country"
+              className="w-32 rounded-lg border border-field bg-background px-3 py-2"
             />
             <span>from</span>
             <input

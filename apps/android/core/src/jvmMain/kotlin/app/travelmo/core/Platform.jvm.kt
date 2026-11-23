@@ -13,3 +13,5 @@ internal actual fun displayCountry(code: String, language: String?): String = tr
     // Not a region code at all ("G1"): the platform knows no name for it, which the callers expect.
     ""
 }
+
+internal actual fun decomposed(text: String): String = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD)

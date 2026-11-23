@@ -11,3 +11,6 @@ internal expect fun isoCountryCodes(): List<String>
  * null; empty when the platform does not know the code.
  */
 internal expect fun displayCountry(code: String, language: String?): String
+
+/** [text] in Unicode canonical decomposition (NFD), so accents are marks of their own. */
+internal expect fun decomposed(text: String): String

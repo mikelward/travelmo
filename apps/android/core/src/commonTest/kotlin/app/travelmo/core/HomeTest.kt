@@ -179,6 +179,18 @@ class HomeTest {
     }
 
     @Test
+    fun `reads a country saved by name or short form as its code and a city by either of its names`() {
+        homeCorrections(listOf(HomeCorrection("London", "UK", "2022-01-15"))) shouldBe listOf(HomePeriod("London", "GB", from = "2022-01-15"))
+        countryCode("United Kingdom") shouldBe "GB"
+        countryCode("gb") shouldBe "GB"
+        sameCity("Göteborg", "Gothenburg") shouldBe true
+        sameCity("Zürich", "zurich") shouldBe true
+        sameCity("København", "Copenhagen") shouldBe true
+        sameCity("Kraków", "Cracow") shouldBe true
+        sameCity("London", "Londonderry") shouldBe false
+    }
+
+    @Test
     fun `is the corrections alone once there are any with no home before them`() {
         val inferred = listOf(HomePeriod("Boston", until = "2021-03-11"), HomePeriod("London", from = "2021-03-12"))
         effectiveHomes(inferred, emptyList()) shouldBe inferred

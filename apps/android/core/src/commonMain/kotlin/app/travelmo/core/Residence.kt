@@ -64,7 +64,8 @@ fun presenceTimeline(
             timeline[day] = DayPresence(known, trips[day].orEmpty(), assumedHome = false, inTransit = transit[day] ?: false)
             continue
         }
-        val home = homeAt(homes, day)?.country?.uppercase()
+        // As a code, however the home was written ("UK" is GB).
+        val home = homeAt(homes, day)?.country?.let(::countryCode)
         timeline[day] = DayPresence(setOfNotNull(home), emptySet(), assumedHome = true, inTransit = false)
     }
     return timeline

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   awayPlace,
   connects,
+  countryCode,
   describeHomes,
   effectiveHomes,
   findTripForBooking,
@@ -10,6 +11,7 @@ import {
   homeTimeline,
   isAtHome,
   isHomeTrip,
+  sameCity,
   isTransfer,
   outingRuns,
   transferTitle,
@@ -544,6 +546,36 @@ describe("homeCorrections", () => {
     expect(homeCorrections([{ city: "Leeds", from: "2021-03-12" }, { city: "London", from: "2021-03-12" }])).toEqual([
       { city: "London", from: "2021-03-12" },
     ]);
+  });
+
+  it("reads a country saved by name or short form as its code, and a city by either of its names", () => {
+    expect(homeCorrections([{ city: "London", country: "UK", from: "2022-01-15" }])).toEqual([{ city: "London", country: "GB", from: "2022-01-15" }]);
+    expect(countryCode("United Kingdom")).toBe("GB");
+    expect(countryCode("gb")).toBe("GB");
+    expect(sameCity("Göteborg", "Gothenburg")).toBe(true);
+    expect(sameCity("Zürich", "zurich")).toBe(true);
+    expect(sameCity("København", "Copenhagen")).toBe(true);
+    expect(sameCity("Kraków", "Cracow")).toBe(true);
+    expect(sameCity("London", "Londonderry")).toBe(false);
+  });
+});
+
+describe("towns written differently", () => {
+  const at = "2026-11-01T12:00:00Z";
+  const trip = { id: "t", title: "Sweden", start: "2026-08-15", end: "2026-08-23", ownerUid: "u1", sharedWith: [], createdAt: at, updatedAt: at };
+  const ride = { type: "other" as const, title: "Ride", start: "2026-08-15T10:30:00+01:00", origin: { name: "Home", city: "London", country: "GB" }, destination: { name: "Stansted", city: "Stansted", country: "GB" } };
+  const out = { type: "flight" as const, title: "Out", start: "2026-08-15T13:55:00+01:00", end: "2026-08-15T17:15:00+02:00", origin: { name: "Stansted", code: "STN", city: "London", country: "GB" }, destination: { name: "Arlanda", code: "ARN", city: "Stockholm", country: "SE" } };
+  const back = { type: "flight" as const, title: "Back", start: "2026-08-23T14:05:00+02:00", end: "2026-08-23T15:00:00+01:00", origin: { name: "Landvetter", code: "GOT", city: "Gothenburg", country: "SE" }, destination: { name: "Stansted", code: "STN", city: "London", country: "GB" } };
+
+  it("keeps a day out at home apart from a trip away when home was saved as UK", () => {
+    const camp = { type: "activity" as const, title: "Holiday camp", start: "2026-08-14T09:00:00+01:00", end: "2026-08-14T17:00:00+01:00", destination: { name: "School", city: "London", country: "GB" } };
+    const overrides = homeCorrections([{ city: "London", country: "UK", from: "2022-01-15" }]);
+    expect(findTripForBooking([trip], () => [ride, out, back], [camp], [], overrides)).toBeUndefined();
+  });
+
+  it("puts a car hired in Göteborg with the flight home from Gothenburg", () => {
+    const car = { type: "car_rental" as const, title: "Car", start: "2026-08-19T10:00:00+02:00", end: "2026-08-21T10:00:00+02:00", origin: { name: "Göteborg Central", city: "Göteborg", country: "SE" }, destination: { name: "Göteborg Central", city: "Göteborg", country: "SE" } };
+    expect(findTripForBooking([trip], () => [ride, out, back], [car], [{ city: "London", country: "GB" }])?.id).toBe("t");
   });
 });
 

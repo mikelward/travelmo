@@ -1,4 +1,4 @@
-import { homeAt, type HomePeriod } from "./home";
+import { homeAt, type HomePeriod, countryCode } from "./home";
 import { reportBounds, tripDayPlaces, type PlaceLookup, type TripWithSegments } from "./reports";
 
 // Days in and out of countries, for residence and visa limits: where the
@@ -75,7 +75,9 @@ export function presenceTimeline(
       timeline.set(day, known);
       continue;
     }
-    const home = homeAt(homes, day)?.country?.toUpperCase();
+    // As a code, however the home was written ("UK" is GB).
+    const homeCountry = homeAt(homes, day)?.country;
+    const home = homeCountry ? countryCode(homeCountry) : undefined;
     timeline.set(day, { countries: new Set(home ? [home] : []), tripIds: new Set(), assumedHome: true, inTransit: false });
   }
   return timeline;
