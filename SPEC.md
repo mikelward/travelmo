@@ -771,11 +771,11 @@ rest of Settings is not); confirming checks the address still lets it in
 it and writes the user document, which lets the account in: the app follows
 that document live, so it opens without a reload.
 
-Admins see Access in the menu: requests waiting, oldest first, each with
+Admins see Access in the menu (web and Android): requests waiting, oldest first, each with
 Approve and Decline; everyone approved by a record, each with Revoke (never
 an admin's own address or another admin's, which the rules refuse too); and
 Invite, which approves an address that never asked. An account from before
-approvals records itself as approved the next time it opens the web app, so
+approvals records itself as approved the next time it opens either app, so
 it is listed and can be revoked. Revoking writes `declined`, which outranks
 the user document and any invite; approving again or inviting from the
 Access page lets the person back in.
@@ -806,16 +806,27 @@ Enforced in three places:
   news it was owed is dropped; its calendar link answers 404 as an unknown link does. A new account
   cannot connect any of these, since connecting goes through `requireUser`.
 
-The Android app calls `/access/check` once each time it opens signed in,
-so an account the rules cannot tell is old is let in going forward; when
-that answers approved while the trip list is empty (a refused query loads
-empty), it asks again for the trips, the travel profile and the profiles
-shared with it. It has no request screen yet. For an
-account not approved,
-its trip list loads empty (the rules refuse the queries, which it logs),
-anything it saves fails with its usual error, and parser features (import,
-deleting all trips) fail with the parser's 403; deleting the account still
-works. The data model and rules are ready for its own request screen.
+The Android app decides the same way from the same documents (`accessStatus`
+in `:core`, a mirror of `packages/core`'s), following them live, and takes an
+approval from the phone's cache at once while "not approved" waits for the
+server's word. Until that word comes it shows the app as before, so an
+approved account never waits on it, offline included. It calls
+`/access/check` once each time it opens signed in, so an account the rules
+cannot tell is old is let in going forward and admins hear of a waiting
+request; when that answers approved while the trip list is empty (a refused
+query loads empty), or the account is approved while the app is open, it
+asks again for the trips, the travel profile and the profiles shared with
+it. An account the server says is not approved sees the web's invite-only
+page in place of the app: Request access (then `/access/check`), where its
+request stands, "Invited at another address?" while it waits (the link
+opens on the web, whose confirming writes the user document the app
+follows), Sign out and Delete account. Sharing a trip or trusting an
+address with the travel profile writes the invite in the same batch, as
+the web does. An admin's ⋮ menu, on every screen, starts its own items
+with Access, the web's Access page; the "Access request" notification
+(tag `access-<address>`, the web's `/access`) opens it, in a channel of
+its own ("Access requests"). An account from before approvals records
+itself as the web does, so Android-only ones are listed too.
 
 ## Linked email addresses
 
@@ -2082,7 +2093,9 @@ long-click action). Sources opens a dialog listing them as the web's does (each 
 `uid` or as the trip's owner for one without, opens in Gmail at that
 message, in the Gmail account the user connected for importing
 (`gmail.emailAddress`, as the web's links), else the phone's default one. CI builds it beside the web app
-(`ci / android`).
+(`ci / android`). An account not approved sees the web's invite-only page in place of
+the app, and admins have the Access page, from the ⋮ menu or an "Access
+request" notification ("Access").
 
 When Google Play has a newer version, the ⋮ menu's icon carries a small red
 dot and the menu ends with "Update available", last so the other items keep

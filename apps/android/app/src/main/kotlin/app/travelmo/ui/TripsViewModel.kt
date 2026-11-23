@@ -28,8 +28,18 @@ import app.travelmo.core.TripWithSegments
 import app.travelmo.core.groupTrips
 import app.travelmo.core.listWarnings
 import app.travelmo.core.deviceId
+import app.travelmo.core.AccessConfig
+import app.travelmo.core.AccessLists
+import app.travelmo.core.AccessRecord
 import app.travelmo.core.AccountAccess
 import app.travelmo.core.AddressHolder
+import app.travelmo.core.accessLists
+import app.travelmo.core.accessStatus
+import app.travelmo.core.emailAddressOf
+import app.travelmo.core.isAdmin
+import app.travelmo.core.linkedEmails
+import app.travelmo.data.Seen
+import com.mikelward.androidlog.safe
 import app.travelmo.core.LinkCheck
 import app.travelmo.core.checkNewLink
 import app.travelmo.core.myAddresses
@@ -100,6 +110,25 @@ sealed interface Outcome {
     data class Failed(val message: String) : Outcome
 }
 
+/** Where the signed-in account stands (SPEC "Access"), as the web's useAccess tells it. */
+sealed interface AccessState {
+    /** Not known yet: a "not approved" answer from this phone's cache waits for the server's word. */
+    data object Loading : AccessState
+
+    /**
+     * [admin]: the account's sign-in or a linked address is in `config/access`
+     * ([admins], which admins alone may read); [hasProfile]: `users/{uid}`
+     * exists; [record]: the verified address's `access/{email}`.
+     */
+    data class Known(
+        val status: AccountAccess,
+        val admin: Boolean,
+        val hasProfile: Boolean,
+        val record: AccessRecord?,
+        val admins: List<String> = emptyList(),
+    ) : AccessState
+}
+
 /** How many upcoming trips get a segment listener for their "next up" line, as on the web. */
 const val UPCOMING_WITH_DETAILS = 3
 
@@ -135,7 +164,12 @@ class TripsViewModel(
     private val importReview: ImportReview = NoImportReview,
     /** The parser's Gmail connection and mailbox reading; none by default. */
     private val gmailActions: GmailActions = NoGmailActions,
+    /** Whether Google verified [email]: only a verified address has an access record. */
+    emailVerified: Boolean = true,
 ) : ViewModel() {
+    /** The verified sign-in address, normalized, as access is decided on it; null when unverified. */
+    val verifiedEmail: String? = emailAddressOf(email)?.takeIf { emailVerified }
+
     /** The current instant, as pending email links are judged by. */
     fun now(): String = clock().toString()
 
@@ -201,16 +235,98 @@ class TripsViewModel(
     val people: StateFlow<List<PersonDocuments>> = combine(ownProfile, sharedProfiles) { own, shared -> peopleDocuments(own, shared, uid) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** The user document as access reads it: null until it answers, a [Seen] of null when there is none. */
+    private val userDocument: StateFlow<Seen<AddressHolder?>?> = store.userDocument(uid)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    private val accessRecord: Flow<Seen<AccessRecord?>?> =
+        verifiedEmail?.let { email -> store.accessRecord(email) } ?: flowOf(Seen(null, confirmed = true))
+
+    // Linking an admin's address (or connecting its Gmail) opens the list,
+    // which the rules refused before, so it is asked again.
+    private val accessConfig: Flow<Seen<AccessConfig?>?> = userDocument.map { linkedEmails(it?.value).joinToString(" ") }
+        .distinctUntilChanged().flatMapLatest { store.accessConfig() }
+
+    /**
+     * Where the account stands, live, so an approval lets it in without a
+     * restart: what approves is taken from the cache at once, so the app
+     * opens offline, while "not approved" waits for the server's word.
+     */
+    val access: StateFlow<AccessState> = combine(userDocument, accessRecord, accessConfig) { profile, record, config ->
+        if (profile == null || record == null || config == null) return@combine AccessState.Loading
+        val linked = linkedEmails(profile.value)
+        val hasProfile = profile.value != null
+        val status = accessStatus(verifiedEmail, hasProfile, record.value, config.value, linked)
+        if (status != AccountAccess.APPROVED && !(profile.confirmed && record.confirmed && config.confirmed)) return@combine AccessState.Loading
+        AccessState.Known(status, isAdmin(verifiedEmail, linked, config.value), hasProfile, record.value, config.value?.admins.orEmpty())
+    }.distinctUntilChanged().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AccessState.Loading)
+
     init {
         // Once per signed-in view model (SPEC "Access"): the parser lets in
         // an account from before approvals that the rules cannot tell is
-        // one. The rules refuse its queries until then: the trips and shared
-        // profiles load empty and the profile never answers. An account
-        // whose trips came back empty may be one, so its queries are asked
-        // again once it is in.
+        // one, and tells the admins of a request they have not heard of. The
+        // rules refuse an account's queries until it is in: the trips and
+        // shared profiles load empty and the profile never answers. An
+        // account whose trips came back empty may be one, so its queries are
+        // asked again once it is in.
         viewModelScope.launch {
             if (accessCheck.check() == AccountAccess.APPROVED && trips.value.isNullOrEmpty()) accessSettled.update { it + 1 }
         }
+        viewModelScope.launch {
+            var refused = false
+            var recorded = false
+            access.collect { state ->
+                if (state !is AccessState.Known) return@collect
+                if (state.status != AccountAccess.APPROVED) {
+                    refused = true
+                    return@collect
+                }
+                // Approved while the app was open: ask again for all that was refused.
+                if (refused) {
+                    refused = false
+                    accessSettled.update { it + 1 }
+                }
+                // An account from before approvals records itself once, as on
+                // the web, so it is listed on the Access page and can be revoked.
+                if (!recorded && state.hasProfile && state.record == null && verifiedEmail != null) {
+                    recorded = true
+                    try {
+                        store.recordSelf(verifiedEmail, uid, clock().toString())
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        TravelmoLog.error(e, "Recording access failed")
+                    }
+                }
+            }
+        }
+    }
+
+    /** Every access record, sorted for the Access page; null while they load. Admins alone may list them. */
+    val accessLists: StateFlow<AccessLists?> = store.accessRecords().map { records -> records?.let(::accessLists) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Asks for access for the verified sign-in, then has the parser tell the admins, as the web's invite-only page does. */
+    fun requestAccess(token: String) {
+        val email = verifiedEmail ?: return
+        run(token, "requestAccess", failure = "Couldn't send your request. Try again.") {
+            store.requestAccess(email, uid, clock().toString())
+            accessCheck.check()
+        }
+    }
+
+    /** An admin's decision: approve, decline or revoke [address]. */
+    fun decideAccess(token: String, address: String, decision: AccountAccess) =
+        run(token, "decideAccess", failure = "Couldn't save that for $address. Try again.") { store.decideAccess(address, decision, uid, clock().toString()) }
+
+    /** An admin invites an address that never asked: an approval of it. */
+    fun inviteAccess(token: String, raw: String) {
+        val address = emailAddressOf(raw)
+        if (address == null) {
+            _outcomes.update { it + (token to Outcome.Failed("Enter an email address")) }
+            return
+        }
+        decideAccess(token, address, AccountAccess.APPROVED)
     }
 
     val state: StateFlow<TripListState> = combine(groups, details, now, people) { groups, details, now, people ->
@@ -291,7 +407,9 @@ class TripsViewModel(
      */
     // `operation` is a fixed name for the logs; the token can carry user
     // data (an address being unshared, a loyalty number), so it never goes there.
-    private fun run(token: String, operation: String, block: suspend () -> Unit) {
+    // [failure], when given, is what the screen says in place of the
+    // error's own message, which may quote what the write was about.
+    private fun run(token: String, operation: String, failure: String? = null, block: suspend () -> Unit) {
         if (_outcomes.value[token] is Outcome.Busy) return
         _outcomes.update { it + (token to Outcome.Busy) }
         viewModelScope.launch {
@@ -301,8 +419,13 @@ class TripsViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                TravelmoLog.error(e, "$operation failed")
-                Outcome.Failed(e.message ?: e.javaClass.simpleName)
+                if (failure == null) {
+                    TravelmoLog.error(e, "$operation failed")
+                } else {
+                    // By kind only: the message may name the address the write was for.
+                    TravelmoLog.error("%s failed: %s", safe(operation), safe(e.javaClass.simpleName))
+                }
+                Outcome.Failed(failure ?: e.message ?: e.javaClass.simpleName)
             }
             _outcomes.update { it + (token to outcome) }
         }
@@ -328,7 +451,7 @@ class TripsViewModel(
 
     fun fitTripDates(token: String, tripId: String) = run(token, "fitTripDates") { store.fitTripDates(tripId) }
 
-    fun shareTrip(token: String, tripId: String, email: String) = run(token, "shareTrip") { store.shareTrip(tripId, email) }
+    fun shareTrip(token: String, tripId: String, email: String) = run(token, "shareTrip") { store.shareTrip(tripId, email, uid) }
 
     fun unshareTrip(token: String, tripId: String, email: String) = run(token, "unshareTrip") { store.unshareTrip(tripId, email) }
 
@@ -571,6 +694,6 @@ class TripsViewModel(
     /** Who the user's travel profile is shared with; the profile is started if none has arrived yet. */
     fun saveTrusted(token: String, emails: List<String>) = run(token, "saveTrusted") {
         val answer = ownProfileAnswer.value ?: throw IllegalStateException("The profile is still loading; try again")
-        store.saveTrusted(uid, email, exists = answer.profile != null, emails = emails)
+        store.saveTrusted(uid, email, exists = answer.profile != null, emails = emails, before = answer.profile?.trustedEmails.orEmpty())
     }
 }

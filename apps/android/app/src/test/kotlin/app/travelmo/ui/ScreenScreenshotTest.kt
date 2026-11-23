@@ -24,7 +24,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import app.travelmo.core.AccessConfig
+import app.travelmo.core.AccountAccess
 import app.travelmo.core.AddressHolder
+import app.travelmo.core.accessDecision
+import app.travelmo.core.accessInvite
+import app.travelmo.core.accessRequest
 import app.travelmo.core.FlightStatus
 import app.travelmo.core.HomePeriod
 import app.travelmo.core.PendingEmail
@@ -458,6 +463,45 @@ class ScreenScreenshotTest {
         )
         capture(name, dark = dark) {
             SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
+        }
+    }
+
+    // An admin's Access page: two requests waiting, and those let in, the
+    // admin's own address with no Revoke.
+    @Test
+    fun access() = access("access", dark = false)
+
+    @Test
+    fun access_dark() = access("access_dark", dark = true)
+
+    private fun access(name: String, dark: Boolean) {
+        val records = mapOf(
+            OWNER_EMAIL to mapOf("email" to OWNER_EMAIL) + accessDecision(AccountAccess.APPROVED, "admin", FROZEN_NOW),
+            "sam.example@example.com" to accessRequest("sam.example@example.com", "u-sam", "2026-10-30T09:00:00Z"),
+            "alex@example.org" to accessRequest("alex@example.org", "u-alex", "2026-10-31T18:00:00Z"),
+            "partner@example.com" to accessInvite("partner@example.com", OWNER, FROZEN_NOW),
+            "friend@example.com" to mapOf("email" to "friend@example.com") + accessDecision(AccountAccess.APPROVED, OWNER, FROZEN_NOW),
+        )
+        val store = FakeTripStore(access = records, accessConfig = AccessConfig(listOf(OWNER_EMAIL)))
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        capture(name, dark = dark) { AccessScreen(viewModel = viewModel, onBack = {}) }
+    }
+
+    // A new account that never asked: Request access, and the other address
+    // it may have been invited at.
+    @Test
+    fun invite_only() = inviteOnly("invite_only", dark = false)
+
+    @Test
+    fun invite_only_dark() = inviteOnly("invite_only_dark", dark = true)
+
+    private fun inviteOnly(name: String, dark: Boolean) {
+        val viewModel = TripsViewModel(
+            FakeTripStore(access = emptyMap(), hasUserDocument = false), "u-new", "new@example.com", clock = { Instant.parse(FROZEN_NOW) },
+            accountDeletion = FakeAccountDeletion(), emailLinks = FakeEmailLinks(),
+        )
+        capture(name, dark = dark) {
+            InviteOnlyScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), viewModel = viewModel, status = AccountAccess.NONE)
         }
     }
 

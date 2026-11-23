@@ -431,12 +431,13 @@ private fun TripsSection(viewModel: TripsViewModel) {
  * Deleting the account, as on the web: a dialog asks first, then the parser
  * deletes everything and the app signs out, and the sign-in screen says the
  * account is gone. A build with no parser address says to use the web.
+ * The invite-only screen offers it too, since Settings needs access.
  */
 @Composable
-private fun DeleteAccountSection(account: GoogleAccount, viewModel: TripsViewModel) {
+internal fun DeleteAccountSection(account: GoogleAccount, viewModel: TripsViewModel, token: String = DELETE_ACCOUNT_TOKEN) {
     val context = LocalContext.current
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
-    val outcome = outcomes[DELETE_ACCOUNT_TOKEN]
+    val outcome = outcomes[token]
     var confirming by remember { mutableStateOf(false) }
     Text(stringResource(R.string.delete_account), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
     Text(stringResource(R.string.delete_account_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -461,7 +462,7 @@ private fun DeleteAccountSection(account: GoogleAccount, viewModel: TripsViewMod
                     onClick = {
                         confirming = false
                         val appContext = context.applicationContext
-                        viewModel.deleteAccount(DELETE_ACCOUNT_TOKEN) { account.signOutDeleted(appContext) }
+                        viewModel.deleteAccount(token) { account.signOutDeleted(appContext) }
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 ) { Text(stringResource(R.string.delete)) }

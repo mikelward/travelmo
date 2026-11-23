@@ -68,12 +68,21 @@ val LocalReportBug = staticCompositionLocalOf<suspend (Context) -> ShareOutcome>
 val LocalUpdateAvailable = compositionLocalOf { false }
 
 /**
+ * Opens the Access page (SPEC "Access"), for an admin only: the signed-in
+ * app provides it while the account is one, and the menu then starts with
+ * Access, as the web's header shows it to admins alone. Null for everyone
+ * else, and on the Access page itself.
+ */
+val LocalOpenAccess = compositionLocalOf<(() -> Unit)?> { null }
+
+/**
  * The overflow every screen's top bar ends with, as in the sibling apps
  * (stopdash's AppMenuOverflow, clothescast's BugReportOverflowMenu): Report a
  * bug, which shares the debug log as Settings does plus a screenshot of the
  * screen it was opened from, and About, which leads
  * to the open-source licenses. [items] are a screen's own, first, each given
- * a `close` to call as it acts. While Play has a newer version
+ * a `close` to call as it acts; Access follows them for an admin
+ * ([LocalOpenAccess]). While Play has a newer version
  * ([LocalUpdateAvailable]) the button carries a red dot and "Update
  * available", last, opens the Play listing.
  */
@@ -82,6 +91,7 @@ fun AppMenu(modifier: Modifier = Modifier, items: @Composable (close: () -> Unit
     val context = LocalContext.current
     val reportBug = LocalReportBug.current
     val updateAvailable = LocalUpdateAvailable.current
+    val openAccess = LocalOpenAccess.current
     val scope = rememberCoroutineScope()
     var expanded by rememberSaveable { mutableStateOf(false) }
     var showAbout by rememberSaveable { mutableStateOf(false) }
@@ -124,6 +134,15 @@ fun AppMenu(modifier: Modifier = Modifier, items: @Composable (close: () -> Unit
         // window's own; pinchFontSizeHost brings it into the menu.
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.pinchFontSizeHost(), shape = RoundedCornerShape(12.dp)) {
             items { expanded = false }
+            openAccess?.let { open ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.access), style = MaterialTheme.typography.bodyLarge) },
+                    onClick = {
+                        expanded = false
+                        open()
+                    },
+                )
+            }
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.report_a_bug), style = MaterialTheme.typography.bodyLarge) },
                 enabled = !sharing,

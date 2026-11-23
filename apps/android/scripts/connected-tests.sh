@@ -45,10 +45,20 @@ approve() {
   echo "approved $email"
 }
 
+# The owner is an admin, so the tests can read the access records its
+# shares and decisions write.
+make_admin() {
+  local email=$1
+  curl -sS -f -o /dev/null -X PATCH "$firestore/config/access" -H 'Content-Type: application/json' -H 'Authorization: Bearer owner' \
+    -d "{\"fields\":{\"admins\":{\"arrayValue\":{\"values\":[{\"stringValue\":\"$email\"}]}}}}"
+  echo "made $email an admin"
+}
+
 seed_user owner@example.com
 seed_user sharee@example.com
 approve owner@example.com
 approve sharee@example.com
+make_admin owner@example.com
 
 cd "$(dirname "$0")/.."
 exec ./gradlew -PtravelmoFixedVersion :app:connectedDebugAndroidTest "$@"

@@ -309,10 +309,11 @@
       Gmail counts too.
 - [x] Invited at another address: the invite-only page links the address
       someone was invited at, and confirming it lets them in.
-- [ ] Android: the "Travelmo is invite-only" screen with Request access
-      (writing `access/{email}` and calling `/access/check`, as the web
-      does), invites written with shares, and the Access page for admins;
-      meanwhile an account not approved sees an empty trip list.
+- [x] Android access screens (request-access screen and Access page): the
+      "Travelmo is invite-only" screen with Request access (writing
+      `access/{email}` and calling `/access/check`, as the web does),
+      invites written with shares, and the Access page for admins, opened
+      by the "Access request" notification.
 - [ ] Read PDF attachments (tickets, booking confirmations) when an email
       passes the filter: an SJ "Tickets for booking …" email was read as
       not a booking, most likely because the journey is only in the PDF.
@@ -382,6 +383,19 @@
 ## Decisions needing review
 
 Guesses made on autopilot; change any of them freely.
+
+- Android access: until the server confirms an account is not approved,
+  the app shows as before (an empty trip list for one not approved) rather
+  than a loading screen, so an approved account never waits, offline
+  included; the web shows "Loading…" instead. Access is in every screen's
+  ⋮ menu for an admin (not on the Access page itself), after the screen's
+  own items. Access requests get a notification channel of their own
+  ("Access requests") rather than sharing "Trip reminders", so an admin can
+  mute them apart; they are told by both the `access-` tag and the
+  `/access` URL, so an airline page named /access still opens in the
+  browser. "Invited at another address?" says "Open it to confirm", as
+  Settings does, since the link opens on the web, not in the app. An
+  Android account from before approvals records itself, as on the web.
 
 - Residence and visa days: the official pages (gov.uk, ec.europa.eu,
   uscis.gov, irs.gov, canada.ca, immi.homeaffairs.gov.au) could not be

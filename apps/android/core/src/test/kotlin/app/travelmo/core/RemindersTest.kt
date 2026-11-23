@@ -34,4 +34,19 @@ class RemindersTest {
         externalReminderUrl("intent://scan/#Intent;end") shouldBe null
         externalReminderUrl(null) shouldBe null
     }
+
+    @Test
+    fun `an access request opens the Access page in the app`() {
+        val url = "https://travelmo.example/access"
+        opensAccessPage(url, "access-new@example.com") shouldBe true
+        opensAccessPage("$url/", "access-new@example.com") shouldBe true
+        externalReminderUrl(url, "access-new@example.com") shouldBe null
+        // Only the parser's access request, by its tag: an airline's page called /access is the airline's.
+        opensAccessPage("https://airline.example/access", "checkin-t1-s1") shouldBe false
+        externalReminderUrl("https://airline.example/access", "checkin-t1-s1") shouldBe "https://airline.example/access"
+        opensAccessPage("https://travelmo.example/access/other", "access-new@example.com") shouldBe false
+        opensAccessPage("https://travelmo.example/trips/dublin", "access-new@example.com") shouldBe false
+        opensAccessPage(null, "access-new@example.com") shouldBe false
+        opensAccessPage(url, null) shouldBe false
+    }
 }

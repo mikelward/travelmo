@@ -23,8 +23,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.tasks.await
 
-/** The signed-in Firebase user, as the screens need it. */
-data class SignedIn(val uid: String, val email: String?)
+/** The signed-in Firebase user, as the screens need it; [emailVerified] whether Google verified [email], as access asks. */
+data class SignedIn(val uid: String, val email: String?, val emailVerified: Boolean = true)
 
 sealed interface SignInResult {
     data object Success : SignInResult
@@ -144,7 +144,7 @@ class GoogleAccount(
         }
     }
 
-    private fun FirebaseUser.toSignedIn() = SignedIn(uid, normalizeEmail(email))
+    private fun FirebaseUser.toSignedIn() = SignedIn(uid, normalizeEmail(email), isEmailVerified)
 }
 
 private const val NO_STATUS = "none"
