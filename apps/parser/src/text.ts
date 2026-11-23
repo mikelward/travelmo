@@ -40,11 +40,22 @@ export function tidy(text: string): string {
     .trim();
 }
 
-// Plain text when the sender provides it; otherwise HTML flattened. Bookings
-// put the itinerary in both parts, and the plain one costs fewer tokens.
+// Plain text when the sender provides it in full; otherwise HTML flattened.
+// Most bookings put the itinerary in both parts, and the plain one costs
+// fewer tokens, but some (Virgin Atlantic's e-tickets) send only a footer
+// as plain text: a plain part under a third the length of the HTML's text
+// is such a stub.
 export function emailText(payload: MimePart): string {
   const out = { plain: [] as string[], html: [] as string[] };
   collect(payload, out);
-  const text = out.plain.length > 0 ? out.plain.join("\n\n") : htmlToText(out.html.join("\n"));
-  return tidy(text).slice(0, maxEmailChars);
+  return bodyText(out.plain.join("\n\n"), out.html.join("\n"));
+}
+
+// The text an import reads from a message's plain and HTML bodies (either
+// may be empty), as emailText chooses.
+export function bodyText(plainBody: string, htmlBody: string): string {
+  const plain = tidy(plainBody);
+  const html = htmlBody.trim() ? tidy(htmlToText(htmlBody)) : "";
+  const text = plain && plain.length * 3 >= html.length ? plain : html || plain;
+  return text.slice(0, maxEmailChars);
 }
