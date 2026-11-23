@@ -1,5 +1,6 @@
 package app.travelmo.data
 
+import app.travelmo.core.FoundLoyalty
 import app.travelmo.core.Place
 import app.travelmo.core.PlaceDraft
 import app.travelmo.core.ProfileEntry
@@ -140,5 +141,13 @@ class DocumentsTest {
         profile.documents shouldBe listOf(ProfileEntry("Passport", listOf(ProfileField("Expiry", "2031-05-06"))))
         profile.travelers shouldBe emptyList()
         profileFromDocument(mapOf("ownerEmail" to "x")).shouldBeNull()
+    }
+
+    @Test
+    fun `reads loyalty numbers found in emails and drops malformed ones`() {
+        val found = mapOf("program" to "Cove Club", "number" to "CC 4455", "status" to "Member", "messageId" to "m1", "label" to "Your stay at Cove", "at" to "2026-11-01T00:00:00Z")
+        val profile = profileFromDocument(mapOf("ownerUid" to "u1", "foundLoyalty" to listOf(found, mapOf("program" to "No number"), "junk")))!!
+        profile.foundLoyalty shouldBe listOf(FoundLoyalty("Cove Club", "CC 4455", status = "Member", messageId = "m1", label = "Your stay at Cove", at = "2026-11-01T00:00:00Z"))
+        profile.hasDetails shouldBe true
     }
 }

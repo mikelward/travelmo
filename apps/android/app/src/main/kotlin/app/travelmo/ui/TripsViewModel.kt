@@ -3,6 +3,7 @@ package app.travelmo.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.travelmo.core.FlightStatus
+import app.travelmo.core.FoundLoyalty
 import app.travelmo.core.RideNeed
 import app.travelmo.core.effectiveHomes
 import app.travelmo.core.homeTimeline
@@ -313,6 +314,19 @@ class TripsViewModel(
     }
 
     fun hideRideNeed(token: String, need: RideNeed) = run(token) { store.hideRideNeed(uid, rideNeedKey(need)) }
+
+    /** Removes a loyalty number found in the user's emails from their profile. */
+    fun removeFoundLoyalty(token: String, found: FoundLoyalty) = run(token) {
+        try {
+            store.removeFoundLoyalty(uid, found)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Logged by kind only: the number is the user's.
+            TravelmoLog.error(e, "Removing a loyalty number found in emails failed")
+            throw e
+        }
+    }
 
     /**
      * This phone's messaging token is asked for once per view model, and a

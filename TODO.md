@@ -357,9 +357,8 @@
 - [x] Loyalty numbers from booking emails: the extraction lists them, the
       owner's are kept beside TripIt's, shown in Profile's table and the
       booking line, and removable.
-- [ ] Android: loyalty numbers found in emails on the Profile tab and the
-      booking line (`:core`'s `allLoyalty` is in; the app still needs to read
-      `foundLoyalty`), with Remove.
+- [x] Android: loyalty numbers found in emails on the Profile tab and the
+      booking line, with Remove.
 - [ ] Loyalty balances and status from statement emails ("Emerald Club •
       EmeraldClub@email.emeraldclub.com", "Account notification: we're
       pleased to present your Emerald Club eStatement"): let loyalty senders

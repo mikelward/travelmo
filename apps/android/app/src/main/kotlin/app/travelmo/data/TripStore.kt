@@ -1,6 +1,7 @@
 package app.travelmo.data
 
 import app.travelmo.core.FlightStatus
+import app.travelmo.core.FoundLoyalty
 import app.travelmo.core.HomeCorrection
 import app.travelmo.core.MAX_HIDDEN_RIDE_NEEDS
 import app.travelmo.core.RideCompany
@@ -77,6 +78,9 @@ interface TripStore {
 
     /** Hides one ride suggestion for good, in a transaction over the stored list, as the web does. */
     suspend fun hideRideNeed(uid: String, key: String)
+
+    /** Removes a loyalty number found in the owner's emails, in a transaction over the stored list, as the web does. */
+    suspend fun removeFoundLoyalty(uid: String, found: FoundLoyalty)
 
     /** Whether this phone (`users/{uid}/devices/{id}`) is registered for reminders as notifications, live; null while it loads. */
     fun pushDevice(uid: String, id: String): Flow<Boolean?>
@@ -271,6 +275,15 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             trySend(rideSettingsOf(snapshot?.data))
         }
         awaitClose { registration.remove() }
+    }
+
+    override suspend fun removeFoundLoyalty(uid: String, found: FoundLoyalty) {
+        val ref = db.collection("users").document(uid).collection("travelProfile").document("main")
+        db.runTransaction { tx ->
+            val stored = (tx.get(ref).get("foundLoyalty") as? List<*>).orEmpty()
+            val kept = stored.filterNot { (it as? Map<*, *>)?.let { m -> m["program"] == found.program && m["number"] == found.number } == true }
+            tx.update(ref, mapOf("foundLoyalty" to kept, "updatedAt" to Instant.now().toString()))
+        }.await()
     }
 
     override suspend fun hideRideNeed(uid: String, key: String) {

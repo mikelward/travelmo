@@ -1328,7 +1328,8 @@ Profile's table and a booking's loyalty line read both (`allLoyalty`): what
 TripIt imported, then what emails showed that it did not have by number,
 each noting the email it came from. "Found in your emails" on the owner's
 own Profile lists them with Remove, since the extraction is sometimes
-wrong. Nothing is logged but counts. Balances and status from loyalty
+wrong; the Android Profile tab and booking rows show them the same way,
+with the same Remove. Nothing is logged but counts. Balances and status from loyalty
 statement emails (an Emerald Club eStatement, say) are not read: those are
 not bookings, and the pre-filter drops them.
 
