@@ -66,3 +66,23 @@ fun loyaltyLine(entry: ProfileEntry): String {
     val s = loyaltySummary(entry)
     return listOfNotNull(s.title, s.account, s.status).joinToString(" · ")
 }
+
+// A number as written: spaces, dashes and case do not count.
+private fun plainNumber(n: String) = n.replace(Regex("[\\s-]"), "").uppercase()
+
+/** A found membership as the profile shows a program: labeled fields the table reads, and the email it came from. */
+fun foundLoyaltyEntry(found: FoundLoyalty): ProfileEntry = ProfileEntry(
+    found.program,
+    buildList {
+        add(ProfileField("Account number", found.number))
+        found.status?.let { add(ProfileField("Status", it)) }
+        found.holder?.let { add(ProfileField("Name", it)) }
+        add(ProfileField("From email", found.label ?: "A booking email"))
+    },
+)
+
+/** Every program on a profile: what TripIt imported, then what emails showed that it did not already have (by number). */
+fun allLoyalty(profile: TravelProfile): List<ProfileEntry> {
+    val imported = profile.loyalty.mapNotNull { loyaltySummary(it).account }.map(::plainNumber).toSet()
+    return profile.loyalty + profile.foundLoyalty.filter { plainNumber(it.number) !in imported }.map(::foundLoyaltyEntry)
+}

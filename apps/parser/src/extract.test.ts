@@ -1,6 +1,19 @@
 import { parseExtraction } from "./extract";
 
 describe("parseExtraction", () => {
+  it("reads the loyalty numbers a booking shows", () => {
+    const booking = parseExtraction(
+      JSON.stringify({
+        isBooking: true,
+        segments: [],
+        memberships: [{ program: "Example Air Club", number: "EA 123", holder: "MS J EXAMPLE", status: "Silver" }],
+      }),
+      "m1",
+    );
+    expect(booking.memberships).toEqual([{ program: "Example Air Club", number: "EA 123", holder: "MS J EXAMPLE", status: "Silver" }]);
+    expect(() => parseExtraction(JSON.stringify({ isBooking: true, segments: [], memberships: [{ program: "Example Air Club" }] }), "m2")).toThrow(/schema/);
+  });
+
   it("accepts a valid booking", () => {
     const booking = parseExtraction(
       JSON.stringify({

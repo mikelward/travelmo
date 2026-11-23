@@ -87,6 +87,37 @@ describe("importMessage", () => {
     });
   });
 
+  it("keeps the owner's loyalty numbers from a booking email, not a fellow traveler's", async () => {
+    const store = memoryStore();
+    store.ownerNames.set("u1", "Jane Example");
+    const withNumbers: ExtractedBooking = {
+      ...flight,
+      memberships: [
+        { program: "Example Air Club", number: "EA 123 456", holder: "MS J EXAMPLE", status: "Silver" },
+        { program: "Example Air Club", number: "EA 999 000", holder: "Alex Sample" },
+      ],
+    };
+    const logged: unknown[] = [];
+    const outcome = await importMessage("u1", email({ subject: "Your flight to Dublin" }), { ...deps(store, async () => withNumbers), log: (event, fields) => void logged.push({ event, ...fields }) });
+    expect(outcome).toBe("imported");
+    expect(store.foundLoyalty.get("u1")).toEqual([
+      { program: "Example Air Club", number: "EA 123 456", holder: "MS J EXAMPLE", status: "Silver", messageId: "m1", label: "Your flight to Dublin", at: expect.any(String) },
+    ]);
+    // Counts only: the numbers never reach the logs.
+    expect(logged).toContainEqual({ event: "memberships", uid: "u1", messageId: "m1", found: 2, kept: 1 });
+    expect(JSON.stringify(logged)).not.toContain("EA 123 456");
+  });
+
+  it("imports the booking even when keeping its loyalty numbers fails", async () => {
+    const store = memoryStore();
+    store.addFoundLoyalty = async () => {
+      throw new Error("profile unavailable");
+    };
+    const withNumbers: ExtractedBooking = { ...lodging, memberships: [{ program: "Sample Hotels Rewards", number: "777" }] };
+    expect(await importMessage("u1", email(), deps(store, async () => withNumbers))).toBe("imported");
+    expect(store.segments.size).toBe(1);
+  });
+
   it("imports a filtered message again when the user asks for it", async () => {
     const store = memoryStore();
     const extract = vi.fn(async () => lodging);

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { owner, partner, signIn, signOut } from "./helpers";
-import { clearData, seedTravelProfile, seedTrip } from "./seed";
+import { clearData, readTravelProfile, seedTravelProfile, seedTrip } from "./seed";
 
 test.beforeEach(async () => {
   await clearData();
@@ -74,4 +74,27 @@ test("a booking shows the viewer's program its provider belongs to, with the num
   });
   await page.getByRole("link", { name: /Liverpool/ }).click();
   await expect(page.getByTestId("segment-loyalty")).toHaveText("Example Air Miles · EA123 · Gold");
+});
+
+test("loyalty numbers found in booking emails join the table and the booking line, and the owner can remove them", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  await seedTrip(ownerUid, "e2e-loyalty", { provider: "Cove Hotels" });
+  const found = { program: "Cove Club", number: "CC 4455", status: "Member", messageId: "m1", label: "Your stay at Cove", at: "2026-11-01T00:00:00Z" };
+  const air = { program: "Example Air Club", number: "EA 999", messageId: "m2", label: "Your flight", at: "2026-11-02T00:00:00Z" };
+  await seedTravelProfile(ownerUid, { ownerEmail: owner, trustedEmails: [], documents: [], loyalty: [], travelers: [], foundLoyalty: [found, air] });
+
+  await page.getByRole("link", { name: /Liverpool/ }).click();
+  await expect(page.getByTestId("segment-loyalty")).toHaveText("Cove Club · CC 4455 · Member");
+
+  await page.goto("/profile");
+  await expect(page.getByRole("table", { name: "Loyalty programs" }).getByRole("row")).toHaveText([
+    "ProgramAccountBalanceStatus",
+    "Cove ClubCC 4455Member",
+    "Example Air ClubEA 999",
+  ]);
+  const list = page.getByRole("list", { name: "Found in your emails" });
+  await expect(list).toContainText("From “Your stay at Cove”");
+  await list.getByRole("listitem").filter({ hasText: "Example Air Club" }).getByRole("button", { name: "Remove" }).click();
+  await expect(list.getByRole("listitem")).toHaveCount(1);
+  await expect.poll(async () => (await readTravelProfile(ownerUid))?.foundLoyalty).toEqual([found]);
 });

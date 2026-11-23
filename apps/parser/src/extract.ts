@@ -23,6 +23,7 @@ Rules:
 - confirmation: the booking reference / PNR / confirmation number if present.
 - provider: airline, hotel brand, rental company or booking site.
 - If the email cancels a booking (a cancellation confirmation, not a change or a reminder), set isBooking=false with no segments, and list each cancelled booking in cancellations with whatever the email gives: type, provider, confirmation, place (the hotel, venue or route as named), for a stay or event its city when the email gives it, for a flight, train, bus or ferry its origin and destination (the codes or names the email gives), and start/end in the same form as above (with the time the email gives, or 00:00 when it gives none).
+- memberships: each loyalty program number the email shows for a traveler (a frequent flyer, hotel rewards or rental club number): program as named, number exactly as written, holder (the member's name as written) and status (tier) when given. Never a booking reference, ticket number, card number or payment detail. Leave memberships out when there are none.
 - Do not invent details that are not in the email.`;
 
 export function geminiExtractor(client: GoogleGenAI, model: string): Extractor {

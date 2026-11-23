@@ -16,9 +16,22 @@ data class TravelProfile(
     val travelers: List<ProfileEntry> = emptyList(),
     val loyalty: List<ProfileEntry> = emptyList(),
     val documents: List<ProfileEntry> = emptyList(),
+    /** Loyalty memberships read from the owner's booking emails ([allLoyalty]). */
+    val foundLoyalty: List<FoundLoyalty> = emptyList(),
 ) {
-    val hasDetails: Boolean get() = documents.isNotEmpty() || loyalty.isNotEmpty() || travelers.isNotEmpty()
+    val hasDetails: Boolean get() = documents.isNotEmpty() || loyalty.isNotEmpty() || foundLoyalty.isNotEmpty() || travelers.isNotEmpty()
 }
+
+/** A loyalty membership read from one of the owner's booking emails, and the email it was last seen in. */
+data class FoundLoyalty(
+    val program: String,
+    val number: String,
+    val holder: String? = null,
+    val status: String? = null,
+    val messageId: String,
+    val label: String? = null,
+    val at: String,
+)
 
 /** How many people a profile may be shared with, as the rules allow. */
 const val MAX_TRUSTED = 20

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { formatBalance, loyaltyLine, loyaltySummary, nameWords, programsFor } from "./loyalty";
-import type { ProfileEntry } from "./schema";
+import { allLoyalty, couldBeOwner, formatBalance, loyaltyLine, loyaltySummary, nameWords, programsFor, withFoundLoyalty } from "./loyalty";
+import { maxFoundLoyalty, type FoundLoyalty, type ProfileEntry } from "./schema";
 
 // Invented programs and numbers.
 const air: ProfileEntry = {
@@ -98,5 +98,52 @@ describe("loyaltyLine", () => {
   it("is the program, the number and the status, whichever are known", () => {
     expect(loyaltyLine(air)).toBe("Example Air Miles · EA123 · Gold");
     expect(loyaltyLine(bare)).toBe("Loyalty program 3");
+  });
+});
+
+describe("loyalty from emails", () => {
+  const seen = (number: string, extra: Partial<FoundLoyalty> = {}): FoundLoyalty => ({
+    program: "Example Air Club",
+    number,
+    messageId: "m1",
+    label: "Your booking",
+    at: "2026-11-01T00:00:00Z",
+    ...extra,
+  });
+
+  it("refreshes a membership seen again rather than adding it twice", () => {
+    const first = withFoundLoyalty([], seen("12 345 678", { status: "Silver" }));
+    const again = withFoundLoyalty(first, seen("12345678", { messageId: "m2", at: "2026-11-05T00:00:00Z" }));
+    expect(again).toEqual([seen("12345678", { messageId: "m2", at: "2026-11-05T00:00:00Z", status: "Silver" })]);
+    expect(withFoundLoyalty(again, seen("999")).map((f) => f.number)).toEqual(["12345678", "999"]);
+  });
+
+  it("knows a program with no distinctive word by its name", () => {
+    const ba = seen("123", { program: "BA" });
+    expect(withFoundLoyalty(withFoundLoyalty([], ba), { ...ba, program: "ba ", messageId: "m2" })).toHaveLength(1);
+  });
+
+  it("keeps the newest when the list is full", () => {
+    let found: FoundLoyalty[] = [];
+    for (let i = 0; i < maxFoundLoyalty + 1; i++) found = withFoundLoyalty(found, seen(`n${i}`));
+    expect(found).toHaveLength(maxFoundLoyalty);
+    expect(found[0]!.number).toBe("n1");
+  });
+
+  it("tells the owner's membership from a fellow traveler's by name", () => {
+    expect(couldBeOwner("MR J SMITH", "Jane Smith")).toBe(true);
+    expect(couldBeOwner("Alex Example", "Jane Smith")).toBe(false);
+    expect(couldBeOwner(undefined, "Jane Smith")).toBe(true);
+    expect(couldBeOwner("Alex Example", undefined)).toBe(true);
+  });
+
+  it("lists what TripIt imported, then what emails showed that it did not have", () => {
+    const imported = { title: "Example Air Club", fields: [{ label: "Account Number", value: "12345678" }] };
+    const profile = { loyalty: [imported], foundLoyalty: [seen("12 345 678"), seen("777", { program: "Sample Hotels Rewards", status: "Gold" })] };
+    const all = allLoyalty(profile);
+    expect(all).toHaveLength(2);
+    expect(loyaltySummary(all[1]!)).toEqual({ title: "Sample Hotels Rewards", account: "777", status: "Gold" });
+    expect(all[1]!.fields.at(-1)).toEqual({ label: "From email", value: "Your booking" });
+    expect(programsFor("Sample Hotels", all)).toEqual([all[1]]);
   });
 });

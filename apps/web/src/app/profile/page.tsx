@@ -1,13 +1,13 @@
 "use client";
 
-import { loyaltySummary, type ProfileEntry, type TravelProfile } from "@travelmo/core";
+import { allLoyalty, loyaltySummary, type FoundLoyalty, type ProfileEntry, type TravelProfile } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
 import { useState } from "react";
 import { SignInGate } from "@/components/SignInGate";
 import { correctionText, failedReadsText, homeLine, logged, parseCorrection, saveCorrections, useHomes } from "@/lib/home";
 import { useSaveForOffline } from "@/lib/offline";
-import { maxTrusted, saveTrusted, useSharedProfiles, useTravelProfile } from "@/lib/travelProfile";
+import { maxTrusted, removeFoundLoyalty, saveTrusted, useSharedProfiles, useTravelProfile } from "@/lib/travelProfile";
 
 const buttonClass =
   "rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
@@ -72,18 +72,58 @@ function LoyaltyTable({ entries }: { entries: ProfileEntry[] }) {
   );
 }
 
-function ProfileSections({ profile }: { profile: TravelProfile }) {
+// Loyalty numbers read from the owner's booking emails, each removable, as
+// the extraction is sometimes wrong (SPEC "Loyalty from emails").
+function FoundInEmails({ uid, found }: { uid: string; found: FoundLoyalty[] }) {
+  const [error, setError] = useState<string>();
+  if (!found.length) return null;
+  const remove = async (f: FoundLoyalty) => {
+    setError(undefined);
+    try {
+      await removeFoundLoyalty(uid, f);
+    } catch (e) {
+      console.error("Removing a loyalty number failed", e);
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <section className="mt-6">
+      <h3 className="font-medium">Found in your emails</h3>
+      <ul className="mt-2 divide-y divide-zinc-200 dark:divide-zinc-800" aria-label="Found in your emails">
+        {found.map((f) => (
+          <li key={`${f.program}|${f.number}`} className="flex items-start justify-between gap-3 py-2 text-sm">
+            <div className="min-w-0">
+              <p>
+                {f.program} · <span className="break-all">{f.number}</span>
+              </p>
+              <p className="text-muted">From “{f.label ?? "a booking email"}”</p>
+            </div>
+            <button type="button" className={buttonClass} onClick={() => void remove(f)}>
+              Remove
+            </button>
+          </li>
+        ))}
+      </ul>
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+    </section>
+  );
+}
+
+// `ownUid` is set on the viewer's own profile, where what emails showed can be removed.
+function ProfileSections({ profile, ownUid }: { profile: TravelProfile; ownUid?: string }) {
+  const loyalty = allLoyalty(profile);
   return (
     <>
       <Entries title="Documents" entries={profile.documents} open={false} />
-      <LoyaltyTable entries={profile.loyalty} />
-      <Entries title="Loyalty program details" entries={profile.loyalty} open={false} />
+      <LoyaltyTable entries={loyalty} />
+      {ownUid && <FoundInEmails uid={ownUid} found={profile.foundLoyalty ?? []} />}
+      <Entries title="Loyalty program details" entries={loyalty} open={false} />
       <Entries title="Travelers" entries={profile.travelers} open={false} />
     </>
   );
 }
 
-const hasDetails = (p: TravelProfile) => p.documents.length + p.loyalty.length + p.travelers.length > 0;
+const hasDetails = (p: TravelProfile) => p.documents.length + p.loyalty.length + (p.foundLoyalty?.length ?? 0) + p.travelers.length > 0;
 
 function SharingSection({ user, profile }: { user: User; profile: TravelProfile | null }) {
   const trusted = profile?.trustedEmails ?? [];
@@ -281,7 +321,7 @@ function ProfilePage({ user }: { user: User }) {
           bring in your documents, loyalty programs and fellow travelers.
         </p>
       )}
-      {profile && hasDetails(profile) && <ProfileSections profile={profile} />}
+      {profile && hasDetails(profile) && <ProfileSections profile={profile} ownUid={user.uid} />}
       <HomeSection user={user} />
       {profile !== undefined && <SharingSection user={user} profile={profile} />}
       <SharedWithYou user={user} />
