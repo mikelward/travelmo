@@ -335,6 +335,20 @@ Guesses made on autopilot; change any of them freely.
   before departure; an open trip page asks for a look from six hours
   before.
 
+- Trip names: journeys name a trip before stays, so a flight to Melbourne
+  names it whatever suburb the stays are in; suburbs are not mapped to
+  their city otherwise (a trip of stays in St Kilda alone is "St Kilda").
+  A title counts as an import's (and is renamed as bookings join, and by
+  Regroup) when it equals what its bookings, or one email's, would be
+  named, by the current or earlier rules, or the name of one of its
+  bookings or their places; a name the user typed that happens to equal
+  one of those is renamed too.
+- A stay whose two emails name different places merges on the same
+  provider, listing title and check-in and check-out instants; the more
+  specific place wins (address, coordinates, city; the confirmation's on a
+  tie). Regroup still only moves bookings, so such stays already filed
+  twice stay until one is deleted.
+
 - Gmail quota for "Import past bookings": a reading spends at most 4,000 of
   a user's 6,000 units a minute (about 66 messages), leaving the rest for
   new mail and opening emails; a rate-limited batch holds the next off one
