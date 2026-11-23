@@ -359,11 +359,8 @@
       booking line, and removable.
 - [x] Android: loyalty numbers found in emails on the Profile tab and the
       booking line, with Remove.
-- [ ] Loyalty balances and status from statement emails ("Emerald Club •
-      EmeraldClub@email.emeraldclub.com", "Account notification: we're
-      pleased to present your Emerald Club eStatement"): let loyalty senders
-      past the pre-filter and read balance and tier; costs a model call per
-      statement.
+- [x] Loyalty balances and status from travel programs' statement emails
+      (Emerald Club, MileagePlus), only from travel companies' domains.
 
 ## Decisions needing review
 
@@ -372,7 +369,9 @@ Guesses made on autopilot; change any of them freely.
 - Loyalty from emails: a number is kept when the name on it could be the
   account's (shares a name with the Google profile's), or no name is given;
   a fellow traveler's number on the same booking is left out. Kept only from
-  emails imported as bookings.
+  emails that book travel, and from travel programs' statements, which pass
+  the pre-filter only from the travel domains listed in `prefilter.ts` or a
+  sender the user always imports; statements over 60 days old are skipped.
 
 - Car and ride suggestions: home is this trip's own round trip (or Profile's
   corrections), not the timeline of every trip, to save reads; rides at

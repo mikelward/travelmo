@@ -18,6 +18,8 @@ data class TravelProfile(
     val documents: List<ProfileEntry> = emptyList(),
     /** Loyalty memberships read from the owner's booking emails ([allLoyalty]). */
     val foundLoyalty: List<FoundLoyalty> = emptyList(),
+    /** When TripIt's sections were last uploaded, for telling a newer statement's balance from them. */
+    val importedAt: String? = null,
 ) {
     val hasDetails: Boolean get() = documents.isNotEmpty() || loyalty.isNotEmpty() || foundLoyalty.isNotEmpty() || travelers.isNotEmpty()
 }
@@ -31,6 +33,13 @@ data class FoundLoyalty(
     val messageId: String,
     val label: String? = null,
     val at: String,
+    /** Points, miles or credits as written, from a statement, and when it was as of. */
+    val balance: String? = null,
+    val balanceAt: String? = null,
+    /** The subject of the email the balance came from. */
+    val balanceLabel: String? = null,
+    /** When the status was as of. */
+    val statusAt: String? = null,
 )
 
 /** How many people a profile may be shared with, as the rules allow. */

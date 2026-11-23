@@ -53,6 +53,34 @@ describe("prefilter", () => {
   });
 });
 
+describe("prefilter, loyalty statements", () => {
+  const statement = (from: string, subject: string) => prefilter({ from, subject });
+
+  it("reads a travel program's statement, though it talks of points", () => {
+    expect(statement("Emerald Club <EmeraldClub@email.emeraldclub.com>", "Account notification: we're pleased to present your Emerald Club eStatement")).toEqual({
+      pass: true,
+      reason: "loyalty statement",
+    });
+    expect(statement("Example Air <club@email.ba.com>", "Your Avios balance").pass).toBe(true);
+    // A statement with an offer in its subject is still one.
+    expect(statement("MileagePlus Statement <MyMileagePlus@enews.united.com>", "November statement: Cardmembers save 10% or more on flights booked with miles + earn up to 100K bonus miles")).toEqual({
+      pass: true,
+      reason: "loyalty statement",
+    });
+  });
+
+  it("keeps out a shop's, a coffee chain's or a bank's statement", () => {
+    expect(statement("Example Mart <rewards@examplemart.example>", "Your Clubcard points statement").pass).toBe(false);
+    expect(statement("Example Coffee <hello@examplecoffee.example>", "Your rewards statement is here").pass).toBe(false);
+    expect(statement("Example Bank <alerts@examplebank.example>", "Your monthly statement is ready").pass).toBe(false);
+    expect(statement("Example Health <members@examplehealth.example>", "Your membership statement").pass).toBe(false);
+  });
+
+  it("reads one from a sender the user always imports", () => {
+    expect(prefilter({ from: "Club <club@smallairline.example>", subject: "Your miles statement" }, { allow: ["smallairline.example"], deny: [] }).pass).toBe(true);
+  });
+});
+
 describe("calendarPrefilter", () => {
   it("passes travel titles, with or without a booking word", () => {
     expect(calendarPrefilter("XX123 LHR to CDG", false)).toEqual({ pass: true, reason: "subject keyword" });

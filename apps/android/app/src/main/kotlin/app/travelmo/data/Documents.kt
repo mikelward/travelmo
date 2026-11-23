@@ -185,6 +185,7 @@ fun profileFromDocument(data: Map<String, Any?>): TravelProfile? {
         loyalty = data.entries("loyalty"),
         documents = data.entries("documents"),
         foundLoyalty = foundLoyaltyOf(data["foundLoyalty"]),
+        importedAt = data.text("importedAt"),
     )
 }
 
@@ -200,5 +201,9 @@ internal fun foundLoyaltyOf(value: Any?): List<FoundLoyalty> = (value as? List<*
         messageId = map.text("messageId") ?: return@mapNotNull null,
         label = map.text("label"),
         at = map.text("at") ?: return@mapNotNull null,
+        balance = map.text("balance"),
+        balanceAt = map.text("balanceAt"),
+        balanceLabel = map.text("balanceLabel"),
+        statusAt = map.text("statusAt"),
     )
 }

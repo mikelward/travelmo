@@ -57,7 +57,7 @@ import { airportPlace } from "@travelmo/core/airportPlaces";
 import type { Extractor } from "./extract";
 import type { RetryStore } from "./geocodeSweep";
 import { isNotFound, type EmailMessage } from "./gmail";
-import { calendarPrefilter, prefilter, senderDomain, type PrefilterResult, type SenderPatterns } from "./prefilter";
+import { calendarPrefilter, isTravelStatement, prefilter, senderDomain, statementReason, type PrefilterResult, type SenderPatterns } from "./prefilter";
 import { embeddingText, similarityVerdict, type Example, type ExampleLabel, type Examples } from "./similarity";
 
 export type TripBounds = Pick<Trip, "start" | "end" | "updatedAt"> & Partial<Pick<Trip, "title">>;
@@ -326,6 +326,14 @@ export async function importMessage(
       return "filtered";
     }
     reason = verdict.reason;
+    // Only a recent statement says what the balance is now; reading a whole
+    // mailbox would otherwise send every old one to the model.
+    if (reason === statementReason && sent && Date.parse(now()) - Date.parse(sent) > statementDays * 86_400_000) {
+      if (!(await releaseReplaced())) return "skipped";
+      await save(record("filtered", { reason: "old loyalty statement" }));
+      log("filtered", { uid, messageId: message.id, reason: "old loyalty statement" });
+      return "filtered";
+    }
   }
 
   // The similarity stage: an allowed sender or the user's own request goes
@@ -406,7 +414,19 @@ export async function importMessage(
     log("cancellation", { uid, messageId: message.id, cancelled: marked.length });
     return "cancellation";
   }
+  // A travel statement, whether the pre-filter passed it as one or it was
+  // forwarded or read again on request, which skip the pre-filter: as there,
+  // by its (original) sender and subject.
+  const fromEmail = source === "gmail" || source === "forward";
+  const original = source === "forward" ? unwrapForwarded(message) : message;
+  const statement =
+    fromEmail &&
+    (reason === statementReason || (!!options.force && (booking.memberships?.length ?? 0) > 0 && isTravelStatement(original, await store.senderPatterns(uid))));
   if (!booking.isBooking || booking.segments.length === 0 || !range) {
+    // A travel loyalty statement (the pre-filter let it through for its
+    // sender) is no booking, but its balance and status are kept; any other
+    // email that is no booking keeps nothing.
+    if (statement && booking.memberships?.length) await keepMemberships(uid, message, booking.memberships, now(), deps, sent);
     await save(record("not_booking", { reason }));
     await learn("others");
     log("not_booking", { uid, messageId: message.id });
@@ -457,7 +477,10 @@ export async function importMessage(
     }),
   );
   await learn("bookings");
-  if (isEmail && booking.memberships?.length) await keepMemberships(uid, message, booking.memberships, timestamp, deps);
+  // Only from an email that books travel: a ticket or an appointment that
+  // shows a member number (a clinic's, a party's) keeps nothing.
+  const booksTravel = booking.segments.some((segment) => travelTypes.has(segment.type));
+  if (isEmail && booksTravel && booking.memberships?.length) await keepMemberships(uid, message, booking.memberships, timestamp, deps, sent);
   log("imported", { uid, messageId: message.id, tripId, segments: segmentIds.length, duplicates });
   return "imported";
 }
@@ -466,14 +489,30 @@ export async function importMessage(
 // (SPEC "Loyalty from emails"). Only the user's own: a fellow traveler's
 // number on the same booking is theirs. Nothing here fails the import; the
 // numbers never reach the logs, only counts.
-async function keepMemberships(uid: string, message: EmailMessage, memberships: readonly ExtractedMembership[], at: string, deps: ImportDeps): Promise<void> {
+async function keepMemberships(
+  uid: string,
+  message: EmailMessage,
+  memberships: readonly ExtractedMembership[],
+  at: string,
+  deps: ImportDeps,
+  sent: string | undefined,
+): Promise<void> {
   try {
     const owner = await deps.store.ownerName(uid);
     const mine = memberships.filter((m) => couldBeOwner(m.holder, owner));
     if (mine.length) {
       await deps.store.addFoundLoyalty(
         uid,
-        mine.map((m) => ({ ...m, messageId: message.id, label: message.subject, at })),
+        // A balance and a status are as of when the email was sent, so an
+        // older one never replaces a newer (withFoundLoyalty).
+        mine.map((m) => ({
+          ...m,
+          messageId: message.id,
+          label: message.subject,
+          at,
+          ...(m.balance ? { balanceAt: sent ?? at } : {}),
+          ...(m.status ? { statusAt: sent ?? at } : {}),
+        })),
       );
     }
     deps.log("memberships", { uid, messageId: message.id, found: memberships.length, kept: mine.length });
@@ -481,6 +520,12 @@ async function keepMemberships(uid: string, message: EmailMessage, memberships: 
     deps.log("memberships_failed", { uid, messageId: message.id, reason: (error as Error).message });
   }
 }
+
+// What a membership number is kept from: an email booking one of these.
+const travelTypes = new Set<string>(["flight", "train", "bus", "ferry", "lodging", "car_rental"]);
+
+// How old a loyalty statement may be and still be read.
+const statementDays = 60;
 
 const duplicateReason = (n: number) => `${n} already imported from elsewhere`;
 

@@ -1,6 +1,7 @@
 import type { BackfillProgress } from "@travelmo/core";
 import { GmailRateLimited, withRateLimitRetry, type MessagePage } from "./gmail";
 import { emptyCounts, type ImportCounts } from "./importer";
+import { travelLoyaltyDomains } from "./prefilter";
 
 // Reading a whole mailbox's history, in batches small enough for one
 // request: each batch searches on from where the last stopped (Gmail's page
@@ -8,10 +9,12 @@ import { emptyCounts, type ImportCounts } from "./importer";
 // far it got. Every message is claimed once, so a batch read twice, or a
 // reading started over, costs Gmail reads but never imports twice.
 
-// Booking-like subjects over the whole mailbox; the pre-filter and the
-// model decide the rest.
+// Booking-like subjects over the whole mailbox, and travel programs' recent
+// statements (the pre-filter reads only those under 60 days old); the
+// pre-filter and the model decide the rest.
+const statements = `(subject:(statement OR estatement OR "account summary" OR balance) newer_than:60d from:(${travelLoyaltyDomains.join(" OR ")}))`;
 export const backfillQuery =
-  "-in:spam -in:trash {subject:booking subject:reservation subject:confirmation subject:confirmed subject:itinerary subject:ticket subject:tickets subject:flight subject:hotel subject:rental subject:check-in subject:\"boarding pass\" subject:cancellation subject:cancelation subject:cancelled subject:canceled}";
+  `-in:spam -in:trash {subject:booking subject:reservation subject:confirmation subject:confirmed subject:itinerary subject:ticket subject:tickets subject:flight subject:hotel subject:rental subject:check-in subject:"boarding pass" subject:cancellation subject:cancelation subject:cancelled subject:canceled ${statements}}`;
 // Messages per batch: enough to make progress, in one search call. A batch
 // that runs short of time stops early (see `timeLeftMs`), so it always ends
 // inside a request.

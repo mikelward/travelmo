@@ -53,5 +53,33 @@ class LoyaltyTest {
         loyaltySummary(all[1]) shouldBe LoyaltySummary("Sample Hotels Rewards", "777", status = "Gold")
         all[1].fields.last() shouldBe ProfileField("From email", "Your booking")
         programsFor("Sample Hotels", all) shouldBe listOf(all[1])
+        // A statement's balance joins the table.
+        val statement = seen("Emerald Club", "EC 1").copy(balance = "3 credits", balanceAt = "2026-11-01T00:00:00Z")
+        loyaltySummary(foundLoyaltyEntry(statement)) shouldBe LoyaltySummary("Emerald Club", "EC 1", balance = "3 credits")
+    }
+
+    @Test
+    fun `brings a newer statement's balance and status to the program TripIt imported`() {
+        val imported = entry("Emerald Club", "Account number" to "EC 77", "Balance" to "1", "Elite status" to "Member")
+        val statement = FoundLoyalty("Emerald Club", "EC77", status = "Executive", messageId = "m1", label = "Your Emerald Club eStatement", at = "2026-11-01T00:00:00Z", balance = "3 free rental days", balanceAt = "2026-11-01T00:00:00Z", statusAt = "2026-11-01T00:00:00Z")
+        val newer = allLoyalty(TravelProfile("u", loyalty = listOf(imported), foundLoyalty = listOf(statement), importedAt = "2026-06-01T00:00:00Z"))
+        newer.size shouldBe 1
+        loyaltySummary(newer[0]) shouldBe LoyaltySummary("Emerald Club", "EC 77", "3 free rental days", "Executive")
+        newer[0].fields.last() shouldBe ProfileField("Balance from email", "Your Emerald Club eStatement")
+        // The balance names the email it came from, though a later one is the label.
+        val relabeled = statement.copy(label = "Your rental receipt", balanceLabel = "Your Emerald Club eStatement")
+        allLoyalty(TravelProfile("u", loyalty = listOf(imported), foundLoyalty = listOf(relabeled)))[0].fields.last() shouldBe
+            ProfileField("Balance from email", "Your Emerald Club eStatement")
+        val older = allLoyalty(TravelProfile("u", loyalty = listOf(imported), foundLoyalty = listOf(statement), importedAt = "2026-11-20T00:00:00Z"))
+        loyaltySummary(older[0]) shouldBe LoyaltySummary("Emerald Club", "EC 77", "1", "Member")
+    }
+
+    @Test
+    fun `brings a statement only to the same program, whatever the number`() {
+        val air = entry("Example Air Club", "Account number" to "123", "Balance" to "10")
+        val hotel = FoundLoyalty("Sample Hotels Rewards", "123", messageId = "m1", at = "2026-11-01T00:00:00Z", balance = "999", balanceAt = "2026-11-01T00:00:00Z")
+        val all = allLoyalty(TravelProfile("u", loyalty = listOf(air), foundLoyalty = listOf(hotel)))
+        loyaltySummary(all[0]).balance shouldBe "10"
+        loyaltySummary(all[1]) shouldBe LoyaltySummary("Sample Hotels Rewards", "123", "999")
     }
 }

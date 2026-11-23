@@ -73,6 +73,8 @@ export const ExtractedMembership = z.object({
   // The member's name as the email gives it.
   holder: z.string().min(1).optional(),
   status: z.string().min(1).optional(),
+  // Points, miles or credits as written ("12,400 points"), from a statement.
+  balance: z.string().min(1).optional(),
 });
 export type ExtractedMembership = z.infer<typeof ExtractedMembership>;
 
@@ -432,6 +434,13 @@ export const FoundLoyalty = ExtractedMembership.extend({
   messageId: z.string().min(1),
   label: z.string().optional(),
   at: isoDateTime,
+  // When the balance was as of (the email's sending time), and that
+  // email's subject, kept with the balance when a later email without one
+  // becomes `label`.
+  balanceAt: isoDateTime.optional(),
+  balanceLabel: z.string().optional(),
+  // When the status was as of: the sending time of the email that gave it.
+  statusAt: isoDateTime.optional(),
 });
 export type FoundLoyalty = z.infer<typeof FoundLoyalty>;
 export const maxFoundLoyalty = 50;
