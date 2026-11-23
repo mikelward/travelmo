@@ -632,8 +632,7 @@ function RideCompaniesSection({ user }: { user: User }) {
     <section className="mt-10">
       <h2 className="text-lg font-medium">Car and ride companies</h2>
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-        When a flight has no car or ride booked, its trip suggests rental companies such as Avis and Enterprise.
-        Add your own, such as a local minicab firm, to offer them too.
+        Add your own airport transfer, taxi, and rental car companies.
       </p>
       <form onSubmit={add} className="mt-3 flex flex-wrap gap-2">
         <input

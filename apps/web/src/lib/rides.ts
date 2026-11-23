@@ -1,6 +1,6 @@
 "use client";
 
-import { RideCompany, maxHiddenRideNeeds, maxRideCompanies, paths } from "@travelmo/core";
+import { RideCompany, maxHiddenRideNeeds, paths, withRideCompany, withoutRideCompany } from "@travelmo/core";
 import { doc, runTransaction, type DocumentReference, type Transaction } from "firebase/firestore";
 import { firestore } from "./firebase";
 
@@ -14,17 +14,15 @@ async function storedCompanies(tx: Transaction, ref: DocumentReference): Promise
   });
 }
 
-const sameCompany = (a: RideCompany, b: RideCompany) => a.name === b.name && a.url === b.url && a.near === b.near;
-
 // Adds one of the user's own companies to the list as stored now, so another
 // tab's change in the meantime is kept.
 export async function addRideCompany(uid: string, company: RideCompany): Promise<void> {
   const ref = doc(firestore(), paths.user(uid));
   await runTransaction(firestore(), async (tx) => {
     const companies = await storedCompanies(tx, ref);
-    if (companies.some((c) => sameCompany(c, company))) return;
-    if (companies.length >= maxRideCompanies) throw new Error(`At most ${maxRideCompanies}.`);
-    tx.set(ref, { rideCompanies: [...companies, company] }, { merge: true });
+    const next = withRideCompany(companies, company);
+    if (next.length === companies.length) return;
+    tx.set(ref, { rideCompanies: next }, { merge: true });
   });
 }
 
@@ -33,7 +31,7 @@ export async function removeRideCompany(uid: string, company: RideCompany): Prom
   const ref = doc(firestore(), paths.user(uid));
   await runTransaction(firestore(), async (tx) => {
     const companies = await storedCompanies(tx, ref);
-    tx.set(ref, { rideCompanies: companies.filter((c) => !sameCompany(c, company)) }, { merge: true });
+    tx.set(ref, { rideCompanies: withoutRideCompany(companies, company) }, { merge: true });
   });
 }
 

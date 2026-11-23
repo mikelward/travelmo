@@ -6,6 +6,8 @@ import app.travelmo.core.ParsedRecord
 import app.travelmo.core.REVIEW_RECENT
 import app.travelmo.core.SenderList
 import app.travelmo.core.SenderPatterns
+import app.travelmo.core.withoutRideCompany
+import app.travelmo.core.withRideCompany
 import app.travelmo.core.withLearned
 import app.travelmo.data.ImportReview
 import app.travelmo.data.SearchedRecords
@@ -278,6 +280,12 @@ class FakeTripStore(
     val rides = MutableStateFlow(RideSettings())
     val hiddenRides = mutableListOf<String>()
     override fun rideSettings(uid: String): Flow<RideSettings?> = rides
+    override suspend fun addRideCompany(uid: String, company: RideCompany) {
+        rides.value = rides.value.copy(companies = withRideCompany(rides.value.companies, company))
+    }
+    override suspend fun removeRideCompany(uid: String, company: RideCompany) {
+        rides.value = rides.value.copy(companies = withoutRideCompany(rides.value.companies, company))
+    }
     override suspend fun hideRideNeed(uid: String, key: String) {
         hiddenRides += key
         rides.value = rides.value.copy(hidden = rides.value.hidden + key)

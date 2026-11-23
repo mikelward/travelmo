@@ -509,6 +509,27 @@ class ScreenScreenshotTest {
         composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
     }
 
+    // Settings scrolled to the car and ride companies: a minicab firm near home.
+    @Test
+    fun settings_rides() = settingsRides("settings_rides", dark = false)
+
+    @Test
+    fun settings_rides_dark() = settingsRides("settings_rides_dark", dark = true)
+
+    private fun settingsRides(name: String, dark: Boolean) {
+        val store = FakeTripStore()
+        store.rides.value = app.travelmo.data.RideSettings(companies = listOf(app.travelmo.core.RideCompany("Village Cabs", "https://cabs.example/", app.travelmo.core.RideNear.HOME)))
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent {
+            TravelmoTheme(darkTheme = dark) {
+                SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
+            }
+        }
+        composeRule.onNodeWithText("Add").performScrollTo()
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
+    }
+
     // An admin's Access page: two requests waiting, and those let in, the
     // admin's own address with no Revoke.
     @Test

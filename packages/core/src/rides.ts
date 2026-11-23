@@ -1,5 +1,5 @@
 import { homeAt, inHomeTown, nearHub, rideFromArrival, rideToDeparture, type HomePeriod } from "./home";
-import type { RideCompany, Segment } from "./schema";
+import { maxRideCompanies, type RideCompany, type Segment } from "./schema";
 import { liveSegments } from "./trips";
 
 // The rental companies every car suggestion offers, at their own sites:
@@ -97,4 +97,19 @@ export const rideNeedKey = (need: RideNeed) => `${need.segmentId}/${need.kind}`;
 export function rideCompaniesFor(kind: RideNeedKind, own: readonly RideCompany[]): { name: string; url: string }[] {
   const mine = own.filter((c) => (kind === "car" ? c.near === "anywhere" : c.near === "home")).map(({ name, url }) => ({ name, url }));
   return kind === "car" ? [...rentalCompanies, ...mine] : mine;
+}
+
+const sameCompany = (a: RideCompany, b: RideCompany) => a.name === b.name && a.url === b.url && a.near === b.near;
+
+// The user's own companies with one more, as stored now: unchanged when it
+// is there already, and refused past the limit.
+export function withRideCompany(companies: readonly RideCompany[], company: RideCompany): RideCompany[] {
+  if (companies.some((c) => sameCompany(c, company))) return [...companies];
+  if (companies.length >= maxRideCompanies) throw new Error(`At most ${maxRideCompanies}.`);
+  return [...companies, company];
+}
+
+// The user's own companies without one.
+export function withoutRideCompany(companies: readonly RideCompany[], company: RideCompany): RideCompany[] {
+  return companies.filter((c) => !sameCompany(c, company));
 }

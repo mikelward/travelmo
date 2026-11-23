@@ -3,20 +3,25 @@ package app.travelmo.ui
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -25,6 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -39,31 +45,34 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.BuildConfig
 import app.travelmo.R
 import app.travelmo.auth.GoogleAccount
 import app.travelmo.auth.SignedIn
-import app.travelmo.core.MAX_GMAIL_MAILBOXES
 import app.travelmo.core.EmailRowKind
+import app.travelmo.core.MAX_GMAIL_MAILBOXES
+import app.travelmo.core.MAX_RIDE_COMPANIES
+import app.travelmo.core.RideNear
+import app.travelmo.core.describeBackfill
 import app.travelmo.core.emailRows
 import app.travelmo.core.pausedReason
-import app.travelmo.core.describeBackfill
+import app.travelmo.core.rideCompanyOrNull
 import app.travelmo.log.DebugLogging
 import app.travelmo.notify.ReminderNotifications
 import com.mikelward.androidlog.android.ShareOutcome
@@ -83,6 +92,8 @@ private const val DELETE_TRIPS_TOKEN = "settings/trips/delete"
 private const val ADD_EMAIL_TOKEN = "settings/emails/add"
 private const val REMOVE_EMAIL_TOKEN = "settings/emails/remove"
 private const val SENDER_RULES_TOKEN = "settings/senders"
+private const val ADD_COMPANY_TOKEN = "settings/rides/add"
+private const val REMOVE_COMPANY_TOKEN = "settings/rides/remove"
 
 /**
  * The account, Gmail and reading past emails, regrouping or deleting all
@@ -135,6 +146,7 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
             Text(stringResource(R.string.import_review_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedButton(onClick = onOpenReview, modifier = Modifier.padding(top = 8.dp)) { Text(stringResource(R.string.open_import_review)) }
             SenderRulesSection(viewModel)
+            RideCompaniesSection(viewModel)
             EmailAddressesSection(user, viewModel)
             Text(stringResource(R.string.reminders), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
             Text(stringResource(R.string.reminders_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -165,6 +177,98 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
                 modifier = Modifier.padding(top = 24.dp),
             )
         }
+    }
+}
+
+/**
+ * Settings' "Car and ride companies", as on the web: the user's own, which
+ * trip pages offer on flights with no car or ride booked, each for rides
+ * to and from home or for a car wherever a flight lands.
+ */
+@Composable
+private fun RideCompaniesSection(viewModel: TripsViewModel) {
+    val settings by viewModel.rideSettings.collectAsStateWithLifecycle()
+    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val adding = outcomes[ADD_COMPANY_TOKEN]
+    val removing = outcomes[REMOVE_COMPANY_TOKEN]
+    val busy = adding is Outcome.Busy || removing is Outcome.Busy
+    var name by rememberSaveable { mutableStateOf("") }
+    var url by rememberSaveable { mutableStateOf("") }
+    var near by rememberSaveable { mutableStateOf(RideNear.HOME) }
+    var invalid by rememberSaveable { mutableStateOf<Int?>(null) }
+    val context = LocalContext.current
+    LaunchedEffect(adding) {
+        if (adding is Outcome.Done) {
+            name = ""
+            url = ""
+            viewModel.outcomeSeen(ADD_COMPANY_TOKEN)
+        }
+    }
+    LaunchedEffect(removing) { if (removing is Outcome.Done) viewModel.outcomeSeen(REMOVE_COMPANY_TOKEN) }
+    val companies = settings?.companies ?: return
+    Text(stringResource(R.string.ride_companies), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(R.string.ride_companies_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val nearLabel = { where: RideNear -> if (where == RideNear.HOME) R.string.rides_home else R.string.cars_anywhere }
+    for (company in companies) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    company.name,
+                    style = MaterialTheme.typography.bodyLarge.copy(textDecoration = TextDecoration.Underline),
+                    modifier = Modifier.clickable(onClickLabel = stringResource(R.string.open_company, company.name)) { openLink(context, company.url, "a car or ride company") },
+                )
+                Text(stringResource(nearLabel(company.near)), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            IconButton(onClick = { viewModel.removeRideCompany(REMOVE_COMPANY_TOKEN, company) }, enabled = !busy) {
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.remove_company, company.name))
+            }
+        }
+    }
+    OutlinedTextField(
+        value = name,
+        onValueChange = { name = it; invalid = null },
+        label = { Text(stringResource(R.string.company_name)) },
+        singleLine = true,
+        enabled = !busy,
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+    )
+    OutlinedTextField(
+        value = url,
+        onValueChange = { url = it; invalid = null },
+        label = { Text(stringResource(R.string.booking_page)) },
+        placeholder = { Text("https://…") },
+        singleLine = true,
+        enabled = !busy,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+    )
+    Column(modifier = Modifier.selectableGroup().padding(top = 4.dp)) {
+        for (where in RideNear.entries) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().selectable(selected = near == where, enabled = !busy, role = Role.RadioButton) { near = where },
+            ) {
+                RadioButton(selected = near == where, onClick = null, enabled = !busy)
+                Text(stringResource(nearLabel(where)), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 12.dp))
+            }
+        }
+    }
+    Button(
+        onClick = {
+            val company = rideCompanyOrNull(name, url, near.wire)
+            invalid = when {
+                name.isBlank() -> R.string.enter_a_name
+                company == null -> R.string.use_https_link
+                else -> null
+            }
+            if (company != null) viewModel.addRideCompany(ADD_COMPANY_TOKEN, company)
+        },
+        enabled = !busy && name.isNotBlank() && url.isNotBlank() && companies.size < MAX_RIDE_COMPANIES,
+        modifier = Modifier.padding(top = 4.dp),
+    ) { Text(stringResource(R.string.add)) }
+    invalid?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+    for (outcome in listOf(adding, removing)) {
+        (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
     }
 }
 

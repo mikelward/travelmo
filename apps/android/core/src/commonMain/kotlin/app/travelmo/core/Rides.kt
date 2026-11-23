@@ -12,10 +12,14 @@ enum class RideNear(val wire: String) {
     }
 }
 
-/** A company the traveler books cars or rides with, added in the web's Settings. */
+/** A company the traveler books cars or rides with, added in Settings. */
 data class RideCompany(val name: String, val url: String, val near: RideNear)
 
 const val MAX_RIDE_COMPANIES = 20
+
+// An https:// link with a host, as the web's schema (`.url()`) needs:
+// "https://?" has none.
+private val httpsLink = Regex("""https://[^/?#\s]+([/?#]\S*)?""")
 
 /**
  * A company from the profile's `rideCompanies`, or null when it does not parse
@@ -23,10 +27,20 @@ const val MAX_RIDE_COMPANIES = 20
  */
 fun rideCompanyOrNull(name: String?, url: String?, near: String?): RideCompany? {
     val n = name?.trim()?.takeIf { it.isNotEmpty() && it.length <= 60 } ?: return null
-    val u = url?.trim()?.takeIf { it.startsWith("https://") && it.length > "https://".length && it.length <= 500 && ' ' !in it } ?: return null
+    val u = url?.trim()?.takeIf { it.length <= 500 && httpsLink.matches(it) } ?: return null
     val where = RideNear.fromWire(near) ?: return null
     return RideCompany(n, u, where)
 }
+
+/** The traveler's own companies with [company] added, as rides.ts: unchanged when it is there, refused past the limit. */
+fun withRideCompany(companies: List<RideCompany>, company: RideCompany): List<RideCompany> {
+    if (company in companies) return companies
+    check(companies.size < MAX_RIDE_COMPANIES) { "At most $MAX_RIDE_COMPANIES." }
+    return companies + company
+}
+
+/** The traveler's own companies without [company]. */
+fun withoutRideCompany(companies: List<RideCompany>, company: RideCompany): List<RideCompany> = companies.filter { it != company }
 
 /** A rental company's name and site. */
 data class CompanyLink(val name: String, val url: String)

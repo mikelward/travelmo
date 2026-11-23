@@ -23,6 +23,7 @@ import app.travelmo.core.ParsedRecord
 import app.travelmo.core.withLoyaltyPerson
 import app.travelmo.core.HomeCorrection
 import app.travelmo.core.MAX_HIDDEN_RIDE_NEEDS
+import app.travelmo.core.MAX_RIDE_COMPANIES
 import app.travelmo.core.RideCompany
 import app.travelmo.core.rideCompanyOrNull
 import app.travelmo.core.queryAddresses
@@ -92,7 +93,7 @@ interface TripStore {
 
     /**
      * What car and ride suggestions need from the user document, live: the
-     * user's own companies (`rideCompanies`, edited on the web), the
+     * user's own companies (`rideCompanies`, edited in Settings), the
      * suggestions they hid (`hiddenRideNeeds`) and their corrections to home
      * (`homes`); null while it loads.
      */
@@ -100,6 +101,12 @@ interface TripStore {
 
     /** Hides one ride suggestion for good, in a transaction over the stored list, as the web does. */
     suspend fun hideRideNeed(uid: String, key: String)
+
+    /** Adds one of the user's own car and ride companies to the list as stored now, as the web does. */
+    suspend fun addRideCompany(uid: String, company: RideCompany)
+
+    /** Removes one of the user's own car and ride companies from the list as stored now. */
+    suspend fun removeRideCompany(uid: String, company: RideCompany)
 
     /** Removes a loyalty number found in the owner's emails, in a transaction over the stored list, as the web does. */
     suspend fun removeFoundLoyalty(uid: String, found: FoundLoyalty)
@@ -226,6 +233,30 @@ data class RideSettings(
     val hidden: List<String> = emptyList(),
     val homes: List<HomeCorrection> = emptyList(),
 )
+
+private fun storedCompany(entry: Any?): RideCompany? {
+    val map = entry as? Map<*, *> ?: return null
+    return rideCompanyOrNull(map["name"] as? String, map["url"] as? String, map["near"] as? String)
+}
+
+/**
+ * The stored `rideCompanies` with [company] added, or null when it is there
+ * already. Every other entry stays as stored, even one this app cannot
+ * read: the web's schema may take it, and the list is the user's.
+ */
+internal fun rideCompaniesAdding(stored: List<*>, company: RideCompany): List<Any?>? {
+    val known = stored.mapNotNull(::storedCompany)
+    if (company in known) return null
+    // Every stored entry counts towards the limit, as the rules count them.
+    check(stored.size < MAX_RIDE_COMPANIES) { "At most $MAX_RIDE_COMPANIES." }
+    return stored + mapOf("name" to company.name, "url" to company.url, "near" to company.near.wire)
+}
+
+/** The stored `rideCompanies` without [company], every other entry as stored; null when it isn't there. */
+internal fun rideCompaniesRemoving(stored: List<*>, company: RideCompany): List<Any?>? {
+    val kept = stored.filterNot { storedCompany(it) == company }
+    return if (kept.size == stored.size) null else kept
+}
 
 /** The fields as stored; an entry that does not parse is left out, as on the web. */
 internal fun rideSettingsOf(data: Map<String, Any?>?): RideSettings {
@@ -469,6 +500,20 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             val next = withLearned(senderPatternsOf(tx.get(ref).data), domain, which)
             // Merged, so any other field of the document stays.
             tx.set(ref, mapOf("allow" to next.allow, "deny" to next.deny), SetOptions.merge())
+        }.await()
+    }
+
+    override suspend fun addRideCompany(uid: String, company: RideCompany) = editRideCompanies(uid) { rideCompaniesAdding(it, company) }
+
+    override suspend fun removeRideCompany(uid: String, company: RideCompany) = editRideCompanies(uid) { rideCompaniesRemoving(it, company) }
+
+    // Read and written in one transaction, so a change from another device
+    // in the meantime is kept.
+    private suspend fun editRideCompanies(uid: String, change: (List<Any?>) -> List<Any?>?) {
+        val ref = db.collection("users").document(uid)
+        db.runTransaction { tx ->
+            val stored = (tx.get(ref).get("rideCompanies") as? List<*>).orEmpty()
+            change(stored)?.let { tx.set(ref, mapOf("rideCompanies" to it), SetOptions.merge()) }
         }.await()
     }
 

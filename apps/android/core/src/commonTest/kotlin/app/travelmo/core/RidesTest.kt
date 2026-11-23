@@ -96,5 +96,20 @@ class RidesTest {
         rideCompanyOrNull("Example Cars", "javascript:alert(1)", "home").shouldBeNull()
         rideCompanyOrNull(" ", "https://cars.example.com/", "home").shouldBeNull()
         rideCompanyOrNull("Example Cars", "https://cars.example.com/", "nowhere").shouldBeNull()
+        // A link with no host, which the web's schema (`.url()`) refuses too.
+        rideCompanyOrNull("Example Cars", "https://?", "home").shouldBeNull()
+        rideCompanyOrNull("Example Cars", "https:///cars", "home").shouldBeNull()
+        rideCompanyOrNull("Example Cars", "https://#top", "home").shouldBeNull()
+        rideCompanyOrNull("Example Cars", "https://cars.example.com?from=home", "home")?.url shouldBe "https://cars.example.com?from=home"
+    }
+
+    @Test
+    fun `adds a company once and takes it away and refuses one past the limit`() {
+        val cabs = RideCompany("Cabs", "https://cabs.example/", RideNear.HOME)
+        withRideCompany(emptyList(), cabs) shouldBe listOf(cabs)
+        withRideCompany(listOf(cabs), cabs) shouldBe listOf(cabs)
+        withoutRideCompany(listOf(cabs), cabs.copy()) shouldBe emptyList()
+        val full = (0 until 20).map { cabs.copy(name = "Cabs $it") }
+        kotlin.test.assertFailsWith<IllegalStateException> { withRideCompany(full, cabs) }.message shouldBe "At most 20."
     }
 }

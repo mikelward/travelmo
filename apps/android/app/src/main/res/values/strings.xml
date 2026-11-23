@@ -118,6 +118,16 @@
     <string name="always_import_list">Always import</string>
     <string name="never_import_list">Never import</string>
     <string name="saved">Saved</string>
+    <string name="ride_companies">Car and ride companies</string>
+    <string name="ride_companies_hint">Add your own airport transfer, taxi, and rental car companies.</string>
+    <string name="rides_home">Rides to and from home</string>
+    <string name="cars_anywhere">Cars wherever I land</string>
+    <string name="company_name">Company name</string>
+    <string name="booking_page">Booking page</string>
+    <string name="enter_a_name">Enter a name.</string>
+    <string name="use_https_link">Use a link that starts with https://.</string>
+    <string name="open_company">Open %1$s</string>
+    <string name="remove_company">Remove %1$s</string>
     <string name="search">Search</string>
     <string name="review_from">From</string>
     <string name="review_to">To</string>

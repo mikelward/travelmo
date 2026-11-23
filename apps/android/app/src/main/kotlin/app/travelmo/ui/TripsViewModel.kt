@@ -58,6 +58,7 @@ import app.travelmo.core.GmailMailbox
 import app.travelmo.core.MAX_GMAIL_MAILBOXES
 import app.travelmo.data.NoGmailActions
 import app.travelmo.data.GmailActions
+import app.travelmo.core.RideCompany
 import app.travelmo.core.SenderPatterns
 import app.travelmo.core.cleanSenderList
 import app.travelmo.core.SenderList
@@ -586,6 +587,12 @@ class TripsViewModel(
         val said = if (which == SenderList.ALLOW) "Always importing $domain" else "Never importing $domain"
         _reviewNotices.update { it + (messageId to said) }
     }
+
+    /** Adds one of the user's own car and ride companies. */
+    fun addRideCompany(token: String, company: RideCompany) = run(token, "addRideCompany") { store.addRideCompany(uid, company) }
+
+    /** Removes one of the user's own car and ride companies. */
+    fun removeRideCompany(token: String, company: RideCompany) = run(token, "removeRideCompany") { store.removeRideCompany(uid, company) }
 
     fun hideRideNeed(token: String, need: RideNeed) = run(token, "hideRideNeed") { store.hideRideNeed(uid, rideNeedKey(need)) }
 
