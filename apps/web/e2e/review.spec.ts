@@ -35,6 +35,7 @@ test("the review list is searched by keyword and by dates", async ({ page }) => 
 
   await page.goto("/settings/review");
   await expect(page.getByText("Our summer sale")).toBeVisible();
+  await expect(page.getByRole("listitem").filter({ hasText: "Our summer sale" })).toContainText("Read 30 Oct 2026");
   await expect(page.getByText("How was your trip?")).toBeVisible();
 
   await page.getByRole("searchbox", { name: "Search" }).fill("rail");
@@ -67,6 +68,8 @@ test("a search finds an email whatever it was read among, by name or by when it 
 
   await page.getByRole("searchbox", { name: "Search" }).fill("example air");
   await expect(page.getByText("Example Air e-Ticket XY12AB")).toBeVisible();
+  // Each row says when its email was sent, or when it was read.
+  await expect(page.getByRole("listitem").filter({ hasText: "Example Air e-Ticket XY12AB" })).toContainText("Sent 23 May 2026");
 
   await page.getByRole("button", { name: "Clear" }).click();
   await page.getByLabel("From").fill("2026-05-01");
