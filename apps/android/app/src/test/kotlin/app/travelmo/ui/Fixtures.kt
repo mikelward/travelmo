@@ -1,5 +1,7 @@
 package app.travelmo.ui
 
+import app.travelmo.data.GmailActions
+import app.travelmo.data.GmailStatus
 import app.travelmo.core.ParsedRecord
 import app.travelmo.core.REVIEW_RECENT
 import app.travelmo.core.SenderList
@@ -189,7 +191,9 @@ class FakeTripStore(
     private val flightStatuses: Map<String, FlightStatus> = emptyMap(),
     private val addressHolder: AddressHolder = AddressHolder(),
     private val parsed: List<ParsedRecord> = fixtureParsed,
+    private val gmailStatus: GmailStatus? = null,
 ) : TripStore {
+    override fun gmailStatus(uid: String): Flow<GmailStatus?> = flowOf(gmailStatus)
     override fun latestParsed(uid: String): Flow<List<ParsedRecord>?> = flowOf(parsed.take(REVIEW_RECENT))
     override fun allParsed(uid: String): Flow<SearchedRecords> = flowOf(SearchedRecords(parsed, done = true))
     val patterns = MutableStateFlow(SenderPatterns(deny = listOf("news.example")))
@@ -368,5 +372,24 @@ class FakeImportReview : ImportReview {
     override suspend fun reimport(messageId: String): String {
         asked += messageId
         return "Imported"
+    }
+}
+
+/** Gmail's parser routes as they would answer, recording what was asked. */
+class FakeGmailActions : GmailActions {
+    val calls = mutableListOf<String>()
+    override val available = true
+    override suspend fun connectUrl(): String {
+        calls += "connect"
+        return "https://accounts.example/consent"
+    }
+    override suspend fun start(restart: Boolean) {
+        calls += if (restart) "restart" else "start"
+    }
+    override suspend fun stop() {
+        calls += "stop"
+    }
+    override suspend fun disconnect() {
+        calls += "disconnect"
     }
 }

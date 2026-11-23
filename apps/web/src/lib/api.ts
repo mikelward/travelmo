@@ -1,5 +1,5 @@
 import type { User } from "firebase/auth";
-import { deleteAllTripsPath, linkRefusalText, refusalOf, regroupPath, type AccountAccess, type CalendarExport, type ForwardAddress, type RegroupResult } from "@travelmo/core";
+import { backfillStartPath, backfillStopPath, deleteAllTripsPath, gmailConnectPath, gmailDisconnectPath, linkRefusalText, refusalOf, regroupPath, type AccountAccess, type CalendarExport, type ForwardAddress, type RegroupResult } from "@travelmo/core";
 import type { CalendarResult } from "./ics";
 import type { TripItResult } from "./tripit";
 
@@ -30,16 +30,16 @@ async function post<T>(user: User, path: string, body: unknown = {}): Promise<T>
 }
 
 export const api = {
-  connectGmail: (user: User) => post<{ url: string }>(user, "/gmail/connect"),
+  connectGmail: (user: User) => post<{ url: string }>(user, gmailConnectPath),
   completeGmail: (user: User, state: string) => post<{ emailAddress: string }>(user, "/gmail/complete", { state }),
-  disconnectGmail: (user: User) => post<void>(user, "/gmail/disconnect"),
+  disconnectGmail: (user: User) => post<void>(user, gmailDisconnectPath),
   connectCalendar: (user: User) => post<{ url: string }>(user, "/calendar/connect"),
   completeCalendar: (user: User, state: string) =>
     post<{ emailAddress: string; calendars: number }>(user, "/calendar/complete", { state }),
   selectCalendars: (user: User, ids: string[]) => post<{ read: number; failed: number }>(user, "/calendar/select", { ids }),
   disconnectCalendar: (user: User) => post<void>(user, "/calendar/disconnect"),
-  startBackfill: (user: User, restart = false) => post<BackfillStarted>(user, "/gmail/backfill", restart ? { restart } : {}),
-  stopBackfill: (user: User) => post<void>(user, "/gmail/backfill/stop"),
+  startBackfill: (user: User, restart = false) => post<BackfillStarted>(user, backfillStartPath, restart ? { restart } : {}),
+  stopBackfill: (user: User) => post<void>(user, backfillStopPath),
   reimport: (user: User, messageId: string) => post<{ outcome: string }>(user, "/gmail/reimport", { messageId }),
   importTripIt: (user: User, exported: unknown) => post<TripItResult>(user, "/import/tripit", { export: exported }),
   importIcs: (user: User, text: string) => post<CalendarResult>(user, "/import/ics", { text }),

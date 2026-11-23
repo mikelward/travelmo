@@ -100,6 +100,9 @@ interface TripStore {
     /** Removes a loyalty number found in the owner's emails, in a transaction over the stored list, as the web does. */
     suspend fun removeFoundLoyalty(uid: String, found: FoundLoyalty)
 
+    /** The Gmail connection and how far the last reading of the mailbox got, live; null when not connected. */
+    fun gmailStatus(uid: String): Flow<GmailStatus?>
+
     /** The [REVIEW_RECENT] import records read last, newest first, live; null while they load. */
     fun latestParsed(uid: String): Flow<List<ParsedRecord>?>
 
@@ -354,6 +357,18 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             }
             tx.update(ref, mapOf("loyaltyPeople" to next, "updatedAt" to Instant.now().toString()))
         }.await()
+    }
+
+    override fun gmailStatus(uid: String): Flow<GmailStatus?> = callbackFlow {
+        val registration = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                TravelmoLog.error(error, "Reading the Gmail connection failed")
+                trySend(null)
+                return@addSnapshotListener
+            }
+            trySend(gmailStatusOf(snapshot?.data))
+        }
+        awaitClose { registration.remove() }
     }
 
     override fun latestParsed(uid: String): Flow<List<ParsedRecord>?> = callbackFlow {

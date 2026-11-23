@@ -22,6 +22,9 @@ import app.travelmo.data.ParserTripActions
 import app.travelmo.data.ImportReview
 import app.travelmo.data.NoImportReview
 import app.travelmo.data.ParserImportReview
+import app.travelmo.data.GmailActions
+import app.travelmo.data.NoGmailActions
+import app.travelmo.data.ParserGmailActions
 import app.travelmo.data.TripActions
 import app.travelmo.data.TripStore
 import app.travelmo.log.DebugLogging
@@ -75,6 +78,9 @@ class TravelmoApplication : Application() {
 
     /** Import review's "Import anyway" through the parser; nothing without Firebase or a parser address. */
     val importReview: ImportReview by lazy { if (firebaseReady) ParserImportReview(ParserClient(BuildConfig.PARSER_URL)) else NoImportReview }
+
+    /** Connecting Gmail and reading the mailbox through the parser; nothing without Firebase or a parser address. */
+    val gmailActions: GmailActions by lazy { if (firebaseReady) ParserGmailActions(ParserClient(BuildConfig.PARSER_URL)) else NoGmailActions }
 
     /** Settling the account's access with the parser; nothing without Firebase or a parser address. */
     val accessCheck: AccessCheck by lazy { if (firebaseReady) ParserAccessCheck(BuildConfig.PARSER_URL) else NoAccessCheck }

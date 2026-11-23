@@ -1,5 +1,8 @@
 package app.travelmo.ui
 
+import app.travelmo.core.BackfillShown
+import app.travelmo.data.GmailStatus
+
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -445,8 +448,13 @@ class ScreenScreenshotTest {
             pendingEmails = listOf(PendingEmail("owner@other.example", FROZEN_NOW, "2026-11-02T12:00:00Z")),
         )
         val viewModel = TripsViewModel(
-            FakeTripStore(addressHolder = addresses), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, pushDevice = FakePushDevice(),
-            accountDeletion = FakeAccountDeletion(), emailLinks = FakeEmailLinks(), tripActions = FakeTripActions(),
+            FakeTripStore(
+                addressHolder = addresses,
+                // Gmail connected and reading past emails.
+                gmailStatus = GmailStatus("owner@example.com", BackfillShown(scanned = 1200, imported = 14, done = false, updatedAt = FROZEN_NOW, running = true)),
+            ),
+            OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, pushDevice = FakePushDevice(),
+            accountDeletion = FakeAccountDeletion(), emailLinks = FakeEmailLinks(), tripActions = FakeTripActions(), gmailActions = FakeGmailActions(),
         )
         capture(name, dark = dark) {
             SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})

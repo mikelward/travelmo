@@ -16,6 +16,8 @@ import app.travelmo.data.OwnProfile
 import app.travelmo.data.RideSettings
 import app.travelmo.data.TripStore
 import app.travelmo.core.HomeCorrection
+import app.travelmo.core.BackfillShown
+import app.travelmo.data.GmailStatus
 import app.travelmo.core.SenderList
 import app.travelmo.core.SenderPatterns
 import app.travelmo.core.rideNeedKey
@@ -352,6 +354,31 @@ class TripsViewModelTest {
         viewModel.learnSender("learn", "news", "news.example", SenderList.ALLOW)
         store.patterns.value shouldBe SenderPatterns(allow = listOf("news.example"))
         viewModel.reviewNotices.value shouldBe mapOf("ticket" to "Imported", "news" to "Always importing news.example")
+    }
+
+    @Test
+    fun `gmail shows how far the reading got, and its buttons go to the parser`() = runTest {
+        val reading = BackfillShown(scanned = 600, imported = 2, done = false, updatedAt = "2026-11-22T11:59:00Z", running = true)
+        val actions = FakeGmailActions()
+        val viewModel = TripsViewModel(
+            FakeTripStore(gmailStatus = GmailStatus("owner@example.com", reading)), OWNER, OWNER_EMAIL,
+            clock = { Instant.parse("2026-11-22T12:00:00Z") }, gmailActions = actions,
+        )
+        val watching = launch { viewModel.gmail.collect {} }
+        runCurrent()
+        viewModel.gmail.value shouldBe TripsViewModel.GmailState.Connected("owner@example.com", reading, reading = true)
+        viewModel.connectGmail("g")
+        viewModel.gmailConsentUrl.value shouldBe "https://accounts.example/consent"
+        viewModel.gmailConsentOpened()
+        viewModel.gmailConsentUrl.value shouldBe null
+        viewModel.outcomeSeen("g")
+        viewModel.startReading("g", restart = true)
+        viewModel.outcomeSeen("g")
+        viewModel.stopReading("g")
+        viewModel.outcomeSeen("g")
+        viewModel.disconnectGmail("g")
+        actions.calls shouldBe listOf("connect", "restart", "stop", "disconnect")
+        watching.cancel()
     }
 
     @Test
