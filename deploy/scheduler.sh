@@ -42,7 +42,8 @@ ensure_job renew-gmail-watches "17 3 * * *" /internal/renew-watches
 ensure_job poll-calendar-feeds "43 4 * * *" /internal/poll-feeds
 # Early in the UTC day, when the geocoding budget is fresh.
 ensure_job geocode-sweep "11 1 * * *" /internal/geocode-sweep
-# Morning in Europe, so a reminder is read the day it is about.
+# Morning in Europe, so a reminder is read the day it is about; also sends
+# the reminders people set themselves before a trip.
 ensure_job send-reminders "7 6 * * *" /internal/reminders
 # Gates and carousels change by the minute; the parser decides which
 # flights are due a look and does nothing without AEROAPI_KEY.

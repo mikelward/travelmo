@@ -117,7 +117,7 @@ private const val REMOVE_COMPANY_TOKEN = "settings/rides/remove"
 /**
  * The account, Gmail and Fastmail and reading past emails, regrouping or deleting all
  * trips, Import review, reminders by email and
- * as notifications on this phone, the text size, the debug log, deleting
+ * as notifications on this phone, the reminders before international trips, the text size, the debug log, deleting
  * the account and the build; the other import settings are on the web for now.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -190,6 +190,7 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
             }
             (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
             PushSwitch(viewModel)
+            TripRemindersSection(viewModel)
             TextSizeSection()
             DebugLogSection(signedIn = true)
             DeleteAccountSection(account, viewModel)

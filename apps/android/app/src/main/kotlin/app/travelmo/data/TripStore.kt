@@ -22,6 +22,16 @@ import app.travelmo.core.REVIEW_RECENT
 import app.travelmo.core.ParsedRecord
 import app.travelmo.core.withLoyaltyPerson
 import app.travelmo.core.HomeCorrection
+import app.travelmo.core.DEFAULT_LEAD
+import app.travelmo.core.MAX_STANDING_REMINDERS
+import app.travelmo.core.MAX_TRIP_REMINDERS
+import app.travelmo.core.ONE_OFF_SLOT_PREFIX
+import app.travelmo.core.Reminder
+import app.travelmo.core.STANDING_SLOT_PREFIX
+import app.travelmo.core.isReminderId
+import app.travelmo.core.reminderOrNull
+import app.travelmo.core.slotNumber
+import app.travelmo.core.withDone
 import app.travelmo.core.MAX_HIDDEN_RIDE_NEEDS
 import app.travelmo.core.MAX_RIDE_COMPANIES
 import app.travelmo.core.RideCompany
@@ -120,6 +130,24 @@ interface TripStore {
 
     /** Removes a loyalty number found in the owner's emails, in a transaction over the stored list, as the web does. */
     suspend fun removeFoundLoyalty(uid: String, found: FoundLoyalty)
+
+    /** The user's reminders before every international trip (`users/{uid}/tripReminders`), in slot order; null while they load. */
+    fun standingReminders(uid: String): Flow<List<Reminder>?>
+
+    /** What the user ticked off on a trip and the one-offs they added to it; null while it loads. */
+    fun myChecklist(uid: String, tripId: String): Flow<MyChecklist?>
+
+    /**
+     * Writes a reminder to its [Reminder.slot], or a new one (blank slot) to
+     * the first free one, each read in the transaction before it is taken:
+     * a standing one with no [tripId], else a one-off on that trip.
+     */
+    suspend fun saveReminder(uid: String, tripId: String?, reminder: Reminder)
+
+    suspend fun removeReminder(uid: String, tripId: String?, slot: String)
+
+    /** Ticks a reminder off for a trip, or not, in a transaction over the stored list, as the web does. */
+    suspend fun setReminderDone(uid: String, tripId: String, id: String, done: Boolean)
 
     /**
      * The Gmail mailboxes the user connected (`gmails` on their user
@@ -334,6 +362,33 @@ private fun isCalendarDate(text: String): Boolean = try {
 
 /** The hidden list with [key] added, keeping the newest when it is full. */
 internal fun withHidden(hidden: List<String>, key: String): List<String> = (hidden.filter { it != key } + key).takeLast(MAX_HIDDEN_RIDE_NEEDS)
+
+/** The user's own state for a trip's reminders: the ids they ticked off and the one-offs they added. */
+data class MyChecklist(val done: List<String> = emptyList(), val added: List<Reminder> = emptyList())
+
+/** A reminder from its slot's document, or null (logged by slot alone) when it does not parse, as the web leaves it out. */
+internal fun reminderOf(slot: String, data: Map<String, Any?>?, dated: Boolean): Reminder? {
+    val reminder = reminderOrNull(
+        slot,
+        data?.get("id") as? String,
+        data?.get("text") as? String,
+        data?.get("amount") as? Number,
+        data?.get("unit") as? String,
+        data?.get("date") as? String,
+        dated,
+    )
+    if (reminder == null) TravelmoLog.warning("A reminder that does not parse was left out: %s", safe(slot))
+    return reminder
+}
+
+/** A reminder's stored fields, as the rules check them. */
+internal fun reminderFields(reminder: Reminder, now: String): Map<String, Any> =
+    mapOf("id" to reminder.id, "text" to reminder.text, "createdAt" to now) +
+        (reminder.date?.let { mapOf("date" to it) } ?: reminder.lead.let { lead -> mapOf("amount" to (lead ?: DEFAULT_LEAD).amount, "unit" to (lead ?: DEFAULT_LEAD).unit.wire) })
+
+/** The ticked ids as stored, those that are not ids left out. */
+internal fun doneOf(data: Map<String, Any?>?): List<String> =
+    (data?.get("done") as? List<*>).orEmpty().filterIsInstance<String>().filter(::isReminderId)
 
 /** What the profile document answered: the profile, or none yet. Distinct from not having answered at all. */
 data class OwnProfile(val profile: TravelProfile?)
@@ -616,6 +671,70 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             tx.set(ref, mapOf("hiddenRideNeeds" to withHidden(stored, key)), SetOptions.merge())
         }.await()
     }
+
+    override fun standingReminders(uid: String): Flow<List<Reminder>?> =
+        db.collection("users").document(uid).collection("tripReminders").snapshots()
+            .map<QuerySnapshot, List<Reminder>?> { snap -> remindersOf(snap, dated = false) }
+            .catch { error ->
+                TravelmoLog.error(error, "Reading the reminders before trips failed")
+                emit(emptyList())
+            }
+
+    override fun myChecklist(uid: String, tripId: String): Flow<MyChecklist?> {
+        val ref = checklistRef(uid, tripId)
+        val done = callbackFlow {
+            val registration = ref.addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    TravelmoLog.error(error, "Reading a trip's checklist failed")
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                trySend(doneOf(snapshot?.data))
+            }
+            awaitClose { registration.remove() }
+        }
+        val added = ref.collection("added").snapshots()
+            .map { snap -> remindersOf(snap, dated = true) }
+            .catch { error ->
+                TravelmoLog.error(error, "Reading a trip's own reminders failed")
+                emit(emptyList())
+            }
+        return combine(done, added) { d, a -> MyChecklist(d, a) }
+    }
+
+    override suspend fun saveReminder(uid: String, tripId: String?, reminder: Reminder) {
+        val slots = if (tripId == null) db.collection("users").document(uid).collection("tripReminders") else checklistRef(uid, tripId).collection("added")
+        val (prefix, max) = if (tripId == null) STANDING_SLOT_PREFIX to MAX_STANDING_REMINDERS else ONE_OFF_SLOT_PREFIX to MAX_TRIP_REMINDERS
+        val fields = reminderFields(reminder, Instant.now().toString())
+        db.runTransaction { tx ->
+            if (reminder.slot.isNotEmpty()) {
+                tx.set(slots.document(reminder.slot), fields)
+                return@runTransaction
+            }
+            val free = (0 until max).map { slots.document("$prefix$it") }.firstOrNull { !tx.get(it).exists() }
+                ?: throw IllegalStateException("At most $max.")
+            tx.set(free, fields)
+        }.await()
+    }
+
+    override suspend fun removeReminder(uid: String, tripId: String?, slot: String) {
+        val slots = if (tripId == null) db.collection("users").document(uid).collection("tripReminders") else checklistRef(uid, tripId).collection("added")
+        slots.document(slot).delete().await()
+    }
+
+    override suspend fun setReminderDone(uid: String, tripId: String, id: String, done: Boolean) {
+        val ref = checklistRef(uid, tripId)
+        db.runTransaction { tx ->
+            val before = doneOf(tx.get(ref).data)
+            tx.set(ref, mapOf("done" to withDone(before, id, done), "updatedAt" to Instant.now().toString()))
+        }.await()
+    }
+
+    private fun checklistRef(uid: String, tripId: String): DocumentReference =
+        db.collection("users").document(uid).collection("tripChecklists").document(tripId)
+
+    private fun remindersOf(snap: QuerySnapshot, dated: Boolean): List<Reminder> =
+        snap.documents.sortedBy { slotNumber(it.id) }.mapNotNull { reminderOf(it.id, it.data, dated) }
 
     override fun pushDevice(uid: String, id: String): Flow<Boolean?> = callbackFlow {
         val registration = deviceRef(uid, id).addSnapshotListener { snapshot, error ->

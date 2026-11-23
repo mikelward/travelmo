@@ -266,6 +266,78 @@ describe("users", () => {
     await assertFails(setDoc(doc(as(partner), paths.user(owner.uid)), { rideCompanies }, { merge: true }));
   });
 
+  it("a user keeps their own reminders before international trips, at most twenty, each checked, and nobody else sees them", async () => {
+    const at = "2026-11-07T00:00:00Z";
+    const visa = { id: "r1", text: "Apply for a visa", amount: 30, unit: "days", createdAt: at };
+    const ref = (slot: string, user = owner) => doc(as(user), paths.tripReminder(owner.uid, slot));
+    await assertSucceeds(setDoc(ref("s0"), visa));
+    await assertSucceeds(setDoc(ref("s19"), { ...visa, id: "r2", text: "Request prescriptions", amount: 2, unit: "weeks" }));
+    await assertSucceeds(setDoc(ref("s1"), { ...visa, amount: 12, unit: "months" }));
+    await assertSucceeds(getDoc(ref("s0")));
+    await assertSucceeds(getDocs(collection(as(owner), paths.tripReminders(owner.uid))));
+    // Twenty slots, no more.
+    await assertFails(setDoc(ref("s20"), visa));
+    await assertFails(setDoc(ref("r1"), visa));
+    await assertFails(setDoc(ref("s2"), { ...visa, text: "" }));
+    await assertFails(setDoc(ref("s2"), { ...visa, text: "x".repeat(201) }));
+    await assertFails(setDoc(ref("s2"), { ...visa, amount: 13, unit: "months" }));
+    await assertFails(setDoc(ref("s2"), { ...visa, amount: 366 }));
+    await assertFails(setDoc(ref("s2"), { ...visa, amount: 1.5 }));
+    await assertFails(setDoc(ref("s2"), { ...visa, amount: -1 }));
+    await assertFails(setDoc(ref("s2"), { ...visa, unit: "years" }));
+    await assertFails(setDoc(ref("s2"), { ...visa, id: "a/b" }));
+    await assertFails(setDoc(ref("s2"), { ...visa, id: 7 }));
+    await assertFails(setDoc(ref("s2"), { ...visa, extra: 1 }));
+    const { amount: _a, unit: _u, ...bare } = visa;
+    await assertFails(setDoc(ref("s2"), bare));
+    // A date is for a one-off on one trip only.
+    await assertFails(setDoc(ref("s2"), { ...bare, date: "2026-12-01" }));
+    await assertFails(getDoc(ref("s0", partner)));
+    await assertFails(setDoc(ref("s3", partner), visa));
+    await assertSucceeds(deleteDoc(ref("s0")));
+  });
+
+  it("a user ticks off and adds reminders to a trip for themselves alone, shared trip or not", async () => {
+    const at = "2026-11-07T00:00:00Z";
+    const ref = (user: { uid: string; email: string }, uid = owner.uid) => doc(as(user), paths.tripChecklist(uid, trip.id));
+    await assertSucceeds(setDoc(ref(owner), { done: ["r1"], updatedAt: at }));
+    await assertSucceeds(getDoc(ref(owner)));
+    // The trip's sharee keeps their own, under their own account.
+    await assertSucceeds(setDoc(ref(partner, partner.uid), { done: ["r1"], updatedAt: at }));
+    await assertFails(getDoc(ref(partner)));
+    await assertFails(setDoc(ref(partner), { done: [], updatedAt: at }));
+    await assertFails(setDoc(ref(owner), { done: Array.from({ length: 41 }, (_, i) => `r${i}`), updatedAt: at }));
+    await assertFails(setDoc(ref(owner), { done: "r1", updatedAt: at }));
+    await assertFails(setDoc(ref(owner), { done: [], updatedAt: at, extra: 1 }));
+    await assertFails(setDoc(ref(owner), { done: [] }));
+
+    const added = (slot: string, user = owner) => doc(as(user), paths.tripChecklistAddedSlot(owner.uid, trip.id, slot));
+    const adapter = { id: "x1", text: "Pack the adapter", date: "2026-12-10", createdAt: at };
+    await assertSucceeds(setDoc(added("a0"), adapter));
+    await assertSucceeds(setDoc(added("a9"), { id: "x2", text: "Print tickets", amount: 3, unit: "days", createdAt: at }));
+    await assertSucceeds(getDocs(collection(as(owner), paths.tripChecklistAdded(owner.uid, trip.id))));
+    // Ten slots, no more.
+    await assertFails(setDoc(added("a10"), adapter));
+    await assertFails(setDoc(added("a1"), { ...adapter, date: "soon" }));
+    await assertFails(setDoc(added("a1"), { ...adapter, amount: 3, unit: "days" }));
+    await assertFails(setDoc(added("a1"), { id: "x3", text: "Pack", createdAt: at }));
+    await assertFails(getDoc(added("a0", partner)));
+    await assertFails(setDoc(added("a1", partner), adapter));
+    await assertSucceeds(deleteDoc(added("a0")));
+    await assertSucceeds(deleteDoc(ref(owner)));
+  });
+
+  it("nobody reads or writes whether a reminder before a trip was sent", async () => {
+    const id = `${owner.uid}__${trip.id}__r1`;
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), paths.checklistReminder(id)), { id, uid: owner.uid, done: true });
+    });
+    await assertFails(getDoc(doc(as(owner), paths.checklistReminder(id))));
+    await assertFails(getDocs(collection(as(owner), paths.checklistReminders())));
+    await assertFails(setDoc(doc(as(owner), paths.checklistReminder(id)), { id, done: false }));
+    await assertFails(deleteDoc(doc(as(owner), paths.checklistReminder(id))));
+  });
+
   it("a user may turn reminders on, but not read or write what was mailed", async () => {
     await assertSucceeds(setDoc(doc(as(owner), paths.user(owner.uid)), { reminders: { email: true } }, { merge: true }));
     await assertFails(getDoc(doc(as(owner), paths.reminderLog(owner.uid, "t1"))));
@@ -421,6 +493,8 @@ describe("a deleted account", () => {
     await assertFails(setDoc(doc(as(owner), paths.segment(trip.id, "s2")), { ...segment, id: "s2" }));
     await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { email: owner.email }));
     await assertFails(setDoc(doc(as(owner), paths.travelProfile(owner.uid)), { ownerUid: owner.uid, ownerEmail: owner.email, trustedEmails: [] }));
+    await assertFails(setDoc(doc(as(owner), paths.tripReminder(owner.uid, "s0")), { id: "r1", text: "Apply for a visa", amount: 30, unit: "days", createdAt: "2026-11-23T00:00:00Z" }));
+    await assertFails(setDoc(doc(as(owner), paths.tripChecklist(owner.uid, trip.id)), { done: ["r1"], updatedAt: "2026-11-23T00:00:00Z" }));
     // The partner the trip is shared with is not deleted and still edits it.
     await assertSucceeds(setDoc(doc(as(partner), paths.segment(trip.id, "s3")), { ...segment, id: "s3" }));
   });

@@ -22,6 +22,8 @@ import { useEntryRequirements } from "@/lib/visas";
 import { localToday } from "@/lib/dates";
 import { usePeopleDocuments, useTripWarnings } from "@/lib/documents";
 import { useTravelProfile } from "@/lib/travelProfile";
+import { BeforeYouGo } from "@/components/Checklist";
+import { useTripChecklist } from "@/lib/checklist";
 import { useAddresses, useNow, useProfile, useSegments, useSenderPatterns, useTrip, useTrips } from "@/lib/trips";
 import { flightLinesFor, useFlightRefresh, useFlightStatuses } from "@/lib/flightStatus";
 
@@ -297,6 +299,8 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
     const periods = effectiveHomes(homeTimeline(segments), profile.homes ?? []);
     return rideNeeds(segments, { periods, hidden: profile.hiddenRideNeeds ?? [], now });
   }, [segments, profile, now]);
+  // The viewer's own reminders before the trip, theirs alone, shared trip or not.
+  const checklist = useTripChecklist(user.uid, tripId, trip, segments, profile ? (profile.homes ?? []) : undefined, today);
   const [editing, setEditing] = useState<Editing>();
   const [error, setError] = useState<string>();
   if (trip === undefined) return <p className="text-muted">Loading…</p>;
@@ -340,6 +344,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
       {isOwner && trip.deleting && <DangerZone trip={trip} />}
       <DocumentWarnings warnings={warnings} today={today} />
       {entries && <EntryRequirements entries={entries.entries} fetched={entries.fetched} />}
+      {checklist && !trip.deleting && <BeforeYouGo uid={user.uid} tripId={trip.id} entries={checklist.entries} added={checklist.added} today={today} />}
 
       {canEdit && !editing && (
         <button type="button" onClick={() => setEditing({ kind: "add" })} className={`${buttonClass} mt-4`}>

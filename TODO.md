@@ -356,6 +356,10 @@
 - [x] Remind travelers when online check-in opens: per-airline windows
       (default a day), on the trip card too; once per booking and person,
       by their reminder channels, from the every-minute flight job.
+- [x] Reminders of the traveler's own before international trips: a list
+      in Settings with lead times, a "Before you go" checklist on each trip
+      (ticked off and one-offs added per person), each due one sent once by
+      the daily run.
 - [ ] Check-in reminders: deep links to each airline's check-in page in
       place of its home page, once each is checked from a browser; more
       airlines in the table as their windows are confirmed.
@@ -885,3 +889,24 @@ Guesses made on autopilot; change any of them freely.
   several; apps older than this show only the first mailbox (the frozen
   `gmail`). Source links carry the mailbox in the source id rather than a
   new `mailbox` field, so sharees never see the importer's other addresses.
+
+- Reminders before trips: a trip counts as international from this trip's
+  own round trip (or Profile's corrections), as ride suggestions work home
+  out, not from every trip as Profile does, to save reading every trip on
+  each visit and run; a one-way trip with no correction is not
+  international. No home country or no placed booking: not international.
+- Reminders before trips: trips shared with the person get their own
+  standing reminders too, to them alone; one-offs go on any trip, abroad
+  or not. They go by the Reminders switches (nothing with both off), in
+  the daily run at the document reminders' hour (06:07 UTC), not the
+  person's own morning, as the document reminders do. One email and one
+  notification per reminder, not one digest a day.
+- Reminders before trips: one document per reminder in a numbered slot
+  (s0–s19, a0–a9) rather than a list on the user document, since the
+  rules ran out of their 1000 expressions checking more than five list
+  entries; months count back calendar months; a lead time is at most 365
+  days, 52 weeks or 12 months. Ticks of a deleted trip stay until the
+  account goes; a reminder edited after it was sent is not sent again.
+- Reminders before trips: "Before you go" shows on every trip not yet
+  over, with Add a reminder even when nothing is listed, so a one-off can
+  go on a trip at home.

@@ -91,4 +91,17 @@ export const paths = {
   // booking (`<ownerUid>__<segmentId>`); the parser's alone.
   checkInReminders: () => "checkInReminders",
   checkInReminder: (id: string) => `checkInReminders/${id}`,
+  // The user's reminders before every international trip, one per slot
+  // (checklist.ts), and their own state for a trip's reminders: what they
+  // ticked off and the one-offs they added to it. Theirs alone.
+  tripReminders: (uid: string) => `users/${uid}/tripReminders`,
+  tripReminder: (uid: string, slot: string) => `users/${uid}/tripReminders/${slot}`,
+  tripChecklists: (uid: string) => `users/${uid}/tripChecklists`,
+  tripChecklist: (uid: string, tripId: string) => `users/${uid}/tripChecklists/${tripId}`,
+  tripChecklistAdded: (uid: string, tripId: string) => `users/${uid}/tripChecklists/${tripId}/added`,
+  tripChecklistAddedSlot: (uid: string, tripId: string, slot: string) => `users/${uid}/tripChecklists/${tripId}/added/${slot}`,
+  // Whether a reminder before a trip went to its user, one per user, trip
+  // and reminder (`<uid>__<tripId>__<reminderId>`); the parser's alone.
+  checklistReminders: () => "checklistReminders",
+  checklistReminder: (id: string) => `checklistReminders/${id}`,
 } as const;

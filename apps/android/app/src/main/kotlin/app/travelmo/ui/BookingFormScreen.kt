@@ -330,7 +330,7 @@ private fun WhenFields(
 
 /** A read-only field that opens a picker on tap. */
 @Composable
-private fun PickerField(value: String, label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+internal fun PickerField(value: String, label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(modifier = modifier) {
         OutlinedTextField(value = value, onValueChange = {}, readOnly = true, label = { Text(label) }, singleLine = true, modifier = Modifier.fillMaxWidth())
         // A transparent layer takes the tap: a read-only field would open the keyboard's cursor instead.

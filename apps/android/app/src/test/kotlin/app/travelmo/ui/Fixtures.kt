@@ -47,6 +47,16 @@ import app.travelmo.data.EmailLinkFailed
 import app.travelmo.data.EmailLinks
 import app.travelmo.data.OwnProfile
 import app.travelmo.data.RideSettings
+import app.travelmo.data.MyChecklist
+import app.travelmo.core.Lead
+import app.travelmo.core.LeadUnit
+import app.travelmo.core.MAX_STANDING_REMINDERS
+import app.travelmo.core.MAX_TRIP_REMINDERS
+import app.travelmo.core.ONE_OFF_SLOT_PREFIX
+import app.travelmo.core.Reminder
+import app.travelmo.core.STANDING_SLOT_PREFIX
+import app.travelmo.core.freeSlot
+import app.travelmo.core.withDone
 import app.travelmo.data.TripStore
 import app.travelmo.notify.PushDevice
 import kotlinx.coroutines.flow.Flow
@@ -169,6 +179,13 @@ val fixtureBostonSegments = listOf(
     Segment("b-back", "boston", SegmentType.FLIGHT, "VS 12 BOS to LHR", "2026-11-29T19:00:00-05:00", "2026-11-30T07:00:00+00:00", provider = "Virgin Atlantic", confirmation = "E5WSJI", origin = logan, destination = heathrow),
 )
 val fixtureRideCompanies = listOf(RideCompany("Example Cars", "https://cars.example.com/book", RideNear.HOME))
+
+/** The owner's reminders before every international trip, and a one-off on Boston, one ticked off. */
+val fixtureStandingReminders = listOf(
+    Reminder("s0", "visa", "Apply for an ESTA", Lead(3, LeadUnit.WEEKS)),
+    Reminder("s1", "meds", "Request prescriptions", Lead(30, LeadUnit.DAYS)),
+)
+val fixtureBostonChecklist = MyChecklist(done = listOf("meds"), added = listOf(Reminder("a0", "adapter", "Pack the plug adapter", date = "2026-11-23")))
 
 private fun entry(title: String, vararg fields: Pair<String, String>) = ProfileEntry(title, fields.map { ProfileField(it.first, it.second) })
 
@@ -304,6 +321,37 @@ class FakeTripStore(
     }
     override suspend fun setReminderEmail(uid: String, on: Boolean) {
         reminders += on
+    }
+
+    /** The user's reminders before trips, and each trip's ticks and one-offs, as stored. */
+    val standing = MutableStateFlow<List<Reminder>>(emptyList())
+    val checklists = MutableStateFlow<Map<String, MyChecklist>>(emptyMap())
+    override fun standingReminders(uid: String): Flow<List<Reminder>?> = standing
+    override fun myChecklist(uid: String, tripId: String): Flow<MyChecklist?> = checklists.map { it[tripId] ?: MyChecklist() }
+    override suspend fun saveReminder(uid: String, tripId: String?, reminder: Reminder) {
+        fun placed(list: List<Reminder>, prefix: String, max: Int): List<Reminder> {
+            if (reminder.slot.isNotEmpty()) return list.map { if (it.slot == reminder.slot) reminder else it }
+            val slot = freeSlot(list.map { it.slot }, prefix, max) ?: error("At most $max.")
+            return list + reminder.copy(slot = slot)
+        }
+        if (tripId == null) {
+            standing.value = placed(standing.value, STANDING_SLOT_PREFIX, MAX_STANDING_REMINDERS)
+        } else {
+            val mine = checklists.value[tripId] ?: MyChecklist()
+            checklists.value += tripId to mine.copy(added = placed(mine.added, ONE_OFF_SLOT_PREFIX, MAX_TRIP_REMINDERS))
+        }
+    }
+    override suspend fun removeReminder(uid: String, tripId: String?, slot: String) {
+        if (tripId == null) {
+            standing.value = standing.value.filter { it.slot != slot }
+        } else {
+            val mine = checklists.value[tripId] ?: MyChecklist()
+            checklists.value += tripId to mine.copy(added = mine.added.filter { it.slot != slot })
+        }
+    }
+    override suspend fun setReminderDone(uid: String, tripId: String, id: String, done: Boolean) {
+        val mine = checklists.value[tripId] ?: MyChecklist()
+        checklists.value += tripId to mine.copy(done = withDone(mine.done, id, done))
     }
     /** Every registration write, in order: the id and its token, or null for a removal. */
     val devices = mutableListOf<Pair<String, String?>>()

@@ -78,11 +78,12 @@ Gradle). `:core` is Kotlin Multiplatform (the JVM and iOS) with the models and t
 `packages/core` has (grouping, what comes next, the status lines, date
 formatting), tested without an SDK and kept free of Android by
 `:core:verifyNoAndroid`; `:app` is the Compose app: sign-in, the trip list,
-a trip's bookings with adding, editing and deleting, the calendar's month
+a trip's bookings with adding, editing and deleting and its "Before you go"
+reminders, the calendar's month
 view, the travel profile with its document warnings, reports, the
 open-source licenses, and Settings with sign-out, the reminders switches (by email, and as notifications on
 the phone over Firebase Cloud Messaging, which asks for the notification
-permission), the text size, the debug log and deleting the account. Deleting calls the
+permission), the reminders before international trips, the text size, the debug log and deleting the account. Deleting calls the
 parser at `travelmoParserUrl` in `apps/android/gradle.properties` (the
 production address, as in `apphosting.yaml`; override it with
 `-PtravelmoParserUrl=…` or `TRAVELMO_PARSER_URL`, or set it empty to have
@@ -360,8 +361,8 @@ One Google Cloud project holds everything.
    watches expire after seven days, `/internal/poll-feeds`, which reads
    every subscribed calendar feed, `/internal/geocode-sweep`, which asks
    the geocoder again about the bookings a spent daily budget put off, and
-   `/internal/reminders`, which sends the day's reminders by email and
-   push, daily, and `/internal/flight-status`, which sends check-in
+   `/internal/reminders`, which sends the day's reminders (and each due
+   reminder people set themselves before a trip) by email and push, daily, and `/internal/flight-status`, which sends check-in
    reminders and looks at the flights near departure or arrival, every
    minute (check-in reminders go even without `AEROAPI_KEY`), and
    `/internal/poll-fastmail`, which reads new mail in connected Fastmail

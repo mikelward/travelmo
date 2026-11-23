@@ -336,6 +336,57 @@ export const maxRideCompanies = 20;
 
 // Ride suggestions the user hid (rideNeedKey in rides.ts), newest last.
 export const maxHiddenRideNeeds = 200;
+
+// The traveler's own reminders before a trip (checklist.ts; SPEC "Before
+// you go").
+export const LeadUnit = z.enum(["days", "weeks", "months"]);
+export type LeadUnit = z.infer<typeof LeadUnit>;
+
+// The most of each unit a reminder may be ahead of a trip: about a year.
+export const leadLimits: Record<LeadUnit, number> = { days: 365, weeks: 52, months: 12 };
+export type Lead = { amount: number; unit: LeadUnit };
+export const defaultLead: Lead = { amount: 30, unit: "days" };
+
+export const maxReminderText = 200;
+// At most this many standing reminders, one-offs per trip and ticked ones per trip.
+export const maxStandingReminders = 20;
+export const maxTripReminders = 10;
+export const maxDoneReminders = 40;
+
+// An id the client makes up: letters, digits, - and _, at most 40.
+const reminderId = z.string().regex(/^[A-Za-z0-9_-]{1,40}$/);
+const reminderText = z.string().trim().min(1).max(maxReminderText);
+
+const withinLimit = (r: Lead) => r.amount <= leadLimits[r.unit];
+
+// One of the user's standing reminders: a document of its own in a slot
+// (`users/{uid}/tripReminders/{slot}`, slots s0 to s19, so the rules bound
+// how many there are), with an id of its own, so a reminder that takes a
+// freed slot is not ticked off where the old one was.
+export const StandingReminder = z
+  .object({ id: reminderId, text: reminderText, amount: z.number().int().min(0), unit: LeadUnit })
+  .refine(withinLimit, "Too far ahead");
+export type StandingReminder = z.infer<typeof StandingReminder>;
+
+// A reminder for one trip only (`users/{uid}/tripChecklists/{tripId}/added/{slot}`,
+// slots a0 to a9): a lead time like a standing one, or a date.
+export const DatedReminder = z.object({ id: reminderId, text: reminderText, date: isoDate });
+export type DatedReminder = z.infer<typeof DatedReminder>;
+export const OneOffReminder = z.union([StandingReminder, DatedReminder]);
+export type OneOffReminder = z.infer<typeof OneOffReminder>;
+
+// The user's own state for one trip (`users/{uid}/tripChecklists/{tripId}`):
+// the reminders they ticked off. An id that does not parse is left out.
+export const TripChecklist = z.object({
+  done: z
+    .array(z.unknown())
+    .max(maxDoneReminders)
+    .transform((ids) => ids.filter((id): id is string => reminderId.safeParse(id).success))
+    .default([]),
+  updatedAt: z.string().optional(),
+});
+export type TripChecklist = z.infer<typeof TripChecklist>;
+
 // An address the user asked to link that is waiting for its confirmation
 // link to be opened (emails.ts): shown in Settings until it expires.
 export const PendingEmail = z.object({ email: z.string(), sentAt: z.string(), expiresAt: z.string() });

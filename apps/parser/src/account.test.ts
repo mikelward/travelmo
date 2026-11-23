@@ -107,9 +107,17 @@ async function seedUser(uid: string, email: string) {
     paths.importLock(uid),
     paths.reminderLog(uid, "t"),
     paths.emailLinks(uid),
+    // Their reminders before trips, what they ticked off on one and a one-off they added to it.
+    paths.tripReminder(uid, "s0"),
+    paths.tripChecklist(uid, "t"),
+    paths.tripChecklistAddedSlot(uid, "t", "a0"),
   ];
   for (const path of owned) await db.doc(path).set({ at: iso });
+  // Whether one of those reminders went to them.
+  const sent = `${uid}__t__r1`;
+  await db.doc(paths.checklistReminder(sent)).set({ id: sent, uid, tripId: "t", reminderId: "r1", ends: "2026-12-19", attempts: 0, done: true, at: iso });
   const lookups = [
+    paths.checklistReminder(sent),
     paths.gmailAccount(mailbox),
     paths.gmailAccount(second),
     paths.pendingConnection(pending),

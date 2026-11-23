@@ -1,5 +1,11 @@
 package app.travelmo.ui
 
+import app.travelmo.core.Lead
+import app.travelmo.core.LeadUnit
+import app.travelmo.core.Reminder
+import app.travelmo.core.isReminderId
+import app.travelmo.data.MyChecklist
+
 import app.travelmo.core.FlightStatus
 import app.travelmo.core.Place
 import app.travelmo.core.Segment
@@ -164,6 +170,44 @@ class TripsViewModelTest {
         viewModel.hideRideNeed("hide", needs[1])
         viewModel.outcomes.value shouldBe mapOf("hide" to Outcome.Done)
         store.hiddenRides shouldBe listOf("b-out/car")
+    }
+
+    @Test
+    fun `a trip abroad lists the standing reminders and its one-offs, a trip at home its one-offs alone`() = runTest {
+        val viewModel = TripsViewModel(FakeTripStore(), OWNER, null, clock = { Instant.parse(FROZEN_NOW) })
+        val settings = RideSettings()
+        val boston = viewModel.checklistFor(fixtureBostonTrip, fixtureBostonSegments, fixtureStandingReminders, fixtureBostonChecklist, settings)
+        boston?.map { Triple(it.text, it.due, it.done) } shouldBe listOf(
+            Triple("Apply for an ESTA", "2026-11-03", false),
+            Triple("Pack the plug adapter", "2026-11-23", false),
+            Triple("Request prescriptions", "2026-10-25", true),
+        ).sortedBy { it.second }
+        // Liverpool by train from London: at home, so only its one-offs.
+        val liverpool = fixtureTrips.first { it.id == "liverpool" }
+        val oneOff = MyChecklist(added = listOf(Reminder("a0", "tour", "Book the tour", date = "2026-12-01")))
+        viewModel.checklistFor(liverpool, fixtureSegments.getValue("liverpool"), fixtureStandingReminders, oneOff, settings)?.map { it.id } shouldBe listOf("tour")
+        // Nothing while anything loads, nor for a trip that is over.
+        viewModel.checklistFor(fixtureBostonTrip, fixtureBostonSegments, null, fixtureBostonChecklist, settings) shouldBe null
+        viewModel.checklistFor(fixtureTrips.first { it.id == "lisbon" }, fixtureSegments.getValue("lisbon"), fixtureStandingReminders, MyChecklist(), settings) shouldBe null
+    }
+
+    @Test
+    fun `reminders are added with an id of their own, ticked off and removed through the store`() = runTest {
+        val store = FakeTripStore()
+        val viewModel = TripsViewModel(store, OWNER, null)
+        viewModel.saveReminder("add", null, Reminder("", "", "Apply for a visa", Lead(30, LeadUnit.DAYS)))
+        viewModel.outcomes.value shouldBe mapOf("add" to Outcome.Done)
+        val saved = store.standing.value.single()
+        saved.slot shouldBe "s0"
+        isReminderId(saved.id) shouldBe true
+        viewModel.saveReminder("edit", null, saved.copy(lead = Lead(6, LeadUnit.WEEKS)))
+        store.standing.value shouldBe listOf(saved.copy(lead = Lead(6, LeadUnit.WEEKS)))
+        viewModel.saveReminder("one-off", "boston", Reminder("", "", "Pack", date = "2026-11-23"))
+        store.checklists.value.getValue("boston").added.single().slot shouldBe "a0"
+        viewModel.setReminderDone("tick", "boston", saved.id, true)
+        store.checklists.value.getValue("boston").done shouldBe listOf(saved.id)
+        viewModel.removeReminder("remove", null, "s0")
+        store.standing.value shouldBe emptyList()
     }
 
     @Test
