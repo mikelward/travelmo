@@ -78,6 +78,7 @@ import app.travelmo.core.SegmentType
 import app.travelmo.core.SourceKind
 import app.travelmo.core.SourceRef
 import app.travelmo.core.Trip
+import app.travelmo.core.MAX_TRIP_REMINDERS
 import app.travelmo.core.displayTitles
 import app.travelmo.core.emailLinkFor
 import app.travelmo.core.allLoyalty
@@ -144,6 +145,9 @@ fun TripDetailScreen(
     val ownProfile by viewModel.ownProfile.collectAsStateWithLifecycle()
     val gmailMailboxes by viewModel.gmailMailboxes.collectAsStateWithLifecycle()
     val rideSettings by viewModel.rideSettings.collectAsStateWithLifecycle()
+    val standingReminders by viewModel.standingReminders.collectAsStateWithLifecycle()
+    val myChecklistFlow = remember(tripId) { viewModel.myChecklist(tripId) }
+    val myChecklist by myChecklistFlow.collectAsStateWithLifecycle(initialValue = null)
     val addresses by viewModel.addresses.collectAsStateWithLifecycle()
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
     var deleting by remember { mutableStateOf<Segment?>(null) }
@@ -244,6 +248,16 @@ fun TripDetailScreen(
                     null
                 },
                 tripActions = if (isOwner) actions else null,
+                // The viewer's own reminders before the trip, theirs alone, shared trip or not.
+                checklist = viewModel.checklistFor(current, segments, standingReminders, myChecklist, rideSettings)?.let { entries ->
+                    Checklist(
+                        entries = entries,
+                        onTick = { entry, done -> viewModel.setReminderDone("${prefix}checklist/${entry.id}/done", tripId, entry.id, done) },
+                        onRemove = { entry -> viewModel.removeReminder("${prefix}checklist/${entry.id}/remove", tripId, entry.slot) },
+                        onAdd = { reminder -> viewModel.saveReminder("${prefix}checklist/add", tripId, reminder) },
+                        canAdd = myChecklist?.added.orEmpty().size < MAX_TRIP_REMINDERS,
+                    )
+                },
                 canManage = canManage,
                 targets = targets,
                 titles = displayTitles(trips.orEmpty()),
@@ -297,6 +311,7 @@ private fun TripBody(
     emailLink: (SourceRef) -> String?,
     rides: RideSuggestions,
     tripActions: TripActions?,
+    checklist: Checklist?,
     canManage: Boolean,
     targets: List<Trip>,
     /** Every trip's title as [displayTitles] shows it among the others. */
@@ -358,6 +373,9 @@ private fun TripBody(
         }
         if (warnings.isNotEmpty()) {
             item(key = "warnings") { DocumentWarnings(warnings, today) }
+        }
+        if (checklist != null) {
+            item(key = "before-you-go") { BeforeYouGo(checklist, today) }
         }
         if (days.isEmpty()) {
             item(key = "empty") {

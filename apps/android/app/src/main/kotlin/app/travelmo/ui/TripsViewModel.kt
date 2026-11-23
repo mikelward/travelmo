@@ -83,6 +83,12 @@ import app.travelmo.data.TripActions
 import app.travelmo.data.NoTripActions
 import app.travelmo.data.OwnProfile
 import app.travelmo.data.RideSettings
+import app.travelmo.data.MyChecklist
+import app.travelmo.core.ChecklistEntry
+import app.travelmo.core.Reminder
+import app.travelmo.core.isInternational
+import app.travelmo.core.shownEnd
+import app.travelmo.core.tripChecklist
 import app.travelmo.data.TripStore
 import app.travelmo.log.TravelmoLog
 import app.travelmo.notify.NoPushDevice
@@ -521,6 +527,38 @@ class TripsViewModel(
         return rideNeeds(segments, periods, clock().toString(), hidden = settings.hidden)
     }
 
+    /** The user's reminders before every international trip, in slot order; null while they load. */
+    val standingReminders: StateFlow<List<Reminder>?> = accessSettled.flatMapLatest { store.standingReminders(uid) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** What the user ticked off on a trip and the one-offs they added to it; null while it loads. */
+    fun myChecklist(tripId: String): Flow<MyChecklist?> = store.myChecklist(uid, tripId)
+
+    /**
+     * A trip's "Before you go" for the viewer (SPEC "Before you go"): their
+     * standing reminders when the trip goes abroad from home on its first
+     * day (the trip's own round trip unless they corrected home, as ride
+     * suggestions work it out), and their one-offs. Null while anything
+     * loads, and for a trip that is over or being deleted.
+     */
+    fun checklistFor(trip: Trip, segments: List<Segment>, standing: List<Reminder>?, mine: MyChecklist?, settings: RideSettings?): List<ChecklistEntry>? {
+        if (standing == null || mine == null || settings == null || trip.deleting || trip.shownEnd < today()) return null
+        val international = standing.isNotEmpty() && isInternational(trip, segments, settings.homes)
+        return tripChecklist(trip, standing, mine.done, mine.added, international)
+    }
+
+    /**
+     * Saves a reminder: a standing one with no [tripId], else a one-off on
+     * that trip; one with no slot is new, and gets an id of its own.
+     */
+    fun saveReminder(token: String, tripId: String?, reminder: Reminder) = run(token, "saveReminder") {
+        store.saveReminder(uid, tripId, if (reminder.id.isEmpty()) reminder.copy(id = newReminderId()) else reminder)
+    }
+
+    fun removeReminder(token: String, tripId: String?, slot: String) = run(token, "removeReminder") { store.removeReminder(uid, tripId, slot) }
+
+    fun setReminderDone(token: String, tripId: String, id: String, done: Boolean) = run(token, "setReminderDone") { store.setReminderDone(uid, tripId, id, done) }
+
     /** One connected mailbox as Settings shows it: the address, and how far the last reading of it got. */
     data class MailboxShown(val emailAddress: String, val progress: BackfillShown?, val reading: Boolean)
 
@@ -828,3 +866,6 @@ class TripsViewModel(
         store.saveTrusted(uid, email, exists = answer.profile != null, emails = emails, before = answer.profile?.trustedEmails.orEmpty())
     }
 }
+
+/** A new reminder's id: random, so one that takes a freed slot is not ticked off where the one before it was. */
+internal fun newReminderId(): String = java.util.UUID.randomUUID().toString().replace("-", "").take(20)

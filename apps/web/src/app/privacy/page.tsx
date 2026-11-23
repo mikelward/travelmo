@@ -49,6 +49,10 @@ export default function PrivacyPage() {
             visas with their numbers and expiry dates, and loyalty programs.
           </li>
           <li>
+            <strong>Your reminders before trips:</strong> what each says and when it is due, which you ticked off on each
+            trip, and which were sent to you.
+          </li>
+          <li>
             <strong>Connections you turn on:</strong> access to read your Gmail accounts, Fastmail or Google Calendar,
             calendar feed addresses,
             your forwarding address, your calendar export link, and the devices and browsers you asked to notify.
@@ -159,7 +163,7 @@ export default function PrivacyPage() {
         <p>
           Your data stays until you delete it. Deleting a trip or booking removes it; disconnecting Gmail or Google Calendar
           removes Travelmo&apos;s access, and disconnecting Fastmail deletes its API token. Deleting your account in Settings removes your trips, bookings, travel profile,
-          connections and access record, and takes you off trips others shared with you; bookings you added to someone else&apos;s trip stay
+          reminders, connections and access record, and takes you off trips others shared with you; bookings you added to someone else&apos;s trip stay
           with that trip. Service logs are kept for 30 days.
         </p>
         <p>

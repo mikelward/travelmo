@@ -62,6 +62,7 @@ import { smtpConfig, smtpMailer } from "./mail";
 import { fcmSender } from "./fcm";
 import { pushConfig, webPushSender } from "./push";
 import { firestoreReminderIo, sendReminders } from "./reminders";
+import { firestoreChecklistIo, sendChecklistReminders, type ChecklistRun } from "./checklist";
 import { aeroApiLookup } from "./aeroapi";
 import { firestoreCheckInIo, sendCheckInReminders } from "./checkIn";
 import { canSeeTrip, checkFlights, defaultFlightStatusDailyLimit, firestoreFlightIo, retryPendingNews, type FlightOptions } from "./flightStatus";
@@ -1136,19 +1137,37 @@ const reminderIo = {
   users: async () => onlyApproved(await allReminderIo.users(), (uid) => approvedUid(db, uid, verifiedEmail, log), log),
 };
 
+// The traveler's own reminders before a trip (checklist.ts), to the same
+// people: those with reminders on, and approved.
+const allChecklistIo = firestoreChecklistIo(db, allReminderIo, log);
+const checklistIo = {
+  ...allChecklistIo,
+  users: async () => onlyApproved(await allChecklistIo.users(), (uid) => approvedUid(db, uid, verifiedEmail, log), log),
+};
+
 // Cloud Scheduler calls this daily (deploy/scheduler.sh): the document
 // warnings and entry requirements of trips starting within a month, sent
-// once each to everyone who asked, by email and to their browsers and phones.
+// once each to everyone who asked, by email and to their browsers and phones,
+// and then each of their own reminders before a trip that is due.
 app.post("/internal/reminders", async (c) => {
   await requireInternalCaller(c);
+  const now = deps.now();
   const run = await sendReminders(reminderIo, reminderChannels, {
-    now: deps.now(),
+    now,
     origin: webOrigin,
     lookups: { airportPlace, visaTable },
     log: (event, fields) => log(event === "reminder_failed" ? "ERROR" : "INFO", event, fields),
   });
   log("INFO", "reminders_sent", run);
-  return c.json({ enabled: true, ...run });
+  let checklist: ChecklistRun | undefined;
+  try {
+    checklist = await sendChecklistReminders(checklistIo, reminderChannels, { now, clock: deps.now, origin: webOrigin, lookup: airportPlace, log });
+    log("INFO", "checklist_reminders_sent", checklist);
+  } catch (error) {
+    // The document reminders went; these wait for tomorrow's run.
+    log("ERROR", "checklist_reminders_failed", errorFields(error));
+  }
+  return c.json({ enabled: true, ...run, ...(checklist ? { checklist } : {}) });
 });
 
 // Linked email addresses (emails.ts; SPEC "Linked email addresses"). A

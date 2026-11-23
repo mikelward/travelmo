@@ -68,6 +68,18 @@ viewer's zone. Trip bounds are calendar dates.
   declinedAt, notifiedAt`: who may use the app, one per lowercased verified
   address ("Access"). `config/access` — `admins[]`, lowercase addresses,
   written by hand in the console.
+- `users/{uid}/tripReminders/{slot}` — `id, text, amount, unit
+  (days | weeks | months), createdAt`: one of the user's reminders before
+  every international trip ("Before you go"), in a slot `s0` to `s19`.
+  `users/{uid}/tripChecklists/{tripId}` — `done[], updatedAt`: the
+  reminders the user ticked off on a trip, by id, at most forty; and under
+  it `added/{slot}` — `id, text, createdAt` with `amount, unit` or `date`:
+  a one-off for that trip alone, in a slot `a0` to `a9`. The owner's
+  alone, whether the trip is theirs or shared with them.
+- `checklistReminders/{uid__tripId__reminderId}` — `id, uid, tripId,
+  reminderId, ends, attempts, done, at, claimUntil`: whether a reminder
+  before a trip went to its user, `ends` the trip's last day for the
+  sweep. The parser's alone.
 - `users/{uid}/pushSubscriptions/{id}` — `endpoint, keys {p256dh, auth},
   createdAt`: one per browser that asked for notifications, written by that
   browser, read and pruned by the parser.
@@ -484,6 +496,61 @@ Once nobody is left to try, the booking is done and later runs read only
 its marker; someone added to the trip after that is not told. Markers go
 once their flight has left, swept by the same job, and account deletion
 takes the person's uid off them.
+
+## Before you go
+
+Besides the warnings above, travelers keep their own reminders before a
+trip (`packages/core/src/checklist.ts`, mirrored in the Android app's
+core). Settings has "Before international trips": reminders such as
+"Apply for a visa" or "Request prescriptions", each with how long before a
+trip it is due, in days, weeks or months (30 days unless changed, at most
+about a year), added, edited and removed there, at most twenty.
+
+A trip is international when one of its bookings is in a country other
+than home on the day it starts. Home is worked out as ride suggestions
+work it out: this trip's own round trip, unless the person corrected home
+on Profile, whose corrections then decide. Home's country is the one the
+home names, or else that of a place of the trip in the home town (an
+airport's, from the airport table, as the reports place flights). With no
+home country known or no booking with a country, the trip is not
+international, so a one-way trip says nothing until Profile says where
+home is. Reading every trip to work out home, as Profile does, would cost
+a read of each on every visit and in every daily run.
+
+The trip page, on the web and in the Android app, has "Before you go" for
+a trip not yet over: the person's standing reminders when the trip is
+international, and the one-offs they added to it, whatever the trip (a
+date, or how long before), soonest due first, each with its day ("By Thu
+12 Nov", red once it is due and not done). Ticking one off, adding and
+removing a one-off are the viewer's own: a trip shared with someone shows
+them their own reminders, never the owner's, and ticking one off on one
+trip leaves it on the others. Each reminder is a document in a numbered
+slot, so the rules check every one in full and bound how many there are
+(a list in one document would have to be checked entry by entry, which
+the rules' limit of a thousand expressions does not allow for twenty);
+each has an id of its own, so one that takes a freed slot is not ticked
+off where the reminder before it was. The reminder's words are never
+logged.
+
+The daily `/internal/reminders` run sends each due reminder once, after
+the document reminders: one due today or earlier (a trip booked after
+the day goes at once), not ticked off, for a trip not yet started, by the
+channels the person chose under Reminders (an email to the address Google
+verified when `reminders.email` is on, every browser and phone when
+`reminders.push` is), only to them and only once approved ("Access"). It
+is "Apply for a visa — Lisbon trip in 30 days" by email, in plain words
+with a link to the trip, and a notification with the reminder as its
+title, tagged per trip and reminder, whose tap opens the trip. Someone
+with nowhere to send is skipped before their trips are read, and a trip's
+bookings are read only when something could be due. A marker per
+person, trip and reminder (`checklistReminders`, the parser's alone,
+`apps/parser/src/checklist.ts`) remembers it went, as check-in reminders
+do: claimed for ten minutes in a transaction first, so overlapping runs
+never both send; a delivery that every channel failed is tried by the
+next runs, five in all; the deletion marker is read in each write. Markers
+go once their trip is over or gone, swept by the same run; one whose trip
+moved later goes with it. A trip deleted leaves its ticks under the user
+until the account goes; nothing reads them.
 
 ## Live flight status
 
@@ -953,6 +1020,11 @@ approved accounts only ("Access"):
   parser's alone.
 - A flight's status is readable by any signed-in user who names its key,
   never listed and never written by a client.
+- A user's reminders before trips and their ticks and one-offs on a trip
+  are theirs alone to read and write: each reminder whole (an id, words of
+  at most 200 characters, a lead time within a year or, for a one-off, a
+  date) in one of a bounded set of slots, at most forty ticks; whether one
+  was sent is closed to clients.
 - A user's `emails` and `pendingEmails` are never written by a client;
   `linkedEmails` and `private` are closed to clients.
 - `gmailAccounts` and `oauthStates` are closed to clients.
@@ -2021,7 +2093,7 @@ caller's uid, in this order:
    (whose new token is revoked instead), a forwarding address, a
    calendar link, a TripIt profile, a calendar feed, an upload lease, a
    sign-in's OAuth state, and background bookkeeping (calendar event
-   aliases, reminder logs, geocode retries, the forwarding budget); a
+   aliases, reminder logs and markers, geocode retries, the forwarding budget); a
    disconnect touches the user document only while it exists. Writes that only change a document that must already exist
    need no check: deletion removed it. Every user endpoint but `/account/delete` answers 410
    for the account from then on. The rules refuse every client create
@@ -2038,8 +2110,9 @@ caller's uid, in this order:
 2. Lookups that name the user outside their own documents: `gmailAccounts`,
    `forwardAddresses` (the forwarding address bounces from then on),
    `calendarExports` (the export link stops working), `pendingConnections`,
-   `oauthStates` and `geocodeRetries`, each by its `uid` field; and their
-   uid comes off the `sent` list of `checkInReminders`.
+   `oauthStates`, `geocodeRetries` and `checklistReminders`, each by its
+   `uid` field; and their uid comes off the `sent` list of
+   `checkInReminders`.
 3. Every trip they own: marked `deleting` first, as a trip deletion is, so
    no edit adds to it meanwhile, then its segments, and the trip document
    only once they are all gone, so a failure leaves the trip for a retry to
@@ -2052,7 +2125,8 @@ caller's uid, in this order:
    trips keep every booking, including ones the deleted user added: they
    belong to the trip.
 5. `users/{uid}` and every subcollection under it, whatever it holds,
-   including a Fastmail API token (Fastmail cannot revoke one from outside).
+   including a Fastmail API token (Fastmail cannot revoke one from outside)
+   and reminders before trips and what they ticked off.
 6. The Firebase Auth user, last, so the user can retry until everything
    else is gone; one already deleted counts as done.
 

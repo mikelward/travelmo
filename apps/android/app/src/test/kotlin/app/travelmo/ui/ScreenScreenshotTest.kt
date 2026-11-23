@@ -347,6 +347,38 @@ class ScreenScreenshotTest {
         capture("trip_detail_rides") { TripDetailScreen(viewModel = viewModel, tripId = "boston", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
+    // Boston from London is abroad: the owner's reminders before every
+    // international trip, one ticked off, and a one-off of their own.
+    @Test
+    fun trip_detail_checklist() = tripChecklist("trip_detail_checklist", dark = false)
+
+    @Test
+    fun trip_detail_checklist_dark() = tripChecklist("trip_detail_checklist_dark", dark = true)
+
+    private fun tripChecklist(name: String, dark: Boolean) {
+        val store = FakeTripStore(trips = fixtureTrips + fixtureBostonTrip, segments = fixtureSegments + (fixtureBostonTrip.id to fixtureBostonSegments))
+        store.standing.value = fixtureStandingReminders
+        store.checklists.value = mapOf(fixtureBostonTrip.id to fixtureBostonChecklist)
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        capture(name, dark = dark) { TripDetailScreen(viewModel = viewModel, tripId = "boston", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+    }
+
+    // Settings scrolled to the reminders before international trips.
+    @Test
+    fun settings_trip_reminders() {
+        val store = FakeTripStore()
+        store.standing.value = fixtureStandingReminders
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, pushDevice = FakePushDevice())
+        composeRule.setContent {
+            TravelmoTheme(darkTheme = false, fontSize = FontSizeState(FontSizeSettings(scale = 1f), onScaleSettled = {}, onPinchEnabledChange = {})) {
+                SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
+            }
+        }
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.add_reminder)).performScrollTo()
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage(filePath = "$outputDir/settings_trip_reminders.png")
+    }
+
     @Test
     fun trip_manage() {
         val viewModel = viewModel()

@@ -118,6 +118,20 @@ service cloud.firestore {
       return value is string && value.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}');
     }
 
+    // A reminder before a trip (packages/core/src/checklist.ts), one per
+    // document: an id, its words and a lead time, or, for a one-off on one
+    // trip, a date instead. A missing field or one of the wrong type fails
+    // the check with an error.
+    function validReminder(r, dated) {
+      return r.keys().hasOnly(['id', 'text', 'amount', 'unit', 'date', 'createdAt'])
+        && r.id.matches('[A-Za-z0-9_-]{1,40}')
+        && r.text is string && r.text.size() > 0 && r.text.size() <= 200
+        && r.createdAt is string
+        && ('date' in r
+          ? dated && !('amount' in r) && !('unit' in r) && isDate(r.date)
+          : r.amount is int && r.amount >= 0 && r.amount <= {'days': 365, 'weeks': 52, 'months': 12}[r.unit]);
+    }
+
     function validTrip(trip) {
       return trip.keys().hasOnly(['id', 'title', 'start', 'end', 'liveStart', 'liveEnd', 'ownerUid', 'sharedWith', 'deleting', 'createdAt', 'updatedAt'])
         && (!('deleting' in trip) || trip.deleting is bool)
@@ -235,6 +249,35 @@ service cloud.firestore {
       allow update: if member() && isSelf()
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(serverKeys())
         && validHomes(request.resource.data) && validRides(request.resource.data);
+
+      // Reminders before every international trip (Settings), one per
+      // slot, s0 to s19, so there are at most twenty.
+      match /tripReminders/{slot} {
+        allow read, delete: if isSelf() && approved();
+        allow create, update: if member() && isSelf()
+          && slot.matches('s([0-9]|1[0-9])')
+          && validReminder(request.resource.data, false);
+      }
+
+      // The user's own state for one trip's reminders before it: which they
+      // ticked off (at most forty ids) and, one per slot a0 to a9, the
+      // one-offs they added to it. Theirs alone, whether the trip is theirs
+      // or shared with them.
+      match /tripChecklists/{tripId} {
+        allow read, delete: if isSelf() && approved();
+        allow create, update: if member() && isSelf()
+          && request.resource.data.keys().hasOnly(['done', 'updatedAt'])
+          && request.resource.data.done is list
+          && request.resource.data.done.size() <= 40
+          && request.resource.data.updatedAt is string;
+
+        match /added/{slot} {
+          allow read, delete: if isSelf() && approved();
+          allow create, update: if member() && isSelf()
+            && slot.matches('a[0-9]')
+            && validReminder(request.resource.data, true);
+        }
+      }
 
       // What the parser has sent as reminders: nobody's to read or write.
       match /reminders/{tripId} {
@@ -447,6 +490,10 @@ service cloud.firestore {
     }
     // Who was reminded that a booking's online check-in is open.
     match /checkInReminders/{id} {
+      allow read, write: if false;
+    }
+    // Whether a reminder before a trip went to its user.
+    match /checklistReminders/{id} {
       allow read, write: if false;
     }
     // The geocoder's cache and daily budget: the parser's alone.

@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { AccountDeleted, DeleteAccountSection, useAccountDeletion } from "@/components/DeleteAccount";
 import { EmailAddressesSection } from "@/components/EmailAddresses";
+import { TripRemindersSection } from "@/components/Checklist";
 import { SignInGate } from "@/components/SignInGate";
 import { api } from "@/lib/api";
 import { exportLinks, useCalendarExport } from "@/lib/calendarExport";
@@ -1234,6 +1235,7 @@ export default function SettingsPage() {
           <CalendarExportSection user={user} />
           <EmailAddressesSection user={user} />
           <RemindersSection user={user} />
+          <TripRemindersSection uid={user.uid} />
           <RideCompaniesSection user={user} />
           <PatternsSection user={user} />
           <ReviewSection />

@@ -203,6 +203,33 @@ export async function setAdmins(admins: string[]): Promise<void> {
   await db.doc(paths.accessConfig()).set({ admins });
 }
 
+// The user's reminders before trips, by slot, as stored.
+export async function seedTripReminder(uid: string, slot: string, reminder: Record<string, unknown>): Promise<void> {
+  await db.doc(paths.tripReminder(uid, slot)).set({ createdAt: "2026-11-01T00:00:00Z", ...reminder });
+}
+
+// A stored reminder's words and when, without its made-up id and time.
+const shown = (data: Record<string, unknown>) => Object.fromEntries(Object.entries(data).filter(([key]) => key !== "id" && key !== "createdAt"));
+
+export async function readTripReminders(uid: string): Promise<Record<string, Record<string, unknown>>> {
+  const snap = await db.collection(paths.tripReminders(uid)).get();
+  return Object.fromEntries(snap.docs.map((d) => [d.id, shown(d.data())]));
+}
+
+// What the user ticked off on a trip and the one-offs they added to it.
+// What another device ticked off on a trip.
+export async function seedTripTicks(uid: string, tripId: string, done: string[]): Promise<void> {
+  await db.doc(paths.tripChecklist(uid, tripId)).set({ done }, { merge: true });
+}
+
+export async function readTripChecklist(uid: string, tripId: string): Promise<{ done: unknown; added: Record<string, unknown>[] }> {
+  const [snap, added] = await Promise.all([db.doc(paths.tripChecklist(uid, tripId)).get(), db.collection(paths.tripChecklistAdded(uid, tripId)).get()]);
+  return {
+    done: snap.get("done"),
+    added: added.docs.map((d) => ({ slot: d.id, ...shown(d.data()) })),
+  };
+}
+
 export async function readPushSubscriptions(uid: string): Promise<PushSubscription[]> {
   return (await db.collection(paths.pushSubscriptions(uid)).get()).docs.map((d) => d.data() as PushSubscription);
 }
