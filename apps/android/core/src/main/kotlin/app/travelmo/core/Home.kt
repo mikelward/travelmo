@@ -187,3 +187,58 @@ fun describeHomes(periods: List<HomePeriod>): String = periods.reversed().joinTo
         else -> "${p.city} ${from.take(4)}–${until.take(4)}"
     }
 }
+
+/** Whether [place] is in the town that was home on [date]; false when either is unknown. */
+fun inHomeTown(place: Place?, date: String, periods: List<HomePeriod>, overrides: List<HomePeriod> = emptyList()): Boolean {
+    val where = town(place) ?: return false
+    val home = homeAt(periods, date, overrides) ?: return false
+    return sameTown(where, home)
+}
+
+// Words that say nothing about which airport or station a place is.
+private val hubWords = setOf("airport", "international", "terminal", "station", "central", "railway", "rail", "city")
+private fun wordsOf(text: String) = text.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }
+
+// Whether a place in a ride's booking is the airport or station [hub]: the
+// same code, the code written in it, or a word of the hub's name that is not
+// its town's ("Heathrow" of London Heathrow).
+private fun atHub(place: Place, hub: Place): Boolean {
+    if (place.code != null && hub.code != null) return place.code.equals(hub.code, ignoreCase = true)
+    val text = "${place.name} ${place.address ?: ""}"
+    val code = hub.code?.uppercase()?.replace(Regex("[^A-Z0-9]"), "")
+    if (!code.isNullOrEmpty() && Regex("\\b$code\\b", RegexOption.IGNORE_CASE).containsMatchIn(text)) return true
+    val townWords = wordsOf("${hub.city ?: ""} ${hub.country ?: ""}").toSet()
+    val words = wordsOf(text).toSet()
+    return wordsOf(hub.name).any { it.length >= 4 && it !in hubWords && it !in townWords && it in words }
+}
+
+// How close a ride must be to a journey at the same airport or station to belong with it.
+private const val CONNECTION_HOURS = 12L
+
+private fun waitBetween(from: String, to: String): Long? {
+    val ms = instantMillis(to) - instantMillis(from)
+    return ms.takeIf { it >= 0 && it <= CONNECTION_HOURS * 3_600_000 }
+}
+
+/** How long after [journey] arrives [ride] leaves its airport or station; null when it doesn't take the traveler on. */
+fun rideFromArrival(ride: Segment, journey: Segment): Long? {
+    if (!isTransfer(ride) || journey.type !in journeyTypes) return null
+    val hub = journey.destination ?: return null
+    return if (atHub(ride.origin!!, hub)) waitBetween(journey.end ?: journey.start, ride.start) else null
+}
+
+/** How long before [journey] leaves [ride] reaches its airport or station; null when it doesn't bring the traveler there. */
+fun rideToDeparture(ride: Segment, journey: Segment): Long? {
+    if (!isTransfer(ride) || journey.type !in journeyTypes) return null
+    val hub = journey.origin ?: return null
+    return if (atHub(ride.destination!!, hub)) waitBetween(ride.end ?: ride.start, journey.start) else null
+}
+
+/** Whether [place] is the airport or station [hub], or in its town: where a car hired for a flight is collected. */
+fun nearHub(place: Place?, hub: Place?): Boolean {
+    if (place == null || hub == null) return false
+    if (atHub(place, hub)) return true
+    val a = town(place) ?: return false
+    val b = town(hub) ?: return false
+    return sameTown(a, b)
+}

@@ -124,6 +124,11 @@ export async function seedFeed(uid: string, feed: CalendarFeed): Promise<void> {
 }
 
 // The connection as the parser leaves it on the profile (no token here).
+// A change to the user's profile made elsewhere (another tab or device).
+export async function updateUser(uid: string, data: Partial<UserProfile>): Promise<void> {
+  await db.doc(paths.user(uid)).set(data, { merge: true });
+}
+
 export async function seedGmail(uid: string, gmail: GmailConnection): Promise<void> {
   await db.doc(paths.user(uid)).set({ gmail }, { merge: true });
 }

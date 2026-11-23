@@ -523,6 +523,43 @@ widens, the source is deleted, and the target keeps its own sharing list.
 Both run as transactions; the merge reads the source's bookings first and
 re-reads if the source's `updatedAt` moved in between.
 
+### Car and ride suggestions
+
+Under a flight with nothing booked on the ground, the trip page suggests
+booking it (`rideNeeds` in `packages/core/src/rides.ts`), for flights still
+ahead and not cancelled:
+
+- leaving home with no transfer to the airport: "Need a ride to London
+  Heathrow?";
+- landing at home with no transfer from it: "Need a ride home from London
+  Heathrow?";
+- landing away, as the last leg there (no journey onward from that airport
+  within twelve hours), with no transfer from it and no car collected there
+  (at the airport or in its town) from twelve hours before landing to two
+  days after: "Need a car in Boston?".
+
+A transfer counts only for the end of the flight it meets: one to the
+airport (`rideToDeparture`) covers the ride there, one from it
+(`rideFromArrival`) the way on, each as `connectionGap` in "Home" matches
+them. Android's `:core` mirrors this in `Rides.kt`.
+Home is where this trip's round trip starts (`homeTimeline` of its own
+bookings), or the viewer's corrections on Profile when there are any; it is
+not worked out from every trip, which would read them all on each visit.
+Without a home, a landing is known to be away only when another journey
+follows it, so a one-way trip's last flight gets nothing.
+
+A car suggestion links to Avis, Enterprise, Hertz, Budget, Sixt, National
+and Alamo at their own sites, plain links that carry nothing about the
+trip, then the viewer's own companies for "Cars wherever I land". A ride at
+home links only to the viewer's companies for "Rides to and from home",
+such as a local minicab firm, and shows nothing until they add one.
+Settings ("Car and ride companies") lists them: a name, an `https://`
+booking link and which suggestions it joins, at most twenty
+(`users/{uid}.rideCompanies`; an entry that does not parse is left out).
+"Hide" removes one suggestion for good (`hiddenRideNeeds`, the newest two
+hundred `segmentId/kind` keys). Both are the viewer's own, so a sharee sees
+their own companies and hides their own suggestions.
+
 ## Offline
 
 The app is installable, and a trip opened once stays readable with no

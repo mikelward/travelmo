@@ -1,13 +1,15 @@
 "use client";
 
-import { bookedDateRange, displayBounds, displayTitles, formatDate, formatDateRange, localDate, normalizeEmail, paths, programsFor, type Segment, type Trip } from "@travelmo/core";
+import { bookedDateRange, displayBounds, effectiveHomes, homeTimeline, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, localDate, normalizeEmail, paths, programsFor, type Segment, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { arrayRemove, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Suspense, use, useMemo, useState, type FormEvent } from "react";
+import { Fragment, Suspense, use, useMemo, useState, type FormEvent } from "react";
 import { SegmentForm } from "@/components/SegmentForm";
+import { RideSuggestion } from "@/components/RideSuggestion";
 import { SegmentRow } from "@/components/SegmentRow";
+import { hideRideNeed } from "@/lib/rides";
 import { SignInGate } from "@/components/SignInGate";
 import { deleteSegment, deleteTrip, favoriteSegment, fitTripDates, mergeTrips, moveSegment, rateSegment, renameTrip, restoreSegment, saveSegment } from "@/lib/edits";
 import { shareTrip } from "@/lib/access";
@@ -285,6 +287,14 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   const segmentsOfTrip = useMemo(() => (segments ? { [tripId]: segments } : {}), [segments, tripId]);
   const warnings = useTripWarnings(people, tripList, segmentsOfTrip, today)[tripId] ?? [];
   const entries = useEntryRequirements(people, trip, segments, today);
+  // Flights with no car or ride booked. Home is where this trip's round trip
+  // starts, unless the viewer said otherwise on Profile: reading every trip
+  // to work it out would cost a read of each on every visit.
+  const needs = useMemo(() => {
+    if (!segments || !profile) return [];
+    const periods = effectiveHomes(homeTimeline(segments), profile.homes ?? []);
+    return rideNeeds(segments, { periods, hidden: profile.hiddenRideNeeds ?? [], now });
+  }, [segments, profile, now]);
   const [editing, setEditing] = useState<Editing>();
   const [error, setError] = useState<string>();
   if (trip === undefined) return <p className="text-muted">Loading…</p>;
@@ -357,34 +367,51 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
                     />
                   </li>
                 ) : (
-                  <SegmentRow
-                    key={segment.id}
-                    segment={segment}
-                    {...(canEdit
-                      ? {
-                          onEdit: () => setEditing({ kind: "edit", segment }),
-                          onDelete: () => remove(segment),
-                          moveTargets: otherTrips,
-                          onMove: (toTripId: string) => move(segment, toTripId),
-                        }
-                      : {})}
-                    {...(learn(segment) ? { onLearnSender: learn(segment) } : {})}
-                    // Each email links for whoever imported it, from their mailbox.
-                    emailLinks={{ uid: user.uid, account: profile?.gmail?.emailAddress, ownsTrip: isOwner }}
-                    programs={programsFor(segment.provider, loyalty)}
-                    flightLines={flightLinesFor(segment, flightStatuses, now)}
-                    {...(canEdit
-                      ? {
-                          onRate: (rating: number | null) => rateSegment(firestore(), trip.id, segment.id, rating).catch((e: Error) => setError(e.message)),
-                          onFavorite: (favorite: boolean) => favoriteSegment(firestore(), trip.id, segment.id, favorite).catch((e: Error) => setError(e.message)),
-                          onRestore: () =>
-                            restoreSegment(firestore(), trip.id, segment.id).catch((e: Error) => {
-                              console.error("Restoring a cancelled booking failed", e);
+                  <Fragment key={segment.id}>
+                    <SegmentRow
+                      segment={segment}
+                      {...(canEdit
+                        ? {
+                            onEdit: () => setEditing({ kind: "edit", segment }),
+                            onDelete: () => remove(segment),
+                            moveTargets: otherTrips,
+                            onMove: (toTripId: string) => move(segment, toTripId),
+                          }
+                        : {})}
+                      {...(learn(segment) ? { onLearnSender: learn(segment) } : {})}
+                      // Each email links for whoever imported it, from their mailbox.
+                      emailLinks={{ uid: user.uid, account: profile?.gmail?.emailAddress, ownsTrip: isOwner }}
+                      programs={programsFor(segment.provider, loyalty)}
+                      flightLines={flightLinesFor(segment, flightStatuses, now)}
+                      {...(canEdit
+                        ? {
+                            onRate: (rating: number | null) => rateSegment(firestore(), trip.id, segment.id, rating).catch((e: Error) => setError(e.message)),
+                            onFavorite: (favorite: boolean) => favoriteSegment(firestore(), trip.id, segment.id, favorite).catch((e: Error) => setError(e.message)),
+                            onRestore: () =>
+                              restoreSegment(firestore(), trip.id, segment.id).catch((e: Error) => {
+                                console.error("Restoring a cancelled booking failed", e);
+                                setError(e.message);
+                              }),
+                          }
+                        : {})}
+                    />
+                    {needs
+                      .filter((n) => n.segmentId === segment.id)
+                      .map((n) => (
+                        <RideSuggestion
+                          key={rideNeedKey(n)}
+                          kind={n.kind}
+                          flight={segment}
+                          companies={profile?.rideCompanies ?? []}
+                          onHide={() =>
+                            hideRideNeed(user.uid, rideNeedKey(n)).catch((e: Error) => {
+                              console.error("Hiding a ride suggestion failed", e);
                               setError(e.message);
-                            }),
-                        }
-                      : {})}
-                  />
+                            })
+                          }
+                        />
+                      ))}
+                  </Fragment>
                 ),
               )}
             </ul>
