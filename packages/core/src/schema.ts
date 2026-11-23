@@ -89,9 +89,9 @@ export const ExtractedBooking = z.object({
 export type ExtractedBooking = z.infer<typeof ExtractedBooking>;
 
 // Where a booking came from: an email read from Gmail, a hand entry, a
-// TripIt export, a calendar file or an email forwarded to the user's
-// forwarding address.
-export const SegmentSource = z.enum(["gmail", "manual", "tripit", "ics", "forward"]);
+// TripIt export, a calendar file, an email forwarded to the user's
+// forwarding address or one read from a connected Fastmail mailbox.
+export const SegmentSource = z.enum(["gmail", "manual", "tripit", "ics", "forward", "fastmail"]);
 export type SegmentSource = z.infer<typeof SegmentSource>;
 
 // One place a booking came from: the email, TripIt item or calendar event
@@ -99,7 +99,7 @@ export type SegmentSource = z.infer<typeof SegmentSource>;
 // too, so a dropped duplicate (perhaps a second room after all) is one
 // click away, as is anything the extraction left out.
 export const SourceRef = z.object({
-  kind: z.enum(["gmail", "tripit", "ics", "forward"]),
+  kind: z.enum(["gmail", "tripit", "ics", "forward", "fastmail"]),
   // The Gmail message id, or the import record's id for the others.
   id: z.string().min(1),
   // What the user recognizes it by: the email's subject, the TripIt trip's
@@ -233,6 +233,15 @@ export const GmailConnection = z.object({
 });
 export type GmailConnection = z.infer<typeof GmailConnection>;
 
+// What the client may see about a Fastmail connection; the API token stays
+// in the server-only FastmailState document.
+export const FastmailConnection = z.object({
+  emailAddress: z.string(),
+  connectedAt: isoDateTime,
+  backfill: BackfillProgress.optional(),
+});
+export type FastmailConnection = z.infer<typeof FastmailConnection>;
+
 // One calendar of a connected Google account: whether the user chose it, and
 // what its last daily read did.
 export const GoogleCalendarChoice = z.object({
@@ -338,6 +347,7 @@ export const UserProfile = z.object({
   // connected before there could be several, until the parser moves it.
   gmail: GmailConnection.optional(),
   gmails: z.record(z.string(), GmailConnection).optional(),
+  fastmail: FastmailConnection.optional(),
   googleCalendar: GoogleCalendarConnection.optional(),
   reminders: ReminderSettings.optional(),
   forward: ForwardAddress.optional(),
@@ -365,6 +375,16 @@ export const GmailState = GmailConnection.extend({
 });
 export type GmailState = z.infer<typeof GmailState>;
 
+// A Fastmail connection as the parser keeps it: the read-only API token,
+// the JMAP account it reads, and the mailbox state new mail is read from.
+export const FastmailState = FastmailConnection.extend({
+  token: z.string().min(1),
+  accountId: z.string().min(1),
+  emailState: z.string().optional(),
+  lastPolledAt: isoDateTime.optional(),
+});
+export type FastmailState = z.infer<typeof FastmailState>;
+
 export const SenderPatterns = z.object({
   allow: z.array(z.string()).default([]),
   deny: z.array(z.string()).default([]),
@@ -376,7 +396,7 @@ export type SenderPatterns = z.infer<typeof SenderPatterns>;
 // with `source` saying which). A record without `source` is a Gmail one.
 export const ParsedMessage = z.object({
   messageId: z.string().min(1),
-  source: z.enum(["gmail", "tripit", "ics", "forward"]).optional(),
+  source: z.enum(["gmail", "tripit", "ics", "forward", "fastmail"]).optional(),
   uid: z.string().min(1),
   // `cancellation`: an email cancelling bookings; `reason` says how many
   // were found and marked.

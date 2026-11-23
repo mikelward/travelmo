@@ -389,15 +389,22 @@
       history), with several connected at once:
   - [x] The parser reads mail through a `MailSource` (search a page,
         fetch a message), Gmail its first implementation.
-  - [ ] Fastmail over JMAP with a read-only API token from Settings
+  - [x] Fastmail over JMAP with a read-only API token from Settings
         (web and Android): new mail polled, the backfill chain per
         mailbox, `source: "fastmail"`.
-  - [ ] Move the Gmail connection into the same list of mailboxes
-        (`users/{uid}.gmail` and `private/gmail` migrated).
+  - [ ] Maintainer: run `deploy/scheduler.sh` again for the
+        `poll-fastmail` job, then connect a real Fastmail mailbox and
+        check new mail and Import past bookings.
   - [ ] Ask Fastmail's partnerships team for an OAuth client with a mail
         read scope, so connecting is one tap instead of a pasted token.
-  - [ ] Maybe: IMAP with app passwords (iCloud, Yahoo, Infomaniak),
-        once the risk of holding full-mailbox passwords is handled.
+  - [ ] Encrypt stored mail credentials (Gmail refresh tokens, Fastmail
+        tokens, IMAP passwords) with Cloud KMS, so only the parser can
+        read them and a Firestore leak reveals nothing usable.
+  - [ ] IMAP with app passwords (iCloud, Infomaniak, Yahoo, others), as a
+        `MailSource`: inbox opened read-only, new mail polled with the
+        Fastmail job, the backfill through IMAP search; server settings
+        filled in for known providers. Neither iCloud nor Infomaniak
+        offers OAuth for mail.
 
 ## iOS app
 
@@ -415,6 +422,13 @@ Kotlin Multiplatform, sharing the Android app's Kotlin (SPEC "iOS app").
 ## Decisions needing review
 
 Guesses made on autopilot; change any of them freely.
+
+- Fastmail: a connected Fastmail address does not count as a confirmed
+  address for sharing (a connected Gmail does), and two users may connect
+  the same Fastmail mailbox, since the token is proof of access; both can
+  change when Gmail moves into the same list of mailboxes.
+- Fastmail: only read-only tokens are accepted, and new mail is polled
+  every five minutes (about ten cents a month for the scheduler job).
 
 - iOS: the shared screens will be Compose Multiplatform rather than SwiftUI,
   so one UI serves both phones; SwiftUI would feel more native but means a

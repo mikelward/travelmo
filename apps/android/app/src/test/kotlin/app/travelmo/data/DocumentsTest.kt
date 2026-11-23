@@ -205,4 +205,35 @@ class DocumentsTest {
         )
         gmailStatusesOf(data).single().progress?.scanned shouldBe 40
     }
+
+    @Test
+    fun `reads the Fastmail connection and how far its reading got, a malformed progress as none`() {
+        val progress = mapOf("scanned" to 1200L, "imported" to 14L, "done" to false, "updatedAt" to "2026-11-01T12:00:00Z", "running" to true, "failed" to 2L)
+        val doc = mapOf(
+            "gmail" to mapOf("emailAddress" to "owner@example.com", "connectedAt" to "2026-11-01T00:00:00Z"),
+            "fastmail" to mapOf("emailAddress" to "owner@fastmail.example", "connectedAt" to "2026-11-01T00:00:00Z", "backfill" to progress),
+        )
+        fastmailStatusOf(doc) shouldBe
+            FastmailStatus("owner@fastmail.example", BackfillShown(scanned = 1200, imported = 14, done = false, updatedAt = "2026-11-01T12:00:00Z", failed = 2, running = true))
+        // Gmail's mailboxes are not Fastmail's.
+        gmailStatusesOf(doc).map { it.emailAddress } shouldBe listOf("owner@example.com")
+        fastmailStatusOf(mapOf("fastmail" to mapOf("emailAddress" to "owner@fastmail.example", "backfill" to mapOf("scanned" to 3L)))) shouldBe
+            FastmailStatus("owner@fastmail.example")
+        fastmailStatusOf(mapOf("fastmail" to mapOf("emailAddress" to " "))).shouldBeNull()
+        fastmailStatusOf(mapOf("fastmail" to "junk")).shouldBeNull()
+        fastmailStatusOf(mapOf("gmail" to mapOf("emailAddress" to "owner@example.com"))).shouldBeNull()
+        fastmailStatusOf(null).shouldBeNull()
+    }
+
+    @Test
+    fun `reads a Fastmail source on a booking as one`() {
+        val segment = segmentFromDocument(
+            "s1", "t1",
+            mapOf(
+                "type" to "lodging", "title" to "Cove", "start" to "2026-12-12T15:00:00+00:00", "source" to "fastmail",
+                "sources" to listOf(mapOf("kind" to "fastmail", "id" to "fm-1", "label" to "Your stay", "uid" to "u1", "at" to "2026-11-01T00:00:00Z")),
+            ),
+        )!!
+        segment.sources shouldBe listOf(SourceRef(SourceKind.FASTMAIL, "fm-1", label = "Your stay", uid = "u1", at = "2026-11-01T00:00:00Z"))
+    }
 }

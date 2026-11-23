@@ -70,7 +70,7 @@ function Trips({ user }: { user: User }) {
         <p>No trips yet.</p>
         <p className="mt-2">
           <Link href="/settings" className="underline">
-            Connect Gmail
+            Connect Gmail or Fastmail
           </Link>{" "}
           to import your bookings.
         </p>

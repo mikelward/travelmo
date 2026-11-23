@@ -272,6 +272,9 @@ data class GmailStatus(
     val mailbox: GmailMailbox get() = GmailMailbox(emailAddress, connectedAt, idPrefix)
 }
 
+/** The Fastmail connection on the user document: the address, and how far the last reading got. */
+data class FastmailStatus(val emailAddress: String, val progress: BackfillShown? = null)
+
 /**
  * The user document's connected mailboxes (`gmails`, and `gmail`, one
  * connected before there could be several), oldest first. A malformed
@@ -289,20 +292,32 @@ internal fun gmailStatusesOf(data: Map<String, Any?>?): List<GmailStatus> {
 
 private fun gmailStatusOf(entry: Any?): GmailStatus? {
     val gmail = entry as? Map<*, *> ?: return null
-    val address = (gmail["emailAddress"] as? String)?.takeIf { it.isNotBlank() } ?: return null
-    val p = gmail["backfill"] as? Map<*, *>
-    fun count(key: String) = (p?.get(key) as? Number)?.toInt()
-    val progress = p?.let {
-        BackfillShown(
-            scanned = count("scanned") ?: return@let null,
-            imported = count("imported") ?: return@let null,
-            done = it["done"] as? Boolean ?: return@let null,
-            updatedAt = it["updatedAt"] as? String ?: return@let null,
-            failed = count("failed") ?: 0,
-            running = it["running"] == true,
-            leaseUntil = it["leaseUntil"] as? String,
-            lastFailed = count("lastFailed") ?: 0,
-        )
-    }
-    return GmailStatus(address, progress, gmail["connectedAt"] as? String ?: "", gmail["idPrefix"] as? String ?: "")
+    val address = connectedAddressOf(gmail) ?: return null
+    return GmailStatus(address, backfillOf(gmail), gmail["connectedAt"] as? String ?: "", gmail["idPrefix"] as? String ?: "")
+}
+
+/** The user document's Fastmail connection (`fastmail`); null when none. A malformed progress reads as none. */
+internal fun fastmailStatusOf(data: Map<String, Any?>?): FastmailStatus? {
+    val fastmail = data?.get("fastmail") as? Map<*, *> ?: return null
+    val address = connectedAddressOf(fastmail) ?: return null
+    return FastmailStatus(address, backfillOf(fastmail))
+}
+
+/** A mailbox connection's address; null when blank or missing. */
+private fun connectedAddressOf(connection: Map<*, *>): String? = (connection["emailAddress"] as? String)?.takeIf { it.isNotBlank() }
+
+/** How far a mailbox connection's last reading got; null when none or malformed. */
+private fun backfillOf(connection: Map<*, *>): BackfillShown? {
+    val p = connection["backfill"] as? Map<*, *> ?: return null
+    fun count(key: String) = (p[key] as? Number)?.toInt()
+    return BackfillShown(
+        scanned = count("scanned") ?: return null,
+        imported = count("imported") ?: return null,
+        done = p["done"] as? Boolean ?: return null,
+        updatedAt = p["updatedAt"] as? String ?: return null,
+        failed = count("failed") ?: 0,
+        running = p["running"] == true,
+        leaseUntil = p["leaseUntil"] as? String,
+        lastFailed = count("lastFailed") ?: 0,
+    )
 }

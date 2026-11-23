@@ -87,6 +87,16 @@ describe("importMessage", () => {
     });
   });
 
+  it("files an email read from Fastmail as Fastmail's, with its sender and no Gmail link", async () => {
+    const store = memoryStore();
+    const outcome = await importMessage("u1", email({ id: "fm-M1", threadId: "fm-T1" }), deps(store, async () => lodging), { source: "fastmail" });
+    expect(outcome).toBe("imported");
+    const segment = [...store.segments.values()][0]!;
+    expect(segment).toMatchObject({ id: "fm-M1-0", source: "fastmail", gmailMessageIds: [], sender: "cove.example" });
+    expect(segment.sources).toEqual([expect.objectContaining({ kind: "fastmail", id: "fm-M1", label: "Your booking confirmation - Cove Liverpool" })]);
+    expect(store.parsed.get("u1/fm-M1")).toMatchObject({ source: "fastmail", outcome: "imported" });
+  });
+
   it("files a weekly class from one email as a day out each week", async () => {
     const store = memoryStore();
     const session = (date: string) => ({

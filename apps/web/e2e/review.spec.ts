@@ -19,7 +19,7 @@ test("Settings links to the import review page, which lists what was not importe
   await expect(page).toHaveURL(/\/settings\/review$/);
   await expect(page.getByRole("heading", { level: 1, name: "Import review" })).toBeVisible();
   await expect(page.getByText("Our summer sale")).toBeVisible();
-  await expect(page.getByText("News <news@cove.example> · Read, not a booking")).toBeVisible();
+  await expect(page.getByText("News <news@cove.example> · Gmail · Read, not a booking")).toBeVisible();
   await expect(page.getByRole("button", { name: "Always import cove.example" })).toBeVisible();
   await expect(page.getByText("Your stay is confirmed")).toBeHidden();
 

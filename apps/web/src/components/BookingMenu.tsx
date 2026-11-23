@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { formatDateRange, isCancelled, segmentSources, type Segment, type SourceRef, type Trip } from "@travelmo/core";
-import { emailLinkFor, type EmailLinks } from "@/lib/sourceLinks";
-
-const sourceKinds: Record<SourceRef["kind"], string> = { gmail: "Email", tripit: "TripIt", ics: "Calendar", forward: "Forwarded email" };
+import { formatDateRange, isCancelled, segmentSources, type Segment, type Trip } from "@travelmo/core";
+import { emailLinkFor, sourceKindLabels, type EmailLinks } from "@/lib/sourceLinks";
 
 const buttonClass = "rounded-lg border border-field px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-900";
 
@@ -57,7 +55,7 @@ function SourcesDialog({
     <Dialog title="Sources" onClose={onClose}>
       <ul data-testid="segment-sources">
         {sources.map((source) => {
-          const kind = sourceKinds[source.kind];
+          const kind = sourceKindLabels[source.kind];
           const href = emailLinkFor(source, emailLinks);
           const name = source.label ?? kind;
           return (

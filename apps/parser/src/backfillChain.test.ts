@@ -186,6 +186,14 @@ describe("startBackfill", () => {
     expect(w.queued).toEqual([{ uid: "u1", mailbox: "k1", run: "r1", step: 1, wake: "w1" }]);
   });
 
+  it("keeps a Fastmail reading's batches Fastmail's", async () => {
+    const w = world({ pages: 2 });
+    await startBackfill("u1", "r1", false, w.io);
+    w.queued.shift();
+    expect(await continueBackfill({ uid: "u1", provider: "fastmail", run: "r1", step: 0 }, w.io)).toMatchObject({ kind: "ran" });
+    expect(w.queued).toEqual([{ uid: "u1", provider: "fastmail", run: "r1", step: 1 }]);
+  });
+
   it("carries on from the stored place, or starts over when asked or when the last reading had finished", async () => {
     const w = world();
     w.stored = { cursor: "4", scanned: 1200, imported: 9, failed: 1, lastFailed: 1, done: false, updatedAt: "2026-11-01T00:00:00Z" };
@@ -653,6 +661,11 @@ describe("parseContinuePush", () => {
     });
     expect(parseContinuePush(envelope({ uid: "u1", run: "r1", step: 4, wake: "w1" }))).toMatchObject({ step: 4, wake: "w1" });
     expect(parseContinuePush(envelope({ uid: "u1", mailbox: "k1", run: "r1", step: 4 }))).toMatchObject({ mailbox: "k1", step: 4 });
+  });
+
+  it("reads whether the batch is for the Fastmail mailbox", () => {
+    expect(parseContinuePush(envelope({ uid: "u1", run: "r1", step: 0, provider: "fastmail" })).provider).toBe("fastmail");
+    expect(() => parseContinuePush(envelope({ uid: "u1", run: "r1", step: 0, provider: "hotmail" }))).toThrow(BadPushEnvelope);
   });
 
   it("rejects anything else", () => {

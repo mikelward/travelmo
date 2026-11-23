@@ -79,11 +79,29 @@ fun outcomeLabel(outcome: String): String = when (outcome) {
     else -> outcome
 }
 
+/**
+ * Whether a record was read from a connected mailbox (one without `source`
+ * is a Gmail one), so it can be read again and has a sender worth teaching;
+ * forwarded emails, TripIt items and calendar events have neither. As
+ * apps/web/src/lib/sourceLinks.ts.
+ */
+fun isFromMailbox(record: ParsedRecord): Boolean = (record.source ?: "gmail").let { it == "gmail" || it == "fastmail" }
+
+/** Where a record came from, as Import review says it on the web. */
+fun recordSourceLabel(source: String?): String = when (source ?: "gmail") {
+    "gmail" -> "Gmail"
+    "fastmail" -> "Fastmail"
+    "tripit" -> "TripIt"
+    "ics" -> "Calendar"
+    "forward" -> "Forwarded email"
+    else -> source.orEmpty()
+}
+
 /** How many records the review list shows, newest first, until a search reads them all. */
 const val REVIEW_RECENT = 100
 
 /** The most records a search reads, as on the web. */
 const val REVIEW_SEARCH_CAP = 20_000
 
-/** The parser's path for reading one message again. */
+/** The parser's path for reading one message again, Gmail or Fastmail (`fm-` ids). */
 const val REIMPORT_PATH = "/gmail/reimport"

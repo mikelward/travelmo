@@ -31,7 +31,7 @@ export async function deleteOwnTrips(uid: string, store: TripStore, budget = wri
       tx.bumpGeneration();
       // The reading positions go in the same transaction, every pass: a
       // mailbox reading never sees the new generation with the old place.
-      const mailboxes = await tx.gmailMailboxes();
+      const mailboxes = await tx.connectedMailboxes();
       const owned = (await tx.listTrips()).filter((trip) => trip.ownerUid === uid);
       // Reads first.
       const plan: { tripId: string; segmentIds: string[]; whole: boolean }[] = [];

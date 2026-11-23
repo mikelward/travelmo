@@ -37,6 +37,17 @@ class ReviewTest {
     }
 
     @Test
+    fun `only mailbox records can be read again and say where they came from`() {
+        val gmail = record("g")
+        isFromMailbox(gmail) shouldBe true
+        isFromMailbox(gmail.copy(source = "gmail")) shouldBe true
+        isFromMailbox(gmail.copy(source = "fastmail")) shouldBe true
+        for (other in listOf("tripit", "ics", "forward")) isFromMailbox(gmail.copy(source = other)) shouldBe false
+        listOf(null, "gmail", "fastmail", "tripit", "ics", "forward").map(::recordSourceLabel) shouldBe
+            listOf("Gmail", "Gmail", "Fastmail", "TripIt", "Calendar", "Forwarded email")
+    }
+
+    @Test
     fun `reads sender rules as the parser does`() {
         domainOf("Cove <stay@Cove.Example>") shouldBe "cove.example"
         domainOf("cove.example") shouldBe "cove.example"

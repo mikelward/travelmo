@@ -127,18 +127,23 @@ export function firestoreStore(db: Firestore): TripStore {
         if (await deleted(t, uid)) throw new AccountDeletedError(uid);
         const generation = generationOf(await t.get(lock));
         let next = generation;
-        // What gmailMailboxes found, for clearBackfill.
+        // What connectedMailboxes found, for clearBackfill.
         let mailboxes: { ref: DocumentReference; field: FieldPath }[] = [];
         const result = await fn({
           generation,
           bumpGeneration() {
             next = generation + 1;
           },
-          async gmailMailboxes() {
-            const [snap, legacy] = await Promise.all([t.get(mailboxesQuery(db, uid)), t.get(db.doc(paths.gmailState(uid)))]);
+          async connectedMailboxes() {
+            const [snap, legacy, fastmail] = await Promise.all([
+              t.get(mailboxesQuery(db, uid)),
+              t.get(db.doc(paths.gmailState(uid))),
+              t.get(db.doc(paths.fastmailState(uid))),
+            ]);
             mailboxes = snap.docs.map((d) => ({ ref: d.ref, field: new FieldPath("gmails", String(d.get("emailAddress")).trim().toLowerCase(), "backfill") }));
             // One connected before there could be several, not moved yet.
             if (legacy.exists) mailboxes.push({ ref: legacy.ref, field: new FieldPath("gmail", "backfill") });
+            if (fastmail.exists) mailboxes.push({ ref: fastmail.ref, field: new FieldPath("fastmail", "backfill") });
             return mailboxes.length;
           },
           clearBackfill() {

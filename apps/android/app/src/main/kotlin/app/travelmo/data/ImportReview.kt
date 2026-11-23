@@ -15,7 +15,7 @@ interface ImportReview {
     /** False on a build with no parser address. */
     val available: Boolean
 
-    /** Reads one Gmail message again with the pre-filter skipped; what came of it, in words. Throws [TripActionFailed]. */
+    /** Reads one Gmail or Fastmail message again with the pre-filter skipped (the parser tells them apart by id); what came of it, in words. Throws [TripActionFailed]. */
     suspend fun reimport(messageId: String): String
 }
 
@@ -41,9 +41,10 @@ class ParserImportReview(private val client: ParserClient) : ImportReview {
         if (reply.status !in 200..299) {
             TravelmoLog.warning("Reading a message again failed: HTTP %s", safe(reply.status.toString()))
             // The parser says in plain text why it refused a request it could
-            // not do (already imported, gone from Gmail); others get the usual words.
-            val reason = reply.body.trim().takeIf { reply.status in setOf(404, 409) && it.isNotEmpty() && it.length < 200 }
-            throw TripActionFailed(reason?.let { "$it." } ?: tripActionFailure(reply.status))
+            // not do (already imported, gone from the mailbox, a Fastmail token
+            // it no longer takes); others get the usual words.
+            val reason = reply.body.trim().takeIf { reply.status in setOf(400, 404, 409) && it.isNotEmpty() && it.length < 200 }
+            throw TripActionFailed(reason?.let { if (it.endsWith(".")) it else "$it." } ?: tripActionFailure(reply.status))
         }
         val outcome = try {
             JSONObject(reply.body).optString("outcome")

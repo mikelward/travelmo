@@ -93,7 +93,31 @@ import { firestoreStore } from "./store";
 import { FeedLimitReached, addFeed, feedFailure, firestoreFeeds, pollAllFeeds, type FeedIo } from "./feeds";
 import { fetchFeed } from "./safefetch";
 import { runBackfillBatch } from "./backfill";
-import { gmailSource, type MailSource } from "./mailSource";
+import { gmailSource, type MailSource, type Pace } from "./mailSource";
+import {
+  JmapHttpError,
+  JmapMethodError,
+  backfillFilter,
+  currentEmailState,
+  fastmailRecordId,
+  fastmailRecordPrefix,
+  fastmailSource,
+  inboxCreatedSince,
+  jmapClient,
+  jmapSession,
+  mailboxRoles,
+  type Jmap,
+} from "./jmap";
+import {
+  OtherMailboxConnected,
+  changeFastmailBackfill,
+  fastmailUsers,
+  loadFastmailState,
+  removeFastmailConnection,
+  saveFastmailConnection,
+  updateFastmailLive,
+} from "./fastmailConnection";
+import { pollFastmail } from "./fastmailPoll";
 import { continueBackfill, parseContinuePush, startBackfill, stopBackfill, type ChainIo, type ContinueMessage } from "./backfillChain";
 import { pubsubPublisher } from "./publish";
 
@@ -197,6 +221,7 @@ type Env = { Variables: { uid: string } };
 const app = new Hono<Env>();
 
 app.use("/gmail/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
+app.use("/fastmail/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/import/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/calendar/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/feeds/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
@@ -418,27 +443,110 @@ app.post("/gmail/disconnect", async (c) => {
   return c.body(null, 204);
 });
 
+// Fastmail's answer to a token it does not take, as the user should hear it.
+function fastmailRefusal(error: unknown): HTTPException | undefined {
+  if (error instanceof JmapHttpError && (error.status === 401 || error.status === 403)) {
+    return new HTTPException(400, { message: "Fastmail didn't accept that API token. Check it, or make a new one." });
+  }
+  if (error instanceof JmapMethodError && error.type === "noMailAccount") {
+    return new HTTPException(400, { message: "That API token can't read email. Make one with Email access." });
+  }
+  return undefined;
+}
+
+// Connects a Fastmail mailbox with an API token the user made in Fastmail's
+// settings. Only a read-only token is taken: one that could change or
+// delete mail is refused rather than stored.
+app.post("/fastmail/connect", async (c) => {
+  const uid = await requireUser(c);
+  const body = (await c.req.json().catch(() => ({}))) as { token?: unknown };
+  const token = typeof body.token === "string" ? body.token.trim() : "";
+  if (!token) throw new HTTPException(400, { message: "Paste your Fastmail API token" });
+  let session;
+  let emailState;
+  try {
+    session = await jmapSession(token);
+    if (!session.readOnly) {
+      throw new HTTPException(400, { message: "That API token can change your mail. Make a read-only one instead." });
+    }
+    emailState = await currentEmailState(jmapClient(token, session));
+  } catch (error) {
+    if (error instanceof HTTPException) throw error;
+    throw fastmailRefusal(error) ?? error;
+  }
+  try {
+    await saveFastmailConnection(db, uid, {
+      token,
+      accountId: session.accountId,
+      emailAddress: session.username,
+      connectedAt: new Date().toISOString(),
+      emailState,
+    });
+  } catch (error) {
+    if (error instanceof OtherMailboxConnected) throw new HTTPException(409, { message: error.message });
+    if (error instanceof AccountDeletedError) throw new HTTPException(410, { message: "This account was deleted" });
+    throw error;
+  }
+  log("INFO", "fastmail_connected", { uid });
+  return c.json({ emailAddress: session.username });
+});
+
+// Forgets the token; the user deletes it in Fastmail's settings.
+app.post("/fastmail/disconnect", async (c) => {
+  const uid = await requireUser(c);
+  await stopBackfill(backfillIo(uid, { provider: "fastmail" }));
+  await removeFastmailConnection(db, uid);
+  log("INFO", "fastmail_disconnected", { uid });
+  return c.body(null, 204);
+});
+
 // Imports new mail by id, waiting out Gmail's rate limit for up to a minute.
-function importIds(uid: string, state: GmailState, ids: readonly string[], options: ImportOptions = {}) {
-  const source = gmailSource(gmailFor(oauth, state.refreshToken));
+function importIds(uid: string, source: MailSource, ids: readonly string[], options: ImportOptions = {}) {
   const deadline = Date.now() + notificationRateLimitWaitMs;
   const retry = { timeLeftMs: () => deadline - Date.now(), sleep, log: (event: string, fields: Record<string, unknown>) => log("WARNING", event, { uid, ...fields }) };
-  return importMessages(uid, ids, recordedAs(state.idPrefix, (id) => withRateLimitRetry(() => source.fetch(id), retry)), deps, options);
+  return importMessages(uid, ids, (id) => withRateLimitRetry(() => source.fetch(id), retry), deps, { ...options, source: source.provider });
+}
+
+// A connected Gmail mailbox as a MailSource: its emails recorded under the
+// mailbox's id prefix (none for the account's first).
+function gmailMailSource(state: GmailState, pace?: Pace): MailSource {
+  const source = gmailSource(gmailFor(oauth, state.refreshToken), pace);
+  return { ...source, fetch: recordedAs(state.idPrefix, source.fetch) };
+}
+
+// A Fastmail mailbox's JMAP client: the session says where its API is.
+async function fastmailJmap(state: { token: string }): Promise<Jmap> {
+  return jmapClient(state.token, await jmapSession(state.token));
+}
+
+// A connection's mailbox, reached once something is read.
+function fastmailMailSource(state: { token: string }, jmap?: () => Promise<Jmap>): MailSource {
+  return fastmailSource(jmap ?? (() => fastmailJmap(state)));
 }
 
 // Reading the whole mailbox runs on the server (backfillChain.ts): each
 // batch carries on from where the last stopped, records how far it got on
 // the connection, where Settings shows it, and queues the next on Pub/Sub.
-// One reading per mailbox, each on its own.
-function backfillIo(uid: string, emailAddress: string): ChainIo<GmailState> {
+// One reading per mailbox, each on its own: a Gmail mailbox by its address,
+// or the user's Fastmail mailbox.
+type BackfillTarget = { emailAddress: string } | { provider: "fastmail" };
+
+function backfillIo(uid: string, target: BackfillTarget): ChainIo<MailSource> {
   // Stop importing well before Cloud Run's request limit, leaving time to
   // save progress; the next batch carries on. Time spent waiting for the
   // batch's turn comes out of it.
   const deadline = Date.now() + backfillBudgetMs;
   return {
-    change: (fn) => changeBackfill(db, uid, emailAddress, fn),
-    runBatch: (state, from, generation) => {
-      const source = gmailSource(gmailFor(oauth, state.refreshToken), gmailPacer(backfillUnitsPerMinute, { nowMs: Date.now, sleep }));
+    change: async (fn) => {
+      if ("provider" in target) {
+        const changed = await changeFastmailBackfill(db, uid, fn);
+        return changed && { ...changed, state: fastmailMailSource(changed.state) };
+      }
+      const changed = await changeBackfill(db, uid, target.emailAddress, fn);
+      const pace = gmailPacer(backfillUnitsPerMinute, { nowMs: Date.now, sleep });
+      return changed && { ...changed, state: gmailMailSource(changed.state, pace) };
+    },
+    runBatch: (source, from, generation) => {
       return runBackfillBatch(from, false, {
         timeLeftMs: () => deadline - Date.now(),
         sleep,
@@ -446,13 +554,13 @@ function backfillIo(uid: string, emailAddress: string): ChainIo<GmailState> {
         // An email whose import failed (the model was down, say) is read
         // again when the reading passes it again, as after starting over.
         // Gmail's rate limit is waited out by the batch, within its time.
-        importIds: (ids) => importMessages(uid, ids, recordedAs(state.idPrefix, source.fetch), deps, { retryFailed: true, generation }),
+        importIds: (ids) => importMessages(uid, ids, source.fetch, deps, { retryFailed: true, generation, source: source.provider }),
         isStaleCursor: source.isStaleCursor,
         now: () => new Date().toISOString(),
         log: (event, fields) => log("WARNING", event, { uid, ...fields }),
       });
     },
-    publish: (message: ContinueMessage) => publishBackfill(message),
+    publish: (message: ContinueMessage) => publishBackfill("provider" in target ? { ...message, provider: target.provider } : message),
     now: () => new Date().toISOString(),
     log: (severity, event, fields) => log(severity, event, fields),
     sleep,
@@ -474,7 +582,7 @@ app.post("/gmail/backfill", async (c) => {
   const mailbox = await requestedMailbox(uid, body);
   if (!mailbox) throw new HTTPException(409, { message: "Gmail not connected" });
   const key = mailboxKey(mailbox.emailAddress);
-  const result = await startBackfill(uid, randomBytes(12).toString("base64url"), restart, backfillIo(uid, mailbox.emailAddress), key);
+  const result = await startBackfill(uid, randomBytes(12).toString("base64url"), restart, backfillIo(uid, { emailAddress: mailbox.emailAddress }), key);
   if (result.kind === "disconnected") throw new HTTPException(409, { message: "Gmail not connected" });
   if (result.kind === "busy") throw new HTTPException(409, { message: "A batch is still being read. Try again in a few minutes." });
   log("INFO", "backfill_started", { uid, mailbox: key, restart, joined: result.kind === "joined", run: result.progress.run });
@@ -487,8 +595,32 @@ app.post("/gmail/backfill/stop", async (c) => {
   const uid = await requireUser(c);
   const body = (await c.req.json().catch(() => ({}))) as { emailAddress?: unknown };
   const mailbox = await requestedMailbox(uid, body);
-  const stopped = mailbox ? await stopBackfill(backfillIo(uid, mailbox.emailAddress)) : false;
+  const stopped = mailbox ? await stopBackfill(backfillIo(uid, { emailAddress: mailbox.emailAddress })) : false;
   log("INFO", "backfill_stopped", { uid, ...(mailbox ? { mailbox: mailboxKey(mailbox.emailAddress) } : {}), stopped });
+  return c.body(null, 204);
+});
+
+app.post("/fastmail/backfill", async (c) => {
+  const uid = await requireUser(c);
+  const body = (await c.req.json().catch(() => ({}))) as { restart?: unknown };
+  const restart = body.restart === true;
+  let result;
+  try {
+    result = await startBackfill(uid, randomBytes(12).toString("base64url"), restart, backfillIo(uid, { provider: "fastmail" }));
+  } catch (error) {
+    throw fastmailRefusal(error) ?? error;
+  }
+  if (result.kind === "disconnected") throw new HTTPException(409, { message: "Fastmail not connected" });
+  if (result.kind === "busy") throw new HTTPException(409, { message: "A batch is still being read. Try again in a few minutes." });
+  log("INFO", "backfill_started", { uid, provider: "fastmail", restart, joined: result.kind === "joined", run: result.progress.run });
+  const { cursor: _cursor, after: _after, ...progress } = result.progress;
+  return c.json({ progress });
+});
+
+app.post("/fastmail/backfill/stop", async (c) => {
+  const uid = await requireUser(c);
+  const stopped = await stopBackfill(backfillIo(uid, { provider: "fastmail" }));
+  log("INFO", "backfill_stopped", { uid, provider: "fastmail", stopped });
   return c.body(null, 204);
 });
 
@@ -518,18 +650,30 @@ app.post("/gmail/reimport", async (c) => {
   const uid = await requireUser(c);
   const body = (await c.req.json().catch(() => ({}))) as { messageId?: string };
   if (!body.messageId) throw new HTTPException(400, { message: "Missing messageId" });
-  const state = sourceMailbox(body.messageId, await loadMailboxes(db, uid));
-  if (!state) throw new HTTPException(409, { message: "The Gmail account this email is in isn't connected" });
-  const source = gmailSource(gmailFor(oauth, state.refreshToken));
-  const prefix = state.idPrefix ?? "";
+  // The record's id says which mailbox the email is in: Fastmail's carry
+  // its prefix, Gmail's name their mailbox (gmail.ts's sourceMailbox).
+  const fastmail = body.messageId.startsWith(fastmailRecordPrefix);
+  const name = fastmail ? "Fastmail" : "Gmail";
+  let source: MailSource;
+  let id = body.messageId;
+  if (fastmail) {
+    const state = await loadFastmailState(db, uid);
+    if (!state) throw new HTTPException(409, { message: "Fastmail not connected" });
+    source = fastmailMailSource(state);
+  } else {
+    const state = sourceMailbox(body.messageId, await loadMailboxes(db, uid));
+    if (!state) throw new HTTPException(409, { message: "The Gmail account this email is in isn't connected" });
+    source = gmailMailSource(state);
+    id = body.messageId.slice((state.idPrefix ?? "").length);
+  }
   let message;
   try {
-    message = await recordedAs(state.idPrefix, source.fetch)(body.messageId.slice(prefix.length));
+    message = await source.fetch(id);
   } catch (error) {
-    if (source.isNotFound(error)) throw new HTTPException(404, { message: "That email is no longer in Gmail" });
-    throw error;
+    if (source.isNotFound(error)) throw new HTTPException(404, { message: `That email is no longer in ${name}` });
+    throw (fastmail ? fastmailRefusal(error) : undefined) ?? error;
   }
-  const outcome = await importMessage(uid, message, deps, { force: true, reclaim: true });
+  const outcome = await importMessage(uid, message, deps, { force: true, reclaim: true, source: source.provider });
   log("INFO", "reimport", { uid, messageId: message.id, outcome });
   if (outcome === "skipped") {
     throw new HTTPException(409, { message: "That email is already imported or being imported right now" });
@@ -1258,7 +1402,7 @@ app.post("/internal/pubsub/gmail", async (c) => {
       resetGeneration: () => deps.store.resetGeneration(uid),
       loadState: () => loadMailbox(db, uid, notification.emailAddress),
       listAdded: (state, since) => listAddedSince(gmailFor(oauth, state.refreshToken), since),
-      importIds: (state, ids, generation) => importIds(uid, state, ids, { generation }),
+      importIds: (state, ids, generation) => importIds(uid, gmailMailSource(state), ids, { generation }),
       saveHistoryId: (state, historyId, generation) => updateHistoryId(db, uid, state.emailAddress, historyId, generation),
     });
     if (result.kind === "disconnected") {
@@ -1303,18 +1447,24 @@ app.post("/internal/backfill", async (c) => {
     if (error instanceof BadPushEnvelope) throw new HTTPException(400, { message: error.message });
     throw error;
   }
-  const { uid, mailbox, run, step, wake, pubsubMessageId, deliveryAttempt } = message;
-  const fields = { uid, mailbox, run, step, wake, pubsubMessageId, deliveryAttempt };
-  const continued: ContinueMessage = { uid, ...(mailbox ? { mailbox } : {}), run, step, ...(wake ? { wake } : {}) };
+  const { uid, mailbox, provider, run, step, wake, pubsubMessageId, deliveryAttempt } = message;
+  const fields = { uid, mailbox, provider, run, step, wake, pubsubMessageId, deliveryAttempt };
+  const continued: ContinueMessage = { uid, ...(mailbox ? { mailbox } : {}), ...(provider ? { provider } : {}), run, step, ...(wake ? { wake } : {}) };
   try {
-    // A batch queued before there could be several mailboxes names none:
-    // it reads the user's first.
-    const state = await resolveMailbox(db, uid, mailbox);
-    if (!state) {
-      log("WARNING", "backfill_for_disconnected_user", fields);
-      return c.body(null, 204);
+    let target: BackfillTarget;
+    if (provider === "fastmail") {
+      target = { provider };
+    } else {
+      // A Gmail batch queued before there could be several mailboxes names
+      // none: it reads the user's first.
+      const state = await resolveMailbox(db, uid, mailbox);
+      if (!state) {
+        log("WARNING", "backfill_for_disconnected_user", fields);
+        return c.body(null, 204);
+      }
+      target = { emailAddress: state.emailAddress };
     }
-    const io = backfillIo(uid, state.emailAddress);
+    const io = backfillIo(uid, target);
     if (!(await approvedUid(db, uid, verifiedEmail, log))) {
       // Marked stopped where it got to, so Settings shows Continue at once
       // if access comes back, rather than a reading nothing is doing.
@@ -1356,6 +1506,47 @@ app.post("/internal/backfill", async (c) => {
     log("ERROR", "backfill_batch_failed", { ...fields, ...errorFields(error) });
     throw error;
   }
+});
+
+// New Fastmail mail, every few minutes (deploy/scheduler.sh): one user's
+// failure is logged and the rest carry on; their next poll reads it again.
+app.post("/internal/poll-fastmail", async (c) => {
+  await requireInternalCaller(c);
+  const isApproved = (uid: string) => approvedUid(db, uid, verifiedEmail, log);
+  const uids = (await onlyApproved((await fastmailUsers(db)).map((uid) => ({ uid })), isApproved, log)).map(({ uid }) => uid);
+  const totals = { users: uids.length, messages: 0, failed: 0 };
+  for (const uid of uids) {
+    try {
+      let jmap: Jmap | undefined;
+      const client = async (state: { token: string }) => (jmap ??= await fastmailJmap(state));
+      const result = await pollFastmail({
+        resetGeneration: () => deps.store.resetGeneration(uid),
+        loadState: async () => loadFastmailState(db, uid),
+        stateOf: (state) => state.emailState,
+        currentState: async (state) => currentEmailState(await client(state)),
+        createdSince: async (state, since) => {
+          const api = await client(state);
+          return inboxCreatedSince(api, since, (await mailboxRoles(api)).inbox);
+        },
+        importIds: async (state, ids, generation) =>
+          importIds(uid, fastmailMailSource(state, () => client(state)), ids.map(fastmailRecordId), { generation }),
+        saveState: (state, emailState, generation) =>
+          updateFastmailLive(db, uid, state.emailAddress, { emailState, lastPolledAt: new Date().toISOString() }, generation),
+      });
+      if (result.kind === "processed" || result.kind === "superseded") {
+        totals.messages += result.messages;
+        if (result.messages > 0 || result.kind === "superseded") log("INFO", `fastmail_poll_${result.kind}`, { uid, messages: result.messages, ...result.counts });
+      } else if (result.kind === "expired") {
+        log("WARNING", "fastmail_changes_expired", { uid, since: result.since });
+      }
+    } catch (error) {
+      totals.failed += 1;
+      const rejected = error instanceof JmapHttpError && (error.status === 401 || error.status === 403);
+      log(rejected ? "WARNING" : "ERROR", rejected ? "fastmail_token_rejected" : "fastmail_poll_failed", { uid, ...errorFields(error) });
+    }
+  }
+  log("INFO", "fastmail_polled", totals);
+  return c.json(totals);
 });
 
 // Gmail watches last seven days; Cloud Scheduler calls this daily.

@@ -1,6 +1,6 @@
 import { gmailIdPrefix } from "@travelmo/core";
 import { describe, expect, it } from "vitest";
-import { emailLinkFor } from "./sourceLinks";
+import { emailLinkFor, isFromMailbox, recordSourceLabels, sourceKindLabels } from "./sourceLinks";
 
 const email = { kind: "gmail" as const, id: "m1", label: "Your stay", at: "2026-11-01T00:00:00Z" };
 const alex = { emailAddress: "alex@example.com", idPrefix: "" };
@@ -34,5 +34,29 @@ describe("emailLinkFor", () => {
 
   it("never links other kinds of source", () => {
     expect(emailLinkFor({ ...email, kind: "tripit", uid: "alex" }, { uid: "alex", ownsTrip: true })).toBeUndefined();
+  });
+
+  it("never links a Fastmail email, which has no stable address", () => {
+    expect(emailLinkFor({ ...email, kind: "fastmail", id: "fm-1", uid: "alex" }, { uid: "alex", mailboxes: [alex], ownsTrip: true })).toBeUndefined();
+  });
+});
+
+describe("source labels", () => {
+  it("names a Fastmail email apart from a Gmail or forwarded one", () => {
+    expect(sourceKindLabels.fastmail).toBe("Fastmail email");
+    expect(new Set(Object.values(sourceKindLabels)).size).toBe(Object.keys(sourceKindLabels).length);
+    expect(recordSourceLabels.fastmail).toBe("Fastmail");
+    expect(recordSourceLabels.gmail).toBe("Gmail");
+  });
+});
+
+describe("isFromMailbox", () => {
+  it("offers reading again and teaching the sender for Gmail and Fastmail records only", () => {
+    expect(isFromMailbox({})).toBe(true);
+    expect(isFromMailbox({ source: "gmail" })).toBe(true);
+    expect(isFromMailbox({ source: "fastmail" })).toBe(true);
+    expect(isFromMailbox({ source: "forward" })).toBe(false);
+    expect(isFromMailbox({ source: "tripit" })).toBe(false);
+    expect(isFromMailbox({ source: "ics" })).toBe(false);
   });
 });

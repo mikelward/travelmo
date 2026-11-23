@@ -59,6 +59,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.BuildConfig
@@ -87,6 +88,11 @@ private const val REMINDER_TOKEN = "settings/reminders/email"
 private const val PUSH_TOKEN = "settings/reminders/push"
 private const val DELETE_ACCOUNT_TOKEN = "settings/account/delete"
 private const val GMAIL_TOKEN = "settings/gmail"
+private const val FASTMAIL_TOKEN = "settings/fastmail"
+private const val FASTMAIL_DISCONNECT_TOKEN = "settings/fastmail/disconnect"
+
+/** Where Fastmail users make (and later delete) the API token Travelmo reads with. */
+private const val FASTMAIL_TOKENS_URL = "https://app.fastmail.com/settings/security/tokens"
 private const val REGROUP_TOKEN = "settings/trips/regroup"
 private const val DELETE_TRIPS_TOKEN = "settings/trips/delete"
 private const val ADD_EMAIL_TOKEN = "settings/emails/add"
@@ -96,7 +102,7 @@ private const val ADD_COMPANY_TOKEN = "settings/rides/add"
 private const val REMOVE_COMPANY_TOKEN = "settings/rides/remove"
 
 /**
- * The account, Gmail and reading past emails, regrouping or deleting all
+ * The account, Gmail and Fastmail and reading past emails, regrouping or deleting all
  * trips, Import review, reminders by email and
  * as notifications on this phone, the text size, the debug log, deleting
  * the account and the build; the other import settings are on the web for now.
@@ -141,6 +147,7 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
                 Text(stringResource(R.string.sign_out))
             }
             GmailSection(viewModel)
+            FastmailSection(viewModel)
             TripsSection(viewModel)
             Text(stringResource(R.string.import_review), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
             Text(stringResource(R.string.import_review_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -458,12 +465,9 @@ private fun EmailAddressesSection(user: SignedIn, viewModel: TripsViewModel) {
 /**
  * Settings' "Gmail", as on the web: Connect opens Google's consent page in
  * the browser, which hands back to Travelmo there; once connected, each
- * mailbox with its address, Import past bookings (Continue, or Read again
- * from the start once done) or Stop while it reads, Disconnect, and how far
- * its reading got, which the parser records as it goes; then Connect
- * another Gmail account, up to the limit.
+ * mailbox as a [MailboxRow]; then Connect another Gmail account, up to the
+ * limit.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun GmailSection(viewModel: TripsViewModel) {
     val context = LocalContext.current
@@ -494,7 +498,16 @@ private fun GmailSection(viewModel: TripsViewModel) {
         }
         is TripsViewModel.GmailState.Connected -> {
             Text(stringResource(R.string.gmail_connected_hint), style = MaterialTheme.typography.bodyMedium)
-            for (mailbox in state.mailboxes) MailboxRow(viewModel, mailbox, busy)
+            for (mailbox in state.mailboxes) {
+                val address = mailbox.emailAddress
+                MailboxRow(
+                    mailbox,
+                    busy = busy,
+                    onStart = { restart -> viewModel.startReading(GMAIL_TOKEN, address, restart) },
+                    onStop = { viewModel.stopReading(GMAIL_TOKEN, address) },
+                    onDisconnect = { viewModel.disconnectGmail(GMAIL_TOKEN, address) },
+                )
+            }
             if (state.canConnectMore) {
                 OutlinedButton(onClick = { viewModel.connectGmail(GMAIL_TOKEN) }, enabled = !busy, modifier = Modifier.padding(top = 16.dp)) {
                     Text(stringResource(R.string.connect_another_gmail))
@@ -514,18 +527,112 @@ private fun GmailSection(viewModel: TripsViewModel) {
     }
 }
 
-/** One connected mailbox: its address, its own reading and Disconnect. */
+/**
+ * Settings' "Fastmail": Fastmail has no consent page for other apps, so the
+ * user makes a read-only API token in Fastmail's settings and pastes it here;
+ * the parser refuses one that could change mail. Once connected, the same
+ * past-bookings controls as Gmail. Travelmo can't revoke the token, so
+ * Settings says to delete it in Fastmail after disconnecting.
+ */
+@Composable
+private fun FastmailSection(viewModel: TripsViewModel) {
+    val context = LocalContext.current
+    val fastmail by viewModel.fastmail.collectAsStateWithLifecycle()
+    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val outcome = outcomes[FASTMAIL_TOKEN]
+    val disconnecting = outcomes[FASTMAIL_DISCONNECT_TOKEN]
+    val busy = outcome is Outcome.Busy || disconnecting is Outcome.Busy
+    // Not saveable: the token stays out of the saved instance state, and is
+    // cleared once the parser has it.
+    var apiToken by remember { mutableStateOf("") }
+    var disconnected by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(outcome) {
+        if (outcome is Outcome.Done) {
+            apiToken = ""
+            viewModel.outcomeSeen(FASTMAIL_TOKEN)
+        }
+    }
+    LaunchedEffect(disconnecting) {
+        if (disconnecting is Outcome.Done) {
+            disconnected = true
+            viewModel.outcomeSeen(FASTMAIL_DISCONNECT_TOKEN)
+        }
+    }
+    Text(stringResource(R.string.fastmail), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    if (!viewModel.canUseFastmail) {
+        Text(stringResource(R.string.fastmail_on_web), style = MaterialTheme.typography.bodyMedium)
+        return
+    }
+    when (val state = fastmail) {
+        TripsViewModel.FastmailState.Loading -> Text(stringResource(R.string.loading), style = MaterialTheme.typography.bodyMedium)
+        TripsViewModel.FastmailState.NotConnected -> {
+            if (disconnected) Text(stringResource(R.string.fastmail_disconnected), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(bottom = 8.dp))
+            Text(stringResource(R.string.fastmail_connect_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TextButton(onClick = { openLink(context, FASTMAIL_TOKENS_URL, "Fastmail API tokens") }) { Text(stringResource(R.string.fastmail_tokens)) }
+            OutlinedTextField(
+                value = apiToken,
+                onValueChange = { apiToken = it },
+                label = { Text(stringResource(R.string.fastmail_token)) },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Button(
+                onClick = {
+                    disconnected = false
+                    viewModel.connectFastmail(FASTMAIL_TOKEN, apiToken)
+                },
+                enabled = !busy && apiToken.isNotBlank(),
+                modifier = Modifier.padding(top = 8.dp),
+            ) {
+                Text(stringResource(R.string.connect_fastmail))
+            }
+        }
+        is TripsViewModel.FastmailState.Connected -> {
+            Text(stringResource(R.string.fastmail_connected_hint), style = MaterialTheme.typography.bodyMedium)
+            MailboxRow(
+                state.mailbox,
+                busy = busy,
+                onStart = { restart -> viewModel.startFastmailReading(FASTMAIL_TOKEN, restart) },
+                onStop = { viewModel.stopFastmailReading(FASTMAIL_TOKEN) },
+                onDisconnect = {
+                    disconnected = false
+                    viewModel.disconnectFastmail(FASTMAIL_DISCONNECT_TOKEN)
+                },
+            )
+            Text(stringResource(R.string.fastmail_delete_token), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+        }
+    }
+    for (o in listOf(outcome, disconnecting)) {
+        (o as? Outcome.Failed)?.let {
+            Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+        }
+    }
+}
+
+/**
+ * One connected mailbox, Gmail or Fastmail: its address, Import past
+ * bookings (Continue, or Read again from the start once done) or Stop while
+ * it reads, Disconnect, and how far its reading got, which the parser
+ * records as it goes.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MailboxRow(viewModel: TripsViewModel, mailbox: TripsViewModel.MailboxShown, busy: Boolean) {
-    val address = mailbox.emailAddress
+private fun MailboxRow(
+    mailbox: TripsViewModel.MailboxShown,
+    busy: Boolean,
+    onStart: (restart: Boolean) -> Unit,
+    onStop: () -> Unit,
+    onDisconnect: () -> Unit,
+) {
     val progress = mailbox.progress
-    Text(address, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 16.dp))
+    Text(mailbox.emailAddress, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 16.dp))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
         if (mailbox.reading) {
-            OutlinedButton(onClick = { viewModel.stopReading(GMAIL_TOKEN, address) }, enabled = !busy) { Text(stringResource(R.string.stop)) }
+            OutlinedButton(onClick = onStop, enabled = !busy) { Text(stringResource(R.string.stop)) }
         } else {
-            OutlinedButton(onClick = { viewModel.startReading(GMAIL_TOKEN, address, restart = progress?.done == true) }, enabled = !busy) {
+            OutlinedButton(onClick = { onStart(progress?.done == true) }, enabled = !busy) {
                 Text(
                     stringResource(
                         when {
@@ -537,7 +644,7 @@ private fun MailboxRow(viewModel: TripsViewModel, mailbox: TripsViewModel.Mailbo
                 )
             }
         }
-        OutlinedButton(onClick = { viewModel.disconnectGmail(GMAIL_TOKEN, address) }, enabled = !busy) { Text(stringResource(R.string.disconnect)) }
+        OutlinedButton(onClick = onDisconnect, enabled = !busy) { Text(stringResource(R.string.disconnect)) }
     }
     progress?.let {
         Text(describeBackfill(it, mailbox.reading), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))

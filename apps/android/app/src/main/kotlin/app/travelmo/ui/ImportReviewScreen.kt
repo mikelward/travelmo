@@ -46,6 +46,8 @@ import app.travelmo.core.SenderList
 import app.travelmo.core.dayRange
 import app.travelmo.core.domainOf
 import app.travelmo.core.effectiveDecision
+import app.travelmo.core.isFromMailbox
+import app.travelmo.core.recordSourceLabel
 import app.travelmo.core.outcomeLabel
 import app.travelmo.core.reviewDate
 import app.travelmo.core.toReview
@@ -188,8 +190,9 @@ private fun forgetRow(viewModel: TripsViewModel, messageId: String) {
 
 /**
  * One reviewed message: its subject, then when it was sent (or read), who
- * from and what became of it, then Import anyway for a Gmail message and
- * Always or Never import its sender unless the rules already say so.
+ * from, which source and what became of it, then Import anyway for a Gmail
+ * or Fastmail message and Always or Never import its sender unless the
+ * rules already say so.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -204,16 +207,16 @@ private fun ReviewRow(
     onLearn: (String, SenderList) -> Unit,
 ) {
     // Records from other sources have no sender to teach and no email to read again.
-    val fromGmail = (record.source ?: "gmail") == "gmail"
-    val domain = if (fromGmail) record.from?.let(::domainOf) else null
+    val fromMailbox = isFromMailbox(record)
+    val domain = if (fromMailbox) record.from?.let(::domainOf) else null
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(bottom = 12.dp))
         Text(record.subject?.takeIf { it.isNotBlank() } ?: stringResource(R.string.no_subject), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-        val line = listOf(reviewDate(record, zone.id), record.from ?: stringResource(R.string.unknown_sender), outcomeLabel(record.outcome)).joinToString(" · ") +
+        val line = listOf(reviewDate(record, zone.id), record.from ?: stringResource(R.string.unknown_sender), recordSourceLabel(record.source), outcomeLabel(record.outcome)).joinToString(" · ") +
             (record.reason?.let { " ($it)" } ?: "")
         Text(line, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-            if (fromGmail && canReimport) OutlinedButton(onClick = onReimport, enabled = !busy) { Text(stringResource(R.string.import_anyway)) }
+            if (fromMailbox && canReimport) OutlinedButton(onClick = onReimport, enabled = !busy) { Text(stringResource(R.string.import_anyway)) }
             if (domain != null && decision != SenderList.ALLOW) {
                 OutlinedButton(onClick = { onLearn(domain, SenderList.ALLOW) }, enabled = !busy) { Text(stringResource(R.string.always_import, domain)) }
             }

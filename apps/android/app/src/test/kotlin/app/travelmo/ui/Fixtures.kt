@@ -1,6 +1,8 @@
 package app.travelmo.ui
 
+import app.travelmo.data.FastmailActions
 import app.travelmo.data.GmailActions
+import app.travelmo.data.FastmailStatus
 import app.travelmo.data.GmailStatus
 import app.travelmo.core.ParsedRecord
 import app.travelmo.core.REVIEW_RECENT
@@ -83,10 +85,12 @@ val fixtureUntimedActivity = Segment(
 // The owner's own import, which opens in Gmail.
 val fixtureTrainEmail = SourceRef(SourceKind.GMAIL, "m-avanti", label = "Your Avanti West Coast tickets", uid = OWNER, at = "2026-10-20T08:00:00Z")
 
-// The stay's booking email, a reminder the partner imported (in their
+// The stay's booking email, its receipt from the owner's Fastmail (which
+// has no link to a message), a reminder the partner imported (in their
 // mailbox, so no link), and the TripIt trip it was also in.
 val fixtureStaySources = listOf(
     SourceRef(SourceKind.GMAIL, "m-cove", label = "Booking confirmed: Cove Liverpool", uid = OWNER, at = "2026-10-21T09:00:00Z"),
+    SourceRef(SourceKind.FASTMAIL, "fm-cove-receipt", label = "Payment received: Cove Liverpool", uid = OWNER, at = "2026-10-22T09:00:00Z"),
     SourceRef(SourceKind.GMAIL, "m-cove-reminder", label = "Your stay is coming up", uid = "partner", at = "2026-11-01T09:00:00Z"),
     SourceRef(SourceKind.TRIPIT, "tripit-liverpool", label = "Liverpool weekend", uid = OWNER, at = "2026-11-01T10:00:00Z"),
 )
@@ -205,6 +209,7 @@ class FakeTripStore(
     private val addressHolder: AddressHolder = AddressHolder(),
     private val parsed: List<ParsedRecord> = fixtureParsed,
     private val gmailStatuses: List<GmailStatus> = emptyList(),
+    private val fastmailStatus: FastmailStatus? = null,
     /** Each `access/{email}` as stored, by address: the owner approved by default. */
     access: Map<String, Map<String, String>> = mapOf(OWNER_EMAIL to mapOf("email" to OWNER_EMAIL) + accessDecision(AccountAccess.APPROVED, "admin", FROZEN_NOW)),
     /** `config/access` as the owner may read it: null for someone not an admin. */
@@ -213,6 +218,7 @@ class FakeTripStore(
     hasUserDocument: Boolean = true,
 ) : TripStore {
     override fun gmailStatuses(uid: String): Flow<List<GmailStatus>> = flowOf(gmailStatuses)
+    override fun fastmailStatus(uid: String): Flow<FastmailStatus?> = flowOf(fastmailStatus)
     /** The stored access records' fields, by address, as Firestore would merge them. */
     val accessFields = MutableStateFlow(access)
     val config = MutableStateFlow(accessConfig)
@@ -429,6 +435,7 @@ val fixtureParsed = listOf(
     ParsedRecord("booked", "imported", "2026-11-23T11:00:00Z", from = "Cove <stay@cove.example>", subject = "Your stay at Cove Liverpool"),
     ParsedRecord("tripit", "failed", "2026-11-23T10:30:00Z", source = "tripit", subject = "Dublin", reason = "Couldn't read it"),
     ParsedRecord("ticket", "not_booking", "2026-11-23T10:00:00Z", from = "Example Air <tickets@air.example>", subject = "Example Air e-Ticket XY12AB", sentAt = "2026-05-23T07:22:58Z"),
+    ParsedRecord("fm-ferry", "not_booking", "2026-11-23T09:00:00Z", source = "fastmail", from = "Example Ferries <sail@ferry.example>", subject = "Your sailing to Dublin", sentAt = "2026-11-02T18:40:00Z"),
 )
 
 /** Import anyway as the parser would answer, recording the messages asked for. */
@@ -438,6 +445,25 @@ class FakeImportReview : ImportReview {
     override suspend fun reimport(messageId: String): String {
         asked += messageId
         return "Imported"
+    }
+}
+
+/** Fastmail's parser routes as they would answer, recording what was asked; [refusal] is what it says of any token. */
+class FakeFastmailActions(private val refusal: String? = null) : FastmailActions {
+    val calls = mutableListOf<String>()
+    override val available = true
+    override suspend fun connect(token: String) {
+        calls += "connect $token"
+        refusal?.let { throw app.travelmo.data.TripActionFailed(it) }
+    }
+    override suspend fun start(restart: Boolean) {
+        calls += if (restart) "restart" else "start"
+    }
+    override suspend fun stop() {
+        calls += "stop"
+    }
+    override suspend fun disconnect() {
+        calls += "disconnect"
     }
 }
 

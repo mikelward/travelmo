@@ -8,6 +8,10 @@ export const gmailConnectPath = "/gmail/connect";
 export const gmailDisconnectPath = "/gmail/disconnect";
 export const backfillStartPath = "/gmail/backfill";
 export const backfillStopPath = "/gmail/backfill/stop";
+export const fastmailConnectPath = "/fastmail/connect";
+export const fastmailDisconnectPath = "/fastmail/disconnect";
+export const fastmailBackfillStartPath = "/fastmail/backfill";
+export const fastmailBackfillStopPath = "/fastmail/backfill/stop";
 
 // The parser reads the mailbox batch after batch on its own once started,
 // recording its progress on the connection. A reading that has saved

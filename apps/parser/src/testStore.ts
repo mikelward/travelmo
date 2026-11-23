@@ -27,7 +27,7 @@ export function memoryStore(): Memory {
   const locks = new Map<string, Promise<unknown>>();
   const generations = new Map<string, number>();
   let ids = 0;
-  const tx: Omit<TripTx, "listParsedIds" | "deleteParsed" | "generation" | "bumpGeneration" | "gmailMailboxes" | "clearBackfill"> = {
+  const tx: Omit<TripTx, "listParsedIds" | "deleteParsed" | "generation" | "bumpGeneration" | "connectedMailboxes" | "clearBackfill"> = {
     listTrips: async () => [...trips.values()],
     listSegments: async (tripId) => [...segments.values()].filter((s) => s.tripId === tripId),
     createTrip: (t) => {
@@ -136,7 +136,7 @@ export function memoryStore(): Memory {
         ...tx,
         generation: generations.get(uid) ?? 0,
         bumpGeneration: () => void generations.set(uid, (generations.get(uid) ?? 0) + 1),
-        gmailMailboxes: async () => 0,
+        connectedMailboxes: async () => 0,
         clearBackfill: () => {},
         listParsedIds: async (limit) =>
           [...parsed.keys()].filter((k) => k.startsWith(`${uid}/`)).slice(0, limit).map((k) => k.slice(uid.length + 1)),

@@ -119,6 +119,9 @@ interface TripStore {
      */
     fun gmailStatuses(uid: String): Flow<List<GmailStatus>>
 
+    /** The Fastmail connection (`fastmail` on the user document) and how far the last reading of it got, live; null when not connected. */
+    fun fastmailStatus(uid: String): Flow<FastmailStatus?>
+
     /** The [REVIEW_RECENT] import records read last, newest first, live; null while they load. */
     fun latestParsed(uid: String): Flow<List<ParsedRecord>?>
 
@@ -428,15 +431,22 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         }.await()
     }
 
-    override fun gmailStatuses(uid: String): Flow<List<GmailStatus>> = callbackFlow {
+    // Shown as not connected; source links open the phone's default Gmail account.
+    override fun gmailStatuses(uid: String): Flow<List<GmailStatus>> =
+        userDocument(uid, "Reading the Gmail connections failed", emptyList(), ::gmailStatusesOf)
+
+    override fun fastmailStatus(uid: String): Flow<FastmailStatus?> =
+        userDocument(uid, "Reading the Fastmail connection failed", null, ::fastmailStatusOf)
+
+    /** What [read] makes of the user document, live; [fallback] once reading it fails, logged as [failure]. */
+    private fun <T> userDocument(uid: String, failure: String, fallback: T, read: (Map<String, Any?>?) -> T): Flow<T> = callbackFlow {
         val registration = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
             if (error != null) {
-                // Shown as not connected; source links open the phone's default Gmail account.
-                TravelmoLog.error(error, "Reading the Gmail connections failed")
-                trySend(emptyList())
+                TravelmoLog.error(error, failure)
+                trySend(fallback)
                 return@addSnapshotListener
             }
-            trySend(gmailStatusesOf(snapshot?.data))
+            trySend(read(snapshot?.data))
         }
         awaitClose { registration.remove() }
     }

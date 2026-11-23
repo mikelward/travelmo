@@ -17,6 +17,7 @@ import app.travelmo.data.RideSettings
 import app.travelmo.data.TripStore
 import app.travelmo.core.HomeCorrection
 import app.travelmo.core.BackfillShown
+import app.travelmo.data.FastmailStatus
 import app.travelmo.data.GmailStatus
 import app.travelmo.core.SenderList
 import app.travelmo.core.SenderPatterns
@@ -400,6 +401,60 @@ class TripsViewModelTest {
         (full.gmail.value as TripsViewModel.GmailState.Connected).canConnectMore shouldBe false
         none.gmail.value shouldBe TripsViewModel.GmailState.NotConnected
         watching.cancel()
+    }
+
+    @Test
+    fun `fastmail connects with a token and its buttons go to its own parser routes, not Gmail's`() = runTest {
+        val done = BackfillShown(scanned = 80, imported = 3, done = true, updatedAt = "2026-11-22T11:00:00Z")
+        val gmail = FakeGmailActions()
+        val fastmail = FakeFastmailActions()
+        val viewModel = TripsViewModel(
+            FakeTripStore(fastmailStatus = FastmailStatus("me@fastmail.example", done)), OWNER, OWNER_EMAIL,
+            clock = { Instant.parse("2026-11-22T12:00:00Z") }, gmailActions = gmail, fastmailActions = fastmail,
+        )
+        val watching = launch {
+            launch { viewModel.gmail.collect {} }
+            viewModel.fastmail.collect {}
+        }
+        runCurrent()
+        viewModel.gmail.value shouldBe TripsViewModel.GmailState.NotConnected
+        viewModel.fastmail.value shouldBe TripsViewModel.FastmailState.Connected(TripsViewModel.MailboxShown("me@fastmail.example", done, reading = false))
+        viewModel.canUseFastmail shouldBe true
+        // Pasted with the space a copy often brings.
+        viewModel.connectFastmail("f", " fmu1-token ")
+        runCurrent()
+        viewModel.outcomeSeen("f")
+        viewModel.startFastmailReading("f", restart = true)
+        runCurrent()
+        viewModel.outcomeSeen("f")
+        viewModel.stopFastmailReading("f")
+        runCurrent()
+        viewModel.outcomeSeen("f")
+        viewModel.disconnectFastmail("f")
+        runCurrent()
+        fastmail.calls shouldBe listOf("connect fmu1-token", "restart", "stop", "disconnect")
+        gmail.calls shouldBe emptyList()
+        watching.cancel()
+    }
+
+    @Test
+    fun `fastmail says why it refused a token, and asks for one when none was pasted`() = runTest {
+        val refusal = "That API token can change your mail. Make a read-only one instead."
+        val fastmail = FakeFastmailActions(refusal = refusal)
+        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, fastmailActions = fastmail)
+        viewModel.connectFastmail("f", "fmu1-writable")
+        runCurrent()
+        viewModel.outcomes.value["f"] shouldBe Outcome.Failed(refusal)
+        viewModel.outcomeSeen("f")
+        viewModel.connectFastmail("f", "  ")
+        runCurrent()
+        viewModel.outcomes.value["f"] shouldBe Outcome.Failed("Paste your Fastmail API token.")
+        fastmail.calls shouldBe listOf("connect fmu1-writable")
+    }
+
+    @Test
+    fun `a build with no parser sends Fastmail to the web`() {
+        TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL).canUseFastmail shouldBe false
     }
 
     @Test

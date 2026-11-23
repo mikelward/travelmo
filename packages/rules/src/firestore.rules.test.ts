@@ -178,6 +178,8 @@ describe("segments", () => {
     // A forwarded email's booking is the owner's to edit, rate and move too.
     await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s10")), { ...imported, id: "s10", source: "forward" }));
     await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s10")), { ...imported, id: "s10", source: "forward", rating: 4 }));
+    // So is one read from a connected Fastmail mailbox.
+    await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s11")), { ...imported, id: "s11", source: "fastmail" }));
     const withSources = { ...imported, id: "s8", sources: [{ kind: "gmail", id: "m1", label: "Your booking", at: "2026-11-01T00:00:00Z" }] };
     await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s8")), withSources));
     await assertSucceeds(updateDoc(doc(as(partner), paths.segment(trip.id, "s8")), { title: "Edited, sources kept" }));
@@ -301,6 +303,16 @@ describe("users", () => {
     await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { googleCalendar: forged }, { merge: true }));
     await assertFails(setDoc(doc(as(stranger), paths.user(stranger.uid)), { googleCalendar: forged }));
     await assertFails(getDoc(doc(as(owner), paths.googleCalendarState(owner.uid))));
+  });
+
+  it("a user may not forge a Fastmail connection or read its token", async () => {
+    const forged = { emailAddress: "forged@fastmail.com", connectedAt: "2026-11-01T00:00:00Z" };
+    await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { fastmail: forged }, { merge: true }));
+    await assertFails(setDoc(doc(as(stranger), paths.user(stranger.uid)), { fastmail: forged }));
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), paths.fastmailState(owner.uid)), { ...forged, token: "fmu1-secret", accountId: "u1" });
+    });
+    await assertFails(getDoc(doc(as(owner), paths.fastmailState(owner.uid))));
   });
 
   it("calendar feeds are readable by their owner only and written by the parser alone", async () => {

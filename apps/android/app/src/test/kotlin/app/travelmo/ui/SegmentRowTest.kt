@@ -158,7 +158,7 @@ class SegmentRowTest {
         composeRule.setContent { TravelmoTheme { SegmentRow(stay) } }
         composeRule.onNodeWithContentDescription("Booking actions").performClick()
         composeRule.onNodeWithText("Sources").performClick()
-        for (label in listOf("Booking confirmed: Cove Liverpool", "Your stay is coming up", "Liverpool weekend", "TripIt", "From cove.example")) {
+        for (label in listOf("Booking confirmed: Cove Liverpool", "Payment received: Cove Liverpool", "Fastmail email", "Your stay is coming up", "Liverpool weekend", "TripIt", "From cove.example")) {
             composeRule.onNodeWithText(label).assertExists()
         }
         composeRule.onNodeWithText("Close").performClick()
@@ -173,6 +173,9 @@ class SegmentRowTest {
         val started = shadowOf(composeRule.activity)
 
         composeRule.onNodeWithText("Your stay is coming up").performClick()
+        started.nextStartedActivity.shouldBeNull()
+        // The viewer's own, but Fastmail has no link to a message.
+        composeRule.onNodeWithText("Payment received: Cove Liverpool").performClick()
         started.nextStartedActivity.shouldBeNull()
 
         composeRule.onNodeWithText("Booking confirmed: Cove Liverpool").performClick()
