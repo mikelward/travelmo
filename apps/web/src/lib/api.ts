@@ -1,5 +1,5 @@
 import type { User } from "firebase/auth";
-import { backfillStartPath, backfillStopPath, deleteAllTripsPath, fastmailBackfillStartPath, fastmailBackfillStopPath, fastmailConnectPath, fastmailDisconnectPath, gmailConnectPath, gmailDisconnectPath, linkRefusalText, refusalOf, regroupPath, type AccountAccess, type CalendarExport, type ForwardAddress, type RegroupResult } from "@travelmo/core";
+import { backfillStartPath, backfillStopPath, deleteAllTripsPath, fastmailBackfillStartPath, fastmailBackfillStopPath, fastmailConnectPath, fastmailDisconnectPath, forwardIssuePath, forwardStopPath, gmailConnectPath, gmailDisconnectPath, linkRefusalText, refusalOf, regroupPath, type AccountAccess, type CalendarExport, type ForwardAddress, type RegroupResult } from "@travelmo/core";
 import type { CalendarResult } from "./ics";
 import type { TripItResult } from "./tripit";
 
@@ -68,8 +68,8 @@ export const api = {
   removeFeed: (user: User, id: string) => post<void>(user, "/feeds/remove", { id }),
   issueCalendarExport: (user: User) => post<CalendarExport>(user, "/export/calendar"),
   stopCalendarExport: (user: User) => post<void>(user, "/export/calendar/stop"),
-  issueForward: (user: User) => post<ForwardAddress>(user, "/forward/issue"),
-  stopForward: (user: User) => post<void>(user, "/forward/stop"),
+  issueForward: (user: User) => post<ForwardAddress>(user, forwardIssuePath),
+  stopForward: (user: User) => post<void>(user, forwardStopPath),
   deleteAccount: (user: User) => post<void>(user, "/account/delete"),
   checkAccess: (user: User) => post<{ status: AccountAccess }>(user, "/access/check"),
   addEmail: (user: User, email: string) => post<{ email: string }>(user, "/emails/add", { email }),

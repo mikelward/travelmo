@@ -265,6 +265,8 @@ class FakeTripStore(
         patterns.value = withLearned(patterns.value, domain, which)
     }
     override fun addressHolder(uid: String): Flow<AddressHolder> = flowOf(addressHolder)
+    val forward = MutableStateFlow(app.travelmo.data.Forwarding(null))
+    override fun forwarding(uid: String): Flow<app.travelmo.data.Forwarding?> = forward
     override fun ownProfile(uid: String): Flow<OwnProfile> = flowOf(OwnProfile(profile))
     val reminders = mutableListOf<Boolean>()
 

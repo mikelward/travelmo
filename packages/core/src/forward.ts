@@ -5,6 +5,10 @@
 
 // Lowercase base32 (RFC 4648 alphabet, lowercased): reads aloud, needs no
 // quoting in an address, and 20 characters carry 100 bits.
+// The parser routes that issue and stop the forwarding address.
+export const forwardIssuePath = "/forward/issue";
+export const forwardStopPath = "/forward/stop";
+
 export const forwardTokenAlphabet = "abcdefghijklmnopqrstuvwxyz234567";
 export const forwardTokenLength = 20;
 const tokenPattern = /^[a-z2-7]{20}$/;

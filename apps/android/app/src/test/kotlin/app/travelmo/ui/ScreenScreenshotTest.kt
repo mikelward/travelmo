@@ -560,6 +560,32 @@ class ScreenScreenshotTest {
         composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
     }
 
+    // Settings scrolled to an address to forward bookings to.
+    @Test
+    fun settings_forward() = settingsForward("settings_forward", dark = false)
+
+    @Test
+    fun settings_forward_dark() = settingsForward("settings_forward_dark", dark = true)
+
+    private fun settingsForward(name: String, dark: Boolean) {
+        val store = FakeTripStore()
+        store.forward.value = app.travelmo.data.Forwarding("trips-k3x9q2m7p4w8z5r6@forward.example")
+        val actions = object : app.travelmo.data.ForwardActions {
+            override val available = true
+            override suspend fun issue() {}
+            override suspend fun stop() {}
+        }
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, forwardActions = actions, forwardOffered = true)
+        composeRule.setContent {
+            TravelmoTheme(darkTheme = dark) {
+                SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
+            }
+        }
+        composeRule.onNodeWithText("Turn off").performScrollTo()
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
+    }
+
     // An admin's Access page: two requests waiting, and those let in, the
     // admin's own address with no Revoke.
     @Test

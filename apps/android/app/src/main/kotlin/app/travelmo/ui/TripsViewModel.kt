@@ -58,6 +58,9 @@ import app.travelmo.core.GmailMailbox
 import app.travelmo.core.MAX_GMAIL_MAILBOXES
 import app.travelmo.data.NoGmailActions
 import app.travelmo.data.GmailActions
+import app.travelmo.data.Forwarding
+import app.travelmo.data.NoForwardActions
+import app.travelmo.data.ForwardActions
 import app.travelmo.core.RideCompany
 import app.travelmo.data.FastmailActions
 import app.travelmo.data.NoFastmailActions
@@ -172,6 +175,10 @@ class TripsViewModel(
     private val gmailActions: GmailActions = NoGmailActions,
     /** The parser's Fastmail connection and mailbox reading; none by default. */
     private val fastmailActions: FastmailActions = NoFastmailActions,
+    /** The parser's forwarding address; none by default. */
+    private val forwardActions: ForwardActions = NoForwardActions,
+    /** Whether this build's deployment has a forwarding domain (BuildConfig.FORWARD_DOMAIN). */
+    private val forwardOffered: Boolean = false,
     /** Whether Google verified [email]: only a verified address has an access record. */
     emailVerified: Boolean = true,
 ) : ViewModel() {
@@ -585,6 +592,19 @@ class TripsViewModel(
     fun setReviewSearching(on: Boolean) {
         reviewSearching.value = on
     }
+
+    /** The user's forwarding address, live; null while it loads. */
+    val forwarding: StateFlow<Forwarding?> = accessSettled.flatMapLatest { store.forwarding(uid) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Whether Settings offers forwarding: a parser to issue it, and a domain or an address already issued. */
+    fun canForward(forwarding: Forwarding): Boolean = forwardActions.available && (forwardOffered || forwarding.address != null)
+
+    /** Issues a forwarding address, replacing any old one. */
+    fun issueForward(token: String) = run(token, "issueForward") { forwardActions.issue() }
+
+    /** Turns the forwarding address off. */
+    fun stopForward(token: String) = run(token, "stopForward") { forwardActions.stop() }
 
     /** The user's sender rules, live. */
     val senderPatterns: StateFlow<SenderPatterns?> = accessSettled.flatMapLatest { store.senderPatterns(uid) }
