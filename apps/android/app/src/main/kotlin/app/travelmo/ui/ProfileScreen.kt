@@ -40,7 +40,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.R
+import app.travelmo.core.FoundLoyalty
 import app.travelmo.core.ProfileEntry
+import app.travelmo.core.allLoyalty
 import app.travelmo.core.TravelProfile
 import app.travelmo.core.loyaltySummary
 
@@ -59,6 +61,10 @@ fun ProfileScreen(viewModel: TripsViewModel, bottomBar: @Composable () -> Unit) 
     val loaded by viewModel.profileLoaded.collectAsStateWithLifecycle()
     // A finished share is acknowledged so a later one starts afresh.
     LaunchedEffect(outcomes[SHARE_TOKEN]) { if (outcomes[SHARE_TOKEN] is Outcome.Done) viewModel.outcomeSeen(SHARE_TOKEN) }
+    // A removal that failed says so under the list; one that finished is acknowledged.
+    val removals = outcomes.filterKeys { it.startsWith(FOUND_PREFIX) }
+    val removalError = removals.values.filterIsInstance<Outcome.Failed>().lastOrNull()?.message
+    LaunchedEffect(removals) { for ((token, outcome) in removals) if (outcome is Outcome.Done) viewModel.outcomeSeen(token) }
     Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.profile)) }, actions = { AppMenu() }) }, bottomBar = bottomBar) { padding ->
         val list = rememberLazyListState()
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).scrollEdgeCue(list, scrollCueColors()), state = list, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
@@ -68,7 +74,16 @@ fun ProfileScreen(viewModel: TripsViewModel, bottomBar: @Composable () -> Unit) 
                     Text(stringResource(R.string.profile_empty), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
-                profileSections(own, prefix = "own")
+                profileSections(
+                    own,
+                    prefix = "own",
+                    onRemoveFound = { found ->
+                        // A new attempt clears what the last one said.
+                        removals.keys.forEach(viewModel::outcomeSeen)
+                        viewModel.removeFoundLoyalty("$FOUND_PREFIX${found.program}/${found.number}", found)
+                    },
+                    removalError = removalError,
+                )
             }
             item(key = "shared-with") { SectionTitle(stringResource(R.string.shared_with)) }
             item(key = "sharing") {
@@ -97,13 +112,24 @@ fun ProfileScreen(viewModel: TripsViewModel, bottomBar: @Composable () -> Unit) 
     }
 }
 
-private fun LazyListScope.profileSections(profile: TravelProfile, prefix: String) {
+/** [onRemoveFound] is set on the viewer's own profile, where what emails showed can be removed. */
+private fun LazyListScope.profileSections(profile: TravelProfile, prefix: String, onRemoveFound: ((FoundLoyalty) -> Unit)? = null, removalError: String? = null) {
     entries(stringResource = R.string.documents, entries = profile.documents, prefix = "$prefix-doc")
-    if (profile.loyalty.isNotEmpty()) {
+    val loyalty = allLoyalty(profile)
+    if (loyalty.isNotEmpty()) {
         item(key = "$prefix-loyalty-title") { SectionTitle(stringResource(R.string.loyalty_programs)) }
-        item(key = "$prefix-loyalty-table") { LoyaltyTable(profile.loyalty) }
+        item(key = "$prefix-loyalty-table") { LoyaltyTable(loyalty) }
     }
-    entries(stringResource = R.string.loyalty_details, entries = profile.loyalty, prefix = "$prefix-loy")
+    if (onRemoveFound != null && profile.foundLoyalty.isNotEmpty()) {
+        item(key = "$prefix-found-title") { SectionTitle(stringResource(R.string.found_in_emails)) }
+        for (found in profile.foundLoyalty) {
+            item(key = "$prefix-found-${found.program}-${found.number}") { FoundRow(found, onRemove = { onRemoveFound(found) }) }
+        }
+        removalError?.let { message ->
+            item(key = "$prefix-found-error") { Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+        }
+    }
+    entries(stringResource = R.string.loyalty_details, entries = loyalty, prefix = "$prefix-loy")
     entries(stringResource = R.string.travelers, entries = profile.travelers, prefix = "$prefix-trav")
 }
 
@@ -116,7 +142,26 @@ private fun LazyListScope.entries(stringResource: Int, entries: List<ProfileEntr
     }
 }
 
+/** A loyalty number found in an email, the email it came from, and Remove, since the extraction is sometimes wrong. */
+@Composable
+private fun FoundRow(found: FoundLoyalty, onRemove: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text("${found.program} · ${found.number}", style = MaterialTheme.typography.bodyLarge)
+            Text(
+                stringResource(R.string.found_from_email, found.label ?: stringResource(R.string.a_booking_email)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        IconButton(onClick = onRemove) {
+            Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.remove_found_loyalty, found.program))
+        }
+    }
+}
+
 private const val SHARE_TOKEN = "profile/share"
+private const val FOUND_PREFIX = "profile/found/"
 
 /**
  * Who the profile is shared with, as the web's page has it: each address

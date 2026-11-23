@@ -80,6 +80,7 @@ import app.travelmo.core.SourceRef
 import app.travelmo.core.Trip
 import app.travelmo.core.displayTitles
 import app.travelmo.core.emailLinkFor
+import app.travelmo.core.allLoyalty
 import app.travelmo.core.RideCompany
 import app.travelmo.core.RideNeed
 import app.travelmo.core.rideNeedKey
@@ -223,7 +224,7 @@ fun TripDetailScreen(
             current != null -> TripBody(
                 current, segments, shared = current.ownerUid != uid, errors = errors, busy = busy,
                 warnings = tripWarnings(people, current, segments, viewModel.today()), today = viewModel.today(),
-                programsFor = { provider -> programsFor(provider, ownProfile?.loyalty.orEmpty()) },
+                programsFor = { provider -> programsFor(provider, ownProfile?.let(::allLoyalty).orEmpty()) },
                 flightLines = { segment -> viewModel.flightLines(segment, flightStatuses) },
                 emailLink = { source -> emailLinkFor(source, uid, ownsTrip = isOwner, account = gmailAccount) },
                 rides = RideSuggestions(

@@ -1,6 +1,7 @@
 package app.travelmo.data
 
 import app.travelmo.core.FlightStatus
+import app.travelmo.core.FoundLoyalty
 import app.travelmo.core.Place
 import app.travelmo.core.PlaceDraft
 import app.travelmo.core.ProfileEntry
@@ -183,5 +184,21 @@ fun profileFromDocument(data: Map<String, Any?>): TravelProfile? {
         travelers = data.entries("travelers"),
         loyalty = data.entries("loyalty"),
         documents = data.entries("documents"),
+        foundLoyalty = foundLoyaltyOf(data["foundLoyalty"]),
+    )
+}
+
+/** Loyalty numbers read from booking emails; an entry missing its program, number, email or time is left out, as on the web. */
+internal fun foundLoyaltyOf(value: Any?): List<FoundLoyalty> = (value as? List<*>).orEmpty().mapNotNull { item ->
+    @Suppress("UNCHECKED_CAST")
+    val map = item as? Map<String, Any?> ?: return@mapNotNull null
+    FoundLoyalty(
+        program = map.text("program") ?: return@mapNotNull null,
+        number = map.text("number") ?: return@mapNotNull null,
+        holder = map.text("holder"),
+        status = map.text("status"),
+        messageId = map.text("messageId") ?: return@mapNotNull null,
+        label = map.text("label"),
+        at = map.text("at") ?: return@mapNotNull null,
     )
 }

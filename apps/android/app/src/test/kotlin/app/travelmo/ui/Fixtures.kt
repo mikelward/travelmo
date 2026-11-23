@@ -1,6 +1,7 @@
 package app.travelmo.ui
 
 import app.travelmo.core.FlightStatus
+import app.travelmo.core.FoundLoyalty
 import app.travelmo.core.Place
 import app.travelmo.core.ProfileEntry
 import app.travelmo.core.ProfileField
@@ -149,6 +150,8 @@ val fixtureProfile = TravelProfile(
         entry("Example Cars Club", "Account number" to "EC 44 8812"),
     ),
     documents = listOf(entry("Passport: Ann Example", "Number" to "X1234567", "Nationality" to "GB", "Expiration date" to "2027-02-01")),
+    // One more program, read from a booking email, which the owner can remove.
+    foundLoyalty = listOf(FoundLoyalty("Cove Club", "CC 4455", status = "Member", messageId = "m-cove", label = "Your stay at Cove Liverpool", at = "2026-10-20T09:00:00Z")),
 )
 
 /** A partner's profile shared with the owner: a passport that runs out before Dublin ends. */
@@ -172,6 +175,12 @@ class FakeTripStore(
     override fun gmailAccount(uid: String): Flow<String?> = flowOf(gmailAccount)
 
     override fun reminderEmail(uid: String): Flow<Boolean?> = flowOf(true)
+
+    /** Every loyalty number removed from the profile, in order. */
+    val removedFound = mutableListOf<FoundLoyalty>()
+    override suspend fun removeFoundLoyalty(uid: String, found: FoundLoyalty) {
+        removedFound += found
+    }
 
     /** The user document's ride fields, and every suggestion hidden, in order. */
     val rides = MutableStateFlow(RideSettings())
