@@ -691,13 +691,15 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
       const filled = growth(tripId);
       const want = filled ? { start: min(own.start, filled.start), end: max(own.end, filled.end) } : own;
       wanted.set(tripId, want);
-      // A trip of nothing but a ride from the airport, still named for its
-      // route, takes the name of the flight's trip once the flight joins it.
-      // Home may have been unknown when it was named ("Heathrow to London").
+      // A trip still named as an import named it (importGaveTitle) is
+      // named again from all its bookings once this one joins: a ride from
+      // the airport ("Heathrow to London") takes the name of the flight's
+      // trip, and a trip a stay with no town started ("Designer Collingwood
+      // Terrace") the town the flight goes to. Home may have been unknown
+      // when it was named.
       const held = segmentsOf(tripId);
-      const routeNamed = [tripTitle(held, periods, overrides), tripTitle(held)].includes(target.title);
       const renamed =
-        held.length > 0 && held.every(isTransfer) && routeNamed
+        held.length > 0 && importGaveTitle(target.title, held, periods, overrides)
           ? tripTitle([...held, ...booking.segments].sort((a, b) => compareInstants(a.start, b.start)), periods, overrides)
           : undefined;
       tx.extendTrip(tripId, {
@@ -982,10 +984,11 @@ export async function importMessages(
 // or transfer's drop-off: a car to Stansted for a flight to Stockholm makes
 // a Stockholm trip.
 export function tripTitle(
-  segments: readonly ExtractedSegment[],
+  unordered: readonly ExtractedSegment[],
   periods: readonly HomePeriod[] = [],
   overrides: readonly HomePeriod[] = [],
 ): string {
+  const segments = byStart(unordered);
   const first = segments[0];
   // Nothing but a ride, from the airport home say: named by its route, not
   // as a trip to the home town.
@@ -1015,16 +1018,86 @@ export function courseTitle(segments: readonly ExtractedSegment[]): string | und
 // Where a trip goes, as tripTitle names one that is not a day out or a
 // course. Known home is not where a trip goes: a train out of London to
 // Liverpool makes a Liverpool trip, even booked as its return leg alone.
+// Journeys come first, then stays and the rest, then a car or transfer's
+// drop-off: a flight to Melbourne makes a Melbourne trip whichever suburb
+// the stays are in. Only a town names a trip: a place's city (the
+// geocoder's, when the source gave none), or for a journey an airport or
+// station named without one. A place that is only its own name ("Designer
+// Collingwood Terrace", a stay's listing) names the trip only when nothing
+// else does.
 export function placeTitle(
-  segments: readonly ExtractedSegment[],
+  unordered: readonly ExtractedSegment[],
   periods: readonly HomePeriod[] = [],
   overrides: readonly HomePeriod[] = [],
 ): string {
+  const segments = byStart(unordered);
+  const rank = (s: ExtractedSegment) => (journeyTypes.has(s.type) ? 0 : isTransfer(s) ? 2 : 1);
+  const ordered = segments
+    .map((segment, index) => ({ segment, index }))
+    .sort((a, b) => rank(a.segment) - rank(b.segment) || a.index - b.index)
+    .map(({ segment }) => segment);
+  const asTown = (s: ExtractedSegment, place: ExtractedSegment["origin"]) => (place && (place.city || journeyTypes.has(s.type)) ? place : undefined);
+  const towns = ordered.map((s) => ({ start: s.start, origin: asTown(s, s.origin), destination: asTown(s, s.destination) }));
+  const place = awayPlace(towns, periods, overrides) ?? towns.find((s) => s.destination)?.destination;
+  return place?.city ?? place?.name ?? legacyPlaceTitle(segments, periods, overrides);
+}
+
+// placeTitle as imports named trips before only a town could name one: the
+// first place away (or any), journeys and stays before transfers, by its
+// city or else its name. Still the last resort, and how importGaveTitle
+// recognizes a trip named that way.
+function legacyPlaceTitle(
+  unordered: readonly ExtractedSegment[],
+  periods: readonly HomePeriod[] = [],
+  overrides: readonly HomePeriod[] = [],
+): string {
+  const segments = byStart(unordered);
   const ordered = [...segments.filter((s) => !isTransfer(s)), ...segments.filter(isTransfer)];
   const place = awayPlace(ordered, periods, overrides) ?? ordered.find((s) => s.destination)?.destination;
   return place?.city ?? place?.name ?? segments[0]?.title ?? "Trip";
 }
 
+// Bookings in the order they happen: the titles above read "first" by
+// date, whatever order a caller holds them in (Regroup holds them by
+// import).
+const byStart = <S extends ExtractedSegment>(segments: readonly S[]): S[] => [...segments].sort((a, b) => compareInstants(a.start, b.start));
+
+const journeyTypes: ReadonlySet<ExtractedSegment["type"]> = new Set(["flight", "train", "bus", "ferry"]);
+
+// Whether a trip's title is still one an import gave it, not one the user
+// chose: what tripTitle or placeTitle names its bookings, or the bookings
+// of any one source (the email that started the trip, named before the rest
+// joined), by today's rules or those before them (legacyPlaceTitle), with
+// home known or not. Such a trip is renamed from all its bookings when more
+// join it, and by Regroup; one the user renamed keeps its name.
+export function importGaveTitle(
+  title: string,
+  segments: readonly Segment[],
+  periods: readonly HomePeriod[] = [],
+  overrides: readonly HomePeriod[] = [],
+): boolean {
+  const bySource = new Map<string, Segment[]>();
+  for (const segment of segments) {
+    const first = segmentSources(segment)[0];
+    const key = first ? `${first.kind}:${first.id}` : `${segment.tripId}/${segment.id}`;
+    bySource.set(key, [...(bySource.get(key) ?? []), segment]);
+  }
+  // A booking's own name or its place's, as a trip named before that place
+  // gained a town: "Designer Collingwood Terrace" once the stay is known to
+  // be in Collingwood.
+  const names = segments.flatMap((s) => [s.title, s.origin?.name, s.destination?.name]);
+  if (names.includes(title)) return true;
+  return [segments, ...bySource.values()].some((set) => {
+    const sorted = [...set].sort((a, b) => compareInstants(a.start, b.start));
+    return [
+      tripTitle(sorted, periods, overrides),
+      tripTitle(sorted),
+      placeTitle(sorted, periods, overrides),
+      legacyPlaceTitle(sorted, periods, overrides),
+      legacyPlaceTitle(sorted),
+    ].includes(title);
+  });
+}
 
 // How far either side of a booking the importer reads trips to work out
 // where home was, in days.
