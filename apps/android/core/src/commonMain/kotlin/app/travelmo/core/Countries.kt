@@ -30,3 +30,8 @@ fun countryCodeOf(name: String): String? {
     if (key.isEmpty()) return null
     return byName[key] ?: byName[key.removePrefix("the ")]
 }
+
+private val knownCodes: Set<String> by lazy { (isoCountryCodes() + "XK").map { it.uppercase() }.toSet() }
+
+/** Whether [code] is a country's two-letter ISO code (or XK, Kosovo), as countries.ts. */
+fun isCountryCode(code: String): Boolean = code.uppercase() in knownCodes

@@ -1,4 +1,5 @@
 import { homeAt, inHomeTown, nearHub, rideFromArrival, rideToDeparture, type HomePeriod } from "./home";
+import { countryCodeOf, isCountryCode } from "./countries";
 import { maxRideCompanies, type RideCompany, type Segment } from "./schema";
 import { liveSegments } from "./trips";
 
@@ -94,12 +95,19 @@ export const rideNeedKey = (need: RideNeed) => `${need.segmentId}/${need.kind}`;
 // The companies a suggestion offers: for a car, the rental companies then
 // the traveler's own; for a ride at home, only the traveler's own near home
 // (there is nobody to suggest in their town otherwise).
-export function rideCompaniesFor(kind: RideNeedKind, own: readonly RideCompany[]): { name: string; url: string }[] {
-  const mine = own.filter((c) => (kind === "car" ? c.near === "anywhere" : c.near === "home")).map(({ name, url }) => ({ name, url }));
+// A company the traveler limited to some countries is offered only in them;
+// where the airport's country is unknown, every company is.
+export function rideCompaniesFor(kind: RideNeedKind, own: readonly RideCompany[], country?: string): { name: string; url: string }[] {
+  const where = country?.toUpperCase();
+  const mine = own
+    .filter((c) => (kind === "car" ? c.near === "anywhere" : c.near === "home"))
+    .filter((c) => !where || !c.countries?.length || c.countries.includes(where))
+    .map(({ name, url }) => ({ name, url }));
   return kind === "car" ? [...rentalCompanies, ...mine] : mine;
 }
 
-const sameCompany = (a: RideCompany, b: RideCompany) => a.name === b.name && a.url === b.url && a.near === b.near;
+const countriesKey = (c: RideCompany) => [...(c.countries ?? [])].sort().join(",");
+const sameCompany = (a: RideCompany, b: RideCompany) => a.name === b.name && a.url === b.url && a.near === b.near && countriesKey(a) === countriesKey(b);
 
 // The user's own companies with one more, as stored now: unchanged when it
 // is there already, and refused past the limit.
@@ -112,4 +120,24 @@ export function withRideCompany(companies: readonly RideCompany[], company: Ride
 // The user's own companies without one.
 export function withoutRideCompany(companies: readonly RideCompany[], company: RideCompany): RideCompany[] {
   return companies.filter((c) => !sameCompany(c, company));
+}
+
+// Where a suggestion's ride or car is: the airport a ride to it leaves
+// for, else the one the flight lands at; nothing when the booking does not
+// say its country.
+export function rideCountry(kind: RideNeedKind, flight: Pick<Segment, "origin" | "destination">): string | undefined {
+  return (kind === "toAirport" ? flight.origin : flight.destination)?.country?.toUpperCase();
+}
+
+// The countries a company is limited to, as typed: names or codes,
+// separated by commas ("UK, France"). Each becomes its ISO code, once; the
+// first that is no country is reported instead.
+export function parseCountries(text: string): { countries: string[] } | { unknown: string } {
+  const countries: string[] = [];
+  for (const part of text.split(",").map((p) => p.trim()).filter(Boolean)) {
+    const code = countryCodeOf(part) ?? (isCountryCode(part) ? part.toUpperCase() : undefined);
+    if (!code) return { unknown: part };
+    if (!countries.includes(code)) countries.push(code);
+  }
+  return { countries };
 }

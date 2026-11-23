@@ -12,35 +12,47 @@ enum class RideNear(val wire: String) {
     }
 }
 
-/** A company the traveler books cars or rides with, added in Settings. */
-data class RideCompany(val name: String, val url: String, val near: RideNear)
+/**
+ * A company the traveler books cars or rides with, added in Settings;
+ * [countries], when any, are the only ones it is offered in (ISO codes).
+ */
+data class RideCompany(val name: String, val url: String, val near: RideNear, val countries: List<String> = emptyList())
 
 const val MAX_RIDE_COMPANIES = 20
 
 // An https:// link with a host, as the web's schema (`.url()`) needs:
 // "https://?" has none.
+private val isoCode = Regex("[A-Z]{2}")
+
 private val httpsLink = Regex("""https://[^/?#\s]+([/?#]\S*)?""")
 
 /**
  * A company from the profile's `rideCompanies`, or null when it does not parse
  * (as the web's schema leaves it out): a name, an https:// link, and where.
  */
-fun rideCompanyOrNull(name: String?, url: String?, near: String?): RideCompany? {
+fun rideCompanyOrNull(name: String?, url: String?, near: String?, countries: List<*>? = null): RideCompany? {
     val n = name?.trim()?.takeIf { it.isNotEmpty() && it.length <= 60 } ?: return null
     val u = url?.trim()?.takeIf { it.length <= 500 && httpsLink.matches(it) } ?: return null
     val where = RideNear.fromWire(near) ?: return null
-    return RideCompany(n, u, where)
+    // As the web's schema: two capital letters each, at most fifty, or the company is not one.
+    val codes = countries.orEmpty().map { it as? String ?: return null }
+    if (codes.size > 50 || codes.any { !isoCode.matches(it) }) return null
+    return RideCompany(n, u, where, codes)
 }
 
 /** The traveler's own companies with [company] added, as rides.ts: unchanged when it is there, refused past the limit. */
+/** Whether two companies are one, as rides.ts: their countries in any order. */
+fun sameRideCompany(a: RideCompany, b: RideCompany): Boolean =
+    a.name == b.name && a.url == b.url && a.near == b.near && a.countries.sorted() == b.countries.sorted()
+
 fun withRideCompany(companies: List<RideCompany>, company: RideCompany): List<RideCompany> {
-    if (company in companies) return companies
+    if (companies.any { sameRideCompany(it, company) }) return companies
     check(companies.size < MAX_RIDE_COMPANIES) { "At most $MAX_RIDE_COMPANIES." }
     return companies + company
 }
 
 /** The traveler's own companies without [company]. */
-fun withoutRideCompany(companies: List<RideCompany>, company: RideCompany): List<RideCompany> = companies.filter { it != company }
+fun withoutRideCompany(companies: List<RideCompany>, company: RideCompany): List<RideCompany> = companies.filterNot { sameRideCompany(it, company) }
 
 /** A rental company's name and site. */
 data class CompanyLink(val name: String, val url: String)
@@ -128,9 +140,35 @@ fun rideNeeds(
     return needs.filter { rideNeedKey(it) !in hidden }
 }
 
-/** For a car, the rental companies then the traveler's own; for a ride at home, only their own near home. */
-fun rideCompaniesFor(kind: RideNeedKind, own: List<RideCompany>): List<CompanyLink> {
+/**
+ * For a car, the rental companies then the traveler's own; for a ride at
+ * home, only their own near home. One limited to some countries is offered
+ * only in them; with [country] unknown, every one is.
+ */
+fun rideCompaniesFor(kind: RideNeedKind, own: List<RideCompany>, country: String? = null): List<CompanyLink> {
+    val where = country?.uppercase()
     val mine = own.filter { if (kind == RideNeedKind.CAR) it.near == RideNear.ANYWHERE else it.near == RideNear.HOME }
+        .filter { where == null || it.countries.isEmpty() || where in it.countries }
         .map { CompanyLink(it.name, it.url) }
     return if (kind == RideNeedKind.CAR) rentalCompanies + mine else mine
+}
+
+/** Where a suggestion's ride or car is, as rides.ts: the airport a ride to it leaves for, else where the flight lands. */
+fun rideCountry(kind: RideNeedKind, flight: Segment): String? =
+    (if (kind == RideNeedKind.TO_AIRPORT) flight.origin else flight.destination)?.country?.uppercase()
+
+/** Countries as typed for a company: their codes, or the first part that is no country. */
+sealed interface ParsedCountries {
+    data class Countries(val codes: List<String>) : ParsedCountries
+    data class Unknown(val text: String) : ParsedCountries
+}
+
+/** Names or codes separated by commas ("UK, France"), as rides.ts: each as its ISO code, once. */
+fun parseCountries(text: String): ParsedCountries {
+    val codes = mutableListOf<String>()
+    for (part in text.split(",").map { it.trim() }.filter { it.isNotEmpty() }) {
+        val code = countryCodeOf(part) ?: part.uppercase().takeIf { it.length == 2 && isCountryCode(it) } ?: return ParsedCountries.Unknown(part)
+        if (code !in codes) codes += code
+    }
+    return ParsedCountries.Countries(codes)
 }

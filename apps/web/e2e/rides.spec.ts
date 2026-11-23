@@ -69,3 +69,30 @@ test("a company added in Settings is offered for rides to and from the airport a
   await mine.getByRole("listitem").filter({ hasText: "Example Cars" }).getByRole("button", { name: "Remove" }).click();
   await expect.poll(async () => (await readUser(uid))?.rideCompanies).toEqual([other]);
 });
+
+test("a company limited to some countries is offered only there", async ({ page }) => {
+  const uid = await signIn(page, owner);
+  await seedBoston(uid);
+  await page.goto("/settings");
+  await page.getByRole("textbox", { name: "Company name" }).fill("Cretan Cars");
+  await page.getByRole("textbox", { name: "Booking page" }).fill("https://cretan.example/");
+  await page.getByRole("combobox", { name: "Suggest for" }).selectOption("anywhere");
+  await page.getByRole("textbox", { name: "Countries" }).fill("Greece, Narnia");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(page.getByText("Narnia isn't a country.")).toBeVisible();
+  await page.getByRole("textbox", { name: "Countries" }).fill("Greece");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  const mine = page.getByRole("list", { name: "Your companies" });
+  await expect(mine).toContainText("Cars wherever I land · Greece");
+  await expect.poll(async () => (await readUser(uid))?.rideCompanies).toEqual([
+    { name: "Cretan Cars", url: "https://cretan.example/", near: "anywhere", countries: ["GR"] },
+  ]);
+
+  // Not offered for a car in Boston; offered once it also covers the US.
+  await page.goto("/trips/e2e-boston");
+  const car = page.getByTestId("ride-suggestion").filter({ hasText: "Need a car in Boston?" });
+  await expect(car.getByRole("link", { name: "Avis" })).toBeVisible();
+  await expect(car.getByRole("link", { name: "Cretan Cars" })).toHaveCount(0);
+  await updateUser(uid, { rideCompanies: [{ name: "Cretan Cars", url: "https://cretan.example/", near: "anywhere", countries: ["GR", "US"] }] });
+  await expect(car.getByRole("link", { name: "Cretan Cars" })).toBeVisible();
+});

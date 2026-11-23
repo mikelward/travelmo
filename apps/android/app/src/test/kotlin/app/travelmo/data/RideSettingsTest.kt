@@ -58,4 +58,17 @@ class RideSettingsTest {
         val stored = listOf(fromWeb) + (1 until MAX_RIDE_COMPANIES).map { mapOf("name" to "Cabs $it", "url" to "https://cabs.example/", "near" to "home") }
         org.junit.jupiter.api.assertThrows<IllegalStateException> { rideCompaniesAdding(stored, RideCompany("Island Cars", "https://cars.example/", RideNear.ANYWHERE)) }.message shouldBe "At most 20."
     }
+
+    @Test
+    fun `reads and writes the countries a company is limited to`() {
+        val stored = mapOf("name" to "Cretan Cars", "url" to "https://cretan.example/", "near" to "anywhere", "countries" to listOf("GR"))
+        rideSettingsOf(mapOf("rideCompanies" to listOf(stored))).companies shouldBe listOf(RideCompany("Cretan Cars", "https://cretan.example/", RideNear.ANYWHERE, listOf("GR")))
+        rideCompaniesAdding(emptyList<Any>(), RideCompany("Cretan Cars", "https://cretan.example/", RideNear.ANYWHERE, listOf("GR"))) shouldBe listOf(stored)
+        rideCompaniesAdding(emptyList<Any>(), RideCompany("Cabs", "https://cabs.example/", RideNear.HOME)) shouldBe listOf(mapOf("name" to "Cabs", "url" to "https://cabs.example/", "near" to "home"))
+        // Countries in another order are the company already there.
+        val both = mapOf("name" to "Cabs", "url" to "https://cabs.example/", "near" to "home", "countries" to listOf("GB", "FR"))
+        val reordered = RideCompany("Cabs", "https://cabs.example/", RideNear.HOME, listOf("FR", "GB"))
+        rideCompaniesAdding(listOf(both), reordered) shouldBe null
+        rideCompaniesRemoving(listOf(both), reordered) shouldBe emptyList<Any>()
+    }
 }

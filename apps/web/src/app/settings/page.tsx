@@ -1,6 +1,6 @@
 "use client";
 
-import { RideCompany, cleanSenderList, describeBackfill, describeDeletedTrips, gmailMailboxes, isReading, maxGmailMailboxes, pausedReason, describeRegroup, groupSkips, maxRideCompanies, paths, type BackfillProgress, type GmailConnection, type SenderPatterns, type SkipGroup } from "@travelmo/core";
+import { RideCompany, cleanSenderList, parseCountries, describeBackfill, describeDeletedTrips, gmailMailboxes, isReading, maxGmailMailboxes, pausedReason, describeRegroup, groupSkips, maxRideCompanies, paths, type BackfillProgress, type GmailConnection, type SenderPatterns, type SkipGroup } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -19,6 +19,7 @@ import { subscribePush, unsubscribePush, usePushState } from "@/lib/push";
 import { describeCalendarResult, previewIcs } from "@/lib/ics";
 import { describeTripItResult, previewTripIt } from "@/lib/tripit";
 import { useFeeds, useProfile, useSenderPatterns, useTrips } from "@/lib/trips";
+import { countryName } from "@/lib/countries";
 import { addRideCompany, removeRideCompany } from "@/lib/rides";
 
 const buttonClass =
@@ -739,12 +740,18 @@ function RideCompaniesSection({ user }: { user: User }) {
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [near, setNear] = useState<RideCompany["near"]>("home");
+  const [countries, setCountries] = useState("");
   const [error, setError] = useState<string>();
 
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(undefined);
-    const parsed = RideCompany.safeParse({ name, url, near });
+    const where = parseCountries(countries);
+    if ("unknown" in where) {
+      setError(`${where.unknown} isn't a country.`);
+      return;
+    }
+    const parsed = RideCompany.safeParse({ name, url, near, ...(where.countries.length ? { countries: where.countries } : {}) });
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.path[0] === "name" ? "Enter a name." : "Use a link that starts with https://.");
       return;
@@ -753,6 +760,7 @@ function RideCompaniesSection({ user }: { user: User }) {
       await addRideCompany(user.uid, parsed.data);
       setName("");
       setUrl("");
+      setCountries("");
     } catch (err) {
       console.error("Adding a ride company failed", err);
       setError((err as Error).message);
@@ -800,6 +808,13 @@ function RideCompaniesSection({ user }: { user: User }) {
           <option value="home">Rides to and from home</option>
           <option value="anywhere">Cars wherever I land</option>
         </select>
+        <input
+          value={countries}
+          onChange={(e) => setCountries(e.target.value)}
+          placeholder="Countries (all if blank)"
+          aria-label="Countries"
+          className="min-w-0 flex-1 basis-48 rounded-lg border border-field bg-background px-3 py-2 text-sm"
+        />
         <button type="submit" disabled={!name.trim() || !url.trim() || companies.length >= maxRideCompanies} className={buttonClass}>
           Add
         </button>
@@ -813,7 +828,9 @@ function RideCompaniesSection({ user }: { user: User }) {
                 <a href={c.url} target="_blank" rel="noreferrer" className="font-medium underline">
                   {c.name}
                 </a>
-                <p className="text-zinc-600 dark:text-zinc-400">{c.near === "home" ? "Rides to and from home" : "Cars wherever I land"}</p>
+                <p className="text-zinc-600 dark:text-zinc-400">
+                  {[c.near === "home" ? "Rides to and from home" : "Cars wherever I land", c.countries?.map(countryName).join(", ")].filter(Boolean).join(" · ")}
+                </p>
               </div>
               <button type="button" className={buttonClass} onClick={() => remove(c)}>
                 Remove

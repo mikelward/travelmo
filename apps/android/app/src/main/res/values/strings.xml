@@ -134,6 +134,9 @@
     <string name="cars_anywhere">Cars wherever I land</string>
     <string name="company_name">Company name</string>
     <string name="booking_page">Booking page</string>
+    <string name="company_countries">Countries</string>
+    <string name="company_countries_hint">All if blank, or e.g. UK, France</string>
+    <string name="not_a_country">%1$s isn\'t a country.</string>
     <string name="enter_a_name">Enter a name.</string>
     <string name="use_https_link">Use a link that starts with https://.</string>
     <string name="open_company">Open %1$s</string>
