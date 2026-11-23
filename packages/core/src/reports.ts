@@ -26,10 +26,43 @@ const transport: ReadonlySet<SegmentType> = new Set(["flight", "train", "bus", "
 // which they are in no country until it arrives.
 type Moment = { at: string; country?: string; then?: string; transit?: true };
 
-function moments(segment: ExtractedSegment, lookup?: PlaceLookup): Moment[] {
+// A flight's ends that are a connection: it lands where the next flight
+// leaves from (the same airport code) within a day, with no stay booked in
+// between. The traveler changes planes there rather than visiting, so the
+// landing and the takeoff place them in no country (a day changing planes
+// in Dubai is not a day in the UAE), though they are still away.
+const connectionHours = 24;
+
+function connections(live: readonly ExtractedSegment[], lookup?: PlaceLookup): { lands: Set<ExtractedSegment>; leaves: Set<ExtractedSegment> } {
+  const flights = live.filter((s) => s.type === "flight").sort((a, b) => compareInstants(a.start, b.start));
+  const stays = live.filter((s) => s.type === "lodging");
+  const lands = new Set<ExtractedSegment>();
+  const leaves = new Set<ExtractedSegment>();
+  for (let i = 0; i + 1 < flights.length; i++) {
+    const [a, b] = [flights[i]!, flights[i + 1]!];
+    const at = a.destination?.code?.trim().toUpperCase();
+    if (!at || at !== b.origin?.code?.trim().toUpperCase()) continue;
+    const landed = Date.parse(a.end ?? a.start);
+    const left = Date.parse(b.start);
+    if (!(left >= landed && left - landed <= connectionHours * 3_600_000)) continue;
+    // Only a stay in the connection's country makes it a stopover: a hotel
+    // booked where the trip goes next can overlap the change of planes.
+    const country = placeCountry(a.destination, "flight", lookup);
+    const stayed = stays.some((s) => {
+      const where = placeCountry(s.destination ?? s.origin, "lodging", lookup);
+      return (!where || !country || where === country) && Date.parse(s.start) < left && Date.parse(s.end ?? s.start) > landed;
+    });
+    if (stayed) continue;
+    lands.add(a);
+    leaves.add(b);
+  }
+  return { lands, leaves };
+}
+
+function moments(segment: ExtractedSegment, lookup?: PlaceLookup, connecting: { lands?: boolean; leaves?: boolean } = {}): Moment[] {
   if (transport.has(segment.type)) {
-    const from = placeCountry(segment.origin, segment.type, lookup);
-    const to = placeCountry(segment.destination, segment.type, lookup);
+    const from = connecting.leaves ? undefined : placeCountry(segment.origin, segment.type, lookup);
+    const to = connecting.lands ? undefined : placeCountry(segment.destination, segment.type, lookup);
     // Only a flight is in no country on the way. A drive, a train, a bus or
     // a ferry that starts and ends in one country stays in it throughout (a
     // two-night train across the US never leaves it); between two countries,
@@ -39,7 +72,7 @@ function moments(segment: ExtractedSegment, lookup?: PlaceLookup): Moment[] {
     const during = !flight && from && from === to ? from : undefined;
     return [
       { at: segment.start, ...(from ? { country: from } : {}), ...(during ? { then: during } : flight ? { transit: true as const } : {}) },
-      { at: segment.end ?? segment.start, ...(to ? { country: to, then: to } : {}) },
+      { at: segment.end ?? segment.start, ...(to ? { country: to, then: to } : connecting.lands ? { transit: true as const } : {}) },
     ];
   }
   const here = placeCountry(segment.destination ?? segment.origin, segment.type, lookup);
@@ -83,7 +116,11 @@ export function tripDayPlaces(
 ): Map<string, TripDay> {
   // In the order they happened, which across the date line is not the
   // order of their local dates: a flight can land the day before it left.
-  const timeline = liveSegments(segments).flatMap((s) => moments(s, lookup)).sort((a, b) => compareInstants(a.at, b.at));
+  const live = liveSegments(segments);
+  const changes = connections(live, lookup);
+  const timeline = live
+    .flatMap((s) => moments(s, lookup, { lands: changes.lands.has(s), leaves: changes.leaves.has(s) }))
+    .sort((a, b) => compareInstants(a.at, b.at));
   const days = new Map<string, TripDay>();
   const bounds = reportBounds(trip, segments);
   if (!bounds) return days;
@@ -156,6 +193,8 @@ export function travelReport(
   const { year, lookup } = options;
   const inYear = (date: string) => !year || date.startsWith(year);
   const dayCountries = new Map<string, Set<string>>();
+  // Days between countries all day (changing planes), which are known.
+  const transitDays = new Set<string>();
   const countryTrips = new Map<string, Set<string>>();
   const yearDays = new Map<string, Map<string, Set<string>>>();
   const yearTrips = new Map<string, number>();
@@ -180,7 +219,8 @@ export function travelReport(
     yearTrips.set(startYear, (yearTrips.get(startYear) ?? 0) + 1);
     if (inYear(bounds.start)) trips += 1;
 
-    for (const [day, countries] of tripDays(trip, segments, today, lookup)) {
+    for (const [day, { countries, inTransit }] of tripDayPlaces(trip, segments, today, lookup)) {
+      if (inTransit && inYear(day)) transitDays.add(day);
       const y = day.slice(0, 4);
       const ofYear = yearDays.get(y) ?? new Map<string, Set<string>>();
       yearDays.set(y, ofYear);
@@ -217,8 +257,8 @@ export function travelReport(
 
   const daysIn = new Map<string, number>();
   let unknownDays = 0;
-  for (const countries of dayCountries.values()) {
-    if (!countries.size) unknownDays += 1;
+  for (const [day, countries] of dayCountries) {
+    if (!countries.size && !transitDays.has(day)) unknownDays += 1;
     for (const c of countries) daysIn.set(c, (daysIn.get(c) ?? 0) + 1);
   }
 
