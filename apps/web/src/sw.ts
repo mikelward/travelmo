@@ -107,10 +107,17 @@ self.addEventListener("push", (event) => {
   );
 });
 
-// Tapping one opens the trip, in a window the app already has if any.
+// Tapping one opens the trip, in a window the app already has if any; a
+// check-in reminder's airline site opens in a window of its own, leaving
+// the app where it was.
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = new URL((event.notification.data as { url?: string } | undefined)?.url ?? "/", self.location.origin).href;
+  const target = new URL((event.notification.data as { url?: string } | undefined)?.url ?? "/", self.location.origin);
+  const url = target.href;
+  if (target.origin !== self.location.origin) {
+    if (target.protocol === "https:") event.waitUntil(self.clients.openWindow(url).then(() => undefined));
+    return;
+  }
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clients) => {
       const open = clients.find((c) => c.url === url) ?? clients[0];

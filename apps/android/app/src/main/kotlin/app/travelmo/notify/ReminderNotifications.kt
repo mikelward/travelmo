@@ -10,14 +10,17 @@ import android.content.pm.PackageManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import app.travelmo.MainActivity
 import app.travelmo.R
+import app.travelmo.core.externalReminderUrl
 import app.travelmo.log.TravelmoLog
 import com.mikelward.androidlog.safe
 
 /**
  * The reminder channel and how a reminder from the parser is shown. A tap
- * opens the trip: [MainActivity] reads [EXTRA_URL].
+ * opens the trip ([MainActivity] reads [EXTRA_URL]), or a check-in
+ * reminder's airline site in the browser.
  */
 object ReminderNotifications {
     const val CHANNEL_ID = "reminders"
@@ -49,10 +52,12 @@ object ReminderNotifications {
             return
         }
         ensureChannel(context)
-        val open = Intent(context, MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            putExtra(EXTRA_URL, url)
-        }
+        // A check-in reminder's airline site opens in the browser; a trip, in the app.
+        val open = externalReminderUrl(url)?.let { Intent(Intent.ACTION_VIEW, it.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+            ?: Intent(context, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                putExtra(EXTRA_URL, url)
+            }
         val tap = PendingIntent.getActivity(context, tag.hashCode(), open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)

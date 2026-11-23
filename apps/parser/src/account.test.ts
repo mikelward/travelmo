@@ -156,10 +156,14 @@ describe("deleteAccount", () => {
     const untouched = await seedTrip(owner, ["partner@example.com"]);
     await db.doc(paths.travelProfile(owner)).set({ ownerUid: owner, trustedEmails: [email, "partner@example.com"] });
     await db.doc(paths.access(email)).set({ email, status: "approved", uid, approvedBy: "admin", approvedAt: iso });
+    // A check-in reminder that reached both of them on the shared trip.
+    const reminder = paths.checkInReminder(`${shared}__${shared}-s0`);
+    await db.doc(reminder).set({ id: `${shared}__${shared}-s0`, departs: iso, sent: [owner, uid], attempts: 0, done: true, at: iso });
     const { deps } = fakeDeps();
 
     const result = await deleteAccount(uid, email, deps);
     expect(await exists(paths.access(email))).toBe(false);
+    expect((await db.doc(reminder).get()).data()?.sent).toEqual([owner]);
 
     expect((await db.doc(paths.trip(shared)).get()).data()?.sharedWith).toEqual(["partner@example.com"]);
     expect(await segmentCount(shared)).toBe(3);

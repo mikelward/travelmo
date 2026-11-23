@@ -340,6 +340,12 @@
       Restore action, as the web does.
 - [x] Android app: a cancelled booking in a screenshot fixture
       (`trip_detail_cancelled`).
+- [x] Remind travelers when online check-in opens: per-airline windows
+      (default a day), on the trip card too; once per booking and person,
+      by their reminder channels, from the every-minute flight job.
+- [ ] Check-in reminders: deep links to each airline's check-in page in
+      place of its home page, once each is checked from a browser; more
+      airlines in the table as their windows are confirmed.
 
 ## Decisions needing review
 
@@ -636,11 +642,24 @@ Guesses made on autopilot; change any of them freely.
   them when it is renamed, as the web's form does when a name is typed over
   a pick. Deleting a booking asks first on Android, unlike the web, since
   a tap in an overflow menu is easier to slip on than a text button.
-- The trip card's online check-in line assumes the common window, a day
-  before departure until departure, since airlines differ (some open 48 or
-  30 hours ahead, most close 45 to 60 minutes before) and the booking
-  carries no airline rule; the line says "usually" and is a nudge, not a
-  promise. The countdown stops a week out, where a date says more than a
+- The trip card's online check-in line reads the airline's window from a
+  short table (a day for any airline not listed) and says open until
+  departure, since airlines close at different times (most 45 to 60
+  minutes before); the line says "usually" and is a nudge, not a
+  promise. Check-in reminders: sent from the every-minute flight job (not
+  the daily reminder run, which would be up to a day late, nor a new
+  Scheduler job), even without an AeroAPI key; no earlier than two days
+  before departure however early the airline opens (easyJet's month), and
+  none in the last hour; a flight booked after check-in opened is
+  reminded at once; once per booking, so a retimed flight is not reminded
+  again and someone added to the trip after it went is not told; no
+  switch of its own, following `reminders.email` and `reminders.push`;
+  delivered when any channel took it (as flight news), a failure on every
+  channel tried again by the next five runs; a tap opens the airline's
+  home page (not a deep link to check-in, which could not be checked from
+  the sandbox and moves often) or the trip; one reminder per person per
+  flight across bookings of the same flight. The table's windows are from
+  memory of the airlines' published rules, not checked online. The countdown stops a week out, where a date says more than a
   count of days. The stay line names lodging only; a rental car under way
   is not a place one is at.
 - Reminders by push use the Web Push standard (VAPID keys the parser holds,

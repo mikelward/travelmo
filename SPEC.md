@@ -92,6 +92,11 @@ viewer's zone. Trip bounds are calendar dates.
   title, url, tag, attempts, at`, someone owed news of the flight. Any signed-in client may read a status by
   the key its booking names, never list them; the parser alone writes all
   four, and alone reads the other three.
+- `checkInReminders/{ownerUid__segmentId}` — `id, tripId, segmentId, departs,
+  sent[], attempts, done, at, claimUntil`: whom a booking's check-in
+  reminder reached (uids), `departs` in UTC for the sweep, which moves it
+  instead for a booking retimed later; each run moves a due booking's
+  marker with it to its trip and departure ("Check-in reminders"). The parser's alone.
 - `users/{uid}/parsedMessages/{sourceId}` — `outcome` (processing,
   filtered, not_booking, imported, failed, cancellation), `source` (absent for Gmail,
   `tripit` or `ics` otherwise), `reason, from, subject, segmentIds[],
@@ -175,10 +180,11 @@ show every trip's dates.
 The same card says how soon that is when it is within a week ("in 25 min",
 "in 3 h 20 min", "tomorrow", "on Sun"), counted in the place's own offset;
 names the stay under way and when it ends; and, for the next flight, when
-online check-in opens (a day before departure, which most airlines honor,
-so the card says "usually") from a day before that, then that it is open,
-with the booking reference at hand (`packages/core/src/status.ts`). The
-clock behind these lines ticks once a minute.
+online check-in opens from a day before that, then that it is open, with
+the booking reference at hand (`packages/core/src/status.ts`). The window
+is the airline's, read from the flight number ("Check-in reminders"); an
+airline may change it, so the card says "usually". The clock behind these
+lines ticks once a minute.
 
 `/calendar` shows the same trips month by month (`packages/core/src/calendar.ts`):
 weeks run Monday to Sunday, padded with the neighboring months' days, and
@@ -334,6 +340,64 @@ notification is kept within the payload a push service guarantees to carry
 (3993 bytes, RFC 8291): a trip with more news than fits says how many more
 lines wait on its page. Each send has a socket timeout, so one quiet
 endpoint cannot stall the run for everyone after it.
+
+## Check-in reminders
+
+When a flight's online check-in opens, whoever has the trip hears of it
+once: "Check in for QF 1 to London", "Online check-in is open.", when it
+departs (as written, in the place's offset) and the booking reference.
+
+The window comes from a table of airlines by IATA code
+(`packages/core/src/airlines.ts`, mirrored in the Android app's core), read
+from the flight number in the booking's title as live flight status reads
+it: hours before departure and the airline's site. It lists only airlines
+whose window is well known (American, Air Canada, Alaska, JetBlue, British
+Airways, Delta, Qantas, United, Virgin Australia and Southwest a day ahead;
+Lufthansa and SWISS 23 hours; Air France and KLM 30; Finnair 36; Cathay
+Pacific, Emirates and Singapore Airlines 48; easyJet 30 days); any other
+airline, or a booking with no flight number, gets a day, what most
+airlines do. The site is the airline's home page, not a deep link to its
+check-in form, since those move often. The trip card's line uses the same
+table.
+
+The parser's every-minute flight-status job sends them first
+(`apps/parser/src/checkIn.ts`), with or without `AEROAPI_KEY`: the daily
+reminder run would send them up to a day late, and the flight job already
+reads flight bookings by local start with an index for it. It reads the
+flight bookings leaving from an hour to two days ahead (widened by every
+offset a place can have), and a booking is due once its check-in has
+opened, or two days before departure for an airline that opens earlier
+(easyJet's month ahead is not worth a nudge yet), until an hour before
+departure, when online check-in has usually closed. So a flight booked
+after its check-in opened is reminded at once, and one already gone or
+about to go is not, nor one that was cancelled.
+
+It goes to the owner of the booking's trip and the people it is shared
+with (by verified address), only those approved ("Access"), by the
+reminder settings they chose: email when `reminders.email` is on (to the
+address Google verified), and every browser and phone when
+`reminders.push` is. There is no switch of its own: someone who wants
+reminders gets this one too. The email carries the airline's site, where
+the table knows it, and the trip; a notification's tap opens the airline's
+site in a window of its own (web) or the browser (Android), or the trip
+where the airline is not listed. A push service holds it until an hour
+before departure, at most a day. Someone on two bookings of the same
+flight (a couple's, each shared with the other) hears once, of the one on
+their own trip.
+
+A marker per booking (`checkInReminders/{ownerUid__segmentId}`, keyed so
+it stays with a booking moved to another of its owner's trips; the
+parser's alone) records whom it reached. A run first claims all of a
+flight's bookings for ten minutes from when it takes them, all or none in
+one transaction, so overlapping runs never both send or split a flight
+(each email send is bounded to well under that); where to send is read
+before anything is sent, so a failed read never repeats a sent one; a
+person it reached is never told again, and a delivery that failed on
+every channel of a person is tried again by the next runs, five in all.
+Once nobody is left to try, the booking is done and later runs read only
+its marker; someone added to the trip after that is not told. Markers go
+once their flight has left, swept by the same job, and account deletion
+takes the person's uid off them.
 
 ## Live flight status
 
@@ -607,8 +671,8 @@ Enforced in three places:
   forwarded to its address is refused as an unknown address and bounced;
   its feeds, Google calendars and reminders are skipped (one whose
   approval cannot be looked up is skipped and logged, and the rest carry
-  on); flight-status news is not sent to it, and news it was owed is
-  dropped; its calendar link answers 404 as an unknown link does. A new account
+  on); flight-status news and check-in reminders are not sent to it, and
+  news it was owed is dropped; its calendar link answers 404 as an unknown link does. A new account
   cannot connect any of these, since connecting goes through `requireUser`.
 
 The Android app calls `/access/check` once each time it opens signed in,
@@ -1524,7 +1588,8 @@ caller's uid, in this order:
 2. Lookups that name the user outside their own documents: `gmailAccounts`,
    `forwardAddresses` (the forwarding address bounces from then on),
    `calendarExports` (the export link stops working), `pendingConnections`,
-   `oauthStates` and `geocodeRetries`, each by its `uid` field.
+   `oauthStates` and `geocodeRetries`, each by its `uid` field; and their
+   uid comes off the `sent` list of `checkInReminders`.
 3. Every trip they own: marked `deleting` first, as a trip deletion is, so
    no edit adds to it meanwhile, then its segments, and the trip document
    only once they are all gone, so a failure leaves the trip for a retry to
@@ -1575,7 +1640,7 @@ build without one points to the web instead.
 | `POST /internal/pubsub/gmail` | OIDC from `INTERNAL_CALLERS` | Pub/Sub push target |
 | `POST /internal/backfill` | OIDC from `INTERNAL_CALLERS` | Pub/Sub push target for the mailbox reading's next batch |
 | `POST /internal/renew-watches` | OIDC from `INTERNAL_CALLERS` | Cloud Scheduler target |
-| `POST /internal/flight-status` | OIDC from `INTERNAL_CALLERS` | Cloud Scheduler target, every minute: looks at the flights due a look and sends their news ("Live flight status"); `{enabled: false}` without `AEROAPI_KEY` |
+| `POST /internal/flight-status` | OIDC from `INTERNAL_CALLERS` | Cloud Scheduler target, every minute: sends the check-in reminders due ("Check-in reminders"), then looks at the flights due a look and sends their news ("Live flight status"); `{enabled: false}` without `AEROAPI_KEY`, though check-in reminders still go |
 | `POST /flights/refresh` | Firebase ID token | Looks at the flights of a trip the caller can see (`tripId`) that are due a refresh; 404 for a trip they cannot see |
 | `POST /forward/issue` | Firebase ID token | Issues the user's forwarding address, retiring any old one; returns it; 503 without `FORWARD_DOMAIN` |
 | `POST /forward/stop` | Firebase ID token | Retires the user's forwarding address |
@@ -1621,7 +1686,14 @@ shared by everyone on it; AeroAPI's Personal tier has no monthly minimum
 and its first $5 a month free, and covers personal and household use only
 (Standard, for anything wider, is $100 a month). Its Cloud Scheduler job
 runs every minute, still about ten cents a month, and each run is one
-small Firestore query. Forwarding addresses ride Cloudflare Email Routing (free, unlimited
+small Firestore query. Check-in reminders add a second query to each run,
+reading the flight bookings leaving within about three days (two days
+plus the widest offsets) and a marker for each whose check-in is open, and
+a sweep query, usually empty (billed as one read each): about 3,000 reads
+a day with no flights near, and a few thousand more a day per flight in
+the two days before it leaves, within Firestore's free daily allowance
+(50,000) for a household, growing with the flights booked across all
+users (past it, about six cents per 100,000 reads). Forwarding addresses ride Cloudflare Email Routing (free, unlimited
 inbound) and one Email Worker (free plan: 100,000 requests a day), with
 the model cost of a Gmail import per forwarded email. The rules tests and CI run
 on GitHub-hosted runners; CI's deploys of the parser build on Cloud Build

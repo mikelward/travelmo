@@ -1,4 +1,4 @@
-import { allCancelled, displayBounds, eventVerb, formatDate, formatDateRange, localDate, localTime, relativeTime, tripStatus, type Segment, type Trip } from "@travelmo/core";
+import { allCancelled, checkInLine, displayBounds, eventVerb, formatDate, formatDateRange, localDate, localTime, relativeTime, tripStatus, type Segment, type Trip } from "@travelmo/core";
 import Link from "next/link";
 
 // A trip's card: the title (as displayTitles shows it among the list), its
@@ -57,8 +57,7 @@ export function TripCard({
       )}
       {checkIn && (
         <p className={`mt-1 text-sm ${checkIn.open ? "text-amber-800 dark:text-amber-300" : "text-muted"}`} data-testid="trip-checkin">
-          {checkIn.open ? "Online check-in open, usually until departure" : `Online check-in usually opens ${formatDate(localDate(checkIn.opensAt))} ${localTime(checkIn.opensAt)}`}
-          {checkIn.segment.confirmation && ` · Ref ${checkIn.segment.confirmation}`}
+          {checkInLine(checkIn)}
         </p>
       )}
     </Link>

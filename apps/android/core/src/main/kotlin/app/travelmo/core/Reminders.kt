@@ -21,3 +21,12 @@ private val tripUrl = Regex("""/trips/([A-Za-z0-9_-]+)(?:[/?#]|$)""")
 
 /** The trip a reminder's URL points at (`https://<web>/trips/<id>`), or null for anything else. */
 fun tripIdFromReminderUrl(url: String?): String? = url?.let { tripUrl.find(it)?.groupValues?.get(1) }
+
+private val httpsUrl = Regex("""^https://[^/\s]+(/\S*)?$""")
+
+/**
+ * A reminder's tap target outside the app, to open in the browser: a
+ * check-in reminder carries the airline's site rather than a trip. Null for
+ * a trip's URL, which the app opens itself, and for anything not https.
+ */
+fun externalReminderUrl(url: String?): String? = url?.takeIf { tripIdFromReminderUrl(it) == null && httpsUrl.matches(it) }

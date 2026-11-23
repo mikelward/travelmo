@@ -358,8 +358,9 @@ One Google Cloud project holds everything.
    every subscribed calendar feed, `/internal/geocode-sweep`, which asks
    the geocoder again about the bookings a spent daily budget put off, and
    `/internal/reminders`, which sends the day's reminders by email and
-   push, daily, and `/internal/flight-status`, which looks at the flights
-   near departure or arrival, every minute. Three jobs per billing account
+   push, daily, and `/internal/flight-status`, which sends check-in
+   reminders and looks at the flights near departure or arrival, every
+   minute (check-in reminders go even without `AEROAPI_KEY`). Three jobs per billing account
    are free; each further one costs about ten cents a month. Deploy the
    Firestore indexes first: the flight status job queries bookings by type
    and start across trips.

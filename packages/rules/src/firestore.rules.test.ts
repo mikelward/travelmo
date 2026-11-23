@@ -365,6 +365,17 @@ describe("flight status", () => {
     await assertFails(getDoc(doc(as(owner), paths.flightStatusNewsEntry(`${key}__${owner.uid}`))));
     await assertFails(setDoc(doc(as(owner), paths.flightStatusClaim(key)), { until: "2026-12-12T21:00:30Z" }));
   });
+
+  it("keeps who was reminded of check-in from every client", async () => {
+    const id = "trip1__flight1";
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), paths.checkInReminder(id)), { id, sent: [owner.uid], done: true });
+    });
+    await assertFails(getDoc(doc(as(owner), paths.checkInReminder(id))));
+    await assertFails(getDocs(collection(as(owner), paths.checkInReminders())));
+    await assertFails(setDoc(doc(as(owner), paths.checkInReminder(id)), { id, sent: [], done: false }));
+    await assertFails(deleteDoc(doc(as(owner), paths.checkInReminder(id))));
+  });
 });
 
 describe("a deleted account", () => {

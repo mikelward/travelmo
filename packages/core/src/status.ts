@@ -1,4 +1,5 @@
-import { formatDate } from "./format";
+import { checkInHoursBefore } from "./airlines";
+import { formatDate, localTime } from "./format";
 import { compareInstants, splitInstant } from "./instant";
 import type { ExtractedSegment } from "./schema";
 import { liveSegments, localDate, nextEvent, type UpcomingEvent } from "./trips";
@@ -52,9 +53,13 @@ export function relativeTime(now: string, at: string): string | undefined {
   return `on ${formatDate(date, "en-GB", { day: undefined, month: undefined })}`;
 }
 
-// Most airlines open online check-in a day before departure and close it
-// at the gate; the exact window is theirs, so the card says "usually".
-export const checkInOpensHoursBefore = 24;
+// When online check-in opens for a flight: the airline's window before
+// departure (airlines.ts; a day for any airline not listed), written in the
+// departure's own offset. The window is the airline's to change, so the
+// card says "usually".
+export function checkInOpensAt(segment: Pick<ExtractedSegment, "type" | "title" | "start">): string {
+  return shiftInstant(segment.start, -checkInHoursBefore(segment) * hour);
+}
 
 export type CheckIn<S extends ExtractedSegment = ExtractedSegment> = { segment: S; opensAt: string; open: boolean };
 
@@ -67,9 +72,17 @@ export function flightCheckIn<S extends ExtractedSegment>(segments: readonly S[]
     if (!next || compareInstants(segment.start, next.start) < 0) next = segment;
   }
   if (!next) return undefined;
-  const opensAt = shiftInstant(next.start, -checkInOpensHoursBefore * hour);
+  const opensAt = checkInOpensAt(next);
   if (Date.parse(now) < Date.parse(opensAt) - day) return undefined;
   return { segment: next, opensAt, open: compareInstants(now, opensAt) >= 0 };
+}
+
+// The check-in line a card shows, with the booking reference at hand.
+export function checkInLine(checkIn: CheckIn): string {
+  const head = checkIn.open
+    ? "Online check-in open, usually until departure"
+    : `Online check-in usually opens ${formatDate(localDate(checkIn.opensAt))} ${localTime(checkIn.opensAt)}`;
+  return checkIn.segment.confirmation ? `${head} · Ref ${checkIn.segment.confirmation}` : head;
 }
 
 // The stay the traveler is in the middle of, if any: checked in, not yet out.
