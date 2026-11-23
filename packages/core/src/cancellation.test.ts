@@ -493,7 +493,7 @@ describe("days away in reports", () => {
   it("count only the days the bookings still booked span", () => {
     expect([...tripDays(trip, [london, paris], "2026-07-01").keys()]).toEqual(["2026-06-01", "2026-06-02", "2026-06-03"]);
     const report = travelReport([{ trip: { id: "t", ...trip }, segments: [london, paris] }], "2026-07-01");
-    expect(report.countries).toEqual([{ country: "GB", days: 3, trips: 1 }]);
+    expect(report.countries).toEqual([{ country: "GB", days: 3, trips: 1, tripIds: ["t"] }]);
   });
 
   it("date the trip by what is still booked: ahead until then, and in the year it falls", () => {

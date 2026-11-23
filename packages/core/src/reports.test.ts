@@ -120,10 +120,10 @@ describe("travelReport", () => {
     expect(report.upcoming).toBe(1);
     expect(report.days).toBe(11);
     expect(report.countries).toEqual([
-      { country: "FR", days: 6, trips: 1 },
-      { country: "JP", days: 4, trips: 1 },
-      { country: "US", days: 2, trips: 1 },
-      { country: "BE", days: 1, trips: 1 },
+      { country: "FR", days: 6, trips: 1, tripIds: ["paris"] },
+      { country: "JP", days: 4, trips: 1, tripIds: ["tokyo"] },
+      { country: "US", days: 2, trips: 1, tripIds: ["paris"] },
+      { country: "BE", days: 1, trips: 1, tripIds: ["paris"] },
     ]);
     expect(report.years).toEqual([
       { year: "2025", trips: 1, days: 9, countries: 4 },
@@ -178,11 +178,17 @@ describe("travelReport", () => {
     expect(names("2024-12-29")).toEqual([]);
   });
 
+  it("lists the trips behind each country, the latest first", () => {
+    const again = { trip: { id: "tokyo2", start: "2025-03-01", end: "2025-03-02" }, segments: [stay("Ryokan Again", "JP", "2025-03-01T15:00:00+09:00", "2025-03-02T10:00:00+09:00")] };
+    const report = travelReport([tokyo, again], "2025-11-01", { lookup: airportPlace });
+    expect(report.countries.find((c) => c.country === "JP")?.tripIds).toEqual(["tokyo2", "tokyo"]);
+  });
+
   it("narrows to one year by the days spent in it", () => {
     const report = travelReport([paris, tokyo], "2025-11-01", { year: "2024", lookup: airportPlace });
     expect(report.trips).toBe(1);
     expect(report.days).toBe(2);
-    expect(report.countries).toEqual([{ country: "JP", days: 2, trips: 1 }]);
+    expect(report.countries).toEqual([{ country: "JP", days: 2, trips: 1, tripIds: ["tokyo"] }]);
     expect(report.airports).toEqual([]);
     expect(report.years).toHaveLength(2);
   });

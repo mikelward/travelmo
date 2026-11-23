@@ -54,6 +54,7 @@ import app.travelmo.core.TripWithBookings
 import app.travelmo.core.WorldMapData
 import app.travelmo.core.countryName
 import app.travelmo.core.displayTitles
+import app.travelmo.core.formatDateRange
 import app.travelmo.core.favoritePlaces
 import app.travelmo.core.travelReport
 import app.travelmo.core.worldMap
@@ -103,10 +104,28 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, botto
             }
             if (report.countries.isNotEmpty()) {
                 item(key = "countries") {
+                    // Each country opens to the trips with days there, so a surprising one can be found.
+                    var open by rememberSaveable { mutableStateOf<String?>(null) }
+                    val trips = remember(input) { input.orEmpty().associate { it.trip.id to it.trip } }
                     SectionTitle(stringResource(R.string.days_in_each_country))
                     Table(
                         header = listOf(stringResource(R.string.col_country) to 2f, stringResource(R.string.col_days) to 0.7f, stringResource(R.string.col_trips) to 0.7f),
                         rows = report.countries.map { listOf(countryName(it.country), it.days.toString(), it.trips.toString()) },
+                        onRow = { r -> report.countries[r].country.let { open = if (open == it) null else it } },
+                        open = report.countries.indexOfFirst { it.country == open }.takeIf { it >= 0 },
+                        under = { r ->
+                            Column(modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)) {
+                                for (id in report.countries[r].tripIds) {
+                                    val trip = trips[id]
+                                    Text(
+                                        listOfNotNull(titles[id] ?: trip?.title, trip?.let { formatDateRange(it.start, it.end) }).joinToString(" · "),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.clickable { onOpenTrip(id) }.padding(vertical = 4.dp),
+                                    )
+                                }
+                            }
+                        },
                     )
                 }
             }
@@ -178,7 +197,14 @@ private fun SectionTitle(text: String) {
 
 /** A small table: a muted header, then rows divided by hairlines; numbers right-aligned. */
 @Composable
-private fun Table(header: List<Pair<String, Float>>, rows: List<List<String>>, onRow: ((Int) -> Unit)? = null) {
+private fun Table(
+    header: List<Pair<String, Float>>,
+    rows: List<List<String>>,
+    onRow: ((Int) -> Unit)? = null,
+    // The row opened, and what shows under it.
+    open: Int? = null,
+    under: @Composable (Int) -> Unit = {},
+) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.padding(vertical = 4.dp)) {
@@ -194,6 +220,7 @@ private fun Table(header: List<Pair<String, Float>>, rows: List<List<String>>, o
                     Text(cell, style = MaterialTheme.typography.bodyMedium, textAlign = if (i == 0) TextAlign.Start else TextAlign.End, modifier = Modifier.weight(header[i].second))
                 }
             }
+            if (open == r) under(r)
         }
     }
 }
