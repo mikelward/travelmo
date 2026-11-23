@@ -1,6 +1,6 @@
 "use client";
 
-import { addMonths, monthLabel, monthOf, monthWeeks, weekBars, type Trip, type TripBar } from "@travelmo/core";
+import { addMonths, displayTitles, monthLabel, monthOf, monthWeeks, weekBars, type Trip, type TripBar } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
 import { useState } from "react";
@@ -16,7 +16,7 @@ const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 // A trip's bar across one week: its title where it starts (or at the
 // week's edge when it carried over), the whole bar a link to the trip.
-function Bar({ bar, uid }: { bar: TripBar; uid: string }) {
+function Bar({ bar, title, uid }: { bar: TripBar; title: string; uid: string }) {
   const shared = bar.trip.ownerUid !== uid;
   const rounded = `${bar.continuesBefore ? "" : "rounded-l-md"} ${bar.continuesAfter ? "" : "rounded-r-md"}`;
   return (
@@ -24,19 +24,33 @@ function Bar({ bar, uid }: { bar: TripBar; uid: string }) {
       href={`/trips/${bar.trip.id}`}
       data-trip={bar.trip.id}
       data-days={`${bar.from}-${bar.to}`}
-      title={bar.trip.title}
+      title={title}
       style={{ gridColumn: `${bar.from + 1} / ${bar.to + 2}`, gridRow: bar.lane + 2 }}
       className={`${rounded} mx-px truncate px-1.5 py-0.5 text-xs text-white hover:opacity-90 ${
         shared ? "bg-violet-600 dark:bg-violet-500" : "bg-sky-600 dark:bg-sky-500"
       } ${bar.trip.deleting ? "opacity-50" : ""}`}
     >
       {bar.continuesBefore ? "… " : ""}
-      {bar.trip.title}
+      {title}
     </Link>
   );
 }
 
-function Week({ week, trips, month, today, uid }: { week: readonly string[]; trips: readonly Trip[]; month: string; today: string; uid: string }) {
+function Week({
+  week,
+  trips,
+  titles,
+  month,
+  today,
+  uid,
+}: {
+  week: readonly string[];
+  trips: readonly Trip[];
+  titles: Map<string, string>;
+  month: string;
+  today: string;
+  uid: string;
+}) {
   const bars = weekBars(week, trips);
   const lanes = bars.reduce((n, b) => Math.max(n, b.lane + 1), 0);
   return (
@@ -60,7 +74,7 @@ function Week({ week, trips, month, today, uid }: { week: readonly string[]; tri
         );
       })}
       {bars.map((bar) => (
-        <Bar key={bar.trip.id} bar={bar} uid={uid} />
+        <Bar key={bar.trip.id} bar={bar} title={titles.get(bar.trip.id) ?? bar.trip.title} uid={uid} />
       ))}
       {/* Keeps a week with no trips as tall as a day number. */}
       <div style={{ gridColumn: 1, gridRow: 1 }} className="min-h-10" aria-hidden />
@@ -75,6 +89,9 @@ function Calendar({ user }: { user: User }) {
   const [month, setMonth] = useState(monthOf(today));
   if (!trips) return <p className="text-muted">Loading trips…</p>;
   const weeks = monthWeeks(month);
+  // Among all the trips, not just this month's: the same camp a year
+  // earlier still gets this one its dates.
+  const titles = displayTitles(trips);
   const inMonth = trips.filter((t) => monthOf(t.start) <= month && monthOf(t.end) >= month);
   return (
     <>
@@ -103,7 +120,7 @@ function Calendar({ user }: { user: User }) {
           ))}
         </div>
         {weeks.map((week) => (
-          <Week key={week[0]} week={week} trips={inMonth} month={month} today={today} uid={user.uid} />
+          <Week key={week[0]} week={week} trips={inMonth} titles={titles} month={month} today={today} uid={user.uid} />
         ))}
       </div>
       {inMonth.length === 0 && (

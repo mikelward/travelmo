@@ -101,6 +101,28 @@ describe("regroupTrips", () => {
     expect(store.trips.get("palace")).toEqual(trip("palace", "Palace with Nan", "2026-12-20", "2026-12-20"));
   });
 
+  it("renames a day camp still named for its venue after the camp", async () => {
+    const store = memoryStore();
+    store.trips.set("camp", trip("camp", "Weston Park School", "2025-08-11", "2025-08-15"));
+    for (const d of [11, 12, 13, 14, 15]) {
+      store.segments.set(
+        `c-${d}`,
+        segment("camp", `c-${d}`, "c", {
+          type: "activity",
+          title: `Debutots Camp - ${d}th Aug 2025`,
+          start: `2025-08-${d}T10:00:00+01:00`,
+          end: `2025-08-${d}T15:00:00+01:00`,
+          destination: { name: "Weston Park School", address: "Denton Road, Hornsey, London, N8 9WP", country: "GB" },
+        }),
+      );
+    }
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 1, deleted: 0 });
+    expect(store.trips.get("camp")?.title).toBe("Debutots Camp");
+    store.trips.set("camp", { ...store.trips.get("camp")!, title: "Summer camp" });
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0 });
+    expect(store.trips.get("camp")?.title).toBe("Summer camp");
+  });
+
   it("moves a ride from the airport into the trip of the flight it meets", async () => {
     const store = memoryStore();
     const lhr = { name: "London Heathrow", code: "LHR", city: "London", country: "GB" };

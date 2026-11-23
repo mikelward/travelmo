@@ -597,6 +597,46 @@ describe("tripTitle", () => {
     expect(tripTitle([course])).toBe("5 Day Summer Holiday Course: Peter Pan");
   });
 
+  it("names a day camp after the camp, not its venue", () => {
+    const school = { name: "Weston Park School", address: "Denton Road, Hornsey, London, N8 9WP", country: "GB" };
+    const days = [11, 12, 13, 14, 15].map((d) => ({
+      type: "activity" as const,
+      title: `Debutots Camp - ${d}th Aug 2025`,
+      start: `2025-08-${d}T10:00:00+01:00`,
+      end: `2025-08-${d}T15:00:00+01:00`,
+      destination: school,
+    }));
+    expect(tripTitle(days)).toBe("Debutots Camp");
+  });
+
+  it("names a course after it whatever form its dates take", () => {
+    const camp = (titles: string[]) =>
+      titles.map((title, i) => ({
+        type: "activity" as const,
+        title,
+        start: `2026-08-1${i + 1}T10:00:00+01:00`,
+        destination: { name: "Weston Park School" },
+      }));
+    expect(tripTitle(camp(["Camp – 11 August", "Camp – 12 August"]))).toBe("Camp");
+    expect(tripTitle(camp(["Camp (Mon 11 Aug)", "Camp (Tue 12 Aug)"]))).toBe("Camp");
+    expect(tripTitle(camp(["Camp, 11/08/2026", "Camp, 12/08/2026"]))).toBe("Camp");
+    expect(tripTitle(camp(["Camp - 2026-08-11", "Camp - 2026-08-12"]))).toBe("Camp");
+    expect(tripTitle(camp(["Camp on 11 Aug", "Camp on 12 Aug"]))).toBe("Camp");
+    expect(tripTitle(camp(["Camp - August 11th, 2026", "Camp - August 12th, 2026"]))).toBe("Camp");
+  });
+
+  it("keeps a number that is not a date", () => {
+    const film = (n: number, day: number) => ({
+      type: "activity" as const,
+      title: `Toy Story ${n}`,
+      start: `2026-07-0${day}T12:00:00+01:00`,
+      destination: { name: "Everyman" },
+    });
+    expect(tripTitle([film(5, 4)])).toBe("Toy Story 5");
+    expect(tripTitle([film(4, 4), film(5, 5)])).toBe("Everyman");
+    expect(tripTitle([{ ...film(5, 4), title: "Camp - Group 2" }, { ...film(5, 5), title: "Camp - Group 3" }])).toBe("Everyman");
+  });
+
   it("names a trip after where it goes, not the car to the airport", () => {
     const car = {
       type: "other" as const,

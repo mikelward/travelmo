@@ -146,6 +146,15 @@ listener too, so their document warnings know where they go, but their
 cards say only the title and the dates, since what comes next is for a
 trip under way; past trips and further-off ones get no listener, to keep
 Firestore reads in check.
+Where trips are listed together (the trip list, the calendar, the trips a
+favorite place was on, a document warning, the merge button), a title two
+or more of the user's trips share, ignoring case and spacing, reads with
+each one's dates: "Debutots Camp (11–15 Aug 2025)" and "Debutots Camp
+(10–14 Aug 2026)", whichever came first and whether an import or the user
+named them (`displayTitles` in `packages/core/src/format.ts`). The stored
+title is unchanged, and a trip's own page shows it plain, its dates being
+right under it; the pickers that move a booking or merge a trip already
+show every trip's dates.
 The same card says how soon that is when it is within a week ("in 25 min",
 "in 3 h 20 min", "tomorrow", "on Sun"), counted in the place's own offset;
 names the stay under way and when it ends; and, for the next flight, when
@@ -659,7 +668,14 @@ failing that its first origin that is not (a return leg booked alone),
 looking at journeys and stays before a car or transfer's drop-off. A day
 out is named after what it is, and so is a course of several days at one
 place: one ticket spanning them, or one a day whose titles differ only in
-the day ("Holiday Camp East Finchley - Junior Group").
+the day or date ("Holiday Camp East Finchley - Junior Group" for "... (Day
+2)", "Debutots Camp" for "Debutots Camp - 11th Aug 2025", not the school it
+runs at). A date there has a day and a month, in the forms bookings write
+("- 11th Aug 2025", "(Mon 11 Aug)", ", 11/08/2025", "- 2025-08-11", "on 11
+August"), so a number alone ("Toy Story 5") stays in the title. Titles are
+reduced by pattern rather than to their longest common start, which would
+name "London Eye" and "London Zoo" on two days "London", and "Toy Story 4"
+and "Toy Story 5" "Toy Story".
 
 A car or taxi booked from one place to another (`isTransfer`: a car or
 "other" booking whose origin and destination differ by code, name and
@@ -710,7 +726,10 @@ most of its bookings, with its id, sharing and dates; it keeps that trip's
 title too while it still holds every booking the trip had, so a name the
 user gave a trip only added to survives (otherwise it is named from all
 its bookings, so a trip that starts with a car to the airport is named
-after where the flight goes), and a trip whose bookings are
+after where the flight goes). A course still titled with its venue's name,
+as imports named one before they read dates in its titles ("Weston Park
+School"), is renamed after the course; that title is still the one an
+import gave it. A trip whose bookings are
 unchanged is not written at all. Bookings never move between trips shared
 with different people (the maintainer's call: never mix them). Bookings are
 regrouped only among trips with the same share list, compared as a set and

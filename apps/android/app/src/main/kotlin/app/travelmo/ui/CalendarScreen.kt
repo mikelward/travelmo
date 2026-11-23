@@ -41,6 +41,7 @@ import app.travelmo.R
 import app.travelmo.core.Trip
 import app.travelmo.core.TripBar
 import app.travelmo.core.addMonths
+import app.travelmo.core.displayTitles
 import app.travelmo.core.monthLabel
 import app.travelmo.core.monthOf
 import app.travelmo.core.monthWeeks
@@ -94,7 +95,7 @@ fun CalendarScreen(
             val inMonth = all.filter { monthOf(it.start) <= month && monthOf(it.end) >= month }
             val scroll = rememberScrollState()
             Column(modifier = Modifier.fillMaxSize().padding(padding).scrollEdgeCue(scroll, scrollCueColors()).verticalScroll(scroll).padding(horizontal = 16.dp, vertical = 12.dp)) {
-                MonthGrid(month = month, trips = inMonth, today = today, uid = uid, onOpenTrip = onOpenTrip)
+                MonthGrid(month = month, trips = inMonth, titles = displayTitles(all), today = today, uid = uid, onOpenTrip = onOpenTrip)
                 if (inMonth.isEmpty()) {
                     Text(
                         stringResource(R.string.no_trips_in, monthLabel(month)),
@@ -109,7 +110,7 @@ fun CalendarScreen(
 }
 
 @Composable
-private fun MonthGrid(month: String, trips: List<Trip>, today: String, uid: String, onOpenTrip: (String) -> Unit) {
+private fun MonthGrid(month: String, trips: List<Trip>, titles: Map<String, String>, today: String, uid: String, onOpenTrip: (String) -> Unit) {
     val shape = RoundedCornerShape(12.dp)
     Column(modifier = Modifier.fillMaxWidth().clip(shape).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)) {
         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
@@ -125,14 +126,14 @@ private fun MonthGrid(month: String, trips: List<Trip>, today: String, uid: Stri
         }
         for (week in monthWeeks(month)) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Week(week = week, trips = trips, month = month, today = today, uid = uid, onOpenTrip = onOpenTrip)
+            Week(week = week, trips = trips, titles = titles, month = month, today = today, uid = uid, onOpenTrip = onOpenTrip)
         }
     }
 }
 
 /** Seven day numbers, then one row per lane with the trips' bars across it. */
 @Composable
-private fun Week(week: List<String>, trips: List<Trip>, month: String, today: String, uid: String, onOpenTrip: (String) -> Unit) {
+private fun Week(week: List<String>, trips: List<Trip>, titles: Map<String, String>, month: String, today: String, uid: String, onOpenTrip: (String) -> Unit) {
     val bars = weekBars(week, trips)
     val lanes = (bars.maxOfOrNull { it.lane } ?: -1) + 1
     Column(modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp).padding(bottom = 6.dp)) {
@@ -160,7 +161,7 @@ private fun Week(week: List<String>, trips: List<Trip>, month: String, today: St
                 var column = 0
                 for (bar in bars.filter { it.lane == lane }.sortedBy { it.from }) {
                     if (bar.from > column) Spacer(modifier = Modifier.weight((bar.from - column).toFloat()))
-                    Bar(bar = bar, shared = bar.trip.ownerUid != uid, modifier = Modifier.weight((bar.to - bar.from + 1).toFloat()), onClick = { onOpenTrip(bar.trip.id) })
+                    Bar(bar = bar, title = titles[bar.trip.id] ?: bar.trip.title, shared = bar.trip.ownerUid != uid, modifier = Modifier.weight((bar.to - bar.from + 1).toFloat()), onClick = { onOpenTrip(bar.trip.id) })
                     column = bar.to + 1
                 }
                 if (column < week.size) Spacer(modifier = Modifier.weight((week.size - column).toFloat()))
@@ -171,7 +172,7 @@ private fun Week(week: List<String>, trips: List<Trip>, month: String, today: St
 
 /** A trip's bar: its title where it starts, an ellipsis where it carried over, the whole bar a tap to the trip. */
 @Composable
-private fun Bar(bar: TripBar, shared: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun Bar(bar: TripBar, title: String, shared: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val radius = 6.dp
     val shape = RoundedCornerShape(
         topStart = if (bar.continuesBefore) 0.dp else radius,
@@ -187,7 +188,7 @@ private fun Bar(bar: TripBar, shared: Boolean, modifier: Modifier = Modifier, on
         else -> MaterialTheme.colorScheme.primary to MaterialTheme.colorScheme.onPrimary
     }
     Text(
-        (if (bar.continuesBefore) "… " else "") + bar.trip.title,
+        (if (bar.continuesBefore) "… " else "") + title,
         style = MaterialTheme.typography.bodyMedium,
         color = foreground,
         maxLines = 1,
