@@ -77,7 +77,16 @@ for (const colorScheme of ["light", "dark"] as const) {
     await expectReadable(page);
 
     await page.goto("/trips/e2e-trip");
-    await expect(page.getByText("Sources (2)", { exact: false })).toBeVisible();
+    await expect(page.getByText("Cove Liverpool", { exact: true })).toBeVisible();
+    // The booking menu and its Sources dialog, as well as the page.
+    await page.getByRole("button", { name: "Booking actions" }).first().click();
+    await expect(page.getByRole("menu")).toBeVisible();
+    await expectReadable(page);
+    await page.getByRole("menuitem", { name: "Sources" }).click();
+    const sources = page.getByRole("dialog", { name: "Sources" });
+    await expect(sources).toBeVisible();
+    await expectReadable(page);
+    await sources.getByRole("button", { name: "Close" }).click();
     await page.getByRole("button", { name: "Add a booking" }).click();
     await expect(page.getByRole("combobox", { name: "Type" })).toBeVisible();
     await expectReadable(page);

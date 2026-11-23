@@ -313,6 +313,13 @@ endpoint cannot stall the run for everyone after it.
 
 The owner and anyone the trip is shared with can add, edit and delete
 segments on a trip page; only the owner renames, shares or deletes the trip.
+Each booking has a ⋮ menu, the same as the Android app's: "Copy reference"
+(when it has one) and "Sources" (when it has sources or a sender) for
+everyone who sees the trip, then Edit, "Move to another trip…" and Delete for
+those who may edit. Sources opens a dialog listing each source's label and
+kind (an email the viewer imported links to Gmail), then "From" the sender
+with "Always import this sender"; Move to another trip… opens a dialog of the
+viewer's other trips. The row itself shows only the booking.
 The same people can rate a booking one to five stars and mark it a favorite
 (`rating`, `favorite` on the segment; tapping the current star clears the
 rating): an edit like any other, moving the booking's revision, so a calendar
@@ -492,8 +499,8 @@ the record of a message that did not become a booking — never an imported
 one, whose bookings are edited on the trip page, nor one whose import is
 live — and runs the import with the pre-filter skipped). Teaching a sender also
 drops any pattern on the other list that covers it, so the newest decision
-is the one the parser follows. A trip
-page offers "Always import this sender" on imported bookings.
+is the one the parser follows. A booking's Sources dialog on the trip page
+offers "Always import this sender" on imported bookings.
 
 The similarity pre-filter (`apps/parser/src/similarity.ts`) learns from
 the model's verdicts. Every email that reaches the model is embedded
@@ -1235,12 +1242,11 @@ airport-country table read as a resource; as on the web, an upcoming card is
 its title and dates; a booking row carries the viewer's matching loyalty
 programs. A booking's ⋮ menu, for anyone who sees the trip, starts with
 "Copy reference" (when it has one) and "Sources" (when it has sources or a
-sender), then Edit, Move to and Delete for those who may edit. Copy
+sender), then Edit, Move to and Delete for those who may edit, as on the web. Copy
 reference puts the reference alone on the clipboard, with no toast since
 Android (13 and later, all the app runs on) confirms a copy itself; a long
 press on the reference line does the same (TalkBack offers it as the
-long-click action). Sources opens a dialog listing them as the web's trip
-page does (each source's label and kind, then "From" the sender), the same
+long-click action). Sources opens a dialog listing them as the web's does (each source's label and kind, then "From" the sender), the same
 `segmentSources` in `:core`; an email the viewer imported, by the source's
 `uid` or as the trip's owner for one without, opens in Gmail at that
 message, in the Gmail account the user connected for importing
