@@ -231,6 +231,7 @@ export function sameBooking(a: ExtractedSegment, b: ExtractedSegment): boolean {
     if (a.end && b.end && localDate(a.end) !== localDate(b.end)) return false;
   }
   if (a.confirmation && b.confirmation) return normalizeReference(a.confirmation) === normalizeReference(b.confirmation);
+  if (sameListing(a, b)) return true;
   if (placesConflict(a, b)) return false;
   if (a.origin?.code && b.origin?.code && a.destination?.code && b.destination?.code) return true;
   // A city or a chain is shared by many bookings; what is left of the
@@ -253,6 +254,56 @@ export function sameBooking(a: ExtractedSegment, b: ExtractedSegment): boolean {
   }
   for (const word of ours) if (theirs.has(word)) return true;
   return false;
+}
+
+// A name as compared: compatibility forms folded, accents dropped, case
+// ignored, and only letters and numbers of any script kept, so "\u6771\u4eac" and
+// "\u5927\u962a" still tell two listings apart.
+const normalizeName = (text: string) =>
+  text.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+
+// One stay told twice, by a booking request or receipt and its
+// confirmation: the same provider, the same listing title, and the same
+// check-in and check-out instants. The two may name its town differently
+// (the city, then the suburb), so cities are not compared: without a list
+// of which suburbs belong to which city, comparing them would keep St Kilda
+// and Melbourne apart. Known countries must agree.
+function sameListing(a: ExtractedSegment, b: ExtractedSegment): boolean {
+  if (a.type !== "lodging" || b.type !== "lodging") return false;
+  const [x, y] = [a.destination?.country, b.destination?.country];
+  if (x && y && x.toUpperCase() !== y.toUpperCase()) return false;
+  if (!a.provider || !b.provider || normalizeName(a.provider) !== normalizeName(b.provider)) return false;
+  if (!normalizeName(a.title) || normalizeName(a.title) !== normalizeName(b.title)) return false;
+  return !!a.end && !!b.end && compareInstants(a.start, b.start) === 0 && compareInstants(a.end, b.end) === 0;
+}
+
+// How much a place says, compared in order as a tuple: an address, then
+// coordinates, then a city.
+const placeDetail = (place: Place) => [place.address ? 1 : 0, place.lat !== undefined ? 1 : 0, place.city ? 1 : 0];
+
+// Whether a stay's place found again says more than the one it has: more
+// detail (placeDetail), or as much from the email bearing the reference
+// the booking lacked (a confirmation, where the request named only the
+// town).
+function betterPlace(existing: ExtractedSegment, found: ExtractedSegment): boolean {
+  if (existing.type !== "lodging" || !existing.destination || !found.destination) return false;
+  const order = compareMatchRanks(placeDetail(found.destination), placeDetail(existing.destination));
+  return order > 0 || (order === 0 && !existing.confirmation && !!found.confirmation);
+}
+
+// A place taken over another, keeping what only the other knew: its code,
+// city, country, address and coordinates (both or neither), so a better
+// place that leaves out the country does not drop it.
+function fillPlace(preferred: Place, other: Place): Place {
+  const filled: Place = { ...preferred };
+  for (const key of ["code", "city", "country", "address"] as const) {
+    if (filled[key] === undefined && other[key] !== undefined) filled[key] = other[key];
+  }
+  if (filled.lat === undefined && filled.lon === undefined && other.lat !== undefined && other.lon !== undefined) {
+    filled.lat = other.lat;
+    filled.lon = other.lon;
+  }
+  return filled;
 }
 
 // Every word of an event's name but a few that join others, accents and
@@ -324,9 +375,14 @@ export function identitiesConflict(x: EventIdentity, y: EventIdentity): boolean 
 
 // A booking found again, with what the new email adds to it: fields it
 // lacked, the new notes (seats, a screen) where it has not got them, and the
-// new reference when it differs. Nothing it already says is replaced.
-export function mergeDetails<S extends ExtractedSegment>(existing: S, found: ExtractedSegment): S {
+// new reference when it differs. Nothing else it already says is replaced,
+// but a stay's place, unless the user `edited` the booking, gives way to a
+// more specific one (betterPlace): the suburb and address a confirmation
+// gives over the town its request named, keeping what only the old place
+// said (fillPlace).
+export function mergeDetails<S extends ExtractedSegment>(existing: S, found: ExtractedSegment, { edited = false }: { edited?: boolean } = {}): S {
   const merged: S = { ...existing };
+  if (!edited && betterPlace(existing, found)) merged.destination = fillPlace(found.destination!, existing.destination!);
   if (merged.provider === undefined && found.provider !== undefined) merged.provider = found.provider;
   if (merged.confirmation === undefined && found.confirmation !== undefined) merged.confirmation = found.confirmation;
   if (merged.end === undefined && found.end !== undefined) merged.end = found.end;

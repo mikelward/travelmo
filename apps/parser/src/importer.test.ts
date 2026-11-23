@@ -1988,4 +1988,46 @@ describe("fileBooking a week in Melbourne", () => {
     await file(store, "flight", [flightIn]);
     expect(titles(store)).toEqual(["Christmas away 2025-12-26..2025-12-30"]);
   });
+
+  it("renames a trip named after a stay once another email for it gives the town", async () => {
+    const store = memoryStore();
+    await file(store, "terrace", [terrace]);
+    const placed = { ...terrace, destination: { name: "Designer Collingwood Terrace", address: "2 Example Lane, Collingwood VIC 3066, Australia", city: "Collingwood", country: "AU" } };
+    await file(store, "terrace-again", [placed]);
+    expect(titles(store)).toEqual(["Collingwood 2025-12-27..2025-12-30"]);
+    expect(store.segments.size).toBe(1);
+  });
+
+  it.each([
+    ["with", true],
+    ["without", false],
+  ] as const)("names the trip from its bookings as merged, %s a new booking in the same email", async (_, withLoft) => {
+    const loft: ExtractedSegment = {
+      type: "lodging",
+      title: "Harbour Loft",
+      provider: "Airbnb",
+      confirmation: "HMEXAMPLE03",
+      start: "2025-12-27T15:00:00+11:00",
+      end: "2025-12-28T10:00:00+11:00",
+      destination: { name: "Harbour Loft", city: "St Kilda", country: "AU" },
+    };
+    const store = memoryStore();
+    await file(store, "requested", [requested]);
+    expect(titles(store)).toEqual(["Melbourne 2025-12-26..2025-12-27"]);
+    await file(store, "confirmed", withLoft ? [confirmed, loft] : [confirmed]);
+    expect(titles(store)).toEqual([withLoft ? "St Kilda 2025-12-26..2025-12-28" : "St Kilda 2025-12-26..2025-12-27"]);
+  });
+
+  it.each([
+    ["request first", [["requested", requested], ["confirmed", confirmed]]],
+    ["confirmation first", [["confirmed", confirmed], ["requested", requested]]],
+  ] as const)("files a stay requested and confirmed in two emails once, %s", async (_, order) => {
+    const store = memoryStore();
+    await file(store, "flight", [flightIn]);
+    for (const [id, segment] of order) await file(store, id, [segment]);
+    const stays = [...store.segments.values()].filter((s) => s.type === "lodging");
+    expect(stays).toHaveLength(1);
+    expect(stays[0]).toMatchObject({ confirmation: "HMEXAMPLE01", destination: confirmed.destination });
+    expect(stays[0]!.sources?.map((s) => s.id).sort()).toEqual(["confirmed", "requested"]);
+  });
 });

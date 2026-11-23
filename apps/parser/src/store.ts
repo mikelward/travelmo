@@ -156,8 +156,8 @@ export function firestoreStore(db: Firestore): TripStore {
           deleteSegment(tripId, segmentId) {
             t.delete(db.doc(paths.segment(tripId, segmentId)));
           },
-          touchTrip(tripId, updatedAt) {
-            t.update(db.doc(paths.trip(tripId)), { updatedAt });
+          touchTrip(tripId, updatedAt, title) {
+            t.update(db.doc(paths.trip(tripId)), title === undefined ? { updatedAt } : { title, updatedAt });
           },
           updateTrip(tripId, fields) {
             t.update(db.doc(paths.trip(tripId)), fields);

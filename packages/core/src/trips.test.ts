@@ -468,3 +468,60 @@ describe("matchRank", () => {
     expect(ranked).toEqual([week1, week2]);
   });
 });
+
+// One stay from two emails, a booking request and its confirmation
+// (invented references): the request names the town, the confirmation the
+// suburb, its address and the reference.
+describe("a stay confirmed twice", () => {
+  const listing = "Best balcony in St Kilda & Entire apartment.";
+  const requested: ExtractedSegment = {
+    type: "lodging",
+    title: listing,
+    provider: "Airbnb",
+    start: "2025-12-26T15:00:00+11:00",
+    end: "2025-12-27T10:00:00+11:00",
+    destination: { name: listing, city: "Melbourne", country: "AU" },
+  };
+  const confirmed: ExtractedSegment = {
+    ...requested,
+    confirmation: "HMEXAMPLE01",
+    destination: { name: listing, address: "1 Example Street, St Kilda VIC 3182, Australia", city: "St Kilda", country: "AU" },
+  };
+
+  it("is one booking: the same provider, listing and check-in and check-out, whatever town each names", () => {
+    expect(sameBooking(requested, confirmed)).toBe(true);
+    expect(sameBooking(confirmed, requested)).toBe(true);
+    expect(sameBooking(requested, { ...confirmed, title: "best balcony in st kilda & entire apartment" })).toBe(true);
+  });
+
+  it("is two when anything else differs", () => {
+    expect(sameBooking(requested, { ...confirmed, end: "2025-12-28T10:00:00+11:00" })).toBe(false);
+    expect(sameBooking(requested, { ...confirmed, start: "2025-12-26T16:00:00+11:00" })).toBe(false);
+    expect(sameBooking(requested, { ...confirmed, provider: "Booking.com" })).toBe(false);
+    expect(sameBooking(requested, { ...confirmed, title: "Sunny studio by the beach" })).toBe(false);
+    expect(sameBooking({ ...requested, confirmation: "HMEXAMPLE09" }, confirmed)).toBe(false);
+    // Names told apart only by letters outside A to Z.
+    const tokyo = { ...requested, title: "東京 Apartment 101", destination: { name: "東京 Apartment 101", city: "Tokyo", country: "JP" } };
+    const osaka = { ...confirmed, title: "大阪 Apartment 101", destination: { name: "大阪 Apartment 101", city: "Osaka", country: "JP" } };
+    expect(sameBooking(tokyo, osaka)).toBe(false);
+    expect(sameBooking(tokyo, { ...osaka, title: "東京  apartment 101!" })).toBe(true);
+    expect(sameBooking(tokyo, { ...osaka, title: "東京 Apartment 101", destination: { name: "東京 Apartment 101", city: "Tokyo", country: "KR" } })).toBe(false);
+    expect(sameBooking({ ...requested, title: "Ｃａｆé Loft" }, { ...confirmed, title: "cafe loft" })).toBe(true);
+  });
+
+  it("keeps the reference and the more specific place, whichever came first", () => {
+    expect(mergeDetails(requested, confirmed)).toEqual(confirmed);
+    expect(mergeDetails(confirmed, requested)).toEqual(confirmed);
+  });
+
+  it("keeps what the place it replaces knew and the better one does not", () => {
+    const located = { ...requested, destination: { ...requested.destination!, lat: -37.81, lon: 144.96, code: "EX1" } };
+    const bare = { ...confirmed, destination: { name: listing, address: "1 Example Street, St Kilda VIC 3182, Australia", city: "St Kilda" } };
+    expect(mergeDetails(requested, bare).destination).toEqual({ ...bare.destination, country: "AU" });
+    expect(mergeDetails(located, bare).destination).toEqual({ ...bare.destination, country: "AU", code: "EX1", lat: -37.81, lon: 144.96 });
+  });
+
+  it("keeps a place the user edited", () => {
+    expect(mergeDetails(requested, confirmed, { edited: true })).toEqual({ ...requested, confirmation: "HMEXAMPLE01" });
+  });
+});
