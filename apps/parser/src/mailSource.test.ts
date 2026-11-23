@@ -36,6 +36,10 @@ describe("gmailSource", () => {
     expect(calls).toEqual([`list backfill ${backfillBatch} -`, `list backfill ${backfillBatch} p2`]);
   });
 
+  it("is Gmail's, so what it imports is recorded as Gmail's", () => {
+    expect(gmailSource(fakeGmail().gmail).provider).toBe("gmail");
+  });
+
   it("fetches a message as the import reads it", async () => {
     const { gmail } = fakeGmail();
     const message = await gmailSource(gmail).fetch("m1");

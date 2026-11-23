@@ -53,9 +53,16 @@ test("the header leads with Trips and signing out is at the foot of Settings", a
   await page.getByRole("link", { name: "Settings" }).click();
   const signOut = page.getByRole("button", { name: "Sign out" });
   await expect(signOut).toBeVisible();
-  // Below everything else on the page, Delete account included.
-  const signOutTop = (await signOut.boundingBox())!.y;
-  const deleteTop = (await page.getByRole("button", { name: "Delete account" }).boundingBox())!.y;
+  // Below everything else on the page, Delete account included. Both are
+  // measured in one frame: sections that load later (Fastmail's, once the
+  // profile arrives) move both down, and two separate reads could straddle
+  // that.
+  const deleteButton = page.getByRole("button", { name: "Delete account" });
+  await expect(deleteButton).toBeVisible();
+  const [signOutTop, deleteTop] = await signOut.evaluate((el) => {
+    const remove = [...document.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Delete account")!;
+    return [el.getBoundingClientRect().top, remove.getBoundingClientRect().top];
+  });
   expect(signOutTop).toBeGreaterThan(deleteTop);
   await signOut.click();
   await expect(page.getByRole("button", { name: "Sign in with Google" })).toBeVisible();

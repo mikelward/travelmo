@@ -3,6 +3,7 @@ package app.travelmo.ui
 import androidx.compose.ui.test.performScrollTo
 
 import app.travelmo.core.BackfillShown
+import app.travelmo.data.FastmailStatus
 import app.travelmo.data.GmailStatus
 
 import androidx.activity.ComponentActivity
@@ -526,6 +527,35 @@ class ScreenScreenshotTest {
             }
         }
         composeRule.onNodeWithText("Add").performScrollTo()
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
+    }
+
+    // Settings scrolled to Fastmail, not connected: the token field and Connect.
+    @Test
+    fun settings_fastmail() = fastmail("settings_fastmail", status = null, last = "Connect Fastmail")
+
+    // Fastmail connected, its whole mailbox read, and the note to delete the token after disconnecting.
+    @Test
+    fun settings_fastmail_connected() = fastmail(
+        "settings_fastmail_connected",
+        status = FastmailStatus("owner@fastmail.example", BackfillShown(scanned = 840, imported = 9, done = true, updatedAt = FROZEN_NOW)),
+        last = "After you disconnect, delete the token in Fastmail.",
+    )
+
+    // Scrolled until [last], the section's end, is on screen, so the whole section shows.
+    private fun fastmail(name: String, status: FastmailStatus?, last: String) {
+        val viewModel = TripsViewModel(
+            FakeTripStore(fastmailStatus = status), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) },
+            gmailActions = FakeGmailActions(), fastmailActions = FakeFastmailActions(),
+        )
+        val fontSize = FontSizeState(FontSizeSettings(scale = 1f), onScaleSettled = {}, onPinchEnabledChange = {})
+        composeRule.setContent {
+            TravelmoTheme(fontSize = fontSize) {
+                SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
+            }
+        }
+        composeRule.onNodeWithText(last).performScrollTo()
         composeRule.waitForIdle()
         composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
     }

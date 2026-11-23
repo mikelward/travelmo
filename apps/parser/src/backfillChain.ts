@@ -52,11 +52,14 @@ export const maxFailedBatches = 3;
 // `deferred`); the first message of each step has none. `mailbox` is the
 // key of the mailbox being read (mailboxKey in packages/core's gmail.ts),
 // absent from batches queued before a user could connect several.
-export type ContinueMessage = { uid: string; mailbox?: string; run: string; step: number; wake?: string };
+// `provider` is "fastmail" for a Fastmail mailbox's reading (which has no
+// key: one per user), absent for Gmail's.
+export type ContinueMessage = { uid: string; mailbox?: string; provider?: "fastmail"; run: string; step: number; wake?: string };
 
 const continueSchema = z.object({
   uid: z.string().min(1),
   mailbox: z.string().min(1).optional(),
+  provider: z.literal("fastmail").optional(),
   run: z.string().min(1),
   step: z.number().int().nonnegative(),
   wake: z.string().min(1).optional(),
@@ -66,13 +69,20 @@ export function parseContinuePush(body: unknown): ContinueMessage & { pubsubMess
   const { data, pubsubMessageId, deliveryAttempt } = parsePush(body);
   const message = continueSchema.safeParse(data);
   if (!message.success) throw new BadPushEnvelope("Pub/Sub message is not a backfill batch");
-  const { wake, mailbox, ...rest } = message.data;
-  return { ...rest, ...(mailbox ? { mailbox } : {}), ...(wake ? { wake } : {}), pubsubMessageId, deliveryAttempt };
+  const { wake, mailbox, provider, ...rest } = message.data;
+  return { ...rest, ...(mailbox ? { mailbox } : {}), ...(provider ? { provider } : {}), ...(wake ? { wake } : {}), pubsubMessageId, deliveryAttempt };
 }
 
 // The same reading's message for `step`.
 function forStep(message: ContinueMessage, step: number, wake?: string): ContinueMessage {
-  return { uid: message.uid, ...(message.mailbox ? { mailbox: message.mailbox } : {}), run: message.run, step, ...(wake ? { wake } : {}) };
+  return {
+    uid: message.uid,
+    ...(message.mailbox ? { mailbox: message.mailbox } : {}),
+    ...(message.provider ? { provider: message.provider } : {}),
+    run: message.run,
+    step,
+    ...(wake ? { wake } : {}),
+  };
 }
 
 // A worker is reading a batch.

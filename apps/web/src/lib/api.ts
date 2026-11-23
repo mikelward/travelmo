@@ -1,5 +1,5 @@
 import type { User } from "firebase/auth";
-import { backfillStartPath, backfillStopPath, deleteAllTripsPath, gmailConnectPath, gmailDisconnectPath, linkRefusalText, refusalOf, regroupPath, type AccountAccess, type CalendarExport, type ForwardAddress, type RegroupResult } from "@travelmo/core";
+import { backfillStartPath, backfillStopPath, deleteAllTripsPath, fastmailBackfillStartPath, fastmailBackfillStopPath, fastmailConnectPath, fastmailDisconnectPath, gmailConnectPath, gmailDisconnectPath, linkRefusalText, refusalOf, regroupPath, type AccountAccess, type CalendarExport, type ForwardAddress, type RegroupResult } from "@travelmo/core";
 import type { CalendarResult } from "./ics";
 import type { TripItResult } from "./tripit";
 
@@ -7,13 +7,28 @@ export type BackfillStarted = {
   progress: { scanned: number; imported: number; failed?: number; done: boolean; running?: boolean; updatedAt: string };
 };
 
+// Statuses whose body the parser words for the user: a request it won't
+// take (a token Fastmail refused, say), or one that clashes with the
+// account's state (another mailbox connected, a reading still running).
+const userFacing = new Set([400, 409, 410]);
+
+// What a failed call says: a refusal to link an address in words, the
+// parser's own message where it words one for the user, else the details.
+export function failureMessage(path: string, status: number, text: string, plain = false): string {
+  const refusal = refusalOf(text);
+  if (refusal) return linkRefusalText[refusal];
+  if (plain && userFacing.has(status) && text.trim()) return text.trim();
+  return `${path} failed: ${status} ${text}`;
+}
+
 export function parserUrl(): string {
   const url = process.env.NEXT_PUBLIC_PARSER_URL;
   if (!url) throw new Error("Missing NEXT_PUBLIC_PARSER_URL");
   return url.replace(/\/$/, "");
 }
 
-async function post<T>(user: User, path: string, body: unknown = {}): Promise<T> {
+// `plain`: the parser's message for a refused request is shown as it is.
+async function post<T>(user: User, path: string, body: unknown = {}, plain = false): Promise<T> {
   const token = await user.getIdToken();
   const response = await fetch(`${parserUrl()}${path}`, {
     method: "POST",
@@ -21,10 +36,7 @@ async function post<T>(user: User, path: string, body: unknown = {}): Promise<T>
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    const text = await response.text();
-    // A refusal to link an address is put in words.
-    const refusal = refusalOf(text);
-    throw new Error(refusal ? linkRefusalText[refusal] : `${path} failed: ${response.status} ${text}`);
+    throw new Error(failureMessage(path, response.status, await response.text(), plain));
   }
   return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
 }
@@ -39,9 +51,15 @@ export const api = {
     post<{ emailAddress: string; calendars: number }>(user, "/calendar/complete", { state }),
   selectCalendars: (user: User, ids: string[]) => post<{ read: number; failed: number }>(user, "/calendar/select", { ids }),
   disconnectCalendar: (user: User) => post<void>(user, "/calendar/disconnect"),
+  // A Gmail mailbox's reading, by its address.
   startBackfill: (user: User, emailAddress: string, restart = false) =>
-    post<BackfillStarted>(user, backfillStartPath, restart ? { emailAddress, restart } : { emailAddress }),
+    post<BackfillStarted>(user, backfillStartPath, restart ? { emailAddress, restart } : { emailAddress }, true),
   stopBackfill: (user: User, emailAddress: string) => post<void>(user, backfillStopPath, { emailAddress }),
+  connectFastmail: (user: User, token: string) => post<{ emailAddress: string }>(user, fastmailConnectPath, { token }, true),
+  disconnectFastmail: (user: User) => post<void>(user, fastmailDisconnectPath),
+  startFastmailBackfill: (user: User, restart = false) =>
+    post<BackfillStarted>(user, fastmailBackfillStartPath, restart ? { restart } : {}, true),
+  stopFastmailBackfill: (user: User) => post<void>(user, fastmailBackfillStopPath),
   reimport: (user: User, messageId: string) => post<{ outcome: string }>(user, "/gmail/reimport", { messageId }),
   importTripIt: (user: User, exported: unknown) => post<TripItResult>(user, "/import/tripit", { export: exported }),
   importIcs: (user: User, text: string) => post<CalendarResult>(user, "/import/ics", { text }),

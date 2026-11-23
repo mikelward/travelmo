@@ -52,11 +52,23 @@ class ImportReviewScreenTest {
         composeRule.waitForIdle()
         store.patterns.value shouldBe SenderPatterns(allow = listOf("news.example"))
         composeRule.onNodeWithText("Always importing news.example").performScrollTo()
-        // Two Gmail messages to read again; the TripIt item has no email to read.
-        composeRule.onAllNodesWithText("Import anyway").fetchSemanticsNodes().size shouldBe 2
+        // Two Gmail messages and a Fastmail one to read again; the TripIt item has no email to read.
+        composeRule.onAllNodesWithText("Import anyway").fetchSemanticsNodes().size shouldBe 3
         composeRule.onAllNodesWithText("Import anyway")[1].performScrollTo().performClick()
         composeRule.waitForIdle()
         review.asked shouldBe listOf("ticket")
+    }
+
+    @Test
+    fun `a Fastmail email says where it came from and can be imported anyway`() {
+        val review = FakeImportReview()
+        show(FakeTripStore(), review)
+        composeRule.onNodeWithText("Sent 2 Nov 2026 · Example Ferries <sail@ferry.example> · Fastmail · Read, not a booking").performScrollTo()
+        composeRule.onNodeWithText("Read 23 Nov 2026 · unknown sender · TripIt · Failed (Couldn't read it)").performScrollTo()
+        composeRule.onNodeWithText("Never import ferry.example").performScrollTo()
+        composeRule.onAllNodesWithText("Import anyway")[2].performScrollTo().performClick()
+        composeRule.waitForIdle()
+        review.asked shouldBe listOf("fm-ferry")
     }
 
     @Test

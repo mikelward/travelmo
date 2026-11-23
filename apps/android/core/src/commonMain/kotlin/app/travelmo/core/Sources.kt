@@ -2,13 +2,15 @@ package app.travelmo.core
 
 // Where a booking was read from, as packages/core/src/sources.ts: every
 // email, TripIt trip or calendar event, and the link that opens an email in
-// the mailbox it came from.
+// the mailbox it came from (Gmail only: Fastmail has no stable address for
+// a message).
 
 enum class SourceKind(val wire: String) {
     GMAIL("gmail"),
     TRIPIT("tripit"),
     ICS("ics"),
     FORWARD("forward"),
+    FASTMAIL("fastmail"),
     ;
 
     companion object {
@@ -58,7 +60,7 @@ fun gmailMessageUrl(messageId: String, account: String? = null): String {
  * An email links only for the user whose mailbox it was read from: the
  * source's `uid`, or for sources recorded before imports were attributed,
  * the trip's owner; it opens in that one of the viewer's [mailboxes]
- * (gmailSourceLink). As apps/web/src/lib/sourceLinks.ts.
+ * (gmailSourceLink). Only Gmail ones link. As apps/web/src/lib/sourceLinks.ts.
  */
 fun emailLinkFor(source: SourceRef, viewerUid: String, ownsTrip: Boolean, mailboxes: List<GmailMailbox> = emptyList()): String? {
     if (source.kind != SourceKind.GMAIL) return null

@@ -1,11 +1,11 @@
 "use client";
 
-import { RideCompany, cleanSenderList, describeBackfill, describeDeletedTrips, gmailMailboxes, isReading, maxGmailMailboxes, pausedReason, describeRegroup, groupSkips, maxRideCompanies, paths, type GmailConnection, type SenderPatterns, type SkipGroup } from "@travelmo/core";
+import { RideCompany, cleanSenderList, describeBackfill, describeDeletedTrips, gmailMailboxes, isReading, maxGmailMailboxes, pausedReason, describeRegroup, groupSkips, maxRideCompanies, paths, type BackfillProgress, type GmailConnection, type SenderPatterns, type SkipGroup } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { AccountDeleted, DeleteAccountSection, useAccountDeletion } from "@/components/DeleteAccount";
 import { EmailAddressesSection } from "@/components/EmailAddresses";
 import { SignInGate } from "@/components/SignInGate";
@@ -26,12 +26,6 @@ const buttonClass =
 
 function GmailSection({ user }: { user: User }) {
   const profile = useProfile(user.uid);
-  // The clock a stalled reading is judged by; a minute is fine enough.
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 60_000);
-    return () => clearInterval(timer);
-  }, []);
   const params = useSearchParams();
   const router = useRouter();
   const status = params.get("gmail");
@@ -100,7 +94,7 @@ function GmailSection({ user }: { user: User }) {
           </p>
           <ul className="mt-3 space-y-4">
             {mailboxes.map((mailbox) => (
-              <MailboxRow key={mailbox.emailAddress} user={user} mailbox={mailbox} now={now} busy={busy} run={run} />
+              <MailboxRow key={mailbox.emailAddress} user={user} mailbox={mailbox} busy={busy} run={run} />
             ))}
           </ul>
           {mailboxes.length < maxGmailMailboxes ? (
@@ -127,51 +121,198 @@ function GmailSection({ user }: { user: User }) {
 function MailboxRow({
   user,
   mailbox,
-  now,
   busy,
   run,
 }: {
   user: User;
   mailbox: GmailConnection;
-  now: number;
   busy: boolean;
   run: (action: () => Promise<void>) => Promise<void>;
 }) {
-  const progress = mailbox.backfill;
-  const reading = isReading(progress, now);
-  const paused = pausedReason(progress, reading);
   const address = mailbox.emailAddress;
   return (
     <li className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800" data-testid="gmail-mailbox">
       <p className="text-sm font-medium">{address}</p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {reading ? (
-          <button type="button" disabled={busy} className={buttonClass} onClick={() => run(() => api.stopBackfill(user, address))}>
-            Stop
-          </button>
-        ) : (
-          <button
-            type="button"
-            disabled={busy}
-            className={buttonClass}
-            onClick={() => run(async () => void (await api.startBackfill(user, address, !!progress?.done)))}
-          >
-            {!progress ? "Import past bookings" : progress.done ? "Read again from the start" : "Continue reading past emails"}
-          </button>
-        )}
+      <PastBookings
+        progress={mailbox.backfill}
+        busy={busy}
+        testId="backfill-progress"
+        onStart={(restart) => void run(async () => void (await api.startBackfill(user, address, restart)))}
+        onStop={() => void run(() => api.stopBackfill(user, address))}
+      >
         <button type="button" disabled={busy} className={buttonClass} onClick={() => run(() => api.disconnectGmail(user, address))}>
           Disconnect
         </button>
-      </div>
-      {progress && (
-        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="backfill-progress">
-          {describeBackfill(progress, reading)}
-        </p>
-      )}
-      {paused && <p className="mt-2 text-sm text-danger">{paused}</p>}
+      </PastBookings>
     </li>
   );
 }
+
+// "Import past bookings" for a connected mailbox: start, continue, read again
+// from the start or stop, with how far the parser has got. The parser reads
+// the mailbox on its own once started, and records its progress on the
+// profile, which the line below follows. `children` go beside the button.
+function PastBookings({
+  progress,
+  busy,
+  testId,
+  onStart,
+  onStop,
+  children,
+}: {
+  progress: BackfillProgress | undefined;
+  busy: boolean;
+  testId: string;
+  onStart: (restart: boolean) => void;
+  onStop: () => void;
+  children?: ReactNode;
+}) {
+  // The clock a stalled reading is judged by; a minute is fine enough.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  const reading = isReading(progress, now);
+  const paused = pausedReason(progress, reading);
+  return (
+    <>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {reading ? (
+          <button type="button" disabled={busy} className={buttonClass} onClick={onStop}>
+            Stop
+          </button>
+        ) : (
+          <button type="button" disabled={busy} className={buttonClass} onClick={() => onStart(!!progress?.done)}>
+            {!progress ? "Import past bookings" : progress.done ? "Read again from the start" : "Continue reading past emails"}
+          </button>
+        )}
+        {children}
+      </div>
+      {progress && (
+        <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400" data-testid={testId}>
+          {describeBackfill(progress, reading)}
+        </p>
+      )}
+      {paused && <p className="mt-3 text-sm text-danger">{paused}</p>}
+    </>
+  );
+}
+
+// Where Fastmail makes API tokens.
+const fastmailTokensUrl = "https://app.fastmail.com/settings/security/tokens";
+
+// Fastmail has no sign-in for apps like this one, so the user makes a
+// read-only API token there and pastes it here; the parser keeps it.
+function FastmailSection({ user }: { user: User }) {
+  const profile = useProfile(user.uid);
+  const [token, setToken] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string>();
+  const [disconnected, setDisconnected] = useState(false);
+  const [error, setError] = useState<string>();
+
+  const run = async (action: () => Promise<void>) => {
+    setBusy(true);
+    setNotice(undefined);
+    setDisconnected(false);
+    setError(undefined);
+    try {
+      await action();
+    } catch (e) {
+      // Logged without the message, which may quote the mailbox's address.
+      console.error("A Fastmail action failed", { error: (e as Error).name });
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const connect = (e: React.FormEvent) => {
+    e.preventDefault();
+    void run(async () => {
+      const { emailAddress } = await api.connectFastmail(user, token.trim());
+      setToken("");
+      setNotice(`Fastmail connected as ${emailAddress}. Import your past bookings below.`);
+    });
+  };
+
+  const fastmail = profile?.fastmail;
+  return (
+    <section className="mt-10">
+      <h2 className="text-lg font-medium">Fastmail</h2>
+      {profile === undefined && <p className="mt-2 text-muted">Loading…</p>}
+      {profile && !fastmail && (
+        <form onSubmit={connect}>
+          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+            Imports booking confirmations from your Fastmail inbox, checking for new ones every few minutes.{" "}
+            <a href={fastmailTokensUrl} target="_blank" rel="noreferrer" className="underline">
+              Make a read-only API token
+            </a>{" "}
+            with Email access, then paste it here.
+          </p>
+          <div className="mt-3 flex flex-wrap items-end gap-2 text-sm">
+            <label className="flex flex-col">
+              <span className="font-medium">API token</span>
+              <input
+                type="password"
+                autoComplete="off"
+                required
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                className="mt-1 rounded-lg border border-field bg-background px-3 py-2"
+              />
+            </label>
+            <button type="submit" disabled={busy || !token.trim()} className={buttonClass}>
+              {busy ? "Connecting…" : "Connect"}
+            </button>
+          </div>
+        </form>
+      )}
+      {fastmail && (
+        <>
+          <p className="mt-2 text-sm">
+            Connected as <span className="font-medium">{fastmail.emailAddress}</span>. New bookings import automatically;
+            past ones come in when you import them, as far back as your mailbox goes.
+          </p>
+          <PastBookings
+            progress={fastmail.backfill}
+            busy={busy}
+            testId="fastmail-backfill-progress"
+            onStart={(restart) => run(async () => void (await api.startFastmailBackfill(user, restart)))}
+            onStop={() => run(() => api.stopFastmailBackfill(user))}
+          >
+            <button
+              type="button"
+              disabled={busy}
+              className={buttonClass}
+              onClick={() =>
+                run(async () => {
+                  await api.disconnectFastmail(user);
+                  setDisconnected(true);
+                })
+              }
+            >
+              Disconnect
+            </button>
+          </PastBookings>
+        </>
+      )}
+      {notice && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{notice}</p>}
+      {disconnected && (
+        <p className="mt-3 text-sm">
+          Fastmail disconnected.{" "}
+          <a href={fastmailTokensUrl} target="_blank" rel="noreferrer" className="underline">
+            Delete the API token in Fastmail
+          </a>{" "}
+          too, as Travelmo can&apos;t.
+        </p>
+      )}
+      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+    </section>
+  );
+}
+
 
 type FilePreview = { text: string; canImport: boolean; notImported?: SkipGroup[]; run: () => Promise<string> };
 
@@ -1064,6 +1205,7 @@ export default function SettingsPage() {
           <Suspense fallback={<p className="text-muted">Loading…</p>}>
             <GmailSection user={user} />
           </Suspense>
+          <FastmailSection user={user} />
           <RegroupSection user={user} />
           <TripItSection user={user} />
           <CalendarSection user={user} />

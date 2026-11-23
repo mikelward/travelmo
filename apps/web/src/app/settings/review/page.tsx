@@ -9,6 +9,7 @@ import { api } from "@/lib/api";
 import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
 import { domainOf, effectiveDecision, learnSender } from "@/lib/patterns";
+import { isFromMailbox, recordSourceLabels } from "@/lib/sourceLinks";
 import { useAllParsedMessages, useParsedMessages, useSenderPatterns } from "@/lib/trips";
 
 const buttonClass =
@@ -89,18 +90,19 @@ function ReviewList({ user }: { user: User }) {
         {shown.map((record) => {
           // Records from other sources have no sender to teach and no email
           // to read again.
-          const fromGmail = (record.source ?? "gmail") === "gmail";
-          const domain = fromGmail && record.from ? domainOf(record.from) : undefined;
+          const fromMailbox = isFromMailbox(record);
+          const domain = fromMailbox && record.from ? domainOf(record.from) : undefined;
           const decision = domain ? effectiveDecision(patterns, domain) : undefined;
           return (
             <li key={record.messageId} className="py-3 text-sm">
               <p className="font-medium">{record.subject || "(no subject)"}</p>
               <p className="text-zinc-600 dark:text-zinc-400">
-                {reviewDate(record)} · {record.from || "unknown sender"} · {outcomeLabels[record.outcome]}
+                {reviewDate(record)} · {record.from || "unknown sender"} · {recordSourceLabels[record.source ?? "gmail"]} ·{" "}
+                {outcomeLabels[record.outcome]}
                 {record.reason ? ` (${record.reason})` : ""}
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
-                {fromGmail && (
+                {fromMailbox && (
                   <button
                     type="button"
                     disabled={busy === record.messageId}

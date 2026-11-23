@@ -45,4 +45,15 @@ class SourcesTest {
         emailLinkFor(fromWork, "me", ownsTrip = false, mailboxes) shouldBe "https://mail.google.com/mail/u/?authuser=me%40work.example#all/m2"
         emailLinkFor(fromWork.copy(id = "m1"), "me", ownsTrip = false, mailboxes) shouldBe "https://mail.google.com/mail/u/?authuser=me%40example.com#all/m1"
     }
+
+    @Test
+    fun `a Fastmail email is read as a source of its own and links nowhere even for whoever imported it`() {
+        val fastmail = SourceKind.fromWire("fastmail")
+        fastmail shouldBe SourceKind.FASTMAIL
+        val email = SourceRef(SourceKind.FASTMAIL, "fm-1", uid = "me", at = "2030-01-01T00:00:00Z")
+        emailLinkFor(email, "me", ownsTrip = true).shouldBeNull()
+        // Not the same source as a Gmail message that happens to share its id.
+        segmentSources(listOf(email, email.copy(kind = SourceKind.GMAIL)), gmailMessageIds = listOf("fm-1"), createdAt = "2030-01-01T00:00:00Z")
+            .map { it.kind } shouldBe listOf(SourceKind.FASTMAIL, SourceKind.GMAIL)
+    }
 }

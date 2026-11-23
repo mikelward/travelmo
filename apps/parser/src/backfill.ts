@@ -12,9 +12,17 @@ import { travelLoyaltyDomains } from "./prefilter";
 // Booking-like subjects over the whole mailbox, and travel programs' recent
 // statements (the pre-filter reads only those under 60 days old); the
 // pre-filter and the model decide the rest.
-const statements = `(subject:(statement OR estatement OR "account summary" OR balance) newer_than:60d from:(${travelLoyaltyDomains.join(" OR ")}))`;
+// The same search for every provider, in its own query language.
+export const backfillSubjects = [
+  "booking", "reservation", "confirmation", "confirmed", "itinerary", "ticket", "tickets", "flight", "hotel", "rental",
+  "check-in", "boarding pass", "cancellation", "cancelation", "cancelled", "canceled",
+] as const;
+export const statementSubjects = ["statement", "estatement", "account summary", "balance"] as const;
+export const statementDays = 60;
+const gmailTerm = (term: string) => (term.includes(" ") ? `"${term}"` : term);
+const statements = `(subject:(${statementSubjects.map(gmailTerm).join(" OR ")}) newer_than:${statementDays}d from:(${travelLoyaltyDomains.join(" OR ")}))`;
 export const backfillQuery =
-  `-in:spam -in:trash {subject:booking subject:reservation subject:confirmation subject:confirmed subject:itinerary subject:ticket subject:tickets subject:flight subject:hotel subject:rental subject:check-in subject:"boarding pass" subject:cancellation subject:cancelation subject:cancelled subject:canceled ${statements}}`;
+  `-in:spam -in:trash {${backfillSubjects.map((s) => `subject:${gmailTerm(s)}`).join(" ")} ${statements}}`;
 // Messages per batch: enough to make progress, in one search call. A batch
 // that runs short of time stops early (see `timeLeftMs`), so it always ends
 // inside a request.

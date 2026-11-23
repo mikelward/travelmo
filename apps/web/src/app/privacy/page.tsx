@@ -49,8 +49,8 @@ export default function PrivacyPage() {
             visas with their numbers and expiry dates, and loyalty programs.
           </li>
           <li>
-            <strong>Connections you turn on:</strong> access to read your Gmail accounts or Google Calendar, calendar feed
-            addresses,
+            <strong>Connections you turn on:</strong> access to read your Gmail accounts, Fastmail or Google Calendar,
+            calendar feed addresses,
             your forwarding address, your calendar export link, and the devices and browsers you asked to notify.
           </li>
           <li>
@@ -83,6 +83,19 @@ export default function PrivacyPage() {
         <p>
           You can disconnect each Gmail account, or Google Calendar, in Settings at any time; Travelmo then revokes its
           access.
+        </p>
+      </Section>
+
+      <Section title="Fastmail">
+        <p>
+          When you connect Fastmail, you give Travelmo a read-only API token you made in Fastmail&apos;s settings, and
+          Travelmo keeps it on its servers. It uses the token only to read new email every few minutes, and past email
+          when you import it, handling each email as it does with Gmail: only ones that look like bookings go to
+          Gemini, and it never sends, changes or deletes email.
+        </p>
+        <p>
+          Disconnecting Fastmail in Settings deletes the token from Travelmo. Travelmo can&apos;t revoke a Fastmail
+          token, so delete it in Fastmail too.
         </p>
       </Section>
 
@@ -145,7 +158,7 @@ export default function PrivacyPage() {
       <Section title="Keeping and deleting your data">
         <p>
           Your data stays until you delete it. Deleting a trip or booking removes it; disconnecting Gmail or Google Calendar
-          removes Travelmo&apos;s access. Deleting your account in Settings removes your trips, bookings, travel profile,
+          removes Travelmo&apos;s access, and disconnecting Fastmail deletes its API token. Deleting your account in Settings removes your trips, bookings, travel profile,
           connections and access record, and takes you off trips others shared with you; bookings you added to someone else&apos;s trip stay
           with that trip. Service logs are kept for 30 days.
         </p>

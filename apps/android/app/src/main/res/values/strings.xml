@@ -51,6 +51,7 @@
     <string name="source_tripit">TripIt</string>
     <string name="source_ics">Calendar</string>
     <string name="source_forward">Forwarded email</string>
+    <string name="source_fastmail">Fastmail email</string>
     <string name="open_in_gmail">Open in Gmail</string>
     <string name="from_sender">From %1$s</string>
     <string name="close">Close</string>
@@ -109,6 +110,15 @@
     <string name="stop">Stop</string>
     <string name="disconnect">Disconnect</string>
     <string name="gmail_on_web">Connect Gmail and import past bookings from Settings on the web.</string>
+    <string name="fastmail">Fastmail</string>
+    <string name="fastmail_connect_hint">Travelmo reads booking confirmations from your Fastmail inbox. Make an API token with read-only Email access and paste it here.</string>
+    <string name="fastmail_connected_hint">New bookings import automatically; past ones come in when you import them, as far back as your mailbox goes.</string>
+    <string name="fastmail_tokens">Open Fastmail API tokens</string>
+    <string name="fastmail_token">API token</string>
+    <string name="connect_fastmail">Connect Fastmail</string>
+    <string name="fastmail_delete_token">After you disconnect, delete the token in Fastmail.</string>
+    <string name="fastmail_disconnected">Disconnected. Now delete the token in Fastmail.</string>
+    <string name="fastmail_on_web">Connect Fastmail and import past bookings from Settings on the web.</string>
     <string name="trips_section">Trips</string>
     <string name="import_review">Import review</string>
     <string name="import_review_hint">Recent emails and other imports that did not become bookings. Teach the importer about a sender, or import one anyway.</string>

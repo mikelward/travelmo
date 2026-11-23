@@ -89,6 +89,26 @@ describe("resetTrips", () => {
     expect((await db.doc(paths.gmailMailbox(uid, mailboxKey("trips@example.org"))).get()).data()).toEqual({ emailAddress: "trips@example.org", refreshToken: "token2" });
   });
 
+  it("forgets every connected mailbox's reading position", async () => {
+    const uid = "reset-u-mailboxes";
+    const backfill = { scanned: 300, imported: 12, done: true, updatedAt: at };
+    await db.doc(paths.user(uid)).set({
+      gmail: { emailAddress: "owner@example.com", connectedAt: at, backfill },
+      fastmail: { emailAddress: "owner@fastmail.com", connectedAt: at, backfill },
+    });
+    await db.doc(paths.gmailState(uid)).set({ emailAddress: "owner@example.com", refreshToken: "token", backfill });
+    await db.doc(paths.fastmailState(uid)).set({ emailAddress: "owner@fastmail.com", connectedAt: at, token: "fmu1", accountId: "u1", backfill });
+    await put(trip("reset-mailboxes-1", uid), [segment("reset-mailboxes-1", "m1-0")]);
+
+    await resetTrips(db, uid, quiet);
+
+    const user = (await db.doc(paths.user(uid)).get()).data();
+    expect(user?.gmail).toEqual({ emailAddress: "owner@example.com", connectedAt: at });
+    expect(user?.fastmail).toEqual({ emailAddress: "owner@fastmail.com", connectedAt: at });
+    expect((await db.doc(paths.fastmailState(uid)).get()).get("backfill")).toBeUndefined();
+    expect((await db.doc(paths.fastmailState(uid)).get()).get("token")).toBe("fmu1");
+  });
+
   it("files the same email again afterwards", async () => {
     const uid = "reset-u2";
     const store = firestoreStore(db);

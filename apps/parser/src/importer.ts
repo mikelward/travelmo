@@ -60,6 +60,7 @@ import { airportPlace } from "@travelmo/core/airportPlaces";
 import type { Extractor } from "./extract";
 import type { RetryStore } from "./geocodeSweep";
 import { isNotFound, type EmailMessage } from "./gmail";
+import type { MailProvider } from "./mailSource";
 import { calendarPrefilter, isTravelStatement, prefilter, senderDomain, statementReason, type PrefilterResult, type SenderPatterns } from "./prefilter";
 import { embeddingText, similarityVerdict, type Example, type ExampleLabel, type Examples } from "./similarity";
 
@@ -97,11 +98,11 @@ export type TripTx = {
   // can tell and give up rather than recreate what the reset removed.
   generation: number;
   bumpGeneration(): void;
-  // How many Gmail mailboxes the user connected, whose reading positions a
-  // reset clears (a read), and clearing those it found (two writes each), so
-  // a reset forgets the places in the same transaction that moves the
-  // generation on.
-  gmailMailboxes(): Promise<number>;
+  // How many mailboxes (Gmail's and Fastmail's) the user connected, whose
+  // reading positions a reset clears (a read), and clearing those it found
+  // (two writes each), so a reset forgets the places in the same
+  // transaction that moves the generation on.
+  connectedMailboxes(): Promise<number>;
   clearBackfill(): void;
   // Cancellations not yet matched to a booking (see markCancelled).
   listPendingCancellations(uid: string): Promise<PendingCancellation[]>;
@@ -247,9 +248,13 @@ export type ImportOptions = {
   consumed?: Set<string>;
   // A calendar event read like an email: recorded and filed as `ics`, and
   // checked by this instead of the sender-and-subject pre-filter.
-  source?: "gmail" | "ics" | "forward";
+  source?: EmailSource;
   prefilter?: (message: EmailMessage) => PrefilterResult;
 };
+
+// Where a message read like an email came from: a mailbox (Gmail,
+// Fastmail), the forwarding address, or a calendar event.
+export type EmailSource = "gmail" | "fastmail" | "ics" | "forward";
 
 export async function importMessage(
   uid: string,
@@ -425,7 +430,7 @@ export async function importMessage(
   // A travel statement, whether the pre-filter passed it as one or it was
   // forwarded or read again on request, which skip the pre-filter: as there,
   // by its (original) sender and subject.
-  const fromEmail = source === "gmail" || source === "forward";
+  const fromEmail = source !== "ics";
   const original = source === "forward" ? unwrapForwarded(message) : message;
   const statement =
     fromEmail &&
@@ -443,7 +448,7 @@ export async function importMessage(
 
   // A forwarded email is an email: its sender (the original one, read out of
   // the forwarding block) is learnable, and two alike may be one booking.
-  const isEmail = source === "gmail" || source === "forward";
+  const isEmail = source !== "ics";
   const sender = isEmail ? senderDomain(message.from) : undefined;
   // Outings on days apart (a weekly class booked for a term) are filed run
   // by run, each a day out of its own (outingRuns); their ids stay those of

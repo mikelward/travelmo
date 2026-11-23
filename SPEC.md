@@ -15,7 +15,7 @@ on Android; native apps later without a rewrite.
 | Hosting | Firebase App Hosting | Same project as Auth, Firestore and the worker; managed Next.js SSR on Cloud Run; scales to zero. Cloud Run with `apps/parser`-style Dockerfile is the fallback; Vercel was considered and rejected to keep one cloud and one bill |
 | Auth | Firebase Auth, Google sign-in | Free at this scale; verified email is what sharing keys on |
 | Data | Firestore | Realtime listeners, offline cache for the future mobile app, per-document rules make sharing a field, not a service |
-| Email | Gmail API, OAuth refresh token, Pub/Sub push | Near-realtime import with no polling |
+| Email | Gmail API, OAuth refresh token, Pub/Sub push; Fastmail over JMAP with a read-only API token, polled every five minutes | Near-realtime import with no polling for Gmail; Fastmail offers no third-party OAuth for mail, and a push connection held open does not fit Cloud Run |
 | Worker | Cloud Run (Hono, Node 22) | Pay per request; also hosts the OAuth flow so the web app needs no secrets |
 | Extraction | Gemini via `@google/genai`, JSON schema output | Cheapest model that reliably fills a strict schema; model name is configurable |
 | Mobile | PWA, a native Android app, and an iOS app sharing its Kotlin | Kotlin Multiplatform: the Android app's `:core` builds for iOS too, so the logic is not written a third time; a PWA on iOS gets no background refresh, no Time Sensitive notifications and no Live Activities |
@@ -35,26 +35,28 @@ viewer's zone. Trip bounds are calendar dates.
   start, end, origin, destination, notes, source, gmailMessageIds[], sources[],
   sender` (the booking email's domain), `rating` (one to five) and
   `favorite`, the traveler's own verdict. `source` is `gmail`, `manual`,
-  `tripit`, `ics` or `forward` (an email forwarded to the user's forwarding
-  address): where the booking first came from. `sources` lists every
+  `tripit`, `ics`, `forward` (an email forwarded to the user's forwarding
+  address) or `fastmail` (read from a connected Fastmail mailbox): where the
+  booking first came from. `sources` lists every
   email, TripIt item or calendar event it was read from (`kind, id, label,
   uid, at`), including later ones dropped as duplicates of it; the trip page
   shows them all, each email linking into Gmail for the user who imported
   it (`uid`; the trip's owner for sources recorded without one), in the
-  mailbox it came from, wherever the booking has since moved.
+  mailbox it came from, wherever the booking has since moved. Fastmail
+  emails do not link.
   Imported segments use the id `<source id>-<index>` (for an email, its
   Gmail message id, behind its mailbox's `idPrefix`: see "Several
-  mailboxes"; `tripit-<key>` for a TripIt trip) so a re-import overwrites
-  rather than duplicates.
+  mailboxes"; `fm-<JMAP email id>` for Fastmail; `tripit-<key>` for a
+  TripIt trip) so a re-import overwrites rather than duplicates.
 - `users/{uid}` — `email, displayName, photoURL, gmails {<lowercased
   address>: {emailAddress, connectedAt, watchExpiration, historyId,
   idPrefix, backfill}}` (one entry per connected Gmail mailbox; `gmail`,
   the same for one connected before there could be several, stays until
   that mailbox is disconnected, frozen, for rules and apps from before),
-  `googleCalendar
+  `fastmail {emailAddress, connectedAt, backfill}`, `googleCalendar
   {emailAddress, connectedAt, calendars[]}, reminders {email, push}, forward
   {address, createdAt}, emails[], pendingEmails[{email, sentAt,
-  expiresAt}]`. `gmail`, `gmails`, `googleCalendar`, `forward`, `emails` (a copy,
+  expiresAt}]`. `gmail`, `gmails`, `fastmail`, `googleCalendar`, `forward`, `emails` (a copy,
   for the apps, of the addresses the user confirmed besides their sign-in,
   lowercase; never trusted, see below) and `pendingEmails` (those whose
   confirmation link is still out) are server-written ("Linked email addresses"); `reminders` is the owner's choice; `backfill` is how far a reading of the whole mailbox has
@@ -111,9 +113,9 @@ viewer's zone. Trip bounds are calendar dates.
 - `users/{uid}/parsedMessages/{sourceId}` (for an email, its source id:
   see "Several mailboxes") — `outcome` (processing,
   filtered, not_booking, imported, failed, cancellation), `source` (absent for Gmail,
-  `tripit` or `ics` otherwise), `reason, from, subject, segmentIds[],
-  processedAt`, one per Gmail message, TripIt trip, unfiled TripIt item or
-  calendar event. Claimed atomically as `processing` before any
+  `tripit`, `ics`, `forward` or `fastmail` otherwise), `reason, from, subject, segmentIds[],
+  processedAt`, one per Gmail or Fastmail message, forwarded email, TripIt
+  trip, unfiled TripIt item or calendar event. Claimed atomically as `processing` before any
   work, so a message delivered twice is imported once; a `processing` claim
   older than fifteen minutes is a dead worker's and may be taken over. Also
   the audit trail of what the LLM was shown, and the source of the review
@@ -124,6 +126,9 @@ viewer's zone. Trip bounds are calendar dates.
   there could be several, until the parser moves it;
   `users/{uid}/private/gmailIds` — `first`, the mailbox whose emails keep
   Gmail's bare message ids;
+  `users/{uid}/private/fastmail` — the Fastmail API token, the JMAP account
+  id, the mailbox state new mail is read from (`emailState`), when it was
+  last polled, and the backfill progress;
   `users/{uid}/private/googleCalendar` — the Calendar refresh token and the
   calendar list, `googleCalendarAliases-<hash>` per calendar the event ids
   of deleted events still need. Server only. `users/{uid}/private/import` is read and written by every import
@@ -1881,6 +1886,55 @@ either a Gmail notification (`emailAddress` and `historyId`, from
 `gmail-parser`) or a batch of a mailbox reading (`uid`, `run` and `step`,
 from `gmail-backfill-parser`).
 
+### Connected Fastmail
+
+A Fastmail mailbox is read as Gmail is, new mail and the whole history,
+over JMAP (RFC 8620, 8621; `apps/parser/src/jmap.ts`). Fastmail gives
+third-party apps no OAuth for mail, so the user makes an API token in
+Fastmail's settings (Privacy & Security → Manage API tokens), read-only
+with Email access, and pastes it into Settings; one Fastmail mailbox can be
+connected beside the Gmail ones. `POST /fastmail/connect` reads the
+token's JMAP session and refuses a token that can change mail (the
+account's `isReadOnly`), one without mail access, or one Fastmail does not
+take, then keeps it server-side (`users/{uid}/private/fastmail`) with the
+mailbox's current state; the user document shows only the address and the
+backfill progress. The token goes only to Fastmail's session URL and the
+API URL that session names, which must be on fastmail.com. Disconnecting
+stops any reading and deletes the token; Fastmail has no API to revoke it,
+so Settings asks the user to delete it there.
+
+New mail: Cloud Scheduler calls `/internal/poll-fastmail` every five
+minutes, which for each approved user asks `Email/changes` what was created
+since the stored state, keeps what is in the inbox (Gmail's watch covers
+only the inbox too), and imports it as pushed Gmail mail is, with
+`source: "fastmail"`. The state moves on only once that is done and the
+user's trips were not reset meanwhile, so a failed or superseded poll is
+read again by the next. A state the server can no longer calculate changes
+from skips to now; the backfill finds what was missed. One user's failure
+(a token deleted in Fastmail, say) is logged and the rest carry on.
+
+Past mail: the backfill chain (`backfillChain.ts`) is the same for every
+mailbox; a Fastmail batch's Pub/Sub message says so (`provider:
+"fastmail"`, where a Gmail one names its mailbox by key), and the progress
+is kept on that connection. All read
+through `MailSource` (`mailSource.ts`): a page of the booking-like search
+(`backfill.ts`'s subjects and statements, as a JMAP filter over mail in neither trash
+nor junk (even with another label), newest first, each page anchored on the last email of the one
+before so mail arriving meanwhile shifts nothing; a deleted anchor starts
+the reading over, its claims skipping what was read), and one email by id
+(`Email/get` with the text and HTML body values, attachments unread,
+reduced as Gmail's are). Record ids are `fm-<email id>`, kept apart from
+Gmail's; "import anyway" routes them to Fastmail. A Fastmail booking links
+to no message, as there is no stable URL for one; its sender is learnable
+as any email's. Deleting all trips forgets every mailbox's reading
+position.
+
+Settings on the web and Android has a Fastmail section under Gmail: a
+link to make the token, a password field for it, and once connected, the
+same Import past bookings controls and Disconnect, with a reminder to
+delete the token in Fastmail. The token is not kept in Android's saved
+screen state.
+
 ## Connecting Gmail
 
 ### Several mailboxes
@@ -1987,7 +2041,8 @@ caller's uid, in this order:
    their access record (`access/{email}`) goes. Those
    trips keep every booking, including ones the deleted user added: they
    belong to the trip.
-5. `users/{uid}` and every subcollection under it, whatever it holds.
+5. `users/{uid}` and every subcollection under it, whatever it holds,
+   including a Fastmail API token (Fastmail cannot revoke one from outside).
 6. The Firebase Auth user, last, so the user can retry until everything
    else is gone; one already deleted counts as done.
 

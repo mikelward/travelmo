@@ -354,7 +354,7 @@ One Google Cloud project holds everything.
    setting. It uses `gcloud beta`, which gcloud offers to install on first
    use.
 5. **Scheduled jobs**: `PROJECT=… LOCATION=<region> PARSER_URL=https://<parser>
-   SCHEDULER_SA=<service account> deploy/scheduler.sh` creates five Cloud
+   SCHEDULER_SA=<service account> deploy/scheduler.sh` creates six Cloud
    Scheduler jobs that POST with an OIDC token from that service account
    (list it in `INTERNAL_CALLERS`): `/internal/renew-watches`, since Gmail
    watches expire after seven days, `/internal/poll-feeds`, which reads
@@ -363,7 +363,9 @@ One Google Cloud project holds everything.
    `/internal/reminders`, which sends the day's reminders by email and
    push, daily, and `/internal/flight-status`, which sends check-in
    reminders and looks at the flights near departure or arrival, every
-   minute (check-in reminders go even without `AEROAPI_KEY`). Three jobs per billing account
+   minute (check-in reminders go even without `AEROAPI_KEY`), and
+   `/internal/poll-fastmail`, which reads new mail in connected Fastmail
+   mailboxes, every five minutes. Three jobs per billing account
    are free; each further one costs about ten cents a month. Deploy the
    Firestore indexes first: the flight status job queries bookings by type
    and start across trips. Once continuous deployment is set up (below,

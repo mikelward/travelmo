@@ -21,6 +21,7 @@ export const paths = {
   // `first`: the mailbox whose emails are recorded under Gmail's bare
   // message ids (the account's first, for good: gmail.ts's gmailIdPrefix).
   gmailIds: (uid: string) => `users/${uid}/private/gmailIds`,
+  fastmailState: (uid: string) => `users/${uid}/private/fastmail`,
   googleCalendarState: (uid: string) => `users/${uid}/private/googleCalendar`,
   // Per chosen calendar (by a hash of its id): Google event id → iCalendar
   // UID, for events whose UID Google does not derive from their id.

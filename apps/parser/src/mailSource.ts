@@ -15,6 +15,8 @@ import {
 // provider (Gmail today) implements it; how new mail is noticed stays the
 // provider's own (Gmail's push notifications).
 export type MailSource = {
+  // Which mailbox it is, recorded on every import read from it.
+  provider: MailProvider;
   // Up to a batch of booking-like message ids from `cursor` on, and where
   // to carry on from; no nextPageToken once the search is exhausted.
   searchPage: (cursor: string | undefined) => Promise<MessagePage>;
@@ -26,6 +28,9 @@ export type MailSource = {
   isNotFound: (error: unknown) => boolean;
 };
 
+// The mailboxes the parser can read.
+export type MailProvider = "gmail" | "fastmail";
+
 // Spends a call's share of the provider's quota before making it.
 export type Pace = (units: number) => Promise<void>;
 
@@ -33,6 +38,7 @@ const unpaced: Pace = async () => {};
 
 export function gmailSource(gmail: Gmail, pace: Pace = unpaced): MailSource {
   return {
+    provider: "gmail",
     searchPage: async (cursor) => {
       await pace(gmailUnits.list);
       return searchMessagePage(gmail, backfillQuery, backfillBatch, cursor);

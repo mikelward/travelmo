@@ -59,6 +59,8 @@ import app.travelmo.core.MAX_GMAIL_MAILBOXES
 import app.travelmo.data.NoGmailActions
 import app.travelmo.data.GmailActions
 import app.travelmo.core.RideCompany
+import app.travelmo.data.FastmailActions
+import app.travelmo.data.NoFastmailActions
 import app.travelmo.core.SenderPatterns
 import app.travelmo.core.cleanSenderList
 import app.travelmo.core.SenderList
@@ -168,6 +170,8 @@ class TripsViewModel(
     private val importReview: ImportReview = NoImportReview,
     /** The parser's Gmail connection and mailbox reading; none by default. */
     private val gmailActions: GmailActions = NoGmailActions,
+    /** The parser's Fastmail connection and mailbox reading; none by default. */
+    private val fastmailActions: FastmailActions = NoFastmailActions,
     /** Whether Google verified [email]: only a verified address has an access record. */
     emailVerified: Boolean = true,
 ) : ViewModel() {
@@ -509,6 +513,13 @@ class TripsViewModel(
         }
     }
 
+    /** Fastmail as Settings shows it: loading, not connected, or the one connected mailbox. */
+    sealed interface FastmailState {
+        data object Loading : FastmailState
+        data object NotConnected : FastmailState
+        data class Connected(val mailbox: MailboxShown) : FastmailState
+    }
+
     /** The Gmail mailboxes, judged against the clock each minute so a stalled reading shows as stopped. */
     val gmail: StateFlow<GmailState> = combine(accessSettled.flatMapLatest { store.gmailStatuses(uid) }, now) { statuses, at ->
         val millis = Instant.parse(at).toEpochMilli()
@@ -516,9 +527,19 @@ class TripsViewModel(
         else GmailState.Connected(statuses.map { MailboxShown(it.emailAddress, it.progress, isReading(it.progress, millis)) })
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), GmailState.Loading)
 
-    /** Whether this build can connect Gmail and read the mailbox here. */
+    /** The Fastmail connection, judged against the clock the same way. */
+    val fastmail: StateFlow<FastmailState> = combine(accessSettled.flatMapLatest { store.fastmailStatus(uid) }, now) { status, at ->
+        status?.let { FastmailState.Connected(MailboxShown(it.emailAddress, it.progress, isReading(it.progress, Instant.parse(at).toEpochMilli()))) }
+            ?: FastmailState.NotConnected
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FastmailState.Loading)
+
+    /** Whether this build can connect Gmail and read the mailboxes here. */
     val canUseGmail: Boolean
         get() = gmailActions.available
+
+    /** Whether this build can connect Fastmail and read the mailbox here. */
+    val canUseFastmail: Boolean
+        get() = fastmailActions.available
 
     /** Google's consent page for connecting Gmail, once asked for; the screen opens it and clears it. */
     private val _gmailConsentUrl = MutableStateFlow<String?>(null)
@@ -530,12 +551,25 @@ class TripsViewModel(
         _gmailConsentUrl.value = null
     }
 
-    /** Starts or continues reading a mailbox's past emails; from the start once the last reading finished. */
+    /** Starts or continues reading a Gmail mailbox's past emails; from the start once the last reading finished. */
     fun startReading(token: String, emailAddress: String, restart: Boolean) = run(token, "startReading") { gmailActions.start(emailAddress, restart) }
 
     fun stopReading(token: String, emailAddress: String) = run(token, "stopReading") { gmailActions.stop(emailAddress) }
 
     fun disconnectGmail(token: String, emailAddress: String) = run(token, "disconnectGmail") { gmailActions.disconnect(emailAddress) }
+
+    /** Connects Fastmail with a read-only API token the user made there; the parser says why it refuses one. */
+    fun connectFastmail(token: String, apiToken: String) = run(token, "connectFastmail") {
+        if (apiToken.isBlank()) throw IllegalArgumentException("Paste your Fastmail API token.")
+        fastmailActions.connect(apiToken.trim())
+    }
+
+    /** Starts or continues reading Fastmail's past emails; from the start once the last reading finished. */
+    fun startFastmailReading(token: String, restart: Boolean) = run(token, "startFastmailReading") { fastmailActions.start(restart) }
+
+    fun stopFastmailReading(token: String) = run(token, "stopFastmailReading") { fastmailActions.stop() }
+
+    fun disconnectFastmail(token: String) = run(token, "disconnectFastmail") { fastmailActions.disconnect() }
 
     /** Import review's latest records, live; null while they load. */
     val reviewLatest: StateFlow<List<ParsedRecord>?> = accessSettled.flatMapLatest { store.latestParsed(uid) }

@@ -47,3 +47,4 @@ ensure_job send-reminders "7 6 * * *" /internal/reminders
 # Gates and carousels change by the minute; the parser decides which
 # flights are due a look and does nothing without AEROAPI_KEY.
 ensure_job check-flight-status "* * * * *" /internal/flight-status
+ensure_job poll-fastmail "*/5 * * * *" /internal/poll-fastmail
