@@ -259,6 +259,55 @@ in the Equal Earth projection drawn to SVG paths by
 `apps/web/scripts/worldmap.mjs` (`apps/web/src/lib/worldMap.json`, 27 KB
 compressed), and the airport table load only on this page.
 
+### Residence and visa days
+
+Below the counts, "Residence and visa days" checks the days in and out of
+countries against the limits people ask about
+(`packages/core/src/residence.ts`, mirrored in `:core`): UK settlement
+(no more than 180 days outside the UK in any 12 months of the five years
+before applying), UK citizenship (450 days outside in the five years
+before applying, 90 in the last 12 months), Schengen short stays (90 days
+in any 180, in the 29 members since Bulgaria and Romania joined in full in
+2025, Ireland and Cyprus not among them), US citizenship (913 days in the
+US in the five years before applying, or 548 in three when married to a US
+citizen, and no single absence of over six months, a year breaking
+continuous residence; Puerto Rico, Guam, the US Virgin Islands and the
+Northern Mariana Islands count as the US), the US green card (an absence
+of over six months, or of a year or more), US tax (the substantial
+presence test: 31 days this year, and 183 counting this year's days, a
+third of last year's and a sixth of the year before's; the states and DC
+only), Canada permanent residence (730 days in Canada in the last five
+years) and citizenship (1,095 in the five years before applying), and
+Australian citizenship (no more than a year away in the four years before
+applying, and 90 days in the last 12 months). Each rule is data, with the
+official page it comes from beside it; the page links to it.
+
+Where the traveler was each day is worked out as the counts above work
+it out, from the trips the page already read: a day counts for every
+country they were in for any part of it, so the day of leaving and the day
+of coming back are days in both countries. That gives both conventions the
+rules use: the UK counts an absence only for a whole day away, so those
+days are not absences; Schengen, the US, Canada and Australia count any
+part of a day in the country, so they are days there. A day spent wholly
+in the air (a flight across the date line can skip one) is in no country.
+A day with no trip is at home, from home over time as the Profile works it
+out (`effectiveHomes`); a day of a trip before its first booking is too. A
+day nothing places (a booking naming no country, or home with no country)
+counts against the traveler: as away for a limit on absences or a minimum
+of days in, as in for a limit on days in, and the page says how many there
+were; with no country for home, it asks for one on the Profile.
+
+The person picks a set of rules and a date ("Applying on" for an
+application, "On" otherwise; today by default; the Android app counts to
+today). Trips booked up to the date count, so a date ahead shows what
+planned trips would leave. Each rule shows the days used of the limit,
+what is left (or short, or to spare), the worst window and its dates (for
+a rolling limit, also the window ending on the date), whether it is within
+the limit, within a tenth of it, or over, and the absences or stays behind
+it with their countries and trips. A note says it is an estimate from the
+bookings Travelmo knows about, not legal advice. It reads nothing new: no
+lookups, no server, no cost.
+
 ## Document reminders
 
 A passport, visa or other document in a travel profile with an expiry date
@@ -1984,7 +2033,8 @@ does, from `:core`'s port of the same logic with the same tests: the trips
 begun, days away and days in each country, on the web's world map
 (`worldMap.json` read as a resource, spots placed by the same Equal Earth
 projection) with visited countries filled and airports and placed bookings
-marked; the rated and favorite places, each trip opening; trips per year,
+marked; the rated and favorite places, each trip opening; residence and
+visa days, counted to today; trips per year,
 a row or the year picker narrowing the rest to a year. Bookings are added, edited and
 deleted on the trip page by the owner and sharees, with the web's form
 (type, title, start and end as date, time and zone with a pinned "as

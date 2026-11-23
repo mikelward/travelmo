@@ -372,9 +372,49 @@
       from it and offers to remove what it already imported (a weekly kids'
       class is no trip).
 
+- [x] Residence and visa days on Reports: days in and out of countries
+      against UK settlement and citizenship, Schengen, US citizenship,
+      green card and tax, Canada and Australia limits.
+- [ ] Residence and visa days on Android: a date picker, as the web has
+      (it counts to today), and the stays and time away past the latest
+      five.
+
 ## Decisions needing review
 
 Guesses made on autopilot; change any of them freely.
+
+- Residence and visa days: the official pages (gov.uk, ec.europa.eu,
+  uscis.gov, irs.gov, canada.ca, immi.homeaffairs.gov.au) could not be
+  fetched from the build sandbox, so each number and convention was
+  checked against search results quoting them, not the pages themselves;
+  read each cited page before relying on it. Doubts:
+  - UK citizenship: that departure and return days are not absences is
+    the Home Office's rule for settlement (whole days); naturalisation
+    guidance was not seen saying the same. The Home Office's discretion
+    (up to 480 days) is not modeled. Planned changes to settlement
+    (a longer qualifying period) are not reflected; the 12-month windows
+    run over the five years before the date whatever the route.
+  - UK: only GB counts as the UK; the Channel Islands and Isle of Man are
+    away.
+  - Australia: sources disagree on whether the days of leaving and
+    returning count as days in Australia; they are counted as in (the
+    any-part rule). The 12 months away is 365 days, and the four years'
+    other conditions (lawful residence, a year as a permanent resident)
+    are not checked.
+  - Canada: the half-day credit for time before permanent residence (up
+    to 365 days) is not counted, and permanent residence is checked over
+    the last five years even for someone resident less long. That a part
+    day counts is from IRCC's calculator help, not verified on the page.
+  - US: "over six months" is a day past six calendar months after leaving;
+    "a year or more" is coming back on or after the same date a year on.
+    The green card warns from six months, when the return may be
+    questioned. Substantial presence ignores exempt days (students,
+    teachers, commuters from Canada or Mexico, transit under 24 hours).
+  - Schengen: Monaco, San Marino and Vatican City are not counted; the
+    worst window is looked for over the year before the date.
+  - A day nothing places counts against the traveler (away, or in for
+    Schengen and US tax), and so do the days of a trip shared with them
+    by someone else, as the other reports count them.
 
 - "Import past bookings" regroups the user's trips when it finishes, as
   "Regroup trips" does, so a booking moved by hand during the import may

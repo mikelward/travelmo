@@ -15,9 +15,18 @@ import app.travelmo.R
 import app.travelmo.auth.GoogleAccount
 import app.travelmo.auth.SignInResult
 import app.travelmo.auth.SignedIn
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import app.travelmo.core.AddressHolder
 import app.travelmo.core.FlightStatus
+import app.travelmo.core.HomePeriod
 import app.travelmo.core.PendingEmail
+import app.travelmo.core.TripWithSegments
+import app.travelmo.core.displayTitles
 import app.travelmo.core.Place
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentType
@@ -390,6 +399,23 @@ class ScreenScreenshotTest {
         val viewModel = viewModel()
         capture("reports_dark", dark = true) { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, bottomBar = { HomeNavigationBar(HomeTab.REPORTS) {} }) }
     }
+
+    // The residence and visa days below the map, on their own: home in London, so
+    // the week in Lisbon is four days away.
+    private fun residence(name: String, dark: Boolean) = capture(name, dark = dark) {
+        val trips = fixtureTrips.map { TripWithSegments(it, fixtureSegments[it.id].orEmpty()) }
+        Surface {
+            Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+                ResidenceDays(trips, listOf(HomePeriod("London", "GB")), FROZEN_NOW.take(10), displayTitles(fixtureTrips), onOpenTrip = {})
+            }
+        }
+    }
+
+    @Test
+    fun reports_residence() = residence("reports_residence", dark = false)
+
+    @Test
+    fun reports_residence_dark() = residence("reports_residence_dark", dark = true)
 
     @Test
     fun settings() = settings("settings", dark = false)
