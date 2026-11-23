@@ -147,4 +147,20 @@ class ReportsTest {
         val bare = TripWithSegments(trip("bare", "2025-03-05", "2025-03-05"), listOf(Segment("b", "t", SegmentType.ACTIVITY, "Tour", "2025-03-05T10:00:00+01:00")))
         travelReport(listOf(bare), "2025-12-01").unplaced shouldBe 1
     }
+
+    @Test
+    fun `counts no day in the country of an airport the traveler only changes planes at but a stopover's days`() {
+        val out = flight("LHR", "DXB", "2025-02-01T21:00:00+00:00", "2025-02-02T07:30:00+04:00")
+        val on = flight("DXB", "SYD", "2025-02-02T09:30:00+04:00", "2025-02-03T06:00:00+11:00")
+        val days = tripDayPlaces(trip("t", "2025-02-01", "2025-02-03"), listOf(out, on), "2025-12-31")
+        days.mapValues { it.value.countries.sorted() } shouldBe mapOf("2025-02-01" to listOf("GB"), "2025-02-02" to emptyList(), "2025-02-03" to listOf("AU"))
+        days["2025-02-02"]?.inTransit shouldBe true
+        // Known to be between countries, so not a day with no country known.
+        travelReport(listOf(TripWithSegments(trip("t", "2025-02-01", "2025-02-03"), listOf(out, on))), "2025-12-31").unknownDays shouldBe 0
+        val sydney = stay("Example Hotel Sydney", "AU", "2025-02-02T14:00:00+11:00", "2025-02-06T10:00:00+11:00")
+        tripDayPlaces(trip("t", "2025-02-01", "2025-02-03"), listOf(out, on, sydney), "2025-12-31")["2025-02-02"]?.countries?.contains("AE") shouldBe false
+        val later = flight("DXB", "SYD", "2025-02-03T09:30:00+04:00", "2025-02-04T06:00:00+11:00", id = "later")
+        val hotel = stay("Example Hotel Dubai", "AE", "2025-02-02T14:00:00+04:00", "2025-02-03T08:00:00+04:00")
+        tripDayPlaces(trip("t", "2025-02-01", "2025-02-04"), listOf(out, hotel, later), "2025-12-31")["2025-02-02"]?.countries?.sorted() shouldBe listOf("AE")
+    }
 }

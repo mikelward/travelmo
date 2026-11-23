@@ -255,7 +255,13 @@ first, up to 200 a day, writing what it learns under the user's import lock
 only if the booking has not been edited since, dropping an entry once it is
 answered (a "none" included), its booking is gone, or it is thirty days old,
 and stopping for the day when the budget runs out again.
-Station and ferry codes are never read as airport codes. Each day of a trip counts for every country the
+Station and ferry codes are never read as airport codes. Changing planes
+is no visit: a flight that lands where the next one leaves from (the same
+airport code) within a day, with no stay booked in between, places the
+traveler in no country on landing or takeoff, so a day changing planes in
+Dubai counts no day in the UAE, while a stopover with a hotel does; such a
+day is between countries, not unknown, and still a day away from home.
+Each day of a trip counts for every country the
 traveler was in that day: a booking's start and end say where they were,
 and between bookings they stay where the last one (in time, not by local
 date, which differ across the date line) left them. So a travel day

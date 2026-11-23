@@ -18,10 +18,46 @@ private val transport = setOf(SegmentType.FLIGHT, SegmentType.TRAIN, SegmentType
  */
 private data class Moment(val at: String, val country: String?, val then: String?, val transit: Boolean = false)
 
-private fun moments(segment: Segment, lookup: (String) -> AirportPlace?): List<Moment> {
+// A flight's ends that are a connection, as reports.ts finds them: it
+// lands where the next flight leaves from (the same airport code) within a
+// day, with no stay booked in between, so the landing and the takeoff place
+// the traveler in no country, though they are still away.
+private const val CONNECTION_HOURS = 24L
+
+// An instant as a booking writes it, as compareInstants reads it when the
+// timeline is sorted (a time that doesn't parse fails there either way).
+private fun instantAt(at: String): Long = instantMillis(at)
+
+private fun connections(live: List<Segment>, lookup: (String) -> AirportPlace?): Pair<Set<Segment>, Set<Segment>> {
+    val flights = live.filter { it.type == SegmentType.FLIGHT }.sortedWith { a, b -> compareInstants(a.start, b.start) }
+    val stays = live.filter { it.type == SegmentType.LODGING }
+    val lands = mutableSetOf<Segment>()
+    val leaves = mutableSetOf<Segment>()
+    for ((a, b) in flights.zipWithNext()) {
+        val at = a.destination?.code?.trim()?.uppercase() ?: continue
+        if (at != b.origin?.code?.trim()?.uppercase()) continue
+        val landed = instantAt(a.end ?: a.start)
+        val left = instantAt(b.start)
+        if (left < landed || left - landed > CONNECTION_HOURS * 3_600_000) continue
+        // Only a stay in the connection's country makes it a stopover: a
+        // hotel booked where the trip goes next can overlap the change of planes.
+        val country = placeCountry(a.destination, SegmentType.FLIGHT, lookup)
+        val stayed = stays.any { stay ->
+            val where = placeCountry(stay.destination ?: stay.origin, SegmentType.LODGING, lookup)
+            (where == null || country == null || where == country) &&
+                instantAt(stay.start) < left && instantAt(stay.end ?: stay.start) > landed
+        }
+        if (stayed) continue
+        lands += a
+        leaves += b
+    }
+    return lands to leaves
+}
+
+private fun moments(segment: Segment, lookup: (String) -> AirportPlace?, lands: Boolean = false, leaves: Boolean = false): List<Moment> {
     if (segment.type in transport) {
-        val from = placeCountry(segment.origin, segment.type, lookup)
-        val to = placeCountry(segment.destination, segment.type, lookup)
+        val from = if (leaves) null else placeCountry(segment.origin, segment.type, lookup)
+        val to = if (lands) null else placeCountry(segment.destination, segment.type, lookup)
         // A car is driven from place to place in between; a flight is in the air.
         // Only a flight is in no country on the way. A drive, a train, a bus
         // or a ferry that starts and ends in one country stays in it
@@ -30,7 +66,7 @@ private fun moments(segment: Segment, lookup: (String) -> AirportPlace?): List<M
         // known, which is not the same as nowhere.
         val flight = segment.type == SegmentType.FLIGHT
         val during = if (!flight && from != null && from == to) from else null
-        return listOf(Moment(segment.start, from, during, transit = flight), Moment(segment.end ?: segment.start, to, to))
+        return listOf(Moment(segment.start, from, during, transit = flight), Moment(segment.end ?: segment.start, to, to, transit = lands))
     }
     val here = placeCountry(segment.destination ?: segment.origin, segment.type, lookup)
     return listOfNotNull(Moment(segment.start, here, here), segment.end?.let { Moment(it, here, here) })
@@ -65,7 +101,9 @@ data class TripDay(val countries: Set<String>, val inTransit: Boolean, val start
 fun tripDayPlaces(trip: Trip, segments: List<Segment>, today: String, lookup: (String) -> AirportPlace? = ::airportPlace): Map<String, TripDay> {
     // In the order they happened, which across the date line is not the
     // order of their local dates: a flight can land the day before it left.
-    val timeline = liveSegments(segments).flatMap { moments(it, lookup) }.sortedWith { a, b -> compareInstants(a.at, b.at) }
+    val live = liveSegments(segments)
+    val (lands, leaves) = connections(live, lookup)
+    val timeline = live.flatMap { moments(it, lookup, it in lands, it in leaves) }.sortedWith { a, b -> compareInstants(a.at, b.at) }
     val days = LinkedHashMap<String, TripDay>()
     val bounds = reportBounds(trip, segments) ?: return days
     val last = minOf(bounds.second, today)
@@ -135,6 +173,8 @@ private fun spot(lat: Double, lon: Double) = "${fixed3(lat)},${fixed3(lon)}"
 fun travelReport(all: List<TripWithSegments>, today: String, year: String? = null, lookup: (String) -> AirportPlace? = ::airportPlace): TravelReport {
     fun inYear(date: String) = year == null || date.startsWith(year)
     val dayCountries = LinkedHashMap<String, MutableSet<String>>()
+    // Days between countries all day (changing planes), which are known.
+    val transitDays = mutableSetOf<String>()
     val countryTrips = HashMap<String, MutableSet<String>>()
     val yearDays = HashMap<String, LinkedHashMap<String, MutableSet<String>>>()
     val yearTrips = HashMap<String, Int>()
@@ -159,7 +199,9 @@ fun travelReport(all: List<TripWithSegments>, today: String, year: String? = nul
         yearTrips[startYear] = (yearTrips[startYear] ?: 0) + 1
         if (inYear(bounds.first)) trips += 1
 
-        for ((day, countries) in tripDays(trip, segments, today, lookup)) {
+        for ((day, place) in tripDayPlaces(trip, segments, today, lookup)) {
+            val countries = place.countries
+            if (place.inTransit && inYear(day)) transitDays += day
             val y = day.substring(0, 4)
             yearDays.getOrPut(y) { LinkedHashMap() }.getOrPut(day) { mutableSetOf() } += countries
             if (!inYear(day)) continue
@@ -197,8 +239,8 @@ fun travelReport(all: List<TripWithSegments>, today: String, year: String? = nul
 
     val daysIn = HashMap<String, Int>()
     var unknownDays = 0
-    for (countries in dayCountries.values) {
-        if (countries.isEmpty()) unknownDays += 1
+    for ((day, countries) in dayCountries) {
+        if (countries.isEmpty() && day !in transitDays) unknownDays += 1
         for (c in countries) daysIn[c] = (daysIn[c] ?: 0) + 1
     }
 

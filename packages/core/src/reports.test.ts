@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { airportPlace } from "./airportPlaces";
-import { placeCountry, travelReport, tripDays, tripPlaces } from "./reports";
+import { placeCountry, travelReport, tripDayPlaces, tripDays, tripPlaces } from "./reports";
 import type { ExtractedSegment } from "./schema";
 
 const flight = (from: string, to: string, start: string, end: string): ExtractedSegment => ({
@@ -104,6 +104,33 @@ describe("tripDays", () => {
   it("leaves days no booking places without a country", () => {
     const days = tripDays({ start: "2025-06-01", end: "2025-06-03" }, [stay("Inn", "IT", "2025-06-02T15:00:00+02:00", "2025-06-03T10:00:00+02:00")], "2026-01-01");
     expect(countriesOf(days)).toEqual({ "2025-06-01": [], "2025-06-02": ["IT"], "2025-06-03": ["IT"] });
+  });
+});
+
+describe("changing planes", () => {
+  const out = flight("LHR", "DXB", "2025-02-01T21:00:00+00:00", "2025-02-02T07:30:00+04:00");
+  const on = flight("DXB", "SYD", "2025-02-02T09:30:00+04:00", "2025-02-03T06:00:00+11:00");
+
+  it("counts no day in the country of an airport the traveler only changes planes at", () => {
+    const days = tripDays({ start: "2025-02-01", end: "2025-02-03" }, [out, on], "2025-12-31", airportPlace);
+    expect(countriesOf(days)).toEqual({ "2025-02-01": ["GB"], "2025-02-02": [], "2025-02-03": ["AU"] });
+    // Known to be between countries, so not a day with no country known.
+    expect(travelReport([{ trip: { id: "t", start: "2025-02-01", end: "2025-02-03" }, segments: [out, on] }], "2025-12-31", { lookup: airportPlace }).unknownDays).toBe(0);
+    // Not unknown: the traveler is between countries all day.
+    expect(tripDayPlaces({ start: "2025-02-01", end: "2025-02-03" }, [out, on], "2025-12-31", airportPlace).get("2025-02-02")?.inTransit).toBe(true);
+  });
+
+  it("still counts no day there when the stay that overlaps is where the trip goes next", () => {
+    const sydney = stay("Example Hotel Sydney", "AU", "2025-02-02T14:00:00+11:00", "2025-02-06T10:00:00+11:00");
+    const days = tripDays({ start: "2025-02-01", end: "2025-02-03" }, [out, on, sydney], "2025-12-31", airportPlace);
+    expect(countriesOf(days)["2025-02-02"]).not.toContain("AE");
+  });
+
+  it("counts the days of a stopover with a stay booked there", () => {
+    const later = flight("DXB", "SYD", "2025-02-03T09:30:00+04:00", "2025-02-04T06:00:00+11:00");
+    const hotel = stay("Example Hotel Dubai", "AE", "2025-02-02T14:00:00+04:00", "2025-02-03T08:00:00+04:00");
+    const days = tripDays({ start: "2025-02-01", end: "2025-02-04" }, [out, hotel, later], "2025-12-31", airportPlace);
+    expect(countriesOf(days)["2025-02-02"]).toEqual(["AE"]);
   });
 });
 
