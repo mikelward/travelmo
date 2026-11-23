@@ -319,6 +319,8 @@ describe("resetTrips", () => {
       },
       now: () => at,
       log: quiet,
+      sleep: async () => {},
+      newWake: () => "wake-1",
     };
     expect((await startBackfill(uid, "run-1", false, io)).kind).toBe("started");
     // "Delete all trips" lands while the first batch reads.

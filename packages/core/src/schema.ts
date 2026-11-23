@@ -141,9 +141,19 @@ export const BackfillProgress = z.object({
   queued: z.boolean().optional(),
   // A batch is being read until then, so no other starts meanwhile.
   leaseUntil: isoDateTime.optional(),
-  // After a failed batch, no batch reads until then: the email it was
-  // importing stays claimed by it that long.
+  // No batch reads until then: after a failed batch, the email it was
+  // importing stays claimed by it that long; after Gmail's rate limit, its
+  // per-minute quota frees up.
   retryAfter: isoDateTime.optional(),
+  // The id of the one queued message that carries the reading on while it
+  // waits (`retryAfter` or a lease): other copies of the step are dropped.
+  wake: z.string().optional(),
+  // Set while the message for `wake` may not have been queued yet: the
+  // message it took over from (`from`, absent for the step's first) may
+  // queue it (again) until it runs.
+  handoff: z.object({ from: z.string().optional() }).optional(),
+  // Batches in a row that failed; the reading stops after a few.
+  failures: z.number().int().positive().optional(),
   // Emails whose import failed in the last batch, which paused the reading.
   lastFailed: z.number().int().positive().optional(),
 });

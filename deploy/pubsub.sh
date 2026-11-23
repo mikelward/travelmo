@@ -24,8 +24,10 @@ PUSH_SUBSCRIPTION="${PUSH_SUBSCRIPTION:-gmail-parser}"
 MAX_DELIVERY_ATTEMPTS="${MAX_DELIVERY_ATTEMPTS:-5}"
 BACKFILL_TOPIC="${BACKFILL_TOPIC:-gmail-backfill}"
 BACKFILL_SUBSCRIPTION="${BACKFILL_SUBSCRIPTION:-gmail-backfill-parser}"
-# A failed batch, or one whose copy is still reading, is refused for up to
-# sixteen minutes (its lease); ten attempts with backoff span about forty.
+# Only a batch that errs fails its delivery: one that must wait (a failed
+# batch's fifteen minutes, a copy still reading, Gmail's rate limit) hands
+# on to a fresh message instead, since ten attempts span only about five
+# minutes.
 BACKFILL_MAX_DELIVERY_ATTEMPTS="${BACKFILL_MAX_DELIVERY_ATTEMPTS:-10}"
 
 gcloud="gcloud --project=$PROJECT --quiet"
@@ -86,8 +88,9 @@ $gcloud pubsub topics add-iam-policy-binding "$BACKFILL_TOPIC" \
   --member="serviceAccount:$PARSER_SA" --role=roles/pubsub.publisher >/dev/null
 ensure_push "$BACKFILL_SUBSCRIPTION" "$BACKFILL_TOPIC" /internal/backfill 600 "$BACKFILL_MAX_DELIVERY_ATTEMPTS"
 
-# Dead-lettered notifications wait here (seven days) to be read with
-# `gcloud pubsub subscriptions pull gmail-dead-letter --auto-ack`. The alert in
+# Dead-lettered notifications and mailbox-reading batches wait here (seven
+# days) to be read with `gcloud pubsub subscriptions pull gmail-dead-letter
+# --format=json` and acknowledged with `--auto-ack`. The alert in
 # deploy/monitoring.sh fires while this subscription has a message.
 if ! $gcloud pubsub subscriptions describe "$DEAD_LETTER_TOPIC" >/dev/null 2>&1; then
   $gcloud pubsub subscriptions create "$DEAD_LETTER_TOPIC" \

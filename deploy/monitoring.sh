@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Creates the alerting policies in deploy/alerts: one for a failed Gmail watch
-# renewal (the parser's `renew_watch_failed` log line) and one for a
-# notification that landed on the dead-letter topic. Idempotent: an existing
+# renewal (the parser's `renew_watch_failed` log line) and one for a message
+# that landed on the dead-letter topic: a Gmail notification or a batch of a
+# mailbox reading, which the alert's text tells apart. Idempotent: an existing
 # policy with the same display name is updated in place.
 #
 #   PROJECT=my-project CHANNEL=projects/my-project/notificationChannels/123 deploy/monitoring.sh

@@ -50,29 +50,44 @@ export function toEmailMessage(message: gmail_v1.Schema$Message): EmailMessage {
   };
 }
 
+// What Gmail charges against a user's per-minute quota ("Total Query Cost",
+// 6,000 units a minute per user) for the calls made in bulk: a full message
+// costs 60 units, a search 5 whatever the page size.
+export const gmailUnits = { getFull: 60, list: 5 } as const;
+
+// googleapis on its own retries a 429 three times within two seconds: each
+// retry is charged again, and none waits long enough for a per-minute quota
+// to free up. Calls that may hit it wait instead (`withRateLimitRetry`).
+const noQuickRetryOn429 = {
+  retryConfig: {
+    statusCodesToRetry: [
+      [100, 199],
+      [408, 408],
+      [500, 599],
+    ],
+  },
+};
+
 export async function fetchMessage(gmail: Gmail, id: string): Promise<EmailMessage> {
-  const { data } = await gmail.users.messages.get({ userId: "me", id, format: "full" });
+  const { data } = await gmail.users.messages.get({ userId: "me", id, format: "full" }, noQuickRetryOn429);
   return toEmailMessage(data);
 }
 
 export type MessagePage = { ids: string[]; nextPageToken?: string };
 
-// Up to `max` message ids from `pageToken` on, and where to carry on from;
-// no nextPageToken once the search is exhausted.
+// Gmail returns at most this many ids per search call.
+export const maxSearchPage = 500;
+
+// Up to `max` (at most 500) message ids from `pageToken` on, and where to
+// carry on from; no nextPageToken once the search is exhausted. One search
+// call, however many ids.
 export async function searchMessagePage(gmail: Gmail, query: string, max: number, pageToken?: string): Promise<MessagePage> {
-  const ids: string[] = [];
-  let token = pageToken;
-  do {
-    const { data } = await gmail.users.messages.list({
-      userId: "me",
-      q: query,
-      maxResults: Math.min(100, max - ids.length),
-      ...(token ? { pageToken: token } : {}),
-    });
-    for (const m of data.messages ?? []) if (m.id) ids.push(m.id);
-    token = data.nextPageToken ?? undefined;
-  } while (token && ids.length < max);
-  return { ids, ...(token ? { nextPageToken: token } : {}) };
+  const { data } = await gmail.users.messages.list(
+    { userId: "me", q: query, maxResults: Math.min(maxSearchPage, max), ...(pageToken ? { pageToken } : {}) },
+    noQuickRetryOn429,
+  );
+  const ids = (data.messages ?? []).flatMap((m) => (m.id ? [m.id] : []));
+  return { ids, ...(data.nextPageToken ? { nextPageToken: data.nextPageToken } : {}) };
 }
 
 // Gmail answers 400 for a page token it no longer accepts.
@@ -135,4 +150,88 @@ export function isNotFound(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
   const { code, status } = error as { code?: unknown; status?: unknown };
   return status === 404 || code === 404 || code === "404";
+}
+
+// Gmail's answer when a user's per-minute quota or rate is used up: 429, or
+// 403 with reason rateLimitExceeded or userRateLimitExceeded, or one naming
+// an exceeded quota. Undefined for any other error; otherwise how long Gmail
+// asked to wait (Retry-After), or 0 when it did not say.
+export function rateLimitWaitMs(error: unknown, nowMs = Date.now()): number | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  const e = error as {
+    code?: unknown;
+    status?: unknown;
+    message?: unknown;
+    response?: { status?: unknown; headers?: unknown; data?: { error?: { errors?: { reason?: unknown }[] } } };
+  };
+  const status = Number(e.status ?? e.response?.status ?? e.code);
+  const reasons = (e.response?.data?.error?.errors ?? []).map((r) => r.reason);
+  const quota = typeof e.message === "string" && e.message.includes("Quota exceeded");
+  const limited =
+    status === 429 || (status === 403 && (quota || reasons.includes("rateLimitExceeded") || reasons.includes("userRateLimitExceeded")));
+  if (!limited) return undefined;
+  return retryAfterMs(e.response?.headers, nowMs) ?? 0;
+}
+
+function retryAfterMs(headers: unknown, nowMs: number): number | undefined {
+  if (typeof headers !== "object" || headers === null) return undefined;
+  const value =
+    typeof (headers as { get?: unknown }).get === "function"
+      ? (headers as { get: (name: string) => string | null }).get("retry-after")
+      : (headers as Record<string, unknown>)["retry-after"];
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  const at = Date.parse(value);
+  return Number.isNaN(at) ? undefined : Math.max(0, at - nowMs);
+}
+
+// Gmail still refused for rate once there was no time left to wait.
+export class GmailRateLimited extends Error {
+  constructor(readonly limit: unknown) {
+    super(`Gmail rate limit: ${limit instanceof Error ? limit.message : String(limit)}`);
+    this.name = "GmailRateLimited";
+  }
+}
+
+export type RetryIo = {
+  // How long the caller may still wait: rather than wait past it, the call
+  // gives up with GmailRateLimited.
+  timeLeftMs: () => number;
+  sleep: (ms: number) => Promise<void>;
+  log: (event: string, fields: Record<string, unknown>) => void;
+};
+
+// The first wait after a rate limit when Gmail names none, doubled each
+// time up to a minute, by when a per-minute quota has freed up.
+export const rateLimitBackoffMs = { first: 2000, max: 60_000 };
+
+// Calls `fn`, waiting out Gmail's rate limits with exponential backoff, or
+// as long as Gmail asks if longer, while `timeLeftMs` allows.
+export async function withRateLimitRetry<T>(fn: () => Promise<T>, io: RetryIo): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      const asked = rateLimitWaitMs(error);
+      if (asked === undefined) throw error;
+      const wait = Math.max(asked, Math.min(rateLimitBackoffMs.max, rateLimitBackoffMs.first * 2 ** attempt));
+      if (io.timeLeftMs() < wait) throw new GmailRateLimited(error);
+      io.log("gmail_rate_limited", { attempt: attempt + 1, waitMs: wait });
+      await io.sleep(wait);
+    }
+  }
+}
+
+// Spaces calls out so that together they spend at most `unitsPerMinute` of
+// the user's quota: each waits until the units of those before it have been
+// spread over a minute.
+export function gmailPacer(unitsPerMinute: number, io: { nowMs: () => number; sleep: (ms: number) => Promise<void> }) {
+  let free = 0;
+  return async (units: number): Promise<void> => {
+    const now = io.nowMs();
+    const start = Math.max(free, now);
+    free = start + (units * 60_000) / unitsPerMinute;
+    if (start > now) await io.sleep(start - now);
+  };
 }

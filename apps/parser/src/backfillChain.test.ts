@@ -4,6 +4,7 @@ import type { BackfillBatch } from "./backfill";
 import {
   backfillLeaseMs,
   continueBackfill,
+  maxFailedBatches,
   parseContinuePush,
   startBackfill,
   stopBackfill,
@@ -18,18 +19,22 @@ const t0 = Date.parse("2026-11-22T12:00:00Z");
 // One user's connection in memory: the stored progress, the reset
 // generation, the messages queued, and batches that each read 300 emails
 // until the mailbox is done after `pages` of them.
-function world(options: { pages?: number; failOn?: Set<number> } = {}) {
+// Waiting (`sleep`) moves the clock on.
+function world(options: { pages?: number; failOn?: Set<number>; rateLimitOn?: Set<number> } = {}) {
   const pages = options.pages ?? 3;
   let stored: BackfillProgress | undefined;
   let connected = true;
   let generation = 0;
   let clock = t0;
+  let wakes = 0;
   const queued: ContinueMessage[] = [];
   const logged: string[] = [];
-  const read: { from: BackfillProgress; generation: number }[] = [];
+  const read: { from: BackfillProgress; generation: number; at: number }[] = [];
   let duringBatch: () => Promise<void> = async () => {};
   let throwOnBatch: Error | undefined;
   let throwOnPublish: Error | undefined;
+  let deliverAtOnce = false;
+  const deliveredAtOnce: unknown[] = [];
   const io: ChainIo<{ uid: string }> = {
     change: async (fn) => {
       if (!connected) return undefined;
@@ -38,9 +43,20 @@ function world(options: { pages?: number; failOn?: Set<number> } = {}) {
       return { state: { uid: "u1" }, generation, result };
     },
     runBatch: async (_state, from, at): Promise<BackfillBatch> => {
-      read.push({ from, generation: at });
+      read.push({ from, generation: at, at: clock });
       await duringBatch();
       if (throwOnBatch) throw throwOnBatch;
+      // Gmail's quota ran out for the whole batch, once on this page.
+      const here = from.cursor ? Number(from.cursor) : 0;
+      if (options.rateLimitOn?.delete(here + 1)) {
+        const { run: _r, step: _s, running: _g, queued: _q, leaseUntil: _l, wake: _w, ...place } = from;
+        return {
+          counts: emptyCounts(),
+          candidates: 300,
+          rateLimited: true,
+          progress: { ...place, updatedAt: new Date(clock).toISOString(), retryAfter: new Date(clock + 60_000).toISOString() },
+        };
+      }
       const page = from.cursor ? Number(from.cursor) : 0;
       const failed = options.failOn?.has(page + 1) ? 2 : 0;
       const done = page + 1 >= pages;
@@ -59,10 +75,19 @@ function world(options: { pages?: number; failOn?: Set<number> } = {}) {
     },
     publish: async (message) => {
       if (throwOnPublish) throw throwOnPublish;
+      // Pub/Sub may deliver it before publish returns.
+      if (deliverAtOnce) {
+        deliveredAtOnce.push(await continueBackfill(message, io));
+        return;
+      }
       queued.push(message);
     },
     now: () => new Date(clock).toISOString(),
     log: (_severity, event) => logged.push(event),
+    sleep: async (ms) => {
+      clock += ms;
+    },
+    newWake: () => `w${++wakes}`,
   };
   // Delivers queued messages, oldest first, until none is left.
   const drain = async () => {
@@ -88,10 +113,52 @@ function world(options: { pages?: number; failOn?: Set<number> } = {}) {
       stored = undefined;
     },
     tick: (ms: number) => (clock += ms),
+    get clock() {
+      return clock;
+    },
     during: (fn: () => Promise<void>) => (duringBatch = fn),
     failBatch: (error: Error | undefined) => (throwOnBatch = error),
     failPublish: (error: Error | undefined) => (throwOnPublish = error),
+    deliverAtOnce: (on: boolean) => (deliverAtOnce = on),
+    deliveredAtOnce,
   };
+}
+
+// The gaps between Pub/Sub's attempts to deliver a message the parser
+// failed, as seen in production (minimum backoff 10 s, maximum 600 s): ten
+// attempts within about five minutes.
+const attemptGapsMs = [12, 14, 16, 26, 26, 31, 40, 53, 73].map((s) => s * 1000);
+const maxDeliveryAttempts = 10;
+
+// Delivers what is queued as Pub/Sub's push subscription does: an error
+// answer makes it deliver the message again after the next gap, and the
+// tenth failed attempt sends it to the dead-letter topic instead.
+async function pubsub(w: ReturnType<typeof world>) {
+  type Pending = { message: ContinueMessage; attempts: number; at: number };
+  const pending: Pending[] = [];
+  const take = () => pending.push(...w.queued.splice(0).map((message) => ({ message, attempts: 0, at: w.clock })));
+  const deadLettered: ContinueMessage[] = [];
+  const failures: string[] = [];
+  take();
+  for (let deliveries = 0; pending.length; deliveries++) {
+    if (deliveries > 500) throw new Error("the reading never settles");
+    pending.sort((a, b) => a.at - b.at);
+    const next = pending.shift()!;
+    if (next.at > w.clock) w.tick(next.at - w.clock);
+    next.attempts += 1;
+    let failed = false;
+    try {
+      await continueBackfill(next.message, w.io);
+    } catch (error) {
+      failed = true;
+      failures.push((error as Error).message);
+    }
+    take();
+    if (!failed) continue;
+    if (next.attempts >= maxDeliveryAttempts) deadLettered.push(next.message);
+    else pending.push({ ...next, at: w.clock + attemptGapsMs[next.attempts - 1]! });
+  }
+  return { deadLettered, failures };
 }
 
 describe("startBackfill", () => {
@@ -185,8 +252,11 @@ describe("continueBackfill", () => {
       copy = await continueBackfill(first, w.io);
     });
     await continueBackfill(first, w.io);
-    // Failing makes Pub/Sub try it again later, by when it is out of date.
-    expect(copy).toEqual({ kind: "busy" });
+    // It waited a minute, then handed on to a fresh message, which finds
+    // the batch read by then.
+    expect(copy).toMatchObject({ kind: "deferred" });
+    expect(w.queued.map((m) => m.wake)).toEqual(["w1", undefined]);
+    expect(await continueBackfill(w.queued.shift()!, w.io)).toEqual({ kind: "stale", reason: "duplicate" });
     expect(await continueBackfill(first, w.io)).toEqual({ kind: "stale", reason: "duplicate" });
     expect(w.read).toHaveLength(1);
   });
@@ -260,15 +330,106 @@ describe("continueBackfill", () => {
     const first = w.queued.shift()!;
     w.failBatch(new Error("Gmail down"));
     await expect(continueBackfill(first, w.io)).rejects.toThrow("Gmail down");
-    expect(w.stored).toMatchObject({ step: 0, running: true });
+    expect(w.stored).toMatchObject({ step: 0, running: true, failures: 1 });
     w.failBatch(undefined);
     // Sooner, the importer would skip that email as another import's, and
-    // the batch would pass it by.
-    w.tick(claimLeaseMs);
-    expect(await continueBackfill(first, w.io)).toEqual({ kind: "busy" });
-    w.tick(2000);
+    // the batch would pass it by. Pub/Sub's next attempt waits for it.
+    w.tick(claimLeaseMs - 30_000);
     expect((await continueBackfill(first, w.io)).kind).toBe("ran");
+    expect(w.read[1]!.at).toBeGreaterThan(t0 + claimLeaseMs);
     expect(w.read).toHaveLength(2);
+    expect(w.stored?.failures).toBeUndefined();
+  });
+
+  it("hands a batch that must wait longer than a request on to one fresh message, which alone carries the reading", async () => {
+    const w = world({ pages: 2 });
+    await startBackfill("u1", "r1", false, w.io);
+    const first = w.queued.shift()!;
+    w.failBatch(new Error("Gmail down"));
+    await expect(continueBackfill(first, w.io)).rejects.toThrow("Gmail down");
+    w.failBatch(undefined);
+    // Two copies of the failed batch's message come back while it waits.
+    expect(await continueBackfill(first, w.io)).toMatchObject({ kind: "deferred" });
+    expect(await continueBackfill(first, w.io)).toEqual({ kind: "stale", reason: "duplicate" });
+    expect(w.queued.map((m) => m.wake)).toEqual(["w1"]);
+    await w.drain();
+    expect(w.stored).toMatchObject({ done: true, scanned: 600 });
+    expect(w.read).toHaveLength(3);
+    expect(w.read[1]!.at).toBeGreaterThan(t0 + claimLeaseMs);
+  });
+
+  it("runs a fresh message that Pub/Sub delivers before handing on finishes", async () => {
+    const w = world({ pages: 1 });
+    await startBackfill("u1", "r1", false, w.io);
+    const first = w.queued.shift()!;
+    w.failBatch(new Error("Gmail down"));
+    await expect(continueBackfill(first, w.io)).rejects.toThrow("Gmail down");
+    w.failBatch(undefined);
+    w.tick(claimLeaseMs - 90_000);
+    w.deliverAtOnce(true);
+    expect(await continueBackfill(first, w.io)).toMatchObject({ kind: "deferred" });
+    // Delivered inside publish, it waited out the rest and read the batch.
+    expect(w.deliveredAtOnce).toEqual([expect.objectContaining({ kind: "ran" })]);
+    expect(w.stored).toMatchObject({ done: true });
+  });
+
+  it("queues the fresh message again from the old one when the worker died before queueing it", async () => {
+    const w = world({ pages: 1 });
+    await startBackfill("u1", "r1", false, w.io);
+    const first = w.queued.shift()!;
+    w.failBatch(new Error("Gmail down"));
+    await expect(continueBackfill(first, w.io)).rejects.toThrow("Gmail down");
+    w.failBatch(undefined);
+    // The fresh message is stored as the carrier, then the process dies
+    // before publishing it.
+    w.failPublish(new Error("process died"));
+    await expect(continueBackfill(first, w.io)).rejects.toThrow("process died");
+    expect(w.stored).toMatchObject({ wake: "w1", handoff: {} });
+    w.failPublish(undefined);
+    // Pub/Sub delivers the old one again: it queues the fresh one.
+    expect(await continueBackfill(first, w.io)).toEqual({ kind: "requeued" });
+    expect(w.queued).toEqual([{ uid: "u1", run: "r1", step: 0, wake: "w1" }]);
+    expect(w.stored?.handoff).toBeUndefined();
+    // Once that is queued, the old one is a duplicate.
+    expect(await continueBackfill(first, w.io)).toEqual({ kind: "stale", reason: "duplicate" });
+    await w.drain();
+    expect(w.stored).toMatchObject({ done: true });
+    expect(w.read).toHaveLength(2);
+  });
+
+  it("survives the worker dying between storing and queueing a fresh message, against Pub/Sub's attempts", async () => {
+    const w = world({ pages: 2 });
+    let failOnce = true;
+    w.during(async () => {
+      if (!failOnce) return;
+      failOnce = false;
+      throw new Error("Gmail down");
+    });
+    // The first fresh message's publish dies with its process.
+    let dieOnce = true;
+    const publish = w.io.publish;
+    w.io.publish = async (message) => {
+      if (message.wake && dieOnce) {
+        dieOnce = false;
+        throw new Error("process died");
+      }
+      return publish(message);
+    };
+    await startBackfill("u1", "r1", false, w.io);
+    const { deadLettered } = await pubsub(w);
+    expect(deadLettered).toEqual([]);
+    expect(w.stored).toMatchObject({ done: true, scanned: 600 });
+  });
+
+  it("stops after failing several batches in a row, so Settings offers Continue", async () => {
+    const w = world();
+    await startBackfill("u1", "r1", false, w.io);
+    w.failBatch(new Error("invalid_grant"));
+    const { deadLettered } = await pubsub(w);
+    expect(w.read).toHaveLength(maxFailedBatches);
+    expect(w.stored).toMatchObject({ running: false, failures: maxFailedBatches });
+    expect(w.logged).toContain("backfill_stopped_after_failures");
+    expect(deadLettered).toEqual([]);
   });
 
   it("reads a batch whose process died again only once the email it was importing can be claimed again", async () => {
@@ -282,10 +443,10 @@ describe("continueBackfill", () => {
     await expect(continueBackfill(first, w.io)).rejects.toThrow();
     w.stored = { ...w.stored!, leaseUntil: new Date(t0 + backfillLeaseMs).toISOString() };
     w.during(async () => {});
-    w.tick(claimLeaseMs + 1);
-    expect(await continueBackfill(first, w.io)).toEqual({ kind: "busy" });
-    w.tick(backfillLeaseMs);
-    expect((await continueBackfill(first, w.io)).kind).toBe("ran");
+    w.tick(claimLeaseMs - 60_000);
+    expect(await continueBackfill(first, w.io)).toMatchObject({ kind: "deferred" });
+    expect((await continueBackfill(w.queued.shift()!, w.io)).kind).toBe("ran");
+    expect(w.read[1]!.at).toBeGreaterThanOrEqual(t0 + backfillLeaseMs);
   });
 
   it("queues the next batch from a redelivery when the worker died after saving, and only once", async () => {
@@ -318,17 +479,14 @@ describe("continueBackfill", () => {
     await expect(continueBackfill(first, w.io)).rejects.toThrow("Gmail down");
     w.failBatch(undefined);
     await stopBackfill(w.io);
-    // Pub/Sub's next attempt comes while the batch waits: kept, not dropped.
-    w.tick(60_000);
-    expect(await continueBackfill(first, w.io)).toEqual({ kind: "busy" });
+    // Pub/Sub's next attempt comes while the batch waits: nothing reads
+    // it now, so it is dropped.
+    w.tick(10_000);
+    expect(await continueBackfill(first, w.io)).toEqual({ kind: "stale", reason: "stopped" });
     expect((await startBackfill("u1", "r2", false, w.io)).kind).toBe("started");
-    // The new reading's first batch also waits out the failed one's claims.
-    const resumed = w.queued.shift()!;
-    expect(await continueBackfill(resumed, w.io)).toEqual({ kind: "busy" });
-    w.tick(claimLeaseMs);
-    expect(await continueBackfill(first, w.io)).toEqual({ kind: "stale", reason: "superseded" });
-    expect((await continueBackfill(resumed, w.io)).kind).toBe("ran");
+    // The new reading's first batch waits out the failed one's claims.
     await w.drain();
+    expect(w.read[1]!.at).toBeGreaterThan(t0 + claimLeaseMs);
     expect(w.stored).toMatchObject({ run: "r2", done: true });
   });
 
@@ -340,10 +498,9 @@ describe("continueBackfill", () => {
     w.stored = { ...w.stored!, leaseUntil: new Date(t0 + backfillLeaseMs).toISOString() };
     await stopBackfill(w.io);
     w.tick(60_000);
-    expect(await continueBackfill(first, w.io)).toEqual({ kind: "busy" });
+    // Kept while the lease holds, handed on to a fresh message.
+    expect(await continueBackfill(first, w.io)).toMatchObject({ kind: "deferred" });
     expect((await startBackfill("u1", "r2", false, w.io)).kind).toBe("joined");
-    w.tick(backfillLeaseMs);
-    expect((await continueBackfill(first, w.io)).kind).toBe("ran");
     await w.drain();
     expect(w.stored).toMatchObject({ run: "r1", done: true });
   });
@@ -380,6 +537,51 @@ describe("continueBackfill", () => {
   });
 });
 
+describe("continueBackfill against Pub/Sub's attempts", () => {
+  it("survives a failed batch whose fifteen-minute wait outlasts all ten attempts, and reads on", async () => {
+    const w = world({ pages: 3 });
+    let failOnce = true;
+    w.during(async () => {
+      if (!failOnce) return;
+      failOnce = false;
+      throw new Error("Quota exceeded for quota metric 'Total Query Cost'");
+    });
+    // All ten attempts fall inside the wait, so answering each with an
+    // error, as the parser once did, dead-letters the reading.
+    expect(attemptGapsMs.reduce((a, b) => a + b, 0)).toBeLessThan(claimLeaseMs);
+    await startBackfill("u1", "r1", false, w.io);
+    const { deadLettered, failures } = await pubsub(w);
+    expect(failures).toHaveLength(1);
+    expect(deadLettered).toEqual([]);
+    expect(w.stored).toMatchObject({ run: "r1", done: true, scanned: 900, running: false });
+    // Read again only once the failed batch's claims lapsed.
+    expect(w.read[1]!.at).toBeGreaterThan(t0 + claimLeaseMs);
+    expect(w.read).toHaveLength(4);
+  });
+
+  it("goes on through Gmail's rate limit, never as a failure, resuming a minute later", async () => {
+    const w = world({ pages: 3, rateLimitOn: new Set([1, 2]) });
+    await startBackfill("u1", "r1", false, w.io);
+    const { deadLettered, failures } = await pubsub(w);
+    expect(failures).toEqual([]);
+    expect(deadLettered).toEqual([]);
+    expect(w.stored).toMatchObject({ done: true, scanned: 900, failed: 0 });
+    expect(w.stored?.lastFailed).toBeUndefined();
+    // Each limited batch was read again from the same place, a minute on.
+    expect(w.read.map((r) => r.from.cursor)).toEqual([undefined, undefined, "1", "1", "2"]);
+    expect(w.read[1]!.at - w.read[0]!.at).toBeGreaterThanOrEqual(60_000);
+  });
+
+  it("keeps a rate-limited reading running and queues its next batch with retryAfter", async () => {
+    const w = world({ pages: 2, rateLimitOn: new Set([1]) });
+    await startBackfill("u1", "r1", false, w.io);
+    const result = await continueBackfill(w.queued.shift()!, w.io);
+    expect(result).toMatchObject({ kind: "ran", batch: { rateLimited: true } });
+    expect(w.stored).toMatchObject({ running: true, step: 1, queued: true, retryAfter: new Date(t0 + 60_000).toISOString() });
+    expect(w.queued).toEqual([{ uid: "u1", run: "r1", step: 1 }]);
+  });
+});
+
 describe("parseContinuePush", () => {
   const envelope = (data: unknown) => ({
     message: { data: Buffer.from(JSON.stringify(data)).toString("base64"), messageId: "m-1" },
@@ -394,6 +596,7 @@ describe("parseContinuePush", () => {
       pubsubMessageId: "m-1",
       deliveryAttempt: 2,
     });
+    expect(parseContinuePush(envelope({ uid: "u1", run: "r1", step: 4, wake: "w1" }))).toMatchObject({ step: 4, wake: "w1" });
   });
 
   it("rejects anything else", () => {

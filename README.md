@@ -338,7 +338,9 @@ One Google Cloud project holds everything.
    (the parser's service account gets `roles/pubsub.publisher` on it) so that
    "Import past bookings" reads batch after batch on its own, and its push
    subscription to `https://<parser>/internal/backfill`, dead-lettered to the
-   same topic after ten attempts. It prints the `GMAIL_PUBSUB_TOPIC` and
+   same topic after ten failed attempts (a batch that must wait, after a
+   failure or Gmail's rate limit, queues a fresh message rather than fail
+   its delivery). It prints the `GMAIL_PUBSUB_TOPIC` and
    `BACKFILL_PUBSUB_TOPIC` values for the parser. Rerun it to change a
    setting. It uses `gcloud beta`, which gcloud offers to install on first
    use.
@@ -355,7 +357,9 @@ One Google Cloud project holds everything.
 6. **Alerts**: `PROJECT=… CHANNEL=<notification channel> deploy/monitoring.sh`
    creates two alerting policies from `deploy/alerts/`: a failed watch renewal
    (the parser's `renew_watch_failed` log line) and a dead-lettered
-   notification. Create the notification channel (email, Slack, …) first;
+   message, a Gmail notification or a batch of "Import past bookings" (the
+   alert says how to tell them apart and what to do about each). Create the
+   notification channel (email, Slack, …) first;
    Cloud Monitoring's alerting is free at this volume.
 7. **Web** on Firebase App Hosting: connect the repository, leave the root
    directory at the repository root (`/`: the build finds the pnpm
