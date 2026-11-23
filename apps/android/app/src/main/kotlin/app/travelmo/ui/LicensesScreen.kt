@@ -1,6 +1,7 @@
 package app.travelmo.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -9,8 +10,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -23,9 +24,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -39,12 +37,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import app.travelmo.R
+import app.travelmo.shared.Res
+import app.travelmo.shared.back
+import app.travelmo.shared.licenses
+import app.travelmo.shared.licenses_by
+import app.travelmo.shared.ok
+import app.travelmo.shared.version
 import com.mikepenz.aboutlibraries.Libs
 import com.mikepenz.aboutlibraries.entity.Library
 import com.mikepenz.aboutlibraries.ui.compose.android.produceLibraries
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Opens the Licenses screen. [LicensesHost] provides it around the whole
@@ -119,10 +125,10 @@ internal fun LicensesContent(libraries: Libs?, onBack: () -> Unit = {}, onOpenLi
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.licenses)) },
+                title = { Text(stringResource(Res.string.licenses)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(Res.string.back))
                     }
                 },
                 actions = { AppMenu() },
@@ -162,10 +168,10 @@ private fun LibraryDialog(library: Library, onOpenLicenseUrl: (String) -> Unit, 
         text = {
             Column(modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
                 library.artifactVersion?.let {
-                    Text(stringResource(R.string.version, it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(Res.string.version, it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (authors.isNotEmpty()) {
-                    Text(stringResource(R.string.licenses_by, authors), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(Res.string.licenses_by, authors), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 library.licenses.forEach { license ->
                     val url = license.url
@@ -182,7 +188,7 @@ private fun LibraryDialog(library: Library, onOpenLicenseUrl: (String) -> Unit, 
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok)) } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.ok)) } },
     )
 }
 

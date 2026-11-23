@@ -34,12 +34,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.travelmo.R
 import app.travelmo.core.ParsedRecord
 import app.travelmo.core.REVIEW_RECENT
 import app.travelmo.core.SenderList
@@ -47,15 +44,39 @@ import app.travelmo.core.dayRange
 import app.travelmo.core.domainOf
 import app.travelmo.core.effectiveDecision
 import app.travelmo.core.isFromMailbox
-import app.travelmo.core.recordSourceLabel
 import app.travelmo.core.outcomeLabel
+import app.travelmo.core.recordSourceLabel
 import app.travelmo.core.reviewDate
 import app.travelmo.core.toReview
 import app.travelmo.core.withLatest
+import app.travelmo.shared.Res
+import app.travelmo.shared.always_import
+import app.travelmo.shared.back
+import app.travelmo.shared.cancel
+import app.travelmo.shared.clear
+import app.travelmo.shared.import_anyway
+import app.travelmo.shared.import_review
+import app.travelmo.shared.import_review_hint
+import app.travelmo.shared.loading
+import app.travelmo.shared.never_import
+import app.travelmo.shared.no_subject
+import app.travelmo.shared.nothing_matches
+import app.travelmo.shared.nothing_to_review
+import app.travelmo.shared.ok
+import app.travelmo.shared.review_from
+import app.travelmo.shared.review_from_date
+import app.travelmo.shared.review_showing_recent
+import app.travelmo.shared.review_to
+import app.travelmo.shared.review_to_date
+import app.travelmo.shared.search
+import app.travelmo.shared.searching
+import app.travelmo.shared.unknown_sender
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
 private const val REVIEW_PREFIX = "review/"
 
@@ -87,9 +108,9 @@ fun ImportReviewScreen(viewModel: TripsViewModel, onBack: () -> Unit, zone: Zone
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.import_review)) },
+                title = { Text(stringResource(Res.string.import_review)) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back)) }
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(Res.string.back)) }
                 },
                 actions = { AppMenu() },
             )
@@ -103,32 +124,32 @@ fun ImportReviewScreen(viewModel: TripsViewModel, onBack: () -> Unit, zone: Zone
         ) {
             item(key = "intro") {
                 Column {
-                    Text(stringResource(R.string.import_review_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(Res.string.import_review_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedTextField(
                         value = keyword,
                         onValueChange = { keyword = it },
-                        label = { Text(stringResource(R.string.search)) },
+                        label = { Text(stringResource(Res.string.search)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                     )
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                        OutlinedButton(onClick = { picking = "from" }) { Text(from?.let { stringResource(R.string.review_from_date, it) } ?: stringResource(R.string.review_from)) }
-                        OutlinedButton(onClick = { picking = "to" }) { Text(to?.let { stringResource(R.string.review_to_date, it) } ?: stringResource(R.string.review_to)) }
+                        OutlinedButton(onClick = { picking = "from" }) { Text(from?.let { stringResource(Res.string.review_from_date, it) } ?: stringResource(Res.string.review_from)) }
+                        OutlinedButton(onClick = { picking = "to" }) { Text(to?.let { stringResource(Res.string.review_to_date, it) } ?: stringResource(Res.string.review_to)) }
                         if (searching) {
                             TextButton(onClick = {
                                 keyword = ""
                                 from = null
                                 to = null
-                            }) { Text(stringResource(R.string.clear)) }
+                            }) { Text(stringResource(Res.string.clear)) }
                         }
                     }
                 }
             }
             when {
-                records == null -> item(key = "loading") { Text(stringResource(R.string.loading), modifier = Modifier.padding(top = 12.dp)) }
+                records == null -> item(key = "loading") { Text(stringResource(Res.string.loading), modifier = Modifier.padding(top = 12.dp)) }
                 shown.isEmpty() && searchDone -> item(key = "none") {
                     Text(
-                        stringResource(if (searching) R.string.nothing_matches else R.string.nothing_to_review),
+                        stringResource(if (searching) Res.string.nothing_matches else Res.string.nothing_to_review),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 12.dp),
                     )
@@ -155,11 +176,11 @@ fun ImportReviewScreen(viewModel: TripsViewModel, onBack: () -> Unit, zone: Zone
                 )
             }
             if (searching && !searchDone) {
-                item(key = "searching") { Text(stringResource(R.string.searching), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp)) }
+                item(key = "searching") { Text(stringResource(Res.string.searching), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp)) }
             }
             if (!searching && latest?.size == REVIEW_RECENT) {
                 item(key = "more") {
-                    Text(pluralStringResource(R.plurals.review_showing_recent, REVIEW_RECENT, REVIEW_RECENT), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp))
+                    Text(pluralStringResource(Res.plurals.review_showing_recent, REVIEW_RECENT, REVIEW_RECENT), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp))
                 }
             }
         }
@@ -175,9 +196,9 @@ fun ImportReviewScreen(viewModel: TripsViewModel, onBack: () -> Unit, zone: Zone
                     val day = state.selectedDateMillis?.let { Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toString() }
                     if (which == "from") from = day else to = day
                     picking = null
-                }) { Text(stringResource(R.string.ok)) }
+                }) { Text(stringResource(Res.string.ok)) }
             },
-            dismissButton = { TextButton(onClick = { picking = null }) { Text(stringResource(R.string.cancel)) } },
+            dismissButton = { TextButton(onClick = { picking = null }) { Text(stringResource(Res.string.cancel)) } },
         ) { DatePicker(state = state) }
     }
 }
@@ -211,17 +232,17 @@ private fun ReviewRow(
     val domain = if (fromMailbox) record.from?.let(::domainOf) else null
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(bottom = 12.dp))
-        Text(record.subject?.takeIf { it.isNotBlank() } ?: stringResource(R.string.no_subject), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-        val line = listOf(reviewDate(record, zone.id), record.from ?: stringResource(R.string.unknown_sender), recordSourceLabel(record.source), outcomeLabel(record.outcome)).joinToString(" · ") +
+        Text(record.subject?.takeIf { it.isNotBlank() } ?: stringResource(Res.string.no_subject), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+        val line = listOf(reviewDate(record, zone.id), record.from ?: stringResource(Res.string.unknown_sender), recordSourceLabel(record.source), outcomeLabel(record.outcome)).joinToString(" · ") +
             (record.reason?.let { " ($it)" } ?: "")
         Text(line, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-            if (fromMailbox && canReimport) OutlinedButton(onClick = onReimport, enabled = !busy) { Text(stringResource(R.string.import_anyway)) }
+            if (fromMailbox && canReimport) OutlinedButton(onClick = onReimport, enabled = !busy) { Text(stringResource(Res.string.import_anyway)) }
             if (domain != null && decision != SenderList.ALLOW) {
-                OutlinedButton(onClick = { onLearn(domain, SenderList.ALLOW) }, enabled = !busy) { Text(stringResource(R.string.always_import, domain)) }
+                OutlinedButton(onClick = { onLearn(domain, SenderList.ALLOW) }, enabled = !busy) { Text(stringResource(Res.string.always_import, domain)) }
             }
             if (domain != null && decision != SenderList.DENY) {
-                OutlinedButton(onClick = { onLearn(domain, SenderList.DENY) }, enabled = !busy) { Text(stringResource(R.string.never_import, domain)) }
+                OutlinedButton(onClick = { onLearn(domain, SenderList.DENY) }, enabled = !busy) { Text(stringResource(Res.string.never_import, domain)) }
             }
         }
         notice?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp)) }

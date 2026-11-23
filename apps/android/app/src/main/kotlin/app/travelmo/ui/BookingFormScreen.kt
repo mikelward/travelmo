@@ -20,12 +20,12 @@ import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -42,11 +42,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.travelmo.R
 import app.travelmo.core.BookingFields
 import app.travelmo.core.BookingFormException
 import app.travelmo.core.FIXED_OFFSET_PREFIX
@@ -60,12 +58,42 @@ import app.travelmo.core.initialFields
 import app.travelmo.core.timeZones
 import app.travelmo.core.toDraft
 import app.travelmo.core.zoneLabel
+import app.travelmo.shared.Res
+import app.travelmo.shared.add
+import app.travelmo.shared.add_booking
+import app.travelmo.shared.cancel
+import app.travelmo.shared.check_in_local
+import app.travelmo.shared.check_out_local
+import app.travelmo.shared.clear
+import app.travelmo.shared.edit_booking
+import app.travelmo.shared.end_local
+import app.travelmo.shared.field_code
+import app.travelmo.shared.field_confirmation
+import app.travelmo.shared.field_country
+import app.travelmo.shared.field_date
+import app.travelmo.shared.field_from
+import app.travelmo.shared.field_notes
+import app.travelmo.shared.field_provider
+import app.travelmo.shared.field_time
+import app.travelmo.shared.field_title
+import app.travelmo.shared.field_to
+import app.travelmo.shared.field_type
+import app.travelmo.shared.field_where
+import app.travelmo.shared.field_zone
+import app.travelmo.shared.from_country
+import app.travelmo.shared.no_country
+import app.travelmo.shared.ok
+import app.travelmo.shared.save
+import app.travelmo.shared.search_zones
+import app.travelmo.shared.start_local
+import app.travelmo.shared.to_country
+import com.mikelward.androidzoom.compose.FontSizeWindow
+import com.mikelward.androidzoom.compose.pinchFontSizeHost
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.UUID
-import com.mikelward.androidzoom.compose.FontSizeWindow
-import com.mikelward.androidzoom.compose.pinchFontSizeHost
+import org.jetbrains.compose.resources.stringResource
 
 private val typeLabels = mapOf(
     SegmentType.FLIGHT to "Flight", SegmentType.TRAIN to "Train", SegmentType.BUS to "Bus", SegmentType.FERRY to "Ferry",
@@ -137,13 +165,13 @@ fun BookingForm(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(if (existing == null) R.string.add_booking else R.string.edit_booking)) },
+                title = { Text(stringResource(if (existing == null) Res.string.add_booking else Res.string.edit_booking)) },
                 navigationIcon = {
-                    IconButton(onClick = onDone) { Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.cancel)) }
+                    IconButton(onClick = onDone) { Icon(Icons.Filled.Close, contentDescription = stringResource(Res.string.cancel)) }
                 },
                 actions = {
                     TextButton(onClick = { save() }, enabled = !busy) {
-                        Text(stringResource(if (existing == null) R.string.add else R.string.save))
+                        Text(stringResource(if (existing == null) Res.string.add else Res.string.save))
                     }
                     AppMenu()
                 },
@@ -159,20 +187,20 @@ fun BookingForm(
             OutlinedTextField(
                 value = fields.title,
                 onValueChange = { fields = fields.copy(title = it) },
-                label = { Text(stringResource(R.string.field_title)) },
+                label = { Text(stringResource(Res.string.field_title)) },
                 placeholder = { Text("BA 117 LHR to JFK") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
             WhenFields(
-                label = stringResource(if (lodging) R.string.check_in_local else R.string.start_local),
+                label = stringResource(if (lodging) Res.string.check_in_local else Res.string.start_local),
                 date = fields.startDate, time = fields.startTime, zone = fields.startZone, required = true,
                 onDate = { fields = fields.copy(startDate = it) },
                 onTime = { fields = fields.copy(startTime = it) },
                 onZone = { fields = fields.copy(startZone = it); pickedZones = pickedZones + "start" },
             )
             WhenFields(
-                label = stringResource(if (lodging) R.string.check_out_local else R.string.end_local),
+                label = stringResource(if (lodging) Res.string.check_out_local else Res.string.end_local),
                 date = fields.endDate, time = fields.endTime, zone = fields.endZone, required = false,
                 onDate = { fields = fields.copy(endDate = it) },
                 onTime = { fields = fields.copy(endTime = it) },
@@ -181,7 +209,7 @@ fun BookingForm(
             )
             if (fields.transport) {
                 PlaceFields(
-                    label = stringResource(R.string.field_from), placeholder = "London Heathrow", codePlaceholder = "LHR",
+                    label = stringResource(Res.string.field_from), placeholder = "London Heathrow", codePlaceholder = "LHR",
                     name = fields.originName, code = fields.originCode,
                     onName = { fields = fields.copy(originName = it) },
                     onCode = { code ->
@@ -190,7 +218,7 @@ fun BookingForm(
                     },
                 )
                 PlaceFields(
-                    label = stringResource(R.string.field_to), placeholder = "New York JFK", codePlaceholder = "JFK",
+                    label = stringResource(Res.string.field_to), placeholder = "New York JFK", codePlaceholder = "JFK",
                     name = fields.destinationName, code = fields.destinationCode,
                     onName = { fields = fields.copy(destinationName = it) },
                     onCode = { code ->
@@ -200,35 +228,35 @@ fun BookingForm(
                 )
                 if (fields.type != SegmentType.FLIGHT) {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        CountryField(stringResource(R.string.from_country), fields.originCountry, Modifier.weight(1f)) { fields = fields.copy(originCountry = it) }
-                        CountryField(stringResource(R.string.to_country), fields.destinationCountry, Modifier.weight(1f)) { fields = fields.copy(destinationCountry = it) }
+                        CountryField(stringResource(Res.string.from_country), fields.originCountry, Modifier.weight(1f)) { fields = fields.copy(originCountry = it) }
+                        CountryField(stringResource(Res.string.to_country), fields.destinationCountry, Modifier.weight(1f)) { fields = fields.copy(destinationCountry = it) }
                     }
                 }
             } else {
                 OutlinedTextField(
                     value = fields.destinationName,
                     onValueChange = { fields = fields.copy(destinationName = it) },
-                    label = { Text(stringResource(R.string.field_where)) },
+                    label = { Text(stringResource(Res.string.field_where)) },
                     placeholder = { Text("Cove Liverpool") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                CountryField(stringResource(R.string.field_country), fields.destinationCountry, Modifier.fillMaxWidth()) { fields = fields.copy(destinationCountry = it) }
+                CountryField(stringResource(Res.string.field_country), fields.destinationCountry, Modifier.fillMaxWidth()) { fields = fields.copy(destinationCountry = it) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = fields.provider, onValueChange = { fields = fields.copy(provider = it) },
-                    label = { Text(stringResource(R.string.field_provider)) }, placeholder = { Text("British Airways") }, singleLine = true, modifier = Modifier.weight(1f),
+                    label = { Text(stringResource(Res.string.field_provider)) }, placeholder = { Text("British Airways") }, singleLine = true, modifier = Modifier.weight(1f),
                 )
                 OutlinedTextField(
                     value = fields.confirmation, onValueChange = { fields = fields.copy(confirmation = it) },
-                    label = { Text(stringResource(R.string.field_confirmation)) }, placeholder = { Text("ABC123") }, singleLine = true, modifier = Modifier.weight(1f),
+                    label = { Text(stringResource(Res.string.field_confirmation)) }, placeholder = { Text("ABC123") }, singleLine = true, modifier = Modifier.weight(1f),
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
                 )
             }
             OutlinedTextField(
                 value = fields.notes, onValueChange = { fields = fields.copy(notes = it) },
-                label = { Text(stringResource(R.string.field_notes)) }, minLines = 2, modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(Res.string.field_notes)) }, minLines = 2, modifier = Modifier.fillMaxWidth(),
             )
             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
         }
@@ -244,7 +272,7 @@ private fun TypeField(type: SegmentType, onChange: (SegmentType) -> Unit) {
             value = typeLabels.getValue(type),
             onValueChange = {},
             readOnly = true,
-            label = { Text(stringResource(R.string.field_type)) },
+            label = { Text(stringResource(Res.string.field_type)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
             modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
         )
@@ -276,16 +304,16 @@ private fun WhenFields(
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             PickerField(
                 value = date.takeIf { it.isNotEmpty() }?.let { formatDateWithYear(it) } ?: "",
-                label = stringResource(R.string.field_date),
+                label = stringResource(Res.string.field_date),
                 modifier = Modifier.weight(1.4f),
                 onClick = { picking = "date" },
             )
-            PickerField(value = time, label = stringResource(R.string.field_time), modifier = Modifier.weight(1f), onClick = { picking = "time" })
+            PickerField(value = time, label = stringResource(Res.string.field_time), modifier = Modifier.weight(1f), onClick = { picking = "time" })
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            PickerField(value = zoneLabel(zone), label = stringResource(R.string.field_zone), modifier = Modifier.weight(1f), onClick = { picking = "zone" })
+            PickerField(value = zoneLabel(zone), label = stringResource(Res.string.field_zone), modifier = Modifier.weight(1f), onClick = { picking = "zone" })
             if (onClear != null && (date.isNotEmpty() || time.isNotEmpty())) {
-                TextButton(onClick = onClear, modifier = Modifier.padding(top = 8.dp)) { Text(stringResource(R.string.clear)) }
+                TextButton(onClick = onClear, modifier = Modifier.padding(top = 8.dp)) { Text(stringResource(Res.string.clear)) }
             }
         }
     }
@@ -302,10 +330,10 @@ private fun WhenFields(
                         TextButton(onClick = {
                             state.selectedDateMillis?.let { onDate(Instant.ofEpochMilli(it).atOffset(ZoneOffset.UTC).toLocalDate().toString()) }
                             picking = null
-                        }) { Text(stringResource(R.string.ok)) }
+                        }) { Text(stringResource(Res.string.ok)) }
                     }
                 },
-                dismissButton = { FontSizeWindow { TextButton(onClick = { picking = null }) { Text(stringResource(R.string.cancel)) } } },
+                dismissButton = { FontSizeWindow { TextButton(onClick = { picking = null }) { Text(stringResource(Res.string.cancel)) } } },
             ) { FontSizeWindow { DatePicker(state = state) } }
         }
         "time" -> {
@@ -317,9 +345,9 @@ private fun WhenFields(
                     TextButton(onClick = {
                         onTime(String.format(java.util.Locale.ROOT, "%02d:%02d", state.hour, state.minute))
                         picking = null
-                    }) { Text(stringResource(R.string.ok)) }
+                    }) { Text(stringResource(Res.string.ok)) }
                 },
-                dismissButton = { TextButton(onClick = { picking = null }) { Text(stringResource(R.string.cancel)) } },
+                dismissButton = { TextButton(onClick = { picking = null }) { Text(stringResource(Res.string.cancel)) } },
                 text = { TimePicker(state = state) },
             )
         }
@@ -349,11 +377,11 @@ private fun ZonePicker(current: String, onPick: (String) -> Unit, onDismiss: () 
     AppAlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
-        title = { Text(stringResource(R.string.field_zone)) },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+        title = { Text(stringResource(Res.string.field_zone)) },
         text = {
             Column {
-                OutlinedTextField(value = query, onValueChange = { query = it }, singleLine = true, placeholder = { Text(stringResource(R.string.search_zones)) }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = query, onValueChange = { query = it }, singleLine = true, placeholder = { Text(stringResource(Res.string.search_zones)) }, modifier = Modifier.fillMaxWidth())
                 LazyColumn(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                     if (current.startsWith(FIXED_OFFSET_PREFIX)) {
                         item { DropdownMenuItem(text = { Text(zoneLabel(current)) }, onClick = { onPick(current) }) }
@@ -371,7 +399,7 @@ private fun PlaceFields(label: String, placeholder: String, codePlaceholder: Str
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(value = name, onValueChange = onName, label = { Text(label) }, placeholder = { Text(placeholder) }, singleLine = true, modifier = Modifier.weight(1f))
         OutlinedTextField(
-            value = code, onValueChange = { onCode(it.uppercase()) }, label = { Text(stringResource(R.string.field_code)) }, placeholder = { Text(codePlaceholder) }, singleLine = true,
+            value = code, onValueChange = { onCode(it.uppercase()) }, label = { Text(stringResource(Res.string.field_code)) }, placeholder = { Text(codePlaceholder) }, singleLine = true,
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters), modifier = Modifier.width(104.dp),
         )
     }
@@ -393,7 +421,7 @@ private fun CountryField(label: String, code: String, modifier: Modifier = Modif
             modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
         )
         ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.pinchFontSizeHost()) {
-            DropdownMenuItem(text = { Text(stringResource(R.string.no_country)) }, onClick = { onChange(""); open = false })
+            DropdownMenuItem(text = { Text(stringResource(Res.string.no_country)) }, onClick = { onChange(""); open = false })
             for ((c, name) in choices) {
                 DropdownMenuItem(text = { Text(name) }, onClick = { onChange(c); open = false })
             }

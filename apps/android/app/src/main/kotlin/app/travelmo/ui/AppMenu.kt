@@ -37,7 +37,6 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -47,10 +46,25 @@ import app.travelmo.BuildConfig
 import app.travelmo.R
 import app.travelmo.log.DebugLogging
 import app.travelmo.log.TravelmoLog
+import app.travelmo.shared.Res
+import app.travelmo.shared.about
+import app.travelmo.shared.about_version
+import app.travelmo.shared.access
+import app.travelmo.shared.app_name
+import app.travelmo.shared.cancel
+import app.travelmo.shared.dont_show_again
+import app.travelmo.shared.licenses
+import app.travelmo.shared.more_options
+import app.travelmo.shared.ok
+import app.travelmo.shared.report_a_bug
+import app.travelmo.shared.report_consent_body
+import app.travelmo.shared.report_consent_continue
+import app.travelmo.shared.update_available
 import com.mikelward.androidlog.android.ShareOutcome
 import com.mikelward.androidlog.safe
 import com.mikelward.androidzoom.compose.pinchFontSizeHost
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * What Report a bug shares: the debug report with a screenshot of the screen
@@ -115,9 +129,9 @@ fun AppMenu(modifier: Modifier = Modifier, items: @Composable (close: () -> Unit
     Box(modifier) {
         IconButton(onClick = { expanded = true }) {
             Box {
-                Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.more_options))
+                Icon(Icons.Filled.MoreVert, contentDescription = stringResource(Res.string.more_options))
                 if (updateAvailable) {
-                    val updateDescription = stringResource(R.string.update_available)
+                    val updateDescription = stringResource(Res.string.update_available)
                     Box(
                         Modifier
                             .align(Alignment.TopEnd)
@@ -136,7 +150,7 @@ fun AppMenu(modifier: Modifier = Modifier, items: @Composable (close: () -> Unit
             items { expanded = false }
             openAccess?.let { open ->
                 DropdownMenuItem(
-                    text = { Text(stringResource(R.string.access), style = MaterialTheme.typography.bodyLarge) },
+                    text = { Text(stringResource(Res.string.access), style = MaterialTheme.typography.bodyLarge) },
                     onClick = {
                         expanded = false
                         open()
@@ -144,7 +158,7 @@ fun AppMenu(modifier: Modifier = Modifier, items: @Composable (close: () -> Unit
                 )
             }
             DropdownMenuItem(
-                text = { Text(stringResource(R.string.report_a_bug), style = MaterialTheme.typography.bodyLarge) },
+                text = { Text(stringResource(Res.string.report_a_bug), style = MaterialTheme.typography.bodyLarge) },
                 enabled = !sharing,
                 onClick = {
                     expanded = false
@@ -153,7 +167,7 @@ fun AppMenu(modifier: Modifier = Modifier, items: @Composable (close: () -> Unit
                 },
             )
             DropdownMenuItem(
-                text = { Text(stringResource(R.string.about), style = MaterialTheme.typography.bodyLarge) },
+                text = { Text(stringResource(Res.string.about), style = MaterialTheme.typography.bodyLarge) },
                 onClick = {
                     expanded = false
                     showAbout = true
@@ -162,7 +176,7 @@ fun AppMenu(modifier: Modifier = Modifier, items: @Composable (close: () -> Unit
             // Last, so the other items keep their places whether or not an update is out.
             if (updateAvailable) {
                 DropdownMenuItem(
-                    text = { Text(stringResource(R.string.update_available), style = MaterialTheme.typography.bodyLarge) },
+                    text = { Text(stringResource(Res.string.update_available), style = MaterialTheme.typography.bodyLarge) },
                     onClick = {
                         expanded = false
                         openPlayListing(context)
@@ -207,22 +221,22 @@ fun ReportConsentDialog(onContinue: (dontShowAgain: Boolean) -> Unit, onCancel: 
     var dontShowAgain by rememberSaveable { mutableStateOf(false) }
     AppAlertDialog(
         onDismissRequest = onCancel,
-        title = { Text(stringResource(R.string.report_a_bug)) },
+        title = { Text(stringResource(Res.string.report_a_bug)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(stringResource(R.string.report_consent_body))
+                Text(stringResource(Res.string.report_consent_body))
                 // The whole row toggles, so a tap on the words ticks the box too.
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.toggleable(value = dontShowAgain, role = Role.Checkbox, onValueChange = { dontShowAgain = it }),
                 ) {
                     Checkbox(checked = dontShowAgain, onCheckedChange = null)
-                    Text(stringResource(R.string.dont_show_again), modifier = Modifier.padding(start = 8.dp))
+                    Text(stringResource(Res.string.dont_show_again), modifier = Modifier.padding(start = 8.dp))
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onContinue(dontShowAgain) }) { Text(stringResource(R.string.report_consent_continue)) } },
-        dismissButton = { TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel)) } },
+        confirmButton = { TextButton(onClick = { onContinue(dontShowAgain) }) { Text(stringResource(Res.string.report_consent_continue)) } },
+        dismissButton = { TextButton(onClick = onCancel) { Text(stringResource(Res.string.cancel)) } },
     )
 }
 
@@ -259,15 +273,15 @@ internal fun openPlayListing(context: Context) {
 fun AboutDialog(onOpenLicenses: (() -> Unit)?, onDismiss: () -> Unit) {
     AppAlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.app_name)) },
-        text = { Text(stringResource(R.string.about_version, "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")) },
+        title = { Text(stringResource(Res.string.app_name)) },
+        text = { Text(stringResource(Res.string.about_version, "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")) },
         confirmButton = {
             if (onOpenLicenses != null) {
-                TextButton(onClick = onOpenLicenses) { Text(stringResource(R.string.licenses)) }
+                TextButton(onClick = onOpenLicenses) { Text(stringResource(Res.string.licenses)) }
             } else {
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok)) }
+                TextButton(onClick = onDismiss) { Text(stringResource(Res.string.ok)) }
             }
         },
-        dismissButton = onOpenLicenses?.let { { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok)) } } },
+        dismissButton = onOpenLicenses?.let { { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.ok)) } } },
     )
 }

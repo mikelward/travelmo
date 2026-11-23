@@ -15,26 +15,31 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import app.travelmo.R
 import app.travelmo.core.RideCompany
 import app.travelmo.core.RideNeedKind
 import app.travelmo.core.Segment
 import app.travelmo.core.rideCompaniesFor
 import app.travelmo.core.rideCountry
+import app.travelmo.shared.Res
+import app.travelmo.shared.car_in
+import app.travelmo.shared.hide
+import app.travelmo.shared.ride_home_from_airport
+import app.travelmo.shared.ride_to_airport
+import app.travelmo.shared.the_airport
+import org.jetbrains.compose.resources.stringResource
 
 /** The question a suggestion asks: the airport by its name, a city by its own, as on the web. */
 @Composable
 private fun rideQuestion(kind: RideNeedKind, flight: Segment): String {
-    val airport = stringResource(R.string.the_airport)
+    val airport = stringResource(Res.string.the_airport)
     val from = flight.origin?.name ?: flight.origin?.code ?: airport
     val to = flight.destination?.name ?: flight.destination?.code ?: airport
     return when (kind) {
-        RideNeedKind.TO_AIRPORT -> stringResource(R.string.ride_to_airport, from)
-        RideNeedKind.FROM_AIRPORT -> stringResource(R.string.ride_home_from_airport, to)
-        RideNeedKind.CAR -> stringResource(R.string.car_in, flight.destination?.city ?: to)
+        RideNeedKind.TO_AIRPORT -> stringResource(Res.string.ride_to_airport, from)
+        RideNeedKind.FROM_AIRPORT -> stringResource(Res.string.ride_home_from_airport, to)
+        RideNeedKind.CAR -> stringResource(Res.string.car_in, flight.destination?.city ?: to)
     }
 }
 
@@ -53,7 +58,7 @@ fun RideSuggestion(kind: RideNeedKind, flight: Segment, companies: List<RideComp
         Column(modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(rideQuestion(kind, flight), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-                TextButton(onClick = onHide) { Text(stringResource(R.string.hide)) }
+                TextButton(onClick = onHide) { Text(stringResource(Res.string.hide)) }
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
                 for (offer in offers) {

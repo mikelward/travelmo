@@ -34,12 +34,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.travelmo.R
 import app.travelmo.core.ChecklistEntry
 import app.travelmo.core.DEFAULT_LEAD
 import app.travelmo.core.Lead
@@ -50,12 +48,34 @@ import app.travelmo.core.Reminder
 import app.travelmo.core.dueText
 import app.travelmo.core.formatDate
 import app.travelmo.core.leadText
+import app.travelmo.shared.Res
+import app.travelmo.shared.add_reminder
+import app.travelmo.shared.before_international_trips
+import app.travelmo.shared.before_international_trips_hint
+import app.travelmo.shared.before_you_go
+import app.travelmo.shared.cancel
+import app.travelmo.shared.days_before
+import app.travelmo.shared.edit
+import app.travelmo.shared.edit_reminder
+import app.travelmo.shared.field_date
+import app.travelmo.shared.how_long_before
+import app.travelmo.shared.months_before
+import app.travelmo.shared.ok
+import app.travelmo.shared.on_a_date
+import app.travelmo.shared.reminder
+import app.travelmo.shared.reminder_amount_error
+import app.travelmo.shared.reminder_date_error
+import app.travelmo.shared.reminder_example
+import app.travelmo.shared.remove_named
+import app.travelmo.shared.save
+import app.travelmo.shared.weeks_before
 import app.travelmo.ui.theme.TextButtonInset
 import com.mikelward.androidzoom.compose.FontSizeWindow
 import com.mikelward.androidzoom.compose.pinchFontSizeHost
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
+import org.jetbrains.compose.resources.stringResource
 
 // The traveler's own reminders before a trip (SPEC "Before you go"), as the
 // web's components/Checklist.tsx shows them: Settings' "Before international
@@ -79,7 +99,7 @@ internal fun TripRemindersSection(viewModel: TripsViewModel) {
     LaunchedEffect(removing) { if (removing is Outcome.Done) viewModel.outcomeSeen(REMOVE_TOKEN) }
     editing?.let { reminder ->
         ReminderDialog(
-            title = stringResource(if (reminder.slot.isEmpty()) R.string.add_reminder else R.string.edit_reminder),
+            title = stringResource(if (reminder.slot.isEmpty()) Res.string.add_reminder else Res.string.edit_reminder),
             initial = reminder,
             dated = false,
             onDismiss = { editing = null },
@@ -88,8 +108,8 @@ internal fun TripRemindersSection(viewModel: TripsViewModel) {
             viewModel.saveReminder(SAVE_TOKEN, null, saved)
         }
     }
-    Text(stringResource(R.string.before_international_trips), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
-    Text(stringResource(R.string.before_international_trips_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(Res.string.before_international_trips), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(Res.string.before_international_trips_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     val list = reminders.orEmpty()
     for (reminder in list) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
@@ -97,9 +117,9 @@ internal fun TripRemindersSection(viewModel: TripsViewModel) {
                 Text(reminder.text, style = MaterialTheme.typography.bodyLarge)
                 Text(leadText(reminder.lead ?: DEFAULT_LEAD), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            TextButton(onClick = { editing = reminder }, enabled = !busy) { Text(stringResource(R.string.edit)) }
+            TextButton(onClick = { editing = reminder }, enabled = !busy) { Text(stringResource(Res.string.edit)) }
             IconButton(onClick = { viewModel.removeReminder(REMOVE_TOKEN, null, reminder.slot) }, enabled = !busy) {
-                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.remove_named, reminder.text))
+                Icon(Icons.Filled.Close, contentDescription = stringResource(Res.string.remove_named, reminder.text))
             }
         }
     }
@@ -107,7 +127,7 @@ internal fun TripRemindersSection(viewModel: TripsViewModel) {
         onClick = { editing = Reminder("", "", "", DEFAULT_LEAD) },
         enabled = reminders != null && !busy && list.size < MAX_STANDING_REMINDERS,
         modifier = Modifier.padding(top = 8.dp),
-    ) { Text(stringResource(R.string.add_reminder)) }
+    ) { Text(stringResource(Res.string.add_reminder)) }
     for (outcome in listOf(saving, removing)) {
         (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
     }
@@ -128,7 +148,7 @@ internal fun BeforeYouGo(checklist: Checklist, today: String) {
     var adding by rememberSaveable { mutableStateOf(false) }
     if (adding) {
         ReminderDialog(
-            title = stringResource(R.string.add_reminder),
+            title = stringResource(Res.string.add_reminder),
             initial = Reminder("", "", "", DEFAULT_LEAD),
             dated = true,
             onDismiss = { adding = false },
@@ -138,7 +158,7 @@ internal fun BeforeYouGo(checklist: Checklist, today: String) {
         }
     }
     Column {
-        Text(stringResource(R.string.before_you_go), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 20.dp, bottom = 4.dp))
+        Text(stringResource(Res.string.before_you_go), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 20.dp, bottom = 4.dp))
         for (entry in checklist.entries) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Checkbox(checked = entry.done, onCheckedChange = { checklist.onTick(entry, it) })
@@ -156,12 +176,12 @@ internal fun BeforeYouGo(checklist: Checklist, today: String) {
                 )
                 if (entry.oneOff) {
                     IconButton(onClick = { checklist.onRemove(entry) }) {
-                        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.remove_named, entry.text))
+                        Icon(Icons.Filled.Close, contentDescription = stringResource(Res.string.remove_named, entry.text))
                     }
                 }
             }
         }
-        TextButton(onClick = { adding = true }, enabled = checklist.canAdd, modifier = Modifier.padding(top = 4.dp).offset(x = -TextButtonInset)) { Text(stringResource(R.string.add_reminder)) }
+        TextButton(onClick = { adding = true }, enabled = checklist.canAdd, modifier = Modifier.padding(top = 4.dp).offset(x = -TextButtonInset)) { Text(stringResource(Res.string.add_reminder)) }
     }
 }
 
@@ -179,8 +199,8 @@ private fun ReminderDialog(title: String, initial: Reminder, dated: Boolean, onD
     var date by rememberSaveable { mutableStateOf(initial.date ?: "") }
     var picking by rememberSaveable { mutableStateOf(false) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
-    val amountError = stringResource(R.string.reminder_amount_error, LeadUnit.fromWire(unit)?.limit ?: 0)
-    val dateError = stringResource(R.string.reminder_date_error)
+    val amountError = stringResource(Res.string.reminder_amount_error, LeadUnit.fromWire(unit)?.limit ?: 0)
+    val dateError = stringResource(Res.string.reminder_date_error)
     val save = {
         val words = text.trim()
         val leadUnit = LeadUnit.fromWire(unit)
@@ -201,28 +221,28 @@ private fun ReminderDialog(title: String, initial: Reminder, dated: Boolean, onD
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it.take(MAX_REMINDER_TEXT) },
-                    label = { Text(stringResource(R.string.reminder)) },
-                    placeholder = { Text(stringResource(R.string.reminder_example)) },
+                    label = { Text(stringResource(Res.string.reminder)) },
+                    placeholder = { Text(stringResource(Res.string.reminder_example)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val units = listOf(
-                        "days" to R.string.days_before,
-                        "weeks" to R.string.weeks_before,
-                        "months" to R.string.months_before,
-                    ) + if (dated) listOf("date" to R.string.on_a_date) else emptyList()
+                        "days" to Res.string.days_before,
+                        "weeks" to Res.string.weeks_before,
+                        "months" to Res.string.months_before,
+                    ) + if (dated) listOf("date" to Res.string.on_a_date) else emptyList()
                     for ((wire, label) in units) {
                         FilterChip(selected = unit == wire, onClick = { unit = wire; error = null }, label = { Text(stringResource(label)) })
                     }
                 }
                 if (unit == "date") {
-                    PickerField(value = date.takeIf { it.isNotEmpty() }?.let(::formatDate) ?: "", label = stringResource(R.string.field_date), onClick = { picking = true })
+                    PickerField(value = date.takeIf { it.isNotEmpty() }?.let(::formatDate) ?: "", label = stringResource(Res.string.field_date), onClick = { picking = true })
                 } else {
                     OutlinedTextField(
                         value = amount,
                         onValueChange = { amount = it.filter(Char::isDigit).take(3); error = null },
-                        label = { Text(stringResource(R.string.how_long_before)) },
+                        label = { Text(stringResource(Res.string.how_long_before)) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.width(160.dp),
@@ -231,8 +251,8 @@ private fun ReminderDialog(title: String, initial: Reminder, dated: Boolean, onD
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
             }
         },
-        confirmButton = { TextButton(onClick = save, enabled = text.isNotBlank()) { Text(stringResource(R.string.save)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+        confirmButton = { TextButton(onClick = save, enabled = text.isNotBlank()) { Text(stringResource(Res.string.save)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
     )
     if (picking) {
         val start = date.takeIf { it.isNotEmpty() }?.let { LocalDate.parse(it).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli() }
@@ -246,10 +266,10 @@ private fun ReminderDialog(title: String, initial: Reminder, dated: Boolean, onD
                     TextButton(onClick = {
                         state.selectedDateMillis?.let { date = Instant.ofEpochMilli(it).atOffset(ZoneOffset.UTC).toLocalDate().toString(); error = null }
                         picking = false
-                    }) { Text(stringResource(R.string.ok)) }
+                    }) { Text(stringResource(Res.string.ok)) }
                 }
             },
-            dismissButton = { FontSizeWindow { TextButton(onClick = { picking = false }) { Text(stringResource(R.string.cancel)) } } },
+            dismissButton = { FontSizeWindow { TextButton(onClick = { picking = false }) { Text(stringResource(Res.string.cancel)) } } },
         ) { FontSizeWindow { DatePicker(state = state) } }
     }
 }

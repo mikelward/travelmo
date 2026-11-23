@@ -1,5 +1,7 @@
 package app.travelmo.ui
 
+import androidx.compose.ui.res.stringResource
+import org.jetbrains.compose.resources.StringResource
 import android.content.Context
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -29,7 +31,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -37,9 +38,21 @@ import app.travelmo.R
 import app.travelmo.auth.GoogleAccount
 import app.travelmo.auth.SignInResult
 import app.travelmo.log.DebugLogging
+import app.travelmo.shared.Res
+import app.travelmo.shared.account_deleted
+import app.travelmo.shared.app_name
+import app.travelmo.shared.share_debug_log
+import app.travelmo.shared.sharing
+import app.travelmo.shared.sign_in_failed
+import app.travelmo.shared.sign_in_google
+import app.travelmo.shared.sign_in_no_account
+import app.travelmo.shared.sign_in_refused
+import app.travelmo.shared.sign_in_tagline
+import app.travelmo.shared.sign_in_unavailable
 import app.travelmo.ui.theme.Wordmark
 import com.mikelward.androidlog.android.ShareOutcome
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The entry: the logo, the name, the tagline, and Sign in with Google, as on
@@ -59,7 +72,7 @@ fun SignInScreen(
     val scope = rememberCoroutineScope()
     val deleted by account.deleted.collectAsStateWithLifecycle()
     var busy by remember { mutableStateOf(false) }
-    var message by remember { mutableStateOf<Int?>(if (account.available) null else R.string.sign_in_unavailable) }
+    var message by remember { mutableStateOf<StringResource?>(if (account.available) null else Res.string.sign_in_unavailable) }
     var offerLog by remember { mutableStateOf(false) }
     var sharing by remember { mutableStateOf(false) }
     var shareNote by remember { mutableStateOf<Int?>(null) }
@@ -78,16 +91,16 @@ fun SignInScreen(
                 if (crashed) LastCrashBanner(Modifier.padding(bottom = 24.dp))
                 if (deleted) {
                     Text(
-                        stringResource(R.string.account_deleted),
+                        stringResource(Res.string.account_deleted),
                         style = MaterialTheme.typography.bodyLarge,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(bottom = 24.dp),
                     )
                 }
                 Image(painterResource(R.drawable.logo), contentDescription = null, modifier = Modifier.size(96.dp).padding(bottom = 16.dp))
-                Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineMedium, fontFamily = Wordmark)
+                Text(stringResource(Res.string.app_name), style = MaterialTheme.typography.headlineMedium, fontFamily = Wordmark)
                 Text(
-                    stringResource(R.string.sign_in_tagline),
+                    stringResource(Res.string.sign_in_tagline),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -104,15 +117,15 @@ fun SignInScreen(
                             busy = false
                             message = when (result) {
                                 SignInResult.Success, SignInResult.Canceled -> null
-                                SignInResult.NoAccount -> R.string.sign_in_no_account
-                                SignInResult.Refused -> R.string.sign_in_refused
-                                SignInResult.Failed -> R.string.sign_in_failed
+                                SignInResult.NoAccount -> Res.string.sign_in_no_account
+                                SignInResult.Refused -> Res.string.sign_in_refused
+                                SignInResult.Failed -> Res.string.sign_in_failed
                             }
                             offerLog = result == SignInResult.Refused || result == SignInResult.Failed
                         }
                     },
                 ) {
-                    Text(stringResource(R.string.sign_in_google))
+                    Text(stringResource(Res.string.sign_in_google))
                 }
                 message?.let {
                     Text(
@@ -140,7 +153,7 @@ fun SignInScreen(
                             }
                         },
                         modifier = Modifier.padding(top = 16.dp),
-                    ) { Text(stringResource(if (sharing) R.string.sharing else R.string.share_debug_log)) }
+                    ) { Text(stringResource(if (sharing) Res.string.sharing else Res.string.share_debug_log)) }
                     shareNote?.let {
                         Text(
                             stringResource(it),

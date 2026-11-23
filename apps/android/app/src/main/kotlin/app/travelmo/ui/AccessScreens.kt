@@ -42,7 +42,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
@@ -56,7 +55,34 @@ import app.travelmo.core.AccessRecord
 import app.travelmo.core.AccountAccess
 import app.travelmo.core.canRevoke
 import app.travelmo.core.formatDate
+import app.travelmo.shared.Res
+import app.travelmo.shared.access
+import app.travelmo.shared.access_admins_only
+import app.travelmo.shared.access_approved
+import app.travelmo.shared.access_approved_hint
+import app.travelmo.shared.access_invite_label
+import app.travelmo.shared.access_no_requests
+import app.travelmo.shared.access_requested_on
+import app.travelmo.shared.access_requests
+import app.travelmo.shared.approve
+import app.travelmo.shared.back
+import app.travelmo.shared.decline
+import app.travelmo.shared.email_address
+import app.travelmo.shared.email_link_sent
+import app.travelmo.shared.invite
+import app.travelmo.shared.invite_only
+import app.travelmo.shared.invite_only_declined
+import app.travelmo.shared.invite_only_none
+import app.travelmo.shared.invite_only_requested
+import app.travelmo.shared.invite_only_unverified
+import app.travelmo.shared.invited_elsewhere
+import app.travelmo.shared.loading
+import app.travelmo.shared.request_access
+import app.travelmo.shared.revoke
+import app.travelmo.shared.send_link
+import app.travelmo.shared.sign_out
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
 
 private const val REQUEST_TOKEN = "access/request"
 private const val LINK_TOKEN = "access/link"
@@ -91,12 +117,12 @@ fun InviteOnlyScreen(account: GoogleAccount, viewModel: TripsViewModel, status: 
             ) {
                 Column(modifier = Modifier.widthIn(max = 480.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Image(painterResource(R.drawable.logo), contentDescription = null, modifier = Modifier.size(72.dp).padding(bottom = 16.dp))
-                    Text(stringResource(R.string.invite_only), style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+                    Text(stringResource(Res.string.invite_only), style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
                     val said = when {
-                        email == null -> stringResource(R.string.invite_only_unverified)
-                        status == AccountAccess.REQUESTED -> stringResource(R.string.invite_only_requested)
-                        status == AccountAccess.DECLINED -> stringResource(R.string.invite_only_declined, email)
-                        else -> stringResource(R.string.invite_only_none, email)
+                        email == null -> stringResource(Res.string.invite_only_unverified)
+                        status == AccountAccess.REQUESTED -> stringResource(Res.string.invite_only_requested)
+                        status == AccountAccess.DECLINED -> stringResource(Res.string.invite_only_declined, email)
+                        else -> stringResource(Res.string.invite_only_none, email)
                     }
                     Text(
                         said,
@@ -110,14 +136,14 @@ fun InviteOnlyScreen(account: GoogleAccount, viewModel: TripsViewModel, status: 
                             onClick = { viewModel.requestAccess(REQUEST_TOKEN) },
                             enabled = requesting !is Outcome.Busy,
                             modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
-                        ) { Text(stringResource(R.string.request_access)) }
+                        ) { Text(stringResource(Res.string.request_access)) }
                     }
                     (requesting as? Outcome.Failed)?.let {
                         Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 16.dp))
                     }
                     if (email != null && waiting && viewModel.canLinkEmails) InvitedElsewhere(viewModel)
                     TextButton(onClick = { scope.launch { account.signOut(context) } }, modifier = Modifier.padding(top = 16.dp)) {
-                        Text(stringResource(R.string.sign_out))
+                        Text(stringResource(Res.string.sign_out))
                     }
                     Column(modifier = Modifier.fillMaxWidth()) {
                         DeleteAccountSection(account, viewModel, DELETE_ACCOUNT_TOKEN)
@@ -148,8 +174,8 @@ private fun InvitedElsewhere(viewModel: TripsViewModel) {
         }
     }
     Column(modifier = Modifier.fillMaxWidth().padding(top = 32.dp)) {
-        Text(stringResource(R.string.invited_elsewhere), style = MaterialTheme.typography.titleMedium)
-        val label = stringResource(R.string.email_address)
+        Text(stringResource(Res.string.invited_elsewhere), style = MaterialTheme.typography.titleMedium)
+        val label = stringResource(Res.string.email_address)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
             OutlinedTextField(
                 value = address,
@@ -165,10 +191,10 @@ private fun InvitedElsewhere(viewModel: TripsViewModel) {
                     viewModel.addEmail(LINK_TOKEN, address)
                 },
                 enabled = sending !is Outcome.Busy && address.isNotBlank(),
-            ) { Text(stringResource(R.string.send_link)) }
+            ) { Text(stringResource(Res.string.send_link)) }
         }
         if (sending == null || sending is Outcome.Done) {
-            sentTo?.let { Text(stringResource(R.string.email_link_sent, it), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp)) }
+            sentTo?.let { Text(stringResource(Res.string.email_link_sent, it), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp)) }
         }
         (sending as? Outcome.Failed)?.let {
             Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
@@ -190,10 +216,10 @@ fun AccessScreen(viewModel: TripsViewModel, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.access)) },
+                title = { Text(stringResource(Res.string.access)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(Res.string.back))
                     }
                 },
                 actions = { AppMenu() },
@@ -203,9 +229,9 @@ fun AccessScreen(viewModel: TripsViewModel, onBack: () -> Unit) {
         val scroll = rememberScrollState()
         Column(modifier = Modifier.fillMaxSize().padding(padding).scrollEdgeCue(scroll, scrollCueColors()).verticalScroll(scroll).padding(16.dp)) {
             when {
-                known == null -> Text(stringResource(R.string.loading), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                known == null -> Text(stringResource(Res.string.loading), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 known.status != AccountAccess.APPROVED || !known.admin ->
-                    Text(stringResource(R.string.access_admins_only), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(Res.string.access_admins_only), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 else -> AccessAdmin(viewModel, AccessConfig(known.admins))
             }
         }
@@ -233,7 +259,7 @@ private fun AccessAdmin(viewModel: TripsViewModel, config: AccessConfig) {
         action()
     }
     val busy = { email: String -> outcomes[DECIDE_TOKEN + email] is Outcome.Busy }
-    val label = stringResource(R.string.access_invite_label)
+    val label = stringResource(Res.string.access_invite_label)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
         OutlinedTextField(
             value = address,
@@ -246,39 +272,39 @@ private fun AccessAdmin(viewModel: TripsViewModel, config: AccessConfig) {
         Button(
             onClick = { act(INVITE_TOKEN) { viewModel.inviteAccess(INVITE_TOKEN, address) } },
             enabled = mine.values.none { it is Outcome.Busy },
-        ) { Text(stringResource(R.string.invite)) }
+        ) { Text(stringResource(Res.string.invite)) }
     }
     (last?.let { outcomes[it] } as? Outcome.Failed)?.let {
         Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
     }
     val current = lists
     if (current == null) {
-        Text(stringResource(R.string.loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 24.dp))
+        Text(stringResource(Res.string.loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 24.dp))
         return
     }
-    Text(stringResource(R.string.access_requests), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 32.dp, bottom = 4.dp))
+    Text(stringResource(Res.string.access_requests), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 32.dp, bottom = 4.dp))
     if (current.pending.isEmpty()) {
-        Text(stringResource(R.string.access_no_requests), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(Res.string.access_no_requests), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     current.pending.forEachIndexed { index, record ->
         if (index > 0) HorizontalDivider()
         RequestRow(record) {
             OutlinedButton(onClick = { act(DECIDE_TOKEN + record.email) { viewModel.decideAccess(DECIDE_TOKEN + record.email, record.email, AccountAccess.APPROVED) } }, enabled = !busy(record.email)) {
-                Text(stringResource(R.string.approve))
+                Text(stringResource(Res.string.approve))
             }
             OutlinedButton(onClick = { act(DECIDE_TOKEN + record.email) { viewModel.decideAccess(DECIDE_TOKEN + record.email, record.email, AccountAccess.DECLINED) } }, enabled = !busy(record.email)) {
-                Text(stringResource(R.string.decline))
+                Text(stringResource(Res.string.decline))
             }
         }
     }
-    Text(stringResource(R.string.access_approved), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 32.dp, bottom = 4.dp))
-    Text(stringResource(R.string.access_approved_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(Res.string.access_approved), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 32.dp, bottom = 4.dp))
+    Text(stringResource(Res.string.access_approved_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     current.approved.forEachIndexed { index, record ->
         if (index > 0) HorizontalDivider()
         ApprovedRow(record) {
             if (canRevoke(record.email, viewModel.verifiedEmail, config)) {
                 OutlinedButton(onClick = { act(DECIDE_TOKEN + record.email) { viewModel.decideAccess(DECIDE_TOKEN + record.email, record.email, AccountAccess.DECLINED) } }, enabled = !busy(record.email)) {
-                    Text(stringResource(R.string.revoke))
+                    Text(stringResource(Res.string.revoke))
                 }
             }
         }
@@ -291,7 +317,7 @@ private fun RequestRow(record: AccessRecord, buttons: @Composable () -> Unit) {
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         val asked = record.requestedAt?.takeIf { it.length >= 10 }?.let { formatDate(it.take(10)) }
         Text(
-            if (asked != null) stringResource(R.string.access_requested_on, record.email, asked) else record.email,
+            if (asked != null) stringResource(Res.string.access_requested_on, record.email, asked) else record.email,
             style = MaterialTheme.typography.bodyLarge,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) { buttons() }

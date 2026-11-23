@@ -2552,8 +2552,22 @@ Planned, and built the way the Android app is, sharing its Kotlin through
 Kotlin Multiplatform rather than written again in Swift. So far
 `apps/android/core` builds for iOS (`iosArm64`, `iosSimulatorArm64`) and
 CI's `ios-core` job runs its tests on the iOS Simulator on a macOS runner;
-Linux compiles the iOS targets but cannot run them. Next, in order: the
-Compose screens move to a module both apps build (Compose Multiplatform),
-then the iOS app itself (Firebase Auth and Firestore, Google sign-in and
-Sign in with Apple, which App Store review asks of an app offering Google's,
-notifications through Cloud Messaging), then a TestFlight build from CI.
+Linux compiles the iOS targets but cannot run them. The screens' text is
+in `apps/android/shared`, a Compose Multiplatform module both apps build
+(`Res.string.*`), except what only Android shows outside the screens: the
+launcher label, notification channels, toasts and the debug log's notes.
+Next, in order: the logging and data access go behind interfaces, the
+screens and their view model move to `:shared`, then the iOS app itself
+(Firebase Auth and Firestore, Google sign-in and Sign in with Apple, which
+App Store review asks of an app offering Google's, notifications through
+Cloud Messaging), then a TestFlight build from CI.
+
+Anyone can sign up from an iPhone, as on Android and the web. Sign in with
+Apple may give Apple's private relay address rather than a real one; such
+a user adds their real address under Settings' "Email addresses"
+("Linked email addresses"), which then counts for sharing and access as
+any linked address does.
+
+Left to Android for now, as costly for a speculative app: the text size
+and pinch to zoom (iOS has Dynamic Type), the debug log with its crash
+banner and Report a bug, and the Play update check.

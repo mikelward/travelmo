@@ -1,5 +1,6 @@
 package app.travelmo.ui
 
+import org.jetbrains.compose.resources.StringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,8 +11,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
@@ -27,35 +28,46 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.travelmo.R
 import app.travelmo.core.ListWarning
 import app.travelmo.core.Segment
 import app.travelmo.core.Trip
+import app.travelmo.core.WarningWhen
 import app.travelmo.core.allCancelled
 import app.travelmo.core.checkInLine
 import app.travelmo.core.displayTitles
 import app.travelmo.core.eventVerb
 import app.travelmo.core.formatDate
 import app.travelmo.core.formatDateRange
-import app.travelmo.core.shownEnd
-import app.travelmo.core.shownStart
 import app.travelmo.core.localDate
 import app.travelmo.core.localTime
 import app.travelmo.core.relativeTime
-import app.travelmo.core.WarningWhen
+import app.travelmo.core.shownEnd
+import app.travelmo.core.shownStart
 import app.travelmo.core.tripStatus
 import app.travelmo.core.warningText
+import app.travelmo.shared.Res
+import app.travelmo.shared.badge_deleting
+import app.travelmo.shared.badge_shared
+import app.travelmo.shared.section_now
+import app.travelmo.shared.section_past
+import app.travelmo.shared.section_upcoming
+import app.travelmo.shared.settings
+import app.travelmo.shared.staying_at
+import app.travelmo.shared.trip_all_cancelled
+import app.travelmo.shared.trips_empty
+import app.travelmo.shared.trips_empty_hint
+import app.travelmo.shared.trips_loading
 import app.travelmo.ui.theme.Brand
 import app.travelmo.ui.theme.TravelmoTheme
+import org.jetbrains.compose.resources.stringResource
 
 /** Now, Upcoming and Past, each card with what comes next (SPEC.md "The trip list"). */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -69,7 +81,7 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
                 title = { Brand() },
                 actions = {
                     IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings))
+                        Icon(Icons.Filled.Settings, contentDescription = stringResource(Res.string.settings))
                     }
                     AppMenu()
                 },
@@ -83,14 +95,14 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
             groups == null -> Column(Modifier.padding(padding)) {
                 // The crash banner first, at the top of whatever the list shows.
                 if (crashed) LastCrashBanner(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
-                Message(stringResource(R.string.trips_loading))
+                Message(stringResource(Res.string.trips_loading))
             }
             groups.current.isEmpty() && groups.upcoming.isEmpty() && groups.past.isEmpty() ->
                 Column(Modifier.fillMaxSize().padding(padding)) {
                     if (crashed) LastCrashBanner(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
                     Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 64.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(stringResource(R.string.trips_empty), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
-                        Text(stringResource(R.string.trips_empty_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
+                        Text(stringResource(Res.string.trips_empty), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                        Text(stringResource(Res.string.trips_empty_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
                     }
                 }
             else -> LazyColumn(
@@ -111,9 +123,9 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
                 }
                 // What comes next is said only for a trip under way; an upcoming
                 // trip's card is its title and dates.
-                section(R.string.section_now, groups.current, titles, state, uid, showNext = true, onOpenTrip)
-                section(R.string.section_upcoming, groups.upcoming, titles, state, uid, showNext = false, onOpenTrip)
-                section(R.string.section_past, groups.past, titles, state, uid, showNext = false, onOpenTrip)
+                section(Res.string.section_now, groups.current, titles, state, uid, showNext = true, onOpenTrip)
+                section(Res.string.section_upcoming, groups.upcoming, titles, state, uid, showNext = false, onOpenTrip)
+                section(Res.string.section_past, groups.past, titles, state, uid, showNext = false, onOpenTrip)
             }
         }
     }
@@ -124,7 +136,7 @@ private fun Message(text: String, modifier: Modifier = Modifier) {
     Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier.padding(16.dp))
 }
 
-private fun androidx.compose.foundation.lazy.LazyListScope.section(title: Int, trips: List<Trip>, titles: Map<String, String>, state: TripListState, uid: String, showNext: Boolean, onOpenTrip: (String) -> Unit) {
+private fun androidx.compose.foundation.lazy.LazyListScope.section(title: StringResource, trips: List<Trip>, titles: Map<String, String>, state: TripListState, uid: String, showNext: Boolean, onOpenTrip: (String) -> Unit) {
     if (trips.isEmpty()) return
     item(key = "section-$title") {
         Text(
@@ -142,8 +154,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.section(title: Int, t
 @Composable
 fun TripCard(trip: Trip, title: String = trip.title, shared: Boolean, segments: List<Segment>?, now: String, onClick: () -> Unit) {
     val badge = when {
-        trip.deleting -> stringResource(R.string.badge_deleting) to MaterialTheme.colorScheme.onSurfaceVariant
-        shared -> stringResource(R.string.badge_shared) to TravelmoTheme.colors.shared
+        trip.deleting -> stringResource(Res.string.badge_deleting) to MaterialTheme.colorScheme.onSurfaceVariant
+        shared -> stringResource(Res.string.badge_shared) to TravelmoTheme.colors.shared
         else -> null
     }
     Column(
@@ -175,11 +187,11 @@ private fun StatusLines(segments: List<Segment>, now: String) {
     val status = tripStatus(segments, now)
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     if (allCancelled(segments)) {
-        Text(stringResource(R.string.trip_all_cancelled), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
+        Text(stringResource(Res.string.trip_all_cancelled), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
     }
     status.stay?.let { stay ->
         val until = stay.end?.let { " · until ${formatDate(localDate(it))} ${localTime(it)}" } ?: ""
-        Text(stringResource(R.string.staying_at, stay.title) + until, style = MaterialTheme.typography.bodyLarge, color = muted, modifier = Modifier.padding(top = 8.dp))
+        Text(stringResource(Res.string.staying_at, stay.title) + until, style = MaterialTheme.typography.bodyLarge, color = muted, modifier = Modifier.padding(top = 8.dp))
     }
     status.next?.let { event ->
         val soon = relativeTime(now, event.at)?.let { " · $it" } ?: ""

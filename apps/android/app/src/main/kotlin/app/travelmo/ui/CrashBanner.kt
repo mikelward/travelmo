@@ -27,12 +27,19 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.R
+import app.travelmo.shared.Res
+import app.travelmo.shared.crash_banner_body
+import app.travelmo.shared.crash_banner_dismiss
+import app.travelmo.shared.crash_banner_share
+import app.travelmo.shared.crash_banner_title
+import app.travelmo.shared.sharing
 import com.mikelward.androidlog.android.ShareOutcome
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The crash banner's state and actions. The activity provides the debug
@@ -123,13 +130,13 @@ fun CrashBanner(onShare: () -> Unit, onDismiss: () -> Unit, sharing: Boolean, sh
         modifier = modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.crash_banner_title), style = MaterialTheme.typography.titleMedium)
-            Text(stringResource(R.string.crash_banner_body), style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(Res.string.crash_banner_title), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(Res.string.crash_banner_body), style = MaterialTheme.typography.bodyMedium)
             if (shareFailed) Text(stringResource(R.string.debug_log_share_failed), style = MaterialTheme.typography.bodySmall)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.crash_banner_dismiss)) }
+                TextButton(onClick = onDismiss) { Text(stringResource(Res.string.crash_banner_dismiss)) }
                 Button(onClick = onShare, enabled = !sharing) {
-                    Text(stringResource(if (sharing) R.string.sharing else R.string.crash_banner_share))
+                    Text(stringResource(if (sharing) Res.string.sharing else Res.string.crash_banner_share))
                 }
             }
         }

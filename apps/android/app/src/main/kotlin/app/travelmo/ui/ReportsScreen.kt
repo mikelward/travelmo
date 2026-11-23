@@ -37,15 +37,12 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.travelmo.R
 import app.travelmo.core.AirportVisit
 import app.travelmo.core.FavoritePlace
 import app.travelmo.core.PlaceVisit
@@ -54,12 +51,38 @@ import app.travelmo.core.TripWithBookings
 import app.travelmo.core.WorldMapData
 import app.travelmo.core.countryName
 import app.travelmo.core.displayTitles
-import app.travelmo.core.formatDateRange
 import app.travelmo.core.favoritePlaces
+import app.travelmo.core.formatDateRange
 import app.travelmo.core.travelReport
 import app.travelmo.core.worldMap
+import app.travelmo.shared.Res
+import app.travelmo.shared.all_years
+import app.travelmo.shared.col_countries
+import app.travelmo.shared.col_country
+import app.travelmo.shared.col_days
+import app.travelmo.shared.col_trips
+import app.travelmo.shared.col_year
+import app.travelmo.shared.countries_count
+import app.travelmo.shared.days_away
+import app.travelmo.shared.days_in_each_country
+import app.travelmo.shared.favorite_mark
+import app.travelmo.shared.favorite_places
+import app.travelmo.shared.map_description
+import app.travelmo.shared.map_empty
+import app.travelmo.shared.no_trips_yet
+import app.travelmo.shared.reports_loading
+import app.travelmo.shared.reports_title
+import app.travelmo.shared.trips_ahead
+import app.travelmo.shared.trips_count
+import app.travelmo.shared.trips_per_year
+import app.travelmo.shared.unknown_days
+import app.travelmo.shared.unplaced_bookings
+import app.travelmo.shared.unplaced_hint
+import app.travelmo.shared.year
 import app.travelmo.ui.theme.TravelmoTheme
 import com.mikelward.androidzoom.compose.pinchFontSizeHost
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Where the traveler has been, as the web's /reports counts it: the trips
@@ -81,9 +104,9 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, botto
     val report = remember(input, today, year) { if (year == null) whole else input?.let { travelReport(it, today, year) } }
     val titles = remember(input) { displayTitles(input.orEmpty().map { it.trip }) }
     val favorites = remember(input) { input?.let { trips -> favoritePlaces(trips.map { TripWithBookings(it.trip, it.segments) }) }.orEmpty() }
-    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.reports_title)) }, actions = { AppMenu() }) }, bottomBar = bottomBar) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(Res.string.reports_title)) }, actions = { AppMenu() }) }, bottomBar = bottomBar) { padding ->
         if (whole == null || report == null) {
-            Text(stringResource(R.string.reports_loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp))
+            Text(stringResource(Res.string.reports_loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp))
             return@Scaffold
         }
         val list = rememberLazyListState()
@@ -96,10 +119,10 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, botto
             if (report.unknownDays > 0 || report.unplaced > 0) {
                 item(key = "unplaced") {
                     val parts = listOfNotNull(
-                        report.unknownDays.takeIf { it > 0 }?.let { pluralStringResource(R.plurals.unknown_days, it, it) },
-                        report.unplaced.takeIf { it > 0 }?.let { pluralStringResource(R.plurals.unplaced_bookings, it, it) },
+                        report.unknownDays.takeIf { it > 0 }?.let { pluralStringResource(Res.plurals.unknown_days, it, it) },
+                        report.unplaced.takeIf { it > 0 }?.let { pluralStringResource(Res.plurals.unplaced_bookings, it, it) },
                     )
-                    Text(stringResource(R.string.unplaced_hint, parts.joinToString("; ")), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+                    Text(stringResource(Res.string.unplaced_hint, parts.joinToString("; ")), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
                 }
             }
             if (report.countries.isNotEmpty()) {
@@ -107,9 +130,9 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, botto
                     // Each country opens to the trips with days there, so a surprising one can be found.
                     var open by rememberSaveable { mutableStateOf<String?>(null) }
                     val trips = remember(input) { input.orEmpty().associate { it.trip.id to it.trip } }
-                    SectionTitle(stringResource(R.string.days_in_each_country))
+                    SectionTitle(stringResource(Res.string.days_in_each_country))
                     Table(
-                        header = listOf(stringResource(R.string.col_country) to 2f, stringResource(R.string.col_days) to 0.7f, stringResource(R.string.col_trips) to 0.7f),
+                        header = listOf(stringResource(Res.string.col_country) to 2f, stringResource(Res.string.col_days) to 0.7f, stringResource(Res.string.col_trips) to 0.7f),
                         rows = report.countries.map { listOf(countryName(it.country), it.days.toString(), it.trips.toString()) },
                         onRow = { r -> report.countries[r].country.let { open = if (open == it) null else it } },
                         open = report.countries.indexOfFirst { it.country == open }.takeIf { it >= 0 },
@@ -130,7 +153,7 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, botto
                 }
             }
             if (favorites.isNotEmpty()) {
-                item(key = "favorites") { SectionTitle(stringResource(R.string.favorite_places)) }
+                item(key = "favorites") { SectionTitle(stringResource(Res.string.favorite_places)) }
                 for (place in favorites) {
                     item(key = "favorite-${place.name}|${place.country ?: ""}") { Favorite(place, titles, onOpenTrip) }
                 }
@@ -140,9 +163,9 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, botto
             }
             if (whole.years.isNotEmpty()) {
                 item(key = "years") {
-                    SectionTitle(stringResource(R.string.trips_per_year))
+                    SectionTitle(stringResource(Res.string.trips_per_year))
                     Table(
-                        header = listOf(stringResource(R.string.col_year) to 1f, stringResource(R.string.col_trips) to 0.7f, stringResource(R.string.col_days) to 0.7f, stringResource(R.string.col_countries) to 1f),
+                        header = listOf(stringResource(Res.string.col_year) to 1f, stringResource(Res.string.col_trips) to 0.7f, stringResource(Res.string.col_days) to 0.7f, stringResource(Res.string.col_countries) to 1f),
                         rows = whole.years.map { listOf(it.year, it.trips.toString(), it.days.toString(), it.countries.toString()) },
                         onRow = { row -> year = whole.years[row].year },
                     )
@@ -150,11 +173,11 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, botto
             }
             if (whole.upcoming > 0) {
                 item(key = "upcoming") {
-                    Text(pluralStringResource(R.plurals.trips_ahead, whole.upcoming, whole.upcoming), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 24.dp))
+                    Text(pluralStringResource(Res.plurals.trips_ahead, whole.upcoming, whole.upcoming), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 24.dp))
                 }
             }
             if (whole.trips == 0 && whole.upcoming == 0) {
-                item(key = "none") { Text(stringResource(R.string.no_trips_yet), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 24.dp)) }
+                item(key = "none") { Text(stringResource(Res.string.no_trips_yet), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 24.dp)) }
             }
         }
     }
@@ -166,15 +189,15 @@ private fun YearPicker(years: List<String>, year: String?, onPick: (String?) -> 
     var open by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }) {
         OutlinedTextField(
-            value = year ?: stringResource(R.string.all_years),
+            value = year ?: stringResource(Res.string.all_years),
             onValueChange = {},
             readOnly = true,
-            label = { Text(stringResource(R.string.year)) },
+            label = { Text(stringResource(Res.string.year)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
             modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
         )
         ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.pinchFontSizeHost()) {
-            DropdownMenuItem(text = { Text(stringResource(R.string.all_years)) }, onClick = { onPick(null); open = false })
+            DropdownMenuItem(text = { Text(stringResource(Res.string.all_years)) }, onClick = { onPick(null); open = false })
             for (y in years) DropdownMenuItem(text = { Text(y) }, onClick = { onPick(y); open = false })
         }
     }
@@ -183,9 +206,9 @@ private fun YearPicker(years: List<String>, year: String?, onPick: (String?) -> 
 @Composable
 private fun Summary(report: TravelReport) {
     val line = listOf(
-        pluralStringResource(R.plurals.trips_count, report.trips, report.trips),
-        pluralStringResource(R.plurals.days_away, report.days, report.days),
-        pluralStringResource(R.plurals.countries_count, report.countries.size, report.countries.size),
+        pluralStringResource(Res.plurals.trips_count, report.trips, report.trips),
+        pluralStringResource(Res.plurals.days_away, report.days, report.days),
+        pluralStringResource(Res.plurals.countries_count, report.countries.size, report.countries.size),
     ).joinToString(" · ")
     Text(line, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp))
 }
@@ -229,7 +252,7 @@ private fun Table(
 @Composable
 private fun Favorite(place: FavoritePlace, titles: Map<String, String>, onOpenTrip: (String) -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val favoriteMark = stringResource(R.string.favorite_mark)
+    val favoriteMark = stringResource(Res.string.favorite_mark)
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (place.favorite) Text("♥", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.semantics { contentDescription = favoriteMark })
@@ -273,7 +296,7 @@ fun WorldMap(data: WorldMapData, visited: Set<String>, airports: List<AirportVis
     val border = MaterialTheme.colorScheme.surface
     val airport = MaterialTheme.colorScheme.tertiary
     val place = MaterialTheme.colorScheme.error
-    val description = if (visited.isEmpty()) stringResource(R.string.map_empty) else stringResource(R.string.map_description, visited.map { countryName(it) }.sorted().joinToString(", "))
+    val description = if (visited.isEmpty()) stringResource(Res.string.map_empty) else stringResource(Res.string.map_description, visited.map { countryName(it) }.sorted().joinToString(", "))
     val (left, top, width, height) = data.viewBox
     Canvas(modifier = modifier.fillMaxWidth().aspectRatio((width / height).toFloat()).semantics { contentDescription = description }) {
         val factor = size.width / width.toFloat()
