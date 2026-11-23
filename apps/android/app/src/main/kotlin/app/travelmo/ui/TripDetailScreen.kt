@@ -65,7 +65,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
 import app.travelmo.R
 import app.travelmo.core.PersonWarning
 import app.travelmo.core.ProfileEntry
@@ -115,6 +119,19 @@ fun TripDetailScreen(
     val trip by tripFlow.collectAsStateWithLifecycle(initialValue = null)
     val trips by viewModel.trips.collectAsStateWithLifecycle()
     val segments by segmentsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    val flightStatusesFlow = remember(tripId) { viewModel.flightStatuses(tripId) }
+    val flightStatuses by flightStatusesFlow.collectAsStateWithLifecycle(initialValue = emptyMap())
+    // While the trip is in front, its flights near departure are looked at
+    // as often as the parser allows, so the gate on screen is fresh.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(tripId, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                viewModel.refreshFlights(tripId)
+                delay(60_000)
+            }
+        }
+    }
     val loaded by viewModel.state.collectAsStateWithLifecycle()
     val people by viewModel.people.collectAsStateWithLifecycle()
     val ownProfile by viewModel.ownProfile.collectAsStateWithLifecycle()
@@ -200,6 +217,7 @@ fun TripDetailScreen(
                 current, segments, shared = current.ownerUid != uid, errors = errors, busy = busy,
                 warnings = tripWarnings(people, current, segments, viewModel.today()), today = viewModel.today(),
                 programsFor = { provider -> programsFor(provider, ownProfile?.loyalty.orEmpty()) },
+                flightLines = { segment -> viewModel.flightLines(segment, flightStatuses) },
                 emailLink = { source -> emailLinkFor(source, uid, ownsTrip = isOwner, account = gmailAccount) },
                 bookingActions = if (canEdit) {
                     BookingActions(onEdit = { onEditBooking(it.id) }, onDelete = { deleting = it }, onMove = if (targets.isEmpty()) null else { segment -> moving = segment })
@@ -242,6 +260,8 @@ private fun TripBody(
     warnings: List<PersonWarning>,
     today: String,
     programsFor: (String?) -> List<ProfileEntry>,
+    /** A flight's live gates and carousel. */
+    flightLines: (Segment) -> List<String>,
     bookingActions: BookingActions?,
     emailLink: (SourceRef) -> String?,
     tripActions: TripActions?,
@@ -317,7 +337,7 @@ private fun TripBody(
                 Text(formatDate(date), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 20.dp, bottom = 4.dp))
             }
             items(items, key = { it.id }) { segment ->
-                SegmentRow(segment, bookingActions, programs = programsFor(segment.provider), emailLink = emailLink)
+                SegmentRow(segment, bookingActions, programs = programsFor(segment.provider), emailLink = emailLink, flightLines = flightLines(segment))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
         }
@@ -470,6 +490,7 @@ fun SegmentRow(
     actions: BookingActions? = null,
     programs: List<ProfileEntry> = emptyList(),
     emailLink: (SourceRef) -> String? = { null },
+    flightLines: List<String> = emptyList(),
 ) {
     val context = LocalContext.current
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -491,6 +512,9 @@ fun SegmentRow(
             Text(segment.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
             routeLine(segment)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = muted) }
             timesLine(segment)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = muted) }
+            if (flightLines.isNotEmpty()) {
+                Text(flightLines.joinToString(" · "), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.tertiary)
+            }
             referenceLine(segment)?.let { line ->
                 // A long press on the line copies the reference too, as ⋮ does.
                 val copy = reference?.let { ref -> Modifier.longPressUnlessPinch(stringResource(R.string.copy_reference)) { copyReference(context, ref) } } ?: Modifier

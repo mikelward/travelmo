@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Creates the parser's daily Cloud Scheduler jobs: Gmail watch renewal, the
-# calendar feed poll, the geocoding sweep and the reminder mail. Each POSTs
-# to an /internal route with an OIDC token from SCHEDULER_SA. Idempotent:
-# rerun after changing a value. Three jobs per billing account are free; the
-# fourth costs about ten cents a month.
+# Creates the parser's Cloud Scheduler jobs: Gmail watch renewal, the
+# calendar feed poll, the geocoding sweep and the reminder mail, daily, and
+# the flight status check, every minute. Each POSTs to an /internal route
+# with an OIDC token from SCHEDULER_SA. Idempotent: rerun after changing a
+# value. Three jobs per billing account are free; each further one costs
+# about ten cents a month, however often it runs.
 #
 #   PROJECT=my-project LOCATION=us-east4 PARSER_URL=https://parser-xyz.a.run.app \
 #   SCHEDULER_SA=scheduler@my-project.iam.gserviceaccount.com deploy/scheduler.sh
@@ -43,3 +44,6 @@ ensure_job poll-calendar-feeds "43 4 * * *" /internal/poll-feeds
 ensure_job geocode-sweep "11 1 * * *" /internal/geocode-sweep
 # Morning in Europe, so a reminder is read the day it is about.
 ensure_job send-reminders "7 6 * * *" /internal/reminders
+# Gates and carousels change by the minute; the parser decides which
+# flights are due a look and does nothing without AEROAPI_KEY.
+ensure_job check-flight-status "* * * * *" /internal/flight-status

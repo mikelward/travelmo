@@ -38,6 +38,16 @@ describe("webPushSender", () => {
     ]);
   });
 
+  it("lets news that soon goes stale ask for a shorter life", async () => {
+    const calls: unknown[][] = [];
+    const sender = webPushSender(config, async (...args: unknown[]) => {
+      calls.push(args);
+      return { statusCode: 201, body: "", headers: {} };
+    });
+    await sender(subscription, notification, 1800);
+    expect(calls[0]![2]).toMatchObject({ TTL: 1800 });
+  });
+
   it("drops a subscription whose endpoint is not a public https address, without a request", async () => {
     const calls: unknown[][] = [];
     const sender = webPushSender(config, async (...args: unknown[]) => {

@@ -14,6 +14,10 @@ import app.travelmo.R
 import app.travelmo.auth.GoogleAccount
 import app.travelmo.auth.SignInResult
 import app.travelmo.auth.SignedIn
+import app.travelmo.core.FlightStatus
+import app.travelmo.core.Place
+import app.travelmo.core.Segment
+import app.travelmo.core.SegmentType
 import app.travelmo.core.Trip
 import app.travelmo.ui.theme.TravelmoTheme
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -239,6 +243,38 @@ class ScreenScreenshotTest {
     fun trip_detail_dark() {
         val viewModel = viewModel()
         capture("trip_detail_dark", dark = true) { TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+    }
+
+    // A flight near departure: its live gates from the parser's status.
+    private fun flightViewModel(): TripsViewModel {
+        val trip = Trip("sydney", "Singapore", "2026-11-02", "2026-11-06", OWNER)
+        val flight = Segment(
+            "s-flight", "sydney", SegmentType.FLIGHT, "XX 100 SYD to SIN", "2026-11-02T02:00:00+11:00", "2026-11-02T08:30:00+08:00",
+            provider = "Example Air", confirmation = "XX7Q2P", origin = Place("Sydney", code = "SYD"), destination = Place("Singapore", code = "SIN"),
+        )
+        val status = FlightStatus(
+            ident = "XX100", date = "2026-11-02", origin = "SYD", found = true,
+            departureGate = "8", departureTerminal = "1", arrivalGate = "D46", arrivalTerminal = "1",
+            scheduledOut = "2026-11-01T15:00:00Z", scheduledIn = "2026-11-02T00:30:00Z", checkedAt = "2026-11-01T11:59:00Z",
+        )
+        val store = FakeTripStore(
+            trips = fixtureTrips + trip,
+            segments = fixtureSegments + ("sydney" to listOf(flight)),
+            flightStatuses = mapOf("XX100_2026-11-02_SYD" to status),
+        )
+        return TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+    }
+
+    @Test
+    fun trip_detail_flight_status() {
+        val viewModel = flightViewModel()
+        capture("trip_detail_flight_status") { TripDetailScreen(viewModel = viewModel, tripId = "sydney", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+    }
+
+    @Test
+    fun trip_detail_flight_status_dark() {
+        val viewModel = flightViewModel()
+        capture("trip_detail_flight_status_dark", dark = true) { TripDetailScreen(viewModel = viewModel, tripId = "sydney", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
     // A trip shared with the viewer: its violet SHARED label.

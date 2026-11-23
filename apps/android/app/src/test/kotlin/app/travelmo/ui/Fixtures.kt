@@ -1,5 +1,6 @@
 package app.travelmo.ui
 
+import app.travelmo.core.FlightStatus
 import app.travelmo.core.Place
 import app.travelmo.core.ProfileEntry
 import app.travelmo.core.ProfileField
@@ -127,6 +128,7 @@ class FakeTripStore(
     private val profile: TravelProfile? = fixtureProfile,
     private val shared: List<TravelProfile> = listOf(fixtureSharedProfile),
     private val gmailAccount: String? = null,
+    private val flightStatuses: Map<String, FlightStatus> = emptyMap(),
 ) : TripStore {
     override fun ownProfile(uid: String): Flow<OwnProfile> = flowOf(OwnProfile(profile))
     val reminders = mutableListOf<Boolean>()
@@ -157,6 +159,7 @@ class FakeTripStore(
     val deleted = mutableListOf<Pair<String, String>>()
     override fun trips(uid: String, email: String?): Flow<List<Trip>> = flowOf(trips)
     override fun segments(tripId: String): Flow<List<Segment>> = flowOf(segments[tripId].orEmpty())
+    override fun flightStatus(key: String): Flow<FlightStatus?> = flowOf(flightStatuses[key])
     override suspend fun saveSegment(tripId: String, draft: SegmentDraft, existingId: String?) {
         saved += Triple(tripId, draft, existingId)
     }

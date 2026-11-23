@@ -54,4 +54,14 @@ export const paths = {
   segments: (tripId: string) => `trips/${tripId}/segments`,
   segment: (tripId: string, segmentId: string) =>
     `trips/${tripId}/segments/${segmentId}`,
+  // A flight's live gates and carousel, one per flight (flightStatusKey):
+  // any signed-in client may read one it names; the parser alone writes.
+  flightStatus: (key: string) => `flightStatus/${key}`,
+  // Who is looking at a flight now, so overlapping looks make one call.
+  flightStatusClaim: (key: string) => `flightStatusClaims/${key}`,
+  // Flight news no browser or phone of a person took yet, to try again.
+  flightStatusNews: () => "flightStatusNews",
+  flightStatusNewsEntry: (id: string) => `flightStatusNews/${id}`,
+  // Flight-status calls per day across every user, against the daily cap.
+  flightStatusBudget: (day: string) => `flightStatusBudget/${day}`,
 } as const;

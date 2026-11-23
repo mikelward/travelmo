@@ -75,6 +75,18 @@ viewer's zone. Trip bounds are calendar dates.
   `GEOCODE_DAILY_LIMIT`; `geocodeRetries/{tripId__segmentId}` — `uid,
   tripId, segmentId, at`, a booking a spent budget left with a place to ask
   about another day. All three are the parser's alone.
+- `flightStatus/{key}` — `ident, date, origin, found, departureGate,
+  departureTerminal, arrivalGate, arrivalTerminal, baggageClaim,
+  scheduledOut, estimatedOut, actualOut, scheduledIn, estimatedIn,
+  actualIn, cancelled, checkedAt`: a flight's live gates and carousel, one
+  per flight (`key` is its number, local departure date and airport,
+  `QF1_2026-12-13_SYD`) and shared by everyone booked on it, times in UTC;
+  `flightStatusBudget/{day}` — `calls`, the day's count against
+  `FLIGHT_STATUS_DAILY_LIMIT`; `flightStatusClaims/{key}` — `until`, a
+  look at the flight under way; `flightStatusNews/{key__uid}` — `uid, key,
+  title, url, tag, attempts, at`, someone owed news of the flight. Any signed-in client may read a status by
+  the key its booking names, never list them; the parser alone writes all
+  four, and alone reads the other three.
 - `users/{uid}/parsedMessages/{sourceId}` — `outcome` (processing,
   filtered, not_booking, imported, failed), `source` (absent for Gmail,
   `tripit` or `ics` otherwise), `reason, from, subject, segmentIds[],
@@ -318,6 +330,69 @@ notification is kept within the payload a push service guarantees to carry
 lines wait on its page. Each send has a socket timeout, so one quiet
 endpoint cannot stall the run for everyone after it.
 
+## Live flight status
+
+A flight's card on the trip page says, near departure, where it leaves
+from and arrives at and where the bags come out ("Departs from terminal 1,
+gate 8 · Arrives at gate D46 · Bags on carousel 16"), and whoever has the
+trip gets a notification when one of them is given or changes ("Now
+departs from terminal 1, gate 9 (was terminal 1, gate 8)"). Only a field
+given a new value is news: nothing is said of one taken away, which is the
+source losing it, nor of a departure gate once the flight has left (`packages/core/src/flightStatus.ts`,
+mirrored in the Android app's core).
+
+The flight is read from the booking's title, which imports write as the
+airline code and number first ("BA 117 LHR to JFK"); a booking with no
+number there gets no status. The source is FlightAware AeroAPI
+(`apps/parser/src/aeroapi.ts`), asked for the number around the booked
+departure (twelve hours either side), taking the leg from the booking's
+airport that leaves closest to the booked time; FlightAware's own
+pushed alerts carry no gate or carousel, so the parser asks on a schedule.
+Cloud Scheduler calls `/internal/flight-status` every minute
+(`apps/parser/src/flightStatus.ts`), which finds the flight bookings near
+now (one collection-group query on `segments` by type and local start,
+widened by every offset a place can have), groups them by flight, and looks
+at each flight once for everyone on it when it is due: every minute from
+two hours before departure until it leaves (or half an hour after, if it
+has not), and from half an hour before landing until 45 minutes after, by
+the service's latest estimates; every quarter of an hour in between; a
+flight the service does not know, every quarter of an hour until an hour
+after it was due to leave; never for a cancelled one, or past 30 hours
+after the booked departure. An open trip page (web or app) asks
+`/flights/refresh` each minute while it is in front, which looks at its
+flights the same way from six hours before departure, at most once a
+minute each, so what is on screen at the airport is fresh between the
+scheduled looks; what it learns is news for everyone on the flight.
+
+A look first claims the flight for 30 seconds (in a transaction, only
+while the status is still the one it read), so overlapping looks, the job's
+and open trip pages', make one call between them; its answer replaces the
+status only if no other look wrote one since, so news is sent once. A gate,
+terminal or carousel the answer lacks is kept from the last one: the source
+losing a field for a look and finding it again is news neither way, and
+the card keeps saying where to go. A gate and its terminal go together: one
+is kept only while the other is unchanged, so a new terminal never shows
+with the old one's gate. The news
+goes to the owner of every trip holding the flight and the people it is
+shared with (by verified address), each once, on every browser and phone
+they turned notifications on for, through the same channels as reminders,
+titled with the booking and tagged per flight so a later one replaces it.
+Push services hold flight news for an offline browser or phone for half
+an hour, not the day reminders get, since directions to a gate are no use
+once the flight has gone. When every browser and phone of a person failed
+to take the news (not one reported gone), who is owed it waits in
+`flightStatusNews/{key__uid}` until news of the flight reaches them, and
+each scheduled run tries again, for half an hour or five tries, saying where
+the flight leaves from, arrives at and where the bags come out as its status
+says then, so a retry never gives a gate a later look has replaced; a
+retry changes or drops its entry only while it is the one it read, so it
+never discards a newer one a later failure left.
+The page shows a status from a day before departure until the looks stop,
+with a listener per flight only for those flights. `AEROAPI_KEY` turns it
+on; `FLIGHT_STATUS_DAILY_LIMIT` (default 1,000 calls) caps every user's
+calls together, and a capped day logs `flight_status_capped` and looks no
+more until the next.
+
 ## Editing by hand
 
 The owner and anyone the trip is shared with can add, edit and delete
@@ -450,6 +525,8 @@ shows once Travelmo runs installed.
   only `trustedEmails` (at most 20) and `updatedAt`, or starts the document
   with those and their own uid and email; the imported sections are the
   parser's alone.
+- A flight's status is readable by any signed-in user who names its key,
+  never listed and never written by a client.
 - `gmailAccounts` and `oauthStates` are closed to clients.
 - The worker uses the Admin SDK and bypasses rules.
 
@@ -1188,6 +1265,8 @@ build without one points to the web instead.
 | `POST /internal/pubsub/gmail` | OIDC from `INTERNAL_CALLERS` | Pub/Sub push target |
 | `POST /internal/backfill` | OIDC from `INTERNAL_CALLERS` | Pub/Sub push target for the mailbox reading's next batch |
 | `POST /internal/renew-watches` | OIDC from `INTERNAL_CALLERS` | Cloud Scheduler target |
+| `POST /internal/flight-status` | OIDC from `INTERNAL_CALLERS` | Cloud Scheduler target, every minute: looks at the flights due a look and sends their news ("Live flight status"); `{enabled: false}` without `AEROAPI_KEY` |
+| `POST /flights/refresh` | Firebase ID token | Looks at the flights of a trip the caller can see (`tripId`) that are due a refresh; 404 for a trip they cannot see |
 | `POST /forward/issue` | Firebase ID token | Issues the user's forwarding address, retiring any old one; returns it; 503 without `FORWARD_DOMAIN` |
 | `POST /forward/stop` | Firebase ID token | Retires the user's forwarding address |
 | `POST /inbound/cloudflare` | Bearer `INBOUND_SECRET` | The Email Worker's relay of one message (raw MIME, up to 2 MB, `X-Envelope-To`); 204 accepted, 404 no such address, 429 over the day's limit, 413 too large, 503 the model could not read it (the sender's server retries) |
@@ -1222,7 +1301,13 @@ booking is a rare thing beside imports. Reminders by email ride the
 operator's SMTP service, by push the browsers' own push services and
 Firebase Cloud Messaging for phones (free), which
 are free; the daily job is the fourth Cloud Scheduler job, about ten cents
-a month. Forwarding addresses ride Cloudflare Email Routing (free, unlimited
+a month. Live flight status is about 200 AeroAPI queries a flight at
+about half a US cent each (roughly $1 a flight, more for a long delay),
+shared by everyone on it; AeroAPI's Personal tier has no monthly minimum
+and its first $5 a month free, and covers personal and household use only
+(Standard, for anything wider, is $100 a month). Its Cloud Scheduler job
+runs every minute, still about ten cents a month, and each run is one
+small Firestore query. Forwarding addresses ride Cloudflare Email Routing (free, unlimited
 inbound) and one Email Worker (free plan: 100,000 requests a day), with
 the model cost of a Gmail import per forwarded email. The rules tests and CI run
 on GitHub-hosted runners; CI's deploys of the parser build on Cloud Build

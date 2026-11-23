@@ -2,7 +2,13 @@ package app.travelmo.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.travelmo.core.FlightStatus
 import app.travelmo.core.PersonDocuments
+import app.travelmo.core.flightRefreshDue
+import app.travelmo.core.flightStatusKey
+import app.travelmo.core.flightStatusLines
+import app.travelmo.core.flightStatusShown
+import app.travelmo.core.shownFlightKeys
 import app.travelmo.core.ListWarning
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentDraft
@@ -16,6 +22,8 @@ import app.travelmo.core.groupTrips
 import app.travelmo.core.listWarnings
 import app.travelmo.core.deviceId
 import app.travelmo.data.AccountDeletion
+import app.travelmo.data.FlightRefresh
+import app.travelmo.data.NoFlightRefresh
 import app.travelmo.data.NoAccountDeletion
 import app.travelmo.data.OwnProfile
 import app.travelmo.data.TripStore
@@ -34,6 +42,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -83,6 +93,8 @@ class TripsViewModel(
     private val pushDevice: PushDevice = NoPushDevice,
     /** The parser's account deletion; none by default. */
     private val accountDeletion: AccountDeletion = NoAccountDeletion,
+    /** The parser's look at an open trip's flights; none by default. */
+    private val flightRefresh: FlightRefresh = NoFlightRefresh,
 ) : ViewModel() {
     /** Today's date on this device, as grouping and the calendar read it. */
     fun today(): String = LocalDate.ofInstant(clock(), ZoneId.systemDefault()).toString()
@@ -152,6 +164,44 @@ class TripsViewModel(
     fun trip(id: String): Flow<Trip?> = trips.map { trips -> trips?.firstOrNull { it.id == id } }
 
     fun segments(tripId: String): Flow<List<Segment>> = store.segments(tripId)
+
+    /**
+     * The live status of a trip's flights near departure, by flight key: a
+     * listener per flight, only for the few within a day or so, re-chosen
+     * each minute as flights come into and go out of range.
+     */
+    fun flightStatuses(tripId: String): Flow<Map<String, FlightStatus>> =
+        combine(store.segments(tripId), now) { segments, now -> shownFlightKeys(segments, now) }
+            .distinctUntilChanged()
+            .flatMapLatest { keys ->
+                if (keys.isEmpty()) {
+                    flowOf(emptyMap())
+                } else {
+                    combine(keys.map { key -> store.flightStatus(key).map { key to it } }) { pairs ->
+                        pairs.mapNotNull { (key, status) -> status?.let { key to it } }.toMap()
+                    }
+                }
+            }
+
+    /** What a flight's row says of its gates and carousel now. */
+    fun flightLines(segment: Segment, statuses: Map<String, FlightStatus>): List<String> {
+        if (!flightStatusShown(segment, clock().toString())) return emptyList()
+        return flightStatusKey(segment)?.let { flightStatusLines(statuses[it]) }.orEmpty()
+    }
+
+    /**
+     * Has the trip's flights looked at when one is due a look (at most once
+     * a minute, from six hours before departure); the open trip page calls
+     * this every minute while it is in front.
+     */
+    suspend fun refreshFlights(tripId: String) {
+        val now = clock().toString()
+        val due = store.segments(tripId).first().any { segment ->
+            val key = flightStatusKey(segment)
+            key != null && flightStatusShown(segment, now) && flightRefreshDue(segment, store.flightStatus(key).first(), now)
+        }
+        if (due) flightRefresh.refresh(tripId)
+    }
 
     private val _outcomes = MutableStateFlow<Map<String, Outcome>>(emptyMap())
 

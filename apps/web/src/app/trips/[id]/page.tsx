@@ -19,7 +19,8 @@ import { useEntryRequirements } from "@/lib/visas";
 import { localToday } from "@/lib/dates";
 import { usePeopleDocuments, useTripWarnings } from "@/lib/documents";
 import { useTravelProfile } from "@/lib/travelProfile";
-import { useProfile, useSegments, useSenderPatterns, useTrip, useTrips } from "@/lib/trips";
+import { useNow, useProfile, useSegments, useSenderPatterns, useTrip, useTrips } from "@/lib/trips";
+import { flightLinesFor, useFlightRefresh, useFlightStatuses } from "@/lib/flightStatus";
 
 const buttonClass =
   "rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
@@ -266,6 +267,9 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   useSaveForOffline();
   const trip = useTrip(tripId);
   const segments = useSegments(tripId);
+  const now = useNow();
+  const flightStatuses = useFlightStatuses(segments, now);
+  useFlightRefresh(user, tripId, segments, flightStatuses, now);
   const patterns = useSenderPatterns(user.uid);
   const allTrips = useTrips(user);
   const profile = useProfile(user.uid);
@@ -365,6 +369,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
                     // Each email links for whoever imported it, from their mailbox.
                     emailLinks={{ uid: user.uid, account: profile?.gmail?.emailAddress, ownsTrip: isOwner }}
                     programs={programsFor(segment.provider, loyalty)}
+                    flightLines={flightLinesFor(segment, flightStatuses, now)}
                     {...(canEdit
                       ? {
                           onRate: (rating: number | null) => rateSegment(firestore(), trip.id, segment.id, rating).catch((e: Error) => setError(e.message)),

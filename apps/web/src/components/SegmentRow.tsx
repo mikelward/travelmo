@@ -101,6 +101,7 @@ export function SegmentRow({
   programs,
   onRate,
   onFavorite,
+  flightLines,
 }: {
   segment: Segment;
   onEdit?: () => void;
@@ -114,6 +115,8 @@ export function SegmentRow({
   // Stars and the favorite mark; without these the row only shows them.
   onRate?: (rating: number | null) => void;
   onFavorite?: (favorite: boolean) => void;
+  // A flight's live gates and carousel (flightStatusLines).
+  flightLines?: readonly string[];
 }) {
   const route = [place(segment.origin), place(segment.destination)].filter(Boolean).join(" → ");
   // Addresses an address pick recorded, under the route they belong to.
@@ -132,6 +135,11 @@ export function SegmentRow({
         <p className="font-medium">{segment.title}</p>
         {route && <p className="text-sm text-zinc-600 dark:text-zinc-400">{route}</p>}
         {times && <p className="text-sm text-zinc-600 dark:text-zinc-400">{times}</p>}
+        {flightLines && flightLines.length > 0 && (
+          <p className="text-sm font-medium text-amber-800 dark:text-amber-300" data-testid="segment-flight-status">
+            {flightLines.join(" · ")}
+          </p>
+        )}
         {addresses && <p className="mt-1 text-xs text-muted">{addresses}</p>}
         {(segment.confirmation || segment.provider) && (
           <p className="mt-1 text-xs text-muted">

@@ -234,6 +234,23 @@ service cloud.firestore {
     match /pendingConnections/{token} {
       allow read, write: if false;
     }
+    // A flight's live gates and carousel, one per flight and shared by
+    // everyone booked on it: public flight data, read by the id a booking
+    // names (never listed, so nobody learns which flights others take);
+    // the parser alone writes them and their daily budget.
+    match /flightStatus/{key} {
+      allow get: if signedIn();
+      allow list, write: if false;
+    }
+    match /flightStatusBudget/{day} {
+      allow read, write: if false;
+    }
+    match /flightStatusClaims/{key} {
+      allow read, write: if false;
+    }
+    match /flightStatusNews/{id} {
+      allow read, write: if false;
+    }
     // The geocoder's cache and daily budget: the parser's alone.
     match /geocodes/{key} {
       allow read, write: if false;

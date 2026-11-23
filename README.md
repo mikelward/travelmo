@@ -313,6 +313,12 @@ One Google Cloud project holds everything.
    (default 300, within the API's free monthly allowance; answers are
    cached, so a place name is asked about once ever), and a place that has
    its country and wants only its spot for the map may use half of it.
+   `AEROAPI_KEY` (from Secret Manager; a FlightAware AeroAPI key, from
+   flightaware.com/aeroapi) turns on live gates and baggage carousels
+   (SPEC "Live flight status"); without it flights show none.
+   `FLIGHT_STATUS_DAILY_LIMIT` caps AeroAPI calls per day across all users
+   (default 1,000, about $5). The Personal tier covers personal and
+   household use only.
    `SMTP_HOST`, `SMTP_PORT` (default 465, TLS from the start; 587 upgrades),
    `SMTP_USERNAME` and `SMTP_PASSWORD` (from Secret Manager) and `SMTP_FROM`
    turn on reminders by email, sent through whatever mail service the
@@ -344,16 +350,19 @@ One Google Cloud project holds everything.
    `BACKFILL_PUBSUB_TOPIC` values for the parser. Rerun it to change a
    setting. It uses `gcloud beta`, which gcloud offers to install on first
    use.
-5. **Daily jobs**: `PROJECT=… LOCATION=<region> PARSER_URL=https://<parser>
-   SCHEDULER_SA=<service account> deploy/scheduler.sh` creates four Cloud
+5. **Scheduled jobs**: `PROJECT=… LOCATION=<region> PARSER_URL=https://<parser>
+   SCHEDULER_SA=<service account> deploy/scheduler.sh` creates five Cloud
    Scheduler jobs that POST with an OIDC token from that service account
    (list it in `INTERNAL_CALLERS`): `/internal/renew-watches`, since Gmail
    watches expire after seven days, `/internal/poll-feeds`, which reads
    every subscribed calendar feed, `/internal/geocode-sweep`, which asks
    the geocoder again about the bookings a spent daily budget put off, and
    `/internal/reminders`, which sends the day's reminders by email and
-   push. Three jobs per billing account are free; the fourth costs about
-   ten cents a month.
+   push, daily, and `/internal/flight-status`, which looks at the flights
+   near departure or arrival, every minute. Three jobs per billing account
+   are free; each further one costs about ten cents a month. Deploy the
+   Firestore indexes first: the flight status job queries bookings by type
+   and start across trips.
 6. **Alerts**: `PROJECT=… CHANNEL=<notification channel> deploy/monitoring.sh`
    creates two alerting policies from `deploy/alerts/`: a failed watch renewal
    (the parser's `renew_watch_failed` log line) and a dead-lettered
