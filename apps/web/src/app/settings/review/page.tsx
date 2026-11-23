@@ -1,6 +1,6 @@
 "use client";
 
-import { dayRange, toReview, type ParsedMessage, type ReviewSearch } from "@travelmo/core";
+import { dayRange, toReview, withLatest, type ParsedMessage, type ReviewSearch } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
 import { useState } from "react";
@@ -9,14 +9,15 @@ import { api } from "@/lib/api";
 import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
 import { domainOf, effectiveDecision, learnSender } from "@/lib/patterns";
-import { useParsedMessages, useSenderPatterns } from "@/lib/trips";
+import { useAllParsedMessages, useParsedMessages, useSenderPatterns } from "@/lib/trips";
 
 const buttonClass =
   "rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
 
 const fieldClass = "mt-1 rounded-lg border border-field bg-background px-3 py-2";
 
-// How many records the list loads, newest first, within any dates picked.
+// How many records the list shows, newest first, until a search looks
+// through them all.
 const recent = 100;
 
 const outcomeLabels: Record<ParsedMessage["outcome"], string> = {
@@ -30,12 +31,15 @@ const outcomeLabels: Record<ParsedMessage["outcome"], string> = {
 
 function ReviewList({ user }: { user: User }) {
   const [search, setSearch] = useState<ReviewSearch>({ keyword: "", from: "", to: "" });
-  const records = useParsedMessages(user.uid, recent, dayRange(search.from, search.to));
+  const searching = Boolean(search.keyword.trim() || search.from || search.to);
+  const latest = useParsedMessages(user.uid, recent);
+  const all = useAllParsedMessages(user.uid, searching);
+  // A search's records are read once; the live latest show any read again since.
+  const records = searching ? (all ? withLatest(all.records, latest ?? []) : undefined) : latest;
   const patterns = useSenderPatterns(user.uid);
   const [busy, setBusy] = useState<string>();
   const [notice, setNotice] = useState<Record<string, string>>({});
-  const shown = records ? toReview(records, search.keyword) : [];
-  const searching = Boolean(search.keyword.trim() || search.from || search.to);
+  const shown = records ? toReview(records, search.keyword, dayRange(search.from, search.to)) : [];
 
   const act = async (record: ParsedMessage, action: () => Promise<string>) => {
     setBusy(record.messageId);
@@ -80,7 +84,7 @@ function ReviewList({ user }: { user: User }) {
           </button>
         )}
       </form>
-      {records && shown.length === 0 && <p className="mt-3 text-sm text-muted">{searching ? "Nothing matches." : "Nothing to review."}</p>}
+      {records && shown.length === 0 && (!searching || all?.done) && <p className="mt-3 text-sm text-muted">{searching ? "Nothing matches." : "Nothing to review."}</p>}
       <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
         {shown.map((record) => {
           // Records from other sources have no sender to teach and no email
@@ -132,9 +136,10 @@ function ReviewList({ user }: { user: User }) {
           );
         })}
       </ul>
-      {records && records.length === recent && (
-        <p className="mt-3 text-sm text-muted">Only the {recent} most recent are searched. Pick dates to look further back.</p>
+      {!searching && latest && latest.length === recent && (
+        <p className="mt-3 text-sm text-muted">Showing the {recent} most recent. Search to find older ones.</p>
       )}
+      {searching && all && !all.done && <p className="mt-3 text-sm text-muted">Searching…</p>}
     </section>
   );
 }
