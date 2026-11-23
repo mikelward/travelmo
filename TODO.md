@@ -379,6 +379,19 @@
 - [ ] Residence and visa days on Android: a date picker, as the web has
       (it counts to today), and the stays and time away past the latest
       five.
+- [ ] Mailboxes beyond Gmail, read as Gmail is (new mail and the whole
+      history), with several connected at once:
+  - [x] The parser reads mail through a `MailSource` (search a page,
+        fetch a message), Gmail its first implementation.
+  - [ ] Fastmail over JMAP with a read-only API token from Settings
+        (web and Android): new mail polled, the backfill chain per
+        mailbox, `source: "fastmail"`.
+  - [ ] Move the Gmail connection into the same list of mailboxes
+        (`users/{uid}.gmail` and `private/gmail` migrated).
+  - [ ] Ask Fastmail's partnerships team for an OAuth client with a mail
+        read scope, so connecting is one tap instead of a pasted token.
+  - [ ] Maybe: IMAP with app passwords (iCloud, Yahoo, Infomaniak),
+        once the risk of holding full-mailbox passwords is handled.
 
 ## iOS app
 
