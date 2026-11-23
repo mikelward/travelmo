@@ -224,6 +224,10 @@ export type ChainIo<S> = {
   sleep: (ms: number) => Promise<void>;
   // A fresh id for a message that carries a waiting reading on.
   newWake: () => string;
+  // Run once when the reading reaches the end of the mailbox: bookings
+  // were filed in the order their emails were read, so this files them
+  // again in the order they happen (regroupTrips).
+  finished?: () => Promise<void>;
 };
 
 // Queues a batch and records that it is queued. A failure to record it is
@@ -372,6 +376,15 @@ export async function continueBackfill<S>(message: ContinueMessage, io: ChainIo<
   if (!progress) return { kind: "superseded", batch };
   // A failure here fails the push, and Pub/Sub's next attempt queues it.
   if (progress.running) await queue(following, io);
+  if (progress.done && io.finished) {
+    try {
+      await io.finished();
+    } catch (error) {
+      // The bookings are all in; only their grouping waits, and Settings'
+      // "Regroup trips" does the same. Failing the push would read again.
+      io.log("ERROR", "backfill_finish_failed", { uid: message.uid, run: message.run, ...errorFields(error) });
+    }
+  }
   return { kind: "ran", batch, progress };
 }
 

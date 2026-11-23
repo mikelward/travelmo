@@ -1202,7 +1202,11 @@ them, the travel profile, home corrections, connections and feeds stay.
 
 Trips filed before home was known are rebuilt on request ("Regroup trips"
 in Settings, `POST /trips/regroup`, `apps/parser/src/regroup.ts`), in the
-import's per-user transaction. Each booking, the segments that share any
+import's per-user transaction. "Import past bookings" does the same once
+it reaches the end of the mailbox, since it files bookings in the order
+their emails are read: a car hire read before its flight would otherwise
+start a trip of its own. A regroup that fails there is logged and leaves
+the reading done; the bookings are all in. Each booking, the segments that share any
 source kept together (an outbound from one email and the return a later
 email filed beside it stay one), is filed again in the order they happen with the same
 decision as an import. Each resulting trip keeps the existing trip holding
