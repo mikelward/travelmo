@@ -145,9 +145,9 @@ class DocumentsTest {
 
     @Test
     fun `reads loyalty numbers found in emails and drops malformed ones`() {
-        val found = mapOf("program" to "Cove Club", "number" to "CC 4455", "status" to "Member", "messageId" to "m1", "label" to "Your stay at Cove", "at" to "2026-11-01T00:00:00Z")
+        val found = mapOf("program" to "Cove Club", "number" to "CC 4455", "status" to "Member", "messageId" to "m1", "label" to "Your stay at Cove", "at" to "2026-11-01T00:00:00Z", "balance" to "1,200 points", "balanceAt" to "2026-10-31T00:00:00Z")
         val profile = profileFromDocument(mapOf("ownerUid" to "u1", "foundLoyalty" to listOf(found, mapOf("program" to "No number"), "junk")))!!
-        profile.foundLoyalty shouldBe listOf(FoundLoyalty("Cove Club", "CC 4455", status = "Member", messageId = "m1", label = "Your stay at Cove", at = "2026-11-01T00:00:00Z"))
+        profile.foundLoyalty shouldBe listOf(FoundLoyalty("Cove Club", "CC 4455", status = "Member", messageId = "m1", label = "Your stay at Cove", at = "2026-11-01T00:00:00Z", balance = "1,200 points", balanceAt = "2026-10-31T00:00:00Z"))
         profile.hasDetails shouldBe true
     }
 }

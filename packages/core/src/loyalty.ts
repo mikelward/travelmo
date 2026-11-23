@@ -133,9 +133,29 @@ const sameMembership = (a: Pick<FoundLoyalty, "program" | "number">, b: Pick<Fou
 // the list is full.
 export function withFoundLoyalty(found: readonly FoundLoyalty[], seen: FoundLoyalty): FoundLoyalty[] {
   const before = found.find((f) => sameMembership(f, seen));
-  const holder = seen.holder ?? before?.holder;
-  const status = seen.status ?? before?.status;
-  const merged = before ? { ...before, ...seen, ...(holder ? { holder } : {}), ...(status ? { status } : {}) } : seen;
+  // A balance keeps the subject of the email it came from.
+  const withSource = (f: FoundLoyalty): FoundLoyalty => (f.balance && f.label && !f.balanceLabel ? { ...f, balanceLabel: f.label } : f);
+  if (!before) return [...found, withSource(seen)].slice(-maxFoundLoyalty);
+  // The newest balance wins, and apart from it the newest status: a
+  // statement read late, or an email with neither, does not undo a newer one.
+  const newerBalance = !!seen.balance && (!before.balanceAt || (!!seen.balanceAt && seen.balanceAt >= before.balanceAt));
+  const source = withSource(newerBalance ? seen : before);
+  const newerStatus = !!seen.status && (!before.statusAt || (!!seen.statusAt && seen.statusAt >= before.statusAt));
+  const statusFrom = newerStatus || !before.status ? seen : before;
+  const holder = seen.holder ?? before.holder;
+  const { balance: _balance, balanceAt: _balanceAt, balanceLabel: _balanceLabel, holder: _holder, status: _status, statusAt: _statusAt, ...rest } = {
+    ...before,
+    ...seen,
+  };
+  const merged: FoundLoyalty = {
+    ...rest,
+    ...(holder ? { holder } : {}),
+    ...(statusFrom.status ? { status: statusFrom.status } : {}),
+    ...(statusFrom.status && statusFrom.statusAt ? { statusAt: statusFrom.statusAt } : {}),
+    ...(source.balance ? { balance: source.balance } : {}),
+    ...(source.balance && source.balanceAt ? { balanceAt: source.balanceAt } : {}),
+    ...(source.balance && source.balanceLabel ? { balanceLabel: source.balanceLabel } : {}),
+  };
   return [...found.filter((f) => f !== before), merged].slice(-maxFoundLoyalty);
 }
 
@@ -157,6 +177,7 @@ export function foundLoyaltyEntry(found: FoundLoyalty): ProfileEntry {
     title: found.program,
     fields: [
       { label: "Account number", value: found.number },
+      ...(found.balance ? [{ label: "Balance", value: found.balance }] : []),
       ...(found.status ? [{ label: "Status", value: found.status }] : []),
       ...(found.holder ? [{ label: "Name", value: found.holder }] : []),
       { label: "From email", value: found.label ?? "A booking email" },
@@ -165,8 +186,34 @@ export function foundLoyaltyEntry(found: FoundLoyalty): ProfileEntry {
 }
 
 // Every program on a profile: what TripIt imported, then what emails showed
-// that TripIt did not already have (by number).
-export function allLoyalty(profile: Pick<TravelProfile, "loyalty" | "foundLoyalty">): ProfileEntry[] {
-  const imported = new Set(profile.loyalty.map((e) => loyaltySummary(e).account).filter((a): a is string => !!a).map(plainNumber));
-  return [...profile.loyalty, ...(profile.foundLoyalty ?? []).filter((f) => !imported.has(plainNumber(f.number))).map(foundLoyaltyEntry)];
+// that it did not have (by number). A statement newer than the TripIt upload
+// brings its balance and status to the imported program it matches, ahead
+// of the imported ones, which the table reads first.
+export function allLoyalty(profile: Pick<TravelProfile, "loyalty" | "foundLoyalty" | "importedAt">): ProfileEntry[] {
+  const found = profile.foundLoyalty ?? [];
+  // One membership: the same number in the same program (sameMembership).
+  const matching = (entry: ProfileEntry) => {
+    const account = loyaltySummary(entry).account;
+    return account ? (f: FoundLoyalty) => sameMembership(f, { program: entry.title, number: account }) : () => false;
+  };
+  // Newer than the TripIt upload, so it has the last word (no upload: it has).
+  const afterUpload = (at: string | undefined) => !!at && (!profile.importedAt || at > profile.importedAt);
+  const imported = profile.loyalty.map((entry) => {
+    const statement = found.find(matching(entry));
+    const balance = statement?.balance && afterUpload(statement.balanceAt) ? statement.balance : undefined;
+    const status = statement?.status && afterUpload(statement.statusAt) ? statement.status : undefined;
+    if (!statement || (!balance && !status)) return entry;
+    // Under the labels the table reads first, so the email's win.
+    return {
+      ...entry,
+      fields: [
+        ...(balance ? [{ label: "Balance", value: balance }] : []),
+        ...(status ? [{ label: "Elite status", value: status }] : []),
+        ...entry.fields,
+        ...(balance ? [{ label: "Balance from email", value: statement.balanceLabel ?? statement.label ?? "A statement" }] : []),
+      ],
+    };
+  });
+  const shown = (f: FoundLoyalty) => profile.loyalty.some((entry) => matching(entry)(f));
+  return [...imported, ...found.filter((f) => !shown(f)).map(foundLoyaltyEntry)];
 }

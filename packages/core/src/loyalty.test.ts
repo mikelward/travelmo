@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allLoyalty, couldBeOwner, formatBalance, loyaltyLine, loyaltySummary, nameWords, programsFor, withFoundLoyalty } from "./loyalty";
+import { allLoyalty, couldBeOwner, foundLoyaltyEntry, formatBalance, loyaltyLine, loyaltySummary, nameWords, programsFor, withFoundLoyalty } from "./loyalty";
 import { maxFoundLoyalty, type FoundLoyalty, type ProfileEntry } from "./schema";
 
 // Invented programs and numbers.
@@ -116,6 +116,55 @@ describe("loyalty from emails", () => {
     const again = withFoundLoyalty(first, seen("12345678", { messageId: "m2", at: "2026-11-05T00:00:00Z" }));
     expect(again).toEqual([seen("12345678", { messageId: "m2", at: "2026-11-05T00:00:00Z", status: "Silver" })]);
     expect(withFoundLoyalty(again, seen("999")).map((f) => f.number)).toEqual(["12345678", "999"]);
+  });
+
+  it("keeps the newest balance, with its status, whatever order statements arrive in", () => {
+    const march = seen("123", { balance: "9,000 points", balanceAt: "2026-03-01T00:00:00Z", status: "Silver", statusAt: "2026-03-01T00:00:00Z" });
+    const april = seen("123", { messageId: "m2", balance: "12,400 points", balanceAt: "2026-04-01T00:00:00Z", status: "Gold", statusAt: "2026-04-01T00:00:00Z" });
+    const [latest] = withFoundLoyalty(withFoundLoyalty([], april), march);
+    expect(latest).toMatchObject({ balance: "12,400 points", balanceAt: "2026-04-01T00:00:00Z", status: "Gold", balanceLabel: "Your booking" });
+    // A booking email with no balance leaves it as the statement said.
+    const [after] = withFoundLoyalty([latest!], seen("123", { messageId: "m3" }));
+    expect(after).toMatchObject({ balance: "12,400 points", status: "Gold", messageId: "m3" });
+    expect(Object.values(after!)).not.toContain(undefined);
+    // The balance still names the statement it came from.
+    const april2 = seen("123", { messageId: "m2", label: "April statement", balance: "12,400 points", balanceAt: "2026-04-01T00:00:00Z" });
+    const march2 = seen("123", { label: "March statement", balance: "9,000 points", balanceAt: "2026-03-01T00:00:00Z" });
+    const [kept] = withFoundLoyalty(withFoundLoyalty([], april2), march2);
+    expect(kept).toMatchObject({ label: "March statement", balance: "12,400 points", balanceLabel: "April statement" });
+    const imported = { title: "Example Air Club", fields: [{ label: "Account number", value: "123" }] };
+    expect(allLoyalty({ loyalty: [imported], foundLoyalty: [kept!] })[0]!.fields.at(-1)).toEqual({ label: "Balance from email", value: "April statement" });
+    expect(loyaltySummary(foundLoyaltyEntry(after!))).toMatchObject({ balance: "12,400 points", status: "Gold" });
+  });
+
+  it("brings a newer statement's balance and status to the program TripIt imported", () => {
+    const imported = { title: "Emerald Club", fields: [{ label: "Account number", value: "EC 77" }, { label: "Balance", value: "1" }, { label: "Elite status", value: "Member" }] };
+    const statement = seen("EC77", { program: "Emerald Club", balance: "3 free rental days", balanceAt: "2026-11-01T00:00:00Z", status: "Executive", statusAt: "2026-11-01T00:00:00Z", label: "Your Emerald Club eStatement" });
+    const newer = allLoyalty({ loyalty: [imported], foundLoyalty: [statement], importedAt: "2026-06-01T00:00:00Z" });
+    expect(newer).toHaveLength(1);
+    expect(loyaltySummary(newer[0]!)).toMatchObject({ account: "EC 77", balance: "3 free rental days", status: "Executive" });
+    expect(newer[0]!.fields.at(-1)).toEqual({ label: "Balance from email", value: "Your Emerald Club eStatement" });
+    // A TripIt upload after the statement is the newer word.
+    const older = allLoyalty({ loyalty: [imported], foundLoyalty: [statement], importedAt: "2026-11-20T00:00:00Z" });
+    expect(loyaltySummary(older[0]!)).toMatchObject({ balance: "1", status: "Member" });
+  });
+
+  it("brings a statement only to the same program, whatever the number", () => {
+    const air = { title: "Example Air Club", fields: [{ label: "Account number", value: "123" }, { label: "Balance", value: "10" }] };
+    const hotel = seen("123", { program: "Sample Hotels Rewards", balance: "999", balanceAt: "2026-11-01T00:00:00Z" });
+    const all = allLoyalty({ loyalty: [air], foundLoyalty: [hotel] });
+    expect(loyaltySummary(all[0]!)).toMatchObject({ title: "Example Air Club", balance: "10" });
+    expect(loyaltySummary(all[1]!)).toMatchObject({ title: "Sample Hotels Rewards", balance: "999" });
+  });
+
+  it("takes a newer status from an email with no balance, keeping the statement's balance", () => {
+    const statement = seen("123", { label: "November statement", balance: "41,000 miles", balanceAt: "2026-11-01T00:00:00Z", status: "Silver", statusAt: "2026-11-01T00:00:00Z" });
+    const booking = seen("123", { messageId: "m2", label: "Your flight", status: "Gold", statusAt: "2026-11-20T00:00:00Z" });
+    const [after] = withFoundLoyalty(withFoundLoyalty([], statement), booking);
+    expect(after).toMatchObject({ status: "Gold", statusAt: "2026-11-20T00:00:00Z", balance: "41,000 miles", balanceLabel: "November statement" });
+    // An older status read late does not undo it.
+    const [still] = withFoundLoyalty([after!], seen("123", { messageId: "m3", status: "Member", statusAt: "2026-10-01T00:00:00Z" }));
+    expect(still).toMatchObject({ status: "Gold" });
   });
 
   it("knows a program with no distinctive word by its name", () => {

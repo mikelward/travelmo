@@ -87,6 +87,57 @@ describe("importMessage", () => {
     });
   });
 
+  it("keeps a travel statement's balance, though it is no booking, and skips an old one", async () => {
+    const store = memoryStore();
+    const statement: ExtractedBooking = {
+      isBooking: false,
+      segments: [],
+      memberships: [{ program: "Emerald Club", number: "EC 77", status: "Executive", balance: "3 free rental days" }],
+    };
+    const mail = email({
+      from: "Emerald Club <EmeraldClub@email.emeraldclub.com>",
+      subject: "Account notification: we're pleased to present your Emerald Club eStatement",
+      date: "Sun, 1 Nov 2026 08:00:00 +0000",
+    });
+    expect(await importMessage("u1", mail, deps(store, async () => statement))).toBe("not_booking");
+    expect(store.foundLoyalty.get("u1")).toEqual([
+      expect.objectContaining({ program: "Emerald Club", number: "EC 77", balance: "3 free rental days", balanceAt: "2026-11-01T08:00:00.000Z" }),
+    ]);
+
+    let asked = false;
+    const old = email({ ...mail, id: "m2", date: "Mon, 1 Jun 2026 08:00:00 +0000" });
+    const outcome = await importMessage("u1", old, deps(store, async () => {
+      asked = true;
+      return statement;
+    }));
+    expect(outcome).toBe("filtered");
+    expect(asked).toBe(false);
+    expect(store.parsed.get("u1/m2")).toMatchObject({ outcome: "filtered", reason: "old loyalty statement" });
+  });
+
+  it("keeps a statement's balance when it is read on request or forwarded, which skip the pre-filter", async () => {
+    const statement: ExtractedBooking = { isBooking: false, segments: [], memberships: [{ program: "MileagePlus", number: "MP 5", balance: "41,000 miles" }] };
+    const requested = memoryStore();
+    const mail = email({ from: "MileagePlus Statement <MyMileagePlus@enews.united.com>", subject: "November statement: Cardmembers save 10% or more on flights booked with miles" });
+    expect(await importMessage("u1", mail, deps(requested, async () => statement), { force: true })).toBe("not_booking");
+    expect(requested.foundLoyalty.get("u1")).toEqual([expect.objectContaining({ program: "MileagePlus", balance: "41,000 miles" })]);
+
+    const forwarded = memoryStore();
+    const fwd = email({
+      from: "Me <me@example.com>",
+      subject: "Fwd: November statement",
+      text: "---------- Forwarded message ---------\nFrom: MileagePlus Statement <MyMileagePlus@enews.united.com>\nDate: Sun, 1 Nov 2026 08:00:00 +0000\nSubject: November statement\n\nYour balance is 41,000 miles.",
+    });
+    expect(await importMessage("u1", fwd, deps(forwarded, async () => statement), { force: true, source: "forward" })).toBe("not_booking");
+    expect(forwarded.foundLoyalty.get("u1")).toEqual([expect.objectContaining({ program: "MileagePlus", balance: "41,000 miles" })]);
+
+    // Read on request, a shop's statement is still no travel statement.
+    const shop = memoryStore();
+    const clubcard = email({ from: "Example Mart <rewards@examplemart.example>", subject: "Your points statement" });
+    await importMessage("u1", clubcard, deps(shop, async () => statement), { force: true });
+    expect(shop.foundLoyalty.get("u1")).toBeUndefined();
+  });
+
   it("keeps the owner's loyalty numbers from a booking email, not a fellow traveler's", async () => {
     const store = memoryStore();
     store.ownerNames.set("u1", "Jane Example");
@@ -101,11 +152,24 @@ describe("importMessage", () => {
     const outcome = await importMessage("u1", email({ subject: "Your flight to Dublin" }), { ...deps(store, async () => withNumbers), log: (event, fields) => void logged.push({ event, ...fields }) });
     expect(outcome).toBe("imported");
     expect(store.foundLoyalty.get("u1")).toEqual([
-      { program: "Example Air Club", number: "EA 123 456", holder: "MS J EXAMPLE", status: "Silver", messageId: "m1", label: "Your flight to Dublin", at: expect.any(String) },
+      { program: "Example Air Club", number: "EA 123 456", holder: "MS J EXAMPLE", status: "Silver", statusAt: "2026-11-01T10:00:00.000Z", messageId: "m1", label: "Your flight to Dublin", at: expect.any(String) },
     ]);
     // Counts only: the numbers never reach the logs.
     expect(logged).toContainEqual({ event: "memberships", uid: "u1", messageId: "m1", found: 2, kept: 1 });
     expect(JSON.stringify(logged)).not.toContain("EA 123 456");
+  });
+
+  it("keeps no membership from an email that books no travel, nor from one that is no booking", async () => {
+    const store = memoryStore();
+    const appointment: ExtractedBooking = {
+      isBooking: true,
+      segments: [{ type: "activity", title: "Example Clinic appointment", start: "2026-12-12T10:00:00+00:00", destination: { name: "Example Clinic", city: "Liverpool", country: "GB" } }],
+      memberships: [{ program: "Example Health Plan", number: "HP 123" }],
+    };
+    expect(await importMessage("u1", email({ id: "m1" }), deps(store, async () => appointment))).toBe("imported");
+    const notice: ExtractedBooking = { isBooking: false, segments: [], memberships: [{ program: "Example Party", number: "P 9" }] };
+    expect(await importMessage("u1", email({ id: "m2", subject: "Your booking: membership renewal" }), deps(store, async () => notice))).toBe("not_booking");
+    expect(store.foundLoyalty.get("u1")).toBeUndefined();
   });
 
   it("imports the booking even when keeping its loyalty numbers fails", async () => {

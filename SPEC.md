@@ -1329,9 +1329,31 @@ TripIt imported, then what emails showed that it did not have by number,
 each noting the email it came from. "Found in your emails" on the owner's
 own Profile lists them with Remove, since the extraction is sometimes
 wrong; the Android Profile tab and booking rows show them the same way,
-with the same Remove. Nothing is logged but counts. Balances and status from loyalty
-statement emails (an Emerald Club eStatement, say) are not read: those are
-not bookings, and the pre-filter drops them.
+with the same Remove. Nothing is logged but counts.
+
+Numbers are kept only from an email that books travel (a flight, train,
+bus, ferry, stay or car): a ticket or an appointment that shows a member
+number keeps nothing, and the model is told to list travel programs only,
+never a shop's, a card's, or a medical, political, union or other
+membership.
+
+A travel program's statement ("Account notification: we're pleased to
+present your Emerald Club eStatement", "November statement: …" from
+MileagePlus) is read for the balance and status, though it is no booking:
+the pre-filter passes a subject with a statement word ("statement",
+"eStatement", "account summary", "points balance") only from a travel
+company's own domain (`travelLoyaltyDomains`: airlines, hotel groups, car
+rental companies) or a sender the user always imports, so a shop's,
+supermarket's, bank's or insurer's statement never reaches the model. One
+more than 60 days old is skipped, so reading a whole mailbox does not send
+every old statement; that reading's Gmail search asks for those domains'
+statements of the last 60 days beside its booking subjects. One forwarded,
+or read again on request (both skip the pre-filter), is still known by its
+original sender and subject (`isTravelStatement`). Its balance is kept as of the email's date
+(`balanceAt`), and an older one never replaces a newer, with the status it
+came with; the loyalty table shows it. A statement newer than the last
+TripIt upload (`importedAt`) for a program TripIt imported brings its
+balance and status to that program's row, noting the email.
 
 ### Calendar files
 

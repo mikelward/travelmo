@@ -75,14 +75,49 @@ fun foundLoyaltyEntry(found: FoundLoyalty): ProfileEntry = ProfileEntry(
     found.program,
     buildList {
         add(ProfileField("Account number", found.number))
+        found.balance?.let { add(ProfileField("Balance", it)) }
         found.status?.let { add(ProfileField("Status", it)) }
         found.holder?.let { add(ProfileField("Name", it)) }
         add(ProfileField("From email", found.label ?: "A booking email"))
     },
 )
 
-/** Every program on a profile: what TripIt imported, then what emails showed that it did not already have (by number). */
+/**
+ * Every program on a profile: what TripIt imported, then what emails showed
+ * that it did not have (by number). A statement newer than the TripIt upload
+ * brings its balance and status to the imported program it matches, ahead of
+ * the imported ones, which the table reads first.
+ */
 fun allLoyalty(profile: TravelProfile): List<ProfileEntry> {
-    val imported = profile.loyalty.mapNotNull { loyaltySummary(it).account }.map(::plainNumber).toSet()
-    return profile.loyalty + profile.foundLoyalty.filter { plainNumber(it.number) !in imported }.map(::foundLoyaltyEntry)
+    // One membership: the same number in the same program, as the parser keeps them.
+    fun matches(entry: ProfileEntry, found: FoundLoyalty): Boolean {
+        val account = loyaltySummary(entry).account ?: return false
+        return plainNumber(account) == plainNumber(found.number) && sameProgram(entry.title, found.program)
+    }
+    // Newer than the TripIt upload, so it has the last word (no upload: it has).
+    fun afterUpload(at: String?) = at != null && (profile.importedAt == null || at > profile.importedAt)
+    val imported = profile.loyalty.map { entry ->
+        val statement = profile.foundLoyalty.firstOrNull { matches(entry, it) }
+        val balance = statement?.balance?.takeIf { afterUpload(statement.balanceAt) }
+        val status = statement?.status?.takeIf { afterUpload(statement.statusAt) }
+        if (statement == null || (balance == null && status == null)) {
+            entry
+        } else {
+            // Under the labels the table reads first, so the email's win.
+            ProfileEntry(
+                entry.title,
+                buildList {
+                    balance?.let { add(ProfileField("Balance", it)) }
+                    status?.let { add(ProfileField("Elite status", it)) }
+                    addAll(entry.fields)
+                    if (balance != null) add(ProfileField("Balance from email", statement.balanceLabel ?: statement.label ?: "A statement"))
+                },
+            )
+        }
+    }
+    return imported + profile.foundLoyalty.filter { found -> profile.loyalty.none { matches(it, found) } }.map(::foundLoyaltyEntry)
 }
+
+// One program by its name as written, else by a distinctive word in common.
+private fun sameProgram(a: String, b: String): Boolean =
+    a.trim().equals(b.trim(), ignoreCase = true) || nameWords(a).any { it in nameWords(b) }

@@ -244,6 +244,12 @@ describe("searchMessagePage", () => {
     expect(backfillQuery.match(/\{/g)).toHaveLength(1);
   });
 
+  it("searches travel programs' recent statements as well as bookings", () => {
+    expect(backfillQuery).toContain("newer_than:60d from:(emeraldclub.com OR");
+    expect(backfillQuery).toContain("united.com");
+    expect(backfillQuery).toMatch(/subject:\(statement OR estatement/);
+  });
+
   it("stops early when time runs short and carries on from the same page next time", async () => {
     const ids = Array.from({ length: 25 }, (_, i) => `m${i}`);
     const imported = new Set<string>();

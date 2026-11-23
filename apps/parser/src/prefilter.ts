@@ -22,6 +22,67 @@ const subjectKeywords =
 const subjectNoise =
   /\b(newsletter|sale|deal|offer|discount|% off|save up to|last chance|flash|points|miles|survey|feedback|how was|rate your|unsubscribe|password|verify your|welcome to)\b/i;
 
+// A travel loyalty program's statement ("your Emerald Club eStatement",
+// "Avios balance"): read for the balance and status, not a booking. Only from
+// a travel company's own domain (an airline, hotel group or car rental
+// company, `travelLoyaltyDomains`) or a sender the user always imports:
+// shops, supermarkets, coffee chains and card issuers send statements too,
+// and those never reach the model.
+const statementWords = /\b(e-?statements?|statements?|account summary|(points|miles|avios) balance|balance update)\b/i;
+export const statementReason = "loyalty statement";
+
+export const travelLoyaltyDomains = [
+  "emeraldclub.com",
+  "nationalcar.com",
+  "alamo.com",
+  "avis.com",
+  "budget.com",
+  "enterprise.com",
+  "hertz.com",
+  "sixt.com",
+  "europcar.com",
+  "avios.com",
+  "britishairways.com",
+  "ba.com",
+  "virginatlantic.com",
+  "flyingblue.com",
+  "airfrance.com",
+  "klm.com",
+  "lufthansa.com",
+  "miles-and-more.com",
+  "united.com",
+  "delta.com",
+  "aa.com",
+  "southwest.com",
+  "jetblue.com",
+  "alaskaair.com",
+  "aircanada.com",
+  "emirates.com",
+  "qatarairways.com",
+  "singaporeair.com",
+  "cathaypacific.com",
+  "qantas.com",
+  "marriott.com",
+  "hilton.com",
+  "ihg.com",
+  "hyatt.com",
+  "accor.com",
+  "all.accor.com",
+  "wyndhamhotels.com",
+  "choicehotels.com",
+  "bestwestern.com",
+  "radissonhotels.com",
+] as const;
+
+// Whether an email is a travel program's statement, by its sender and
+// subject; asked apart from the pre-filter too, for an email forwarded or
+// read again on request, which skips it.
+export function isTravelStatement(message: Pick<MessageSummary, "from" | "subject">, patterns: SenderPatterns = { allow: [], deny: [] }): boolean {
+  const domain = senderDomain(message.from);
+  if (domain === undefined || patterns.deny.some((p) => domainMatches(domain, p))) return false;
+  return [...travelLoyaltyDomains, ...patterns.allow].some((p) => domainMatches(domain, p)) && statementWords.test(message.subject);
+}
+
 // Domains whose transactional mail is almost always a booking. Users extend
 // this list from the UI; see SenderPatterns.allow.
 export const seedSenderDomains = [
@@ -96,6 +157,7 @@ export function prefilter(
   if (domain && patterns.deny.some((p) => domainMatches(domain, p))) {
     return { pass: false, reason: `sender ${domain} denied` };
   }
+  if (isTravelStatement(message, patterns)) return { pass: true, reason: statementReason };
   const allowed =
     domain !== undefined &&
     [...seedSenderDomains, ...patterns.allow].some((p) => domainMatches(domain, p));
