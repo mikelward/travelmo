@@ -85,15 +85,15 @@ export default function PrivacyPage() {
           the law requires it, and not used to train AI models.
         </p>
         <p>
-          You can disconnect each Gmail account, or Google Calendar, in Settings at any time; Travelmo then revokes its
-          access.
+          Travelmo keeps this access encrypted on its servers. You can disconnect each Gmail account, or Google
+          Calendar, in Settings at any time; Travelmo then revokes its access.
         </p>
       </Section>
 
       <Section title="Fastmail">
         <p>
           When you connect Fastmail, you give Travelmo a read-only API token you made in Fastmail&apos;s settings, and
-          Travelmo keeps it on its servers. It uses the token only to read new email every few minutes, and past email
+          Travelmo keeps it encrypted on its servers. It uses the token only to read new email every few minutes, and past email
           when you import it, handling each email as it does with Gmail: only ones that look like bookings go to
           Gemini, and it never sends, changes or deletes email.
         </p>

@@ -143,7 +143,8 @@ viewer's zone. Trip bounds are calendar dates.
   last polled, and the backfill progress;
   `users/{uid}/private/googleCalendar` — the Calendar refresh token and the
   calendar list, `googleCalendarAliases-<hash>` per calendar the event ids
-  of deleted events still need. Server only. `users/{uid}/private/import` is read and written by every import
+  of deleted events still need. Server only. The refresh tokens and the
+  Fastmail token are `kms1:<ciphertext>` (see "Stored credentials" below). `users/{uid}/private/import` is read and written by every import
   transaction, serializing trip assignment per user.
   `users/{uid}/private/examples` — `bookings[], others[]` of `{subject,
   vector}`, the embeddings the similarity pre-filter compares against.
@@ -161,10 +162,35 @@ viewer's zone. Trip bounds are calendar dates.
 - `gmailAccounts/{emailAddress}` → `{uid}`, one owner per mailbox (an
   account may own several), enforced in a transaction; `oauthStates/{nonce}` → `{uid, createdAt}`;
   `pendingConnections/{token}` → `{uid, refreshToken, createdAt}`, parked
-  tokens awaiting an authenticated completion. Server only; each redeemed
-  once, within ten minutes.
+  tokens awaiting an authenticated completion, the token `kms1:` ciphertext
+  too. Server only; each redeemed once, within ten minutes.
 
 Schemas live in `packages/core/src/schema.ts`; paths in `paths.ts`.
+
+### Stored credentials
+
+Every mail credential the parser keeps (Gmail and Calendar refresh tokens,
+tokens parked in `pendingConnections`, the Fastmail API token) is encrypted
+with a Cloud KMS key (`CREDENTIALS_KMS_KEY`, made by `deploy/kms.sh`)
+before it is written, and stored as `kms1:<base64 ciphertext>`, so a leak
+or export of Firestore reveals nothing usable: only the parser's service
+account may decrypt with the key (`apps/parser/src/sealing.ts`). Each is
+encrypted with the document and field it belongs in as additional
+authenticated data (a Gmail mailbox's by `private/gmail-<key>`, also while
+it is still in `private/gmail`), so a ciphertext copied into another
+user's document does not decrypt. The storage functions encrypt on write
+and decrypt on read, outside Firestore transactions, which may run more
+than once; everything else handles tokens as plaintext, and `revocable`
+compares them unencrypted. A value without the prefix, stored before there
+was a key, is read as it is; as the parser starts with a key it encrypts
+every such value it finds (`sealStored.ts`, by collection-group queries
+on `private` for values outside the `kms1:` range, and on
+`pendingConnections`), logging counts and any document it could not,
+which the next start tries again. Without a key (local runs) credentials
+are stored as they are and the parser logs a warning as it starts. The
+key rotates every 90 days; old versions are kept, since they still
+decrypt what they sealed. A future IMAP connector seals its passwords the
+same way.
 
 ## Testing
 
@@ -2227,7 +2253,13 @@ the two days before it leaves, within Firestore's free daily allowance
 (50,000) for a household, growing with the flights booked across all
 users (past it, about six cents per 100,000 reads). Forwarding addresses ride Cloudflare Email Routing (free, unlimited
 inbound) and one Email Worker (free plan: 100,000 requests a day), with
-the model cost of a Gmail import per forwarded email. The rules tests and CI run
+the model cost of a Gmail import per forwarded email. Cloud KMS costs about $0.06 a month per key version (four
+a year with rotation, all kept) and about $0.03 per 10,000 calls: one
+decryption per Gmail notification, Fastmail poll, Calendar read and batch
+of a mailbox reading, one encryption per connection. A Fastmail mailbox,
+polled every five minutes, is about 8,600 decryptions a month, under three
+cents; a Gmail mailbox's follow its mail; a hundred users is a dollar or
+two a month. The rules tests and CI run
 on GitHub-hosted runners; CI's deploys of the parser build on Cloud Build
 within its monthly free build-minutes.
 

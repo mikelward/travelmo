@@ -1,6 +1,6 @@
 import { paths } from "@travelmo/core";
 import { FieldValue, type DocumentReference, type Firestore, type Query } from "firebase-admin/firestore";
-import { loadCalendarState, loadMailboxes, removeCalendarState, removeConnection } from "./connections";
+import { loadCalendarState, loadMailboxes, pendingTokens, removeCalendarState, removeConnection } from "./connections";
 import { errorFields, errorKind } from "./log";
 
 // Deleting an account: everything the user owns goes, and the trips other
@@ -105,7 +105,7 @@ export async function deleteAccount(uid: string, email: string | undefined, deps
     // including any consent still parked for completion.
     const mailboxes = await loadMailboxes(db, uid);
     const calendar = await loadCalendarState(db, uid);
-    const pending = await db.collection("pendingConnections").where("uid", "==", uid).get();
+    const pending = await pendingTokens(db, uid);
     for (const mailbox of mailboxes) {
       try {
         await deps.stopWatch(mailbox.refreshToken);
@@ -117,10 +117,7 @@ export async function deleteAccount(uid: string, email: string | undefined, deps
     const tokens = [
       ...mailboxes.map((m) => m.refreshToken),
       ...(calendar ? [calendar.refreshToken] : []),
-      ...pending.docs.flatMap((d) => {
-        const token = d.get("refreshToken");
-        return typeof token === "string" ? [token] : [];
-      }),
+      ...pending,
     ];
     const revoked = await revokeAll(uid, tokens, deps);
     for (const mailbox of mailboxes) await removeConnection(db, uid, mailbox.emailAddress);

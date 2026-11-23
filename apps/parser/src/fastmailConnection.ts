@@ -1,15 +1,21 @@
 import { FastmailState, paths, type BackfillProgress, type FastmailConnection } from "@travelmo/core";
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
 import { refuseIfDeleted } from "./deleted";
+import { credentialContext, credentialSealer, withOpenedCredential } from "./sealing";
 import { generationOf } from "./store";
 
 // A Fastmail connection: the read-only API token and the mailbox's state in
 // `users/{uid}/private/fastmail` (server only), and what Settings shows in
-// the user document's `fastmail`.
+// the user document's `fastmail`. The token is stored sealed (sealing.ts)
+// and every function here takes and returns it unsealed.
+
+async function openState(uid: string, state: FastmailState): Promise<FastmailState> {
+  return { ...state, token: await credentialSealer().open(state.token, credentialContext.fastmail(uid)) };
+}
 
 export async function loadFastmailState(db: Firestore, uid: string): Promise<FastmailState | undefined> {
   const snap = await db.doc(paths.fastmailState(uid)).get();
-  return snap.exists ? FastmailState.parse(snap.data()) : undefined;
+  return snap.exists ? openState(uid, FastmailState.parse(snap.data())) : undefined;
 }
 
 function publicPart(state: FastmailState): FastmailConnection {
@@ -27,6 +33,8 @@ export class OtherMailboxConnected extends Error {
 // the first. Connecting the same one again replaces its token and keeps
 // its place.
 export async function saveFastmailConnection(db: Firestore, uid: string, state: FastmailState): Promise<FastmailState> {
+  // Sealed before the transaction, which may run more than once.
+  const token = await credentialSealer().seal(state.token, credentialContext.fastmail(uid));
   return db.runTransaction(async (t) => {
     await refuseIfDeleted(db, t, uid);
     const stateRef = db.doc(paths.fastmailState(uid));
@@ -41,7 +49,7 @@ export async function saveFastmailConnection(db: Firestore, uid: string, state: 
           ...(existing.backfill ? { backfill: existing.backfill } : {}),
         }
       : state;
-    t.set(stateRef, next);
+    t.set(stateRef, { ...next, token });
     t.set(db.doc(paths.user(uid)), { fastmail: publicPart(next) }, { merge: true });
     return next;
   });
@@ -68,24 +76,35 @@ export function updateFastmailLive(
 }
 
 // As connections.ts's changeBackfill, for the Fastmail mailbox.
-export function changeFastmailBackfill<R>(
+export async function changeFastmailBackfill<R>(
   db: Firestore,
   uid: string,
   change: (current: BackfillProgress | undefined, generation: number) => { next?: BackfillProgress | undefined; result: R },
 ): Promise<{ state: FastmailState; generation: number; result: R } | undefined> {
-  return db.runTransaction(async (t) => {
-    const stateRef = db.doc(paths.fastmailState(uid));
-    const [snap, lock] = await Promise.all([t.get(stateRef), t.get(db.doc(paths.importLock(uid)))]);
-    if (!snap.exists) return undefined;
-    const state = FastmailState.parse(snap.data());
-    const generation = generationOf(lock);
-    const { next, result } = change(state.backfill, generation);
-    if (next) {
-      t.update(stateRef, { backfill: next });
-      t.set(db.doc(paths.user(uid)), { fastmail: { backfill: next } }, { mergeFields: ["fastmail.backfill"] });
-    }
-    return { state, generation, result };
-  });
+  const stateRef = db.doc(paths.fastmailState(uid));
+  const changed = await withOpenedCredential(
+    async () => {
+      const snap = await stateRef.get();
+      return snap.exists ? FastmailState.parse(snap.data()) : undefined;
+    },
+    (state) => state.token,
+    async (state) => (await openState(uid, state)).token,
+    (unchanged) =>
+      db.runTransaction(async (t) => {
+        const [snap, lock] = await Promise.all([t.get(stateRef), t.get(db.doc(paths.importLock(uid)))]);
+        if (!snap.exists) return undefined;
+        const state = FastmailState.parse(snap.data());
+        if (!unchanged(state)) return "replaced" as const;
+        const generation = generationOf(lock);
+        const { next, result } = change(state.backfill, generation);
+        if (next) {
+          t.update(stateRef, { backfill: next });
+          t.set(db.doc(paths.user(uid)), { fastmail: { backfill: next } }, { mergeFields: ["fastmail.backfill"] });
+        }
+        return { state, rest: { generation, result } };
+      }),
+  );
+  return changed && { ...changed.rest, state: { ...changed.state, token: changed.opened } };
 }
 
 export async function removeFastmailConnection(db: Firestore, uid: string): Promise<void> {

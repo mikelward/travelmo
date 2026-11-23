@@ -121,6 +121,8 @@ import {
 import { pollFastmail } from "./fastmailPoll";
 import { continueBackfill, parseContinuePush, startBackfill, stopBackfill, type ChainIo, type ContinueMessage } from "./backfillChain";
 import { pubsubPublisher } from "./publish";
+import { sealStoredCredentials } from "./sealStored";
+import { googleKmsClient, kmsSealer, useSealer } from "./sealing";
 
 // How long one backfill request may spend waiting its turn and importing.
 // Leaves two minutes of Cloud Run's default five for the last message and
@@ -182,6 +184,12 @@ const genai = process.env.GEMINI_API_KEY
       location: optionalEnv("GOOGLE_CLOUD_LOCATION", "europe-west1"),
     });
 
+// Stored mail credentials are sealed with this Cloud KMS key (sealing.ts,
+// deploy/kms.sh), its full resource name; without one they are stored as
+// they are, for local runs.
+const credentialsKey = optionalEnv("CREDENTIALS_KMS_KEY", "");
+if (credentialsKey) useSealer(kmsSealer(credentialsKey, googleKmsClient()));
+else log("WARNING", "credentials_unencrypted", { reason: "CREDENTIALS_KMS_KEY is not set" });
 
 // Forward-to-import (inbound.ts) is on when the forwarding domain and the
 // relay's secret are both set; without them Settings offers no address and
@@ -1612,9 +1620,19 @@ try {
 // kept now (connections.ts). Every reader reads both places meanwhile, and
 // any user's mailboxes move when next loaded, so this runs alongside
 // serving rather than before it.
+// Then, with a key, credentials stored before there was one are sealed
+// (sealStored.ts); every reader takes either meanwhile.
 void moveLegacyMailboxes(db, log)
   .then((result) => log("INFO", "gmail_moved", result))
-  .catch((error: unknown) => log("ERROR", "gmail_move_failed", errorKind(error)));
+  .catch((error: unknown) => log("ERROR", "gmail_move_failed", errorKind(error)))
+  .then(async () => {
+    if (!credentialsKey) return;
+    try {
+      log("INFO", "credentials_sealed", await sealStoredCredentials(db, log));
+    } catch (error) {
+      log("ERROR", "credentials_seal_failed", errorKind(error));
+    }
+  });
 
 const port = Number(optionalEnv("PORT", "8080"));
 serve({ fetch: app.fetch, port }, () => log("INFO", "listening", { port, geminiModel, embeddingModel }));
