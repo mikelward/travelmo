@@ -7,7 +7,18 @@ import java.util.Locale
 // account number, the balance and the status, read by their usual labels,
 // and the program a booking's provider belongs to.
 
-data class LoyaltySummary(val title: String, val account: String? = null, val balance: String? = null, val status: String? = null, val nextStatus: String? = null)
+/** [person]: whose it is, when not the owner's. */
+data class LoyaltySummary(
+    val title: String,
+    val account: String? = null,
+    val balance: String? = null,
+    val status: String? = null,
+    val nextStatus: String? = null,
+    val person: String? = null,
+)
+
+/** The field [allLoyalty] marks someone else's membership with. */
+const val PERSON_LABEL = "Belongs to"
 
 private val accountLabels = listOf("account number", "membership number", "member number", "account no", "membership no", "account", "number")
 private val balanceLabels = listOf("balance", "points balance", "miles balance", "point balance", "points", "miles")
@@ -39,6 +50,7 @@ fun loyaltySummary(entry: ProfileEntry): LoyaltySummary = LoyaltySummary(
     balance = field(entry, balanceLabels)?.let(::formatBalance),
     status = field(entry, statusLabels),
     nextStatus = field(entry, nextStatusLabels),
+    person = entry.fields.firstOrNull { it.label == PERSON_LABEL }?.value,
 )
 
 // Words that name what a program is, not whose it is, and the parts of a
@@ -61,10 +73,10 @@ fun programsFor(provider: String?, programs: List<ProfileEntry>): List<ProfileEn
     return programs.filter { p -> nameWords(p.title).any { it in words } }
 }
 
-/** One line for a booking: the program, the number and the status. */
+/** One line for a booking: the program, the number, the status and, when not the owner's, whose it is. */
 fun loyaltyLine(entry: ProfileEntry): String {
     val s = loyaltySummary(entry)
-    return listOfNotNull(s.title, s.account, s.status).joinToString(" · ")
+    return listOfNotNull(s.title, s.account, s.status, s.person).joinToString(" · ")
 }
 
 // A number as written: spaces, dashes and case do not count.
@@ -83,8 +95,8 @@ fun foundLoyaltyEntry(found: FoundLoyalty): ProfileEntry = ProfileEntry(
 )
 
 /**
- * Every program on a profile: what TripIt imported, then what emails showed
- * that it did not have (by number). A statement newer than the TripIt upload
+ * Every program on a profile, the owner's before anyone else's: what TripIt
+ * imported, then what emails showed that it did not have (by number). A statement newer than the TripIt upload
  * brings its balance and status to the imported program it matches, ahead of
  * the imported ones, which the table reads first.
  */
@@ -92,7 +104,13 @@ fun allLoyalty(profile: TravelProfile): List<ProfileEntry> {
     // One membership: the same number in the same program, as the parser keeps them.
     fun matches(entry: ProfileEntry, found: FoundLoyalty): Boolean {
         val account = loyaltySummary(entry).account ?: return false
-        return plainNumber(account) == plainNumber(found.number) && sameProgram(entry.title, found.program)
+        return sameMembership(entry.title, account, found.program, found.number)
+    }
+    // Whose it is: as the owner said, else as the email named, else theirs.
+    fun withPerson(entry: ProfileEntry, number: String?, fromEmail: FoundLoyalty?): ProfileEntry {
+        val said = number?.let { n -> profile.loyaltyPeople.lastOrNull { sameMembership(it.program, it.number, entry.title, n) } }
+        val person = if (said != null) said.person else fromEmail?.person
+        return if (person != null) ProfileEntry(entry.title, entry.fields + ProfileField(PERSON_LABEL, person)) else entry
     }
     // Newer than the TripIt upload, so it has the last word (no upload: it has).
     fun afterUpload(at: String?) = at != null && (profile.importedAt == null || at > profile.importedAt)
@@ -100,7 +118,8 @@ fun allLoyalty(profile: TravelProfile): List<ProfileEntry> {
         val statement = profile.foundLoyalty.firstOrNull { matches(entry, it) }
         val balance = statement?.balance?.takeIf { afterUpload(statement.balanceAt) }
         val status = statement?.status?.takeIf { afterUpload(statement.statusAt) }
-        if (statement == null || (balance == null && status == null)) {
+        val account = loyaltySummary(entry).account
+        val shown = if (statement == null || (balance == null && status == null)) {
             entry
         } else {
             // Under the labels the table reads first, so the email's win.
@@ -114,10 +133,40 @@ fun allLoyalty(profile: TravelProfile): List<ProfileEntry> {
                 },
             )
         }
+        withPerson(shown, account, statement)
     }
-    return imported + profile.foundLoyalty.filter { found -> profile.loyalty.none { matches(it, found) } }.map(::foundLoyaltyEntry)
+    val all = imported + profile.foundLoyalty.filter { found -> profile.loyalty.none { matches(it, found) } }.map { withPerson(foundLoyaltyEntry(it), it.number, it) }
+    // The owner's first, as a booking lists them.
+    val (theirs, mine) = all.partition { loyaltySummary(it).person != null }
+    return mine + theirs
 }
 
+/**
+ * The owner's word on whose a membership is, replacing any earlier word on
+ * it; [person] null says it is theirs. The oldest word goes when the list is full.
+ */
+fun withLoyaltyPerson(people: List<LoyaltyPerson>, program: String, number: String, person: String?): List<LoyaltyPerson> {
+    val name = person?.trim()?.takeIf { it.isNotEmpty() }
+    return (people.filterNot { sameMembership(it.program, it.number, program, number) } + LoyaltyPerson(program, number, name)).takeLast(MAX_LOYALTY_PEOPLE)
+}
+
+/** The programs grouped by whose they are: the owner's first (person null), then each other person's, by name. */
+data class LoyaltyGroup(val person: String?, val entries: List<ProfileEntry>)
+
+fun loyaltyByPerson(entries: List<ProfileEntry>): List<LoyaltyGroup> =
+    entries.groupBy { loyaltySummary(it).person }
+        .entries
+        .sortedWith(compareBy<Map.Entry<String?, List<ProfileEntry>>> { it.key != null }.thenBy { it.key.orEmpty() })
+        .map { LoyaltyGroup(it.key, it.value) }
+
+// One membership: the same number in the same program.
+private fun sameMembership(programA: String, numberA: String, programB: String, numberB: String): Boolean =
+    plainNumber(numberA) == plainNumber(numberB) && sameProgram(programA, programB)
+
 // One program by its name as written, else by a distinctive word in common.
-private fun sameProgram(a: String, b: String): Boolean =
-    a.trim().equals(b.trim(), ignoreCase = true) || nameWords(a).any { it in nameWords(b) }
+// A name with no distinctive word ("Privilege Club") could be any program's.
+private fun sameProgram(a: String, b: String): Boolean {
+    val x = nameWords(a)
+    val y = nameWords(b)
+    return a.trim().equals(b.trim(), ignoreCase = true) || x.isEmpty() || y.isEmpty() || x.any { it in y }
+}

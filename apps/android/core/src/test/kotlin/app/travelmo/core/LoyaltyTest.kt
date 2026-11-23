@@ -82,4 +82,45 @@ class LoyaltyTest {
         loyaltySummary(all[0]).balance shouldBe "10"
         loyaltySummary(all[1]) shouldBe LoyaltySummary("Sample Hotels Rewards", "123", "999")
     }
+
+    private fun seen(program: String, number: String, person: String? = null) = FoundLoyalty(program, number, messageId = "m1", at = "2026-11-01T00:00:00Z", person = person)
+    private val tripIt = entry("Example Air", "Account number" to "111222333")
+    private fun people(entries: List<ProfileEntry>) = loyaltyByPerson(entries).map { g -> (g.person ?: "You") to g.entries.map { loyaltySummary(it).account } }
+
+    @Test
+    fun `groups the owner's first, then each person an email named, and says whose on a booking's line`() {
+        val found = listOf(seen("SkyMiles", "9168692292", "Sam Ward"), seen("SkyMiles", "9099656416"), seen("SkyMiles", "9368712163", "Alex Ward"))
+        val all = allLoyalty(TravelProfile("u1", loyalty = listOf(tripIt), foundLoyalty = found))
+        people(all) shouldBe listOf(
+            "You" to listOf("111222333", "9099656416"),
+            "Alex Ward" to listOf("9368712163"),
+            "Sam Ward" to listOf("9168692292"),
+        )
+        all.map(::loyaltyLine).contains("SkyMiles · 9168692292 · Sam Ward") shouldBe true
+    }
+
+    @Test
+    fun `follows the owner's word over the email's, for TripIt's programs too`() {
+        val found = listOf(seen("SkyMiles", "9168692292", "Sam Ward"))
+        var said = withLoyaltyPerson(emptyList(), "SkyMiles", "9168692292", null)
+        said = withLoyaltyPerson(said, "Example Air", "111 222 333", " Sam Ward ")
+        said.size shouldBe 2
+        people(allLoyalty(TravelProfile("u1", loyalty = listOf(tripIt), foundLoyalty = found, loyaltyPeople = said))) shouldBe listOf(
+            "You" to listOf("9168692292"),
+            "Sam Ward" to listOf("111222333"),
+        )
+        withLoyaltyPerson(said, "SkyMiles", "9168692292", "Alex Ward").filter { it.number == "9168692292" } shouldBe
+            listOf(LoyaltyPerson("SkyMiles", "9168692292", "Alex Ward"))
+    }
+
+    @Test
+    fun `shows a number TripIt has under a program name with nothing distinctive once`() {
+        val qatar = entry("QATAR AIRWAYS", "Account number" to "820342520")
+        allLoyalty(TravelProfile("u1", loyalty = listOf(qatar), foundLoyalty = listOf(seen("Privilege Club", "820342520")))).map { it.title } shouldBe listOf("QATAR AIRWAYS")
+    }
+
+    @Test
+    fun `tells a balance read as a number from a membership number`() {
+        listOf("9,600 Points", "XXXXX8400", "1200 miles", "UA-XXXXX166", "Gold").map(::isMembershipNumber) shouldBe listOf(false, true, false, true, false)
+    }
 }

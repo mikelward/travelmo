@@ -248,9 +248,11 @@ service cloud.firestore {
           && (!('ownerEmail' in request.resource.data) || request.resource.data.ownerEmail == request.auth.token.email.lower())
           && trustedList(request.resource.data.trustedEmails);
         // The owner may also remove what emails showed (`foundLoyalty`, at
-        // most fifty; the parser adds to it).
+        // most fifty; the parser adds to it) and say whose each membership
+        // is (`loyaltyPeople`, at most a hundred).
         allow update: if member() && isSelf()
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['trustedEmails', 'foundLoyalty', 'updatedAt'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['trustedEmails', 'foundLoyalty', 'loyaltyPeople', 'updatedAt'])
+          && (!('loyaltyPeople' in request.resource.data) || (request.resource.data.loyaltyPeople is list && request.resource.data.loyaltyPeople.size() <= 100))
           // A profile an import started may have no sharing list yet.
           && (!('trustedEmails' in request.resource.data) || trustedList(request.resource.data.trustedEmails))
           && (!('foundLoyalty' in request.resource.data) || (request.resource.data.foundLoyalty is list && request.resource.data.foundLoyalty.size() <= 50));

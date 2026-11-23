@@ -154,10 +154,19 @@ class TripsViewModelTest {
     fun `removing a loyalty number found in emails goes to the store`() = runTest {
         val store = FakeTripStore()
         val viewModel = TripsViewModel(store, OWNER, null)
-        val found = fixtureProfile.foundLoyalty.single()
+        val found = fixtureProfile.foundLoyalty.first()
         viewModel.removeFoundLoyalty("remove", found)
         viewModel.outcomes.value shouldBe mapOf("remove" to Outcome.Done)
         store.removedFound shouldBe listOf(found)
+    }
+
+    @Test
+    fun `saying whose a loyalty number is goes to the store`() = runTest {
+        val store = FakeTripStore()
+        val viewModel = TripsViewModel(store, OWNER, null)
+        viewModel.setLoyaltyPerson("whose", "Cove Club", "CC 4455", "Ann Sample")
+        viewModel.outcomes.value shouldBe mapOf("whose" to Outcome.Done)
+        store.people shouldBe listOf(Triple("Cove Club", "CC 4455", "Ann Sample"))
     }
 
     @Test

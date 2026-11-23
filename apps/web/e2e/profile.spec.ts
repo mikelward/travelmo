@@ -27,7 +27,7 @@ test("the owner sees their imported profile, shares it with a partner, and the p
   });
   await page.goto("/profile");
   // Programs at a glance; the full entry folds below.
-  await expect(page.getByRole("table", { name: "Loyalty programs" }).getByRole("row")).toHaveText(["ProgramAccountBalanceStatus", "Example Air MilesEA12312,000Gold"]);
+  await expect(page.getByRole("table", { name: "Loyalty programs" }).getByRole("row")).toHaveText(["ProgramAccountBalanceStatusWhose", "Example Air MilesEA12312,000Gold⋮"]);
   await expect(page.getByText("Elite status")).toBeHidden();
   // Documents stay folded until asked for.
   await expect(page.getByText("X1234567")).toBeHidden();
@@ -88,13 +88,41 @@ test("loyalty numbers found in booking emails join the table and the booking lin
 
   await page.goto("/profile");
   await expect(page.getByRole("table", { name: "Loyalty programs" }).getByRole("row")).toHaveText([
-    "ProgramAccountBalanceStatus",
-    "Cove ClubCC 4455Member",
-    "Example Air ClubEA 999",
+    "ProgramAccountBalanceStatusWhose",
+    "Cove ClubCC 4455Member⋮",
+    "Example Air ClubEA 999⋮",
   ]);
   const list = page.getByRole("list", { name: "Found in your emails" });
   await expect(list).toContainText("From “Your stay at Cove”");
   await list.getByRole("listitem").filter({ hasText: "Example Air Club" }).getByRole("button", { name: "Remove" }).click();
   await expect(list.getByRole("listitem")).toHaveCount(1);
   await expect.poll(async () => (await readTravelProfile(ownerUid))?.foundLoyalty).toEqual([found]);
+});
+
+test("each loyalty number is shown under whose it is, on the profile and on a booking", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  await seedTrip(ownerUid, "e2e-loyalty", { provider: "Example Air" });
+  const theirs = { program: "Example Air Club", number: "EA 999", person: "Alex Sample", messageId: "m1", label: "Your flight", at: "2026-11-01T00:00:00Z" };
+  const mine = { program: "Example Air Club", number: "EA 123", messageId: "m2", label: "Your flight", at: "2026-11-02T00:00:00Z" };
+  await seedTravelProfile(ownerUid, { ownerEmail: owner, trustedEmails: [], documents: [], loyalty: [], travelers: [], foundLoyalty: [theirs, mine] });
+
+  await page.getByRole("link", { name: /Liverpool/ }).click();
+  await expect(page.getByTestId("segment-loyalty").getByRole("listitem")).toHaveText(["Example Air Club · EA 123", "Example Air Club · EA 999 · Alex Sample"]);
+
+  await page.goto("/profile");
+  await expect(page.getByRole("table", { name: "Loyalty programs: You" })).toContainText("EA 123");
+  await expect(page.getByRole("table", { name: "Loyalty programs: Alex Sample" })).toContainText("EA 999");
+
+  // Mine was someone else's all along.
+  await page.getByRole("button", { name: "Whose is Example Air Club EA 123?" }).click();
+  await page.getByRole("button", { name: "Alex Sample" }).click();
+  await expect(page.getByRole("table", { name: "Loyalty programs: Alex Sample" })).toContainText("EA 123");
+  await expect(page.getByRole("heading", { name: "You", exact: true })).toHaveCount(0);
+  await expect.poll(async () => (await readTravelProfile(ownerUid))?.loyaltyPeople).toEqual([{ program: "Example Air Club", number: "EA 123", person: "Alex Sample" }]);
+
+  // And this one is someone new's.
+  await page.getByRole("button", { name: "Whose is Example Air Club EA 999?" }).click();
+  await page.getByLabel("Someone else's name").fill("Sam Sample");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("table", { name: "Loyalty programs: Sam Sample" })).toContainText("EA 999");
 });

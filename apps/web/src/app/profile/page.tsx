@@ -1,13 +1,14 @@
 "use client";
 
-import { allLoyalty, loyaltySummary, type FoundLoyalty, type ProfileEntry, type TravelProfile } from "@travelmo/core";
+import { allLoyalty, loyaltyByPerson, loyaltySummary, type FoundLoyalty, type ProfileEntry, type TravelProfile } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
 import { useState } from "react";
+import { Dialog } from "@/components/BookingMenu";
 import { SignInGate } from "@/components/SignInGate";
 import { correctionText, failedReadsText, homeLine, logged, parseCorrection, saveCorrections, useHomes } from "@/lib/home";
 import { useSaveForOffline } from "@/lib/offline";
-import { maxTrusted, removeFoundLoyalty, saveTrusted, useSharedProfiles, useTravelProfile } from "@/lib/travelProfile";
+import { maxTrusted, removeFoundLoyalty, saveTrusted, setLoyaltyPerson, useSharedProfiles, useTravelProfile } from "@/lib/travelProfile";
 
 const buttonClass =
   "rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
@@ -40,34 +41,138 @@ function Entries({ title, entries, open }: { title: string; entries: ProfileEntr
   );
 }
 
+// Who a membership belongs to: the owner, someone already named, or
+// someone new.
+function PersonDialog({
+  program,
+  number,
+  people,
+  onPick,
+  onClose,
+}: {
+  program: string;
+  number: string;
+  people: string[];
+  onPick: (person: string | undefined) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState("");
+  const pick = (person: string | undefined) => {
+    onPick(person);
+    onClose();
+  };
+  const option = "w-full rounded-lg px-2 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-900";
+  return (
+    <Dialog title={`Whose is ${program} ${number}?`} onClose={onClose}>
+      <ul>
+        <li>
+          <button type="button" className={option} onClick={() => pick(undefined)}>
+            Mine
+          </button>
+        </li>
+        {people.map((p) => (
+          <li key={p}>
+            <button type="button" className={option} onClick={() => pick(p)}>
+              {p}
+            </button>
+          </li>
+        ))}
+      </ul>
+      <form
+        className="mt-2 flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (name.trim()) pick(name.trim());
+        }}
+      >
+        <input
+          value={name}
+          maxLength={80}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Someone else"
+          aria-label="Someone else's name"
+          className="min-w-0 flex-1 rounded-lg border border-field bg-background px-3 py-2 text-sm"
+        />
+        <button type="submit" disabled={!name.trim()} className={buttonClass}>
+          Save
+        </button>
+      </form>
+    </Dialog>
+  );
+}
+
 // Every program at a glance: the number, the balance and the status, read
-// from whatever labels the import gave them; the full entries fold below.
-function LoyaltyTable({ entries }: { entries: ProfileEntry[] }) {
+// from whatever labels the import gave them, the owner's first and then
+// each other person's; the full entries fold below. On the owner's own
+// profile each says whose it is.
+function LoyaltyTable({ entries, ownUid }: { entries: ProfileEntry[]; ownUid?: string }) {
+  const [editing, setEditing] = useState<{ program: string; number: string }>();
+  const [error, setError] = useState<string>();
   if (!entries.length) return null;
-  const rows = entries.map(loyaltySummary);
+  const groups = loyaltyByPerson(entries);
+  const people = groups.flatMap((g) => (g.person ? [g.person] : []));
+  const pick = async (person: string | undefined) => {
+    if (!ownUid || !editing) return;
+    setError(undefined);
+    try {
+      await setLoyaltyPerson(ownUid, editing, person);
+    } catch (e) {
+      console.error("Saving whose a loyalty number is failed", e);
+      setError((e as Error).message);
+    }
+  };
   return (
     <section className="mt-6">
       <h3 className="font-medium">Loyalty programs</h3>
-      <table className="mt-2 w-full text-sm" aria-label="Loyalty programs">
-        <thead className="text-left text-muted">
-          <tr>
-            <th className="py-1 font-normal">Program</th>
-            <th className="py-1 font-normal">Account</th>
-            <th className="py-1 text-right font-normal">Balance</th>
-            <th className="py-1 font-normal">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={`${r.title}-${i}`} className="border-t border-zinc-200 dark:border-zinc-800">
-              <td className="py-1 pr-2">{r.title}</td>
-              <td className="py-1 pr-2 break-all">{r.account ?? ""}</td>
-              <td className="py-1 pr-2 text-right tabular-nums">{r.balance ?? ""}</td>
-              <td className="py-1">{r.nextStatus && r.status ? `${r.status} (next: ${r.nextStatus})` : (r.status ?? "")}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {groups.map((group) => {
+        const name = group.person ?? (ownUid ? "You" : "Theirs");
+        // Named whenever any is someone else's.
+        const named = groups.length > 1 || !!group.person;
+        return (
+          <div key={group.person ?? ""}>
+            {named && <h4 className="mt-4 text-sm font-medium text-muted">{name}</h4>}
+            <table className="mt-2 w-full text-sm" aria-label={named ? `Loyalty programs: ${name}` : "Loyalty programs"}>
+              <thead className="text-left text-muted">
+                <tr>
+                  <th className="py-1 font-normal">Program</th>
+                  <th className="py-1 font-normal">Account</th>
+                  <th className="py-1 text-right font-normal">Balance</th>
+                  <th className="py-1 font-normal">Status</th>
+                  {ownUid && <th className="w-8 py-1 font-normal"><span className="sr-only">Whose</span></th>}
+                </tr>
+              </thead>
+              <tbody>
+                {group.entries.map(loyaltySummary).map((r, i) => (
+                  <tr key={`${r.title}-${i}`} className="border-t border-zinc-200 dark:border-zinc-800">
+                    <td className="py-1 pr-2">{r.title}</td>
+                    <td className="py-1 pr-2 break-all">{r.account ?? ""}</td>
+                    <td className="py-1 pr-2 text-right tabular-nums">{r.balance ?? ""}</td>
+                    <td className="py-1">{r.nextStatus && r.status ? `${r.status} (next: ${r.nextStatus})` : (r.status ?? "")}</td>
+                    {ownUid && (
+                      <td className="py-1 text-right">
+                        {r.account && (
+                          <button
+                            type="button"
+                            aria-label={`Whose is ${r.title} ${r.account}?`}
+                            onClick={() => setEditing({ program: r.title, number: r.account! })}
+                            className="h-8 w-8 rounded-full text-lg leading-none text-muted hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                          >
+                            ⋮
+                          </button>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      {editing && (
+        <PersonDialog program={editing.program} number={editing.number} people={people} onPick={(p) => void pick(p)} onClose={() => setEditing(undefined)} />
+      )}
     </section>
   );
 }
@@ -115,7 +220,7 @@ function ProfileSections({ profile, ownUid }: { profile: TravelProfile; ownUid?:
   return (
     <>
       <Entries title="Documents" entries={profile.documents} open={false} />
-      <LoyaltyTable entries={loyalty} />
+      <LoyaltyTable entries={loyalty} {...(ownUid ? { ownUid } : {})} />
       {ownUid && <FoundInEmails uid={ownUid} found={profile.foundLoyalty ?? []} />}
       <Entries title="Loyalty program details" entries={loyalty} open={false} />
       <Entries title="Travelers" entries={profile.travelers} open={false} />

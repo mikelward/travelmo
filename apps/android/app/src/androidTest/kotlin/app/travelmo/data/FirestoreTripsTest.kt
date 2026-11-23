@@ -372,4 +372,15 @@ class FirestoreTripsTest {
         owner.store.deleteTrip(id)
         assertNull(tripRef(id).get().await().data)
     }
+
+    @Test
+    fun setLoyaltyPerson_recordsWhoseANumberIs_andOnlyTheOwnerMay() = runBlocking {
+        owner.store.saveTrusted(owner.uid, owner.email, exists = false, emails = emptyList())
+        owner.store.setLoyaltyPerson(owner.uid, "Example Air Club", "EA 123", "Alex Sample")
+        owner.store.setLoyaltyPerson(owner.uid, "Example Air Club", "EA123", null)
+        val profile = owner.db.collection("users").document(owner.uid).collection("travelProfile").document("main").get().await()
+        // One word per membership, the latest: spaces in the number don't count.
+        assertEquals(listOf(mapOf("program" to "Example Air Club", "number" to "EA123")), profile.get("loyaltyPeople"))
+        assertTrue(refused { sharee.store.setLoyaltyPerson(owner.uid, "Example Air Club", "EA123", "Sam Sample") }.isPermissionDenied())
+    }
 }

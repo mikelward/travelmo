@@ -157,9 +157,12 @@ export function SegmentRow({
           </p>
         )}
         {programs && programs.length > 0 && (
-          <p className="mt-1 text-xs text-muted" data-testid="segment-loyalty">
-            {programs.map(loyaltyLine).join(" · ")}
-          </p>
+          // One program a line, so whose each number is stays plain.
+          <ul className="mt-1 text-xs text-muted" data-testid="segment-loyalty">
+            {programs.map((p, i) => (
+              <li key={`${p.title}-${i}`}>{loyaltyLine(p)}</li>
+            ))}
+          </ul>
         )}
         {segment.notes && <p className="mt-1 whitespace-pre-line text-xs text-muted">{segment.notes}</p>}
         <Verdict segment={segment} {...(onRate ? { onRate } : {})} {...(onFavorite ? { onFavorite } : {})} />

@@ -50,4 +50,19 @@ class ProfileScreenTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Couldn't reach the server").performScrollTo()
     }
+
+    @Test
+    fun `numbers are grouped by whose they are, and saying whose goes to the store`() {
+        val store = FakeTripStore()
+        show(store)
+        composeRule.onNodeWithText("Sam Example").performScrollTo()
+        composeRule.onNodeWithContentDescription("Whose is Example Air Miles EA 7654321?").performScrollTo().performClick()
+        composeRule.onNodeWithText("Mine").performClick()
+        composeRule.onNodeWithContentDescription("Whose is Cove Club CC 4455?").performScrollTo().performClick()
+        composeRule.onNodeWithText("Cancel").performClick()
+        composeRule.waitForIdle()
+        // Naming someone new is a text field in a dialog, which Robolectric
+        // never idles with; FirestoreTripsTest covers what it saves.
+        store.people shouldBe listOf(Triple("Example Air Miles", "EA 7654321", null))
+    }
 }

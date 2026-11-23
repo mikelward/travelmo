@@ -150,8 +150,12 @@ val fixtureProfile = TravelProfile(
         entry("Example Cars Club", "Account number" to "EC 44 8812"),
     ),
     documents = listOf(entry("Passport: Ann Example", "Number" to "X1234567", "Nationality" to "GB", "Expiration date" to "2027-02-01")),
-    // One more program, read from a booking email, which the owner can remove.
-    foundLoyalty = listOf(FoundLoyalty("Cove Club", "CC 4455", status = "Member", messageId = "m-cove", label = "Your stay at Cove Liverpool", at = "2026-10-20T09:00:00Z")),
+    // One more program, read from a booking email, which the owner can remove,
+    // and a fellow traveler's number from another.
+    foundLoyalty = listOf(
+        FoundLoyalty("Cove Club", "CC 4455", status = "Member", messageId = "m-cove", label = "Your stay at Cove Liverpool", at = "2026-10-20T09:00:00Z"),
+        FoundLoyalty("Example Air Miles", "EA 7654321", holder = "MR SAM EXAMPLE", messageId = "m-dub", label = "Your flight to Dublin", at = "2026-10-21T09:00:00Z", person = "Sam Example"),
+    ),
 )
 
 /** A partner's profile shared with the owner: a passport that runs out before Dublin ends. */
@@ -180,6 +184,12 @@ class FakeTripStore(
     val removedFound = mutableListOf<FoundLoyalty>()
     override suspend fun removeFoundLoyalty(uid: String, found: FoundLoyalty) {
         removedFound += found
+    }
+
+    /** Every word on whose a membership is: program, number and person, in order. */
+    val people = mutableListOf<Triple<String, String, String?>>()
+    override suspend fun setLoyaltyPerson(uid: String, program: String, number: String, person: String?) {
+        people += Triple(program, number, person)
     }
 
     /** The user document's ride fields, and every suggestion hidden, in order. */

@@ -462,6 +462,17 @@ describe("travel profiles", () => {
     await assertSucceeds(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { foundLoyalty: [], updatedAt: "2026-11-03T00:00:00Z" }));
     await assertFails(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { trustedEmails: "everyone" }));
   });
+
+  it("lets the owner alone say whose each membership is", async () => {
+    const said = { program: "Example Air Club", number: "EA123", person: "Alex Sample" };
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), paths.travelProfile(owner.uid)), { ownerUid: owner.uid, trustedEmails: [partner.email], loyalty: [] });
+    });
+    await assertSucceeds(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { loyaltyPeople: [said], updatedAt: "2026-11-03T00:00:00Z" }));
+    await assertFails(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { loyaltyPeople: "Alex Sample" }));
+    await assertFails(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { loyaltyPeople: Array.from({ length: 101 }, () => said) }));
+    await assertFails(updateDoc(doc(as(partner), paths.travelProfile(owner.uid)), { loyaltyPeople: [] }));
+  });
 });
 
 describe("access", () => {

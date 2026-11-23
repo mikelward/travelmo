@@ -441,9 +441,38 @@ export const FoundLoyalty = ExtractedMembership.extend({
   balanceLabel: z.string().optional(),
   // When the status was as of: the sending time of the email that gave it.
   statusAt: isoDateTime.optional(),
+  // Whose it is, when the email named someone other than the owner.
+  person: z.string().min(1).max(80).optional(),
 });
 export type FoundLoyalty = z.infer<typeof FoundLoyalty>;
 export const maxFoundLoyalty = 50;
+
+// Whom the owner says a membership belongs to, over what the email said:
+// a name, or nobody for themself.
+export const LoyaltyPerson = z.object({
+  program: z.string().min(1),
+  number: z.string().min(1),
+  person: z.string().trim().min(1).max(80).optional(),
+});
+export type LoyaltyPerson = z.infer<typeof LoyaltyPerson>;
+export const maxLoyaltyPeople = 100;
+
+// Whether a membership number could be one: it has a digit, and is not a
+// balance read as one ("9,600 Points").
+export const isMembershipNumber = (number: string) =>
+  /\d/.test(number) && !number.includes(",") && !/\b(points?|pts|miles?|credits?|nights?)\b/i.test(number);
+
+// Entries that parse, the rest left out rather than the whole profile.
+const parsedEach = <T>(schema: z.ZodType<T>, keep: (item: T) => boolean = () => true) =>
+  z
+    .array(z.unknown())
+    .transform((entries) =>
+      entries.flatMap((e) => {
+        const parsed = schema.safeParse(e);
+        return parsed.success && keep(parsed.data) ? [parsed.data] : [];
+      }),
+    )
+    .optional();
 
 export const TravelProfile = z.object({
   ownerUid: z.string().min(1),
@@ -453,15 +482,8 @@ export const TravelProfile = z.object({
   loyalty: z.array(ProfileEntry).default([]),
   documents: z.array(ProfileEntry).default([]),
   // An entry that does not parse is left out, not the whole profile.
-  foundLoyalty: z
-    .array(z.unknown())
-    .transform((entries) =>
-      entries.flatMap((e) => {
-        const parsed = FoundLoyalty.safeParse(e);
-        return parsed.success ? [parsed.data] : [];
-      }),
-    )
-    .optional(),
+  foundLoyalty: parsedEach(FoundLoyalty, (f) => isMembershipNumber(f.number)),
+  loyaltyPeople: parsedEach(LoyaltyPerson),
   importedAt: isoDateTime.optional(),
   updatedAt: isoDateTime.optional(),
 });
