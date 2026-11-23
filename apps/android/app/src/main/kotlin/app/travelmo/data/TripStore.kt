@@ -86,6 +86,9 @@ interface TripStore {
      */
     fun addressHolder(uid: String): Flow<AddressHolder>
 
+    /** The user's calendar export link (`users/{uid}/calendarExport/main`), live; [CalendarExportShown.token] null when they have none, the flow's value null while it loads. */
+    fun calendarExport(uid: String): Flow<CalendarExportShown?>
+
     /** The user's calendar feeds (`users/{uid}/feeds`), oldest first, live; null while they load. */
     fun feeds(uid: String): Flow<List<CalendarFeedShown>?>
 
@@ -236,6 +239,13 @@ class TripGoneException(message: String) : Exception(message)
  * useAccess does).
  */
 data class Seen<T>(val value: T, val confirmed: Boolean)
+
+/** The user's calendar export token, when they have one. */
+data class CalendarExportShown(val token: String?)
+
+/** `users/{uid}/calendarExport/main` as the parser writes it; a token shorter than the web's schema allows is none. */
+internal fun calendarExportOf(data: Map<String, Any?>?): CalendarExportShown =
+    CalendarExportShown((data?.get("token") as? String)?.takeIf { it.length >= 20 })
 
 /** A calendar feed as Settings lists it: the link's label or host, and what its last read did. */
 data class CalendarFeedShown(
@@ -401,6 +411,18 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         return db.collectionGroup("travelProfile").whereArrayContainsAny("trustedEmails", asked).snapshots().orNothing("shared profiles").map { snapshot ->
             snapshot?.documents.orEmpty().mapNotNull { doc -> profileFromDocument(doc.data ?: emptyMap()) }
         }
+    }
+
+    override fun calendarExport(uid: String): Flow<CalendarExportShown?> = callbackFlow {
+        val registration = db.document("users/$uid/calendarExport/main").addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                TravelmoLog.error(error, "Reading the calendar export link failed")
+                trySend(CalendarExportShown(null))
+                return@addSnapshotListener
+            }
+            trySend(calendarExportOf(snapshot?.data))
+        }
+        awaitClose { registration.remove() }
     }
 
     override fun feeds(uid: String): Flow<List<CalendarFeedShown>?> = callbackFlow {

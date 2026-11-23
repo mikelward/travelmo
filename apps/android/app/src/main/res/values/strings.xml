@@ -133,6 +133,15 @@
     <string name="feed_not_read">Not read yet</string>
     <string name="remove_feed">Remove %1$s</string>
     <string name="feeds_on_web">Add or remove feeds from Settings on the web.</string>
+    <string name="calendar_export">Calendar export</string>
+    <string name="calendar_export_hint">Show your trips and bookings in Google Calendar, Apple Calendar or Outlook through a link they check for changes, a few times a day. Anyone with the link can see your trips, confirmation numbers included, so keep it to yourself; replacing it stops the old one working.</string>
+    <string name="create_calendar_link">Create calendar link</string>
+    <string name="copy_link">Copy link</string>
+    <string name="add_to_google_calendar">Add to Google Calendar</string>
+    <string name="open_in_calendar_app">Open in calendar app</string>
+    <string name="replace_link">Replace link</string>
+    <string name="replace_export_confirm">Replace the link? Calendars subscribed to the old one stop updating.</string>
+    <string name="stop_export_confirm">Turn off the calendar link? Calendars subscribed to it stop updating.</string>
     <string name="forward_by_email">Forward by email</string>
     <string name="forward_hint">No Gmail, or a confirmation in another mailbox? Forward it to your own Travelmo address and it is read like any booking email, within a minute. The address is yours alone: anyone who has it can add bookings to your trips, so replace it if it gets out. Attachments are not read, so forward the email itself rather than a PDF.</string>
     <string name="create_forwarding_address">Create forwarding address</string>

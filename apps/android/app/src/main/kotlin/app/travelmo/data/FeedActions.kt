@@ -4,11 +4,7 @@ import app.travelmo.core.CalendarResult
 import app.travelmo.core.FEED_ADD_PATH
 import app.travelmo.core.FEED_REMOVE_PATH
 import app.travelmo.core.describeCalendarResult
-import app.travelmo.core.tripActionFailure
 import app.travelmo.log.TravelmoLog
-import com.mikelward.androidlog.safe
-import java.io.IOException
-import kotlinx.coroutines.CancellationException
 import org.json.JSONException
 import org.json.JSONObject
 
@@ -55,7 +51,8 @@ class ParserFeedActions(private val client: ParserClient) : FeedActions {
         get() = client.available
 
     override suspend fun add(url: String): String {
-        val body = call(FEED_ADD_PATH, JSONObject().put("url", url.trim()).toString(), "Adding a calendar feed")
+        // A link the parser cannot read, or one too many feeds, said in plain words.
+        val body = client.postAction(FEED_ADD_PATH, "Adding a calendar feed", JSONObject().put("url", url.trim()).toString(), explained = setOf(400, 409))
         return try {
             describeCalendarResult(calendarResultOf(JSONObject(body)))
         } catch (e: JSONException) {
@@ -66,26 +63,6 @@ class ParserFeedActions(private val client: ParserClient) : FeedActions {
     }
 
     override suspend fun remove(id: String) {
-        call(FEED_REMOVE_PATH, JSONObject().put("id", id).toString(), "Removing a calendar feed")
-    }
-
-    // [what] is fixed wording for the log, never the body (the link may hold a private token).
-    private suspend fun call(path: String, json: String, what: String): String {
-        TravelmoLog.info("%s", safe(what))
-        val reply = try {
-            client.post(path, json) ?: throw TripActionFailed(tripActionFailure(401))
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: IOException) {
-            TravelmoLog.failure(e, "$what failed: the parser could not be reached")
-            throw TripActionFailed(tripActionFailure(null), e)
-        }
-        if (reply.status !in 200..299) {
-            TravelmoLog.warning("%s failed: HTTP %s", safe(what), safe(reply.status.toString()))
-            // A link the parser cannot read, or one too many feeds, said in plain words.
-            val reason = reply.body.trim().takeIf { reply.status in setOf(400, 409) && it.isNotEmpty() && it.length < 200 }
-            throw TripActionFailed(reason?.let { if (it.endsWith(".")) it else "$it." } ?: tripActionFailure(reply.status))
-        }
-        return reply.body
+        client.postAction(FEED_REMOVE_PATH, "Removing a calendar feed", JSONObject().put("id", id).toString(), explained = setOf(400))
     }
 }

@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -107,6 +108,7 @@ private const val ADD_EMAIL_TOKEN = "settings/emails/add"
 private const val REMOVE_EMAIL_TOKEN = "settings/emails/remove"
 private const val SENDER_RULES_TOKEN = "settings/senders"
 private const val FORWARD_TOKEN = "settings/forward"
+private const val EXPORT_TOKEN = "settings/export"
 private const val ADD_FEED_TOKEN = "settings/feeds/add"
 private const val REMOVE_FEED_TOKEN = "settings/feeds/remove"
 private const val ADD_COMPANY_TOKEN = "settings/rides/add"
@@ -161,6 +163,7 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
             FastmailSection(viewModel)
             TripsSection(viewModel)
             FeedsSection(viewModel)
+            CalendarExportSection(viewModel)
             Text(stringResource(R.string.import_review), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
             Text(stringResource(R.string.import_review_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedButton(onClick = onOpenReview, modifier = Modifier.padding(top = 8.dp)) { Text(stringResource(R.string.open_import_review)) }
@@ -267,6 +270,61 @@ private fun FeedsSection(viewModel: TripsViewModel) {
 }
 
 /**
+ * Settings' "Calendar export", as on the web: a link calendar apps
+ * subscribe to, created, copied, added to Google Calendar or opened in a
+ * calendar app, replaced or turned off.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CalendarExportSection(viewModel: TripsViewModel) {
+    val record by viewModel.calendarExport.collectAsStateWithLifecycle()
+    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val outcome = outcomes[EXPORT_TOKEN]
+    val busy = outcome is Outcome.Busy
+    val context = LocalContext.current
+    // Which change is waiting for the user to confirm it: replace or turn off.
+    var confirming by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(outcome) { if (outcome is Outcome.Done) viewModel.outcomeSeen(EXPORT_TOKEN) }
+    val shown = record ?: return
+    if (!viewModel.canExport) return
+    Text(stringResource(R.string.calendar_export), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(R.string.calendar_export_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val token = shown.token
+    if (token == null) {
+        Button(onClick = { viewModel.issueCalendarExport(EXPORT_TOKEN) }, enabled = !busy, modifier = Modifier.padding(top = 8.dp)) {
+            Text(stringResource(if (busy) R.string.creating else R.string.create_calendar_link))
+        }
+    } else {
+        val links = viewModel.exportLinksFor(token)
+        SelectionContainer { Text(links.https, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp)) }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+            OutlinedButton(onClick = { copyToClipboard(context, R.string.calendar_export, links.https) }) { Text(stringResource(R.string.copy_link)) }
+            OutlinedButton(onClick = { openLink(context, links.google, "Google Calendar's add-by-link page") }) { Text(stringResource(R.string.add_to_google_calendar)) }
+            OutlinedButton(onClick = { openLink(context, links.webcal, "the calendar link in a calendar app") }) { Text(stringResource(R.string.open_in_calendar_app)) }
+            OutlinedButton(onClick = { confirming = true }, enabled = !busy) { Text(stringResource(R.string.replace_link)) }
+            OutlinedButton(onClick = { confirming = false }, enabled = !busy) { Text(stringResource(R.string.turn_off)) }
+        }
+    }
+    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+    confirming?.let { replace ->
+        AppAlertDialog(
+            onDismissRequest = { confirming = null },
+            text = { Text(stringResource(if (replace) R.string.replace_export_confirm else R.string.stop_export_confirm)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirming = null
+                        if (replace) viewModel.issueCalendarExport(EXPORT_TOKEN) else viewModel.stopCalendarExport(EXPORT_TOKEN)
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) { Text(stringResource(if (replace) R.string.replace_link else R.string.turn_off)) }
+            },
+            dismissButton = { TextButton(onClick = { confirming = null }) { Text(stringResource(R.string.keep)) } },
+        )
+    }
+}
+
+/**
  * Settings' "Forward by email", as on the web: the user's own address to
  * forward bookings to, created, copied, replaced or turned off. Shown when
  * the deployment has a forwarding domain, or the user already has one.
@@ -294,7 +352,7 @@ private fun ForwardSection(viewModel: TripsViewModel) {
     } else {
         SelectionContainer { Text(address, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp)) }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
-            OutlinedButton(onClick = { copyForwardAddress(context, address) }) { Text(stringResource(R.string.copy_address)) }
+            OutlinedButton(onClick = { copyToClipboard(context, R.string.forward_by_email, address) }) { Text(stringResource(R.string.copy_address)) }
             OutlinedButton(onClick = { confirming = true }, enabled = !busy) { Text(stringResource(R.string.replace_address)) }
             OutlinedButton(onClick = { confirming = false }, enabled = !busy) { Text(stringResource(R.string.turn_off)) }
         }
@@ -318,14 +376,14 @@ private fun ForwardSection(viewModel: TripsViewModel) {
     }
 }
 
-/** Puts the forwarding address on the clipboard; Android confirms the copy itself. */
-private fun copyForwardAddress(context: Context, address: String) {
+/** Puts [text] on the clipboard, labeled [label]; Android confirms the copy itself. */
+private fun copyToClipboard(context: Context, @StringRes label: Int, text: String) {
     val clipboard = context.getSystemService(ClipboardManager::class.java)
     if (clipboard == null) {
-        TravelmoLog.warning("No clipboard to copy the forwarding address to")
+        TravelmoLog.warning("No clipboard to copy to")
         return
     }
-    clipboard.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.forward_by_email), address))
+    clipboard.setPrimaryClip(ClipData.newPlainText(context.getString(label), text))
 }
 
 /**

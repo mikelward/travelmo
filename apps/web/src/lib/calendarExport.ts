@@ -1,6 +1,8 @@
 "use client";
 
-import { CalendarExport, paths } from "@travelmo/core";
+import { CalendarExport, exportLinks as coreExportLinks, paths, type ExportLinks } from "@travelmo/core";
+
+export type { ExportLinks };
 import { doc, onSnapshot } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { parserUrl } from "./api";
@@ -27,12 +29,7 @@ export function useCalendarExport(uid: string): CalendarExport | null | undefine
   return record;
 }
 
-export type ExportLinks = { https: string; webcal: string; google: string };
-
-// The same calendar three ways: to copy, for Apple Calendar (webcal opens
-// its subscribe dialog), and for Google Calendar's add-by-link page.
+// The export links from this deployment's parser.
 export function exportLinks(token: string, base = parserUrl()): ExportLinks {
-  const https = `${base}/cal/${token}.ics`;
-  const webcal = https.replace(/^https?:/, "webcal:");
-  return { https, webcal, google: `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcal)}` };
+  return coreExportLinks(token, base);
 }

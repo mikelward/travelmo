@@ -588,6 +588,32 @@ class ScreenScreenshotTest {
         composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
     }
 
+    // Settings scrolled to the calendar export link.
+    @Test
+    fun settings_export() = settingsExport("settings_export", dark = false)
+
+    @Test
+    fun settings_export_dark() = settingsExport("settings_export_dark", dark = true)
+
+    private fun settingsExport(name: String, dark: Boolean) {
+        val store = FakeTripStore()
+        store.export.value = app.travelmo.data.CalendarExportShown("k3x9q2m7p4w8z5r6t2y8")
+        val actions = object : app.travelmo.data.CalendarExportActions {
+            override val available = true
+            override suspend fun issue() {}
+            override suspend fun stop() {}
+        }
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, calendarExportActions = actions, parserUrl = "https://parser.example")
+        composeRule.setContent {
+            TravelmoTheme(darkTheme = dark) {
+                SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
+            }
+        }
+        composeRule.onNodeWithText("Turn off").performScrollTo()
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
+    }
+
     // Settings scrolled to an address to forward bookings to.
     @Test
     fun settings_forward() = settingsForward("settings_forward", dark = false)

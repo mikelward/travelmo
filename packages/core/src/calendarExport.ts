@@ -139,3 +139,18 @@ export function exportCalendar(items: readonly ExportTrip[], options: { stamp: s
   lines.push("END:VCALENDAR");
   return `${lines.map(fold).join("\r\n")}\r\n`;
 }
+
+// The parser routes that issue the export link and turn it off.
+export const calendarExportIssuePath = "/export/calendar";
+export const calendarExportStopPath = "/export/calendar/stop";
+
+export type ExportLinks = { https: string; webcal: string; google: string };
+
+// The same calendar three ways, from the parser's address [base]: to copy,
+// for a calendar app (webcal opens its subscribe dialog), and for Google
+// Calendar's add-by-link page.
+export function exportLinks(token: string, base: string): ExportLinks {
+  const https = `${base.replace(/\/$/, "")}/cal/${token}.ics`;
+  const webcal = https.replace(/^https?:/, "webcal:");
+  return { https, webcal, google: `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcal)}` };
+}
