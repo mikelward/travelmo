@@ -18,7 +18,7 @@ on Android; native apps later without a rewrite.
 | Email | Gmail API, OAuth refresh token, Pub/Sub push | Near-realtime import with no polling |
 | Worker | Cloud Run (Hono, Node 22) | Pay per request; also hosts the OAuth flow so the web app needs no secrets |
 | Extraction | Gemini via `@google/genai`, JSON schema output | Cheapest model that reliably fills a strict schema; model name is configurable |
-| Mobile | PWA now, React Native + Expo later | `packages/core` already holds the schemas and logic a native app needs |
+| Mobile | PWA, a native Android app, and an iOS app sharing its Kotlin | Kotlin Multiplatform: the Android app's `:core` builds for iOS too, so the logic is not written a third time; a PWA on iOS gets no background refresh, no Time Sensitive notifications and no Live Activities |
 
 ## Data model
 
@@ -2019,7 +2019,13 @@ Credential Manager and Firebase Auth, so a trip looks the same on both and
 Firestore's own cache answers offline. `:core` re-implements, in Kotlin, what
 the screens need of `packages/core` (grouping, the next event, the status
 lines, date formatting); the two are kept in step by hand, with tests that
-mirror each other. The first cut is the sign-in, the trip list with its
+mirror each other. `:core` is Kotlin Multiplatform: the same code and the
+same tests build for the JVM (the Android app) and for iOS ("iOS app"), so
+it uses kotlinx-datetime rather than `java.time`, writes en-GB's month and
+day names itself rather than asking a platform, and has the airport tables
+and the world map compiled in as strings, iOS having no class-path
+resources; only the list of countries and their names in a language come
+from the platform (`java.util.Locale`, `NSLocale`). The first cut is the sign-in, the trip list with its
 status lines, a read-only trip page and sign-out; Settings also turns
 reminders by email on or off (`reminders.email`, as the web's does) and
 reminders as notifications on the phone (the phone's Cloud Messaging token
@@ -2179,3 +2185,15 @@ Itinerary ideas and
 other mail providers. Further import
 sources share the pipeline, as Google Calendar and forward-to-import do;
 `IMPORT.md` compares them and maps their fields.
+
+## iOS app
+
+Planned, and built the way the Android app is, sharing its Kotlin through
+Kotlin Multiplatform rather than written again in Swift. So far
+`apps/android/core` builds for iOS (`iosArm64`, `iosSimulatorArm64`) and
+CI's `ios-core` job runs its tests on the iOS Simulator on a macOS runner;
+Linux compiles the iOS targets but cannot run them. Next, in order: the
+Compose screens move to a module both apps build (Compose Multiplatform),
+then the iOS app itself (Firebase Auth and Firestore, Google sign-in and
+Sign in with Apple, which App Store review asks of an app offering Google's,
+notifications through Cloud Messaging), then a TestFlight build from CI.

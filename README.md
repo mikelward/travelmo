@@ -74,7 +74,7 @@ builds only, so `next dev` runs without it.
 ### Android
 
 `apps/android` is a Gradle build of its own (JDK 21; the wrapper fetches
-Gradle). `:core` is plain Kotlin with the models and the logic the web's
+Gradle). `:core` is Kotlin Multiplatform (the JVM and iOS) with the models and the logic the web's
 `packages/core` has (grouping, what comes next, the status lines, date
 formatting), tested without an SDK and kept free of Android by
 `:core:verifyNoAndroid`; `:app` is the Compose app: sign-in, the trip list,
@@ -96,7 +96,7 @@ same way.
 
 ```sh
 cd apps/android
-./gradlew :core:verifyNoAndroid :core:test            # no SDK needed
+./gradlew :core:verifyNoAndroid :core:test            # no SDK needed; on a Mac, also on the iOS Simulator
 ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 

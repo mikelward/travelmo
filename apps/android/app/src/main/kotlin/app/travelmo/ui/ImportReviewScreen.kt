@@ -80,7 +80,7 @@ fun ImportReviewScreen(viewModel: TripsViewModel, onBack: () -> Unit, zone: Zone
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
     // A search's records are read once; the live latest show any read again since.
     val records = if (searching) all?.let { withLatest(it.records, latest.orEmpty()) } else latest
-    val shown = records?.let { toReview(it, keyword, dayRange(from?.let(LocalDate::parse), to?.let(LocalDate::parse), zone)) }.orEmpty()
+    val shown = records?.let { toReview(it, keyword, dayRange(from, to, zone.id)) }.orEmpty()
     val searchDone = !searching || all?.done == true
     Scaffold(
         topBar = {
@@ -209,7 +209,7 @@ private fun ReviewRow(
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(bottom = 12.dp))
         Text(record.subject?.takeIf { it.isNotBlank() } ?: stringResource(R.string.no_subject), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-        val line = listOf(reviewDate(record, zone), record.from ?: stringResource(R.string.unknown_sender), outcomeLabel(record.outcome)).joinToString(" · ") +
+        val line = listOf(reviewDate(record, zone.id), record.from ?: stringResource(R.string.unknown_sender), outcomeLabel(record.outcome)).joinToString(" · ") +
             (record.reason?.let { " ($it)" } ?: "")
         Text(line, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {

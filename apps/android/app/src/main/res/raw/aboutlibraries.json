@@ -3559,6 +3559,28 @@
             ]
         },
         {
+            "uniqueId": "org.jetbrains.kotlinx:kotlinx-datetime",
+            "artifactVersion": "0.8.0",
+            "name": "kotlinx-datetime",
+            "description": "Kotlin Datetime Library",
+            "website": "https://github.com/Kotlin/kotlinx-datetime",
+            "developers": [
+                {
+                    "name": "JetBrains Team",
+                    "organisationUrl": "https://www.jetbrains.com"
+                }
+            ],
+            "scm": {
+                "url": "https://github.com/Kotlin/kotlinx-datetime"
+            },
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "funding": [
+                
+            ]
+        },
+        {
             "uniqueId": "org.jetbrains.kotlinx:kotlinx-serialization-core",
             "artifactVersion": "1.12.0",
             "name": "kotlinx-serialization-core",
