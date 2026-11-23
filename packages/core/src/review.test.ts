@@ -1,6 +1,6 @@
 import type { ParsedMessage } from "./schema";
 import { describe, expect, it } from "vitest";
-import { dayRange, matchesKeyword, toReview, withLatest } from "./review";
+import { dayRange, matchesKeyword, reviewDate, toReview, withLatest } from "./review";
 
 const record = (extra: Partial<ParsedMessage>): ParsedMessage => ({
   messageId: "m",
@@ -73,5 +73,12 @@ describe("withLatest", () => {
       ["c", "filtered"],
       ["b", "not_booking"],
     ]);
+  });
+});
+
+describe("reviewDate", () => {
+  it("says when the email was sent, or when it was read if that is unknown", () => {
+    expect(reviewDate({ sentAt: "2026-05-23T07:22:58Z", processedAt: "2026-11-23T12:00:00Z" }, "en-GB", "Europe/London")).toBe("Sent 23 May 2026");
+    expect(reviewDate({ processedAt: "2026-11-23T12:00:00Z" }, "en-GB", "Europe/London")).toBe("Read 23 Nov 2026");
   });
 });

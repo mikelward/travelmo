@@ -1,6 +1,6 @@
 "use client";
 
-import { dayRange, toReview, withLatest, type ParsedMessage, type ReviewSearch } from "@travelmo/core";
+import { dayRange, reviewDate, toReview, withLatest, type ParsedMessage, type ReviewSearch } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
 import { useState } from "react";
@@ -96,7 +96,7 @@ function ReviewList({ user }: { user: User }) {
             <li key={record.messageId} className="py-3 text-sm">
               <p className="font-medium">{record.subject || "(no subject)"}</p>
               <p className="text-zinc-600 dark:text-zinc-400">
-                {record.from || "unknown sender"} · {outcomeLabels[record.outcome]}
+                {reviewDate(record)} · {record.from || "unknown sender"} · {outcomeLabels[record.outcome]}
                 {record.reason ? ` (${record.reason})` : ""}
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
