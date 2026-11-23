@@ -28,3 +28,4 @@ export * from "./review";
 export * from "./flightStatus";
 export * from "./access";
 export * from "./rides";
+export * from "./emails";

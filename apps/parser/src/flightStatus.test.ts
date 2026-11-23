@@ -363,11 +363,13 @@ describe("flightWindow", () => {
 });
 
 describe("canSeeTrip", () => {
-  it("lets in the owner and the people it is shared with by verified address", () => {
-    const shared = trip("t1", "owner", ["partner@example.com"]);
-    expect(canSeeTrip(shared, "owner", undefined)).toBe(true);
-    expect(canSeeTrip(shared, "partner", "Partner@example.com")).toBe(true);
-    expect(canSeeTrip(shared, "stranger", undefined)).toBe(false);
-    expect(canSeeTrip(shared, "stranger", "stranger@example.com")).toBe(false);
+  it("lets in the owner and the people it is shared with by any of their addresses", () => {
+    const shared = trip("t1", "owner", ["partner@example.com", "work@company.example"]);
+    expect(canSeeTrip(shared, "owner", [])).toBe(true);
+    expect(canSeeTrip(shared, "partner", ["partner@example.com"])).toBe(true);
+    // Shared with an address the person linked, not the one they sign in with.
+    expect(canSeeTrip(shared, "worker", ["worker@example.com", "work@company.example"])).toBe(true);
+    expect(canSeeTrip(shared, "stranger", [])).toBe(false);
+    expect(canSeeTrip(shared, "stranger", ["stranger@example.com"])).toBe(false);
   });
 });

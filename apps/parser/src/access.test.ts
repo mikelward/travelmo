@@ -60,6 +60,31 @@ function fakeDeps(overrides: Partial<SettleDeps> = {}, emails: Record<string, st
 }
 
 describe("gateUser", () => {
+  it("lets in an admin listed by an address they linked, whatever their sign-in's record says", async () => {
+    const admin = person("linked-admin");
+    await db.doc(paths.user(admin.uid)).set({ emails: [adminEmail] });
+    await db.doc(paths.emailLinks(admin.uid)).set({ pending: [], confirmed: [adminEmail] });
+    await db.doc(paths.access(admin.email)).set({ email: admin.email, status: "declined", declinedBy: adminUid, declinedAt: iso });
+    expect(await gateUser(db, admin)).toBe("ok");
+    // A linked address's approval does not undo the sign-in's decline.
+    const other = person("linked");
+    const work = `${unique("work")}@company.example`;
+    await db.doc(paths.user(other.uid)).set({ emails: [work] });
+    await db.doc(paths.emailLinks(other.uid)).set({ pending: [], confirmed: [work] });
+    await db.doc(paths.access(work)).set({ email: work, status: "approved", approvedBy: adminUid, approvedAt: iso });
+    await db.doc(paths.access(other.email)).set({ email: other.email, status: "declined", declinedBy: adminUid, declinedAt: iso });
+    expect(await gateUser(db, other)).toBe("unapproved");
+  });
+
+  it("trusts only the addresses the parser confirmed, not a list a client wrote on its profile", async () => {
+    // The rules before linked addresses let a client write any field of its
+    // own user document, `emails` included.
+    const planter = person("planter");
+    await db.doc(paths.user(planter.uid)).set({ emails: [adminEmail] });
+    await db.doc(paths.access(planter.email)).set({ email: planter.email, status: "declined", declinedBy: adminUid, declinedAt: iso });
+    expect(await gateUser(db, planter)).toBe("unapproved");
+  });
+
   it("lets in an account from before approvals and keeps out a new one", async () => {
     const old = person("old");
     await db.doc(paths.user(old.uid)).set({ email: old.email });
@@ -138,7 +163,7 @@ describe("the calendar link", () => {
   const options = { now: iso, tripUrl: (id: string) => `https://travelmo.example/trips/${id}` };
   const exportIo = (emails: Record<string, string>) => {
     const verifiedEmail = async (uid: string) => emails[uid];
-    return firestoreExportIo(db, verifiedEmail, (uid) => approvedUid(db, uid, verifiedEmail));
+    return firestoreExportIo(db, async (uid) => (emails[uid] ? [emails[uid]] : []), (uid) => approvedUid(db, uid, verifiedEmail));
   };
 
   it("serves an approved owner's trips and nothing once their access is revoked", async () => {

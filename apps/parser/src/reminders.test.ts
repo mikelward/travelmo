@@ -52,6 +52,8 @@ function setup(
     segments?: Segment[];
     profiles?: Record<string, TravelProfile>;
     emails?: Record<string, string>;
+    // Addresses each user linked besides their sign-in.
+    linked?: Record<string, string[]>;
     users?: (string | ReminderUser)[];
     subscriptions?: Record<string, StoredSubscription[]>;
     devices?: Record<string, StoredDevice[]>;
@@ -70,6 +72,7 @@ function setup(
   const io: ReminderIo = {
     users: async () => users,
     verifiedEmail: async (uid) => emails[uid],
+    addresses: async (uid) => [...(emails[uid] ? [emails[uid]] : []), ...(options.linked?.[uid] ?? [])],
     pushSubscriptions: async (uid) => subscriptions.get(uid) ?? [],
     removePushSubscription: async (uid, id) => {
       subscriptions.set(uid, (subscriptions.get(uid) ?? []).filter((s) => s.id !== id));
@@ -78,11 +81,11 @@ function setup(
     removeDevice: async (uid, id) => {
       devices.set(uid, (devices.get(uid) ?? []).filter((d) => d.id !== id));
     },
-    trips: async (uid, email, endsOnOrAfter) =>
-      (options.trips ?? []).filter((t) => (t.ownerUid === uid || (email && t.sharedWith.includes(email))) && t.end >= endsOnOrAfter),
+    trips: async (uid, addresses, endsOnOrAfter) =>
+      (options.trips ?? []).filter((t) => (t.ownerUid === uid || t.sharedWith.some((e) => addresses.includes(e))) && t.end >= endsOnOrAfter),
     segments: async (tripId) => (options.segments ?? []).filter((s) => s.tripId === tripId),
     ownProfile: async (uid) => options.profiles?.[uid],
-    sharedProfiles: async (email) => Object.values(options.profiles ?? {}).filter((p) => email && p.trustedEmails.includes(email)),
+    sharedProfiles: async (addresses) => Object.values(options.profiles ?? {}).filter((p) => p.trustedEmails.some((e) => addresses.includes(e))),
     sentLines: async (uid, tripId) => sent.get(`${uid}/${tripId}`) ?? [],
     markSent: async (uid, tripId, lines) => {
       sent.set(`${uid}/${tripId}`, [...(sent.get(`${uid}/${tripId}`) ?? []), ...lines]);
@@ -128,6 +131,18 @@ describe("sendReminders", () => {
     // Nothing new the next day.
     expect(await run()).toEqual({ users: 1, mailed: 0, pushed: 0, lines: 0, skipped: 0, failed: 0 });
     expect(mails).toHaveLength(1);
+  });
+
+  it("reminds of a trip shared with an address the user linked, mailing their sign-in", async () => {
+    const { mails, run } = setup({
+      trips: [trip("Dubai", "owner", "2026-11-20", "2026-11-25", { sharedWith: ["work@company.example"] })],
+      segments: [flight("Dubai", "DXB", "AE")],
+      profiles: { u1: profile("u1", "2026-12-30") },
+      linked: { u1: ["work@company.example"] },
+    });
+    expect((await run()).mailed).toBe(1);
+    expect(mails[0]!.to).toBe("traveler@example");
+    expect(mails[0]!.text).toContain("https://travelmo.example/trips/Dubai");
   });
 
   it("sends nothing for a trip whose every booking was cancelled", async () => {

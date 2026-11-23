@@ -31,9 +31,9 @@ function io(token: string, calls: string[] = [], approved = true): ExportIo {
   return {
     uidForToken: async (h) => (h === hashToken(token) ? "u1" : undefined),
     approved: async (uid) => uid === "u1" && approved,
-    verifiedEmail: async () => "me@example.com",
-    trips: async (uid, email, since) => {
-      calls.push(`${uid} ${email} ${since}`);
+    addresses: async () => ["me@example.com", "work@company.example"],
+    trips: async (uid, addresses, since) => {
+      calls.push(`${uid} ${addresses.join(",")} ${since}`);
       return [trip("a"), trip("gone", { deleting: true })];
     },
     segments: async (id) => (id === "a" ? [segment] : []),
@@ -47,7 +47,7 @@ describe("calendarForToken", () => {
     const token = newToken();
     const calls: string[] = [];
     const text = await calendarForToken(token, io(token, calls), options);
-    expect(calls).toEqual(["u1 me@example.com 2025-11-01"]);
+    expect(calls).toEqual(["u1 me@example.com,work@company.example 2025-11-01"]);
     expect(text).toContain("SUMMARY:Trip a");
     expect(text).toContain("SUMMARY:XX 100 MAN to DXB");
     expect(text).not.toContain("Trip gone");

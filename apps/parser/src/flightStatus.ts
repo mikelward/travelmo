@@ -11,6 +11,7 @@ import {
   paths,
   refreshBeforeDepartureMs,
   Segment,
+  sharedWithAny,
   Trip,
   type ReminderNotification,
 } from "@travelmo/core";
@@ -309,9 +310,9 @@ export async function retryPendingNews(io: FlightIo, options: FlightOptions): Pr
 }
 
 // Whether the signed-in person may see the trip: its owner, or someone it
-// is shared with by their verified address.
-export function canSeeTrip(trip: Trip, uid: string, verifiedEmail: string | undefined): boolean {
-  return trip.ownerUid === uid || (verifiedEmail !== undefined && trip.sharedWith.includes(verifiedEmail.toLowerCase()));
+// is shared with by any of their addresses (verified sign-in or linked).
+export function canSeeTrip(trip: Trip, uid: string, addresses: readonly string[]): boolean {
+  return trip.ownerUid === uid || sharedWithAny(trip.sharedWith, addresses);
 }
 
 export function firestoreFlightIo(

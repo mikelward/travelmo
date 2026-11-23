@@ -60,14 +60,24 @@ export type AccessInputs = {
   hasProfile: boolean;
   record: AccessRecord | undefined;
   config: AccessConfig | undefined;
+  // The addresses the account confirmed besides its sign-in (emails.ts),
+  // and their records: an admin's listing, an approval or an invite of any
+  // of them lets the account in as one of the sign-in's would. Only the
+  // sign-in's decline locks it out: that is the address an admin revokes.
+  linked?: readonly string[] | undefined;
+  linkedRecords?: readonly AccessRecord[] | undefined;
 };
 
-export function accessStatus({ email, hasProfile, record, config }: AccessInputs): AccountAccess {
-  if (isAdminEmail(email, config)) return "approved";
+const lets = (record: AccessRecord | undefined): boolean =>
+  !!record && record.status !== "declined" && (record.status === "approved" || !!record.invitedBy);
+
+export function accessStatus({ email, hasProfile, record, config, linked = [], linkedRecords = [] }: AccessInputs): AccountAccess {
+  if (isAdminEmail(email, config) || linked.some((address) => isAdminEmail(address, config))) return "approved";
   // A record speaks only for a verified address.
   const own = email && record?.email === email ? record : undefined;
   if (own?.status === "declined") return "declined";
   if (own?.status === "approved" || own?.invitedBy || hasProfile) return "approved";
+  if (linkedRecords.some((r) => linked.includes(r.email) && lets(r))) return "approved";
   if (own?.status === "requested") return "requested";
   return "none";
 }

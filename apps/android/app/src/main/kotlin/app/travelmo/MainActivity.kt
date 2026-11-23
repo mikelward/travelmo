@@ -156,7 +156,7 @@ private fun SignedInApp(app: TravelmoApplication, user: SignedIn, requestedTrip:
     val factory = remember(user.uid) {
         object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T = TripsViewModel(app.trips, user.uid, user.email, pushDevice = app.pushDevice, accountDeletion = app.accountDeletion, flightRefresh = app.flightRefresh, accessCheck = app.accessCheck) as T
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = TripsViewModel(app.trips, user.uid, user.email, pushDevice = app.pushDevice, accountDeletion = app.accountDeletion, flightRefresh = app.flightRefresh, accessCheck = app.accessCheck, emailLinks = app.emailLinks) as T
         }
     }
     val viewModel: TripsViewModel = viewModel(key = user.uid, factory = factory)
@@ -206,7 +206,6 @@ private fun SignedInApp(app: TravelmoApplication, user: SignedIn, requestedTrip:
                     viewModel = viewModel,
                     tripId = key.tripId,
                     uid = user.uid,
-                    email = user.email,
                     onBack = { backStack.removeLastOrNull() },
                     onAddBooking = { defaultDate -> backStack.add(BookingForm(key.tripId, null, defaultDate)) },
                     onEditBooking = { segmentId -> backStack.add(BookingForm(key.tripId, segmentId, "")) },

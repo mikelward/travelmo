@@ -1,6 +1,8 @@
 package app.travelmo.data
 
 import app.travelmo.core.FoundLoyalty
+import app.travelmo.core.AddressHolder
+import app.travelmo.core.PendingEmail
 import app.travelmo.core.Place
 import app.travelmo.core.PlaceDraft
 import app.travelmo.core.ProfileEntry
@@ -149,5 +151,19 @@ class DocumentsTest {
         val profile = profileFromDocument(mapOf("ownerUid" to "u1", "foundLoyalty" to listOf(found, mapOf("program" to "No number"), "junk")))!!
         profile.foundLoyalty shouldBe listOf(FoundLoyalty("Cove Club", "CC 4455", status = "Member", messageId = "m1", label = "Your stay at Cove", at = "2026-11-01T00:00:00Z", balance = "1,200 points", balanceAt = "2026-10-31T00:00:00Z"))
         profile.hasDetails shouldBe true
+    }
+
+    @Test
+    fun `reads the user's addresses from their user document and drops malformed ones`() {
+        val holder = addressHolderFromDocument(
+            mapOf(
+                "email" to "owner@example.com",
+                "emails" to listOf("owner@work.example", 3),
+                "gmail" to mapOf("emailAddress" to "owner.mail@example.net", "connectedAt" to "2026-11-01T00:00:00Z"),
+                "pendingEmails" to listOf(mapOf("email" to "next@example.org", "sentAt" to "a", "expiresAt" to "b"), mapOf("email" to "half@example.org")),
+            ),
+        )
+        holder shouldBe AddressHolder(listOf("owner@work.example"), "owner.mail@example.net", listOf(PendingEmail("next@example.org", "a", "b")))
+        addressHolderFromDocument(emptyMap()) shouldBe AddressHolder()
     }
 }

@@ -89,6 +89,10 @@ async function seedUser(uid: string, email: string) {
   await db.doc(paths.calendarExport(uid)).set({ token: "t", createdAt: iso });
   const retry = `${unique("t")}__s`;
   await db.doc(`geocodeRetries/${retry}`).set({ uid, tripId: "t", segmentId: "s", at: iso });
+  // An address they linked, and one waiting for its confirmation link.
+  const linked = `${unique("work")}@company.example`;
+  await db.doc(paths.linkedEmail(linked)).set({ uid, linkedAt: iso });
+  await db.doc(paths.user(uid)).set({ emails: [linked], pendingEmails: [{ email: "next@company.example", sentAt: iso, expiresAt: iso }] }, { merge: true });
   const owned = [
     paths.pushSubscription(uid, "browser"),
     paths.device(uid, "phone"),
@@ -100,6 +104,7 @@ async function seedUser(uid: string, email: string) {
     paths.forwardBudget(uid),
     paths.importLock(uid),
     paths.reminderLog(uid, "t"),
+    paths.emailLinks(uid),
   ];
   for (const path of owned) await db.doc(path).set({ at: iso });
   const lookups = [
@@ -109,6 +114,7 @@ async function seedUser(uid: string, email: string) {
     paths.forwardAddress(forwardHash),
     paths.calendarExportToken(exportHash),
     `geocodeRetries/${retry}`,
+    paths.linkedEmail(linked),
   ];
   return { mailbox, owned, lookups };
 }
@@ -337,7 +343,7 @@ describe("deleteAccount", () => {
     await deleteAccount(uid, undefined, fakeDeps().deps);
 
     await expect(saveEventAliases(db, uid, "travel", { e1: "uid-1" })).rejects.toBeInstanceOf(AccountDeletedError);
-    await expect(firestoreReminderIo(db, async () => undefined).markSent(uid, "t1", ["line"], iso)).rejects.toBeInstanceOf(AccountDeletedError);
+    await expect(firestoreReminderIo(db, async () => undefined, async () => []).markSent(uid, "t1", ["line"], iso)).rejects.toBeInstanceOf(AccountDeletedError);
     await expect(firestoreFeeds(db).save(uid, { id: "f1", url: "https://example.com/cal.ics", addedAt: iso })).rejects.toBeInstanceOf(AccountDeletedError);
     await expect(acquireUploadLease(db, uid, "tripit", "h1", iso)).rejects.toBeInstanceOf(AccountDeletedError);
     await expect(saveImportedProfile(db, uid, undefined, { travelers: [], loyalty: [], documents: [] }, iso)).rejects.toBeInstanceOf(AccountDeletedError);

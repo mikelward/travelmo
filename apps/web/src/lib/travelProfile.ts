@@ -1,10 +1,11 @@
 "use client";
 
-import { LoyaltyPerson, TravelProfile, accessInvite, normalizeEmail, paths, withLoyaltyPerson, type FoundLoyalty } from "@travelmo/core";
+import { LoyaltyPerson, TravelProfile, accessInvite, normalizeEmail, paths, queryAddresses, withLoyaltyPerson, type FoundLoyalty } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { collectionGroup, doc, onSnapshot, query, runTransaction, where, writeBatch, type Firestore } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { firestore } from "./firebase";
+import { useAddresses } from "./trips";
 
 // The signed-in user's own travel profile; null when there is none yet.
 export function useTravelProfile(uid: string): TravelProfile | null | undefined {
@@ -24,14 +25,15 @@ export function useTravelProfile(uid: string): TravelProfile | null | undefined 
   return profile;
 }
 
-// Profiles other people have shared with this user, by verified email.
+// Profiles other people have shared with this user, by any of their
+// addresses (verified sign-in or linked).
 export function useSharedProfiles(user: User): TravelProfile[] | undefined {
   const [profiles, setProfiles] = useState<TravelProfile[]>();
-  const email = user.emailVerified ? user.email?.toLowerCase() : undefined;
+  const addresses = queryAddresses(useAddresses(user)).join("\n");
   useEffect(() => {
-    if (!email) return;
+    if (!addresses) return;
     return onSnapshot(
-      query(collectionGroup(firestore(), "travelProfile"), where("trustedEmails", "array-contains", email)),
+      query(collectionGroup(firestore(), "travelProfile"), where("trustedEmails", "array-contains-any", addresses.split("\n"))),
       (s) => {
         const out: TravelProfile[] = [];
         for (const d of s.docs) {
@@ -43,9 +45,9 @@ export function useSharedProfiles(user: User): TravelProfile[] | undefined {
       },
       (error) => console.error("Shared profiles subscription failed", error),
     );
-  }, [email]);
-  // An unverified address is trusted by nobody.
-  return email ? profiles : [];
+  }, [addresses]);
+  // Without a verified address the user is trusted by nobody.
+  return addresses ? profiles : [];
 }
 
 export const maxTrusted = 20;

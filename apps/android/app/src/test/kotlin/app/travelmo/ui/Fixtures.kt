@@ -1,5 +1,6 @@
 package app.travelmo.ui
 
+import app.travelmo.core.AddressHolder
 import app.travelmo.core.FlightStatus
 import app.travelmo.core.FoundLoyalty
 import app.travelmo.core.Place
@@ -16,6 +17,8 @@ import app.travelmo.core.SourceRef
 import app.travelmo.core.Trip
 import app.travelmo.data.AccountDeletion
 import app.travelmo.data.AccountDeletionFailed
+import app.travelmo.data.EmailLinkFailed
+import app.travelmo.data.EmailLinks
 import app.travelmo.data.OwnProfile
 import app.travelmo.data.RideSettings
 import app.travelmo.data.TripStore
@@ -173,7 +176,9 @@ class FakeTripStore(
     private val shared: List<TravelProfile> = listOf(fixtureSharedProfile),
     private val gmailAccount: String? = null,
     private val flightStatuses: Map<String, FlightStatus> = emptyMap(),
+    private val addressHolder: AddressHolder = AddressHolder(),
 ) : TripStore {
+    override fun addressHolder(uid: String): Flow<AddressHolder> = flowOf(addressHolder)
     override fun ownProfile(uid: String): Flow<OwnProfile> = flowOf(OwnProfile(profile))
     val reminders = mutableListOf<Boolean>()
     override fun gmailAccount(uid: String): Flow<String?> = flowOf(gmailAccount)
@@ -219,10 +224,10 @@ class FakeTripStore(
         registerDevice(uid, newId, token)
         unregisterDevice(uid, oldId)
     }
-    override fun sharedProfiles(email: String?): Flow<List<TravelProfile>> = flowOf(shared)
+    override fun sharedProfiles(addresses: List<String>): Flow<List<TravelProfile>> = flowOf(shared)
     val saved = mutableListOf<Triple<String, SegmentDraft, String?>>()
     val deleted = mutableListOf<Pair<String, String>>()
-    override fun trips(uid: String, email: String?): Flow<List<Trip>> = flowOf(trips)
+    override fun trips(uid: String, addresses: List<String>): Flow<List<Trip>> = flowOf(trips)
     override fun segments(tripId: String): Flow<List<Segment>> = flowOf(segments[tripId].orEmpty())
     override fun flightStatus(key: String): Flow<FlightStatus?> = flowOf(flightStatuses[key])
     override suspend fun saveSegment(tripId: String, draft: SegmentDraft, existingId: String?) {
@@ -282,6 +287,20 @@ class FakePushDevice(private val token: String? = "fcm-token-1") : PushDevice {
     override fun remembered(uid: String): String? = remembered[uid]
     override fun tokenKnown(token: String?) {
         latest.value = token
+    }
+}
+
+/** The parser's linking of email addresses, refusing with [failure] when given. */
+class FakeEmailLinks(private val failure: String? = null) : EmailLinks {
+    val added = mutableListOf<String>()
+    val removed = mutableListOf<String>()
+    override val available = true
+    override suspend fun add(email: String) {
+        failure?.let { throw EmailLinkFailed(it) }
+        added += email
+    }
+    override suspend fun remove(email: String) {
+        removed += email
     }
 }
 

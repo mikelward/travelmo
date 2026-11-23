@@ -1,6 +1,6 @@
 "use client";
 
-import { allLoyalty, bookedDateRange, displayBounds, effectiveHomes, homeTimeline, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, localDate, normalizeEmail, paths, programsFor, type Segment, type Trip } from "@travelmo/core";
+import { allLoyalty, bookedDateRange, displayBounds, effectiveHomes, homeTimeline, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, localDate, normalizeEmail, paths, programsFor, sharedWithAny, type Segment, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { arrayRemove, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -22,7 +22,7 @@ import { useEntryRequirements } from "@/lib/visas";
 import { localToday } from "@/lib/dates";
 import { usePeopleDocuments, useTripWarnings } from "@/lib/documents";
 import { useTravelProfile } from "@/lib/travelProfile";
-import { useNow, useProfile, useSegments, useSenderPatterns, useTrip, useTrips } from "@/lib/trips";
+import { useAddresses, useNow, useProfile, useSegments, useSenderPatterns, useTrip, useTrips } from "@/lib/trips";
 import { flightLinesFor, useFlightRefresh, useFlightStatuses } from "@/lib/flightStatus";
 
 const buttonClass =
@@ -278,6 +278,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   const patterns = useSenderPatterns(user.uid);
   const allTrips = useTrips(user);
   const profile = useProfile(user.uid);
+  const addresses = useAddresses(user);
   const people = usePeopleDocuments(user);
   // The viewer's own programs, for the number at check-in; a fellow
   // traveler's are theirs.
@@ -301,7 +302,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   if (trip === undefined) return <p className="text-muted">Loading…</p>;
   if (trip === null) return <p className="text-muted">This trip does not exist or is not shared with you.</p>;
   const isOwner = trip.ownerUid === user.uid;
-  const isSharee = !!user.email && user.emailVerified && trip.sharedWith.includes(user.email.toLowerCase());
+  const isSharee = sharedWithAny(trip.sharedWith, addresses);
   // Sharees edit bookings; only the owner renames, shares or deletes the trip.
   const canEdit = (isOwner || isSharee) && !trip.deleting;
   const canManage = isOwner && !trip.deleting;

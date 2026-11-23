@@ -6,6 +6,7 @@ import {
   paths,
   peopleDocuments,
   PushSubscription,
+  queryAddresses,
   reminderEmail,
   reminderLines,
   reminderNotifications,
@@ -36,16 +37,20 @@ export type StoredDevice = { id: string; device: Device };
 export type ReminderIo = {
   // Users with reminders on, by email or push.
   users(): Promise<ReminderUser[]>;
+  // The sign-in Google verified: where reminders are mailed.
   verifiedEmail(uid: string): Promise<string | undefined>;
+  // Every address that is the user's, sign-in and linked: what trips and
+  // profiles are shared with (SPEC "Linked email addresses").
+  addresses(uid: string): Promise<string[]>;
   pushSubscriptions(uid: string): Promise<StoredSubscription[]>;
   removePushSubscription(uid: string, id: string): Promise<void>;
   devices(uid: string): Promise<StoredDevice[]>;
   removeDevice(uid: string, id: string): Promise<void>;
   // The user's own trips and those shared with them, ending on or after the day.
-  trips(uid: string, email: string | undefined, endsOnOrAfter: string): Promise<Trip[]>;
+  trips(uid: string, addresses: readonly string[], endsOnOrAfter: string): Promise<Trip[]>;
   segments(tripId: string): Promise<Segment[]>;
   ownProfile(uid: string): Promise<TravelProfile | undefined>;
-  sharedProfiles(email: string | undefined): Promise<TravelProfile[]>;
+  sharedProfiles(addresses: readonly string[]): Promise<TravelProfile[]>;
   sentLines(uid: string, tripId: string): Promise<string[]>;
   markSent(uid: string, tripId: string, lines: readonly string[], at: string): Promise<void>;
 };
@@ -71,7 +76,7 @@ export async function sendReminders(io: ReminderIo, channels: ReminderChannels, 
       // Email wants a verified address; push wants a subscribed browser or
       // a registered phone. Someone with none is skipped, with the reason,
       // before any reads.
-      let email = settings.email && channels.mail ? await io.verifiedEmail(uid) : undefined;
+      const email = settings.email && channels.mail ? await io.verifiedEmail(uid) : undefined;
       if (settings.email && channels.mail && !email) options.log("reminder_no_verified_email", { uid });
       const subscriptions = settings.push && channels.push ? await io.pushSubscriptions(uid) : [];
       const devices = settings.push && channels.fcm ? await io.devices(uid) : [];
@@ -79,10 +84,10 @@ export async function sendReminders(io: ReminderIo, channels: ReminderChannels, 
         run.skipped += 1;
         continue;
       }
-      // The trips shared with the person are found by their address, whether
-      // or not they want mail.
-      email ??= await io.verifiedEmail(uid);
-      const [own, shared, trips] = await Promise.all([io.ownProfile(uid), io.sharedProfiles(email), io.trips(uid, email, today)]);
+      // The trips shared with the person are found by any of their
+      // addresses, whether or not they want mail.
+      const addresses = await io.addresses(uid);
+      const [own, shared, trips] = await Promise.all([io.ownProfile(uid), io.sharedProfiles(addresses), io.trips(uid, addresses, today)]);
       const people = peopleDocuments(own, shared, uid);
       if (!people.length) continue;
       const reminders: TripReminder[] = [];
@@ -145,7 +150,11 @@ export async function sendReminders(io: ReminderIo, channels: ReminderChannels, 
   return run;
 }
 
-export function firestoreReminderIo(db: Firestore, verifiedEmail: (uid: string) => Promise<string | undefined>): ReminderIo {
+export function firestoreReminderIo(
+  db: Firestore,
+  verifiedEmail: (uid: string) => Promise<string | undefined>,
+  addresses: (uid: string) => Promise<string[]>,
+): ReminderIo {
   const parse = <T>(schema: { safeParse: (v: unknown) => { success: true; data: T } | { success: false } }, data: unknown): T[] => {
     const r = schema.safeParse(data);
     return r.success ? [r.data] : [];
@@ -162,6 +171,7 @@ export function firestoreReminderIo(db: Firestore, verifiedEmail: (uid: string) 
       });
     },
     verifiedEmail,
+    addresses,
     async pushSubscriptions(uid) {
       const snap = await db.collection(paths.pushSubscriptions(uid)).get();
       return snap.docs.flatMap((d) => parse(PushSubscription, d.data()).map((subscription) => ({ id: d.id, subscription })));
@@ -176,9 +186,11 @@ export function firestoreReminderIo(db: Firestore, verifiedEmail: (uid: string) 
     async removeDevice(uid, id) {
       await db.doc(paths.device(uid, id)).delete();
     },
-    async trips(uid, email, endsOnOrAfter) {
+    async trips(uid, addresses, endsOnOrAfter) {
       const queries = [db.collection(paths.trips()).where("ownerUid", "==", uid).where("end", ">=", endsOnOrAfter).get()];
-      if (email) queries.push(db.collection(paths.trips()).where("sharedWith", "array-contains", email).where("end", ">=", endsOnOrAfter).get());
+      if (addresses.length) {
+        queries.push(db.collection(paths.trips()).where("sharedWith", "array-contains-any", queryAddresses(addresses)).where("end", ">=", endsOnOrAfter).get());
+      }
       const byId = new Map<string, Trip>();
       for (const snap of await Promise.all(queries)) for (const d of snap.docs) for (const t of parse(Trip, d.data())) byId.set(t.id, t);
       return [...byId.values()];
@@ -188,9 +200,9 @@ export function firestoreReminderIo(db: Firestore, verifiedEmail: (uid: string) 
       const snap = await db.doc(paths.travelProfile(uid)).get();
       return snap.exists ? parse(TravelProfile, snap.data())[0] : undefined;
     },
-    async sharedProfiles(email) {
-      if (!email) return [];
-      const snap = await db.collectionGroup("travelProfile").where("trustedEmails", "array-contains", email).get();
+    async sharedProfiles(addresses) {
+      if (!addresses.length) return [];
+      const snap = await db.collectionGroup("travelProfile").where("trustedEmails", "array-contains-any", queryAddresses(addresses)).get();
       return snap.docs.flatMap((d) => parse(TravelProfile, d.data()));
     },
     async sentLines(uid, tripId) {

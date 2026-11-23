@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { owner, signIn, signOut } from "./helpers";
-import { clearData, seedTrip, setAdmins } from "./seed";
+import { clearData, seedLinkedEmails, seedTrip, setAdmins } from "./seed";
 
 const admin = "admin@example.com";
 const newcomer = "newcomer@example.com";
@@ -98,6 +98,15 @@ test("sharing a trip lets the address in without asking", async ({ page }) => {
 
   await signIn(page, newcomer, { approved: false });
   await expect(page.getByRole("link", { name: /Liverpool/ }).getByText("Shared")).toBeVisible();
+});
+
+test("linking an admin's address opens the Access page without a reload", async ({ page }) => {
+  await stubCheck(page);
+  const uid = await signIn(page, owner);
+  await expect(page.getByRole("link", { name: "Trips" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Access" })).toHaveCount(0);
+  await seedLinkedEmails(uid, [admin]);
+  await expect(page.getByRole("link", { name: "Access" })).toBeVisible();
 });
 
 // Settings, where accounts are deleted, is closed to an account without

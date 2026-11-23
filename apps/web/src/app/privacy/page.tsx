@@ -33,7 +33,8 @@ export default function PrivacyPage() {
       <Section title="What Travelmo stores">
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            <strong>Your account:</strong> the name, email address and photo of the Google account you sign in with.
+            <strong>Your account:</strong> the name, email address and photo of the Google account you sign in with,
+            and any other email addresses you add in Settings.
           </li>
           <li>
             <strong>Your access:</strong> whether you asked to use Travelmo, who invited you or which admin approved or

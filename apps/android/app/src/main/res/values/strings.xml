@@ -197,6 +197,14 @@
     <string name="signed_in_as">Signed in as %1$s</string>
     <string name="sign_out">Sign out</string>
     <string name="version">Version %1$s</string>
+    <string name="email_addresses">Email addresses</string>
+    <string name="email_addresses_hint">Trips and profiles shared with any of these come to you.</string>
+    <string name="email_sign_in">Sign-in</string>
+    <string name="email_gmail">Gmail</string>
+    <string name="email_pending">Not confirmed yet</string>
+    <string name="remove_email">Remove %1$s</string>
+    <string name="email_link_sent">We sent a link to %1$s. Open it to confirm.</string>
+    <string name="emails_on_web">Add or remove addresses from Settings on the web.</string>
     <string name="reminders">Reminders</string>
     <string name="reminders_hint">A month before a trip, and as things change, an email or a notification about passports or visas that run out too soon and what each country asks of your passport: the same warnings the trip page shows, each sent once.</string>
     <string name="email_me">Email me before a trip</string>

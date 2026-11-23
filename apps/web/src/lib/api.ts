@@ -1,5 +1,5 @@
 import type { User } from "firebase/auth";
-import type { AccountAccess, CalendarExport, ForwardAddress } from "@travelmo/core";
+import { linkRefusalText, refusalOf, type AccountAccess, type CalendarExport, type ForwardAddress } from "@travelmo/core";
 import type { CalendarResult } from "./ics";
 import type { RegroupResult } from "./regroup";
 import type { TripItResult } from "./tripit";
@@ -21,7 +21,12 @@ async function post<T>(user: User, path: string, body: unknown = {}): Promise<T>
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!response.ok) throw new Error(`${path} failed: ${response.status} ${await response.text()}`);
+  if (!response.ok) {
+    const text = await response.text();
+    // A refusal to link an address is put in words.
+    const refusal = refusalOf(text);
+    throw new Error(refusal ? linkRefusalText[refusal] : `${path} failed: ${response.status} ${text}`);
+  }
   return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
 }
 
@@ -48,6 +53,9 @@ export const api = {
   stopForward: (user: User) => post<void>(user, "/forward/stop"),
   deleteAccount: (user: User) => post<void>(user, "/account/delete"),
   checkAccess: (user: User) => post<{ status: AccountAccess }>(user, "/access/check"),
+  addEmail: (user: User, email: string) => post<{ email: string }>(user, "/emails/add", { email }),
+  confirmEmail: (user: User, token: string) => post<{ email: string }>(user, "/emails/confirm", { token }),
+  removeEmail: (user: User, email: string) => post<void>(user, "/emails/remove", { email }),
   regroupTrips: (user: User) => post<RegroupResult>(user, "/trips/regroup"),
   deleteAllTrips: (user: User) => post<{ trips: number }>(user, "/trips/delete-all"),
   refreshFlights: (user: User, tripId: string) => post<{ enabled: boolean; checked?: number }>(user, "/flights/refresh", { tripId }),

@@ -10,7 +10,10 @@ import app.travelmo.data.NoAccessCheck
 import app.travelmo.data.NoAccountDeletion
 import app.travelmo.data.FlightRefresh
 import app.travelmo.data.NoFlightRefresh
+import app.travelmo.data.EmailLinks
+import app.travelmo.data.NoEmailLinks
 import app.travelmo.data.ParserAccessCheck
+import app.travelmo.data.ParserEmailLinks
 import app.travelmo.data.ParserAccountDeletion
 import app.travelmo.data.ParserFlightRefresh
 import app.travelmo.data.TripStore
@@ -57,6 +60,9 @@ class TravelmoApplication : Application() {
 
     /** Looking at an open trip's flights through the parser; nothing without Firebase or a parser address. */
     val flightRefresh: FlightRefresh by lazy { if (firebaseReady) ParserFlightRefresh(BuildConfig.PARSER_URL) else NoFlightRefresh }
+    /** Linking email addresses through the parser; nothing without Firebase or a parser address. */
+    val emailLinks: EmailLinks by lazy { if (firebaseReady) ParserEmailLinks(BuildConfig.PARSER_URL) else NoEmailLinks }
+
     /** Settling the account's access with the parser; nothing without Firebase or a parser address. */
     val accessCheck: AccessCheck by lazy { if (firebaseReady) ParserAccessCheck(BuildConfig.PARSER_URL) else NoAccessCheck }
 

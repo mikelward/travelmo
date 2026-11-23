@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { exportCalendar, paths, Segment, Trip, type CalendarExport } from "@travelmo/core";
+import { exportCalendar, paths, queryAddresses, Segment, Trip, type CalendarExport } from "@travelmo/core";
 import type { Firestore } from "firebase-admin/firestore";
 import { refuseIfDeleted } from "./deleted";
 
@@ -20,9 +20,10 @@ export type ExportIo = {
   // Whether the link's owner may still use the app (SPEC "Access"): a
   // revoked account's link stops serving its trips.
   approved: (uid: string) => Promise<boolean>;
-  // The user's verified email, for the trips shared with them.
-  verifiedEmail: (uid: string) => Promise<string | undefined>;
-  trips: (uid: string, email: string | undefined, endsOnOrAfter: string) => Promise<Trip[]>;
+  // Every address that is the user's (verified sign-in and linked), for
+  // the trips shared with them.
+  addresses: (uid: string) => Promise<string[]>;
+  trips: (uid: string, addresses: readonly string[], endsOnOrAfter: string) => Promise<Trip[]>;
   segments: (tripId: string) => Promise<Segment[]>;
 };
 
@@ -46,15 +47,15 @@ export async function calendarForToken(
   const uid = await io.uidForToken(hashToken(token));
   if (!uid) return undefined;
   if (!(await io.approved(uid))) return undefined;
-  const email = await io.verifiedEmail(uid);
-  const trips = (await io.trips(uid, email, daysBefore(options.now, exportHistoryDays))).filter((t) => !t.deleting);
+  const addresses = await io.addresses(uid);
+  const trips = (await io.trips(uid, addresses, daysBefore(options.now, exportHistoryDays))).filter((t) => !t.deleting);
   const items = await Promise.all(trips.map(async (trip) => ({ trip, segments: await io.segments(trip.id) })));
   return exportCalendar(items, { stamp: options.now, tripUrl: options.tripUrl });
 }
 
 export function firestoreExportIo(
   db: Firestore,
-  verifiedEmail: (uid: string) => Promise<string | undefined>,
+  addresses: (uid: string) => Promise<string[]>,
   approved: (uid: string) => Promise<boolean>,
 ): ExportIo {
   const parse = <T>(schema: { safeParse: (v: unknown) => { success: true; data: T } | { success: false } }, data: unknown): T[] => {
@@ -68,10 +69,12 @@ export function firestoreExportIo(
       return typeof uid === "string" ? uid : undefined;
     },
     approved,
-    verifiedEmail,
-    trips: async (uid, email, endsOnOrAfter) => {
+    addresses,
+    trips: async (uid, addresses, endsOnOrAfter) => {
       const queries = [db.collection(paths.trips()).where("ownerUid", "==", uid).where("end", ">=", endsOnOrAfter).get()];
-      if (email) queries.push(db.collection(paths.trips()).where("sharedWith", "array-contains", email).where("end", ">=", endsOnOrAfter).get());
+      if (addresses.length) {
+        queries.push(db.collection(paths.trips()).where("sharedWith", "array-contains-any", queryAddresses(addresses)).where("end", ">=", endsOnOrAfter).get());
+      }
       const byId = new Map<string, Trip>();
       for (const snap of await Promise.all(queries)) for (const d of snap.docs) for (const t of parse(Trip, d.data())) byId.set(t.id, t);
       return [...byId.values()];

@@ -48,8 +48,11 @@ viewer's zone. Trip bounds are calendar dates.
 - `users/{uid}` — `email, displayName, photoURL, gmail {emailAddress,
   connectedAt, watchExpiration, historyId, backfill}, googleCalendar
   {emailAddress, connectedAt, calendars[]}, reminders {email, push}, forward
-  {address, createdAt}`. `gmail`, `googleCalendar` and `forward` are
-  server-written; `reminders` is the owner's choice; `backfill` is how far a reading of the whole mailbox has
+  {address, createdAt}, emails[], pendingEmails[{email, sentAt,
+  expiresAt}]`. `gmail`, `googleCalendar`, `forward`, `emails` (a copy,
+  for the apps, of the addresses the user confirmed besides their sign-in,
+  lowercase; never trusted, see below) and `pendingEmails` (those whose
+  confirmation link is still out) are server-written ("Linked email addresses"); `reminders` is the owner's choice; `backfill` is how far a reading of the whole mailbox has
   got (`cursor, after, scanned, imported, failed, done, updatedAt`, and the
   reading under way: `run, step, running, queued, leaseUntil, retryAfter, wake, handoff, failures, lastFailed`); each calendar
   is `{id, summary, primary, selected, lastReadAt, lastResult, lastError}`.
@@ -120,6 +123,12 @@ viewer's zone. Trip bounds are calendar dates.
   address is, by the hash of its token, as `calendarExports` does for export
   links; `users/{uid}/private/forwardBudget` → `{day, count}`, the day's
   forwarded emails. Server only.
+- `linkedEmails/{email}` → `{uid, linkedAt}`, the one account a confirmed
+  address is linked to, made in the same transaction as `confirmed`;
+  `users/{uid}/private/emails` → `{confirmed[], pending[{email, tokenHash,
+  sentAt, expiresAt}], day, sent}`, the confirmed addresses (what the rules
+  and access checks trust), the confirmation links out (by the hash of their
+  token) and the day's count. Server only.
 - `gmailAccounts/{emailAddress}` → `{uid}`, one owner per mailbox, enforced in
   a transaction; `oauthStates/{nonce}` → `{uid, createdAt}`;
   `pendingConnections/{token}` → `{uid, refreshToken, createdAt}`, parked
@@ -622,13 +631,19 @@ these holds, unless an admin declined or revoked its address
 (`accessStatus` in `packages/core/src/access.ts`; the rules and the parser
 decide the same way):
 
-- it is an admin's: its verified email is in `config/access`'s `admins`,
+- it is an admin's: its verified email, or an address it linked ("Linked
+  email addresses"), is in `config/access`'s `admins`,
   which the operator writes by hand in the console (README "Deploy");
 - it has a user document (`users/{uid}`): every account that used the web
   app before approvals has one, since the web app wrote it at each sign-in,
   and a new account may write it only once approved;
 - its verified email's record (`access/{email}`) is approved by an admin,
-  or names someone who invited it (`invitedBy`).
+  or names someone who invited it (`invitedBy`), or so is that of an
+  address it linked. Only the sign-in's decline locks the account out: that
+  is the address an admin revokes. The rules read no linked address's
+  record: the list lives on the user document, whose existence already
+  approves the account, so the parser (which does read them) and the rules
+  agree.
 
 Accounts from before approvals. An Android-only account never wrote a user
 document, and someone shared with may never have signed in, so the parser
@@ -650,7 +665,8 @@ change, the parser's deploy waits for its revision to be ready, which is
 after the first run, and a later rules-only deploy finds it done. No one
 already using the app is locked out, and nothing is migrated by hand.
 
-Sharing invites. Sharing a trip or a travel profile with an address writes
+Sharing invites. Sharing a trip or a travel profile with an address (a
+sign-in or a linked one alike) writes
 `invitedBy` (the sharer) and `invitedAt` into its record in the same batch
 as the share, so the person can open what was shared without asking. The
 rules let any approved user write those two fields for any address, which
@@ -729,13 +745,71 @@ anything it saves fails with its usual error, and parser features (import,
 deleting all trips) fail with the parser's 403; deleting the account still
 works. The data model and rules are ready for its own request screen.
 
+## Linked email addresses
+
+A user signs in with one Google account but may own other addresses (a
+work one, say). Each address they confirm counts as them wherever Travelmo
+knows people by email: a trip or travel profile shared with it is theirs to
+open and edit as a sharee's, shows in their trip list on the web and on
+Android, and brings them the reminders, flight news and check-in reminders
+a sharee gets; an approval, invite or admin listing of it lets them in
+("Access"). Whoever shared keeps seeing the address they typed: nothing in
+`sharedWith` or `trustedEmails` is rewritten. Reminder emails still go to
+the sign-in address.
+
+Settings (web and Android) lists "Email addresses": the sign-in (not
+removable), those confirmed (Remove), the connected Gmail, those waiting
+for confirmation (Remove withdraws the link), and Add. Add calls the
+parser's `/emails/add`, which refuses an address that is already the
+user's, another account's (its sign-in, an address it linked, or its
+connected Gmail), or past ten linked and pending; at most five links a
+day go out. It keeps a random token's hash (as `forwardAddresses` does) and
+mails the link, `/settings/email?token=…`, through the reminders' SMTP
+mailer; a link works for 24 hours and once. The page calls `/emails/confirm`
+signed in: only the account that asked finds the link (as the Gmail
+consent's `claimPending` checks), and in one transaction the claim
+`linkedEmails/{email}` is made and the address joins `confirmed` (and the
+profile's `emails` copy);
+an address another account claimed meanwhile is refused ("That address
+belongs to another Travelmo account."). Removing deletes the claim.
+Without SMTP the endpoint answers 503.
+
+The Gmail mailbox connected for import counts as confirmed, since the
+consent proved it is the user's, for as long as it stays connected:
+disconnecting drops it unless it was also confirmed by link. Connecting a
+mailbox whose address another account linked is refused as connecting one
+another account connected is. An address is linked to one account; an
+account that signs up later with an address someone else linked is not
+stopped, and both count it (the parser then names the account signing in
+with it).
+
+Where it is read: the rules check the verified sign-in first, at no cost,
+then `get()` the private record's `confirmed` and the user document's
+`gmail.emailAddress`. They never trust the user document's `emails`: the
+rules before linked addresses let a client write any field of its own user
+document, so a list planted there before they shipped would otherwise have
+counted. The parser's access checks read the same two. Every write of the
+private record sets the profile's copy whole from it, which also wipes a
+planted list; until then a planted copy only makes its own account's
+queries fail. The apps read the user document and ask for shared trips and profiles with one
+`array-contains-any` over every address; Firestore allows 30 values there,
+which the ten-address limit (with the sign-in and Gmail) stays well under.
+The parser resolves an address to an account (flight news, check-in
+reminders, admins' notifications) by sign-in, then claim, then connected
+mailbox, and finds a user's shared trips and profiles (reminders, the
+calendar export) by all their addresses. Deleting the account deletes its
+claims and pending links; trips shared with a linked address keep it.
+Pure logic is `packages/core/src/emails.ts`, mirrored in Android's
+`Emails.kt`; the parser's side is `apps/parser/src/emails.ts`.
+
 ## Access rules
 
 `firestore.rules`, tested in `packages/rules`. Everything below holds for
 approved accounts only ("Access"):
 
 - A trip is readable by its owner and by any signed-in user whose verified
-  email is in `sharedWith`. The owner may change and delete it; a sharee may
+  email, or an address they linked ("Linked email addresses"), is in
+  `sharedWith`. The owner may change and delete it; a sharee may
   only widen its `start`/`end` (and touch `updatedAt`), which is what saving
   a booking needs. A missing trip reads as absent to any signed-in user, so a
   client can tell a deleted trip from one it may not see.
@@ -747,13 +821,16 @@ approved accounts only ("Access"):
   their sender patterns, can read but not write their parsed-message log,
   and can never read `private`.
 - A travel profile is readable by its owner and by any signed-in user whose
-  verified email is in its `trustedEmails` (a collection-group query on that
-  field lists the profiles shared with someone). Only the owner writes, and
+  verified email or a linked address is in its `trustedEmails` (a
+  collection-group `array-contains-any` query on that field lists the
+  profiles shared with someone). Only the owner writes, and
   only `trustedEmails` (at most 20) and `updatedAt`, or starts the document
   with those and their own uid and email; the imported sections are the
   parser's alone.
 - A flight's status is readable by any signed-in user who names its key,
   never listed and never written by a client.
+- A user's `emails` and `pendingEmails` are never written by a client;
+  `linkedEmails` and `private` are closed to clients.
 - `gmailAccounts` and `oauthStates` are closed to clients.
 - The worker uses the Admin SDK and bypasses rules.
 
@@ -1752,6 +1829,9 @@ build without one points to the web instead.
 | `POST /export/calendar/stop` | Firebase ID token | Turns the calendar export link off |
 | `GET /cal/{token}.ics` | the token | The calendar export itself, for calendar apps; 404 for a link not in use or whose owner may no longer use the app |
 | `POST /account/delete` | Firebase ID token | Deletes the caller's account and everything they own ("Deleting an account"); 204, and a retry finishes an interrupted run |
+| `POST /emails/add` | Firebase ID token | Mails a confirmation link for `email` ("Linked email addresses"); returns `{email}`; a refusal answers `{refusal}` (400 invalid, yours or full; 409 taken; 429 the day's links spent); 503 without SMTP |
+| `POST /emails/confirm` | Firebase ID token | Links the address a link (`token`) was sent to, for the account that asked; returns `{email}`; 410 `{refusal: "expired"}` for a link unknown, used, expired or another account's; 409 taken |
+| `POST /emails/remove` | Firebase ID token | Unlinks `email` or withdraws its pending link |
 | `POST /access/check` | Firebase ID token, approved or not | Settles the caller's access ("Access"): lets in an account from before approvals or one already shared with, otherwise tells the admins of a waiting request once; returns `{status}` (approved, requested, declined, none) |
 | `GET /healthz` | none | Liveness |
 

@@ -475,6 +475,99 @@ describe("travel profiles", () => {
   });
 });
 
+describe("linked email addresses", () => {
+  // Signs in with one address and has confirmed another.
+  const worker = { uid: "worker", email: "worker@example.com" };
+  const work = "worker@work.example";
+  const mailbox = "worker.mail@example.net";
+  const shared = (id: string, sharedWith: string[]): Trip => ({ ...trip, id, sharedWith });
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, paths.user(worker.uid)), {
+        email: worker.email,
+        emails: [work],
+        pendingEmails: [{ email: "pending@work.example", sentAt: "2026-11-23T00:00:00Z", expiresAt: "2026-11-24T00:00:00Z" }],
+        gmail: { emailAddress: "Worker.Mail@example.net", connectedAt: "2026-11-01T00:00:00Z" },
+      });
+      await setDoc(doc(db, paths.trip("work")), shared("work", [work]));
+      await setDoc(doc(db, paths.segment("work", segment.id)), { ...segment, tripId: "work" });
+      await setDoc(doc(db, paths.trip("mailbox")), shared("mailbox", [mailbox]));
+      await setDoc(doc(db, paths.trip("pending")), shared("pending", ["pending@work.example"]));
+      await setDoc(doc(db, paths.trip("signin")), shared("signin", [worker.email]));
+      await setDoc(doc(db, paths.linkedEmail(work)), { uid: worker.uid, linkedAt: "2026-11-23T00:00:00Z" });
+      await setDoc(doc(db, paths.emailLinks(worker.uid)), { pending: [], confirmed: [work] });
+    });
+  });
+
+  it("trusts only the parser's own list, not one a client wrote on its profile before the rules locked it", async () => {
+    const planter = { uid: "planter", email: "planter@example.com" };
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), paths.user(planter.uid)), { email: planter.email, emails: [work, admin.email] });
+      await setDoc(doc(ctx.firestore(), paths.accessConfig()), { admins: [admin.email] });
+    });
+    await assertFails(getDoc(doc(as(planter), paths.trip("work"))));
+    await assertFails(getDoc(doc(as(planter), paths.accessConfig())));
+  });
+
+  it("lets a confirmed address or the connected Gmail open what was shared with it", async () => {
+    await assertSucceeds(getDoc(doc(as(worker), paths.trip("work"))));
+    await assertSucceeds(getDoc(doc(as(worker), paths.trip("mailbox"))));
+    await assertSucceeds(getDoc(doc(as(worker), paths.trip("signin"))));
+    await assertSucceeds(getDocs(collection(as(worker), paths.segments("work"))));
+    await assertSucceeds(setDoc(doc(as(worker), paths.segment("work", "s2")), { ...segment, id: "s2", tripId: "work" }));
+    // A sharee's widening of the dates, as for the sign-in address.
+    await assertSucceeds(updateDoc(doc(as(worker), paths.trip("work")), { start: "2026-12-11", updatedAt: "2026-11-24T00:00:00Z" }));
+    await assertFails(updateDoc(doc(as(worker), paths.trip("work")), { title: "Mine now" }));
+  });
+
+  it("lists the trips shared with any of the account's addresses in one query", async () => {
+    const mine = [worker.email, work, mailbox];
+    const snap = await assertSucceeds(getDocs(query(collection(as(worker), paths.trips()), where("sharedWith", "array-contains-any", mine))));
+    expect(snap.docs.map((d) => d.id).sort()).toEqual(["mailbox", "signin", "work"]);
+    // Not with an address that is someone else's.
+    await assertFails(getDocs(query(collection(as(worker), paths.trips()), where("sharedWith", "array-contains-any", [...mine, partner.email]))));
+  });
+
+  it("does not count an address still waiting for confirmation, or another account's", async () => {
+    await assertFails(getDoc(doc(as(worker), paths.trip("pending"))));
+    await assertFails(getDoc(doc(as(stranger), paths.trip("work"))));
+    await assertFails(getDocs(query(collection(as(stranger), paths.trips()), where("sharedWith", "array-contains-any", [stranger.email, work]))));
+  });
+
+  it("lets a trusted linked address read a travel profile and list it", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), paths.travelProfile(owner.uid)), { ownerUid: owner.uid, ownerEmail: owner.email, trustedEmails: [work] });
+    });
+    await assertSucceeds(getDoc(doc(as(worker), paths.travelProfile(owner.uid))));
+    await assertSucceeds(getDocs(query(collectionGroup(as(worker), "travelProfile"), where("trustedEmails", "array-contains-any", [worker.email, work]))));
+    await assertFails(getDoc(doc(as(stranger), paths.travelProfile(owner.uid))));
+  });
+
+  it("makes an account an admin when a linked address is listed", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), paths.accessConfig()), { admins: [work] });
+    });
+    await assertSucceeds(getDoc(doc(as(worker), paths.accessConfig())));
+    await assertSucceeds(getDocs(collection(as(worker), paths.accessRecords())));
+    await assertFails(getDoc(doc(as(owner), paths.accessConfig())));
+  });
+
+  it("lets no client write the list, the pending links or the claims", async () => {
+    const own = doc(as(worker), paths.user(worker.uid));
+    await assertSucceeds(getDoc(own));
+    await assertFails(updateDoc(own, { emails: [work, partner.email] }));
+    await assertFails(updateDoc(own, { pendingEmails: [] }));
+    await assertFails(setDoc(doc(as(stranger), paths.user(stranger.uid)), { emails: [partner.email] }, { merge: true }));
+    await assertFails(setDoc(doc(as(newcomer), paths.user(newcomer.uid)), { emails: [partner.email] }));
+    await assertFails(getDoc(doc(as(worker), paths.linkedEmail(work))));
+    await assertFails(setDoc(doc(as(stranger), paths.linkedEmail(partner.email)), { uid: stranger.uid }));
+    await assertFails(deleteDoc(doc(as(worker), paths.linkedEmail(work))));
+    await assertFails(getDoc(doc(as(worker), paths.emailLinks(worker.uid))));
+    await assertFails(setDoc(doc(as(worker), paths.emailLinks(worker.uid)), { pending: [] }));
+  });
+});
+
 describe("access", () => {
   const at = "2026-11-23T00:00:00Z";
   const request = { email: newcomer.email, status: "requested", uid: newcomer.uid, requestedAt: at };

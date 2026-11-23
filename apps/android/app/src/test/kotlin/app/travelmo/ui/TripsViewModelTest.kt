@@ -8,6 +8,7 @@ import app.travelmo.core.deviceId
 import app.travelmo.core.SegmentType
 import app.travelmo.data.FlightRefresh
 import app.travelmo.core.AccountAccess
+import app.travelmo.core.AddressHolder
 import app.travelmo.core.Trip
 import app.travelmo.core.TravelProfile
 import app.travelmo.data.AccessCheck
@@ -59,7 +60,7 @@ class TripsViewModelTest {
         var profileAsked = 0
         var sharedAsked = 0
         var approved = false
-        override fun trips(uid: String, email: String?): Flow<List<Trip>> {
+        override fun trips(uid: String, addresses: List<String>): Flow<List<Trip>> {
             asked++
             return flowOf(if (approved) fixtureTrips else emptyList())
         }
@@ -67,7 +68,7 @@ class TripsViewModelTest {
             profileAsked++
             return if (approved) flowOf(OwnProfile(fixtureProfile)) else flow { awaitCancellation() }
         }
-        override fun sharedProfiles(email: String?): Flow<List<TravelProfile>> {
+        override fun sharedProfiles(addresses: List<String>): Flow<List<TravelProfile>> {
             sharedAsked++
             return flowOf(if (approved) listOf(fixtureSharedProfile) else emptyList())
         }
@@ -80,6 +81,16 @@ class TripsViewModelTest {
         override suspend fun check(): AccountAccess? {
             calls++
             return answer.await().also { if (it == AccountAccess.APPROVED) store.approved = true }
+        }
+    }
+
+    /** A store that answers by address, as Firestore's `array-contains-any` does, with the user document's addresses. */
+    private class AddressedStore(holder: AddressHolder) : TripStore by FakeTripStore(addressHolder = holder) {
+        val asked = mutableListOf<List<String>>()
+        private val work = Trip("work", "Offsite", "2026-12-01", "2026-12-03", "colleague", sharedWith = listOf("owner@work.example"))
+        override fun trips(uid: String, addresses: List<String>): Flow<List<Trip>> {
+            asked += addresses
+            return flowOf(listOf(work).filter { trip -> trip.sharedWith.any { it in addresses } })
         }
     }
 
@@ -355,6 +366,45 @@ class TripsViewModelTest {
         viewModel.trips.value shouldBe emptyList()
         watching.cancel()
         people.cancel()
+    }
+
+    @Test
+    fun `lists the trips shared with an address the user confirmed, and lets them edit its bookings`() = runTest {
+        val store = AddressedStore(AddressHolder(emails = listOf("owner@work.example")))
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL)
+        val watching = launch { viewModel.trips.collect {} }
+        runCurrent()
+        viewModel.addresses.value shouldBe listOf(OWNER_EMAIL, "owner@work.example")
+        store.asked.last() shouldBe listOf(OWNER_EMAIL, "owner@work.example")
+        viewModel.trips.value?.map { it.id } shouldBe listOf("work")
+        watching.cancel()
+    }
+
+    @Test
+    fun `adding an address mails its link, and one already the user's is refused at once`() = runTest {
+        val links = FakeEmailLinks()
+        val viewModel = TripsViewModel(FakeTripStore(addressHolder = AddressHolder(emails = listOf("owner@work.example"))), OWNER, OWNER_EMAIL, emailLinks = links)
+        val watching = launch { viewModel.addressHolder.collect {} }
+        runCurrent()
+        viewModel.addEmail("add", " New@Example.org ")
+        viewModel.outcomes.value["add"] shouldBe Outcome.Done
+        links.added shouldBe listOf("new@example.org")
+        viewModel.addEmail("again", "OWNER@work.example")
+        viewModel.outcomes.value["again"] shouldBe Outcome.Failed("That address is already yours.")
+        viewModel.removeEmail("remove", "owner@work.example")
+        links.removed shouldBe listOf("owner@work.example")
+        watching.cancel()
+    }
+
+    @Test
+    fun `says the parser's refusal, and that a build without one cannot add`() = runTest {
+        val refused = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, emailLinks = FakeEmailLinks("That address belongs to another Travelmo account."))
+        refused.addEmail("add", "taken@example.org")
+        refused.outcomes.value["add"] shouldBe Outcome.Failed("That address belongs to another Travelmo account.")
+        val none = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL)
+        none.canLinkEmails shouldBe false
+        none.addEmail("add", "new@example.org")
+        none.outcomes.value["add"] shouldBe Outcome.Failed("Change your email addresses from Settings on the web.")
     }
 
     @Test

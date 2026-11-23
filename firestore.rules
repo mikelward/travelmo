@@ -37,8 +37,37 @@ service cloud.firestore {
     function admins() {
       return get(configPath()).data.get('admins', []);
     }
+    // The addresses the account confirmed besides its sign-in (SPEC "Linked
+    // email addresses"): `confirmed` in its private record, and the Gmail
+    // mailbox it connected, whose consent proved the address is the user's.
+    // Both were always out of clients' reach; the user document's `emails`
+    // copy is not trusted, as the rules before let a client write it. Read
+    // only when the sign-in address does not already answer, so the common
+    // case costs nothing.
+    function userPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+    function linksPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid)/private/emails;
+    }
+    function linkedEmails() {
+      return signedIn() ? confirmedEmails().concat(gmailEmail()) : [];
+    }
+    function confirmedEmails() {
+      return exists(linksPath()) ? get(linksPath()).data.get('confirmed', []) : [];
+    }
+    function gmailEmail() {
+      return exists(userPath()) ? [get(userPath()).data.get(['gmail', 'emailAddress'], '').lower()] : [];
+    }
+    // Whether one of the account's addresses is in the list: the verified
+    // sign-in first, then those it linked. Written with the list on the
+    // left of `hasAny`, the one form a query's filter can satisfy, so the
+    // same check serves reads and `array-contains-any` queries.
+    function anyMine(list) {
+      return (verifiedEmail() && myEmail() in list) || list.hasAny(linkedEmails());
+    }
     function isAdmin() {
-      return signedIn() && verifiedEmail() && exists(configPath()) && admins() is list && myEmail() in admins();
+      return signedIn() && exists(configPath()) && admins() is list && anyMine(admins());
     }
     function hasProfile() {
       return exists(/databases/$(database)/documents/users/$(request.auth.uid));
@@ -67,20 +96,14 @@ service cloud.firestore {
       return trip.ownerUid == request.auth.uid;
     }
 
-    // Sharing is by verified email so no user lookup is needed.
+    // Sharing is by verified email, the sign-in's or one the account linked.
     function isSharee(trip) {
-      return request.auth.token.email != null
-        && request.auth.token.email_verified == true
-        && request.auth.token.email.lower() in trip.sharedWith;
+      return signedIn() && anyMine(trip.sharedWith);
     }
 
     // Someone the owner of a travel profile trusts with it, by verified email.
     function isTrusted(profile) {
-      return signedIn()
-        && request.auth.token.email != null
-        && request.auth.token.email_verified == true
-        && profile.get('trustedEmails', []) is list
-        && request.auth.token.email.lower() in profile.get('trustedEmails', []);
+      return signedIn() && anyMine(profile.get('trustedEmails', []));
     }
 
     function isDate(value) {
@@ -176,8 +199,12 @@ service cloud.firestore {
       function isSelf() {
         return signedIn() && request.auth.uid == uid;
       }
-      // `gmail`, `googleCalendar` and `forward` are written by the server;
-      // clients may not forge a connection or a forwarding address.
+      // `gmail`, `googleCalendar`, `forward`, `emails` and `pendingEmails`
+      // are written by the server; clients may not forge a connection, a
+      // forwarding address or a linked email address.
+      function serverKeys() {
+        return ['gmail', 'googleCalendar', 'forward', 'emails', 'pendingEmails'];
+      }
       // Corrections to where home was (Profile): a list of at most fifty.
       // Rules cannot check each entry; the parser parses them and ignores a
       // list that does not parse.
@@ -195,10 +222,10 @@ service cloud.firestore {
       // Readable to its owner even before approval: the app reads it to
       // tell an account from before approvals from a new one.
       allow read: if isSelf();
-      allow create: if member() && isSelf() && !request.resource.data.keys().hasAny(['gmail', 'googleCalendar', 'forward'])
+      allow create: if member() && isSelf() && !request.resource.data.keys().hasAny(serverKeys())
         && validHomes(request.resource.data) && validRides(request.resource.data);
       allow update: if member() && isSelf()
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['gmail', 'googleCalendar', 'forward'])
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(serverKeys())
         && validHomes(request.resource.data) && validRides(request.resource.data);
 
       // What the parser has sent as reminders: nobody's to read or write.
@@ -285,12 +312,10 @@ service cloud.firestore {
     // Lets someone list the profiles shared with them (a collection-group
     // query on trustedEmails); each result is checked like a direct read.
     // Queries are checked against their filter, so this rule names the
-    // field directly; the client asks with its own (lowercase) email.
+    // field directly; the client asks with its own (lowercase) addresses.
     match /{path=**}/travelProfile/{document} {
       allow get: if approved() && isTrusted(resource.data);
-      allow list: if approved()
-        && request.auth.token.email_verified == true
-        && request.auth.token.email.lower() in resource.data.trustedEmails;
+      allow list: if approved() && anyMine(resource.data.trustedEmails);
     }
 
     // Who may use the app, one record per lowercased verified email
@@ -362,8 +387,7 @@ service cloud.firestore {
     // Settings kept by hand in the console; `config/access` lists the
     // admins and is readable by them alone, so the app can tell who is one.
     match /config/{document} {
-      allow get: if document == 'access' && signedIn() && verifiedEmail()
-        && resource.data.get('admins', []) is list && myEmail() in resource.data.get('admins', []);
+      allow get: if document == 'access' && signedIn() && anyMine(resource.data.get('admins', []));
       allow list, write: if false;
     }
 
@@ -379,6 +403,11 @@ service cloud.firestore {
     }
     // Forwarding-address token hashes to their owner: the parser's alone.
     match /forwardAddresses/{tokenHash} {
+      allow read, write: if false;
+    }
+    // Which account an address is linked to, one each, and the hashes of
+    // the links that confirm one: the parser's alone.
+    match /linkedEmails/{email} {
       allow read, write: if false;
     }
 
