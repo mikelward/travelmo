@@ -54,6 +54,11 @@
     <string name="open_in_gmail">Open in Gmail</string>
     <string name="from_sender">From %1$s</string>
     <string name="close">Close</string>
+    <string name="the_airport">the airport</string>
+    <string name="ride_to_airport">Need a ride to %1$s?</string>
+    <string name="ride_home_from_airport">Need a ride home from %1$s?</string>
+    <string name="car_in">Need a car in %1$s?</string>
+    <string name="hide">Hide</string>
     <string name="copy_reference">Copy reference</string>
     <!-- The clipboard entry's label, which some keyboards show. -->
     <string name="booking_reference">Booking reference</string>

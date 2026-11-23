@@ -4,6 +4,8 @@ import app.travelmo.core.FlightStatus
 import app.travelmo.core.Place
 import app.travelmo.core.ProfileEntry
 import app.travelmo.core.ProfileField
+import app.travelmo.core.RideCompany
+import app.travelmo.core.RideNear
 import app.travelmo.core.TravelProfile
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentDraft
@@ -14,6 +16,7 @@ import app.travelmo.core.Trip
 import app.travelmo.data.AccountDeletion
 import app.travelmo.data.AccountDeletionFailed
 import app.travelmo.data.OwnProfile
+import app.travelmo.data.RideSettings
 import app.travelmo.data.TripStore
 import app.travelmo.notify.PushDevice
 import kotlinx.coroutines.flow.Flow
@@ -119,6 +122,19 @@ val fixtureCancelledSegments = listOf(
     ),
 )
 
+/**
+ * A week in Boston from London with nothing booked on the ground, rendered on
+ * its own (trip_detail_rides) with a company the owner added near home.
+ */
+val fixtureBostonTrip = trip("boston", "Boston", "2026-11-24", "2026-11-30")
+private val heathrow = Place("London Heathrow", code = "LHR", city = "London", country = "GB")
+private val logan = Place("Boston Logan", code = "BOS", city = "Boston", country = "US")
+val fixtureBostonSegments = listOf(
+    Segment("b-out", "boston", SegmentType.FLIGHT, "VS 11 LHR to BOS", "2026-11-24T17:20:00+00:00", "2026-11-24T20:15:00-05:00", provider = "Virgin Atlantic", confirmation = "E5WSJI", origin = heathrow, destination = logan),
+    Segment("b-back", "boston", SegmentType.FLIGHT, "VS 12 BOS to LHR", "2026-11-29T19:00:00-05:00", "2026-11-30T07:00:00+00:00", provider = "Virgin Atlantic", confirmation = "E5WSJI", origin = logan, destination = heathrow),
+)
+val fixtureRideCompanies = listOf(RideCompany("Example Cars", "https://cars.example.com/book", RideNear.HOME))
+
 private fun entry(title: String, vararg fields: Pair<String, String>) = ProfileEntry(title, fields.map { ProfileField(it.first, it.second) })
 
 /** The owner's profile: a passport that runs out two months after Dublin, two programs, two travelers. */
@@ -156,6 +172,15 @@ class FakeTripStore(
     override fun gmailAccount(uid: String): Flow<String?> = flowOf(gmailAccount)
 
     override fun reminderEmail(uid: String): Flow<Boolean?> = flowOf(true)
+
+    /** The user document's ride fields, and every suggestion hidden, in order. */
+    val rides = MutableStateFlow(RideSettings())
+    val hiddenRides = mutableListOf<String>()
+    override fun rideSettings(uid: String): Flow<RideSettings?> = rides
+    override suspend fun hideRideNeed(uid: String, key: String) {
+        hiddenRides += key
+        rides.value = rides.value.copy(hidden = rides.value.hidden + key)
+    }
     override suspend fun setReminderEmail(uid: String, on: Boolean) {
         reminders += on
     }

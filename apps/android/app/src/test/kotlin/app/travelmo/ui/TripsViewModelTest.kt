@@ -12,7 +12,10 @@ import app.travelmo.core.Trip
 import app.travelmo.core.TravelProfile
 import app.travelmo.data.AccessCheck
 import app.travelmo.data.OwnProfile
+import app.travelmo.data.RideSettings
 import app.travelmo.data.TripStore
+import app.travelmo.core.HomeCorrection
+import app.travelmo.core.rideNeedKey
 import java.time.Instant
 import kotlinx.coroutines.flow.first
 import io.kotest.matchers.shouldBe
@@ -127,6 +130,24 @@ class TripsViewModelTest {
         viewModel.deleteTrip("delete", "paris")
         store.merged shouldBe listOf("dublin" to "liverpool")
         store.deletedTrips shouldBe listOf("paris")
+    }
+
+    @Test
+    fun `a flight with nothing booked on the ground asks for a ride or a car, and hiding one goes to the store`() = runTest {
+        val store = FakeTripStore()
+        val viewModel = TripsViewModel(store, OWNER, null, clock = { Instant.parse(FROZEN_NOW) })
+        val settings = RideSettings(companies = fixtureRideCompanies)
+        val needs = viewModel.rideNeedsFor(fixtureBostonSegments, settings)
+        needs.map(::rideNeedKey) shouldBe listOf("b-out/toAirport", "b-out/car", "b-back/fromAirport")
+        // Home corrected to Boston: the same flights read the other way round.
+        viewModel.rideNeedsFor(fixtureBostonSegments, settings.copy(homes = listOf(HomeCorrection("Boston", "US", "2020-01-01")))).map(::rideNeedKey) shouldBe
+            listOf("b-out/fromAirport", "b-back/toAirport", "b-back/car")
+        viewModel.rideNeedsFor(fixtureBostonSegments, settings.copy(hidden = listOf("b-out/car"))).map(::rideNeedKey) shouldBe
+            listOf("b-out/toAirport", "b-back/fromAirport")
+        viewModel.rideNeedsFor(fixtureBostonSegments, null) shouldBe emptyList()
+        viewModel.hideRideNeed("hide", needs[1])
+        viewModel.outcomes.value shouldBe mapOf("hide" to Outcome.Done)
+        store.hiddenRides shouldBe listOf("b-out/car")
     }
 
     @Test

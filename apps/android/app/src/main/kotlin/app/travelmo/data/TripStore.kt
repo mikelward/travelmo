@@ -1,6 +1,10 @@
 package app.travelmo.data
 
 import app.travelmo.core.FlightStatus
+import app.travelmo.core.HomeCorrection
+import app.travelmo.core.MAX_HIDDEN_RIDE_NEEDS
+import app.travelmo.core.RideCompany
+import app.travelmo.core.rideCompanyOrNull
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentDraft
 import app.travelmo.core.localDate
@@ -63,6 +67,17 @@ interface TripStore {
     /** Turns reminders by email on or off, as the web's Settings does: a merge of `reminders.email` alone. */
     suspend fun setReminderEmail(uid: String, on: Boolean)
 
+    /**
+     * What car and ride suggestions need from the user document, live: the
+     * user's own companies (`rideCompanies`, edited on the web), the
+     * suggestions they hid (`hiddenRideNeeds`) and their corrections to home
+     * (`homes`); null while it loads.
+     */
+    fun rideSettings(uid: String): Flow<RideSettings?>
+
+    /** Hides one ride suggestion for good, in a transaction over the stored list, as the web does. */
+    suspend fun hideRideNeed(uid: String, key: String)
+
     /** Whether this phone (`users/{uid}/devices/{id}`) is registered for reminders as notifications, live; null while it loads. */
     fun pushDevice(uid: String, id: String): Flow<Boolean?>
 
@@ -108,6 +123,42 @@ interface TripStore {
 }
 
 class TripGoneException(message: String) : Exception(message)
+
+/** The user document's fields for car and ride suggestions (SPEC "Car and ride suggestions"). */
+data class RideSettings(
+    val companies: List<RideCompany> = emptyList(),
+    val hidden: List<String> = emptyList(),
+    val homes: List<HomeCorrection> = emptyList(),
+)
+
+/** The fields as stored; an entry that does not parse is left out, as on the web. */
+internal fun rideSettingsOf(data: Map<String, Any?>?): RideSettings {
+    val companies = (data?.get("rideCompanies") as? List<*>).orEmpty().mapNotNull { entry ->
+        val map = entry as? Map<*, *> ?: return@mapNotNull null
+        rideCompanyOrNull(map["name"] as? String, map["url"] as? String, map["near"] as? String)
+    }
+    val hidden = (data?.get("hiddenRideNeeds") as? List<*>).orEmpty().filterIsInstance<String>()
+    val homes = (data?.get("homes") as? List<*>).orEmpty().mapNotNull { entry ->
+        val map = entry as? Map<*, *> ?: return@mapNotNull null
+        val city = (map["city"] as? String)?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+        // A date that isn't one would throw where home is worked out.
+        val from = (map["from"] as? String)?.takeIf { isCalendarDate(it) } ?: return@mapNotNull null
+        HomeCorrection(city, (map["country"] as? String)?.takeIf { it.length == 2 }, from)
+    }
+    return RideSettings(companies, hidden, homes)
+}
+
+private fun isCalendarDate(text: String): Boolean = try {
+    java.time.LocalDate.parse(text)
+    true
+} catch (e: java.time.format.DateTimeParseException) {
+    // Left out, as the web's schema leaves it out; logged without the value.
+    TravelmoLog.warning("A home correction with a malformed date was left out")
+    false
+}
+
+/** The hidden list with [key] added, keeping the newest when it is full. */
+internal fun withHidden(hidden: List<String>, key: String): List<String> = (hidden.filter { it != key } + key).takeLast(MAX_HIDDEN_RIDE_NEEDS)
 
 /** What the profile document answered: the profile, or none yet. Distinct from not having answered at all. */
 data class OwnProfile(val profile: TravelProfile?)
@@ -208,6 +259,26 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
 
     override suspend fun setReminderEmail(uid: String, on: Boolean) {
         db.collection("users").document(uid).set(mapOf("reminders" to mapOf("email" to on)), SetOptions.merge()).await()
+    }
+
+    override fun rideSettings(uid: String): Flow<RideSettings?> = callbackFlow {
+        val registration = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                TravelmoLog.error(error, "Reading the user document for ride suggestions failed")
+                trySend(null)
+                return@addSnapshotListener
+            }
+            trySend(rideSettingsOf(snapshot?.data))
+        }
+        awaitClose { registration.remove() }
+    }
+
+    override suspend fun hideRideNeed(uid: String, key: String) {
+        val ref = db.collection("users").document(uid)
+        db.runTransaction { tx ->
+            val stored = (tx.get(ref).get("hiddenRideNeeds") as? List<*>).orEmpty().filterIsInstance<String>()
+            tx.set(ref, mapOf("hiddenRideNeeds" to withHidden(stored, key)), SetOptions.merge())
+        }.await()
     }
 
     override fun pushDevice(uid: String, id: String): Flow<Boolean?> = callbackFlow {

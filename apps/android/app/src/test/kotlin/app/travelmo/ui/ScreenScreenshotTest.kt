@@ -4,6 +4,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import app.travelmo.data.RideSettings
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -314,6 +315,14 @@ class ScreenScreenshotTest {
         val store = FakeTripStore(trips = fixtureTrips + fixtureCancelledTrip, segments = fixtureSegments + (fixtureCancelledTrip.id to fixtureCancelledSegments))
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
         capture("trip_detail_cancelled") { TripDetailScreen(viewModel = viewModel, tripId = "york", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+    }
+
+    @Test
+    fun trip_detail_rides() {
+        val store = FakeTripStore(trips = fixtureTrips + fixtureBostonTrip, segments = fixtureSegments + (fixtureBostonTrip.id to fixtureBostonSegments))
+        store.rides.value = RideSettings(companies = fixtureRideCompanies)
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        capture("trip_detail_rides") { TripDetailScreen(viewModel = viewModel, tripId = "boston", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
     @Test

@@ -349,10 +349,8 @@
 - [x] Suggest a car or ride for a flight with none booked: rental
       companies where it lands, the traveler's own companies (Settings) for
       rides to and from the airport at home; hidden per suggestion.
-- [ ] Android: car and ride suggestions on the trip page, as the web shows
-      them (`:core`'s `rideNeeds` is in; the app still needs to read the
-      profile's `rideCompanies`, `hiddenRideNeeds` and `homes`); companies
-      stay edited on the web.
+- [x] Android: car and ride suggestions on the trip page, as the web shows
+      them; companies stay edited on the web.
 - [ ] Car suggestions: open each rental company's search at the arrival
       airport and dates in place of its home page, once each link is
       checked from a browser.

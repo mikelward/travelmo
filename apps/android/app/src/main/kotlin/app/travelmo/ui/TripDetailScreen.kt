@@ -80,6 +80,9 @@ import app.travelmo.core.SourceRef
 import app.travelmo.core.Trip
 import app.travelmo.core.displayTitles
 import app.travelmo.core.emailLinkFor
+import app.travelmo.core.RideCompany
+import app.travelmo.core.RideNeed
+import app.travelmo.core.rideNeedKey
 import app.travelmo.core.fittedRange
 import app.travelmo.core.formatDate
 import app.travelmo.core.formatDateRange
@@ -139,6 +142,7 @@ fun TripDetailScreen(
     val people by viewModel.people.collectAsStateWithLifecycle()
     val ownProfile by viewModel.ownProfile.collectAsStateWithLifecycle()
     val gmailAccount by viewModel.gmailAccount.collectAsStateWithLifecycle()
+    val rideSettings by viewModel.rideSettings.collectAsStateWithLifecycle()
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
     var deleting by remember { mutableStateOf<Segment?>(null) }
     var moving by remember { mutableStateOf<Segment?>(null) }
@@ -222,6 +226,11 @@ fun TripDetailScreen(
                 programsFor = { provider -> programsFor(provider, ownProfile?.loyalty.orEmpty()) },
                 flightLines = { segment -> viewModel.flightLines(segment, flightStatuses) },
                 emailLink = { source -> emailLinkFor(source, uid, ownsTrip = isOwner, account = gmailAccount) },
+                rides = RideSuggestions(
+                    needs = viewModel.rideNeedsFor(segments, rideSettings).groupBy { it.segmentId },
+                    companies = rideSettings?.companies.orEmpty(),
+                    onHide = { need -> viewModel.hideRideNeed("${prefix}ride/${rideNeedKey(need)}", need) },
+                ),
                 bookingActions = if (canEdit) {
                     BookingActions(
                         onEdit = { onEditBooking(it.id) },
@@ -243,6 +252,13 @@ fun TripDetailScreen(
         }
     }
 }
+
+/** Car and ride suggestions by the flight they follow, with the viewer's own companies. */
+class RideSuggestions(
+    val needs: Map<String, List<RideNeed>> = emptyMap(),
+    val companies: List<RideCompany> = emptyList(),
+    val onHide: (RideNeed) -> Unit = {},
+)
 
 /** What a viewer who may edit can do to a booking. */
 class BookingActions(
@@ -277,6 +293,7 @@ private fun TripBody(
     flightLines: (Segment) -> List<String>,
     bookingActions: BookingActions?,
     emailLink: (SourceRef) -> String?,
+    rides: RideSuggestions,
     tripActions: TripActions?,
     canManage: Boolean,
     targets: List<Trip>,
@@ -351,6 +368,9 @@ private fun TripBody(
             }
             items(items, key = { it.id }) { segment ->
                 SegmentRow(segment, bookingActions, programs = programsFor(segment.provider), emailLink = emailLink, flightLines = flightLines(segment))
+                for (need in rides.needs[segment.id].orEmpty()) {
+                    RideSuggestion(need.kind, segment, rides.companies, onHide = { rides.onHide(need) })
+                }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
         }
