@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import app.travelmo.core.FlightStatus
 import app.travelmo.core.FoundLoyalty
 import app.travelmo.core.RideNeed
+import app.travelmo.core.HomePeriod
 import app.travelmo.core.effectiveHomes
 import app.travelmo.core.homeTimeline
 import app.travelmo.core.rideNeedKey
@@ -328,6 +329,15 @@ class TripsViewModel(
     /** The user's ride companies, hidden suggestions and home corrections; null until the user document answers. */
     val rideSettings: StateFlow<RideSettings?> = accessSettled.flatMapLatest { store.rideSettings(uid) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /**
+     * Home over time for the reports' residence and visa days: worked out
+     * from the user's own trips, with their corrections over it, as the
+     * Profile and the web's reports page work it out; null until both answer.
+     */
+    val reportHomes: StateFlow<List<HomePeriod>?> = combine(reportTrips, rideSettings) { trips, settings ->
+        if (trips == null || settings == null) null else effectiveHomes(homeTimeline(trips.filter { it.trip.ownerUid == uid }.flatMap { it.segments }), settings.homes)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /**
      * A trip's flights with no car or ride booked (SPEC "Car and ride

@@ -166,6 +166,77 @@
         <item quantity="other">%1$d trips still ahead aren\'t counted.</item>
     </plurals>
     <string name="no_trips_yet">No trips yet.</string>
+    <string name="residence_title">Residence and visa days</string>
+    <string name="residence_rules">Rules</string>
+    <string name="residence_applying_today">If you applied today</string>
+    <string name="residence_as_of_today">As of today</string>
+    <string name="residence_no_home_country">Days with no trip count as at home, but home has no country yet. Add one on your Profile.</string>
+    <string name="residence_estimate">An estimate from the bookings Travelmo knows about, with days between trips counted at home. It isn\'t legal advice.</string>
+    <string name="residence_worst_stretch">Worst stretch: %1$s</string>
+    <plurals name="residence_days_ending">
+        <item quantity="one">%1$d day in the one ending %2$s</item>
+        <item quantity="other">%1$d days in the one ending %2$s</item>
+    </plurals>
+    <plurals name="residence_unknown_away">
+        <item quantity="one">Includes %1$d day we can\'t place in a country, counted as away to be safe.</item>
+        <item quantity="other">Includes %1$d days we can\'t place in a country, counted as away to be safe.</item>
+    </plurals>
+    <plurals name="residence_unknown_in">
+        <item quantity="one">Includes %1$d day we can\'t place in a country, counted as inside to be safe.</item>
+        <item quantity="other">Includes %1$d days we can\'t place in a country, counted as inside to be safe.</item>
+    </plurals>
+    <string name="residence_time_away">Time away</string>
+    <string name="residence_stays">Stays</string>
+    <plurals name="residence_days">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
+    <plurals name="residence_more">
+        <item quantity="one">and %1$d more</item>
+        <item quantity="other">and %1$d more</item>
+    </plurals>
+    <string name="residence_official_guidance">Official guidance</string>
+    <string name="residence_enough">Enough days</string>
+    <string name="residence_just_enough">Only just enough</string>
+    <string name="residence_not_enough">Not enough days</string>
+    <string name="residence_within">Within the limit</string>
+    <string name="residence_close">Close to the limit</string>
+    <string name="residence_over">Over the limit</string>
+    <string name="residence_no_long_absence">No long absence</string>
+    <string name="residence_meets_test">Meets the test</string>
+    <string name="residence_under_31">Not met: under 31 days this year</string>
+    <string name="residence_close_to_test">Close to meeting it</string>
+    <string name="residence_not_met">Not met</string>
+    <plurals name="residence_of_days">
+        <item quantity="one">%1$s of %2$s day</item>
+        <item quantity="other">%1$s of %2$s days</item>
+    </plurals>
+    <plurals name="residence_left">
+        <item quantity="one">%1$d day left</item>
+        <item quantity="other">%1$d days left</item>
+    </plurals>
+    <plurals name="residence_over_by">
+        <item quantity="one">%1$d day over</item>
+        <item quantity="other">%1$d days over</item>
+    </plurals>
+    <plurals name="residence_short">
+        <item quantity="one">%1$d day short</item>
+        <item quantity="other">%1$d days short</item>
+    </plurals>
+    <plurals name="residence_spare">
+        <item quantity="one">%1$d day to spare</item>
+        <item quantity="other">%1$d days to spare</item>
+    </plurals>
+    <string name="residence_no_time_away">No time away</string>
+    <plurals name="residence_longest">
+        <item quantity="one">Longest: %1$d day, %2$s</item>
+        <item quantity="other">Longest: %1$d days, %2$s</item>
+    </plurals>
+    <string name="residence_weighted">%1$s of %2$s days, %3$s</string>
+    <plurals name="residence_this_year">
+        <item quantity="one">%1$d day this year</item>
+        <item quantity="other">%1$d days this year</item>
+    </plurals>
     <string name="reports_loading">Loading reports…</string>
     <string name="profile">Travel profile</string>
     <string name="profile_empty">Nothing here yet. Import a TripIt export on the web to fill in your documents, loyalty programs and travelers.</string>

@@ -4,12 +4,14 @@ import { displayTitles, favoritePlaces, travelReport, type FavoritePlace, type P
 import Link from "next/link";
 import type { User } from "firebase/auth";
 import { useEffect, useMemo, useState } from "react";
+import { ResidenceDays } from "@/components/ResidenceDays";
 import { SignInGate } from "@/components/SignInGate";
 import { WorldMap, type WorldMapData } from "@/components/WorldMap";
 import { countryName } from "@/lib/countries";
 import { localToday } from "@/lib/dates";
 import { useSaveForOffline } from "@/lib/offline";
-import { useAllSegments, useTrips } from "@/lib/trips";
+import { deriveHomes } from "@/lib/home";
+import { useAllSegments, useProfile, useTrips } from "@/lib/trips";
 
 type Tables = { lookup: PlaceLookup; map: WorldMapData };
 
@@ -153,6 +155,7 @@ function Report({ user }: { user: User }) {
   const ids = useMemo(() => trips?.map((t) => t.id).sort(), [trips]);
   const segments = useAllSegments(ids);
   const tables = useTables();
+  const profile = useProfile(user.uid);
   const [year, setYear] = useState("");
   const today = localToday();
 
@@ -168,6 +171,16 @@ function Report({ user }: { user: User }) {
     () => (all && tables && !(tables instanceof Error) && year ? travelReport(all.withSegments, today, { year, lookup: tables.lookup }) : all?.report),
     [all, tables, year, today],
   );
+
+  // Home over time, for the days with no trip: from the viewer's own trips,
+  // already read, with their corrections over it, as the Profile works it out.
+  const homes = useMemo(() => {
+    if (!trips || !segments || !profile) return undefined;
+    const own = new Set(trips.filter((t) => t.ownerUid === user.uid).map((t) => t.id));
+    const byTrip = Object.fromEntries(Object.entries(segments.byTrip).filter(([id]) => own.has(id)));
+    return deriveHomes(byTrip, [], profile.homes ?? []).periods;
+  }, [trips, segments, profile, user.uid]);
+  const titles = useMemo(() => displayTitles(trips ?? []), [trips]);
 
   if (tables instanceof Error) return <p className="text-danger">The map couldn&apos;t be loaded: {tables.message}</p>;
   if (!report || !tables || !all || !segments) return <p className="text-muted">Loading reports…</p>;
@@ -218,7 +231,8 @@ function Report({ user }: { user: User }) {
         </p>
       )}
       <Countries report={report} />
-      <Favorites places={favoritePlaces(all.withSegments)} titles={displayTitles(trips ?? [])} />
+      <Favorites places={favoritePlaces(all.withSegments)} titles={titles} />
+      {homes && <ResidenceDays trips={all.withSegments} homes={homes} lookup={tables.lookup} today={today} titles={titles} />}
       <Years report={all.report} onPick={setYear} />
       {all.report.upcoming > 0 && (
         <p className="mt-6 text-sm text-muted">

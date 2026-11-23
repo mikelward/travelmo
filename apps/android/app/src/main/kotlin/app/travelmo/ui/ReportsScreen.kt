@@ -64,13 +64,15 @@ import com.mikelward.androidzoom.compose.pinchFontSizeHost
  * Where the traveler has been, as the web's /reports counts it: the trips
  * begun, the days away and the countries, a world map with those countries
  * filled and the airports and placed bookings marked, days per country,
- * the places rated or marked, and trips per year. A year narrows the counts
+ * the places rated or marked, days in and out of countries against
+ * residence and visa limits (ResidenceDays), and trips per year. A year narrows the counts
  * and the map; the years table always shows every year.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, bottomBar: @Composable () -> Unit) {
     val all by viewModel.reportTrips.collectAsStateWithLifecycle()
+    val homes by viewModel.reportHomes.collectAsStateWithLifecycle()
     var year by rememberSaveable { mutableStateOf<String?>(null) }
     val today = viewModel.today()
     val input = all
@@ -113,6 +115,9 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, botto
                 for (place in favorites) {
                     item(key = "favorite-${place.name}|${place.country ?: ""}") { Favorite(place, titles, onOpenTrip) }
                 }
+            }
+            homes?.let { periods ->
+                item(key = "residence") { ResidenceDays(input.orEmpty(), periods, today, titles, onOpenTrip) }
             }
             if (whole.years.isNotEmpty()) {
                 item(key = "years") {

@@ -22,17 +22,23 @@ const transport: ReadonlySet<SegmentType> = new Set(["flight", "train", "bus", "
 
 // A moment the traveler is known to be somewhere: the country counts for
 // that day, and `then` is where they are afterwards (undefined while in
-// transit or not known).
-type Moment = { at: string; country?: string; then?: string };
+// transit or not known); `transit` marks setting off on a journey, after
+// which they are in no country until it arrives.
+type Moment = { at: string; country?: string; then?: string; transit?: true };
 
 function moments(segment: ExtractedSegment, lookup?: PlaceLookup): Moment[] {
   if (transport.has(segment.type)) {
     const from = placeCountry(segment.origin, segment.type, lookup);
     const to = placeCountry(segment.destination, segment.type, lookup);
-    // A car is driven from place to place in between; a flight is in the air.
-    const during = segment.type === "car_rental" && from === to ? from : undefined;
+    // Only a flight is in no country on the way. A drive, a train, a bus or
+    // a ferry that starts and ends in one country stays in it throughout (a
+    // two-night train across the US never leaves it); between two countries,
+    // where it is on the days between is not known, which is not the same as
+    // nowhere.
+    const flight = segment.type === "flight";
+    const during = !flight && from && from === to ? from : undefined;
     return [
-      { at: segment.start, ...(from ? { country: from } : {}), ...(during ? { then: during } : {}) },
+      { at: segment.start, ...(from ? { country: from } : {}), ...(during ? { then: during } : flight ? { transit: true as const } : {}) },
       { at: segment.end ?? segment.start, ...(to ? { country: to, then: to } : {}) },
     ];
   }
@@ -62,16 +68,23 @@ export function reportBounds(
   return segments.some(isCancelled) ? segmentDateRange(segments) : { start: trip.start, end: trip.end };
 }
 
-export function tripDays(
+// What a trip says about one of its days: the countries the traveler was
+// in, whether they spent all of it between countries (a flight across the
+// date line can skip a calendar day), and whether any booking has started
+// to place them yet (a trip dated before its first booking says nothing
+// about those days).
+export type TripDay = { countries: Set<string>; inTransit: boolean; started: boolean };
+
+export function tripDayPlaces(
   trip: Pick<Trip, "start" | "end">,
   segments: readonly ExtractedSegment[],
   today: string,
   lookup?: PlaceLookup,
-): Map<string, Set<string>> {
+): Map<string, TripDay> {
   // In the order they happened, which across the date line is not the
   // order of their local dates: a flight can land the day before it left.
   const timeline = liveSegments(segments).flatMap((s) => moments(s, lookup)).sort((a, b) => compareInstants(a.at, b.at));
-  const days = new Map<string, Set<string>>();
+  const days = new Map<string, TripDay>();
   const bounds = reportBounds(trip, segments);
   if (!bounds) return days;
   const last = bounds.end < today ? bounds.end : today;
@@ -79,16 +92,30 @@ export function tripDays(
     // Where the traveler was as the day began: left by the latest moment
     // dated before it.
     let where: string | undefined;
+    let transit = false;
+    let started = false;
     const countries = new Set<string>();
     for (const m of timeline) {
       const date = localDate(m.at);
-      if (date < day) where = m.then;
-      else if (date === day && m.country) countries.add(m.country);
+      if (date <= day) started = true;
+      if (date < day) {
+        where = m.then;
+        transit = Boolean(m.transit);
+      } else if (date === day && m.country) countries.add(m.country);
     }
     if (where) countries.add(where);
-    days.set(day, countries);
+    days.set(day, { countries, inTransit: !countries.size && transit, started });
   }
   return days;
+}
+
+export function tripDays(
+  trip: Pick<Trip, "start" | "end">,
+  segments: readonly ExtractedSegment[],
+  today: string,
+  lookup?: PlaceLookup,
+): Map<string, Set<string>> {
+  return new Map([...tripDayPlaces(trip, segments, today, lookup)].map(([day, { countries }]) => [day, countries]));
 }
 
 export type CountryReport = { country: string; days: number; trips: number };
