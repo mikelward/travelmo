@@ -959,7 +959,9 @@ Gmail ─watch─▶ Pub/Sub ─push(OIDC)─▶ parser /internal/pubsub/gmail
 Cost control is the pre-filter plus the parsed-message record: an email is
 shown to the model at most once, and only when it carries a booking signal.
 The seed sender list is in `apps/parser/src/prefilter.ts`; users extend it
-from the Import review page (`/settings/review`, linked from Settings),
+from the Import review page (`/settings/review`, linked from Settings;
+Android's Settings opens the same screen, reading the same records and
+rules with `review.ts` and `senders.ts`'s Kotlin twins),
 which lists recent emails and other imports that did
 not become bookings: the 100 most recent, and with a search, every record
 the user has (read in pages of a thousand, up to 20,000), since one import

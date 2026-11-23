@@ -42,6 +42,7 @@ import app.travelmo.ui.LocalUpdateAvailable
 import app.travelmo.ui.ProfileScreen
 import app.travelmo.ui.ReportsScreen
 import app.travelmo.ui.SettingsScreen
+import app.travelmo.ui.ImportReviewScreen
 import app.travelmo.ui.SignInScreen
 import app.travelmo.ui.TripDetailScreen
 import app.travelmo.ui.TripListScreen
@@ -62,6 +63,9 @@ private data class TripDetail(val tripId: String) : NavKey
 
 @Serializable
 private data object Settings : NavKey
+
+@Serializable
+private data object ImportReview : NavKey
 
 @Serializable
 private data class BookingForm(val tripId: String, val segmentId: String?, val defaultDate: String) : NavKey
@@ -156,7 +160,7 @@ private fun SignedInApp(app: TravelmoApplication, user: SignedIn, requestedTrip:
     val factory = remember(user.uid) {
         object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T = TripsViewModel(app.trips, user.uid, user.email, pushDevice = app.pushDevice, accountDeletion = app.accountDeletion, flightRefresh = app.flightRefresh, accessCheck = app.accessCheck, emailLinks = app.emailLinks, tripActions = app.tripActions) as T
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = TripsViewModel(app.trips, user.uid, user.email, pushDevice = app.pushDevice, accountDeletion = app.accountDeletion, flightRefresh = app.flightRefresh, accessCheck = app.accessCheck, emailLinks = app.emailLinks, tripActions = app.tripActions, importReview = app.importReview) as T
         }
     }
     val viewModel: TripsViewModel = viewModel(key = user.uid, factory = factory)
@@ -220,7 +224,10 @@ private fun SignedInApp(app: TravelmoApplication, user: SignedIn, requestedTrip:
                 BookingFormScreen(viewModel = viewModel, tripId = key.tripId, segmentId = key.segmentId, defaultDate = key.defaultDate, onDone = { backStack.removeLastOrNull() })
             }
             entry<Settings> {
-                SettingsScreen(account = app.account, user = user, viewModel = viewModel, onBack = { backStack.removeLastOrNull() })
+                SettingsScreen(account = app.account, user = user, viewModel = viewModel, onBack = { backStack.removeLastOrNull() }, onOpenReview = { backStack.add(ImportReview) })
+            }
+            entry<ImportReview> {
+                ImportReviewScreen(viewModel = viewModel, onBack = { backStack.removeLastOrNull() })
             }
         },
     )

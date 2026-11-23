@@ -4,6 +4,8 @@ import app.travelmo.core.AddressHolder
 import app.travelmo.core.PendingEmail
 import app.travelmo.core.FlightStatus
 import app.travelmo.core.FoundLoyalty
+import app.travelmo.core.ParsedRecord
+import app.travelmo.core.SenderPatterns
 import app.travelmo.core.LoyaltyPerson
 import app.travelmo.core.isMembershipNumber
 import app.travelmo.core.Place
@@ -233,3 +235,22 @@ internal fun loyaltyPeopleOf(value: Any?): List<LoyaltyPerson> = (value as? List
         person = (map["person"] as? String)?.trim()?.takeIf { it.isNotEmpty() },
     )
 }
+
+/** An import record, as the review list reads it; one missing its outcome or time is left out. */
+internal fun parsedRecordOf(id: String, data: Map<String, Any?>?): ParsedRecord? {
+    val map = data ?: return null
+    return ParsedRecord(
+        messageId = map.text("messageId") ?: id,
+        outcome = map.text("outcome") ?: return null,
+        processedAt = map.text("processedAt") ?: return null,
+        source = map.text("source"),
+        reason = map.text("reason"),
+        from = map.text("from"),
+        subject = map.text("subject"),
+        sentAt = map.text("sentAt"),
+    )
+}
+
+/** The user's sender rules; anything that isn't a list of names reads as none. */
+internal fun senderPatternsOf(data: Map<String, Any?>?): SenderPatterns =
+    SenderPatterns(allow = data.orEmpty().strings("allow"), deny = data.orEmpty().strings("deny"))

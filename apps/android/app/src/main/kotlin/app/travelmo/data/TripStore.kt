@@ -3,6 +3,14 @@ package app.travelmo.data
 import app.travelmo.core.AddressHolder
 import app.travelmo.core.FlightStatus
 import app.travelmo.core.FoundLoyalty
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.flow
+import app.travelmo.core.withLearned
+import app.travelmo.core.SenderPatterns
+import app.travelmo.core.SenderList
+import app.travelmo.core.REVIEW_SEARCH_CAP
+import app.travelmo.core.REVIEW_RECENT
+import app.travelmo.core.ParsedRecord
 import app.travelmo.core.withLoyaltyPerson
 import app.travelmo.core.HomeCorrection
 import app.travelmo.core.MAX_HIDDEN_RIDE_NEEDS
@@ -91,6 +99,22 @@ interface TripStore {
 
     /** Removes a loyalty number found in the owner's emails, in a transaction over the stored list, as the web does. */
     suspend fun removeFoundLoyalty(uid: String, found: FoundLoyalty)
+
+    /** The [REVIEW_RECENT] import records read last, newest first, live; null while they load. */
+    fun latestParsed(uid: String): Flow<List<ParsedRecord>?>
+
+    /**
+     * Every import record, newest first, read once in pages for a search, up
+     * to [REVIEW_SEARCH_CAP]: each page emits what has been read so far, the
+     * last with `done`. A failed page ends it with what was read.
+     */
+    fun allParsed(uid: String): Flow<SearchedRecords>
+
+    /** The user's sender rules, live; empty when they have none. */
+    fun senderPatterns(uid: String): Flow<SenderPatterns>
+
+    /** Teaches the parser a sender ([withLearned]), on the rules as stored now. */
+    suspend fun learnSender(uid: String, domain: String, which: SenderList)
 
     /** Says whose a membership is ([person] null: the owner's), as the web's setLoyaltyPerson. */
     suspend fun setLoyaltyPerson(uid: String, program: String, number: String, person: String?)
@@ -185,6 +209,12 @@ data class OwnProfile(val profile: TravelProfile?)
  * snapshot listener, so a change made elsewhere shows up on its own and
  * Firestore's own cache answers them offline.
  */
+/** What a search has read so far, and whether it has read them all. */
+data class SearchedRecords(val records: List<ParsedRecord>, val done: Boolean)
+
+// Records a search reads at a time.
+private const val SEARCH_PAGE = 1000
+
 class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getInstance()) : TripStore {
     override fun trips(uid: String, addresses: List<String>): Flow<List<Trip>> {
         // One query failing (the rules refusing it, say) must not hold the
@@ -323,6 +353,63 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
                 buildMap { put("program", p.program); put("number", p.number); p.person?.let { put("person", it) } }
             }
             tx.update(ref, mapOf("loyaltyPeople" to next, "updatedAt" to Instant.now().toString()))
+        }.await()
+    }
+
+    override fun latestParsed(uid: String): Flow<List<ParsedRecord>?> = callbackFlow {
+        val query = db.collection("users").document(uid).collection("parsedMessages")
+            .orderBy("processedAt", Query.Direction.DESCENDING).limit(REVIEW_RECENT.toLong())
+        val registration = query.addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                TravelmoLog.error(error, "Reading the import records failed")
+                trySend(emptyList())
+                return@addSnapshotListener
+            }
+            trySend(snapshot?.documents.orEmpty().mapNotNull { parsedRecordOf(it.id, it.data) })
+        }
+        awaitClose { registration.remove() }
+    }
+
+    override fun allParsed(uid: String): Flow<SearchedRecords> = flow {
+        val base = db.collection("users").document(uid).collection("parsedMessages").orderBy("processedAt", Query.Direction.DESCENDING)
+        val read = mutableListOf<ParsedRecord>()
+        var last: DocumentSnapshot? = null
+        while (true) {
+            val page = try {
+                (last?.let { base.startAfter(it) } ?: base).limit(SEARCH_PAGE.toLong()).get().await()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                TravelmoLog.error(e, "Reading import records for a search failed")
+                emit(SearchedRecords(read.toList(), done = true))
+                return@flow
+            }
+            read += page.documents.mapNotNull { parsedRecordOf(it.id, it.data) }
+            last = page.documents.lastOrNull()
+            val done = page.size() < SEARCH_PAGE || read.size >= REVIEW_SEARCH_CAP
+            emit(SearchedRecords(read.toList(), done))
+            if (done) return@flow
+        }
+    }
+
+    override fun senderPatterns(uid: String): Flow<SenderPatterns> = callbackFlow {
+        val registration = db.document("users/$uid/settings/patterns").addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                TravelmoLog.error(error, "Reading the sender rules failed")
+                trySend(SenderPatterns())
+                return@addSnapshotListener
+            }
+            trySend(senderPatternsOf(snapshot?.data))
+        }
+        awaitClose { registration.remove() }
+    }
+
+    override suspend fun learnSender(uid: String, domain: String, which: SenderList) {
+        val ref = db.document("users/$uid/settings/patterns")
+        db.runTransaction { tx ->
+            val next = withLearned(senderPatternsOf(tx.get(ref).data), domain, which)
+            // Merged, so any other field of the document stays.
+            tx.set(ref, mapOf("allow" to next.allow, "deny" to next.deny), SetOptions.merge())
         }.await()
     }
 

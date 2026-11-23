@@ -42,6 +42,12 @@ import app.travelmo.data.FlightRefresh
 import app.travelmo.data.NoFlightRefresh
 import app.travelmo.data.NoAccessCheck
 import app.travelmo.data.NoAccountDeletion
+import app.travelmo.core.SenderPatterns
+import app.travelmo.core.SenderList
+import app.travelmo.core.ParsedRecord
+import app.travelmo.data.SearchedRecords
+import app.travelmo.data.NoImportReview
+import app.travelmo.data.ImportReview
 import app.travelmo.data.TripActions
 import app.travelmo.data.NoTripActions
 import app.travelmo.data.OwnProfile
@@ -121,6 +127,8 @@ class TripsViewModel(
     private val emailLinks: EmailLinks = NoEmailLinks,
     /** The parser's regrouping and deleting of all trips; none by default. */
     private val tripActions: TripActions = NoTripActions,
+    /** The parser's "Import anyway" for Import review; none by default. */
+    private val importReview: ImportReview = NoImportReview,
 ) : ViewModel() {
     /** The current instant, as pending email links are judged by. */
     fun now(): String = clock().toString()
@@ -352,6 +360,52 @@ class TripsViewModel(
         if (settings == null) return emptyList()
         val periods = effectiveHomes(homeTimeline(segments), settings.homes)
         return rideNeeds(segments, periods, clock().toString(), hidden = settings.hidden)
+    }
+
+    /** Import review's latest records, live; null while they load. */
+    val reviewLatest: StateFlow<List<ParsedRecord>?> = accessSettled.flatMapLatest { store.latestParsed(uid) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    private val reviewSearching = MutableStateFlow(false)
+
+    /** Every record, read once a search starts (null before), each page as it comes. */
+    val reviewAll: StateFlow<SearchedRecords?> = reviewSearching.flatMapLatest { if (it) store.allParsed(uid) else flowOf(null) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Whether Import review is searching, which reads every record. */
+    fun setReviewSearching(on: Boolean) {
+        reviewSearching.value = on
+    }
+
+    /** The user's sender rules, live. */
+    val senderPatterns: StateFlow<SenderPatterns?> = accessSettled.flatMapLatest { store.senderPatterns(uid) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    private val _reviewNotices = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    /** What the last action on each reviewed message did, by message id. */
+    val reviewNotices: StateFlow<Map<String, String>> = _reviewNotices
+
+    /** Forgets what the last action on a reviewed message said. */
+    fun reviewNoticeSeen(messageId: String) {
+        _reviewNotices.update { it - messageId }
+    }
+
+    /** Whether this build can read a message again here. */
+    val canReimport: Boolean
+        get() = importReview.available
+
+    /** Reads one message again, skipping the pre-filter, and says what came of it. */
+    fun reimport(token: String, messageId: String) = run(token, "reimport") {
+        val said = importReview.reimport(messageId)
+        _reviewNotices.update { it + (messageId to said) }
+    }
+
+    /** Always or never imports a sender's mail from now on. */
+    fun learnSender(token: String, messageId: String, domain: String, which: SenderList) = run(token, "learnSender") {
+        store.learnSender(uid, domain, which)
+        val said = if (which == SenderList.ALLOW) "Always importing $domain" else "Never importing $domain"
+        _reviewNotices.update { it + (messageId to said) }
     }
 
     fun hideRideNeed(token: String, need: RideNeed) = run(token, "hideRideNeed") { store.hideRideNeed(uid, rideNeedKey(need)) }

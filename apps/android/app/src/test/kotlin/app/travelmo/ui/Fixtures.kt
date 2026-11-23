@@ -1,5 +1,12 @@
 package app.travelmo.ui
 
+import app.travelmo.core.ParsedRecord
+import app.travelmo.core.REVIEW_RECENT
+import app.travelmo.core.SenderList
+import app.travelmo.core.SenderPatterns
+import app.travelmo.core.withLearned
+import app.travelmo.data.ImportReview
+import app.travelmo.data.SearchedRecords
 import app.travelmo.data.TripActions
 import app.travelmo.data.TripActionFailed
 import app.travelmo.core.describeRegroup
@@ -181,7 +188,15 @@ class FakeTripStore(
     private val gmailAccount: String? = null,
     private val flightStatuses: Map<String, FlightStatus> = emptyMap(),
     private val addressHolder: AddressHolder = AddressHolder(),
+    private val parsed: List<ParsedRecord> = fixtureParsed,
 ) : TripStore {
+    override fun latestParsed(uid: String): Flow<List<ParsedRecord>?> = flowOf(parsed.take(REVIEW_RECENT))
+    override fun allParsed(uid: String): Flow<SearchedRecords> = flowOf(SearchedRecords(parsed, done = true))
+    val patterns = MutableStateFlow(SenderPatterns(deny = listOf("news.example")))
+    override fun senderPatterns(uid: String): Flow<SenderPatterns> = patterns
+    override suspend fun learnSender(uid: String, domain: String, which: SenderList) {
+        patterns.value = withLearned(patterns.value, domain, which)
+    }
     override fun addressHolder(uid: String): Flow<AddressHolder> = flowOf(addressHolder)
     override fun ownProfile(uid: String): Flow<OwnProfile> = flowOf(OwnProfile(profile))
     val reminders = mutableListOf<Boolean>()
@@ -331,5 +346,27 @@ class FakeTripActions(private val failure: String? = null) : TripActions {
         calls += "deleteAll"
         failure?.let { throw TripActionFailed(it) }
         return describeDeletedTrips(3)
+    }
+}
+
+/**
+ * Import review's records, newest read first: an e-ticket read early in a
+ * big import (sent in May), a newsletter the rules already skip, an
+ * imported booking (not listed) and a TripIt item (no sender to teach).
+ */
+val fixtureParsed = listOf(
+    ParsedRecord("news", "filtered", "2026-11-23T12:00:00Z", from = "News <hello@news.example>", subject = "Our winter sale", reason = "sender news.example denied", sentAt = "2026-11-20T09:00:00Z"),
+    ParsedRecord("booked", "imported", "2026-11-23T11:00:00Z", from = "Cove <stay@cove.example>", subject = "Your stay at Cove Liverpool"),
+    ParsedRecord("tripit", "failed", "2026-11-23T10:30:00Z", source = "tripit", subject = "Dublin", reason = "Couldn't read it"),
+    ParsedRecord("ticket", "not_booking", "2026-11-23T10:00:00Z", from = "Example Air <tickets@air.example>", subject = "Example Air e-Ticket XY12AB", sentAt = "2026-05-23T07:22:58Z"),
+)
+
+/** Import anyway as the parser would answer, recording the messages asked for. */
+class FakeImportReview : ImportReview {
+    val asked = mutableListOf<String>()
+    override val available = true
+    override suspend fun reimport(messageId: String): String {
+        asked += messageId
+        return "Imported"
     }
 }

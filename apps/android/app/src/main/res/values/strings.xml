@@ -95,6 +95,27 @@
     <string name="edit">Edit</string>
     <string name="delete">Delete</string>
     <string name="trips_section">Trips</string>
+    <string name="import_review">Import review</string>
+    <string name="import_review_hint">Recent emails and other imports that did not become bookings. Teach the importer about a sender, or import one anyway.</string>
+    <string name="open_import_review">Review imports</string>
+    <string name="search">Search</string>
+    <string name="review_from">From</string>
+    <string name="review_to">To</string>
+    <string name="review_from_date">From %1$s</string>
+    <string name="review_to_date">To %1$s</string>
+    <string name="loading">Loading…</string>
+    <string name="nothing_matches">Nothing matches.</string>
+    <string name="nothing_to_review">Nothing to review.</string>
+    <string name="searching">Searching…</string>
+    <plurals name="review_showing_recent">
+        <item quantity="one">Showing the most recent. Search to find older ones.</item>
+        <item quantity="other">Showing the %1$d most recent. Search to find older ones.</item>
+    </plurals>
+    <string name="no_subject">(no subject)</string>
+    <string name="unknown_sender">unknown sender</string>
+    <string name="import_anyway">Import anyway</string>
+    <string name="always_import">Always import %1$s</string>
+    <string name="never_import">Never import %1$s</string>
     <string name="regroup_hint">Rebuilds your trips from your bookings, keeping days out at home separate from trips away.</string>
     <string name="regroup_trips">Regroup trips</string>
     <string name="regrouping">Regrouping…</string>
