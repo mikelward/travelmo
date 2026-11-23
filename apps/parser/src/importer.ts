@@ -3,6 +3,7 @@ import {
   fillAirports,
   awayPlace,
   compareInstants,
+  courseName,
   findTripForBooking,
   isTransfer,
   transferTitle,
@@ -1024,18 +1025,6 @@ export function placeTitle(
   return place?.city ?? place?.name ?? segments[0]?.title ?? "Trip";
 }
 
-// A title without the day or date of a course it names: "(Day 2)",
-// "- Day 2", "- 11th Aug 2025", "(Mon 11 Aug)", ", 11/08/2025",
-// "- 2025-08-11", "on 11 August". A date needs its month, so a number alone
-// ("Toy Story 5") is kept.
-const month = "(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\\.?";
-const dayOfMonth = "\\d{1,2}(?:st|nd|rd|th)?";
-const weekday = "(?:(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*\\.?,?\\s+)?";
-const date =
-  `(?:${weekday}(?:${dayOfMonth}\\s+(?:of\\s+)?${month}|${month}\\s+${dayOfMonth})(?:,?\\s+\\d{4})?` +
-  "|\\d{1,2}[/.]\\d{1,2}[/.]\\d{2,4}|\\d{4}-\\d{2}-\\d{2}|day\\s+\\d+)";
-const dayOrDate = new RegExp(`(?:\\s*\\(\\s*${date}\\s*\\)|\\s*[-–—:,]\\s*${date}|\\s+on\\s+${date})\\s*$`, "i");
-const courseName = (title: string) => title.replace(dayOrDate, "").trim() || title;
 
 // How far either side of a booking the importer reads trips to work out
 // where home was, in days.

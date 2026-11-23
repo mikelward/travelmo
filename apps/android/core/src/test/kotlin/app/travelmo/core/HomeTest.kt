@@ -76,6 +76,44 @@ class HomeTest {
         homeTimeline(listOf(crossing) + roundTrip("London", "Rome", "2025-03-01", "2025-03-05")) shouldBe listOf(HomePeriod("London"))
     }
 
+    // Someone living in London who visits family in Boston each winter.
+    private val londonYears = roundTrip("London", "Paris", "2022-05-02", "2022-05-06") +
+        roundTrip("London", "Rome", "2023-04-03", "2023-04-07") +
+        roundTrip("London", "Lisbon", "2024-03-04", "2024-03-08") +
+        roundTrip("London", "Berlin", "2024-07-01", "2024-07-05") +
+        roundTrip("London", "Madrid", "2024-10-07", "2024-10-11") +
+        roundTrip("London", "Oslo", "2025-04-07", "2025-04-11") +
+        roundTrip("London", "Prague", "2025-09-01", "2025-09-05")
+    private val winters = listOf(
+        flight("2024-01-04T18:00:00-05:00", "Boston", "London"),
+        flight("2024-12-20T09:00:00+00:00", "London", "Boston"),
+        flight("2025-01-04T18:00:00-05:00", "Boston", "London"),
+        flight("2025-12-19T09:00:00+00:00", "London", "Boston"),
+        flight("2026-01-03T18:00:00-05:00", "Boston", "London"),
+    )
+    private val sideTrips = roundTrip("Boston", "New York", "2023-12-22", "2023-12-24") +
+        roundTrip("Boston", "Portland", "2023-12-28", "2023-12-30")
+
+    @Test
+    fun `keeps home through visits whose first outbound flight is missing`() {
+        homeTimeline(londonYears + winters) shouldBe listOf(HomePeriod("London"))
+        homeTimeline(londonYears + winters + sideTrips) shouldBe listOf(HomePeriod("London"))
+        val outbound = flight("2023-12-18T09:00:00+00:00", "London", "Boston")
+        homeTimeline(londonYears + outbound + winters + sideTrips) shouldBe listOf(HomePeriod("London"))
+    }
+
+    @Test
+    fun `still moves after years of trips from the new home and none from the old`() {
+        val bookings = roundTrip("London", "Paris", "2020-05-02", "2020-05-06") +
+            roundTrip("London", "Rome", "2021-04-03", "2021-04-07") +
+            flight("2022-01-10T09:00:00+00:00", "London", "Boston") +
+            roundTrip("Boston", "Chicago", "2022-03-01", "2022-03-05") +
+            roundTrip("Boston", "Denver", "2022-08-10", "2022-08-14") +
+            roundTrip("Boston", "London", "2023-07-01", "2023-07-15") +
+            roundTrip("Boston", "Miami", "2024-01-02", "2024-01-06")
+        homeTimeline(bookings) shouldBe listOf(HomePeriod("London", until = "2022-02-28"), HomePeriod("Boston", from = "2022-03-01"))
+    }
+
     @Test
     fun `knows no home without a round trip`() {
         homeTimeline(listOf(flight("2025-04-01T09:00:00+00:00", "London", "Boston"))) shouldBe emptyList()
@@ -90,7 +128,7 @@ class HomeTest {
         homeAt(emptyList(), "2021-03-12").shouldBeNull()
         val overrides = listOf(HomePeriod("Cambridge", from = "2020-09-01", until = "2021-03-11"))
         homeAt(periods, "2020-10-01", overrides)?.city shouldBe "Cambridge"
-        homeAt(periods, "2020-06-01", overrides)?.city shouldBe "Boston"
+        homeAt(periods, "2020-06-01", overrides).shouldBeNull()
     }
 
     @Test
@@ -132,14 +170,28 @@ class HomeTest {
     }
 
     @Test
-    fun `follows a correction from its date on`() {
+    fun `is the corrections alone once there are any, with no home before them`() {
         val inferred = listOf(HomePeriod("Boston", until = "2021-03-11"), HomePeriod("London", from = "2021-03-12"))
         effectiveHomes(inferred, emptyList()) shouldBe inferred
         effectiveHomes(inferred, listOf(HomeCorrection("Cambridge", "GB", "2020-09-01"))) shouldBe listOf(
-            HomePeriod("Boston", until = "2020-08-31"),
             HomePeriod("Cambridge", "GB", from = "2020-09-01"),
         )
-        effectiveHomes(listOf(HomePeriod("London")), listOf(HomeCorrection("London", from = "2024-01-01"))) shouldBe listOf(HomePeriod("London"))
+        effectiveHomes(listOf(HomePeriod("London")), listOf(HomeCorrection("London", from = "2024-01-01"))) shouldBe
+            listOf(HomePeriod("London", from = "2024-01-01"))
+    }
+
+    @Test
+    fun `drops a home inferred before the earliest correction`() {
+        val corrections = listOf(
+            HomeCorrection("London", from = "2022-01-15"),
+            HomeCorrection("Mountain View", from = "2011-11-25"),
+            HomeCorrection("Elsternwick", from = "2003-03-01"),
+        )
+        val homes = effectiveHomes(listOf(HomePeriod("London")), corrections)
+        describeHomes(homes) shouldBe "London since Jan 2022 · Mountain View 2011–2022 · Elsternwick 2003–2011"
+        homeAt(homes, "2003-02-28").shouldBeNull()
+        homeAt(listOf(HomePeriod("London")), "2003-02-28", homeCorrections(corrections)).shouldBeNull()
+        homeAt(homes, "2015-06-01")?.city shouldBe "Mountain View"
     }
 
     @Test
