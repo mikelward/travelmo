@@ -14,6 +14,19 @@ describe("emailText", () => {
     expect(text).toBe("Flight BA117\nDeparts 09:00");
   });
 
+  it("reads the HTML when the plain part is only a footer", () => {
+    const footer = "This is a service email.\r\nRegistered office: Example Air Ltd.";
+    const itinerary = `<h1>Your booking confirmation</h1>${"<p>XX 11 Boston to London Heathrow, 23 Jul, departs 06:00, arrives 14:30</p>".repeat(5)}`;
+    const text = emailText({
+      mimeType: "multipart/alternative",
+      parts: [
+        { mimeType: "text/plain", body: { data: b64(footer) } },
+        { mimeType: "text/html", body: { data: b64(`${itinerary}<p>${footer}</p>`) } },
+      ],
+    });
+    expect(text).toContain("XX 11 Boston to London Heathrow");
+  });
+
   it("flattens HTML when no plain part exists, dropping links and images", () => {
     const text = emailText({
       mimeType: "text/html",

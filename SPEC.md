@@ -937,6 +937,13 @@ still learned from, so an "import anyway" on a wrongly filtered email
 teaches the filter. An embedding failure is logged and the email goes to
 the model.
 
+The model reads an email's plain-text part when the sender gives the whole
+message there, and its HTML flattened to text otherwise: a plain part under
+a third the length of the HTML's text is a stub (Virgin Atlantic's
+e-tickets put only a footer there), and the HTML is read instead
+(`bodyText`, for Gmail and forwarded mail alike), at most 24,000
+characters.
+
 What isn't a booking: a membership, an annual or season pass, a
 subscription, a gift card or voucher, or a donation buys no visit, so the
 prompt marks it not a booking, and the importer drops any the model still

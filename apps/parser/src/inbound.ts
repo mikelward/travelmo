@@ -14,7 +14,7 @@ import { refuseIfDeleted } from "./deleted";
 import { hashToken } from "./calendarExport";
 import type { EmailMessage } from "./gmail";
 import { importMessage, type ImportDeps, type ImportOutcome } from "./importer";
-import { htmlToText, maxEmailChars, tidy } from "./text";
+import { bodyText } from "./text";
 
 // Forward-to-import: the Email Worker (apps/inbound) relays each message
 // sent to a user's forwarding address here as it arrived, and the import
@@ -68,17 +68,18 @@ function nameAndAddress(sender: { name?: string | undefined; address?: string | 
 }
 
 // The parts of a raw message the import reads, in the shape Gmail's are
-// reduced to (text.ts): plain text when present, else the HTML flattened.
+// reduced to (text.ts's bodyText): plain text when it is the whole message,
+// else the HTML flattened.
 export async function parseInbound(raw: Uint8Array): Promise<InboundMail> {
   const mail = await PostalMime.parse(raw);
-  const text = mail.text?.trim() ? mail.text : mail.html ? htmlToText(mail.html) : "";
+  const text = bodyText(mail.text ?? "", mail.html ?? "");
   return {
     ...(mail.messageId ? { messageId: mail.messageId } : {}),
     from: nameAndAddress(mail.from),
     subject: mail.subject ?? "",
     date: mail.date ?? "",
     listUnsubscribe: mail.headers.some((h) => h.key === "list-unsubscribe"),
-    text: tidy(text).slice(0, maxEmailChars),
+    text,
   };
 }
 
