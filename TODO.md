@@ -366,6 +366,10 @@
 
 Guesses made on autopilot; change any of them freely.
 
+- "Import past bookings" regroups the user's trips when it finishes, as
+  "Regroup trips" does, so a booking moved by hand during the import may
+  be filed again by the grouping rules.
+
 - Loyalty from emails: a number is kept when the name on it could be the
   account's (shares a name with the Google profile's), or no name is given;
   a fellow traveler's number on the same booking is left out. Kept only from

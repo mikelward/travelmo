@@ -444,6 +444,10 @@ function backfillIo(uid: string): ChainIo<GmailState> {
     log: (severity, event, fields) => log(severity, event, fields),
     sleep,
     newWake: () => randomBytes(12).toString("base64url"),
+    finished: async () => {
+      const result = await regroupTrips(uid, deps);
+      log("INFO", "backfill_regrouped", { uid, ...result });
+    },
   };
 }
 

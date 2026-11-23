@@ -233,6 +233,32 @@ describe("continueBackfill", () => {
     expect(w.stored?.leaseUntil).toBeUndefined();
   });
 
+  it("regroups the trips once, when the reading reaches the end", async () => {
+    const w = world({ pages: 3 });
+    let regrouped = 0;
+    w.io.finished = async () => {
+      regrouped += 1;
+    };
+    await startBackfill("u1", "r1", false, w.io);
+    const first = w.queued[0]!;
+    await w.drain();
+    expect(regrouped).toBe(1);
+    // A late copy of a batch finds the reading done and regroups nothing.
+    await continueBackfill(first, w.io);
+    expect(regrouped).toBe(1);
+  });
+
+  it("still records the reading done when regrouping fails", async () => {
+    const w = world({ pages: 1 });
+    w.io.finished = async () => {
+      throw new Error("Firestore down");
+    };
+    await startBackfill("u1", "r1", false, w.io);
+    expect((await w.drain()).map((r) => r.kind)).toEqual(["ran"]);
+    expect(w.stored).toMatchObject({ done: true, running: false });
+    expect(w.logged).toContain("backfill_finish_failed");
+  });
+
   it("drops a second copy of a batch already read", async () => {
     const w = world();
     await startBackfill("u1", "r1", false, w.io);
