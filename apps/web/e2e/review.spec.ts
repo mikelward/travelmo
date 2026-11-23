@@ -49,3 +49,28 @@ test("the review list is searched by keyword and by dates", async ({ page }) => 
   await page.getByLabel("To").fill("2026-10-15");
   await expect(page.getByText("Nothing matches.")).toBeVisible();
 });
+
+test("a search finds an email whatever it was read among, by name or by when it was sent", async ({ page }) => {
+  const uid = await signIn(page, owner);
+  const base = { uid, segmentIds: [], source: "gmail" as const, outcome: "not_booking" as const };
+  // Read early in an import of more emails than the list shows.
+  await seedParsedMessage({ ...base, messageId: "ticket", from: "Example Air <tickets@air.example>", subject: "Example Air e-Ticket XY12AB", processedAt: "2026-11-23T10:00:00Z", sentAt: "2026-05-23T07:22:58Z" });
+  await Promise.all(
+    Array.from({ length: 100 }, (_, i) =>
+      seedParsedMessage({ ...base, messageId: `news-${i}`, from: "News <news@cove.example>", subject: `Newsletter ${i}`, processedAt: `2026-11-23T11:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}Z` }),
+    ),
+  );
+
+  await page.goto("/settings/review");
+  await expect(page.getByText("Showing the 100 most recent.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Example Air e-Ticket XY12AB")).toBeHidden();
+
+  await page.getByRole("searchbox", { name: "Search" }).fill("example air");
+  await expect(page.getByText("Example Air e-Ticket XY12AB")).toBeVisible();
+
+  await page.getByRole("button", { name: "Clear" }).click();
+  await page.getByLabel("From").fill("2026-05-01");
+  await page.getByLabel("To").fill("2026-08-01");
+  await expect(page.getByText("Example Air e-Ticket XY12AB")).toBeVisible();
+  await expect(page.getByText("Newsletter 1", { exact: true })).toBeHidden();
+});

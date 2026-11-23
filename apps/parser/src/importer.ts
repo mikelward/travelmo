@@ -273,6 +273,9 @@ export async function importMessage(
   const source = options.source ?? "gmail";
   // When what the email carries was sent (the original's, for a forward).
   const sent = originalSentAt(message, source);
+  // When it was sent, for the review list's dates: a forward's original,
+  // else its own Date line.
+  const sentOn = sent ?? sentAt(message.date);
   const base = {
     messageId: message.id,
     uid,
@@ -280,6 +283,7 @@ export async function importMessage(
     from: message.from,
     subject: message.subject,
     ...(options.revision ? { revision: options.revision } : {}),
+    ...(sentOn ? { sentAt: sentOn } : {}),
   };
   const record = (outcome: ParsedMessage["outcome"], extra: Partial<ParsedMessage> = {}): ParsedMessage => ({
     ...base,

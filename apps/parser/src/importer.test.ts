@@ -359,7 +359,8 @@ describe("importMessage", () => {
     };
     expect(await importMessage("u1", membershipEmail, deps(store, async () => membership))).toBe("not_booking");
     expect(store.trips.size).toBe(0);
-    expect(store.parsed.get("u1/m-member")).toMatchObject({ outcome: "not_booking", reason: "membership, pass or voucher" });
+    // When the email was sent goes on the record, for finding it by date in the review list.
+    expect(store.parsed.get("u1/m-member")).toMatchObject({ outcome: "not_booking", reason: "membership, pass or voucher", sentAt: "2026-11-01T10:00:00.000Z" });
   });
 
   it("still imports a ticket for a set time", async () => {

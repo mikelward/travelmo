@@ -10,6 +10,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  startAfter,
   where,
   type DocumentData,
   type QuerySnapshot,
@@ -196,20 +197,55 @@ export function useProfile(uid: string): UserProfile | undefined {
 // The most recent import decisions, newest first; the caller filters by
 // outcome so no composite index is needed.
 // The newest records first, optionally only those processed in [start, end).
-export function useParsedMessages(uid: string, max = 100, range: { start?: string; end?: string } = {}): ParsedMessage[] | undefined {
-  const { start, end } = range;
-  // Tagged with the query they answer, so a new range shows as loading
-  // rather than the old range's records.
-  const key = `${uid}|${max}|${start ?? ""}|${end ?? ""}`;
+// Every import record, newest first, read in pages while `enabled` (a
+// search), up to `cap`: one import can read thousands of emails, more than
+// the review list shows. `done` once all are read; a failed read stops it
+// with what was read so far.
+export function useAllParsedMessages(uid: string, enabled: boolean, cap = 20_000): { records: ParsedMessage[]; done: boolean } | undefined {
+  const [state, setState] = useState<{ uid: string; records: ParsedMessage[]; done: boolean }>();
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    const page = 1000;
+    void (async () => {
+      const records: ParsedMessage[] = [];
+      let last: QuerySnapshot<DocumentData>["docs"][number] | undefined;
+      try {
+        for (;;) {
+          const base = collection(firestore(), `${paths.user(uid)}/parsedMessages`);
+          const snapshot = await getDocs(query(base, orderBy("processedAt", "desc"), ...(last ? [startAfter(last)] : []), limit(page)));
+          if (cancelled) return;
+          records.push(...parseDocs(ParsedMessage, snapshot));
+          last = snapshot.docs.at(-1);
+          const done = snapshot.size < page || records.length >= cap;
+          setState({ uid, records: [...records], done });
+          if (done) return;
+        }
+      } catch (error) {
+        console.error("Reading import records for a search failed", error);
+        if (!cancelled) setState({ uid, records: [...records], done: true });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [uid, enabled, cap]);
+  return enabled && state?.uid === uid ? state : undefined;
+}
+
+// The `max` most recently read import records, newest first.
+export function useParsedMessages(uid: string, max = 100): ParsedMessage[] | undefined {
+  // Tagged with the query they answer, so a longer list shows as loading
+  // rather than the shorter one's records.
+  const key = `${uid}|${max}`;
   const [loaded, setLoaded] = useState<{ key: string; records: ParsedMessage[] }>();
   useEffect(() => {
-    const bounds = [...(start ? [where("processedAt", ">=", start)] : []), ...(end ? [where("processedAt", "<", end)] : [])];
     return onSnapshot(
-      query(collection(firestore(), `${paths.user(uid)}/parsedMessages`), ...bounds, orderBy("processedAt", "desc"), limit(max)),
+      query(collection(firestore(), `${paths.user(uid)}/parsedMessages`), orderBy("processedAt", "desc"), limit(max)),
       (s) => setLoaded({ key, records: parseDocs(ParsedMessage, s) }),
       (error) => console.error("Parsed messages subscription failed", error),
     );
-  }, [key, uid, max, start, end]);
+  }, [key, uid, max]);
   return loaded?.key === key ? loaded.records : undefined;
 }
 

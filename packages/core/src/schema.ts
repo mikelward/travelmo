@@ -389,6 +389,9 @@ export const ParsedMessage = z.object({
   // change to the event (a new time, place or note) is read again.
   revision: z.string().optional(),
   processedAt: isoDateTime,
+  // When the email was sent (a forward's original), for finding it by date
+  // in the review list; absent for other sources and older records.
+  sentAt: isoDateTime.optional(),
 });
 export type ParsedMessage = z.infer<typeof ParsedMessage>;
 

@@ -912,8 +912,12 @@ shown to the model at most once, and only when it carries a booking signal.
 The seed sender list is in `apps/parser/src/prefilter.ts`; users extend it
 from the Import review page (`/settings/review`, linked from Settings),
 which lists recent emails and other imports that did
-not become bookings (searchable by words in the subject, sender or reason,
-and by the dates they were processed) with three actions: always import that sender, never
+not become bookings: the 100 most recent, and with a search, every record
+the user has (read in pages of a thousand, up to 20,000), since one import
+reads thousands of emails. A search matches words in the subject, sender or
+reason, and optionally dates: when the email was sent (`sentAt`, a forward's
+original), or when it was read for a record without one (older records,
+other sources). It offers three actions: always import that sender, never
 import it, or import this one anyway (`POST /gmail/reimport`, which reclaims
 the record of a message that did not become a booking — never an imported
 one, whose bookings are edited on the trip page, nor one whose import is
