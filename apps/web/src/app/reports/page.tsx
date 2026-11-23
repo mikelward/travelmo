@@ -1,6 +1,6 @@
 "use client";
 
-import { favoritePlaces, travelReport, type FavoritePlace, type PlaceLookup, type TravelReport } from "@travelmo/core";
+import { displayTitles, favoritePlaces, travelReport, type FavoritePlace, type PlaceLookup, type TravelReport } from "@travelmo/core";
 import Link from "next/link";
 import type { User } from "firebase/auth";
 import { useEffect, useMemo, useState } from "react";
@@ -75,7 +75,7 @@ const stars = (n: number) => "★".repeat(n) + "☆".repeat(5 - n);
 
 // The places the traveler rated or marked on their trip pages, favorites
 // first, each linking to the trips it was on.
-function Favorites({ places }: { places: readonly FavoritePlace[] }) {
+function Favorites({ places, titles }: { places: readonly FavoritePlace[]; titles: Map<string, string> }) {
   if (!places.length) return null;
   return (
     <section className="mt-8">
@@ -102,7 +102,7 @@ function Favorites({ places }: { places: readonly FavoritePlace[] }) {
                 <span key={t.id}>
                   {i > 0 && " · "}
                   <Link href={`/trips/${t.id}`} className="hover:underline">
-                    {t.title}
+                    {titles.get(t.id) ?? t.title}
                   </Link>
                 </span>
               ))}
@@ -218,7 +218,7 @@ function Report({ user }: { user: User }) {
         </p>
       )}
       <Countries report={report} />
-      <Favorites places={favoritePlaces(all.withSegments)} />
+      <Favorites places={favoritePlaces(all.withSegments)} titles={displayTitles(trips ?? [])} />
       <Years report={all.report} onPick={setYear} />
       {all.report.upcoming > 0 && (
         <p className="mt-6 text-sm text-muted">

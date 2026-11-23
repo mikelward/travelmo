@@ -34,3 +34,17 @@ fun formatDateRange(start: String, end: String): String {
         else -> "${fmt(start, "d MMM yyyy")} – ${fmt(end, "d MMM yyyy")}"
     }
 }
+
+/**
+ * How each trip's title reads where trips are listed together: a title two
+ * or more of them share, compared ignoring case and spacing (the same camp
+ * every summer), gets each one's dates, "Debutots Camp (11–15 Aug 2025)";
+ * any other title reads as it is. Keyed by trip id.
+ */
+fun displayTitles(trips: List<Trip>): Map<String, String> {
+    fun key(title: String) = title.trim().replace(Regex("\\s+"), " ").lowercase()
+    val count = trips.groupingBy { key(it.title) }.eachCount()
+    return trips.associate { trip ->
+        trip.id to if ((count[key(trip.title)] ?: 0) > 1) "${trip.title.trim()} (${formatDateRange(trip.start, trip.end)})" else trip.title
+    }
+}

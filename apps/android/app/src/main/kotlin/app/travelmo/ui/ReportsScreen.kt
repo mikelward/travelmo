@@ -53,6 +53,7 @@ import app.travelmo.core.TravelReport
 import app.travelmo.core.TripWithBookings
 import app.travelmo.core.WorldMapData
 import app.travelmo.core.countryName
+import app.travelmo.core.displayTitles
 import app.travelmo.core.favoritePlaces
 import app.travelmo.core.travelReport
 import app.travelmo.core.worldMap
@@ -75,6 +76,7 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, botto
     val input = all
     val whole = remember(input, today) { input?.let { travelReport(it, today) } }
     val report = remember(input, today, year) { if (year == null) whole else input?.let { travelReport(it, today, year) } }
+    val titles = remember(input) { displayTitles(input.orEmpty().map { it.trip }) }
     val favorites = remember(input) { input?.let { trips -> favoritePlaces(trips.map { TripWithBookings(it.trip, it.segments) }) }.orEmpty() }
     Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.reports_title)) }, actions = { AppMenu() }) }, bottomBar = bottomBar) { padding ->
         if (whole == null || report == null) {
@@ -109,7 +111,7 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, botto
             if (favorites.isNotEmpty()) {
                 item(key = "favorites") { SectionTitle(stringResource(R.string.favorite_places)) }
                 for (place in favorites) {
-                    item(key = "favorite-${place.name}|${place.country ?: ""}") { Favorite(place, onOpenTrip) }
+                    item(key = "favorite-${place.name}|${place.country ?: ""}") { Favorite(place, titles, onOpenTrip) }
                 }
             }
             if (whole.years.isNotEmpty()) {
@@ -193,7 +195,7 @@ private fun Table(header: List<Pair<String, Float>>, rows: List<List<String>>, o
 
 /** A rated or marked place: the heart, its name and whereabouts, its stars, and the trips it was on, each opening that trip. */
 @Composable
-private fun Favorite(place: FavoritePlace, onOpenTrip: (String) -> Unit) {
+private fun Favorite(place: FavoritePlace, titles: Map<String, String>, onOpenTrip: (String) -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val favoriteMark = stringResource(R.string.favorite_mark)
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
@@ -207,7 +209,7 @@ private fun Favorite(place: FavoritePlace, onOpenTrip: (String) -> Unit) {
         // A place on many trips wraps its links onto more lines rather than running off the screen.
         FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             for (trip in place.trips) {
-                Text(trip.title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { onOpenTrip(trip.id) }.padding(vertical = 2.dp))
+                Text(titles[trip.id] ?: trip.title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { onOpenTrip(trip.id) }.padding(vertical = 2.dp))
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(top = 8.dp))

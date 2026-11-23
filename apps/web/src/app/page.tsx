@@ -1,6 +1,6 @@
 "use client";
 
-import { groupTrips, listWarnings, type Segment, type Trip } from "@travelmo/core";
+import { displayTitles, groupTrips, listWarnings, type Segment, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
 import { SignInGate } from "@/components/SignInGate";
@@ -18,6 +18,7 @@ const upcomingWithDetails = 3;
 function Section({
   title,
   trips,
+  titles,
   uid,
   segmentsByTrip,
   now,
@@ -25,6 +26,7 @@ function Section({
 }: {
   title: string;
   trips: Trip[];
+  titles: Map<string, string>;
   uid: string;
   segmentsByTrip: Record<string, Segment[]>;
   now: string;
@@ -40,6 +42,7 @@ function Section({
           <TripCard
             key={trip.id}
             trip={trip}
+            title={titles.get(trip.id) ?? trip.title}
             shared={trip.ownerUid !== uid}
             {...(showNext && segmentsByTrip[trip.id] ? { segments: segmentsByTrip[trip.id], now } : {})}
           />
@@ -74,7 +77,7 @@ function Trips({ user }: { user: User }) {
       </div>
     );
   }
-  const sectionProps = { uid: user.uid, segmentsByTrip, now };
+  const sectionProps = { uid: user.uid, titles: displayTitles(trips), segmentsByTrip, now };
   // Document warnings once, at the top, each for the earliest trip it bears
   // on and linking to it, rather than repeated on every card.
   const listed = listWarnings(warnings, trips);
@@ -88,7 +91,7 @@ function Trips({ user }: { user: User }) {
           {listed.map(({ trip, warning }, i) => (
             <li key={i} className={warning.warning.when === "before" ? "text-red-700 dark:text-red-400" : "text-amber-800 dark:text-amber-300"}>
               <Link href={`/trips/${trip.id}`} className="hover:underline">
-                {warningText(warning, today, trip.title)}
+                {warningText(warning, today, sectionProps.titles.get(trip.id) ?? trip.title)}
               </Link>
             </li>
           ))}

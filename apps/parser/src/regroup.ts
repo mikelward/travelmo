@@ -8,7 +8,7 @@ import {
   type Segment,
   type Trip,
 } from "@travelmo/core";
-import { sourceTripPrefix, tripTitle, type ImportDeps, type TripTx } from "./importer";
+import { courseTitle, placeTitle, sourceTripPrefix, tripTitle, type ImportDeps, type TripTx } from "./importer";
 
 // Rebuilding a user's trips from their bookings with the grouping imports
 // use now (findTripForBooking, tripTitle), for trips filed before it knew
@@ -53,7 +53,7 @@ const shareKey = (trip: Pick<Trip, "sharedWith">) => [...new Set(trip.sharedWith
 // each resulting group keeps the existing trip holding most of its bookings
 // (with its id, sharing and dates), and keeps that trip's title too while it
 // still holds every booking the trip had, so a trip only added to keeps a
-// name the user gave it. Bookings never move between trips shared with
+// name the user gave it (all but a course still named for its venue). Bookings never move between trips shared with
 // different people (a private trip's being no one): each group is filed
 // among, and keeps, only trips with its own sharing, so nobody gains or loses
 // sight of a booking. A trip left with none of its bookings is deleted;
@@ -157,9 +157,15 @@ export function planRegroup(
     const before = new Set((segmentsByTrip.get(existing.id) ?? []).map(segmentKey));
     const after = new Set(segments.map(segmentKey));
     const holdsAll = [...before].every((key) => after.has(key));
-    const changed = !holdsAll || after.size !== before.size;
+    // A course named for its venue, as tripTitle named one before it knew
+    // dated titles ("Weston Park School" for "Debutots Camp - 11th Aug
+    // 2025" and the rest), takes its name: the title is still the one an
+    // import gave it, not one the user chose.
+    const course = courseTitle(segments);
+    const venueNamed = course !== undefined && course !== existing.title && tripTitle(segments, periods, overrides) === course && existing.title === placeTitle(segments, periods, overrides);
+    const changed = !holdsAll || after.size !== before.size || venueNamed;
     return holdsAll
-      ? { id: existing.id, existing, title: existing.title, start: min(existing.start, range.start), end: max(existing.end, range.end), sharedWith: existing.sharedWith, segments, changed }
+      ? { id: existing.id, existing, title: venueNamed ? course : existing.title, start: min(existing.start, range.start), end: max(existing.end, range.end), sharedWith: existing.sharedWith, segments, changed }
       : { id: existing.id, existing, title: tripTitle(group.segments, periods, overrides), start: range.start, end: range.end, sharedWith: existing.sharedWith, segments, changed };
   });
   const deleted = eligible.filter((trip) => !keptEmpty.has(trip.id) && !kept.has(trip.id)).map((trip) => trip.id);

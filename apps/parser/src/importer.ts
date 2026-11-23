@@ -976,11 +976,10 @@ export async function importMessages(
 // (Hampton Court Palace for "Hampton Court Palace Admission", not the town it
 // stands in), otherwise the event ("Toy Story 5 at Everyman Muswell Hill",
 // The Graham Norton Show, not London or Television Centre). So is a course
-// of several days: one ticket that spans them, or one a day whose titles
-// differ only in the day ("Holiday Camp - Junior Group (Day 2)"). Dates are
-// compared as written, in local time. A trip is named after where its
-// journeys and stays go before a car or transfer's drop-off: a car to
-// Stansted for a flight to Stockholm makes a Stockholm trip.
+// of several days (courseTitle). Dates are compared as written, in local
+// time. A trip is named after where its journeys and stays go before a car
+// or transfer's drop-off: a car to Stansted for a flight to Stockholm makes
+// a Stockholm trip.
 export function tripTitle(
   segments: readonly ExtractedSegment[],
   periods: readonly HomePeriod[] = [],
@@ -991,24 +990,52 @@ export function tripTitle(
   // as a trip to the home town.
   if (first && segments.every(isTransfer)) return transferTitle(first, periods, overrides)!;
   const days = new Set(segments.flatMap((s) => [s.start, s.end].filter((t) => t !== undefined).map((t) => t.slice(0, 10))));
-  if (first && segments.every((s) => s.type === "activity")) {
-    if (days.size === 1) {
-      const venue = first.destination?.name;
-      if (venue && first.title.toLowerCase().startsWith(venue.toLowerCase())) return venue;
-      if (first.title) return first.title;
-    }
-    const course = new Set(segments.map((s) => withoutDay(s.title)));
-    if (segments.length === 1 || (course.size === 1 && segments.some((s) => s.title !== withoutDay(s.title)))) return withoutDay(first.title);
+  if (first && days.size === 1 && segments.every((s) => s.type === "activity")) {
+    const venue = first.destination?.name;
+    if (venue && first.title.toLowerCase().startsWith(venue.toLowerCase())) return venue;
+    if (first.title) return first.title;
   }
-  // Known home is not where a trip goes: a train out of London to Liverpool
-  // makes a Liverpool trip, even booked as its return leg alone.
+  return courseTitle(segments) ?? placeTitle(segments, periods, overrides);
+}
+
+// The course a trip of nothing but tickets is: one ticket, which may span
+// several days, or one a day whose titles differ only in the day or date
+// ("Holiday Camp - Junior Group (Day 2)", "Debutots Camp - 12th Aug 2025"),
+// named without it. Otherwise undefined: tickets for different things are
+// named for where they are.
+export function courseTitle(segments: readonly ExtractedSegment[]): string | undefined {
+  const first = segments[0];
+  if (!first || !segments.every((s) => s.type === "activity")) return undefined;
+  const names = new Set(segments.map((s) => courseName(s.title)));
+  if (segments.length === 1 || (names.size === 1 && segments.some((s) => s.title !== courseName(s.title)))) return courseName(first.title);
+  return undefined;
+}
+
+// Where a trip goes, as tripTitle names one that is not a day out or a
+// course. Known home is not where a trip goes: a train out of London to
+// Liverpool makes a Liverpool trip, even booked as its return leg alone.
+export function placeTitle(
+  segments: readonly ExtractedSegment[],
+  periods: readonly HomePeriod[] = [],
+  overrides: readonly HomePeriod[] = [],
+): string {
   const ordered = [...segments.filter((s) => !isTransfer(s)), ...segments.filter(isTransfer)];
   const place = awayPlace(ordered, periods, overrides) ?? ordered.find((s) => s.destination)?.destination;
   return place?.city ?? place?.name ?? segments[0]?.title ?? "Trip";
 }
 
-// A title without the day of a course it names: "(Day 2)", "- Day 2".
-const withoutDay = (title: string) => title.replace(/\s*(?:\(\s*day\s+\d+\s*\)|[-–:]\s*day\s+\d+)\s*$/i, "").trim() || title;
+// A title without the day or date of a course it names: "(Day 2)",
+// "- Day 2", "- 11th Aug 2025", "(Mon 11 Aug)", ", 11/08/2025",
+// "- 2025-08-11", "on 11 August". A date needs its month, so a number alone
+// ("Toy Story 5") is kept.
+const month = "(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\\.?";
+const dayOfMonth = "\\d{1,2}(?:st|nd|rd|th)?";
+const weekday = "(?:(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*\\.?,?\\s+)?";
+const date =
+  `(?:${weekday}(?:${dayOfMonth}\\s+(?:of\\s+)?${month}|${month}\\s+${dayOfMonth})(?:,?\\s+\\d{4})?` +
+  "|\\d{1,2}[/.]\\d{1,2}[/.]\\d{2,4}|\\d{4}-\\d{2}-\\d{2}|day\\s+\\d+)";
+const dayOrDate = new RegExp(`(?:\\s*\\(\\s*${date}\\s*\\)|\\s*[-–—:,]\\s*${date}|\\s+on\\s+${date})\\s*$`, "i");
+const courseName = (title: string) => title.replace(dayOrDate, "").trim() || title;
 
 // How far either side of a booking the importer reads trips to work out
 // where home was, in days.

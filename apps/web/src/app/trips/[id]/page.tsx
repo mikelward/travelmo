@@ -1,6 +1,6 @@
 "use client";
 
-import { formatDate, formatDateRange, localDate, paths, programsFor, segmentDateRange, type Segment, type Trip } from "@travelmo/core";
+import { displayTitles, formatDate, formatDateRange, localDate, paths, programsFor, segmentDateRange, type Segment, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { arrayRemove, arrayUnion, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -161,7 +161,7 @@ function Sharing({ trip }: { trip: Trip }) {
   );
 }
 
-function MergeInto({ trip, targets }: { trip: Trip; targets: Trip[] }) {
+function MergeInto({ trip, targets, titles }: { trip: Trip; targets: Trip[]; titles: Map<string, string> }) {
   const router = useRouter();
   const [target, setTarget] = useState<Trip>();
   const [busy, setBusy] = useState(false);
@@ -199,7 +199,7 @@ function MergeInto({ trip, targets }: { trip: Trip; targets: Trip[] }) {
           ))}
         </select>
         <button type="button" disabled={!target || busy} onClick={merge} className={buttonClass}>
-          {busy ? "Merging…" : `Merge into ${target?.title ?? "…"}`}
+          {busy ? "Merging…" : `Merge into ${target ? (titles.get(target.id) ?? target.title) : "…"}`}
         </button>
       </div>
       {error && <p className="mt-2 text-sm text-danger">{error}</p>}
@@ -379,7 +379,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
         ))}
 
       {canManage && <Sharing trip={trip} />}
-      {canManage && <MergeInto trip={trip} targets={otherTrips} />}
+      {canManage && <MergeInto trip={trip} targets={otherTrips} titles={displayTitles(allTrips ?? [])} />}
       {canManage && <DangerZone trip={trip} />}
     </>
   );

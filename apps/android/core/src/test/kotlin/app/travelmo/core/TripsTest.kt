@@ -78,6 +78,20 @@ class TripsTest {
     }
 
     @Test
+    fun `dates every trip whose title another shares, the earlier one too`() {
+        val titles = displayTitles(
+            listOf(
+                Trip("a", "Debutots Camp", "2025-08-11", "2025-08-15", "u1"),
+                Trip("b", "debutots  camp ", "2026-08-10", "2026-08-14", "u1"),
+                Trip("c", "Liverpool", "2026-05-23", "2026-05-25", "u1"),
+            ),
+        )
+        titles["a"] shouldBe "Debutots Camp (11–15 Aug 2025)"
+        titles["b"] shouldBe "debutots  camp (10–14 Aug 2026)"
+        titles["c"] shouldBe "Liverpool"
+    }
+
+    @Test
     fun `the bookings' span feeds both bounds from both ends, and fitting is offered only when it differs`() {
         val trip = Trip("t", "T", "2026-12-10", "2026-12-20", "u")
         val flight = Segment("f", "t", SegmentType.FLIGHT, "Home", "2026-12-15T23:30:00+13:00", "2026-12-15T09:00:00-08:00")

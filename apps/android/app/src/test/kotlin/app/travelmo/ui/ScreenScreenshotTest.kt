@@ -14,6 +14,7 @@ import app.travelmo.R
 import app.travelmo.auth.GoogleAccount
 import app.travelmo.auth.SignInResult
 import app.travelmo.auth.SignedIn
+import app.travelmo.core.Trip
 import app.travelmo.ui.theme.TravelmoTheme
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.captureScreenRoboImage
@@ -166,7 +167,23 @@ class ScreenScreenshotTest {
         captureScreenRoboImage(filePath = "$outputDir/$name.png")
     }
 
+    // The same camp in two school holidays: each card's title carries its
+    // dates, while a title no other trip has reads as it is.
+    @Test
+    fun trip_list_same_titles() {
+        val trips = listOf(
+            Trip("camp-winter", "Debutots Camp", "2026-12-21", "2026-12-23", OWNER),
+            Trip("liverpool", "Liverpool", "2027-01-08", "2027-01-10", OWNER),
+            Trip("camp-spring", "Debutots Camp", "2027-02-15", "2027-02-19", OWNER),
+        )
+        val viewModel = TripsViewModel(FakeTripStore(trips = trips), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        capture("trip_list_same_titles") {
+            TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.TRIPS) {} })
+        }
+    }
+
     // The red dot on ⋮ while Play has a newer version.
+
     @Test
     fun trip_list_update_available() {
         val viewModel = viewModel()

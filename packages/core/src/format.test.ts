@@ -1,4 +1,18 @@
-import { formatDate, formatDateRange, localTime } from "./format";
+import { displayTitles, formatDate, formatDateRange, localTime } from "./format";
+
+describe("displayTitles", () => {
+  const trip = (id: string, title: string, start: string, end: string) => ({ id, title, start, end });
+  it("dates every trip whose title another shares, the earlier one too", () => {
+    const titles = displayTitles([
+      trip("a", "Debutots Camp", "2025-08-11", "2025-08-15"),
+      trip("b", "debutots  camp ", "2026-08-10", "2026-08-14"),
+      trip("c", "Liverpool", "2026-05-23", "2026-05-25"),
+    ]);
+    expect(titles.get("a")).toBe("Debutots Camp (11–15 Aug 2025)");
+    expect(titles.get("b")).toBe("debutots  camp (10–14 Aug 2026)");
+    expect(titles.get("c")).toBe("Liverpool");
+  });
+});
 
 describe("localTime", () => {
   it("reads the wall-clock time without converting zones", () => {

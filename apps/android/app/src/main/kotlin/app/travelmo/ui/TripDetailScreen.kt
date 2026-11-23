@@ -74,6 +74,7 @@ import app.travelmo.core.SegmentType
 import app.travelmo.core.SourceKind
 import app.travelmo.core.SourceRef
 import app.travelmo.core.Trip
+import app.travelmo.core.displayTitles
 import app.travelmo.core.emailLinkFor
 import app.travelmo.core.fittedRange
 import app.travelmo.core.formatDate
@@ -208,6 +209,7 @@ fun TripDetailScreen(
                 tripActions = if (isOwner) actions else null,
                 canManage = canManage,
                 targets = targets,
+                titles = displayTitles(trips.orEmpty()),
                 modifier = Modifier.padding(padding),
             )
             loaded.groups == null -> Text(stringResource(R.string.trip_loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp))
@@ -245,6 +247,8 @@ private fun TripBody(
     tripActions: TripActions?,
     canManage: Boolean,
     targets: List<Trip>,
+    /** Every trip's title as [displayTitles] shows it among the others. */
+    titles: Map<String, String>,
     modifier: Modifier = Modifier,
 ) {
     val days = segmentsByDay(segments)
@@ -320,7 +324,7 @@ private fun TripBody(
         if (canManage && tripActions != null) {
             item(key = "sharing") { Sharing(trip, busy, tripActions) }
             if (targets.isNotEmpty()) {
-                item(key = "merge") { MergeInto(targets, busy, tripActions.merge) }
+                item(key = "merge") { MergeInto(targets, titles, busy, tripActions.merge) }
             }
             item(key = "delete") {
                 TextButton(onClick = { confirmingDelete = true }, enabled = !busy, modifier = Modifier.padding(top = 24.dp).offset(x = -TextButtonInset)) {
@@ -392,7 +396,7 @@ private fun Sharing(trip: Trip, busy: Boolean, actions: TripActions) {
 /** The other trip this one's bookings go to, and the button that sends them. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MergeInto(targets: List<Trip>, busy: Boolean, merge: (String) -> Unit) {
+private fun MergeInto(targets: List<Trip>, titles: Map<String, String>, busy: Boolean, merge: (String) -> Unit) {
     var targetId by rememberSaveable { mutableStateOf<String?>(null) }
     var open by remember { mutableStateOf(false) }
     val target = targets.firstOrNull { it.id == targetId }
@@ -415,7 +419,7 @@ private fun MergeInto(targets: List<Trip>, busy: Boolean, merge: (String) -> Uni
             }
         }
         Button(onClick = { target?.let { merge(it.id) } }, enabled = !busy && target != null, modifier = Modifier.padding(top = 8.dp)) {
-            Text(stringResource(R.string.merge_into, target?.title ?: "…"))
+            Text(stringResource(R.string.merge_into, target?.let { titles[it.id] ?: it.title } ?: "…"))
         }
     }
 }

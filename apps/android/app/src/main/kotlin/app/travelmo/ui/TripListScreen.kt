@@ -41,6 +41,7 @@ import app.travelmo.core.ListWarning
 import app.travelmo.core.Segment
 import app.travelmo.core.Trip
 import app.travelmo.core.checkInLine
+import app.travelmo.core.displayTitles
 import app.travelmo.core.eventVerb
 import app.travelmo.core.formatDate
 import app.travelmo.core.formatDateRange
@@ -95,20 +96,21 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                val titles = displayTitles(groups.current + groups.upcoming + groups.past)
                 // In the list, so it scrolls away with it rather than taking room from the trips.
                 if (crashed) item(key = "crash") { LastCrashBanner() }
                 // Document warnings once, at the top, each for the earliest trip
                 // it bears on and opening it, rather than repeated on every card.
                 if (state.warnings.isNotEmpty()) {
                     item(key = "warnings") {
-                        ListWarnings(state.warnings, today = state.now.substring(0, 10), onOpenTrip = onOpenTrip)
+                        ListWarnings(state.warnings, titles, today = state.now.substring(0, 10), onOpenTrip = onOpenTrip)
                     }
                 }
                 // What comes next is said only for a trip under way; an upcoming
                 // trip's card is its title and dates.
-                section(R.string.section_now, groups.current, state, uid, showNext = true, onOpenTrip)
-                section(R.string.section_upcoming, groups.upcoming, state, uid, showNext = false, onOpenTrip)
-                section(R.string.section_past, groups.past, state, uid, showNext = false, onOpenTrip)
+                section(R.string.section_now, groups.current, titles, state, uid, showNext = true, onOpenTrip)
+                section(R.string.section_upcoming, groups.upcoming, titles, state, uid, showNext = false, onOpenTrip)
+                section(R.string.section_past, groups.past, titles, state, uid, showNext = false, onOpenTrip)
             }
         }
     }
@@ -119,7 +121,7 @@ private fun Message(text: String, modifier: Modifier = Modifier) {
     Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier.padding(16.dp))
 }
 
-private fun androidx.compose.foundation.lazy.LazyListScope.section(title: Int, trips: List<Trip>, state: TripListState, uid: String, showNext: Boolean, onOpenTrip: (String) -> Unit) {
+private fun androidx.compose.foundation.lazy.LazyListScope.section(title: Int, trips: List<Trip>, titles: Map<String, String>, state: TripListState, uid: String, showNext: Boolean, onOpenTrip: (String) -> Unit) {
     if (trips.isEmpty()) return
     item(key = "section-$title") {
         Text(
@@ -129,13 +131,13 @@ private fun androidx.compose.foundation.lazy.LazyListScope.section(title: Int, t
         )
     }
     items(trips, key = { it.id }) { trip ->
-        TripCard(trip = trip, shared = trip.ownerUid != uid, segments = if (showNext) state.segmentsByTrip[trip.id] else null, now = state.now, onClick = { onOpenTrip(trip.id) })
+        TripCard(trip = trip, title = titles[trip.id] ?: trip.title, shared = trip.ownerUid != uid, segments = if (showNext) state.segmentsByTrip[trip.id] else null, now = state.now, onClick = { onOpenTrip(trip.id) })
     }
 }
 
-/** One trip: the title, its dates, and for the trips with listeners what comes next. */
+/** One trip: the title (as [displayTitles] shows it among the list), its dates, and for the trips with listeners what comes next. */
 @Composable
-fun TripCard(trip: Trip, shared: Boolean, segments: List<Segment>?, now: String, onClick: () -> Unit) {
+fun TripCard(trip: Trip, title: String = trip.title, shared: Boolean, segments: List<Segment>?, now: String, onClick: () -> Unit) {
     val badge = when {
         trip.deleting -> stringResource(R.string.badge_deleting) to MaterialTheme.colorScheme.onSurfaceVariant
         shared -> stringResource(R.string.badge_shared) to TravelmoTheme.colors.shared
@@ -151,7 +153,7 @@ fun TripCard(trip: Trip, shared: Boolean, segments: List<Segment>?, now: String,
     ) {
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(
-                trip.title,
+                title,
                 style = MaterialTheme.typography.titleLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -201,7 +203,7 @@ private fun StatusLines(segments: List<Segment>, now: String) {
 
 /** The list's document warnings, one card at the top, each line opening its trip. */
 @Composable
-private fun ListWarnings(warnings: List<ListWarning>, today: String, onOpenTrip: (String) -> Unit) {
+private fun ListWarnings(warnings: List<ListWarning>, titles: Map<String, String>, today: String, onOpenTrip: (String) -> Unit) {
     val shape = RoundedCornerShape(12.dp)
     Column(
         modifier = Modifier
@@ -214,7 +216,7 @@ private fun ListWarnings(warnings: List<ListWarning>, today: String, onOpenTrip:
     ) {
         for (w in warnings) {
             Text(
-                warningText(w.warning, today, w.trip.title),
+                warningText(w.warning, today, titles[w.trip.id] ?: w.trip.title),
                 style = MaterialTheme.typography.bodyLarge,
                 color = if (w.warning.warning.`when` == WarningWhen.BEFORE) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary,
                 modifier = Modifier.fillMaxWidth().clickable { onOpenTrip(w.trip.id) },
