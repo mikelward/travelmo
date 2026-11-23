@@ -4,6 +4,7 @@ import app.travelmo.core.AddressHolder
 import app.travelmo.core.PendingEmail
 import app.travelmo.core.FlightStatus
 import app.travelmo.core.FoundLoyalty
+import app.travelmo.core.BackfillShown
 import app.travelmo.core.ParsedRecord
 import app.travelmo.core.SenderPatterns
 import app.travelmo.core.LoyaltyPerson
@@ -254,3 +255,27 @@ internal fun parsedRecordOf(id: String, data: Map<String, Any?>?): ParsedRecord?
 /** The user's sender rules; anything that isn't a list of names reads as none. */
 internal fun senderPatternsOf(data: Map<String, Any?>?): SenderPatterns =
     SenderPatterns(allow = data.orEmpty().strings("allow"), deny = data.orEmpty().strings("deny"))
+
+/** The Gmail connection on the user document: the address, and how far the last reading got. */
+data class GmailStatus(val emailAddress: String, val progress: BackfillShown? = null)
+
+/** The user document's Gmail connection; null when none. A malformed progress reads as none. */
+internal fun gmailStatusOf(data: Map<String, Any?>?): GmailStatus? {
+    val gmail = data?.get("gmail") as? Map<*, *> ?: return null
+    val address = (gmail["emailAddress"] as? String)?.takeIf { it.isNotBlank() } ?: return null
+    val p = gmail["backfill"] as? Map<*, *>
+    fun count(key: String) = (p?.get(key) as? Number)?.toInt()
+    val progress = p?.let {
+        BackfillShown(
+            scanned = count("scanned") ?: return@let null,
+            imported = count("imported") ?: return@let null,
+            done = it["done"] as? Boolean ?: return@let null,
+            updatedAt = it["updatedAt"] as? String ?: return@let null,
+            failed = count("failed") ?: 0,
+            running = it["running"] == true,
+            leaseUntil = it["leaseUntil"] as? String,
+            lastFailed = count("lastFailed") ?: 0,
+        )
+    }
+    return GmailStatus(address, progress)
+}

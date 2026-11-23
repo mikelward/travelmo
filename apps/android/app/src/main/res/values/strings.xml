@@ -94,6 +94,16 @@
     <string name="booking_actions">Booking actions</string>
     <string name="edit">Edit</string>
     <string name="delete">Delete</string>
+    <string name="gmail">Gmail</string>
+    <string name="gmail_connect_hint">Travelmo reads booking confirmations from your inbox and turns them into trips. It asks for read-only access and only sends emails that look like bookings to the extraction model. Connecting finishes in your browser.</string>
+    <string name="connect_gmail">Connect Gmail</string>
+    <string name="gmail_connected_as">Connected as %1$s. New bookings import automatically; past ones come in when you import them, as far back as your mailbox goes.</string>
+    <string name="import_past_bookings">Import past bookings</string>
+    <string name="read_again_from_start">Read again from the start</string>
+    <string name="continue_reading">Continue reading past emails</string>
+    <string name="stop">Stop</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="gmail_on_web">Connect Gmail and import past bookings from Settings on the web.</string>
     <string name="trips_section">Trips</string>
     <string name="import_review">Import review</string>
     <string name="import_review_hint">Recent emails and other imports that did not become bookings. Teach the importer about a sender, or import one anyway.</string>

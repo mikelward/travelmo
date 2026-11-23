@@ -1,6 +1,13 @@
-import type { BackfillProgress } from "@travelmo/core";
+import type { BackfillProgress } from "./schema";
 
 type Shown = Pick<BackfillProgress, "scanned" | "imported" | "done" | "failed" | "running" | "leaseUntil" | "lastFailed" | "updatedAt">;
+
+// What Settings says about "Import past bookings" on the web and Android
+// (BackfillText.kt is the Kotlin twin), and the parser's paths for it.
+export const gmailConnectPath = "/gmail/connect";
+export const gmailDisconnectPath = "/gmail/disconnect";
+export const backfillStartPath = "/gmail/backfill";
+export const backfillStopPath = "/gmail/backfill/stop";
 
 // The parser reads the mailbox batch after batch on its own once started,
 // recording its progress on the connection. A reading that has saved

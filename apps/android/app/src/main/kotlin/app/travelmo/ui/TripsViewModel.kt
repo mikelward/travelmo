@@ -42,6 +42,10 @@ import app.travelmo.data.FlightRefresh
 import app.travelmo.data.NoFlightRefresh
 import app.travelmo.data.NoAccessCheck
 import app.travelmo.data.NoAccountDeletion
+import app.travelmo.core.isReading
+import app.travelmo.core.BackfillShown
+import app.travelmo.data.NoGmailActions
+import app.travelmo.data.GmailActions
 import app.travelmo.core.SenderPatterns
 import app.travelmo.core.SenderList
 import app.travelmo.core.ParsedRecord
@@ -129,6 +133,8 @@ class TripsViewModel(
     private val tripActions: TripActions = NoTripActions,
     /** The parser's "Import anyway" for Import review; none by default. */
     private val importReview: ImportReview = NoImportReview,
+    /** The parser's Gmail connection and mailbox reading; none by default. */
+    private val gmailActions: GmailActions = NoGmailActions,
 ) : ViewModel() {
     /** The current instant, as pending email links are judged by. */
     fun now(): String = clock().toString()
@@ -361,6 +367,39 @@ class TripsViewModel(
         val periods = effectiveHomes(homeTimeline(segments), settings.homes)
         return rideNeeds(segments, periods, clock().toString(), hidden = settings.hidden)
     }
+
+    /** Gmail as Settings shows it: loading, not connected, or the address with how far the last reading got. */
+    sealed interface GmailState {
+        data object Loading : GmailState
+        data object NotConnected : GmailState
+        data class Connected(val emailAddress: String, val progress: BackfillShown?, val reading: Boolean) : GmailState
+    }
+
+    /** The Gmail connection, judged against the clock each minute so a stalled reading shows as stopped. */
+    val gmail: StateFlow<GmailState> = combine(accessSettled.flatMapLatest { store.gmailStatus(uid) }, now) { status, at ->
+        status?.let { GmailState.Connected(it.emailAddress, it.progress, isReading(it.progress, Instant.parse(at).toEpochMilli())) } ?: GmailState.NotConnected
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), GmailState.Loading)
+
+    /** Whether this build can connect Gmail and read the mailbox here. */
+    val canUseGmail: Boolean
+        get() = gmailActions.available
+
+    /** Google's consent page for connecting Gmail, once asked for; the screen opens it and clears it. */
+    private val _gmailConsentUrl = MutableStateFlow<String?>(null)
+    val gmailConsentUrl: StateFlow<String?> = _gmailConsentUrl
+
+    fun connectGmail(token: String) = run(token, "connectGmail") { _gmailConsentUrl.value = gmailActions.connectUrl() }
+
+    fun gmailConsentOpened() {
+        _gmailConsentUrl.value = null
+    }
+
+    /** Starts or continues reading past emails; from the start once the last reading finished. */
+    fun startReading(token: String, restart: Boolean) = run(token, "startReading") { gmailActions.start(restart) }
+
+    fun stopReading(token: String) = run(token, "stopReading") { gmailActions.stop() }
+
+    fun disconnectGmail(token: String) = run(token, "disconnectGmail") { gmailActions.disconnect() }
 
     /** Import review's latest records, live; null while they load. */
     val reviewLatest: StateFlow<List<ParsedRecord>?> = accessSettled.flatMapLatest { store.latestParsed(uid) }

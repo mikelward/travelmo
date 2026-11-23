@@ -1831,6 +1831,13 @@ started the flow. A link forwarded to someone else therefore cannot attach
 their mailbox to the sender's account. A mailbox connected to one user is
 refused to any other until the first disconnects.
 
+Android's Settings has the same Gmail section, worded by `backfillText.ts`
+and its Kotlin twin: the address, Import past bookings (Continue, or Read
+again from the start once done), Stop while it reads, Disconnect, and how
+far the reading got. Its Connect Gmail opens Google's consent page in the
+phone's browser, and the flow finishes there on the web as above, so the
+browser must be signed in to Travelmo as the same user.
+
 ## Deleting an account
 
 Settings on the web and in the Android app ends with "Delete account" (on

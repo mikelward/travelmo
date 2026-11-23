@@ -32,3 +32,4 @@ export * from "./rides";
 export * from "./emails";
 export * from "./tripActions";
 export * from "./senders";
+export * from "./backfillText";

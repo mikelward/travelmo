@@ -47,6 +47,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -59,6 +61,8 @@ import app.travelmo.auth.GoogleAccount
 import app.travelmo.auth.SignedIn
 import app.travelmo.core.EmailRowKind
 import app.travelmo.core.emailRows
+import app.travelmo.core.pausedReason
+import app.travelmo.core.describeBackfill
 import app.travelmo.log.DebugLogging
 import app.travelmo.notify.ReminderNotifications
 import com.mikelward.androidlog.android.ShareOutcome
@@ -72,13 +76,15 @@ import kotlinx.coroutines.launch
 private const val REMINDER_TOKEN = "settings/reminders/email"
 private const val PUSH_TOKEN = "settings/reminders/push"
 private const val DELETE_ACCOUNT_TOKEN = "settings/account/delete"
+private const val GMAIL_TOKEN = "settings/gmail"
 private const val REGROUP_TOKEN = "settings/trips/regroup"
 private const val DELETE_TRIPS_TOKEN = "settings/trips/delete"
 private const val ADD_EMAIL_TOKEN = "settings/emails/add"
 private const val REMOVE_EMAIL_TOKEN = "settings/emails/remove"
 
 /**
- * The account, regrouping or deleting all trips, Import review, reminders by email and
+ * The account, Gmail and reading past emails, regrouping or deleting all
+ * trips, Import review, reminders by email and
  * as notifications on this phone, the text size, the debug log, deleting
  * the account and the build; the other import settings are on the web for now.
  */
@@ -121,6 +127,7 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
             OutlinedButton(onClick = { scope.launch { account.signOut(context) } }, modifier = Modifier.padding(top = 12.dp)) {
                 Text(stringResource(R.string.sign_out))
             }
+            GmailSection(viewModel)
             TripsSection(viewModel)
             Text(stringResource(R.string.import_review), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
             Text(stringResource(R.string.import_review_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -283,6 +290,76 @@ private fun EmailAddressesSection(user: SignedIn, viewModel: TripsViewModel) {
     if (adding == null || adding is Outcome.Done) sentTo?.let { Text(stringResource(R.string.email_link_sent, it), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp)) }
     for (outcome in listOf(adding, removing)) {
         (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+    }
+}
+
+/**
+ * Settings' "Gmail", as on the web: Connect opens Google's consent page in
+ * the browser, which hands back to Travelmo there; once connected, the
+ * address, Import past bookings (Continue, or Read again from the start once
+ * done) or Stop while it reads, Disconnect, and how far the reading got,
+ * which the parser records as it goes.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun GmailSection(viewModel: TripsViewModel) {
+    val context = LocalContext.current
+    val gmail by viewModel.gmail.collectAsStateWithLifecycle()
+    val consent by viewModel.gmailConsentUrl.collectAsStateWithLifecycle()
+    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val outcome = outcomes[GMAIL_TOKEN]
+    val busy = outcome is Outcome.Busy
+    LaunchedEffect(consent) {
+        consent?.let {
+            openLink(context, it, "Gmail consent")
+            viewModel.gmailConsentOpened()
+        }
+    }
+    LaunchedEffect(outcome) { if (outcome is Outcome.Done) viewModel.outcomeSeen(GMAIL_TOKEN) }
+    Text(stringResource(R.string.gmail), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    if (!viewModel.canUseGmail) {
+        Text(stringResource(R.string.gmail_on_web), style = MaterialTheme.typography.bodyMedium)
+        return
+    }
+    when (val state = gmail) {
+        TripsViewModel.GmailState.Loading -> Text(stringResource(R.string.loading), style = MaterialTheme.typography.bodyMedium)
+        TripsViewModel.GmailState.NotConnected -> {
+            Text(stringResource(R.string.gmail_connect_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedButton(onClick = { viewModel.connectGmail(GMAIL_TOKEN) }, enabled = !busy, modifier = Modifier.padding(top = 8.dp)) {
+                Text(stringResource(R.string.connect_gmail))
+            }
+        }
+        is TripsViewModel.GmailState.Connected -> {
+            Text(stringResource(R.string.gmail_connected_as, state.emailAddress), style = MaterialTheme.typography.bodyMedium)
+            val progress = state.progress
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                if (state.reading) {
+                    OutlinedButton(onClick = { viewModel.stopReading(GMAIL_TOKEN) }, enabled = !busy) { Text(stringResource(R.string.stop)) }
+                } else {
+                    OutlinedButton(onClick = { viewModel.startReading(GMAIL_TOKEN, restart = progress?.done == true) }, enabled = !busy) {
+                        Text(
+                            stringResource(
+                                when {
+                                    progress == null -> R.string.import_past_bookings
+                                    progress.done -> R.string.read_again_from_start
+                                    else -> R.string.continue_reading
+                                },
+                            ),
+                        )
+                    }
+                }
+                OutlinedButton(onClick = { viewModel.disconnectGmail(GMAIL_TOKEN) }, enabled = !busy) { Text(stringResource(R.string.disconnect)) }
+            }
+            progress?.let {
+                Text(describeBackfill(it, state.reading), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+            }
+            pausedReason(progress, state.reading)?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+            }
+        }
+    }
+    (outcome as? Outcome.Failed)?.let {
+        Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
     }
 }
 

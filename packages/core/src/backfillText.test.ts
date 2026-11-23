@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeBackfill, isReading, pausedReason, stalledAfterMs } from "./backfill";
+import { describeBackfill, isReading, pausedReason, stalledAfterMs } from "./backfillText";
 
 const now = Date.parse("2026-11-22T12:00:00Z");
 const ago = (ms: number) => new Date(now - ms).toISOString();
