@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { owner, partner, signIn, signOut } from "./helpers";
+import { bookingAction, owner, partner, signIn, signOut } from "./helpers";
 import { clearData, readSegments, seedTrip, updateSegment } from "./seed";
 
 test.beforeEach(async () => {
@@ -53,7 +53,7 @@ test("saving an edit form keeps a verdict given elsewhere while it was open", as
   const ownerUid = await signIn(page, owner);
   await seedTrip(ownerUid, "e2e-rated", { rating: 2 });
   await page.getByRole("link", { name: /Liverpool/ }).click();
-  await page.getByRole("button", { name: "Edit" }).click();
+  await bookingAction(page, "Edit");
   // A sharee in another tab changes the verdict while the form is open.
   await updateSegment("e2e-rated", "e2e-rated-stay", { rating: 5, favorite: true, updatedAt: "2026-11-01T12:30:00Z" });
   await page.getByPlaceholder("BA 117 LHR to JFK").fill("Cove Liverpool, renamed");

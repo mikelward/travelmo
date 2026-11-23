@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { owner, signIn } from "./helpers";
+import { bookingAction, owner, signIn } from "./helpers";
 import { clearData, readSegments, seedFlight, seedTrip } from "./seed";
 
 test.beforeEach(async () => {
@@ -20,7 +20,7 @@ test("editing an imported booking keeps its offsets although its airports have z
   await expect(page.getByTitle("Time zone").first()).toHaveValue("Europe/London");
   await page.getByRole("button", { name: "Cancel" }).click();
 
-  await page.getByRole("button", { name: "Edit" }).nth(1).click();
+  await bookingAction(page, "Edit", 1);
   const zone = page.getByTitle("Time zone");
   await expect(zone.first()).toHaveValue("offset:+05:00");
   await expect(zone.nth(1)).toHaveValue("offset:+04:00");
@@ -29,7 +29,7 @@ test("editing an imported booking keeps its offsets although its airports have z
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByText("Seat 14A", { exact: false })).toBeVisible();
   await expect(zone).toHaveCount(0);
-  await page.getByRole("button", { name: "Edit" }).nth(1).click();
+  await bookingAction(page, "Edit", 1);
   await expect(zone.first()).toHaveValue("offset:+05:00");
   await expect(zone.nth(1)).toHaveValue("offset:+04:00");
 });
@@ -41,7 +41,7 @@ test("a place's country can be chosen, but is never asked for, and a flight show
   await expect(page.getByText("Cove Liverpool", { exact: true })).toBeVisible();
 
   // An imported stay shows the country it came with.
-  await page.getByRole("button", { name: "Edit" }).first().click();
+  await bookingAction(page, "Edit");
   await expect(page.getByRole("combobox", { name: "Country" })).toHaveValue("GB");
   await page.getByRole("button", { name: "Cancel" }).click();
 
@@ -55,14 +55,14 @@ test("a place's country can be chosen, but is never asked for, and a flight show
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page.getByText("Example walking tour", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Edit" }).nth(1).click();
+  await bookingAction(page, "Edit", 1);
   const country = page.getByRole("combobox", { name: "Country" });
   await expect(country).toHaveValue("");
   // A country with no place name is kept, the place named by the country.
   await country.selectOption({ label: "Ireland" });
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Edit" }).nth(1).click();
+  await bookingAction(page, "Edit", 1);
   await expect(page.getByRole("combobox", { name: "Country" })).toHaveValue("IE");
   await expect(page.getByRole("combobox", { name: "Where" })).toHaveValue("Ireland");
 });
@@ -119,7 +119,7 @@ test("typing the start of an address offers places, and picking one fills city, 
   const stored = (await readSegments("e2e-address")).find((s) => s.title === "Example stay");
   expect(stored?.destination).toMatchObject({ name: "10 Example Street", city: "Exampleville", country: "GB", lat: 53.41, lon: -2.98 });
   // Keyboard: arrow to the second suggestion and pick it with Enter.
-  await page.getByRole("button", { name: "Edit" }).nth(1).click();
+  await bookingAction(page, "Edit", 1);
   const edit = page.getByRole("combobox", { name: "Where" });
   await edit.fill("10 Exa");
   await expect(page.getByRole("option", { name: /10 Example Square/ })).toBeVisible();

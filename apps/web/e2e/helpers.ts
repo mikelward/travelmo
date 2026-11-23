@@ -37,3 +37,9 @@ export function contrastRatio(a: string, b: string): number {
   const [high, low] = [luminance(ca), luminance(cb)].sort((x, y) => y - x);
   return (high + 0.05) / (low + 0.05);
 }
+
+// Picks an item from the ⋮ menu of the trip page's nth booking.
+export async function bookingAction(page: Page, name: string, index = 0): Promise<void> {
+  await page.getByRole("button", { name: "Booking actions" }).nth(index).click();
+  await page.getByRole("menuitem", { name }).click();
+}

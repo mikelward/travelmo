@@ -1,0 +1,272 @@
+"use client";
+
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { formatDateRange, segmentSources, type Segment, type SourceRef, type Trip } from "@travelmo/core";
+import { emailLinkFor, type EmailLinks } from "@/lib/sourceLinks";
+
+const sourceKinds: Record<SourceRef["kind"], string> = { gmail: "Email", tripit: "TripIt", ics: "Calendar", forward: "Forwarded email" };
+
+const buttonClass = "rounded-lg border border-field px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-900";
+
+// A modal on the browser's own <dialog>: it traps focus, closes on Escape
+// and hands focus back to whatever opened it.
+function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = ref.current;
+    if (dialog && !dialog.open) dialog.showModal();
+  }, []);
+  return (
+    <dialog
+      ref={ref}
+      aria-label={title}
+      onClose={onClose}
+      // A click on the backdrop lands on the dialog itself.
+      onClick={(e) => e.target === ref.current && onClose()}
+      className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-xl border border-zinc-200 bg-background p-0 text-foreground backdrop:bg-black/40 dark:border-zinc-800"
+    >
+      <div className="p-5">
+        <h2 className="text-lg font-medium">{title}</h2>
+        <div className="mt-3 max-h-[60vh] overflow-y-auto">{children}</div>
+        <div className="mt-4 flex justify-end">
+          <button type="button" onClick={onClose} className={buttonClass}>
+            Close
+          </button>
+        </div>
+      </div>
+    </dialog>
+  );
+}
+
+// Every email, TripIt trip or calendar event the booking was read from,
+// including ones dropped as duplicates of it, then the sender, as Android's
+// Sources dialog lists them. An email the viewer imported opens in Gmail.
+function SourcesDialog({
+  segment,
+  emailLinks,
+  onLearnSender,
+  onClose,
+}: {
+  segment: Segment;
+  emailLinks?: EmailLinks;
+  onLearnSender?: () => void;
+  onClose: () => void;
+}) {
+  const sources = segmentSources(segment);
+  return (
+    <Dialog title="Sources" onClose={onClose}>
+      <ul data-testid="segment-sources">
+        {sources.map((source) => {
+          const kind = sourceKinds[source.kind];
+          const href = emailLinkFor(source, emailLinks);
+          const name = source.label ?? kind;
+          return (
+            <li key={`${source.kind}/${source.id}`} className="py-2">
+              {href ? (
+                <a href={href} target="_blank" rel="noreferrer" className="underline">
+                  {name}
+                </a>
+              ) : (
+                <p>{name}</p>
+              )}
+              {source.label && <p className="text-xs text-muted">{kind}</p>}
+            </li>
+          );
+        })}
+      </ul>
+      {segment.sender && (
+        <p className="py-2 text-sm text-muted">
+          From {segment.sender}
+          {onLearnSender && (
+            <>
+              {" · "}
+              <button
+                type="button"
+                onClick={() => {
+                  onLearnSender();
+                  onClose();
+                }}
+                className="underline"
+              >
+                Always import this sender
+              </button>
+            </>
+          )}
+        </p>
+      )}
+    </Dialog>
+  );
+}
+
+function MoveDialog({ targets, onMove, onClose }: { targets: Trip[]; onMove: (tripId: string) => void; onClose: () => void }) {
+  return (
+    <Dialog title="Move to another trip" onClose={onClose}>
+      <ul>
+        {targets.map((t) => (
+          <li key={t.id}>
+            <button
+              type="button"
+              onClick={() => {
+                onMove(t.id);
+                onClose();
+              }}
+              className="w-full rounded-lg px-2 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-900"
+            >
+              {t.title}
+              <span className="block text-xs text-muted">{formatDateRange(t.start, t.end)}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Dialog>
+  );
+}
+
+/**
+ * A booking's ⋮ menu, in the order Android's has: Copy reference (when it
+ * has one) and Sources (when it has sources or a sender) for anyone who sees
+ * the trip, then Edit, Move to and Delete for those who may edit.
+ */
+export function BookingMenu({
+  segment,
+  onEdit,
+  onDelete,
+  moveTargets,
+  onMove,
+  emailLinks,
+  onLearnSender,
+}: {
+  segment: Segment;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  moveTargets?: Trip[];
+  onMove?: (tripId: string) => void;
+  emailLinks?: EmailLinks;
+  onLearnSender?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [dialog, setDialog] = useState<"sources" | "move">();
+  const [status, setStatus] = useState<string>();
+  const wrapper = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+
+  const reference = segment.confirmation?.trim() || undefined;
+  const hasSources = segmentSources(segment).length > 0 || !!segment.sender;
+  const canMove = !!onMove && !!moveTargets && moveTargets.length > 0;
+
+  const close = () => {
+    setOpen(false);
+    trigger.current?.focus();
+  };
+  // The menu item that opened a dialog is gone by the time it closes, so
+  // the browser can't hand focus back on its own.
+  const closeDialog = () => {
+    setDialog(undefined);
+    trigger.current?.focus();
+  };
+
+  // A click anywhere else closes the menu.
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => {
+      if (!wrapper.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", away);
+    menu.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    return () => document.removeEventListener("pointerdown", away);
+  }, [open]);
+
+  // "Copied" stands for a moment where the browser gives no sign of its own.
+  useEffect(() => {
+    if (!status) return;
+    const timer = setTimeout(() => setStatus(undefined), 2000);
+    return () => clearTimeout(timer);
+  }, [status]);
+
+  if (!reference && !hasSources && !onEdit && !onDelete && !canMove) return null;
+
+  const copy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setStatus("Copied");
+    } catch (e) {
+      console.error("Copying a booking reference failed", e);
+      setStatus("Couldn't copy");
+    }
+  };
+
+  const keys = (e: KeyboardEvent) => {
+    const items = [...(menu.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
+    const at = items.indexOf(document.activeElement as HTMLElement);
+    if (e.key === "Escape") {
+      e.preventDefault();
+      close();
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      items[(at + step + items.length) % items.length]?.focus();
+    } else if (e.key === "Tab") {
+      setOpen(false);
+    }
+  };
+
+  const item = (label: string, action: () => void) => (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={() => {
+        setOpen(false);
+        action();
+      }}
+      className="block w-full px-4 py-2 text-left text-sm hover:bg-zinc-100 focus:bg-zinc-100 focus:outline-none dark:hover:bg-zinc-900 dark:focus:bg-zinc-900"
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div ref={wrapper} className="relative shrink-0 self-start">
+      <button
+        ref={trigger}
+        type="button"
+        aria-label="Booking actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="-mt-1 flex h-8 w-8 items-center justify-center rounded-full text-lg leading-none text-muted hover:bg-zinc-100 dark:hover:bg-zinc-900"
+      >
+        ⋮
+      </button>
+      {status && (
+        <p role="status" className="absolute right-0 top-8 whitespace-nowrap text-xs text-muted">
+          {status}
+        </p>
+      )}
+      {open && (
+        <div
+          ref={menu}
+          role="menu"
+          aria-label="Booking actions"
+          onKeyDown={keys}
+          className="absolute right-0 top-8 z-10 min-w-48 rounded-lg border border-zinc-200 bg-background py-1 shadow-lg dark:border-zinc-800"
+        >
+          {reference && item("Copy reference", () => void copy(reference))}
+          {hasSources && item("Sources", () => setDialog("sources"))}
+          {onEdit && item("Edit", onEdit)}
+          {canMove && item("Move to another trip…", () => setDialog("move"))}
+          {onDelete && item("Delete", onDelete)}
+        </div>
+      )}
+      {dialog === "sources" && (
+        <SourcesDialog
+          segment={segment}
+          {...(emailLinks ? { emailLinks } : {})}
+          {...(onLearnSender ? { onLearnSender } : {})}
+          onClose={closeDialog}
+        />
+      )}
+      {dialog === "move" && moveTargets && onMove && <MoveDialog targets={moveTargets} onMove={onMove} onClose={closeDialog} />}
+    </div>
+  );
+}

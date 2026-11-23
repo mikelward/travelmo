@@ -1,16 +1,15 @@
 import { SegmentIcon } from "@/components/SegmentIcon";
-import { emailLinkFor, type EmailLinks } from "@/lib/sourceLinks";
+import { BookingMenu } from "@/components/BookingMenu";
+import type { EmailLinks } from "@/lib/sourceLinks";
 import {
   formatDate,
   isUntimed,
   localDate,
   localTime,
   loyaltyLine,
-  segmentSources,
   type ProfileEntry,
   type Segment,
   type SegmentType,
-  type SourceRef,
   type Trip,
 } from "@travelmo/core";
 
@@ -37,8 +36,6 @@ function endLabel(segment: Segment): string | undefined {
   const time = localTime(segment.end);
   return localDate(segment.end) === localDate(segment.start) ? time : `${formatDate(localDate(segment.end))} ${time}`;
 }
-
-const sourceKinds: Record<SourceRef["kind"], string> = { gmail: "Email", tripit: "TripIt", ics: "Calendar", forward: "Forwarded email" };
 
 const plural = (n: number) => (n === 1 ? "1 star" : `${n} stars`);
 
@@ -93,50 +90,6 @@ function Verdict({ segment, onRate, onFavorite }: { segment: Segment; onRate?: (
   );
 }
 
-// Every email, TripIt trip or calendar event the booking was read from,
-// including ones dropped as duplicates of it: a second room, or a detail
-// the extraction left out, is one click away. The sender follows on the
-// same line, with the offer to always import it.
-function Sources({ segment, emailLinks, onLearnSender }: { segment: Segment; emailLinks?: EmailLinks; onLearnSender?: () => void }) {
-  const sources = segmentSources(segment);
-  if (sources.length === 0 && !segment.sender) return null;
-  return (
-    <p className="mt-1 text-xs text-muted" data-testid="segment-sources">
-      {sources.length > 0 && (sources.length === 1 ? "Source: " : `Sources (${sources.length}): `)}
-      {sources.map((source, i) => {
-        const text = `${sourceKinds[source.kind]}${source.label ? ` “${source.label}”` : ""}`;
-        const href = emailLinkFor(source, emailLinks);
-        return (
-          <span key={`${source.kind}/${source.id}`}>
-            {i > 0 && " · "}
-            {href ? (
-              <a href={href} target="_blank" rel="noreferrer" className="hover:underline">
-                {text}
-              </a>
-            ) : (
-              text
-            )}
-          </span>
-        );
-      })}
-      {segment.sender && (
-        <>
-          {sources.length > 0 && " · "}
-          From {segment.sender}
-          {onLearnSender && (
-            <>
-              {" · "}
-              <button type="button" onClick={onLearnSender} className="hover:underline">
-                Always import this sender
-              </button>
-            </>
-          )}
-        </>
-      )}
-    </p>
-  );
-}
-
 export function SegmentRow({
   segment,
   onEdit,
@@ -173,9 +126,7 @@ export function SegmentRow({
       ? `Check-in ${localTime(segment.start)}${end ? ` · Check-out ${end}` : ""}`
       : `${localTime(segment.start)}${end ? ` – ${end}` : ""}`;
   return (
-    // On a phone the actions drop below the details, in line with them,
-    // rather than squeezing them into a narrow column.
-    <li className="flex flex-wrap gap-x-4 gap-y-2 py-3">
+    <li className="flex gap-4 py-3">
       <SegmentIcon type={segment.type} label={labels[segment.type]} className="mt-0.5 shrink-0 text-muted" />
       <div className="min-w-0 flex-1">
         <p className="font-medium">{segment.title}</p>
@@ -194,37 +145,16 @@ export function SegmentRow({
         )}
         {segment.notes && <p className="mt-1 whitespace-pre-line text-xs text-muted">{segment.notes}</p>}
         <Verdict segment={segment} {...(onRate ? { onRate } : {})} {...(onFavorite ? { onFavorite } : {})} />
-        <Sources segment={segment} {...(emailLinks ? { emailLinks } : {})} {...(onLearnSender ? { onLearnSender } : {})} />
       </div>
-      {(onEdit || onDelete || (onMove && moveTargets && moveTargets.length > 0)) && (
-        <div className="flex w-full flex-wrap items-center gap-3 self-start pl-20 text-xs text-muted sm:w-auto sm:shrink-0 sm:pl-0">
-          {onEdit && (
-            <button type="button" onClick={onEdit} className="hover:underline">
-              Edit
-            </button>
-          )}
-          {onDelete && (
-            <button type="button" onClick={onDelete} className="hover:underline">
-              Delete
-            </button>
-          )}
-          {onMove && moveTargets && moveTargets.length > 0 && (
-            <select
-              value=""
-              onChange={(e) => e.target.value && onMove(e.target.value)}
-              title="Move to another trip"
-              className="max-w-40 rounded border border-field bg-background px-1 py-0.5 text-xs"
-            >
-              <option value="">Move to…</option>
-              {moveTargets.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.title}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
-      )}
+      <BookingMenu
+        segment={segment}
+        {...(onEdit ? { onEdit } : {})}
+        {...(onDelete ? { onDelete } : {})}
+        {...(moveTargets ? { moveTargets } : {})}
+        {...(onMove ? { onMove } : {})}
+        {...(emailLinks ? { emailLinks } : {})}
+        {...(onLearnSender ? { onLearnSender } : {})}
+      />
     </li>
   );
 }

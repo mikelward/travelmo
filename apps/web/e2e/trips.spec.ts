@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { owner, partner, signIn, signOut } from "./helpers";
-import { clearData, seedTrip } from "./seed";
+import { bookingAction, owner, partner, signIn, signOut } from "./helpers";
+import { clearData, readSegments, seedTrip } from "./seed";
 
 test.beforeEach(async () => {
   await clearData();
@@ -21,9 +21,17 @@ test("the owner sees an imported trip, shares it, and the partner can add a book
   await expect(page.getByText("Cove Liverpool", { exact: true })).toBeVisible();
   // A booking's type is an icon a screen reader names.
   await expect(page.getByRole("img", { name: "Stay", exact: true })).toBeVisible();
-  // Every source of the booking, the email opening in Gmail for the owner.
-  await expect(page.getByTestId("segment-sources")).toHaveText("Sources (2): Email “Your stay at Cove” · TripIt “Liverpool weekend” · From cove.example · Always import this sender");
-  await expect(page.getByRole("link", { name: "Email “Your stay at Cove”" })).toHaveAttribute("href", /^https:\/\/mail\.google\.com\/mail\/u\/0\/#all\/m1$/);
+  // Every source of the booking, kept out of the row, the email opening in Gmail for the owner.
+  await expect(page.getByText("Your stay at Cove")).toHaveCount(0);
+  await bookingAction(page, "Sources");
+  const sources = page.getByRole("dialog", { name: "Sources" });
+  await expect(sources.getByTestId("segment-sources")).toHaveText("Your stay at CoveEmailLiverpool weekendTripIt");
+  await expect(sources).toContainText("From cove.example · Always import this sender");
+  await expect(sources.getByRole("link", { name: "Your stay at Cove" })).toHaveAttribute("href", /^https:\/\/mail\.google\.com\/mail\/u\/0\/#all\/m1$/);
+  // Closing it puts focus back on the booking's menu button.
+  await page.keyboard.press("Escape");
+  await expect(sources).toBeHidden();
+  await expect(page.getByRole("button", { name: "Booking actions" })).toBeFocused();
 
   await page.getByPlaceholder("partner@example.com").fill(partner);
   await page.getByRole("button", { name: "Share" }).click();
@@ -38,8 +46,16 @@ test("the owner sees an imported trip, shares it, and the partner can add a book
 
   await expect(page.getByRole("button", { name: "Rename" })).toHaveCount(0);
   // The email is in the owner's mailbox, so a partner sees it named, not linked.
-  await expect(page.getByTestId("segment-sources").first()).toContainText("Email “Your stay at Cove”");
-  await expect(page.getByRole("link", { name: "Email “Your stay at Cove”" })).toHaveCount(0);
+  await bookingAction(page, "Sources");
+  const partnerSources = page.getByRole("dialog", { name: "Sources" });
+  await expect(partnerSources.getByTestId("segment-sources")).toContainText("Your stay at Cove");
+  await expect(partnerSources.getByRole("link")).toHaveCount(0);
+  // With no reference and no other trip, the menu leaves those out.
+  await partnerSources.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: "Booking actions" }).first().click();
+  await expect(page.getByRole("menuitem")).toHaveText(["Sources", "Edit", "Delete"]);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
   await page.getByRole("button", { name: "Add a booking" }).click();
   await page.getByPlaceholder("BA 117 LHR to JFK").fill("FR 123 MAN to DUB");
   const startDate = page.locator('input[type="date"]').first();
@@ -69,15 +85,34 @@ test.describe("on a phone", () => {
   test("a booking's details keep the width beside its actions, and the page fits", async ({ page }) => {
     const ownerUid = await signIn(page, owner);
     await seedTrip(ownerUid, "e2e-trip");
-    // Another trip with a long name widens the "Move to…" list.
+    // Another trip with a long name, once a "Move to" list that widened the row.
     await seedTrip(ownerUid, "e2e-other", {}, { title: "Junior Adventures Group Club Weekend Away", start: "2027-01-08", end: "2027-01-09" });
     await page.getByRole("link", { name: /^Liverpool/ }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Liverpool" })).toBeVisible();
-    await expect(page.getByTitle("Move to another trip")).toBeInViewport({ ratio: 1 });
+    await expect(page.getByRole("button", { name: "Booking actions" })).toBeInViewport({ ratio: 1 });
     // Squeezed beside the actions, the title had no width left at all.
     const title = page.getByText("Cove Liverpool", { exact: true });
     expect((await title.boundingBox())?.width).toBeGreaterThan(200);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBe(0);
   });
+});
+
+test("a booking's menu copies its reference and moves it to another trip", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const ownerUid = await signIn(page, owner);
+  await seedTrip(ownerUid, "e2e-trip", { confirmation: "CV1234" });
+  await seedTrip(ownerUid, "e2e-other", {}, { title: "Manchester", start: "2027-01-08", end: "2027-01-09" });
+  await page.getByRole("link", { name: /^Liverpool/ }).click();
+  await expect(page.getByText("Cove Liverpool", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Booking actions" }).click();
+  await expect(page.getByRole("menuitem")).toHaveText(["Copy reference", "Sources", "Edit", "Move to another trip…", "Delete"]);
+  await page.getByRole("menuitem", { name: "Copy reference" }).click();
+  await expect(page.getByRole("status")).toHaveText("Copied");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("CV1234");
+
+  await bookingAction(page, "Move to another trip…");
+  await page.getByRole("dialog", { name: "Move to another trip" }).getByRole("button", { name: /Manchester/ }).click();
+  await expect.poll(async () => (await readSegments("e2e-other")).map((s) => s.title).sort()).toEqual(["Cove Liverpool", "Cove Liverpool"]);
 });
