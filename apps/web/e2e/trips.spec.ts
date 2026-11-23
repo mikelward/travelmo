@@ -52,7 +52,7 @@ test("the owner sees an imported trip, shares it, and the partner can add a book
   await bookingAction(page, "Sources");
   const sources = page.getByRole("dialog", { name: "Sources" });
   await expect(sources.getByTestId("segment-sources")).toHaveText("Your stay at CoveEmailLiverpool weekendTripIt");
-  await expect(sources).toContainText("From cove.example · Always import this sender");
+  await expect(sources).toContainText("From cove.example · Always import this sender · Never import this sender");
   await expect(sources.getByRole("link", { name: "Your stay at Cove" })).toHaveAttribute("href", /^https:\/\/mail\.google\.com\/mail\/u\/0\/#all\/m1$/);
   // Closing it puts focus back on the booking's menu button.
   await page.keyboard.press("Escape");
@@ -141,4 +141,21 @@ test("a booking's menu copies its reference and moves it to another trip", async
   await bookingAction(page, "Move to another trip…");
   await page.getByRole("dialog", { name: "Move to another trip" }).getByRole("button", { name: /Manchester/ }).click();
   await expect.poll(async () => (await readSegments("e2e-other")).map((s) => s.title).sort()).toEqual(["Cove Liverpool", "Cove Liverpool"]);
+});
+
+test("the owner stops importing a booking's sender", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  await seedTrip(ownerUid, "e2e-trip");
+  await page.getByRole("link", { name: /Liverpool/ }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Liverpool" })).toBeVisible();
+  await bookingAction(page, "Sources");
+  await page.getByRole("dialog", { name: "Sources" }).getByRole("button", { name: "Never import this sender" }).click();
+  const confirm = page.getByRole("dialog", { name: "Never import cove.example?" });
+  await confirm.getByRole("button", { name: "Never import", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Never importing cove.example." })).toBeVisible();
+  // The booking stays, and the offer is gone now the sender is never imported.
+  await expect(page.getByText("Cove Liverpool", { exact: true })).toBeVisible();
+  await bookingAction(page, "Sources");
+  await expect(page.getByRole("dialog", { name: "Sources" })).toContainText("From cove.example · Always import this sender");
+  await expect(page.getByRole("button", { name: "Never import this sender" })).toHaveCount(0);
 });

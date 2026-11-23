@@ -333,6 +333,22 @@ class TripsViewModelTest {
     }
 
     @Test
+    fun `a booking's sender is always or never imported, its bookings deleted when asked`() = runTest {
+        val store = FakeTripStore()
+        val actions = FakeTripActions()
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, tripActions = actions)
+        viewModel.neverImport("never", "drama.example", deleteBookings = false)
+        store.patterns.value.deny shouldBe listOf("news.example", "drama.example")
+        viewModel.senderNotice.value shouldBe "Never importing drama.example."
+        actions.calls shouldBe emptyList()
+        viewModel.neverImport("never-delete", "class.example", deleteBookings = true)
+        actions.calls shouldBe listOf("forgetSender class.example")
+        viewModel.senderNotice.value shouldBe "Never importing class.example. Deleted 4 bookings and 3 empty trips."
+        viewModel.alwaysImport("always", "drama.example")
+        store.patterns.value shouldBe SenderPatterns(allow = listOf("drama.example"), deny = listOf("news.example", "class.example"))
+    }
+
+    @Test
     fun `a trip action that fails says why, and without a parser address points to the web`() = runTest {
         val failing = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, tripActions = FakeTripActions(failure = "Couldn't reach Travelmo. Check your connection and try again."))
         failing.regroupTrips("regroup")

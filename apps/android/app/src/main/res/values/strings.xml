@@ -53,6 +53,11 @@
     <string name="source_forward">Forwarded email</string>
     <string name="open_in_gmail">Open in Gmail</string>
     <string name="from_sender">From %1$s</string>
+    <string name="always_import_sender">Always import this sender</string>
+    <string name="never_import_sender">Never import this sender</string>
+    <string name="never_import_title">Never import %1$s?</string>
+    <string name="never_import_text">You can also delete the bookings it already made, with any trips that leaves empty.</string>
+    <string name="never_import_and_delete">Never import and delete its bookings</string>
     <string name="close">Close</string>
     <string name="the_airport">the airport</string>
     <string name="ride_to_airport">Need a ride to %1$s?</string>

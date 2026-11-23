@@ -13,6 +13,7 @@ import app.travelmo.data.TripActions
 import app.travelmo.data.TripActionFailed
 import app.travelmo.core.describeRegroup
 import app.travelmo.core.describeDeletedTrips
+import app.travelmo.core.describeNeverImport
 import app.travelmo.core.AccessConfig
 import app.travelmo.core.AccessRecord
 import app.travelmo.core.AccountAccess
@@ -408,6 +409,11 @@ class FakeTripActions(private val failure: String? = null) : TripActions {
         calls += "deleteAll"
         failure?.let { throw TripActionFailed(it) }
         return describeDeletedTrips(3)
+    }
+    override suspend fun forgetSender(domain: String): String {
+        calls += "forgetSender $domain"
+        failure?.let { throw TripActionFailed(it) }
+        return describeNeverImport(domain, 4, 3)
     }
 }
 

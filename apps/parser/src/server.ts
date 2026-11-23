@@ -4,6 +4,8 @@ import { serve } from "@hono/node-server";
 import { GoogleGenAI } from "@google/genai";
 import {
   NotACalendar,
+  domainOf,
+  forgetSenderPath,
   NotATripItExport,
   extractTripItProfile,
   isEmptyProfile,
@@ -85,6 +87,7 @@ import {
 } from "./gmail";
 import { importCalendar, importMessage, importMessages, importTripIt, type ImportDeps, type ImportOptions } from "./importer";
 import { regroupTrips } from "./regroup";
+import { forgetSender } from "./forgetSender";
 import { resetTrips } from "./tripsReset";
 import { loadHomeOverrides } from "./homeOverrides";
 import { errorFields, errorKind, log } from "./log";
@@ -498,6 +501,17 @@ app.post("/trips/regroup", async (c) => {
   const uid = await requireUser(c);
   const result = await regroupTrips(uid, deps);
   return c.json(result);
+});
+
+// "Never import this sender", with its bookings deleted: what one sender's
+// emails made in the signed-in user's own trips, and the trips left empty.
+// The sender rule itself is the user's own document, which the apps write.
+app.post(forgetSenderPath, async (c) => {
+  const uid = await requireUser(c);
+  const body = (await c.req.json().catch(() => ({}))) as { domain?: unknown };
+  const domain = typeof body.domain === "string" ? domainOf(body.domain) : undefined;
+  if (!domain) throw new HTTPException(400, { message: "Missing sender domain" });
+  return c.json(await forgetSender(uid, domain, deps));
 });
 
 // Deletes every trip the signed-in user owns, with its bookings, and their

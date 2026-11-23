@@ -1,6 +1,6 @@
 "use client";
 
-import { allLoyalty, bookedDateRange, displayBounds, effectiveHomes, homeTimeline, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, gmailMailboxes, localDate, normalizeEmail, paths, programsFor, sharedWithAny, type Segment, type Trip } from "@travelmo/core";
+import { allLoyalty, bookedDateRange, covers, describeNeverImport, displayBounds, effectiveHomes, homeTimeline, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, gmailMailboxes, localDate, normalizeEmail, paths, programsFor, sharedWithAny, type Segment, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { arrayRemove, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -16,6 +16,7 @@ import { shareTrip } from "@/lib/access";
 import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
 import { effectiveDecision, learnSender } from "@/lib/patterns";
+import { api } from "@/lib/api";
 import { DocumentWarnings } from "@/components/DocumentWarnings";
 import { EntryRequirements } from "@/components/EntryRequirements";
 import { useEntryRequirements } from "@/lib/visas";
@@ -299,6 +300,8 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   }, [segments, profile, now]);
   const [editing, setEditing] = useState<Editing>();
   const [error, setError] = useState<string>();
+  const [notice, setNotice] = useState<string>();
+  const router = useRouter();
   if (trip === undefined) return <p className="text-muted">Loading…</p>;
   if (trip === null) return <p className="text-muted">This trip does not exist or is not shared with you.</p>;
   const isOwner = trip.ownerUid === user.uid;
@@ -326,6 +329,27 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
     isOwner && segment.sender && effectiveDecision(patterns, segment.sender) !== "allow"
       ? () => learnSender(firestore(), user.uid, segment.sender!, "allow").catch((e: Error) => setError(e.message))
       : undefined;
+  // "Never import this sender", for the owner while the parser still
+  // imports it; with its bookings deleted, a trip left with none closes.
+  const neverImport = (segment: Segment) =>
+    isOwner && segment.sender && effectiveDecision(patterns, segment.sender) !== "deny"
+      ? async (deleteBookings: boolean) => {
+          const domain = segment.sender!;
+          setError(undefined);
+          setNotice(undefined);
+          try {
+            await learnSender(firestore(), user.uid, domain, "deny");
+            if (!deleteBookings) return setNotice(describeNeverImport(domain));
+            const emptied = (segments ?? []).every((s) => s.sender !== undefined && covers(domain, s.sender.toLowerCase()));
+            const result = await api.forgetSender(user, domain);
+            if (emptied) router.push("/");
+            else setNotice(describeNeverImport(domain, result));
+          } catch (e) {
+            console.error("Never importing a sender failed", e);
+            setError((e as Error).message);
+          }
+        }
+      : undefined;
 
   return (
     <>
@@ -350,6 +374,11 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
         <SegmentForm defaultDate={trip.start} onSave={save} onCancel={() => setEditing(undefined)} />
       )}
       {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      {notice && (
+        <p role="status" className="mt-2 text-sm text-muted">
+          {notice}
+        </p>
+      )}
 
       {!segments && <p className="mt-8 text-muted">Loading…</p>}
       {segments && segments.length === 0 && <p className="mt-8 text-muted">No bookings in this trip yet.</p>}
@@ -381,6 +410,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
                           }
                         : {})}
                       {...(learn(segment) ? { onLearnSender: learn(segment) } : {})}
+                      {...(neverImport(segment) ? { onNeverImport: neverImport(segment) } : {})}
                       // Each email links for whoever imported it, from their mailbox.
                       emailLinks={{ uid: user.uid, mailboxes: gmailMailboxes(profile), ownsTrip: isOwner }}
                       programs={programsFor(segment.provider, loyalty)}

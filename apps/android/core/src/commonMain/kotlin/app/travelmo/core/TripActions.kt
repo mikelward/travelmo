@@ -8,6 +8,9 @@ package app.travelmo.core
 const val REGROUP_PATH = "/trips/regroup"
 const val DELETE_ALL_TRIPS_PATH = "/trips/delete-all"
 
+/** "Never import this sender" with its bookings deleted, on the parser. */
+const val FORGET_SENDER_PATH = "/senders/forget"
+
 private fun trips(n: Int) = "$n trip${if (n == 1) "" else "s"}"
 
 /** What regrouping did: [changed] trips rebuilt, [deleted] merged away. */
@@ -20,6 +23,18 @@ fun describeRegroup(changed: Int, deleted: Int): String {
 /** What deleting all trips did, with the next step. */
 fun describeDeletedTrips(trips: Int): String =
     if (trips == 0) "You had no trips to delete." else "Deleted ${trips(trips)}. Import past bookings to start again."
+
+/**
+ * What "Never import this sender" did: with [bookings] and [trips] when its
+ * bookings were deleted too, null otherwise.
+ */
+fun describeNeverImport(domain: String, bookings: Int? = null, trips: Int = 0): String {
+    if (bookings == null) return "Never importing $domain."
+    if (bookings == 0) return "Never importing $domain. It had no bookings to delete."
+    fun count(n: Int, what: String) = "$n $what${if (n == 1) "" else "s"}"
+    val emptied = if (trips > 0) " and ${count(trips, "empty trip")}" else ""
+    return "Never importing $domain. Deleted ${count(bookings, "booking")}$emptied."
+}
 
 /**
  * What a trip action says when it did not go through: by the parser's

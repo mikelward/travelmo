@@ -45,14 +45,36 @@ function SourcesDialog({
   segment,
   emailLinks,
   onLearnSender,
+  onNeverImport,
   onClose,
 }: {
   segment: Segment;
   emailLinks?: EmailLinks;
   onLearnSender?: () => void;
+  onNeverImport?: (deleteBookings: boolean) => void;
   onClose: () => void;
 }) {
   const sources = segmentSources(segment);
+  const [stopping, setStopping] = useState(false);
+  if (stopping && onNeverImport && segment.sender) {
+    const stop = (deleteBookings: boolean) => {
+      onNeverImport(deleteBookings);
+      onClose();
+    };
+    return (
+      <Dialog title={`Never import ${segment.sender}?`} onClose={onClose}>
+        <p className="text-sm">You can also delete the bookings it already made, with any trips that leaves empty.</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button type="button" onClick={() => stop(false)} className={buttonClass}>
+            Never import
+          </button>
+          <button type="button" onClick={() => stop(true)} className={buttonClass}>
+            Never import and delete its bookings
+          </button>
+        </div>
+      </Dialog>
+    );
+  }
   return (
     <Dialog title="Sources" onClose={onClose}>
       <ul data-testid="segment-sources">
@@ -89,6 +111,14 @@ function SourcesDialog({
                 className="underline"
               >
                 Always import this sender
+              </button>
+            </>
+          )}
+          {onNeverImport && (
+            <>
+              {" · "}
+              <button type="button" onClick={() => setStopping(true)} className="underline">
+                Never import this sender
               </button>
             </>
           )}
@@ -137,6 +167,7 @@ export function BookingMenu({
   onMove,
   emailLinks,
   onLearnSender,
+  onNeverImport,
 }: {
   segment: Segment;
   onEdit?: () => void;
@@ -147,6 +178,8 @@ export function BookingMenu({
   onMove?: (tripId: string) => void;
   emailLinks?: EmailLinks;
   onLearnSender?: () => void;
+  // Stops importing the booking's sender, deleting what it made when asked.
+  onNeverImport?: (deleteBookings: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<"sources" | "move">();
@@ -269,6 +302,7 @@ export function BookingMenu({
           segment={segment}
           {...(emailLinks ? { emailLinks } : {})}
           {...(onLearnSender ? { onLearnSender } : {})}
+          {...(onNeverImport ? { onNeverImport } : {})}
           onClose={closeDialog}
         />
       )}

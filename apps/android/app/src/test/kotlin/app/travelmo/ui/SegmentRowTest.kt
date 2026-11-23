@@ -18,6 +18,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.travelmo.core.SegmentType
+import app.travelmo.core.SenderList
 import app.travelmo.core.emailLinkFor
 import app.travelmo.ui.theme.TravelmoTheme
 import io.kotest.matchers.nulls.shouldBeNull
@@ -163,6 +164,46 @@ class SegmentRowTest {
         }
         composeRule.onNodeWithText("Close").performClick()
         composeRule.onNodeWithText("Your stay is coming up").assertDoesNotExist()
+    }
+
+    @Test
+    fun `the owner never imports a booking's sender from Sources, deleting its bookings when asked`() {
+        val never = mutableListOf<Pair<String, Boolean>>()
+        val always = mutableListOf<String>()
+        val actions = SenderActions(decision = { null }, onAlways = { always += it }, onNever = { domain, delete -> never += domain to delete }, canDelete = true)
+        composeRule.setContent { TravelmoTheme { SegmentRow(stay, senderActions = actions) } }
+        composeRule.onNodeWithContentDescription("Booking actions").performClick()
+        composeRule.onNodeWithText("Sources").performClick()
+        composeRule.onNodeWithText("Always import this sender").assertExists()
+        composeRule.onNodeWithText("Never import this sender").performClick()
+        composeRule.onNodeWithText("Never import cove.example?").assertExists()
+        composeRule.onNodeWithText("Never import and delete its bookings").performClick()
+        never shouldBe listOf("cove.example" to true)
+        always shouldBe emptyList()
+        composeRule.onNodeWithText("Never import cove.example?").assertDoesNotExist()
+    }
+
+    @Test
+    fun `a sender already never imported is offered only Always`() {
+        val denied = SenderActions(decision = { SenderList.DENY }, onAlways = {}, onNever = { _, _ -> }, canDelete = false)
+        composeRule.setContent { TravelmoTheme { SegmentRow(stay, senderActions = denied) } }
+        composeRule.onNodeWithContentDescription("Booking actions").performClick()
+        composeRule.onNodeWithText("Sources").performClick()
+        composeRule.onNodeWithText("Always import this sender").assertExists()
+        composeRule.onNodeWithText("Never import this sender").assertDoesNotExist()
+    }
+
+    @Test
+    fun `without the parser, Never import offers no deleting`() {
+        val never = mutableListOf<Pair<String, Boolean>>()
+        val actions = SenderActions(decision = { null }, onAlways = {}, onNever = { d, x -> never += d to x }, canDelete = false)
+        composeRule.setContent { TravelmoTheme { SegmentRow(stay, senderActions = actions) } }
+        composeRule.onNodeWithContentDescription("Booking actions").performClick()
+        composeRule.onNodeWithText("Sources").performClick()
+        composeRule.onNodeWithText("Never import this sender").performClick()
+        composeRule.onNodeWithText("Never import and delete its bookings").assertDoesNotExist()
+        composeRule.onNodeWithText("Never import").performClick()
+        never shouldBe listOf("cove.example" to false)
     }
 
     @Test

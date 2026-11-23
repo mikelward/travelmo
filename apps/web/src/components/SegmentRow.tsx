@@ -96,6 +96,7 @@ export function SegmentRow({
   onEdit,
   onDelete,
   onLearnSender,
+  onNeverImport,
   moveTargets,
   onMove,
   emailLinks,
@@ -109,6 +110,7 @@ export function SegmentRow({
   onEdit?: () => void;
   onDelete?: () => void;
   onLearnSender?: () => void;
+  onNeverImport?: (deleteBookings: boolean) => void;
   moveTargets?: Trip[];
   onMove?: (tripId: string) => void;
   emailLinks?: EmailLinks;
@@ -176,6 +178,7 @@ export function SegmentRow({
         {...(onMove ? { onMove } : {})}
         {...(emailLinks ? { emailLinks } : {})}
         {...(onLearnSender ? { onLearnSender } : {})}
+        {...(onNeverImport ? { onNeverImport } : {})}
       />
     </li>
   );

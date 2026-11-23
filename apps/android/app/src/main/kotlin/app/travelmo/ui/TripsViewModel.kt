@@ -61,6 +61,7 @@ import app.travelmo.data.GmailActions
 import app.travelmo.core.SenderPatterns
 import app.travelmo.core.cleanSenderList
 import app.travelmo.core.SenderList
+import app.travelmo.core.describeNeverImport
 import app.travelmo.core.ParsedRecord
 import app.travelmo.data.SearchedRecords
 import app.travelmo.data.NoImportReview
@@ -585,6 +586,26 @@ class TripsViewModel(
         store.learnSender(uid, domain, which)
         val said = if (which == SenderList.ALLOW) "Always importing $domain" else "Never importing $domain"
         _reviewNotices.update { it + (messageId to said) }
+    }
+
+    private val _senderNotice = MutableStateFlow<String?>(null)
+
+    /** What the last "Never import this sender" on a booking did, in a line. */
+    val senderNotice: StateFlow<String?> = _senderNotice
+
+    /** Always imports a booking's sender from now on. */
+    fun alwaysImport(token: String, domain: String) = run(token, "alwaysImport") {
+        store.learnSender(uid, domain, SenderList.ALLOW)
+    }
+
+    /**
+     * Never imports a booking's sender from now on, and with [deleteBookings]
+     * deletes what it made, and any trip that leaves empty, through the parser.
+     */
+    fun neverImport(token: String, domain: String, deleteBookings: Boolean) = run(token, "neverImport") {
+        _senderNotice.value = null
+        store.learnSender(uid, domain, SenderList.DENY)
+        _senderNotice.value = if (deleteBookings) tripActions.forgetSender(domain) else describeNeverImport(domain)
     }
 
     fun hideRideNeed(token: String, need: RideNeed) = run(token, "hideRideNeed") { store.hideRideNeed(uid, rideNeedKey(need)) }

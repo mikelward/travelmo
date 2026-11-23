@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeDeletedTrips, describeRegroup } from "./tripActions";
+import { describeDeletedTrips, describeNeverImport, describeRegroup } from "./tripActions";
 
 describe("describeRegroup", () => {
   it("says what changed", () => {
@@ -17,5 +17,14 @@ describe("describeDeletedTrips", () => {
     expect(describeDeletedTrips(12)).toBe("Deleted 12 trips. Import past bookings to start again.");
     expect(describeDeletedTrips(1)).toBe("Deleted 1 trip. Import past bookings to start again.");
     expect(describeDeletedTrips(0)).toBe("You had no trips to delete.");
+  });
+});
+
+describe("describeNeverImport", () => {
+  it("says what stopping a sender did", () => {
+    expect(describeNeverImport("drama.example")).toBe("Never importing drama.example.");
+    expect(describeNeverImport("drama.example", { bookings: 12, trips: 12 })).toBe("Never importing drama.example. Deleted 12 bookings and 12 empty trips.");
+    expect(describeNeverImport("drama.example", { bookings: 1, trips: 0 })).toBe("Never importing drama.example. Deleted 1 booking.");
+    expect(describeNeverImport("drama.example", { bookings: 0, trips: 0 })).toBe("Never importing drama.example. It had no bookings to delete.");
   });
 });

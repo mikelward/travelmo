@@ -552,8 +552,9 @@ Each booking has a ⋮ menu, the same as the Android app's: "Copy reference"
 everyone who sees the trip, then Edit, "Move to another trip…" and Delete for
 those who may edit. Sources opens a dialog listing each source's label and
 kind (an email the viewer imported links to Gmail), then "From" the sender
-with "Always import this sender"; Move to another trip… opens a dialog of the
-viewer's other trips. The row itself shows only the booking.
+with "Always import this sender" and "Never import this sender" for the
+trip's owner (each while the importer does otherwise); Move to another trip…
+opens a dialog of the viewer's other trips. The row itself shows only the booking.
 The same people can rate a booking one to five stars and mark it a favorite
 (`rating`, `favorite` on the segment; tapping the current star clears the
 rating): an edit like any other, moving the booking's revision, so a calendar
@@ -1014,11 +1015,21 @@ the record of a message that did not become a booking — never an imported
 one, whose bookings are edited on the trip page, nor one whose import is
 live — and runs the import with the pre-filter skipped). Teaching a sender also
 drops any pattern on the other list that covers it, so the newest decision
-is the one the parser follows. A booking's Sources dialog on the trip page
-offers "Always import this sender" on imported bookings. Settings on the
-web and Android also edits both lists directly ("Sender rules", one domain
-a line, saved together; `cleanSenderList` trims, lowercases and drops blank
-lines and repeats).
+is the one the parser follows. Settings on the web and Android also edits
+both lists directly ("Sender rules", one domain a line, saved together;
+`cleanSenderList` trims, lowercases and drops blank lines and repeats). A
+booking's Sources dialog on the trip page, on the web and Android, offers
+the trip's owner "Always import this sender" and "Never import this
+sender". Never asks whether to delete what the sender already made too:
+"Never import" only adds the rule, while "Never import and delete its
+bookings" also asks the parser (`POST /senders/forget`,
+`apps/parser/src/forgetSender.ts`) to delete every booking an email from that
+domain or its subdomains made in the user's own trips, with each trip that
+leaves empty (a trip already empty, or being deleted, is left), in the
+import's per-user transaction. The page then says what it did
+(`describeNeverImport`), or goes back to the trip list when the trip it was
+on had nothing else. Android offers the deleting only with a parser address,
+as for regrouping.
 
 The similarity pre-filter (`apps/parser/src/similarity.ts`) learns from
 the model's verdicts. Every email that reaches the model is embedded
@@ -2011,6 +2022,7 @@ build without one points to the web instead.
 | `POST /gmail/backfill/stop` | Firebase ID token | Stops that mailbox's reading after the batch under way |
 | `POST /gmail/reimport` | Firebase ID token | Imports one message again from the mailbox its record id names, skipping the pre-filter; returns its outcome |
 | `POST /gmail/disconnect` | Firebase ID token | Stops the watch of the mailbox `emailAddress` names, revokes its token (unless another connection rests on the grant), deletes its connection |
+| `POST /senders/forget` | Firebase ID token | Deletes the bookings one sender domain's emails made in the user's own trips, and the trips that leaves empty; body `{ domain }`; returns how many of each |
 | `POST /trips/regroup` | Firebase ID token | Rebuilds the user's trips from their bookings with the current grouping ("Home"); returns how many trips changed and how many were merged away |
 | `POST /trips/delete-all` | Firebase ID token | Deletes every trip the user owns with its bookings, their import records, places waiting for a geocode on those bookings, and how far the last mailbox reading got; returns how many trips went. Trips shared with them, their profile and connections stay |
 | `POST /feeds/add` | Firebase ID token | Subscribes to a calendar feed after checking its address and reading it once; returns counts as for `/import/ics` |

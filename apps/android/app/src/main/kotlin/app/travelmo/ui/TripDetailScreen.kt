@@ -75,7 +75,10 @@ import app.travelmo.core.PersonWarning
 import app.travelmo.core.ProfileEntry
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentType
+import app.travelmo.core.SenderList
 import app.travelmo.core.SourceKind
+import app.travelmo.core.covers
+import app.travelmo.core.effectiveDecision
 import app.travelmo.core.SourceRef
 import app.travelmo.core.Trip
 import app.travelmo.core.displayTitles
@@ -146,6 +149,8 @@ fun TripDetailScreen(
     val rideSettings by viewModel.rideSettings.collectAsStateWithLifecycle()
     val addresses by viewModel.addresses.collectAsStateWithLifecycle()
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val senderPatterns by viewModel.senderPatterns.collectAsStateWithLifecycle()
+    val senderNotice by viewModel.senderNotice.collectAsStateWithLifecycle()
     var deleting by remember { mutableStateOf<Segment?>(null) }
     var moving by remember { mutableStateOf<Segment?>(null) }
     val current = trip
@@ -166,7 +171,7 @@ fun TripDetailScreen(
             viewModel.outcomeSeen(token)
             val action = token.removePrefix(prefix)
             when {
-                action == "delete" -> onBack()
+                action == "delete" || action == "sender/never/leave" -> onBack()
                 action.startsWith("merge/") -> onMerged(action.removePrefix("merge/"))
             }
         }
@@ -244,6 +249,22 @@ fun TripDetailScreen(
                     null
                 },
                 tripActions = if (isOwner) actions else null,
+                // Sender rules are the owner's own: the import ran against their mailbox.
+                senderActions = if (isOwner) {
+                    SenderActions(
+                        decision = { effectiveDecision(senderPatterns, it) },
+                        onAlways = { viewModel.alwaysImport("${prefix}sender/always", it) },
+                        onNever = { domain, deleteBookings ->
+                            // A trip of nothing but this sender's bookings is gone after, so the page closes.
+                            val emptied = deleteBookings && segments.all { s -> s.sender?.let { covers(domain, it.lowercase()) } == true }
+                            viewModel.neverImport("${prefix}sender/never${if (emptied) "/leave" else ""}", domain, deleteBookings)
+                        },
+                        canDelete = viewModel.canRunTripActions,
+                    )
+                } else {
+                    null
+                },
+                notice = senderNotice,
                 canManage = canManage,
                 targets = targets,
                 titles = displayTitles(trips.orEmpty()),
@@ -268,6 +289,18 @@ class BookingActions(
     val onDelete: (Segment) -> Unit,
     val onMove: ((Segment) -> Unit)? = null,
     val onRestore: ((Segment) -> Unit)? = null,
+)
+
+/**
+ * What the trip's owner can teach the importer about a booking's sender, from
+ * its Sources: [decision] is what the importer does with a domain now, and
+ * deleting its bookings is offered only when [canDelete].
+ */
+class SenderActions(
+    val decision: (String) -> SenderList?,
+    val onAlways: (String) -> Unit,
+    val onNever: (domain: String, deleteBookings: Boolean) -> Unit,
+    val canDelete: Boolean,
 )
 
 /** What the owner can do to the trip. */
@@ -297,6 +330,9 @@ private fun TripBody(
     emailLink: (SourceRef) -> String?,
     rides: RideSuggestions,
     tripActions: TripActions?,
+    senderActions: SenderActions?,
+    /** What the last action on a booking's sender did, in a line. */
+    notice: String?,
     canManage: Boolean,
     targets: List<Trip>,
     /** Every trip's title as [displayTitles] shows it among the others. */
@@ -356,6 +392,9 @@ private fun TripBody(
         for ((token, message) in errors) {
             item(key = "error-$token") { Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp)) }
         }
+        notice?.let { said ->
+            item(key = "notice") { Text(said, color = muted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp)) }
+        }
         if (warnings.isNotEmpty()) {
             item(key = "warnings") { DocumentWarnings(warnings, today) }
         }
@@ -369,7 +408,7 @@ private fun TripBody(
                 Text(formatDate(date), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 20.dp, bottom = 4.dp))
             }
             items(items, key = { it.id }) { segment ->
-                SegmentRow(segment, bookingActions, programs = programsFor(segment.provider), emailLink = emailLink, flightLines = flightLines(segment))
+                SegmentRow(segment, bookingActions, programs = programsFor(segment.provider), emailLink = emailLink, flightLines = flightLines(segment), senderActions = senderActions)
                 for (need in rides.needs[segment.id].orEmpty()) {
                     RideSuggestion(need.kind, segment, rides.companies, onHide = { rides.onHide(need) })
                 }
@@ -526,6 +565,7 @@ fun SegmentRow(
     programs: List<ProfileEntry> = emptyList(),
     emailLink: (SourceRef) -> String? = { null },
     flightLines: List<String> = emptyList(),
+    senderActions: SenderActions? = null,
 ) {
     val context = LocalContext.current
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -534,7 +574,7 @@ fun SegmentRow(
     val hasSources = segment.sources.isNotEmpty() || segment.sender != null
     val reference = segment.confirmation?.trim()?.takeIf { it.isNotEmpty() }
     if (showingSources && hasSources) {
-        SourcesDialog(segment, emailLink, onDismiss = { showingSources = false })
+        SourcesDialog(segment, emailLink, senderActions, onDismiss = { showingSources = false })
     }
     Row(modifier = Modifier.padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Icon(
@@ -607,10 +647,34 @@ fun SegmentRow(
  * imported opens in Gmail; others' are in a mailbox the viewer can't open.
  */
 @Composable
-private fun SourcesDialog(segment: Segment, emailLink: (SourceRef) -> String?, onDismiss: () -> Unit) {
+private fun SourcesDialog(segment: Segment, emailLink: (SourceRef) -> String?, senderActions: SenderActions?, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val openLabel = stringResource(R.string.open_in_gmail)
+    var stopping by rememberSaveable(segment.id) { mutableStateOf(false) }
+    val sender = segment.sender
+    val decision = sender?.let { senderActions?.decision?.invoke(it) }
+    if (stopping && sender != null && senderActions != null) {
+        val stop = { deleteBookings: Boolean ->
+            onDismiss()
+            senderActions.onNever(sender, deleteBookings)
+        }
+        AppAlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text(stringResource(R.string.never_import_title, sender)) },
+            text = { if (senderActions.canDelete) Text(stringResource(R.string.never_import_text)) },
+            confirmButton = {
+                Column(horizontalAlignment = Alignment.End) {
+                    TextButton(onClick = { stop(false) }) { Text(stringResource(R.string.never_import_list)) }
+                    if (senderActions.canDelete) {
+                        TextButton(onClick = { stop(true) }) { Text(stringResource(R.string.never_import_and_delete)) }
+                    }
+                }
+            },
+            dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+        )
+        return
+    }
     AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.sources)) },
@@ -634,8 +698,20 @@ private fun SourcesDialog(segment: Segment, emailLink: (SourceRef) -> String?, o
                         if (source.label != null) Text(kind, style = MaterialTheme.typography.bodySmall, color = muted)
                     }
                 }
-                segment.sender?.let {
+                sender?.let {
                     Text(stringResource(R.string.from_sender, it), style = MaterialTheme.typography.bodyMedium, color = muted, modifier = Modifier.padding(vertical = 8.dp))
+                }
+                if (sender != null && senderActions != null) {
+                    if (decision != SenderList.ALLOW) {
+                        TextButton(onClick = { onDismiss(); senderActions.onAlways(sender) }, modifier = Modifier.offset(x = -TextButtonInset)) {
+                            Text(stringResource(R.string.always_import_sender))
+                        }
+                    }
+                    if (decision != SenderList.DENY) {
+                        TextButton(onClick = { stopping = true }, modifier = Modifier.offset(x = -TextButtonInset)) {
+                            Text(stringResource(R.string.never_import_sender))
+                        }
+                    }
                 }
             }
         },
