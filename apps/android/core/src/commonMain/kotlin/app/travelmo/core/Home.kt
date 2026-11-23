@@ -19,20 +19,40 @@ data class HomePeriod(
     val until: String? = null,
 )
 
-private data class Town(val city: String, val country: String?)
+private data class Town(val city: String, val country: String?, val lat: Double? = null, val lon: Double? = null)
 
 private val journeyTypes = setOf(SegmentType.FLIGHT, SegmentType.TRAIN, SegmentType.BUS, SegmentType.FERRY)
 
-// A place's town: the city where the source gave one, otherwise its name.
+// A place's town: the city where the source gave one, otherwise its name,
+// and where it is when the source or the geocoder said.
 private fun town(place: Place?): Town? {
     if (place == null) return null
-    return Town(place.city ?: place.name, place.country)
+    val located = place.lat != null && place.lon != null
+    return Town(place.city ?: place.name, place.country, if (located) place.lat else null, if (located) place.lon else null)
 }
 
-// Same city, ignoring case, accents and the local or English name, and the
-// same country when both give one, however it is written ("UK" is GB).
-private fun sameTown(a: Town, b: Town): Boolean =
-    sameCity(a.city, b.city) && (a.country == null || b.country == null || countryCode(a.country) == countryCode(b.country))
+/** How far apart two places can be and still be one town, in kilometers, as home.ts. */
+const val NEAR_KM = 20.0
+
+/** The great-circle distance between two points, in kilometers. */
+fun distanceKm(aLat: Double, aLon: Double, bLat: Double, bLon: Double): Double {
+    val rad = kotlin.math.PI / 180
+    val dLat = (bLat - aLat) * rad
+    val dLon = (bLon - aLon) * rad
+    val h = kotlin.math.sin(dLat / 2).let { it * it } +
+        kotlin.math.cos(aLat * rad) * kotlin.math.cos(bLat * rad) * kotlin.math.sin(dLon / 2).let { it * it }
+    return 2 * 6371 * kotlin.math.asin(kotlin.math.min(1.0, kotlin.math.sqrt(h)))
+}
+
+// No country tells them apart, however it is written ("UK" is GB), and the
+// same city, ignoring case, accents and the local or English name, or
+// within NEAR_KM where both say where they are. Home has no point, so it
+// matches by name alone.
+private fun sameTown(a: Town, b: Town): Boolean {
+    if (a.country != null && b.country != null && countryCode(a.country) != countryCode(b.country)) return false
+    if (sameCity(a.city, b.city)) return true
+    return a.lat != null && a.lon != null && b.lat != null && b.lon != null && distanceKm(a.lat, a.lon, b.lat, b.lon) <= NEAR_KM
+}
 
 /** A country as its ISO code, whether written as one or by name ("UK", "United Kingdom" and "GB" are all GB). */
 fun countryCode(country: String): String = countryCodeOf(country) ?: country.trim().uppercase()

@@ -15,24 +15,50 @@ export type HomePeriod = {
   until?: string;
 };
 
+type Town = { city: string; country?: string; lat?: number; lon?: number };
+
 type Booking = Pick<ExtractedSegment, "type" | "start" | "end" | "origin" | "destination">;
 
 const journeyTypes: ReadonlySet<SegmentType> = new Set(["flight", "train", "bus", "ferry"]);
 
 // A place's town, for telling home from away: the city where the source gave
 // one, otherwise its name (an airport or station named without a city).
-function town(place: Place | undefined): { city: string; country?: string } | undefined {
+// Where it is, when the source or the geocoder said, so a hotel in a suburb
+// is in the town next door.
+function town(place: Place | undefined): Town | undefined {
   const city = place?.city ?? place?.name;
   if (!city) return undefined;
-  return place?.country ? { city, country: place.country } : { city };
+  return {
+    city,
+    ...(place?.country ? { country: place.country } : {}),
+    ...(place?.lat !== undefined && place.lon !== undefined ? { lat: place.lat, lon: place.lon } : {}),
+  };
 }
 
-// Two towns match on the city, ignoring case, accents and the local or
-// English name (sameCity), and on the country when both give one, however
-// it is written ("UK" and "GB" are one: countryCode).
-function sameTown(a: { city: string; country?: string }, b: { city: string; country?: string }): boolean {
-  if (!sameCity(a.city, b.city)) return false;
-  return !a.country || !b.country || countryCode(a.country) === countryCode(b.country);
+// How far apart two places can be and still be one town, in kilometers:
+// a hotel in Solna and a show in Stockholm, or a dinner in a village down
+// the road from the hotel.
+export const nearKm = 20;
+
+// The great-circle distance between two points, in kilometers.
+export function distanceKm(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
+  const rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad;
+  const dLon = (b.lon - a.lon) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+const located = (t: Town): t is Town & { lat: number; lon: number } => t.lat !== undefined && t.lon !== undefined;
+
+// Two towns match when no country tells them apart, however it is written
+// ("UK" and "GB" are one: countryCode), and they have the same city,
+// ignoring case, accents and the local or English name (sameCity), or are
+// within nearKm of each other where both say where they are. Home is a
+// city's name with no point, so it matches by name alone.
+function sameTown(a: Town, b: Town): boolean {
+  if (a.country && b.country && countryCode(a.country) !== countryCode(b.country)) return false;
+  return sameCity(a.city, b.city) || (located(a) && located(b) && distanceKm(a, b) <= nearKm);
 }
 
 // A country as its ISO code, whether written as one or by name ("UK",
@@ -105,7 +131,7 @@ const stayDays = 60;
 // the order they leave, by instant, since local times misorder them across
 // the date line; a journey within one town (a river bus) goes nowhere and
 // says nothing.
-function roundTrips(segments: readonly Booking[]): { base: { city: string; country?: string }; start: string }[] {
+function roundTrips(segments: readonly Booking[]): { base: Town; start: string }[] {
   // A cancelled journey was never travelled, so it says nothing about home.
   const journeys = liveSegments(segments)
     .filter((s) => {
@@ -114,7 +140,7 @@ function roundTrips(segments: readonly Booking[]): { base: { city: string; count
       return journeyTypes.has(s.type) && from && to && !sameTown(from, to);
     })
     .sort((a, b) => compareInstants(a.start, b.start));
-  const trips: { base: { city: string; country?: string }; start: string }[] = [];
+  const trips: { base: Town; start: string }[] = [];
   let i = 0;
   while (i < journeys.length) {
     const base = town(journeys[i]!.origin)!;
@@ -138,12 +164,12 @@ function roundTrips(segments: readonly Booking[]): { base: { city: string; count
 export function homeTimeline(segments: readonly Booking[]): HomePeriod[] {
   const trips = roundTrips(segments);
   const periods: HomePeriod[] = [];
-  let current: { city: string; country?: string } | undefined;
+  let current: Town | undefined;
   for (let i = 0; i < trips.length; i++) {
     const { base, start } = trips[i]!;
     if (!current) {
       current = base;
-      periods.push({ ...base });
+      periods.push({ city: base.city, ...(base.country ? { country: base.country } : {}) });
       continue;
     }
     if (sameTown(base, current)) continue;
@@ -155,7 +181,7 @@ export function homeTimeline(segments: readonly Booking[]): HomePeriod[] {
       continue;
     }
     periods[periods.length - 1]!.until = dayBefore(start);
-    periods.push({ ...base, from: start });
+    periods.push({ city: base.city, ...(base.country ? { country: base.country } : {}), from: start });
     current = base;
     i = end;
   }
@@ -348,7 +374,6 @@ const dayOrDate = new RegExp(`(?:\\s*\\(\\s*${date}\\s*\\)|\\s*[-–—:,]\\s*${
 export const courseName = (title: string) => title.replace(dayOrDate, "").trim() || title;
 
 type Grouped = Located & Pick<ExtractedSegment, "title">;
-type Town = { city: string; country?: string };
 
 // A booking that goes somewhere: a journey, or a transfer (a car to the
 // airport).

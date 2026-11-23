@@ -224,4 +224,16 @@ class HomeTest {
         describeHomes(listOf(HomePeriod("London"))) shouldBe "London"
         describeHomes(emptyList()) shouldBe ""
     }
+    @Test
+    fun `measures the distance between two points`() {
+        kotlin.math.round(distanceKm(51.507, -0.128, 48.857, 2.352)) shouldBe 343.0
+    }
+
+    @Test
+    fun `puts a car hired in a town next to the airport with its flight`() {
+        val heathrow = Place("London Heathrow", code = "LHR", city = "London", country = "GB", lat = 51.470, lon = -0.454)
+        nearHub(Place("Car hire", city = "Hounslow", country = "GB", lat = 51.468, lon = -0.361), heathrow) shouldBe true
+        nearHub(Place("Car hire", city = "Reading", country = "GB", lat = 51.454, lon = -0.973), heathrow) shouldBe false
+        nearHub(Place("Car hire", city = "Hounslow", country = "GB"), heathrow) shouldBe false
+    }
 }
