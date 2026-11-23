@@ -12,6 +12,13 @@ pluginManagement {
                 includeGroupByRegex("androidx.*")
             }
         }
+        // Google's mirror of Maven Central, tried first: repo.maven.apache.org
+        // rate-limits shared CI and sandbox egress (HTTP 429), failing builds.
+        // Central stays as the fallback for anything the mirror lacks.
+        maven {
+            name = "mavenCentralMirror"
+            url = uri("https://maven-central.storage-download.googleapis.com/maven2/")
+        }
         mavenCentral()
         gradlePluginPortal()
     }
@@ -25,6 +32,13 @@ dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         google()
+        // Google's mirror of Maven Central, tried first: repo.maven.apache.org
+        // rate-limits shared CI and sandbox egress (HTTP 429), failing builds.
+        // Central stays as the fallback for anything the mirror lacks.
+        maven {
+            name = "mavenCentralMirror"
+            url = uri("https://maven-central.storage-download.googleapis.com/maven2/")
+        }
         mavenCentral()
         // mikelward/androidlog publishes its own Maven repository into the
         // `maven` branch of that repository, which raw.githubusercontent.com
