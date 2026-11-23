@@ -394,7 +394,11 @@ function townsDuring(outing: Grouped, travel: readonly Grouped[]): Town[] {
 // unknown, where the travel sets off from. So a ticket in Stockholm joins
 // the flight there before it or the flight back after it, while a dinner in
 // London two days before a train from Southampton to London does not: that
-// train only gets there after.
+// train only gets there after. Abroad, the country is enough: a dinner at a
+// resort down the coast from the airport the flight lands at, or a stay
+// that names another town, is in the country the trip is in, while in the
+// home country only the same town counts (a day out in Brighton is not part
+// of a flight from London).
 function onTheWay(
   outing: Grouped,
   travel: readonly Grouped[],
@@ -405,7 +409,17 @@ function onTheWay(
   if (!where || travel.length === 0) return false;
   const base = homeAt(periods, localDate(outing.start), overrides) ?? town(byStart(travel)[0]?.origin);
   if (base && sameTown(where, base)) return false;
-  return townsDuring(outing, travel).some((t) => sameTown(t, where));
+  if (townsDuring(outing, travel).some((t) => sameTown(t, where))) return true;
+  const abroad = !!where.country && !!base?.country && countryCode(where.country) !== countryCode(base.country);
+  if (!abroad) return false;
+  // Where the journeys have taken someone at the time, and the stays they
+  // are in then: a hotel the trip has already left says nothing about a
+  // dinner days later.
+  const from = millis(outing.start);
+  const to = isUntimed(outing) ? from + 86_400_000 - 1 : outing.end ? Math.max(from, millis(outing.end)) : from;
+  const staying = travel.filter((s) => !goes(s) && millis(s.start) <= to && from <= millis(s.end ?? s.start)).flatMap((s) => town(s.destination) ?? []);
+  const there = [...townsDuring(outing, travel.filter(goes)), ...staying];
+  return there.some((t) => !!t.country && countryCode(t.country) === countryCode(where.country!));
 }
 
 // Whether two outings are one thing: tickets for one event (the same title,

@@ -560,6 +560,35 @@ describe("homeCorrections", () => {
   });
 });
 
+describe("outings during a trip abroad", () => {
+  const at = "2026-11-01T12:00:00Z";
+  const trip = { id: "crete", title: "Crete", start: "2024-03-30", end: "2024-04-13", ownerUid: "u1", sharedWith: [], createdAt: at, updatedAt: at };
+  const london = [{ city: "London", country: "GB" }];
+  const out = { type: "flight" as const, title: "Out", start: "2024-03-30T07:00:00+00:00", end: "2024-03-30T13:00:00+03:00", origin: { name: "Gatwick", code: "LGW", city: "London", country: "GB" }, destination: { name: "Heraklion", code: "HER", city: "Heraklion", country: "GR" } };
+  const stay = { type: "lodging" as const, title: "Mitsis Laguna", start: "2024-03-30T15:00:00+03:00", end: "2024-04-13T11:00:00+03:00", destination: { name: "Mitsis Laguna", city: "Anissaras", country: "GR" } };
+  const back = { type: "flight" as const, title: "Back", start: "2024-04-13T14:00:00+03:00", end: "2024-04-13T16:00:00+01:00", origin: { name: "Heraklion", code: "HER", city: "Heraklion", country: "GR" }, destination: { name: "Gatwick", code: "LGW", city: "London", country: "GB" } };
+
+  it("joins a restaurant booked at a resort in another town of the country the trip is in", () => {
+    const dinner = { type: "activity" as const, title: "Cretan à la carte tavern", start: "2024-04-02T19:30:00+03:00", destination: { name: "Cretan tavern", city: "Hersonissos", country: "GR" } };
+    expect(findTripForBooking([trip], () => [out, stay, back], [dinner], london)?.id).toBe("crete");
+  });
+
+  it("does not join a dinner in a country the trip has already left", () => {
+    const athens = { type: "lodging" as const, title: "Athens hotel", start: "2025-02-01T15:00:00+02:00", end: "2025-02-03T11:00:00+02:00", destination: { name: "Hotel", city: "Athens", country: "GR" } };
+    const toParis = { type: "flight" as const, title: "To Paris", start: "2025-02-03T14:00:00+02:00", end: "2025-02-03T16:30:00+01:00", origin: { name: "Athens", code: "ATH", city: "Athens", country: "GR" }, destination: { name: "CDG", code: "CDG", city: "Paris", country: "FR" } };
+    const later = { ...trip, id: "later", start: "2025-02-01", end: "2025-02-08" };
+    const dinner = { type: "activity" as const, title: "Dinner", start: "2025-02-05T20:00:00+02:00", destination: { name: "Taverna", city: "Thessaloniki", country: "GR" } };
+    expect(findTripForBooking([later], () => [athens, toParis], [dinner], london)).toBeUndefined();
+  });
+
+  it("keeps a day out in another town of the home country apart from a trip from home", () => {
+    const brighton = { ...trip, id: "brighton", start: "2026-06-01", end: "2026-06-03" };
+    const train = { type: "train" as const, title: "Train", start: "2026-06-01T09:00:00+01:00", end: "2026-06-01T10:00:00+01:00", origin: { name: "Victoria", city: "London", country: "GB" }, destination: { name: "Brighton", city: "Brighton", country: "GB" } };
+    const show = { type: "activity" as const, title: "Show", start: "2026-06-02T19:30:00+01:00", destination: { name: "Theatre", city: "Hove", country: "GB" } };
+    expect(findTripForBooking([brighton], () => [train], [show], london)).toBeUndefined();
+  });
+});
+
 describe("towns written differently", () => {
   const at = "2026-11-01T12:00:00Z";
   const trip = { id: "t", title: "Sweden", start: "2026-08-15", end: "2026-08-23", ownerUid: "u1", sharedWith: [], createdAt: at, updatedAt: at };

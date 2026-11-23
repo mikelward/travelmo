@@ -1327,7 +1327,11 @@ when it happens where the travel has taken someone at the time, other than
 the home of its day (or, with home unknown, where the travel sets off
 from): before the first journey leaves, where it leaves from; between
 journeys, where the last one arrived; after the last, where it arrived; or
-the town of a stay (`onTheWay`). An outing with no time of its own
+the town of a stay (`onTheWay`). Abroad, the country is enough: a dinner at
+a resort down the coast from the airport a flight lands at, while the trip
+is in that country, joins it (a Crete holiday's restaurant bookings are one
+trip, not seven); in the home country only the same town counts, so a show
+in Hove is not part of a train from London to Brighton. An outing with no time of its own
 (`isUntimed`) is on all its day, so a ticket for the day a flight lands
 comes after it, and one for the day a flight leaves before it. Direction and time matter: a ticket in
 Stockholm joins the flight there before it and a return flight booked alone
