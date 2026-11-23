@@ -367,6 +367,10 @@
       booking line, with Remove.
 - [x] Loyalty balances and status from travel programs' statement emails
       (Emerald Club, MileagePlus), only from travel companies' domains.
+- [ ] "Never import this sender" on an imported booking (web and
+      Android), beside "Always import this sender": stops future imports
+      from it and offers to remove what it already imported (a weekly kids'
+      class is no trip).
 
 ## Decisions needing review
 

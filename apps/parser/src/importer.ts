@@ -5,6 +5,7 @@ import {
   compareInstants,
   courseName,
   findTripForBooking,
+  outingRuns,
   isTransfer,
   transferTitle,
   cancels,
@@ -439,27 +440,38 @@ export async function importMessage(
   // the forwarding block) is learnable, and two alike may be one booking.
   const isEmail = source === "gmail" || source === "forward";
   const sender = isEmail ? senderDomain(message.from) : undefined;
-  let filed;
+  // Outings on days apart (a weekly class booked for a term) are filed run
+  // by run, each a day out of its own (outingRuns); their ids stay those of
+  // the email's whole list, so a re-import finds them again. Only an
+  // email's: a calendar event's record names the one trip its bookings are
+  // in, for the change or cancellation that replaces or removes them.
+  const runs = isEmail ? outingRuns(booking.segments) : [booking.segments];
+  const filings: Filed[] = [];
   try {
-    filed = await fileBooking(
-      uid,
-      {
-        generation,
-        sourceId: message.id,
-        source,
-        label: message.subject,
-        segments: booking.segments,
-        ...(source === "gmail" ? { gmailMessageIds: [message.id] } : {}),
-        ...(sender ? { sender } : {}),
-        ...(isEmail && sent ? { sentAt: sent } : {}),
-        // Events of a calendar are one list with an id each: two alike are
-        // two reservations. Emails are not; one booking is often confirmed
-        // twice.
-        ...(isEmail ? {} : { distinctWithinSource: true }),
-        ...(options.consumed ? { consumed: options.consumed } : {}),
-      },
-      deps,
-    );
+    for (const run of runs) {
+      filings.push(
+        await fileBooking(
+          uid,
+          {
+            generation,
+            sourceId: message.id,
+            source,
+            label: message.subject,
+            segments: run,
+            ...(runs.length > 1 ? { indexes: run.map((s) => booking.segments.indexOf(s)) } : {}),
+            ...(source === "gmail" ? { gmailMessageIds: [message.id] } : {}),
+            ...(sender ? { sender } : {}),
+            ...(isEmail && sent ? { sentAt: sent } : {}),
+            // Events of a calendar are one list with an id each: two alike
+            // are two reservations. Emails are not; one booking is often
+            // confirmed twice.
+            ...(isEmail ? {} : { distinctWithinSource: true }),
+            ...(options.consumed ? { consumed: options.consumed } : {}),
+          },
+          deps,
+        ),
+      );
+    }
   } catch (error) {
     // The user deleted all their trips while this ran: nothing is filed
     // or recorded, and the next import reads the email again.
@@ -467,7 +479,11 @@ export async function importMessage(
     log("import_superseded", { uid, messageId: message.id });
     return "skipped";
   }
-  const { tripId, segmentIds, duplicates, timestamp, matched } = filed;
+  const tripId = filings.find((f) => f.tripId)?.tripId;
+  const segmentIds = filings.flatMap((f) => f.segmentIds);
+  const duplicates = filings.reduce((n, f) => n + f.duplicates, 0);
+  const matched = filings.flatMap((f) => f.matched);
+  const timestamp = filings[filings.length - 1]!.timestamp;
   for (const id of matched) options.consumed?.add(id);
   await save(
     record("imported", {
@@ -727,6 +743,9 @@ export type BookingToFile = {
   label?: string;
   source: Exclude<SegmentSource, "manual">;
   segments: readonly ExtractedSegment[];
+  // Each segment's place in the source's whole list, when this is only part
+  // of it (outingRuns), for its id; its place here otherwise.
+  indexes?: readonly number[];
   gmailMessageIds?: string[];
   sender?: string;
   // When the source was sent (an email's Date), if known.
@@ -1071,7 +1090,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
           !(other.sources ?? []).some((r) => r.kind === ref.kind && r.id === ref.id) &&
           !(booking.gmailMessageIds ?? []).some((m) => other.gmailMessageIds.includes(m)));
     const fresh = booking.segments
-      .map((segment, index) => ({ segment, id: `${booking.sourceId}-${index}` }))
+      .map((segment, index) => ({ segment, id: `${booking.sourceId}-${booking.indexes?.[index] ?? index}` }))
       .filter(({ segment, id }) => {
         // One event confirmed by two emails under two references is one
         // booking too (sameEvent).

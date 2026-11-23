@@ -4,6 +4,7 @@ import {
   homeTimeline,
   isCancelled,
   liveSegments,
+  outingRuns,
   bookedDateRange,
   segmentDateRange,
   segmentSources,
@@ -107,7 +108,12 @@ export function planRegroup(
     units.set(key, unit);
   }
   const first = (unit: Unit) => unit.segments.reduce((a, b) => (compareInstants(b.start, a.start) < 0 ? b : a)).start;
+  // Outings one email booked on days apart (a weekly class for a term) are
+  // filed run by run, as an import files them (outingRuns); a calendar
+  // event's stay together, as its record names one trip.
+  const fromCalendar = (unit: Unit) => unit.segments.some((s) => segmentSources(s).some((ref) => ref.kind === "ics"));
   const ordered = [...units.values()]
+    .flatMap((unit) => (fromCalendar(unit) ? [unit.segments] : outingRuns(unit.segments)).map((segments, i) => ({ ...unit, key: i === 0 ? unit.key : `${unit.key}#${i}`, segments })))
     .map((unit) => ({ ...unit, segments: unit.segments.slice().sort((a, b) => compareInstants(a.start, b.start)) }))
     .sort((a, b) => compareInstants(first(a), first(b)) || a.key.localeCompare(b.key));
 
