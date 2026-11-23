@@ -442,8 +442,8 @@ jobs:
           fi
           node scripts/publish-play-listing.mjs
   # A push to main deploys what it changed: the Firestore rules and indexes,
-  # the parser (built on Cloud Build, then a new Cloud Run revision) and the
-  # forwarding Worker on Cloudflare (README "Continuous deployment"). Google
+  # the parser (built on Cloud Build, then a new Cloud Run revision), its
+  # Cloud Scheduler jobs and the forwarding Worker on Cloudflare (README "Continuous deployment"). Google
   # Cloud is reached through Workload Identity Federation, so no key is
   # stored; deploy/github-deploy.sh sets it up. Like Publish, a part whose
   # variables or secret aren't set yet warns and is skipped rather than
@@ -477,6 +477,7 @@ jobs:
       PARSER_IMAGE: ${{ vars.PARSER_IMAGE }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       PARSER_URL: ${{ vars.PARSER_URL }}
+      SCHEDULER_SA: ${{ vars.SCHEDULER_SA }}
       HAS_CLOUDFLARE_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v5
@@ -501,12 +502,12 @@ jobs:
           AFTER_SHA: ${{ github.sha }}
         run: scripts/deploy-plan.sh
       - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3.0.0
-        if: steps.plan.outputs.firestore == 'true' || steps.plan.outputs.parser == 'true'
+        if: steps.plan.outputs.firestore == 'true' || steps.plan.outputs.parser == 'true' || steps.plan.outputs.scheduler == 'true'
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
       - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db  # v3.0.1
-        if: steps.plan.outputs.parser == 'true'
+        if: steps.plan.outputs.parser == 'true' || steps.plan.outputs.scheduler == 'true'
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320  # v4.4.0
         if: steps.plan.outputs.firestore == 'true' || steps.plan.outputs.worker == 'true'
       # No dependency cache: a job holding deploy credentials restores
@@ -532,6 +533,16 @@ jobs:
           echo "Deploying $image to Cloud Run service parser in $GCP_REGION."
           gcloud run deploy parser --project="$GCP_PROJECT" --region="$GCP_REGION" --image="$image" --quiet
           echo "Deployed the parser at $GITHUB_SHA."
+      # After the parser, so a job never calls a route its revision lacks.
+      # The script creates a missing job and updates an existing one in
+      # place, so a rerun changes nothing; it calls the parser at PARSER_URL
+      # as SCHEDULER_SA, which the deployer may act as (deploy/github-deploy.sh).
+      - name: Update the Cloud Scheduler jobs
+        if: steps.plan.outputs.scheduler == 'true'
+        run: |
+          set -euo pipefail
+          PROJECT="$GCP_PROJECT" LOCATION="$GCP_REGION" deploy/scheduler.sh
+          echo "Updated the Cloud Scheduler jobs at $GITHUB_SHA."
       # After the parser, which lets in the accounts from before approvals
       # as its new revision starts, before it serves (SPEC "Access"): the
       # rules then never ask for an approval that is not yet recorded, and a
@@ -569,4 +580,5 @@ jobs:
           RECORD_FIRESTORE: ${{ steps.plan.outputs.record_firestore }}
           RECORD_PARSER: ${{ steps.plan.outputs.record_parser }}
           RECORD_WORKER: ${{ steps.plan.outputs.record_worker }}
+          RECORD_SCHEDULER: ${{ steps.plan.outputs.record_scheduler }}
         run: scripts/deploy-record.sh

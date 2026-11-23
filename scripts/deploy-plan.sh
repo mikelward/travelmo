@@ -8,13 +8,15 @@
 # not recorded, so it deploys once configured. A run whose push main has
 # since moved past deploys and records nothing: its check can finish after
 # a newer push's, and the newer run measures from the tags anyway. Rules
-# due while the parser is due but skipped wait for it, unrecorded.
+# and Cloud Scheduler jobs due while the parser is due but skipped wait
+# for it, unrecorded. The scheduler jobs, added to CI after the rest, are
+# skipped with a notice rather than a warning while unconfigured.
 #
 # Inputs (environment): AFTER_SHA (this push), GITHUB_REPOSITORY,
 # GITHUB_OUTPUT, GH_TOKEN for `gh api`, and the deploy settings
 # (GCP_PROJECT, GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_DEPLOY_SERVICE_ACCOUNT,
 # GCP_REGION, PARSER_IMAGE, CLOUDFLARE_ACCOUNT_ID, PARSER_URL,
-# HAS_CLOUDFLARE_TOKEN). Tested by scripts/deploy_plan_test.py.
+# HAS_CLOUDFLARE_TOKEN, SCHEDULER_SA). Tested by scripts/deploy_plan_test.py.
 set -euo pipefail
 if ! tip=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha); then
   echo "::warning::Couldn't read main's tip; going on as if this push is it."
@@ -22,7 +24,7 @@ if ! tip=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha); then
 fi
 if [ "$tip" != "$AFTER_SHA" ] && git merge-base --is-ancestor "$AFTER_SHA" "$tip" 2>/dev/null; then
   echo "Main has moved on to $tip, whose run deploys this push's changes too: deploying nothing."
-  for part in firestore parser worker; do
+  for part in firestore parser worker scheduler; do
     echo "$part=false" >> "$GITHUB_OUTPUT"
     echo "record_$part=false" >> "$GITHUB_OUTPUT"
   done
@@ -37,6 +39,7 @@ missing() {
   printf '%s' "$out"
 }
 # decide <part> <label> <path pattern> <missing settings> [<held by>]
+#   [<annotation for missing settings>, warning by default]
 # Sets held_<part>=true when the part is due but skipped. A part held by
 # another (the rules by the parser) waits, unrecorded, while that one is.
 decide() {
@@ -60,7 +63,7 @@ decide() {
     echo "$1=false" >> "$GITHUB_OUTPUT"
     echo "record_$1=true" >> "$GITHUB_OUTPUT"
   elif [ -n "$4" ]; then
-    echo "::warning::Skipping $2 ($reason): set$4 in the production environment (README 'Continuous deployment')."
+    echo "::${6:-warning}::Skipping $2 ($reason): set$4 in the production environment (README 'Continuous deployment')."
     printf -v "$held_var" '%s' true
     echo "$1=false" >> "$GITHUB_OUTPUT"
     echo "record_$1=false" >> "$GITHUB_OUTPUT"
@@ -90,3 +93,9 @@ decide firestore "the Firestore rules and indexes" \
 worker_missing=$(missing CLOUDFLARE_ACCOUNT_ID PARSER_URL)
 [ "$HAS_CLOUDFLARE_TOKEN" = true ] || worker_missing="$worker_missing CLOUDFLARE_API_TOKEN"
 decide worker "the forwarding Worker" '^apps/inbound/' "$worker_missing"
+# The jobs call the parser's routes, so a job for a route the same push
+# adds goes out after the parser. Notice, not warning: setups from before
+# CI ran deploy/scheduler.sh lack SCHEDULER_SA until github-deploy.sh is
+# rerun (README "Continuous deployment").
+decide scheduler "the Cloud Scheduler jobs" '^deploy/scheduler\.sh$' \
+  "$gcp_missing$(missing GCP_REGION PARSER_URL SCHEDULER_SA)" "$parser_hold" notice

@@ -363,7 +363,9 @@ One Google Cloud project holds everything.
    minute (check-in reminders go even without `AEROAPI_KEY`). Three jobs per billing account
    are free; each further one costs about ten cents a month. Deploy the
    Firestore indexes first: the flight status job queries bookings by type
-   and start across trips.
+   and start across trips. Once continuous deployment is set up (below,
+   including `SCHEDULER_SA`), CI reruns this script whenever it changes, so
+   a job added here reaches production without a step by hand.
 6. **Alerts**: `PROJECT=… CHANNEL=<notification channel> deploy/monitoring.sh`
    creates two alerting policies from `deploy/alerts/`: a failed watch renewal
    (the parser's `renew_watch_failed` log line) and a dead-lettered
@@ -442,11 +444,14 @@ has already moved past deploys nothing; the newer run carries its changes:
 | `firestore.rules`, `firestore.indexes.json`, `firebase.json` | `firebase deploy --only firestore` |
 | `apps/parser/`, `packages/core/`, the lockfile or the root build files | a Cloud Build image tagged with the commit, then a new revision of the `parser` Cloud Run service |
 | `apps/inbound/` | the forwarding Worker, with `wrangler deploy` |
+| `deploy/scheduler.sh` | the Cloud Scheduler jobs, with that script (after the parser) |
 
-The parser deploys before the rules, and rules due while a due parser is
-skipped for missing settings wait for it (unrecorded), since rules can rely
-on what the parser does as it starts (the accounts it lets in, SPEC
-"Access"); a failed parser deploy stops the job before the rules.
+The parser deploys before the rules and the scheduler jobs, and either due
+while a due parser is skipped for missing settings waits for it
+(unrecorded), since rules can rely on what the parser does as it starts
+(the accounts it lets in, SPEC "Access") and a new job can call a route
+the parser has only just gained; a failed parser deploy stops the job
+before them.
 
 The web app needs nothing here: App Hosting builds `main` itself. The parser's
 deploy names only the image, so the service keeps its environment variables,
@@ -455,7 +460,8 @@ secrets and service account; change those with `gcloud run services update`.
 Set it up once:
 
 1. `PROJECT=… REGION=<the parser's region> REPO=<owner>/<name>
-   PARSER_SA=<the parser's service account> deploy/github-deploy.sh`
+   PARSER_SA=<the parser's service account>
+   SCHEDULER_SA=<the scheduler jobs' service account> deploy/github-deploy.sh`
    creates a `github-deployer` service account and a Workload Identity pool
    whose GitHub provider accepts only this repository's `ci.yml` running on
    `main`, so no key is stored anywhere. The deployer gets only what the
@@ -463,8 +469,10 @@ Set it up once:
    `<project>-deploy-source`, that deletes uploads after a week) and reading
    their logs, running them as the project's default Cloud Build service
    account, reading the parser's image repository,
-   deploying Cloud Run revisions as the parser's service account and no
-   other, and deploying Firestore rules and indexes. A run that `main` has
+   deploying Cloud Run revisions as the parser's service account,
+   creating and updating Cloud Scheduler jobs that call as the scheduler's
+   service account (acting as no other account), and deploying Firestore
+   rules and indexes. A run that `main` has
    moved past deploys nothing, so a slow older run never rolls back a newer
    deploy, and `.gcloudignore` keeps the job's credentials file out of the
    build upload. It prints the
@@ -478,7 +486,11 @@ Set it up once:
    trailing slash: the committed `wrangler.toml` holds only a placeholder,
    and every deploy replaces its `[vars]`), and the secret
    `CLOUDFLARE_API_TOKEN`, a token made from the "Edit Cloudflare Workers"
-   template and limited to that account.
+   template and limited to that account. For the Cloud Scheduler jobs, add
+   `SCHEDULER_SA` as printed (it also needs `PARSER_URL`). A setup from
+   before CI kept the jobs in step reruns the script once with
+   `SCHEDULER_SA` and adds that variable; until then the jobs are skipped
+   with a notice and stay as `deploy/scheduler.sh` last left them.
 
 A part whose settings are missing is skipped with a warning rather than
 failing the job, and its tag stays put, so the first push after its
@@ -491,7 +503,8 @@ Cost: the parser's build runs on Cloud Build's default `e2-standard-2`
 machine, whose monthly free allowance of build-minutes (2,500 at the time of
 writing) covers a few minutes per change many times over. Each build adds an
 image to Artifact Registry, so keep the cleanup policy from step 3. The
-Firestore and Worker deploys are free.
+Firestore, Worker and Cloud Scheduler deploys are free: the jobs cost
+nothing beyond themselves (about ten cents a month each past three).
 
 ## Costs
 

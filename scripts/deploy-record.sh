@@ -5,7 +5,8 @@
 # deploys again next time, which is safe.
 #
 # Inputs (environment): AFTER_SHA, GITHUB_REPOSITORY, GH_TOKEN for
-# `gh api`, and RECORD_FIRESTORE, RECORD_PARSER, RECORD_WORKER. Tested by
+# `gh api`, and RECORD_FIRESTORE, RECORD_PARSER, RECORD_WORKER,
+# RECORD_SCHEDULER. Tested by
 # scripts/deploy_plan_test.py.
 set -euo pipefail
 record() {
@@ -22,3 +23,4 @@ record() {
 record firestore "$RECORD_FIRESTORE"
 record parser "$RECORD_PARSER"
 record worker "$RECORD_WORKER"
+record scheduler "$RECORD_SCHEDULER"

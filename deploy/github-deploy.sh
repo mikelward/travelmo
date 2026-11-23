@@ -7,10 +7,14 @@
 # rerun after changing a value.
 #
 #   PROJECT=my-project REGION=us-central1 REPO=owner/name \
-#   PARSER_SA=parser@my-project.iam.gserviceaccount.com deploy/github-deploy.sh
+#   PARSER_SA=parser@my-project.iam.gserviceaccount.com \
+#   SCHEDULER_SA=scheduler@my-project.iam.gserviceaccount.com deploy/github-deploy.sh
 #
 # PARSER_SA is the service account the parser runs as (README "Deploy",
 # step 2): Cloud Run lets a deploy keep it only if the deployer may act as it.
+# SCHEDULER_SA is the one the Cloud Scheduler jobs call the parser as (step
+# 5): the deployer keeps them in step with deploy/scheduler.sh, and a job
+# may name it only if the deployer may act as it.
 # It prints the variables to set in the repository's `production`
 # environment (README "Continuous deployment").
 set -euo pipefail
@@ -19,6 +23,7 @@ set -euo pipefail
 : "${REGION:?set REGION to the region the parser runs in}"
 : "${REPO:?set REPO to the GitHub repository, as owner/name}"
 : "${PARSER_SA:?set PARSER_SA to the service account the parser runs as}"
+: "${SCHEDULER_SA:?set SCHEDULER_SA to the service account the Cloud Scheduler jobs call as}"
 DEPLOYER="${DEPLOYER:-github-deployer}"
 POOL="${POOL:-github}"
 PROVIDER="${PROVIDER:-github}"
@@ -33,7 +38,7 @@ DEPLOYER_SA="$DEPLOYER@$PROJECT.iam.gserviceaccount.com"
 $gcloud services enable iam.googleapis.com iamcredentials.googleapis.com \
   sts.googleapis.com cloudbuild.googleapis.com run.googleapis.com \
   artifactregistry.googleapis.com firebaserules.googleapis.com \
-  firestore.googleapis.com logging.googleapis.com
+  firestore.googleapis.com logging.googleapis.com cloudscheduler.googleapis.com
 
 if ! $gcloud iam service-accounts describe "$DEPLOYER_SA" >/dev/null 2>&1; then
   $gcloud iam service-accounts create "$DEPLOYER" \
@@ -92,11 +97,12 @@ $gcloud storage buckets add-iam-policy-binding "gs://$SOURCE_BUCKET" \
 #   run.developer                  deploy a new revision; no IAM changes
 #   firebaserules.admin            release firestore.rules
 #   datastore.indexAdmin           deploy firestore.indexes.json
+#   cloudscheduler.admin           create and update the scheduler jobs
 # The image is pushed by Cloud Build's own service account, as in a deploy
 # by hand; the deployer only reads it (below).
 for role in roles/cloudbuild.builds.editor roles/serviceusage.serviceUsageConsumer \
     roles/logging.viewer roles/run.developer roles/firebaserules.admin \
-    roles/datastore.indexAdmin; do
+    roles/datastore.indexAdmin roles/cloudscheduler.admin; do
   $gcloud projects add-iam-policy-binding "$PROJECT" \
     --member="serviceAccount:$DEPLOYER_SA" --role="$role" --condition=None >/dev/null
 done
@@ -105,16 +111,16 @@ done
 # the parser's image repository (and no other).
 $gcloud artifacts repositories add-iam-policy-binding "$AR_REPOSITORY" --location="$REGION" \
   --member="serviceAccount:$DEPLOYER_SA" --role=roles/artifactregistry.reader >/dev/null
-# A new revision runs as the parser's service account, and a build runs as
-# the project's default Cloud Build service account (the Compute Engine
-# default in projects made since 2024), so the deployer may act as those
-# two; it may act as no other. The workflow names no build account, so its
+# A new revision runs as the parser's service account, a build runs as the
+# project's default Cloud Build service account (the Compute Engine default
+# in projects made since 2024), and the scheduler jobs call as SCHEDULER_SA,
+# so the deployer may act as those three; it may act as no other. The workflow names no build account, so its
 # builds run as the project's default; read it here rather than guess.
 BUILD_SA=$($gcloud builds get-default-service-account --format='value(serviceAccountEmail)')
 BUILD_SA="${BUILD_SA##*/}"
 # The legacy Cloud Build account (<number>@cloudbuild.gserviceaccount.com) is
 # Google-owned and takes no IAM bindings; submitting builds as it needs none.
-sas=("$PARSER_SA")
+sas=("$PARSER_SA" "$SCHEDULER_SA")
 case "$BUILD_SA" in
   *@cloudbuild.gserviceaccount.com) echo "Builds run as the legacy Cloud Build account $BUILD_SA, which needs no binding." ;;
   *) sas+=("$BUILD_SA") ;;
@@ -124,10 +130,11 @@ for sa in "${sas[@]}"; do
     --member="serviceAccount:$DEPLOYER_SA" --role=roles/iam.serviceAccountUser >/dev/null
 done
 
-echo "Deployer $DEPLOYER_SA, impersonable from $REPO's ci.yml on main; acts as $PARSER_SA and $BUILD_SA"
+echo "Deployer $DEPLOYER_SA, impersonable from $REPO's ci.yml on main; acts as $PARSER_SA, $SCHEDULER_SA and $BUILD_SA"
 echo "GCP_PROJECT=$PROJECT"
 echo "GCP_REGION=$REGION"
 echo "GCP_WORKLOAD_IDENTITY_PROVIDER=$POOL_ID/providers/$PROVIDER"
 echo "GCP_DEPLOY_SERVICE_ACCOUNT=$DEPLOYER_SA"
 echo "GCP_SOURCE_BUCKET=$SOURCE_BUCKET"
 echo "PARSER_IMAGE=$REGION-docker.pkg.dev/$PROJECT/$AR_REPOSITORY/parser"
+echo "SCHEDULER_SA=$SCHEDULER_SA"

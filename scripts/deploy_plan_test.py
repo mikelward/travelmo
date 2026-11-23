@@ -41,7 +41,10 @@ CONFIGURED = {
     "CLOUDFLARE_ACCOUNT_ID": "account",
     "PARSER_URL": "https://parser.example",
     "HAS_CLOUDFLARE_TOKEN": "true",
+    "SCHEDULER_SA": "scheduler",
 }
+
+PARTS = ("firestore", "parser", "worker", "scheduler")
 
 # The stand-in gh: `gh api repos/.../commits/main` prints $FAKE_TIP (or
 # fails when FAKE_TIP_FAILS is set); every call is logged to $GH_LOG, and
@@ -114,6 +117,7 @@ class DeployPlanTest(unittest.TestCase):
             "RECORD_FIRESTORE": outputs["record_firestore"],
             "RECORD_PARSER": outputs["record_parser"],
             "RECORD_WORKER": outputs["record_worker"],
+            "RECORD_SCHEDULER": outputs.get("record_scheduler", "false"),
         }
         run = subprocess.run([str(RECORD)], cwd=self.repo, env=env, capture_output=True, text=True)
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
@@ -121,23 +125,54 @@ class DeployPlanTest(unittest.TestCase):
 
     def test_a_part_never_deployed_deploys_and_is_recorded(self):
         out = self.plan(self.base)
-        for part in ("firestore", "parser", "worker"):
+        for part in PARTS:
             self.assertEqual(out[part], "true", part)
             self.assertEqual(out[f"record_{part}"], "true", part)
 
     def test_a_changed_part_deploys_and_an_unchanged_one_is_only_recorded(self):
-        for part in ("firestore", "parser", "worker"):
+        for part in PARTS:
             self.tag(part, self.base)
         after = self.commit({"apps/parser/index.ts": "x"})
         out = self.plan(after)
         self.assertEqual((out["parser"], out["record_parser"]), ("true", "true"))
         self.assertEqual((out["firestore"], out["record_firestore"]), ("false", "true"))
         self.assertEqual((out["worker"], out["record_worker"]), ("false", "true"))
+        self.assertEqual((out["scheduler"], out["record_scheduler"]), ("false", "true"))
+
+    def test_a_changed_job_list_updates_the_scheduler_jobs(self):
+        for part in PARTS:
+            self.tag(part, self.base)
+        after = self.commit({"deploy/scheduler.sh": "x"})
+        out = self.plan(after)
+        self.assertEqual((out["scheduler"], out["record_scheduler"]), ("true", "true"))
+        self.assertEqual((out["parser"], out["record_parser"]), ("false", "true"))
+
+    def test_scheduler_jobs_without_their_settings_are_skipped_with_a_notice(self):
+        # Setups from before CI ran deploy/scheduler.sh lack SCHEDULER_SA;
+        # they stay green, and the jobs update once it is set.
+        for part in PARTS:
+            self.tag(part, self.base)
+        after = self.commit({"deploy/scheduler.sh": "x"})
+        out = self.plan(after, settings={**CONFIGURED, "SCHEDULER_SA": ""})
+        self.assertEqual((out["scheduler"], out["record_scheduler"]), ("false", "false"))
+        self.assertIn("::notice::Skipping the Cloud Scheduler jobs", self.log)
+        self.assertIn("SCHEDULER_SA", self.log)
+        self.assertNotIn("::warning::", self.log)
+        out = self.plan(after)
+        self.assertEqual((out["scheduler"], out["record_scheduler"]), ("true", "true"))
+
+    def test_scheduler_jobs_wait_for_a_due_parser_that_cannot_deploy(self):
+        # A new job calls a route the parser of the same push adds.
+        for part in PARTS:
+            self.tag(part, self.base)
+        after = self.commit({"deploy/scheduler.sh": "x", "apps/parser/index.ts": "x"})
+        out = self.plan(after, settings={**CONFIGURED, "PARSER_IMAGE": ""})
+        self.assertEqual((out["scheduler"], out["record_scheduler"]), ("false", "false"))
 
     def test_changes_since_the_tag_count_not_just_this_push(self):
         # A parser change in an earlier push whose run deployed nothing (it
         # was superseded, or failed) still deploys with a later README push.
-        for part in ("firestore", "parser", "worker"):
+        for part in PARTS:
             self.tag(part, self.base)
         self.commit({"apps/parser/index.ts": "x"})
         after = self.commit({"README.md": "later"})
@@ -161,7 +196,7 @@ class DeployPlanTest(unittest.TestCase):
     def test_rules_wait_for_a_due_parser_that_cannot_deploy(self):
         # The rules rely on the parser of the same push (SPEC "Access"), so
         # they never go out while it is held back.
-        for part in ("firestore", "parser", "worker"):
+        for part in PARTS:
             self.tag(part, self.base)
         after = self.commit({"firestore.rules": "x", "apps/parser/index.ts": "x"})
         out = self.plan(after, settings={**CONFIGURED, "PARSER_IMAGE": ""})
@@ -172,7 +207,7 @@ class DeployPlanTest(unittest.TestCase):
         self.assertEqual((out["parser"], out["firestore"]), ("true", "true"))
 
     def test_rules_alone_deploy_when_the_parser_is_unchanged(self):
-        for part in ("firestore", "parser", "worker"):
+        for part in PARTS:
             self.tag(part, self.base)
         after = self.commit({"firestore.rules": "x"})
         out = self.plan(after, settings={**CONFIGURED, "PARSER_IMAGE": ""})
@@ -183,7 +218,7 @@ class DeployPlanTest(unittest.TestCase):
         stray = self.commit({"apps/parser/index.ts": "abandoned"})
         self.git("reset", "-q", "--hard", self.base)
         after = self.commit({"README.md": "rewritten"})
-        for part in ("firestore", "parser", "worker"):
+        for part in PARTS:
             self.tag(part, stray)
         out = self.plan(after)
         self.assertEqual(out["firestore"], "true")
@@ -192,7 +227,7 @@ class DeployPlanTest(unittest.TestCase):
     def test_a_large_diff_still_finds_the_change(self):
         # grep -q would quit at the first match, git diff would die of
         # SIGPIPE, and pipefail would read that as no change.
-        for part in ("firestore", "parser", "worker"):
+        for part in PARTS:
             self.tag(part, self.base)
         # The matching file sorts first, and the rest are far more than a
         # pipe's buffer, so git diff is still writing when grep could stop.
@@ -209,7 +244,9 @@ class DeployPlanTest(unittest.TestCase):
     def test_record_moves_only_the_recorded_parts(self):
         calls = self.record(self.base, {
             "record_firestore": "true", "record_parser": "false", "record_worker": "true",
+            "record_scheduler": "true",
         })
+        self.assertIn("refs/tags/deployed/scheduler", calls)
         self.assertIn("refs/tags/deployed/firestore", calls)
         self.assertIn("refs/tags/deployed/worker", calls)
         self.assertNotIn("deployed/parser", calls)
