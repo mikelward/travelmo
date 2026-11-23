@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeDeletedTrips, describeRegroup } from "./regroup";
+import { describeDeletedTrips, describeRegroup } from "./tripActions";
 
 describe("describeRegroup", () => {
   it("says what changed", () => {

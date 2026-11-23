@@ -47,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.KeyboardType
@@ -71,13 +72,15 @@ import kotlinx.coroutines.launch
 private const val REMINDER_TOKEN = "settings/reminders/email"
 private const val PUSH_TOKEN = "settings/reminders/push"
 private const val DELETE_ACCOUNT_TOKEN = "settings/account/delete"
+private const val REGROUP_TOKEN = "settings/trips/regroup"
+private const val DELETE_TRIPS_TOKEN = "settings/trips/delete"
 private const val ADD_EMAIL_TOKEN = "settings/emails/add"
 private const val REMOVE_EMAIL_TOKEN = "settings/emails/remove"
 
 /**
- * The account, reminders by email and as notifications on this phone, the
- * text size, the debug log, deleting the account and the build; the import settings are on
- * the web for now.
+ * The account, regrouping or deleting all trips, reminders by email and
+ * as notifications on this phone, the text size, the debug log, deleting
+ * the account and the build; the other import settings are on the web for now.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -118,6 +121,7 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
             OutlinedButton(onClick = { scope.launch { account.signOut(context) } }, modifier = Modifier.padding(top = 12.dp)) {
                 Text(stringResource(R.string.sign_out))
             }
+            TripsSection(viewModel)
             EmailAddressesSection(user, viewModel)
             Text(stringResource(R.string.reminders), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
             Text(stringResource(R.string.reminders_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -276,6 +280,70 @@ private fun EmailAddressesSection(user: SignedIn, viewModel: TripsViewModel) {
     if (adding == null || adding is Outcome.Done) sentTo?.let { Text(stringResource(R.string.email_link_sent, it), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp)) }
     for (outcome in listOf(adding, removing)) {
         (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+    }
+}
+
+/**
+ * Settings' "Trips", as on the web: "Regroup trips" files every booking
+ * again with the grouping imports use now, and "Delete all trips" asks
+ * first, with how many will go, before deleting them so the user can import
+ * again. A build with no parser address says to use the web.
+ */
+@Composable
+private fun TripsSection(viewModel: TripsViewModel) {
+    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val notice by viewModel.tripNotice.collectAsStateWithLifecycle()
+    val own by viewModel.ownTripCount.collectAsStateWithLifecycle()
+    val regrouping = outcomes[REGROUP_TOKEN]
+    val deleting = outcomes[DELETE_TRIPS_TOKEN]
+    val busy = regrouping is Outcome.Busy || deleting is Outcome.Busy
+    var confirming by remember { mutableStateOf(false) }
+    // A finished action is acknowledged so the next starts afresh; its line stays.
+    LaunchedEffect(regrouping) { if (regrouping is Outcome.Done) viewModel.outcomeSeen(REGROUP_TOKEN) }
+    LaunchedEffect(deleting) { if (deleting is Outcome.Done) viewModel.outcomeSeen(DELETE_TRIPS_TOKEN) }
+    Text(stringResource(R.string.trips_section), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(R.string.regroup_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (!viewModel.canRunTripActions) {
+        Text(stringResource(R.string.trips_on_web), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+        return
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+        OutlinedButton(
+            onClick = {
+                listOf(REGROUP_TOKEN, DELETE_TRIPS_TOKEN).forEach(viewModel::outcomeSeen)
+                viewModel.regroupTrips(REGROUP_TOKEN)
+            },
+            enabled = !busy,
+        ) { Text(stringResource(if (regrouping is Outcome.Busy) R.string.regrouping else R.string.regroup_trips)) }
+        OutlinedButton(
+            onClick = { confirming = true },
+            enabled = !busy,
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+        ) { Text(stringResource(if (deleting is Outcome.Busy) R.string.deleting else R.string.delete_all_trips)) }
+    }
+    notice?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp)) }
+    listOf(regrouping, deleting).filterIsInstance<Outcome.Failed>().lastOrNull()?.let {
+        Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+    }
+    if (confirming) {
+        AppAlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text(stringResource(R.string.delete_all_trips_title)) },
+            text = { Text(stringResource(R.string.delete_all_trips_confirm)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirming = false
+                        listOf(REGROUP_TOKEN, DELETE_TRIPS_TOKEN).forEach(viewModel::outcomeSeen)
+                        viewModel.deleteAllTrips(DELETE_TRIPS_TOKEN)
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) {
+                    Text(own?.let { pluralStringResource(R.plurals.delete_n_trips, it, it) } ?: stringResource(R.string.delete))
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirming = false }) { Text(stringResource(R.string.keep)) } },
+        )
     }
 }
 

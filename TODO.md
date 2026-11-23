@@ -250,9 +250,9 @@
       `effectiveHomes` and `HomeCorrection` are already in `:core`).
 - [x] Home, step 4: regroup existing trips under the new rule ("Regroup
       trips" in Settings on the web, `POST /trips/regroup`).
-- [ ] Android: a "Regroup trips" action in Settings, calling
+- [x] Android: a "Regroup trips" action in Settings, calling
       `POST /trips/regroup` as the web does.
-- [ ] Android: "Delete all trips" in Settings, calling
+- [x] Android: "Delete all trips" in Settings, calling
       `POST /trips/delete-all` and asking first, as the web does.
 - [ ] Finish a half-done account deletion: when the deletion marker exists
       but the sign-in account does not go (in production it once failed

@@ -42,6 +42,8 @@ import app.travelmo.data.FlightRefresh
 import app.travelmo.data.NoFlightRefresh
 import app.travelmo.data.NoAccessCheck
 import app.travelmo.data.NoAccountDeletion
+import app.travelmo.data.TripActions
+import app.travelmo.data.NoTripActions
 import app.travelmo.data.OwnProfile
 import app.travelmo.data.RideSettings
 import app.travelmo.data.TripStore
@@ -117,6 +119,8 @@ class TripsViewModel(
     private val accessCheck: AccessCheck = NoAccessCheck,
     /** The parser's linking of email addresses; none by default. */
     private val emailLinks: EmailLinks = NoEmailLinks,
+    /** The parser's regrouping and deleting of all trips; none by default. */
+    private val tripActions: TripActions = NoTripActions,
 ) : ViewModel() {
     /** The current instant, as pending email links are judged by. */
     fun now(): String = clock().toString()
@@ -430,6 +434,31 @@ class TripsViewModel(
         accountDeletion.deleteAccount()
         signOut()
     }
+
+    /** Whether this build can regroup or delete all trips here; without a parser address, Settings points to the web. */
+    val canRunTripActions: Boolean
+        get() = tripActions.available
+
+    private val _tripNotice = MutableStateFlow<String?>(null)
+
+    /** What the last trip action did, in a line, until the next one starts. */
+    val tripNotice: StateFlow<String?> = _tripNotice
+
+    /** Files every booking again with the grouping imports use now, as Settings on the web does. */
+    fun regroupTrips(token: String) = run(token, "regroupTrips") {
+        _tripNotice.value = null
+        _tripNotice.value = tripActions.regroup()
+    }
+
+    /** Deletes every trip the user owns, with its bookings, so they can import again. */
+    fun deleteAllTrips(token: String) = run(token, "deleteAllTrips") {
+        _tripNotice.value = null
+        _tripNotice.value = tripActions.deleteAll()
+    }
+
+    /** How many trips the user owns, for "Delete all trips" to say; null while they load. */
+    val ownTripCount: StateFlow<Int?> = trips.map { list -> list?.count { it.ownerUid == uid } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /** Whether this build can change the linked addresses here; without a parser address, Settings only lists them. */
     val canLinkEmails: Boolean

@@ -1,7 +1,6 @@
 import type { User } from "firebase/auth";
-import { linkRefusalText, refusalOf, type AccountAccess, type CalendarExport, type ForwardAddress } from "@travelmo/core";
+import { deleteAllTripsPath, linkRefusalText, refusalOf, regroupPath, type AccountAccess, type CalendarExport, type ForwardAddress, type RegroupResult } from "@travelmo/core";
 import type { CalendarResult } from "./ics";
-import type { RegroupResult } from "./regroup";
 import type { TripItResult } from "./tripit";
 
 export type BackfillStarted = {
@@ -56,7 +55,7 @@ export const api = {
   addEmail: (user: User, email: string) => post<{ email: string }>(user, "/emails/add", { email }),
   confirmEmail: (user: User, token: string) => post<{ email: string }>(user, "/emails/confirm", { token }),
   removeEmail: (user: User, email: string) => post<void>(user, "/emails/remove", { email }),
-  regroupTrips: (user: User) => post<RegroupResult>(user, "/trips/regroup"),
-  deleteAllTrips: (user: User) => post<{ trips: number }>(user, "/trips/delete-all"),
+  regroupTrips: (user: User) => post<RegroupResult>(user, regroupPath),
+  deleteAllTrips: (user: User) => post<{ trips: number }>(user, deleteAllTripsPath),
   refreshFlights: (user: User, tripId: string) => post<{ enabled: boolean; checked?: number }>(user, "/flights/refresh", { tripId }),
 };

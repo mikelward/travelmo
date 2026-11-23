@@ -1344,7 +1344,7 @@ else "Heathrow to London"; when a journey later joins it and the owner has
 not renamed it, it takes the name the whole trip would get ("New York"), as
 above.
 
-To start over instead, "Delete all trips" in Settings (`POST /trips/delete-all`,
+To start over instead, "Delete all trips" in Settings on the web and Android (`POST /trips/delete-all`,
 `apps/parser/src/tripsReset.ts`) deletes every trip the user owns, its
 bookings (with their ratings and favorites), every import record and every
 cancellation still waiting for its booking, in
@@ -1372,7 +1372,9 @@ read first is unchanged. Trips others share with the user, bookings the user add
 them, the travel profile, home corrections, connections and feeds stay.
 
 Trips filed before home was known are rebuilt on request ("Regroup trips"
-in Settings, `POST /trips/regroup`, `apps/parser/src/regroup.ts`), in the
+in Settings on the web and Android, `POST /trips/regroup`,
+`apps/parser/src/regroup.ts`; both say what it did in the words of
+`tripActions.ts` and its Kotlin twin), in the
 import's per-user transaction. "Import past bookings" does the same once
 it reaches the end of the mailbox, since it files bookings in the order
 their emails are read: a car hire read before its flight would otherwise

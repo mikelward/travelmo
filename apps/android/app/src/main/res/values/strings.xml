@@ -94,6 +94,18 @@
     <string name="booking_actions">Booking actions</string>
     <string name="edit">Edit</string>
     <string name="delete">Delete</string>
+    <string name="trips_section">Trips</string>
+    <string name="regroup_hint">Rebuilds your trips from your bookings, keeping days out at home separate from trips away.</string>
+    <string name="regroup_trips">Regroup trips</string>
+    <string name="regrouping">Regrouping…</string>
+    <string name="delete_all_trips">Delete all trips</string>
+    <string name="delete_all_trips_title">Delete all trips?</string>
+    <string name="delete_all_trips_confirm">Delete all your trips and their bookings? Your profile and connections stay. This cannot be undone.</string>
+    <string name="trips_on_web">Regroup or delete your trips from Settings on the web.</string>
+    <plurals name="delete_n_trips">
+        <item quantity="one">Delete %1$d trip</item>
+        <item quantity="other">Delete %1$d trips</item>
+    </plurals>
     <string name="delete_booking_title">Delete this booking?</string>
     <string name="delete_booking_text">%1$s goes from the trip; an email it came from can be imported again.</string>
     <string name="keep">Keep</string>

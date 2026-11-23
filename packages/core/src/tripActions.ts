@@ -1,3 +1,10 @@
+// What Settings' trip actions (SPEC "Home": regrouping; "Deleting all
+// trips") did, in a line, as the web and Android say it.
+
+// The parser's paths for them.
+export const regroupPath = "/trips/regroup";
+export const deleteAllTripsPath = "/trips/delete-all";
+
 // What regrouping did, in a line for the Settings page.
 export type RegroupResult = { changed: number; deleted: number };
 
