@@ -20,15 +20,22 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import app.travelmo.auth.SignedIn
+import app.travelmo.core.AccountAccess
+import app.travelmo.core.opensAccessPage
 import app.travelmo.core.tripIdFromReminderUrl
 import app.travelmo.log.DebugLogging
 import app.travelmo.notify.ReminderNotifications
+import app.travelmo.ui.AccessScreen
+import app.travelmo.ui.AccessState
 import app.travelmo.ui.BookingFormScreen
+import app.travelmo.ui.InviteOnlyScreen
+import app.travelmo.ui.LocalOpenAccess
 import app.travelmo.ui.CalendarScreen
 import app.travelmo.ui.HomeNavigationBar
 import app.travelmo.ui.HomeTab
@@ -68,12 +75,19 @@ private data object Settings : NavKey
 private data object ImportReview : NavKey
 
 @Serializable
+private data object AccessPage : NavKey
+
+@Serializable
 private data class BookingForm(val tripId: String, val segmentId: String?, val defaultDate: String) : NavKey
 
 class MainActivity : ComponentActivity() {
     // The trip a tapped reminder asks for, until the signed-in app has opened
     // it; kept across a recreation (a rotation on the sign-in screen, say).
     private var requestedTrip by mutableStateOf<String?>(null)
+
+    // Whether a tapped access request asks for the Access page, until the
+    // signed-in app has opened it; kept across a recreation.
+    private var requestedAccess by mutableStateOf(false)
 
     // Whether the Licenses screen is up in place of the app (LicensesHost);
     // kept across a recreation.
@@ -88,6 +102,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         requestedTrip = if (savedInstanceState == null) tripFrom(intent) else savedInstanceState.getString(STATE_REQUESTED_TRIP)
+        requestedAccess = if (savedInstanceState == null) accessFrom(intent) else savedInstanceState.getBoolean(STATE_REQUESTED_ACCESS)
         licensesOpen = savedInstanceState?.getBoolean(STATE_LICENSES_OPEN) ?: false
         val app = application as TravelmoApplication
         setContent {
@@ -114,7 +129,14 @@ class MainActivity : ComponentActivity() {
                         if (signedIn == null) {
                             SignInScreen(account = app.account)
                         } else {
-                            SignedInApp(app, signedIn, requestedTrip, onTripOpened = { requestedTrip = null })
+                            SignedInApp(
+                                app,
+                                signedIn,
+                                requestedTrip,
+                                onTripOpened = { requestedTrip = null },
+                                requestedAccess = requestedAccess,
+                                onAccessOpened = { requestedAccess = false },
+                            )
                         }
                     }
                 }
@@ -137,33 +159,59 @@ class MainActivity : ComponentActivity() {
             // The trip, not the licenses, is what the tap asked for.
             licensesOpen = false
         }
+        if (accessFrom(intent)) {
+            requestedAccess = true
+            licensesOpen = false
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putString(STATE_REQUESTED_TRIP, requestedTrip)
         outState.putBoolean(STATE_LICENSES_OPEN, licensesOpen)
+        outState.putBoolean(STATE_REQUESTED_ACCESS, requestedAccess)
     }
 
     // A tapped reminder carries the trip's URL (ReminderNotifications.show).
     private fun tripFrom(intent: Intent?): String? = tripIdFromReminderUrl(intent?.getStringExtra(ReminderNotifications.EXTRA_URL))
 
+    // A tapped access request, an admin's, carries the web's Access page.
+    private fun accessFrom(intent: Intent?): Boolean =
+        opensAccessPage(intent?.getStringExtra(ReminderNotifications.EXTRA_URL), intent?.getStringExtra(ReminderNotifications.EXTRA_TAG))
+
     private companion object {
         const val STATE_REQUESTED_TRIP = "requestedTrip"
         const val STATE_LICENSES_OPEN = "licensesOpen"
+        const val STATE_REQUESTED_ACCESS = "requestedAccess"
     }
 }
 
 @Composable
-private fun SignedInApp(app: TravelmoApplication, user: SignedIn, requestedTrip: String?, onTripOpened: () -> Unit) {
+private fun SignedInApp(
+    app: TravelmoApplication,
+    user: SignedIn,
+    requestedTrip: String?,
+    onTripOpened: () -> Unit,
+    requestedAccess: Boolean,
+    onAccessOpened: () -> Unit,
+) {
     // One view model per signed-in user: its queries carry the uid.
     val factory = remember(user.uid) {
         object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T = TripsViewModel(app.trips, user.uid, user.email, pushDevice = app.pushDevice, accountDeletion = app.accountDeletion, flightRefresh = app.flightRefresh, accessCheck = app.accessCheck, emailLinks = app.emailLinks, tripActions = app.tripActions, importReview = app.importReview, gmailActions = app.gmailActions) as T
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = TripsViewModel(app.trips, user.uid, user.email, emailVerified = user.emailVerified, pushDevice = app.pushDevice, accountDeletion = app.accountDeletion, flightRefresh = app.flightRefresh, accessCheck = app.accessCheck, emailLinks = app.emailLinks, tripActions = app.tripActions, importReview = app.importReview, gmailActions = app.gmailActions) as T
         }
     }
     val viewModel: TripsViewModel = viewModel(key = user.uid, factory = factory)
+    val access by viewModel.access.collectAsStateWithLifecycle()
+    // Only once the server has said so (SPEC "Access"): until then the app
+    // shows as before, so an approved account never waits on it, offline
+    // included, and one not approved sees its empty trip list a moment.
+    val refused = (access as? AccessState.Known)?.takeIf { it.status != AccountAccess.APPROVED }
+    if (refused != null) {
+        InviteOnlyScreen(account = app.account, viewModel = viewModel, status = refused.status)
+        return
+    }
     val backStack = rememberNavBackStack(Home)
     LaunchedEffect(requestedTrip) {
         if (requestedTrip != null) {
@@ -171,6 +219,21 @@ private fun SignedInApp(app: TravelmoApplication, user: SignedIn, requestedTrip:
             onTripOpened()
         }
     }
+    LaunchedEffect(requestedAccess) {
+        if (requestedAccess) {
+            if (backStack.lastOrNull() != AccessPage) backStack.add(AccessPage)
+            onAccessOpened()
+        }
+    }
+    val admin = (access as? AccessState.Known)?.admin == true
+    val openAccess: (() -> Unit)? = if (admin) ({ if (backStack.lastOrNull() != AccessPage) backStack.add(AccessPage) }) else null
+    CompositionLocalProvider(LocalOpenAccess provides openAccess) {
+        SignedInNavigation(app, user, viewModel, backStack)
+    }
+}
+
+@Composable
+private fun SignedInNavigation(app: TravelmoApplication, user: SignedIn, viewModel: TripsViewModel, backStack: NavBackStack<NavKey>) {
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     NavDisplay(
         backStack = backStack,
@@ -228,6 +291,12 @@ private fun SignedInApp(app: TravelmoApplication, user: SignedIn, requestedTrip:
             }
             entry<ImportReview> {
                 ImportReviewScreen(viewModel = viewModel, onBack = { backStack.removeLastOrNull() })
+            }
+            entry<AccessPage> {
+                // Not offered again from its own menu.
+                CompositionLocalProvider(LocalOpenAccess provides null) {
+                    AccessScreen(viewModel = viewModel, onBack = { backStack.removeLastOrNull() })
+                }
             }
         },
     )

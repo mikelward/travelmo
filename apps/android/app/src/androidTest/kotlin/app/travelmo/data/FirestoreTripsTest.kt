@@ -2,6 +2,7 @@ package app.travelmo.data
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import app.travelmo.core.AccountAccess
 import app.travelmo.core.PlaceDraft
 import app.travelmo.core.SegmentDraft
 import app.travelmo.core.SegmentType
@@ -371,6 +372,45 @@ class FirestoreTripsTest {
         // Calling it for a trip that is gone is a no-op.
         owner.store.deleteTrip(id)
         assertNull(tripRef(id).get().await().data)
+    }
+
+    private fun newAddress() = "invitee-${UUID.randomUUID().toString().take(8)}@example.com"
+
+    // The owner is an admin (connected-tests.sh), so it may read any record.
+    private suspend fun accessRecord(email: String): Map<String, Any?>? = owner.db.collection("access").document(email).get().await().data
+
+    @Test
+    fun shareTrip_invitesTheAddressInTheSameWrite() = runBlocking {
+        val id = seedTrip(shared = false)
+        val address = newAddress()
+        owner.store.shareTrip(id, address, owner.uid)
+        assertEquals(listOf(address), trip(id)["sharedWith"])
+        val record = accessRecord(address)!!
+        assertEquals(address, record["email"])
+        assertEquals(owner.uid, record["invitedBy"])
+        assertTrue(record["invitedAt"] is String)
+    }
+
+    @Test
+    fun saveTrusted_invitesOnlyTheAddressesNewlyTrusted() = runBlocking {
+        val kept = newAddress()
+        val added = newAddress()
+        owner.store.saveTrusted(owner.uid, owner.email, exists = false, emails = listOf(kept, added), before = listOf(kept))
+        assertNull(accessRecord(kept))
+        assertEquals(owner.uid, accessRecord(added)!!["invitedBy"])
+    }
+
+    @Test
+    fun decideAccess_invitesAnAddressThatNeverAsked_andRevokesIt() = runBlocking {
+        val address = newAddress()
+        owner.store.decideAccess(address, AccountAccess.APPROVED, owner.uid, stamp)
+        assertEquals("approved", accessRecord(address)!!["status"])
+        owner.store.decideAccess(address, AccountAccess.DECLINED, owner.uid, stamp)
+        val record = accessRecord(address)!!
+        assertEquals("declined", record["status"])
+        assertEquals(owner.uid, record["declinedBy"])
+        // Someone not an admin may not decide.
+        assertTrue(refused { sharee.store.decideAccess(newAddress(), AccountAccess.APPROVED, sharee.uid, stamp) }.isPermissionDenied())
     }
 
     @Test

@@ -135,8 +135,9 @@ pnpm --filter @travelmo/rules exec firebase emulators:exec --only firestore,auth
   --project demo-travelmo --config ../../firebase.json ../../apps/android/scripts/connected-tests.sh
 ```
 
-The script seeds two users with verified addresses (the rules read
-`email_verified` for a sharee) and runs `connectedDebugAndroidTest`. CI's
+The script seeds two approved users with verified addresses (the rules read
+`email_verified` for a sharee), makes the first an admin (so the tests can
+read the access records shares write) and runs `connectedDebugAndroidTest`. CI's
 `android-emulator` job does the same on a hosted runner's emulator, beside
 the unit job, in about ten minutes.
 

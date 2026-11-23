@@ -1,6 +1,15 @@
 package app.travelmo.data
 
+import app.travelmo.core.AccessConfig
+import app.travelmo.core.AccessRecord
+import app.travelmo.core.AccountAccess
 import app.travelmo.core.AddressHolder
+import app.travelmo.core.accessDecision
+import app.travelmo.core.accessInvite
+import app.travelmo.core.accessRecordOf
+import app.travelmo.core.accessRequest
+import app.travelmo.core.accessSelfApproval
+import app.travelmo.core.emailAddressOf
 import app.travelmo.core.FlightStatus
 import app.travelmo.core.FoundLoyalty
 import kotlinx.coroutines.CancellationException
@@ -36,6 +45,8 @@ import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
+import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.QuerySnapshot
 import com.google.firebase.firestore.SetOptions
@@ -134,8 +145,37 @@ interface TripStore {
     /** A refreshed token: the new registration in, then the old out, so delivery never lapses. */
     suspend fun replaceDevice(uid: String, oldId: String, newId: String, token: String)
 
-    /** Sets who the user's travel profile is shared with, starting the profile if there is none yet ([exists] false). */
-    suspend fun saveTrusted(uid: String, email: String?, exists: Boolean, emails: List<String>)
+    /**
+     * Sets who the user's travel profile is shared with, starting the profile
+     * if there is none yet ([exists] false), and invites each address not in
+     * [before] in the same batch (SPEC "Access", "Sharing invites").
+     */
+    suspend fun saveTrusted(uid: String, email: String?, exists: Boolean, emails: List<String>, before: List<String> = emptyList())
+
+    /**
+     * Whether `users/{uid}` exists (null when it doesn't) and what it says of
+     * the user's addresses, live, as access is decided on it (SPEC "Access").
+     * A read that fails answers as no document.
+     */
+    fun userDocument(uid: String): Flow<Seen<AddressHolder?>>
+
+    /** The verified address's `access/{email}`, live; null when there is none or it can't be read. */
+    fun accessRecord(email: String): Flow<Seen<AccessRecord?>>
+
+    /** `config/access`, live; null for everyone but admins, whom alone the rules let read it. */
+    fun accessConfig(): Flow<Seen<AccessConfig?>>
+
+    /** Every access record, live, for the Access page (admins alone may list them); null while they load. */
+    fun accessRecords(): Flow<List<AccessRecord>?>
+
+    /** Asks for access for the signed-in, verified [email] (accessRequest). */
+    suspend fun requestAccess(email: String, uid: String, now: String)
+
+    /** Records an account from before approvals as approved by itself, so admins see it (accessSelfApproval). */
+    suspend fun recordSelf(email: String, uid: String, now: String)
+
+    /** An admin's decision on [email]: approve (or invite an address that never asked), decline or revoke (accessDecision). */
+    suspend fun decideAccess(email: String, decision: AccountAccess, adminUid: String, now: String)
 
     /** Writes a booking, new ([existingId] null) or edited, widening the trip's dates to hold it. */
     suspend fun saveSegment(tripId: String, draft: SegmentDraft, existingId: String?)
@@ -151,8 +191,11 @@ interface TripStore {
     /** Sets the trip's dates to its bookings' span; false when it has none. Owner only. */
     suspend fun fitTripDates(tripId: String): Boolean
 
-    /** Shares the trip with an address, or stops. Owner only. */
-    suspend fun shareTrip(tripId: String, email: String)
+    /**
+     * Shares the trip with an address, inviting it in the same batch as
+     * [inviterUid] (SPEC "Access", "Sharing invites"), or stops. Owner only.
+     */
+    suspend fun shareTrip(tripId: String, email: String, inviterUid: String)
 
     suspend fun unshareTrip(tripId: String, email: String)
 
@@ -167,6 +210,14 @@ interface TripStore {
 }
 
 class TripGoneException(message: String) : Exception(message)
+
+/**
+ * A document's answer, and whether the server gave it rather than this
+ * phone's cache: a document missing from the cache may only be missing from
+ * the cache, so "not approved" waits for the server's word (as the web's
+ * useAccess does).
+ */
+data class Seen<T>(val value: T, val confirmed: Boolean)
 
 /** The user document's fields for car and ride suggestions (SPEC "Car and ride suggestions"). */
 data class RideSettings(
@@ -476,17 +527,105 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
      * import and, on one that exists, touches only the list (the rules
      * refuse anything else).
      */
-    override suspend fun saveTrusted(uid: String, email: String?, exists: Boolean, emails: List<String>) {
+    override suspend fun saveTrusted(uid: String, email: String?, exists: Boolean, emails: List<String>, before: List<String>) {
         val trusted = normalizeTrusted(emails, email)
         if (trusted.size > MAX_TRUSTED) throw IllegalArgumentException("Share with at most $MAX_TRUSTED people.")
+        val now = Instant.now().toString()
         val doc = LinkedHashMap<String, Any>()
         if (!exists) {
             doc["ownerUid"] = uid
             normalizeEmail(email)?.let { doc["ownerEmail"] = it }
         }
         doc["trustedEmails"] = trusted
-        doc["updatedAt"] = Instant.now().toString()
-        db.collection("users").document(uid).collection("travelProfile").document("main").set(doc, SetOptions.merge()).await()
+        doc["updatedAt"] = now
+        db.runBatch { batch ->
+            batch.set(db.collection("users").document(uid).collection("travelProfile").document("main"), doc, SetOptions.merge())
+            // Each address newly trusted is invited in the same write, so it
+            // can open the profile without asking for access.
+            for (address in trusted) {
+                if (address !in before && emailAddressOf(address) == address) batch.set(accessRef(address), accessInvite(address, uid, now), SetOptions.merge())
+            }
+        }.await()
+    }
+
+    override fun userDocument(uid: String): Flow<Seen<AddressHolder?>> =
+        db.collection("users").document(uid).seen(
+            read = { snapshot -> if (snapshot.exists()) addressHolderFromDocument(snapshot.data.orEmpty()) else null },
+            onError = { error ->
+                TravelmoLog.error(error, "Reading the user document for access failed")
+                null
+            },
+        )
+
+    override fun accessRecord(email: String): Flow<Seen<AccessRecord?>> =
+        accessRef(email).seen(
+            read = { snapshot ->
+                if (!snapshot.exists()) {
+                    null
+                } else {
+                    accessRecordOf(snapshot.data.orEmpty()).also { if (it == null) TravelmoLog.warning("Skipping a malformed access record") }
+                }
+            },
+            onError = { error ->
+                TravelmoLog.error(error, "Reading the access record failed")
+                null
+            },
+        )
+
+    override fun accessConfig(): Flow<Seen<AccessConfig?>> =
+        db.collection("config").document("access").seen(
+            read = { snapshot -> if (snapshot.exists()) AccessConfig((snapshot.get("admins") as? List<*>).orEmpty().filterIsInstance<String>()) else null },
+            onError = { error ->
+                // Expected for everyone but admins: the list is theirs alone
+                // to read, so a refusal means "not an admin".
+                if (error.code == FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                    TravelmoLog.verbose("The admins' list is not readable: not an admin")
+                } else {
+                    TravelmoLog.error(error, "Reading the admins' list failed")
+                }
+                null
+            },
+        )
+
+    override fun accessRecords(): Flow<List<AccessRecord>?> = callbackFlow {
+        val registration = db.collection("access").addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                TravelmoLog.error(error, "Access records subscription failed")
+                return@addSnapshotListener
+            }
+            trySend(
+                snapshot?.documents.orEmpty().mapNotNull { doc ->
+                    accessRecordOf(doc.data.orEmpty()).also { if (it == null) TravelmoLog.warning("Skipping malformed access record %s", sensitive(doc.id)) }
+                },
+            )
+        }
+        awaitClose { registration.remove() }
+    }
+
+    override suspend fun requestAccess(email: String, uid: String, now: String) {
+        accessRef(email).set(accessRequest(email, uid, now)).await()
+    }
+
+    override suspend fun recordSelf(email: String, uid: String, now: String) {
+        accessRef(email).set(accessSelfApproval(email, uid, now)).await()
+    }
+
+    override suspend fun decideAccess(email: String, decision: AccountAccess, adminUid: String, now: String) {
+        accessRef(email).set(mapOf("email" to email) + accessDecision(decision, adminUid, now), SetOptions.merge()).await()
+    }
+
+    private fun accessRef(email: String): DocumentReference = db.collection("access").document(email)
+
+    /** A document's every answer with whether the server gave it; [onError] answers a failure, which ends the listener. */
+    private fun <T> DocumentReference.seen(read: (DocumentSnapshot) -> T, onError: (FirebaseFirestoreException) -> T): Flow<Seen<T>> = callbackFlow {
+        val registration = addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
+            if (error != null) {
+                trySend(Seen(onError(error), confirmed = true))
+                return@addSnapshotListener
+            }
+            if (snapshot != null) trySend(Seen(read(snapshot), confirmed = !snapshot.metadata.isFromCache))
+        }
+        awaitClose { registration.remove() }
     }
 
     /**
@@ -595,10 +734,14 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         throw IllegalStateException("The trip kept changing; try again")
     }
 
-    override suspend fun shareTrip(tripId: String, email: String) {
-        val address = normalizeEmail(email)?.takeIf { it.contains("@") } ?: throw IllegalArgumentException("Enter an email address")
-        db.collection("trips").document(tripId)
-            .update(mapOf("sharedWith" to FieldValue.arrayUnion(address), "updatedAt" to Instant.now().toString())).await()
+    /** As the web's shareTrip: sharing also invites the address, in the same batch, so it can open the trip without asking. */
+    override suspend fun shareTrip(tripId: String, email: String, inviterUid: String) {
+        val address = emailAddressOf(email) ?: throw IllegalArgumentException("Enter an email address")
+        val now = Instant.now().toString()
+        db.runBatch { batch ->
+            batch.update(db.collection("trips").document(tripId), mapOf("sharedWith" to FieldValue.arrayUnion(address), "updatedAt" to now))
+            batch.set(accessRef(address), accessInvite(address, inviterUid, now), SetOptions.merge())
+        }.await()
     }
 
     override suspend fun unshareTrip(tripId: String, email: String) {

@@ -13,7 +13,16 @@ import app.travelmo.data.TripActions
 import app.travelmo.data.TripActionFailed
 import app.travelmo.core.describeRegroup
 import app.travelmo.core.describeDeletedTrips
+import app.travelmo.core.AccessConfig
+import app.travelmo.core.AccessRecord
+import app.travelmo.core.AccountAccess
 import app.travelmo.core.AddressHolder
+import app.travelmo.core.accessDecision
+import app.travelmo.core.accessInvite
+import app.travelmo.core.accessRecordOf
+import app.travelmo.core.accessRequest
+import app.travelmo.core.accessSelfApproval
+import app.travelmo.data.Seen
 import app.travelmo.core.FlightStatus
 import app.travelmo.core.FoundLoyalty
 import app.travelmo.core.Place
@@ -39,6 +48,9 @@ import app.travelmo.notify.PushDevice
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 
 // The invented trips of design/android's boards, as the screenshot tests
 // render them: the owner is "owner", today is 1 November 2026, and the
@@ -192,8 +204,46 @@ class FakeTripStore(
     private val addressHolder: AddressHolder = AddressHolder(),
     private val parsed: List<ParsedRecord> = fixtureParsed,
     private val gmailStatus: GmailStatus? = null,
+    /** Each `access/{email}` as stored, by address: the owner approved by default. */
+    access: Map<String, Map<String, String>> = mapOf(OWNER_EMAIL to mapOf("email" to OWNER_EMAIL) + accessDecision(AccountAccess.APPROVED, "admin", FROZEN_NOW)),
+    /** `config/access` as the owner may read it: null for someone not an admin. */
+    accessConfig: AccessConfig? = null,
+    /** Whether `users/{uid}` exists: every account from before approvals has one. */
+    hasUserDocument: Boolean = true,
 ) : TripStore {
     override fun gmailStatus(uid: String): Flow<GmailStatus?> = flowOf(gmailStatus)
+    /** The stored access records' fields, by address, as Firestore would merge them. */
+    val accessFields = MutableStateFlow(access)
+    val config = MutableStateFlow(accessConfig)
+
+    /** The user document, null when there is none. */
+    val userDoc = MutableStateFlow(if (hasUserDocument) addressHolder else null)
+
+    /** Whether the server, not the phone's cache, gave each answer. */
+    val confirmed = MutableStateFlow(true)
+    override fun userDocument(uid: String): Flow<Seen<AddressHolder?>> = combine(userDoc, confirmed) { doc, server -> Seen(doc, server) }
+    override fun accessRecord(email: String): Flow<Seen<AccessRecord?>> =
+        combine(accessFields, confirmed) { fields, server -> Seen(fields[email]?.let(::accessRecordOf), server) }
+    override fun accessConfig(): Flow<Seen<AccessConfig?>> = combine(config, confirmed) { config, server -> Seen(config, server) }
+    override fun accessRecords(): Flow<List<AccessRecord>?> = accessFields.map { fields -> fields.values.mapNotNull(::accessRecordOf) }
+    private fun write(email: String, fields: Map<String, String>, merge: Boolean) {
+        accessFields.update { stored -> stored + (email to (if (merge) stored[email].orEmpty() else emptyMap()) + fields) }
+    }
+
+    /** Every access write's address, in order. */
+    val accessWrites = mutableListOf<String>()
+    override suspend fun requestAccess(email: String, uid: String, now: String) {
+        accessWrites += email
+        write(email, accessRequest(email, uid, now), merge = false)
+    }
+    override suspend fun recordSelf(email: String, uid: String, now: String) {
+        accessWrites += email
+        write(email, accessSelfApproval(email, uid, now), merge = false)
+    }
+    override suspend fun decideAccess(email: String, decision: AccountAccess, adminUid: String, now: String) {
+        accessWrites += email
+        write(email, mapOf("email" to email) + accessDecision(decision, adminUid, now), merge = true)
+    }
     override fun latestParsed(uid: String): Flow<List<ParsedRecord>?> = flowOf(parsed.take(REVIEW_RECENT))
     override fun allParsed(uid: String): Flow<SearchedRecords> = flowOf(SearchedRecords(parsed, done = true))
     val patterns = MutableStateFlow(SenderPatterns(deny = listOf("news.example")))
@@ -264,8 +314,11 @@ class FakeTripStore(
         restored += tripId to segmentId
     }
     val trusted = mutableListOf<Triple<String, Boolean, List<String>>>()
-    override suspend fun saveTrusted(uid: String, email: String?, exists: Boolean, emails: List<String>) {
+    /** The list each save replaced, whose addresses are not invited again. */
+    val trustedBefore = mutableListOf<List<String>>()
+    override suspend fun saveTrusted(uid: String, email: String?, exists: Boolean, emails: List<String>, before: List<String>) {
         trusted += Triple(uid, exists, emails)
+        trustedBefore += before
     }
     val renamed = mutableListOf<Pair<String, String>>()
     val fitted = mutableListOf<String>()
@@ -281,8 +334,9 @@ class FakeTripStore(
         fitted += tripId
         return true
     }
-    override suspend fun shareTrip(tripId: String, email: String) {
+    override suspend fun shareTrip(tripId: String, email: String, inviterUid: String) {
         sharedWith += tripId to email
+        write(email, accessInvite(email, inviterUid, FROZEN_NOW), merge = true)
     }
     override suspend fun unshareTrip(tripId: String, email: String) {
         unshared += tripId to email
