@@ -205,6 +205,12 @@
 - [x] A second chance for places an exhausted daily geocoding budget left
       without a country or a spot: the import queues the booking and a daily
       sweep (`/internal/geocode-sweep`, the third scheduler job) asks again.
+- [ ] Read past bookings faster within Gmail's quota: fetch a message's
+      headers first (`format: "metadata"`, 20 units rather than a full
+      message's 60) and the full message only once the pre-filter passes
+      it. Worth it if more than a third of the search's hits are turned
+      down; count `prefiltered` against `imported` in the `backfill` log
+      lines first.
 - [ ] Trial the Gemini Decisions API (`gemini-decision-1`, launched
       2026-11-11) as the booking gate in place of the similarity
       pre-filter, behind a flag. Wait until the deploy has real mail: first
@@ -301,6 +307,13 @@
 ## Decisions needing review
 
 Guesses made on autopilot; change any of them freely.
+
+- Gmail quota for "Import past bookings": a reading spends at most 4,000 of
+  a user's 6,000 units a minute (about 66 messages), leaving the rest for
+  new mail and opening emails; a rate-limited batch holds the next off one
+  minute; a delivery waits in its request up to a minute before handing on
+  to a fresh message; three failed batches in a row stop the reading. New
+  mail waits out a rate limit for up to a minute per notification.
 
 - Deleting an account keeps the bookings the user added to someone else's
   trip (they belong to that trip; their `sources` still carry the deleted

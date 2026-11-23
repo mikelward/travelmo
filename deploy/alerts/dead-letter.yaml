@@ -1,23 +1,36 @@
-# Fires while a Gmail notification sits on the dead-letter subscription, that
-# is, after the parser failed every delivery attempt. Rendered by
-# deploy/monitoring.sh.
+# Fires while a message sits on the dead-letter subscription, that is, after
+# the parser failed every delivery attempt of a Gmail notification or of a
+# batch of a mailbox reading ("Import past bookings"). Rendered by
+# deploy/monitoring.sh, which finds the policy to update by this display
+# name, so it keeps its original wording.
 displayName: "Travelmo: Gmail notification dead-lettered"
 documentation:
   mimeType: text/markdown
   content: |
-    Pub/Sub gave up delivering a Gmail notification to the parser. Look for
-    `notification_failed` in the parser's logs (the `pubsubMessageId` and
-    `deliveryAttempt` fields match the message), fix the cause, then read
-    and acknowledge the message:
+    Pub/Sub gave up delivering a message to the parser. Two subscriptions
+    dead-letter here; look at the message without acknowledging it to see
+    which:
+
+        gcloud pubsub subscriptions pull @DEAD_LETTER_TOPIC@ --format=json
+
+    The `CloudPubSubDeadLetterSourceSubscription` attribute names where it
+    came from, and its data (base64 JSON) says what it is:
+
+    - **Gmail notification** (from `gmail-parser`; data has `emailAddress`
+      and `historyId`): look for `notification_failed` in the parser's logs
+      (the `pubsubMessageId` and `deliveryAttempt` fields match the
+      message). Nothing is lost by dropping it: the next notification for
+      that mailbox resumes from the stored history id.
+    - **Mailbox reading batch** (from `gmail-backfill-parser`; data has
+      `uid`, `run` and `step`): look for `backfill_batch_failed` with that
+      run and step. The reading stalled there; half an hour after its last
+      activity Settings shows it as stopped and offers "Continue reading
+      past emails", which carries on from the saved place. Dropping the
+      message loses nothing.
+
+    Fix the cause, then acknowledge the message:
 
         gcloud pubsub subscriptions pull @DEAD_LETTER_TOPIC@ --auto-ack
-
-    Nothing is lost by dropping it: the next notification for that mailbox
-    resumes from the stored history id.
-
-    A message with `uid`, `run` and `step` is a batch of a mailbox reading
-    (`backfill_batch_failed` in the logs); the reading stalled there, and
-    Settings offers to continue it after half an hour.
 combiner: OR
 conditions:
   - displayName: "dead-letter subscription has messages"

@@ -61,7 +61,10 @@ import {
   currentHistoryId,
   fetchMessage,
   gmailFor,
+  gmailPacer,
   gmailScopes,
+  gmailUnits,
+  withRateLimitRetry,
   isNotFound,
   listAddedSince,
   oauthClient,
@@ -84,9 +87,19 @@ import { backfillBatch, backfillQuery, runBackfillBatch } from "./backfill";
 import { continueBackfill, parseContinuePush, startBackfill, stopBackfill, type ChainIo, type ContinueMessage } from "./backfillChain";
 import { pubsubPublisher } from "./publish";
 
-// How long one backfill batch may spend importing. Leaves two minutes of Cloud Run's default five for the last message and
+// How long one backfill request may spend waiting its turn and importing.
+// Leaves two minutes of Cloud Run's default five for the last message and
 // saving progress.
 const backfillBudgetMs = 3 * 60 * 1000;
+// The share of a user's Gmail quota (6,000 units a minute) a mailbox reading
+// spends, about 66 full messages a minute; the rest is left for new mail
+// arriving meanwhile and for opening emails from the app.
+const backfillUnitsPerMinute = 4000;
+// How long a notification's import waits out Gmail's rate limit before it
+// fails, and Pub/Sub delivers it again later; within its 120-second
+// acknowledgement deadline.
+const notificationRateLimitWaitMs = 60 * 1000;
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 import { LeaseLost, UploadRunning, withUploadLease } from "./leases";
 import { calendarForToken, firestoreExportIo, hashToken, issueExport, stopExport } from "./calendarExport";
 import {
@@ -364,27 +377,47 @@ app.post("/gmail/disconnect", async (c) => {
   return c.body(null, 204);
 });
 
+// Imports new mail by id, waiting out Gmail's rate limit for up to a minute.
 function importIds(uid: string, gmail: ReturnType<typeof gmailFor>, ids: readonly string[], options: ImportOptions = {}) {
-  return importMessages(uid, ids, (id) => fetchMessage(gmail, id), deps, options);
+  const deadline = Date.now() + notificationRateLimitWaitMs;
+  const retry = { timeLeftMs: () => deadline - Date.now(), sleep, log: (event: string, fields: Record<string, unknown>) => log("WARNING", event, { uid, ...fields }) };
+  return importMessages(uid, ids, (id) => withRateLimitRetry(() => fetchMessage(gmail, id), retry), deps, options);
 }
 
 // Reading the whole mailbox runs on the server (backfillChain.ts): each
 // batch carries on from where the last stopped, records how far it got on
 // the connection, where Settings shows it, and queues the next on Pub/Sub.
 function backfillIo(uid: string): ChainIo<GmailState> {
+  // Stop importing well before Cloud Run's request limit, leaving time to
+  // save progress; the next batch carries on. Time spent waiting for the
+  // batch's turn comes out of it.
+  const deadline = Date.now() + backfillBudgetMs;
   return {
     change: (fn) => changeBackfill(db, uid, fn),
     runBatch: (state, from, generation) => {
       const gmail = gmailFor(oauth, state.refreshToken);
-      // Stop importing well before Cloud Run's request limit, leaving time
-      // to save progress; the next batch carries on.
-      const deadline = Date.now() + backfillBudgetMs;
+      const pace = gmailPacer(backfillUnitsPerMinute, { nowMs: Date.now, sleep });
       return runBackfillBatch(from, false, {
         timeLeftMs: () => deadline - Date.now(),
-        page: (token) => searchMessagePage(gmail, backfillQuery, backfillBatch, token),
+        sleep,
+        page: async (token) => {
+          await pace(gmailUnits.list);
+          return searchMessagePage(gmail, backfillQuery, backfillBatch, token);
+        },
         // An email whose import failed (the model was down, say) is read
         // again when the reading passes it again, as after starting over.
-        importIds: (ids) => importIds(uid, gmail, ids, { retryFailed: true, generation }),
+        // Gmail's rate limit is waited out by the batch, within its time.
+        importIds: (ids) =>
+          importMessages(
+            uid,
+            ids,
+            async (id) => {
+              await pace(gmailUnits.getFull);
+              return fetchMessage(gmail, id);
+            },
+            deps,
+            { retryFailed: true, generation },
+          ),
         isStaleCursor: isBadRequest,
         now: () => new Date().toISOString(),
         log: (event, fields) => log("WARNING", event, { uid, ...fields }),
@@ -393,6 +426,8 @@ function backfillIo(uid: string): ChainIo<GmailState> {
     publish: (message: ContinueMessage) => publishBackfill(message),
     now: () => new Date().toISOString(),
     log: (severity, event, fields) => log(severity, event, fields),
+    sleep,
+    newWake: () => randomBytes(12).toString("base64url"),
   };
 }
 
@@ -947,12 +982,15 @@ app.post("/internal/pubsub/gmail", async (c) => {
 });
 
 // The next batch of a mailbox reading, queued by the one before. A non-2xx
-// response makes Pub/Sub try again with backoff, so only a transient
-// failure gets one: a batch that failed (tried again once the email claims
-// it left lapse), one whose earlier copy is still reading, or one read but
-// whose next batch could not be queued (the next attempt queues it). A message the stored progress no
+// response makes Pub/Sub try again with backoff, and its attempts run out
+// within minutes, so only an error gets one: a batch that failed (its next
+// attempt waits for the email claims it left to lapse), or one read but
+// whose next batch could not be queued (the next attempt queues it). A
+// batch that must wait (its earlier copy still reads, a failed batch's
+// claims hold, Gmail rate limited the last) waits here up to a minute, then
+// hands the reading on to a fresh message. A message the stored progress no
 // longer expects (a newer start, Stop, a reset, a copy of a batch already
-// read) is acknowledged and dropped.
+// read, a copy another message carries on for) is acknowledged and dropped.
 app.post("/internal/backfill", async (c) => {
   await requireInternalCaller(c);
   let message: ReturnType<typeof parseContinuePush>;
@@ -962,10 +1000,10 @@ app.post("/internal/backfill", async (c) => {
     if (error instanceof BadPushEnvelope) throw new HTTPException(400, { message: error.message });
     throw error;
   }
-  const { uid, run, step, pubsubMessageId, deliveryAttempt } = message;
-  const fields = { uid, run, step, pubsubMessageId, deliveryAttempt };
+  const { uid, run, step, wake, pubsubMessageId, deliveryAttempt } = message;
+  const fields = { uid, run, step, wake, pubsubMessageId, deliveryAttempt };
   try {
-    const result = await continueBackfill({ uid, run, step }, backfillIo(uid));
+    const result = await continueBackfill({ uid, run, step, ...(wake ? { wake } : {}) }, backfillIo(uid));
     switch (result.kind) {
       case "disconnected":
         log("WARNING", "backfill_for_disconnected_user", fields);
@@ -976,15 +1014,21 @@ app.post("/internal/backfill", async (c) => {
       case "requeued":
         log("WARNING", "backfill_requeued", fields);
         return c.body(null, 204);
-      case "busy":
-        log("INFO", "backfill_batch_busy", fields);
-        return c.body(null, 503);
+      case "deferred":
+        log("INFO", "backfill_deferred", { ...fields, until: result.until });
+        return c.body(null, 204);
       case "superseded":
         log("WARNING", "backfill_progress_not_saved", { ...fields, candidates: result.batch.candidates, ...result.batch.counts });
         return c.body(null, 204);
       case "ran": {
         const { cursor: _cursor, after: _after, ...progress } = result.progress;
-        log("INFO", "backfill", { ...fields, candidates: result.batch.candidates, ...result.batch.counts, ...progress });
+        log("INFO", "backfill", {
+          ...fields,
+          candidates: result.batch.candidates,
+          rateLimited: result.batch.rateLimited === true,
+          ...result.batch.counts,
+          ...progress,
+        });
         if (!result.progress.running) log("INFO", "backfill_ended", { uid, run, done: result.progress.done, failed: result.batch.counts.failed });
         return c.body(null, 204);
       }

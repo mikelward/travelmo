@@ -51,7 +51,7 @@ viewer's zone. Trip bounds are calendar dates.
   {address, createdAt}`. `gmail`, `googleCalendar` and `forward` are
   server-written; `reminders` is the owner's choice; `backfill` is how far a reading of the whole mailbox has
   got (`cursor, after, scanned, imported, failed, done, updatedAt`, and the
-  reading under way: `run, step, running, queued, leaseUntil, retryAfter, lastFailed`); each calendar
+  reading under way: `run, step, running, queued, leaseUntil, retryAfter, wake, handoff, failures, lastFailed`); each calendar
   is `{id, summary, primary, selected, lastReadAt, lastResult, lastError}`.
 - `users/{uid}/pushSubscriptions/{id}` — `endpoint, keys {p256dh, auth},
   createdAt`: one per browser that asked for notifications, written by that
@@ -921,11 +921,28 @@ keeps its bookings and shows why in Settings.
 
 Backfill (`apps/parser/src/backfill.ts`) runs the same path over a Gmail
 search for booking-like subjects across the whole mailbox, in batches of up
-to 300 messages, each stopping after three minutes. Each batch carries on
-from Gmail's page cursor, which is kept with its progress (`scanned`,
-`imported`, `failed`, `done`) on the connection, where Settings shows how far
-it has got. A cursor Gmail no longer accepts restarts the search; messages
-already read are skipped by their claims, so only Gmail reads repeat.
+to 300 messages found by one search call, each stopping after three minutes.
+Each batch carries on from Gmail's page cursor, which is kept with its
+progress (`scanned`, `imported`, `failed`, `done`) on the connection, where
+Settings shows how far it has got. A cursor Gmail no longer accepts restarts
+the search; messages already read are skipped by their claims, so only Gmail
+reads repeat.
+
+Gmail charges each user's calls against a quota of 6,000 units a minute
+("Total Query Cost"): a search costs 5 units, but fetching a full message
+costs 60, so at most 100 messages a minute. Imports run one after another,
+and one quick to turn down (most are) takes well under 0.6 s, so a reading
+that fetched as fast as it could ran out of quota within its first minute.
+A batch therefore spaces its calls to spend at most 4,000 units a minute
+(about 66 messages), leaving the rest for new mail and for opening emails
+from the app. If Gmail still answers with its rate limit (429, or 403 with
+`rateLimitExceeded`, `userRateLimitExceeded` or "Quota exceeded"), the batch
+waits, as long as Gmail asks or with exponential backoff from two seconds up
+to a minute, and tries again, as long as its three minutes allow. Past that
+it saves its place like a batch out of time, sets `retryAfter` a minute on,
+and queues the next batch as usual: a rate limit is never a failed import
+and never stops the reading. New mail waits out the rate limit for up to a
+minute before its notification fails and Pub/Sub delivers it again.
 
 The reading runs on the server, so closing the page does not stop it
 (`apps/parser/src/backfillChain.ts`):
@@ -935,14 +952,18 @@ Settings ─POST /gmail/backfill─▶ new run id, step 0, running ─publish─
                                                                             │ push (OIDC)
          ┌──────────────────────────────────────────────────────────────────┘
          ▼
-/internal/backfill {uid, run, step}
-   │ run or step not the stored one, or stopped ─▶ 204, dropped
+/internal/backfill {uid, run, step, wake?}
+   │ run, step or wake not the stored ones, or stopped ─▶ 204, dropped
    │ read already, next never queued ─▶ publish {uid, run, step + 1}, 204
-   │ another copy holds the lease ─▶ 503, Pub/Sub retries later
+   │ a lease or retryAfter holds ─▶ wait up to a minute; still held ─▶
+   │     store wake: new id and handoff, publish {uid, run, step, wake},
+   │     clear handoff, 204
+   │ handed on, maybe never published ─▶ publish {uid, run, step, wake}, 204
    ▼
 take a sixteen-minute lease ─▶ read one batch ─▶ save place, step + 1, lease off
    │ failed ─▶ lease off, wait fifteen minutes (retryAfter), 5xx, Pub/Sub retries;
-   │           10 failures ─▶ gmail-dead-letter
+   │           three batches in a row ─▶ stopped
+   │ rate limited ─▶ saved as above, retryAfter a minute on
    ▼
 more to read, nothing failed, still running ─▶ publish {uid, run, step + 1}, mark queued
 ```
@@ -951,8 +972,27 @@ Pub/Sub delivers at least once and in any order, so a message only runs
 when its run id and step are the ones stored: each start makes a new run
 id, so an older reading's messages are dropped; a batch that saved moves
 the step on, so a late copy of its message is dropped; and a copy that
-arrives while its batch still reads finds the lease taken and fails, to be
-tried again (and dropped) later. A batch saves `queued: false` with its
+arrives while its batch still reads finds the lease taken and waits.
+
+A delivery that must wait (a lease, or `retryAfter`) never answers with an
+error: Pub/Sub gives a message ten attempts, which in practice all come
+within about five minutes, far less than a failed batch's fifteen-minute
+wait, so failing them sent the reading to the dead-letter topic and lost
+it. Instead the delivery waits inside its request, up to a minute (so the
+batch after it still fits Cloud Run's five-minute request), and if the
+batch is still held, stores a new `wake` id, publishes a fresh message for
+the same step with it, and acknowledges. Only the message whose `wake`
+matches the stored one (none, for the step's first message) may run or
+hand on, so other copies are dropped and one message at a time carries the
+reading. The id is stored before the message is published, so the fresh
+one runs however soon it arrives, together with `handoff` (the old
+message's `wake`), cleared once the publish returns or the fresh message
+runs. While `handoff` is set, the old message, if delivered again because
+publishing failed or its worker died, publishes the fresh one again rather
+than being dropped; a second copy of the fresh one waits and is dropped. A
+finished batch clears `wake` along with the step.
+
+A batch saves `queued: false` with its
 place and sets it once the next batch is published; if the worker dies or
 publishing fails in between, the push fails, and the copy Pub/Sub delivers
 again publishes the next batch instead of reading (a second copy of that
@@ -962,9 +1002,11 @@ as the claim it may have left on the email it was importing (`claimLeaseMs`)
 blocks that email: read sooner, the batch would skip the email as another
 import's and pass it by, so no batch of any reading runs before then. One
 whose process died frees its lease after sixteen minutes for the same
-reason. A delivery that comes while its batch waits like that is retried,
-not dropped, even if the reading was stopped meanwhile, so a Continue that
-joins a dead worker's reading has a delivery to carry it on. Stop (`POST /gmail/backfill/stop`) clears `running`: the batch
+reason. Three failed batches in a row (`failures`) stop the reading, since
+the cause is not passing (a revoked grant, say). A delivery that comes
+while a lease holds is kept, not dropped, even if the reading was stopped
+meanwhile, so a Continue that joins a dead worker's reading has a delivery
+to carry it on; one for a stopped reading with no lease is dropped. Stop (`POST /gmail/backfill/stop`) clears `running`: the batch
 under way saves its place and queues nothing. Pressing Import while a batch
 reads joins that reading instead of starting another. A batch with failed
 imports (the model or Gmail may be down) saves `lastFailed` and stops, and
@@ -1019,12 +1061,17 @@ notification for that mailbox resumes from the stored history id.
 The mailbox reading's push subscription (`gmail-backfill-parser`) works the
 same way, with ten attempts, a ten-minute acknowledgement deadline (a batch
 runs for up to five minutes), and the same dead-letter topic; each failed
-attempt is logged as `backfill_batch_failed`. A dead-lettered batch stalls
-that reading, which Settings then offers to continue.
+attempt is logged as `backfill_batch_failed`. Only errors fail a delivery
+(a batch that must wait hands on to a fresh message instead), so a batch
+dead-letters only after ten errors in a row. That stalls the reading, which
+Settings then offers to continue.
 
 Two alerting policies (`deploy/monitoring.sh`, `deploy/alerts/`) page the
 operator: a `renew_watch_failed` log line, meaning a user's imports will stop
-when their watch expires, and a message on the dead-letter subscription.
+when their watch expires, and a message on the dead-letter subscription,
+either a Gmail notification (`emailAddress` and `historyId`, from
+`gmail-parser`) or a batch of a mailbox reading (`uid`, `run` and `step`,
+from `gmail-backfill-parser`).
 
 ## Connecting Gmail
 
@@ -1132,7 +1179,10 @@ build without one points to the web instead.
 ## Costs
 
 Firebase Auth, Pub/Sub, Secret Manager and the Gmail API are free at this
-scale. App Hosting and Cloud Run bill per request and idle at zero. Firestore
+scale. App Hosting and Cloud Run bill per request and idle at zero; a
+mailbox reading that waits out a failed batch holds a request open for a
+minute at a time, about fifteen minutes of instance time, a small fraction
+of a cent. Firestore
 is the term that grows: one listener per trip list and per open trip, one
 read of every booking each time the reports page opens, and one read of the
 last year's trips and bookings each time a subscribed calendar refreshes (a
