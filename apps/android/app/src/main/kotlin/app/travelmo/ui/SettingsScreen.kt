@@ -3,6 +3,7 @@ package app.travelmo.ui
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,12 +15,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -34,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -43,12 +49,15 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.BuildConfig
 import app.travelmo.R
 import app.travelmo.auth.GoogleAccount
 import app.travelmo.auth.SignedIn
+import app.travelmo.core.EmailRowKind
+import app.travelmo.core.emailRows
 import app.travelmo.log.DebugLogging
 import app.travelmo.notify.ReminderNotifications
 import com.mikelward.androidlog.android.ShareOutcome
@@ -62,6 +71,8 @@ import kotlinx.coroutines.launch
 private const val REMINDER_TOKEN = "settings/reminders/email"
 private const val PUSH_TOKEN = "settings/reminders/push"
 private const val DELETE_ACCOUNT_TOKEN = "settings/account/delete"
+private const val ADD_EMAIL_TOKEN = "settings/emails/add"
+private const val REMOVE_EMAIL_TOKEN = "settings/emails/remove"
 
 /**
  * The account, reminders by email and as notifications on this phone, the
@@ -107,6 +118,7 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
             OutlinedButton(onClick = { scope.launch { account.signOut(context) } }, modifier = Modifier.padding(top = 12.dp)) {
                 Text(stringResource(R.string.sign_out))
             }
+            EmailAddressesSection(user, viewModel)
             Text(stringResource(R.string.reminders), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
             Text(stringResource(R.string.reminders_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
@@ -195,6 +207,76 @@ private fun PushSwitch(viewModel: TripsViewModel) {
     }
     if (blocked) Text(stringResource(R.string.notifications_blocked), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
     (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+}
+
+/**
+ * The user's email addresses (SPEC "Linked email addresses"), as on the web:
+ * the sign-in, those confirmed, the connected Gmail and those waiting for
+ * their link, each linked one removable, and Add, which mails a link that
+ * opens on the web. A build with no parser address lists them only.
+ */
+@Composable
+private fun EmailAddressesSection(user: SignedIn, viewModel: TripsViewModel) {
+    val holder by viewModel.addressHolder.collectAsStateWithLifecycle()
+    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val adding = outcomes[ADD_EMAIL_TOKEN]
+    val removing = outcomes[REMOVE_EMAIL_TOKEN]
+    val busy = adding is Outcome.Busy || removing is Outcome.Busy
+    var address by rememberSaveable { mutableStateOf("") }
+    var sentTo by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(adding) {
+        if (adding is Outcome.Done) {
+            address = ""
+            viewModel.outcomeSeen(ADD_EMAIL_TOKEN)
+        }
+    }
+    LaunchedEffect(removing) { if (removing is Outcome.Done) viewModel.outcomeSeen(REMOVE_EMAIL_TOKEN) }
+    Text(stringResource(R.string.email_addresses), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(R.string.email_addresses_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    for (row in emailRows(user.email, holder, viewModel.now())) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(row.email, style = MaterialTheme.typography.bodyLarge)
+                val note = when (row.kind) {
+                    EmailRowKind.SIGN_IN -> R.string.email_sign_in
+                    EmailRowKind.GMAIL -> R.string.email_gmail
+                    EmailRowKind.PENDING -> R.string.email_pending
+                    EmailRowKind.CONFIRMED -> null
+                }
+                note?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+            if (row.removable && viewModel.canLinkEmails) {
+                IconButton(onClick = { sentTo = null; viewModel.removeEmail(REMOVE_EMAIL_TOKEN, row.email) }, enabled = !busy) {
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.remove_email, row.email))
+                }
+            }
+        }
+    }
+    if (!viewModel.canLinkEmails) {
+        Text(stringResource(R.string.emails_on_web), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+        return
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        OutlinedTextField(
+            value = address,
+            onValueChange = { address = it },
+            placeholder = { Text("name@example.com") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+            modifier = Modifier.weight(1f),
+        )
+        Button(
+            onClick = {
+                sentTo = address.trim().lowercase()
+                viewModel.addEmail(ADD_EMAIL_TOKEN, address)
+            },
+            enabled = !busy && address.isNotBlank(),
+        ) { Text(stringResource(R.string.add)) }
+    }
+    if (adding == null || adding is Outcome.Done) sentTo?.let { Text(stringResource(R.string.email_link_sent, it), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp)) }
+    for (outcome in listOf(adding, removing)) {
+        (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+    }
 }
 
 /**

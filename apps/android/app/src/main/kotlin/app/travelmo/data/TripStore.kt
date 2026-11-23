@@ -1,5 +1,6 @@
 package app.travelmo.data
 
+import app.travelmo.core.AddressHolder
 import app.travelmo.core.FlightStatus
 import app.travelmo.core.FoundLoyalty
 import app.travelmo.core.withLoyaltyPerson
@@ -7,6 +8,7 @@ import app.travelmo.core.HomeCorrection
 import app.travelmo.core.MAX_HIDDEN_RIDE_NEEDS
 import app.travelmo.core.RideCompany
 import app.travelmo.core.rideCompanyOrNull
+import app.travelmo.core.queryAddresses
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentDraft
 import app.travelmo.core.localDate
@@ -41,8 +43,8 @@ import java.time.Instant
 
 /** What the screens read and write; Firestore in the app, a fake in tests. */
 interface TripStore {
-    /** The user's own trips and those shared with their verified address, live. */
-    fun trips(uid: String, email: String?): Flow<List<Trip>>
+    /** The user's own trips and those shared with any of their [addresses] (SPEC "Linked email addresses"), live. */
+    fun trips(uid: String, addresses: List<String>): Flow<List<Trip>>
 
     /** One trip's bookings, live; empty while it loads. */
     fun segments(tripId: String): Flow<List<Segment>>
@@ -53,8 +55,15 @@ interface TripStore {
     /** The user's own travel profile, live, from its first answer on: an answer with no profile is one too. A read that fails is logged and keeps the caller waiting. */
     fun ownProfile(uid: String): Flow<OwnProfile>
 
-    /** The profiles shared with the user's verified address, live. */
-    fun sharedProfiles(email: String?): Flow<List<TravelProfile>>
+    /** The profiles shared with any of the user's [addresses], live. */
+    fun sharedProfiles(addresses: List<String>): Flow<List<TravelProfile>>
+
+    /**
+     * What the user document says of the user's addresses (those confirmed,
+     * the connected Gmail, those waiting for confirmation), live; an empty
+     * one when there is no document or it cannot be read.
+     */
+    fun addressHolder(uid: String): Flow<AddressHolder>
 
     /** Whether the user asked for reminders by email (`reminders.email` on their user document), live; null while it loads. */
     fun reminderEmail(uid: String): Flow<Boolean?>
@@ -177,12 +186,13 @@ data class OwnProfile(val profile: TravelProfile?)
  * Firestore's own cache answers them offline.
  */
 class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getInstance()) : TripStore {
-    override fun trips(uid: String, email: String?): Flow<List<Trip>> {
+    override fun trips(uid: String, addresses: List<String>): Flow<List<Trip>> {
         // One query failing (the rules refusing it, say) must not hold the
         // whole list at "loading": it answers with nothing and is logged.
         val own = db.collection("trips").whereEqualTo("ownerUid", uid).snapshots().orNothing("own trips")
-        val address = normalizeEmail(email)
-        val shared = if (address == null) flowOf(null) else db.collection("trips").whereArrayContains("sharedWith", address).snapshots().orNothing("shared trips")
+        // Any of the user's addresses, in one query.
+        val asked = queryAddresses(addresses)
+        val shared = if (asked.isEmpty()) flowOf(null) else db.collection("trips").whereArrayContainsAny("sharedWith", asked).snapshots().orNothing("shared trips")
         return combine(own, shared) { mine, theirs ->
             val byId = LinkedHashMap<String, Trip>()
             for (snapshot in listOfNotNull(mine, theirs)) {
@@ -231,11 +241,25 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         awaitClose { registration.remove() }
     }
 
-    override fun sharedProfiles(email: String?): Flow<List<TravelProfile>> {
-        val address = normalizeEmail(email) ?: return flowOf(emptyList())
-        return db.collectionGroup("travelProfile").whereArrayContains("trustedEmails", address).snapshots().orNothing("shared profiles").map { snapshot ->
+    override fun sharedProfiles(addresses: List<String>): Flow<List<TravelProfile>> {
+        val asked = queryAddresses(addresses)
+        if (asked.isEmpty()) return flowOf(emptyList())
+        return db.collectionGroup("travelProfile").whereArrayContainsAny("trustedEmails", asked).snapshots().orNothing("shared profiles").map { snapshot ->
             snapshot?.documents.orEmpty().mapNotNull { doc -> profileFromDocument(doc.data ?: emptyMap()) }
         }
+    }
+
+    override fun addressHolder(uid: String): Flow<AddressHolder> = callbackFlow {
+        val registration = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                // The sign-in alone still finds what was shared with it.
+                TravelmoLog.error(error, "Reading the user document for the email addresses failed")
+                trySend(AddressHolder())
+                return@addSnapshotListener
+            }
+            trySend(snapshot?.data?.let(::addressHolderFromDocument) ?: AddressHolder())
+        }
+        awaitClose { registration.remove() }
     }
 
     override fun gmailAccount(uid: String): Flow<String?> = callbackFlow {

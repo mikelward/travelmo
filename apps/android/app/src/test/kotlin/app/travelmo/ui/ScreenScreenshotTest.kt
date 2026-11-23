@@ -15,7 +15,9 @@ import app.travelmo.R
 import app.travelmo.auth.GoogleAccount
 import app.travelmo.auth.SignInResult
 import app.travelmo.auth.SignedIn
+import app.travelmo.core.AddressHolder
 import app.travelmo.core.FlightStatus
+import app.travelmo.core.PendingEmail
 import app.travelmo.core.Place
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentType
@@ -219,7 +221,7 @@ class ScreenScreenshotTest {
     @Test
     fun trip_detail_warning() {
         val viewModel = viewModel()
-        capture("trip_detail_warning") { TripDetailScreen(viewModel = viewModel, tripId = "dublin", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+        capture("trip_detail_warning") { TripDetailScreen(viewModel = viewModel, tripId = "dublin", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
     @Test
@@ -237,13 +239,13 @@ class ScreenScreenshotTest {
     @Test
     fun trip_detail() {
         val viewModel = viewModel()
-        capture("trip_detail") { TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+        capture("trip_detail") { TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
     @Test
     fun trip_detail_dark() {
         val viewModel = viewModel()
-        capture("trip_detail_dark", dark = true) { TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+        capture("trip_detail_dark", dark = true) { TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
     // A flight near departure: its live gates from the parser's status.
@@ -269,20 +271,20 @@ class ScreenScreenshotTest {
     @Test
     fun trip_detail_flight_status() {
         val viewModel = flightViewModel()
-        capture("trip_detail_flight_status") { TripDetailScreen(viewModel = viewModel, tripId = "sydney", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+        capture("trip_detail_flight_status") { TripDetailScreen(viewModel = viewModel, tripId = "sydney", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
     @Test
     fun trip_detail_flight_status_dark() {
         val viewModel = flightViewModel()
-        capture("trip_detail_flight_status_dark", dark = true) { TripDetailScreen(viewModel = viewModel, tripId = "sydney", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+        capture("trip_detail_flight_status_dark", dark = true) { TripDetailScreen(viewModel = viewModel, tripId = "sydney", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
     // A trip shared with the viewer: its violet SHARED label.
     @Test
     fun trip_detail_shared_dark() {
         val viewModel = viewModel()
-        capture("trip_detail_shared_dark", dark = true) { TripDetailScreen(viewModel = viewModel, tripId = "edinburgh", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+        capture("trip_detail_shared_dark", dark = true) { TripDetailScreen(viewModel = viewModel, tripId = "edinburgh", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
     // The stay's Sources, from its ⋮ menu: the owner's own emails link into
@@ -293,7 +295,7 @@ class ScreenScreenshotTest {
         val fontSize = FontSizeState(FontSizeSettings(scale = 1f), onScaleSettled = {}, onPinchEnabledChange = {})
         composeRule.setContent {
             TravelmoTheme(fontSize = fontSize) {
-                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
+                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
             }
         }
         composeRule.onAllNodesWithContentDescription("Booking actions")[1].performClick()
@@ -307,14 +309,14 @@ class ScreenScreenshotTest {
     fun trip_detail_untimed() {
         val segments = fixtureSegments + ("liverpool" to fixtureSegments.getValue("liverpool") + fixtureUntimedActivity)
         val viewModel = TripsViewModel(FakeTripStore(segments = segments), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
-        capture("trip_detail_untimed") { TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+        capture("trip_detail_untimed") { TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
     @Test
     fun trip_detail_cancelled() {
         val store = FakeTripStore(trips = fixtureTrips + fixtureCancelledTrip, segments = fixtureSegments + (fixtureCancelledTrip.id to fixtureCancelledSegments))
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
-        capture("trip_detail_cancelled") { TripDetailScreen(viewModel = viewModel, tripId = "york", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+        capture("trip_detail_cancelled") { TripDetailScreen(viewModel = viewModel, tripId = "york", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
     @Test
@@ -322,25 +324,25 @@ class ScreenScreenshotTest {
         val store = FakeTripStore(trips = fixtureTrips + fixtureBostonTrip, segments = fixtureSegments + (fixtureBostonTrip.id to fixtureBostonSegments))
         store.rides.value = RideSettings(companies = fixtureRideCompanies)
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
-        capture("trip_detail_rides") { TripDetailScreen(viewModel = viewModel, tripId = "boston", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+        capture("trip_detail_rides") { TripDetailScreen(viewModel = viewModel, tripId = "boston", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
     @Test
     fun trip_manage() {
         val viewModel = viewModel()
-        capture("trip_manage") { TripDetailScreen(viewModel = viewModel, tripId = "paris", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+        capture("trip_manage") { TripDetailScreen(viewModel = viewModel, tripId = "paris", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
     @Test
     fun trip_deleting() {
         val viewModel = viewModel()
-        capture("trip_deleting") { TripDetailScreen(viewModel = viewModel, tripId = "cornwall", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+        capture("trip_deleting") { TripDetailScreen(viewModel = viewModel, tripId = "cornwall", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
     @Test
     fun trip_detail_shared() {
         val viewModel = viewModel()
-        capture("trip_detail_shared") { TripDetailScreen(viewModel = viewModel, tripId = "edinburgh", uid = OWNER, email = OWNER_EMAIL, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+        capture("trip_detail_shared") { TripDetailScreen(viewModel = viewModel, tripId = "edinburgh", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
     @Test
@@ -398,8 +400,14 @@ class ScreenScreenshotTest {
     private fun settings(name: String, dark: Boolean) {
         // With a messaging token, so the notifications switch is on the screen.
         // With a parser address, so Delete account is a button.
+        // With an address linked and another waiting for its link.
+        val addresses = AddressHolder(
+            emails = listOf("owner@work.example"),
+            pendingEmails = listOf(PendingEmail("owner@other.example", FROZEN_NOW, "2026-11-02T12:00:00Z")),
+        )
         val viewModel = TripsViewModel(
-            FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, pushDevice = FakePushDevice(), accountDeletion = FakeAccountDeletion(),
+            FakeTripStore(addressHolder = addresses), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, pushDevice = FakePushDevice(),
+            accountDeletion = FakeAccountDeletion(), emailLinks = FakeEmailLinks(),
         )
         capture(name, dark = dark) {
             SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})

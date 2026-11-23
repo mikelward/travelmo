@@ -84,6 +84,7 @@ import app.travelmo.core.allLoyalty
 import app.travelmo.core.RideCompany
 import app.travelmo.core.RideNeed
 import app.travelmo.core.rideNeedKey
+import app.travelmo.core.sharedWithAny
 import app.travelmo.core.fittedRange
 import app.travelmo.core.formatDate
 import app.travelmo.core.formatDateRange
@@ -115,7 +116,6 @@ fun TripDetailScreen(
     viewModel: TripsViewModel,
     tripId: String,
     uid: String,
-    email: String?,
     onBack: () -> Unit,
     onAddBooking: (defaultDate: String) -> Unit,
     onEditBooking: (segmentId: String) -> Unit,
@@ -144,12 +144,13 @@ fun TripDetailScreen(
     val ownProfile by viewModel.ownProfile.collectAsStateWithLifecycle()
     val gmailAccount by viewModel.gmailAccount.collectAsStateWithLifecycle()
     val rideSettings by viewModel.rideSettings.collectAsStateWithLifecycle()
+    val addresses by viewModel.addresses.collectAsStateWithLifecycle()
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
     var deleting by remember { mutableStateOf<Segment?>(null) }
     var moving by remember { mutableStateOf<Segment?>(null) }
     val current = trip
     val isOwner = current != null && current.ownerUid == uid
-    val canEdit = current != null && !current.deleting && (isOwner || (email != null && current.sharedWith.contains(email)))
+    val canEdit = current != null && !current.deleting && (isOwner || sharedWithAny(current.sharedWith, addresses))
     val canManage = isOwner && !current.deleting
     val targets = otherTrips(trips.orEmpty(), tripId)
 

@@ -321,6 +321,10 @@ export const maxRideCompanies = 20;
 
 // Ride suggestions the user hid (rideNeedKey in rides.ts), newest last.
 export const maxHiddenRideNeeds = 200;
+// An address the user asked to link that is waiting for its confirmation
+// link to be opened (emails.ts): shown in Settings until it expires.
+export const PendingEmail = z.object({ email: z.string(), sentAt: z.string(), expiresAt: z.string() });
+export type PendingEmail = z.infer<typeof PendingEmail>;
 
 export const UserProfile = z.object({
   email: z.string().optional(),
@@ -342,6 +346,10 @@ export const UserProfile = z.object({
     }))
     .optional(),
   hiddenRideNeeds: z.array(z.string()).max(maxHiddenRideNeeds).optional(),
+  // Server-written (emails.ts): the addresses the user confirmed besides
+  // their sign-in, lowercase, and those waiting for confirmation.
+  emails: z.array(z.string()).optional(),
+  pendingEmails: z.array(PendingEmail).optional(),
 });
 export type UserProfile = z.infer<typeof UserProfile>;
 

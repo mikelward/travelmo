@@ -6,6 +6,7 @@ import {
   accessRequestMessage,
   accessStatus,
   grandfatheredAccess,
+  linkedEmails,
   needsGrandfathering,
   normalizeEmail,
   paths,
@@ -13,6 +14,7 @@ import {
   type ReminderNotification,
 } from "@travelmo/core";
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
+import { readLinks, trustedHolder } from "./emails";
 import type { DeviceSender } from "./fcm";
 import type { Mailer } from "./mail";
 import type { PushSender } from "./push";
@@ -56,13 +58,25 @@ export async function loadAccessConfig(db: Firestore, log?: AccessLog): Promise<
 }
 
 export async function loadAccess(db: Firestore, uid: string, email: string | undefined, log?: AccessLog): Promise<AccessState> {
-  const [user, record, config] = await Promise.all([
+  const [user, links, record, config] = await Promise.all([
     db.doc(paths.user(uid)).get(),
+    db.doc(paths.emailLinks(uid)).get(),
     email ? db.doc(paths.access(email)).get() : Promise.resolve(undefined),
     loadAccessConfig(db, log),
   ]);
   const parsed = record ? parseRecord(record.data(), log) : undefined;
-  const status = accessStatus({ email, hasProfile: user.exists, record: parsed, config });
+  // The addresses it linked count too (SPEC "Linked email addresses"). Their
+  // records are read only when nothing else lets the account in, which in
+  // practice is never: the list lives on the user document, whose existence
+  // already does.
+  // Only what the parser confirmed counts, never the profile's copy.
+  const linked = linkedEmails(trustedHolder(user.data(), readLinks(links.data()))).filter((address) => address !== email);
+  const inputs = { email, hasProfile: user.exists, record: parsed, config, linked };
+  let status = accessStatus(inputs);
+  if ((status === "none" || status === "requested") && linked.length) {
+    const records = await Promise.all(linked.map(async (address) => parseRecord((await db.doc(paths.access(address)).get()).data(), log)));
+    status = accessStatus({ ...inputs, linkedRecords: records.filter((r): r is AccessRecord => !!r) });
+  }
   return { status, ...(parsed ? { record: parsed } : {}), ...(config ? { config } : {}) };
 }
 

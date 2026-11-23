@@ -28,8 +28,15 @@ import app.travelmo.core.groupTrips
 import app.travelmo.core.listWarnings
 import app.travelmo.core.deviceId
 import app.travelmo.core.AccountAccess
+import app.travelmo.core.AddressHolder
+import app.travelmo.core.LinkCheck
+import app.travelmo.core.checkNewLink
+import app.travelmo.core.myAddresses
 import app.travelmo.data.AccessCheck
 import app.travelmo.data.AccountDeletion
+import app.travelmo.data.EmailLinkFailed
+import app.travelmo.data.EmailLinks
+import app.travelmo.data.NoEmailLinks
 import app.travelmo.data.FlightRefresh
 import app.travelmo.data.NoFlightRefresh
 import app.travelmo.data.NoAccessCheck
@@ -107,7 +114,12 @@ class TripsViewModel(
     private val flightRefresh: FlightRefresh = NoFlightRefresh,
     /** The parser's access check; none by default. */
     private val accessCheck: AccessCheck = NoAccessCheck,
+    /** The parser's linking of email addresses; none by default. */
+    private val emailLinks: EmailLinks = NoEmailLinks,
 ) : ViewModel() {
+    /** The current instant, as pending email links are judged by. */
+    fun now(): String = clock().toString()
+
     /** Today's date on this device, as grouping and the calendar read it. */
     fun today(): String = LocalDate.ofInstant(clock(), ZoneId.systemDefault()).toString()
 
@@ -126,8 +138,19 @@ class TripsViewModel(
      */
     private val accessSettled = MutableStateFlow(0)
 
-    /** Every trip of the user's, own and shared; null until the first answer. */
-    val trips: StateFlow<List<Trip>?> = accessSettled.flatMapLatest { store.trips(uid, email) }.map<List<Trip>, List<Trip>?> { it }
+    /** What the user document says of the user's addresses; empty until it answers. */
+    val addressHolder: StateFlow<AddressHolder> = store.addressHolder(uid).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AddressHolder())
+
+    /**
+     * Every address that is the user's (SPEC "Linked email addresses"): the
+     * sign-in at once, those confirmed once the user document answers.
+     */
+    val addresses: StateFlow<List<String>> = addressHolder.map { myAddresses(email, it) }.distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), myAddresses(email, null))
+
+    /** Every trip of the user's, own and shared with any of their addresses; null until the first answer. */
+    val trips: StateFlow<List<Trip>?> = combine(accessSettled, addresses) { _, addresses -> addresses }
+        .flatMapLatest { store.trips(uid, it) }.map<List<Trip>, List<Trip>?> { it }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val groups: Flow<TripGroups?> = combine(trips, now) { trips, _ -> trips?.let { groupTrips(it, today()) } }
@@ -152,7 +175,8 @@ class TripsViewModel(
     val profileLoaded: StateFlow<Boolean> = ownProfileAnswer.map { it != null }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     /** The profiles shared with the user. */
-    val sharedProfiles: StateFlow<List<TravelProfile>> = accessSettled.flatMapLatest { store.sharedProfiles(email) }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val sharedProfiles: StateFlow<List<TravelProfile>> = combine(accessSettled, addresses) { _, addresses -> addresses }
+        .flatMapLatest { store.sharedProfiles(it) }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Whose documents a trip may need: the user's and those of people who shared their profile. */
     val people: StateFlow<List<PersonDocuments>> = combine(ownProfile, sharedProfiles) { own, shared -> peopleDocuments(own, shared, uid) }
@@ -246,7 +270,9 @@ class TripsViewModel(
      * nothing rather than write twice. Outcomes are kept per token, so one
      * screen's pending write never swallows another's.
      */
-    private fun run(token: String, block: suspend () -> Unit) {
+    // `operation` is a fixed name for the logs; the token can carry user
+    // data (an address being unshared, a loyalty number), so it never goes there.
+    private fun run(token: String, operation: String, block: suspend () -> Unit) {
         if (_outcomes.value[token] is Outcome.Busy) return
         _outcomes.update { it + (token to Outcome.Busy) }
         viewModelScope.launch {
@@ -256,6 +282,7 @@ class TripsViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                TravelmoLog.error(e, "$operation failed")
                 Outcome.Failed(e.message ?: e.javaClass.simpleName)
             }
             _outcomes.update { it + (token to outcome) }
@@ -267,28 +294,28 @@ class TripsViewModel(
         _outcomes.update { it - token }
     }
 
-    fun saveSegment(token: String, tripId: String, draft: SegmentDraft, existingId: String?) = run(token) { store.saveSegment(tripId, draft, existingId) }
+    fun saveSegment(token: String, tripId: String, draft: SegmentDraft, existingId: String?) = run(token, "saveSegment") { store.saveSegment(tripId, draft, existingId) }
 
-    fun deleteSegment(token: String, tripId: String, segmentId: String) = run(token) { store.deleteSegment(tripId, segmentId) }
+    fun deleteSegment(token: String, tripId: String, segmentId: String) = run(token, "deleteSegment") { store.deleteSegment(tripId, segmentId) }
 
-    fun restoreSegment(token: String, tripId: String, segmentId: String) = run(token) { store.restoreSegment(tripId, segmentId) }
+    fun restoreSegment(token: String, tripId: String, segmentId: String) = run(token, "restoreSegment") { store.restoreSegment(tripId, segmentId) }
 
-    fun moveSegment(token: String, fromTripId: String, segmentId: String, toTripId: String) = run(token) { store.moveSegment(fromTripId, segmentId, toTripId) }
+    fun moveSegment(token: String, fromTripId: String, segmentId: String, toTripId: String) = run(token, "moveSegment") { store.moveSegment(fromTripId, segmentId, toTripId) }
 
-    fun renameTrip(token: String, tripId: String, title: String) = run(token) {
+    fun renameTrip(token: String, tripId: String, title: String) = run(token, "renameTrip") {
         if (title.isBlank()) throw IllegalArgumentException("Give the trip a name")
         store.renameTrip(tripId, title)
     }
 
-    fun fitTripDates(token: String, tripId: String) = run(token) { store.fitTripDates(tripId) }
+    fun fitTripDates(token: String, tripId: String) = run(token, "fitTripDates") { store.fitTripDates(tripId) }
 
-    fun shareTrip(token: String, tripId: String, email: String) = run(token) { store.shareTrip(tripId, email) }
+    fun shareTrip(token: String, tripId: String, email: String) = run(token, "shareTrip") { store.shareTrip(tripId, email) }
 
-    fun unshareTrip(token: String, tripId: String, email: String) = run(token) { store.unshareTrip(tripId, email) }
+    fun unshareTrip(token: String, tripId: String, email: String) = run(token, "unshareTrip") { store.unshareTrip(tripId, email) }
 
-    fun deleteTrip(token: String, tripId: String) = run(token) { store.deleteTrip(tripId) }
+    fun deleteTrip(token: String, tripId: String) = run(token, "deleteTrip") { store.deleteTrip(tripId) }
 
-    fun mergeTrips(token: String, sourceId: String, targetId: String) = run(token) { store.mergeTrips(sourceId, targetId) }
+    fun mergeTrips(token: String, sourceId: String, targetId: String) = run(token, "mergeTrips") { store.mergeTrips(sourceId, targetId) }
 
     /** The Gmail account the user connected for importing, for source links; null when none. */
     val gmailAccount: StateFlow<String?> = store.gmailAccount(uid).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
@@ -296,7 +323,7 @@ class TripsViewModel(
     /** Whether reminders by email are on; null until the user document answers. */
     val reminderEmail: StateFlow<Boolean?> = store.reminderEmail(uid).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    fun setReminderEmail(token: String, on: Boolean) = run(token) { store.setReminderEmail(uid, on) }
+    fun setReminderEmail(token: String, on: Boolean) = run(token, "setReminderEmail") { store.setReminderEmail(uid, on) }
 
     /** The user's ride companies, hidden suggestions and home corrections; null until the user document answers. */
     val rideSettings: StateFlow<RideSettings?> = accessSettled.flatMapLatest { store.rideSettings(uid) }
@@ -313,10 +340,10 @@ class TripsViewModel(
         return rideNeeds(segments, periods, clock().toString(), hidden = settings.hidden)
     }
 
-    fun hideRideNeed(token: String, need: RideNeed) = run(token) { store.hideRideNeed(uid, rideNeedKey(need)) }
+    fun hideRideNeed(token: String, need: RideNeed) = run(token, "hideRideNeed") { store.hideRideNeed(uid, rideNeedKey(need)) }
 
     /** Removes a loyalty number found in the user's emails from their profile. */
-    fun removeFoundLoyalty(token: String, found: FoundLoyalty) = run(token) {
+    fun removeFoundLoyalty(token: String, found: FoundLoyalty) = run(token, "removeFoundLoyalty") {
         try {
             store.removeFoundLoyalty(uid, found)
         } catch (e: CancellationException) {
@@ -328,7 +355,7 @@ class TripsViewModel(
         }
     }
 
-    fun setLoyaltyPerson(token: String, program: String, number: String, person: String?) = run(token) {
+    fun setLoyaltyPerson(token: String, program: String, number: String, person: String?) = run(token, "setLoyaltyPerson") {
         try {
             store.setLoyaltyPerson(uid, program, number, person)
         } catch (e: CancellationException) {
@@ -373,7 +400,7 @@ class TripsViewModel(
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /** Turns reminders as notifications on this phone on or off; the permission is the screen's to ask for first. */
-    fun setPushDevice(token: String, on: Boolean) = run(token) {
+    fun setPushDevice(token: String, on: Boolean) = run(token, "setPushDevice") {
         val messagingToken = pushDevice.latest.value ?: throw IllegalStateException("This phone has no messaging token")
         val id = deviceId(messagingToken)
         if (on) store.registerDevice(uid, id, messagingToken) else store.unregisterDevice(uid, id)
@@ -389,13 +416,28 @@ class TripsViewModel(
      * this scope, so signing out, which takes Settings off the screen, is
      * not cut short with it. A failure leaves the user signed in to retry.
      */
-    fun deleteAccount(token: String, signOut: suspend () -> Unit) = run(token) {
+    fun deleteAccount(token: String, signOut: suspend () -> Unit) = run(token, "deleteAccount") {
         accountDeletion.deleteAccount()
         signOut()
     }
 
+    /** Whether this build can change the linked addresses here; without a parser address, Settings only lists them. */
+    val canLinkEmails: Boolean
+        get() = emailLinks.available
+
+    /** Mails a confirmation link to another address of the user's; a refusal the app can tell is said at once. */
+    fun addEmail(token: String, raw: String) = run(token, "addEmail") {
+        when (val check = checkNewLink(raw, email, addressHolder.value, clock().toString())) {
+            is LinkCheck.Refused -> throw EmailLinkFailed(check.refusal.text)
+            is LinkCheck.Ok -> emailLinks.add(check.email)
+        }
+    }
+
+    /** Unlinks a confirmed address, or withdraws a pending one. */
+    fun removeEmail(token: String, address: String) = run(token, "removeEmail") { emailLinks.remove(address) }
+
     /** Who the user's travel profile is shared with; the profile is started if none has arrived yet. */
-    fun saveTrusted(token: String, emails: List<String>) = run(token) {
+    fun saveTrusted(token: String, emails: List<String>) = run(token, "saveTrusted") {
         val answer = ownProfileAnswer.value ?: throw IllegalStateException("The profile is still loading; try again")
         store.saveTrusted(uid, email, exists = answer.profile != null, emails = emails)
     }

@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { AccountDeleted, DeleteAccountSection, useAccountDeletion } from "@/components/DeleteAccount";
+import { EmailAddressesSection } from "@/components/EmailAddresses";
 import { SignInGate } from "@/components/SignInGate";
 import { api } from "@/lib/api";
 import { exportLinks, useCalendarExport } from "@/lib/calendarExport";
@@ -1050,6 +1051,7 @@ export default function SettingsPage() {
             <GoogleCalendarSection user={user} />
           </Suspense>
           <CalendarExportSection user={user} />
+          <EmailAddressesSection user={user} />
           <RemindersSection user={user} />
           <RideCompaniesSection user={user} />
           <PatternsSection user={user} />

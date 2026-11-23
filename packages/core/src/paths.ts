@@ -44,6 +44,11 @@ export const paths = {
   pendingCancellations: (uid: string) => `users/${uid}/pendingCancellations`,
   pendingCancellation: (uid: string, messageId: string) => `users/${uid}/pendingCancellations/${messageId}`,
   gmailAccount: (emailAddress: string) => `gmailAccounts/${emailAddress}`,
+  // Server-only: which account a confirmed address is linked to, one each
+  // (emails.ts), and the account's unconfirmed links' token hashes and the
+  // confirmation emails it sent today.
+  linkedEmail: (email: string) => `linkedEmails/${email}`,
+  emailLinks: (uid: string) => `users/${uid}/private/emails`,
   oauthState: (nonce: string) => `oauthStates/${nonce}`,
   pendingConnection: (token: string) => `pendingConnections/${token}`,
   // The geocoder's answers, shared by every user, and its calls per day.

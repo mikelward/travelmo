@@ -322,8 +322,10 @@ One Google Cloud project holds everything.
    `SMTP_HOST`, `SMTP_PORT` (default 465, TLS from the start; 587 upgrades),
    `SMTP_USERNAME` and `SMTP_PASSWORD` (from Secret Manager) and `SMTP_FROM`
    turn on reminders by email, sent through whatever mail service the
-   account already has; without `SMTP_HOST` the switch in Settings does
-   nothing. `VAPID_PRIVATE_KEY` (from Secret Manager), `VAPID_PUBLIC_KEY`
+   account already has, and the links that confirm a linked email address
+   (SPEC "Linked email addresses"); without `SMTP_HOST` the switch in
+   Settings does nothing and adding an address answers that email is not
+   set up. `VAPID_PRIVATE_KEY` (from Secret Manager), `VAPID_PUBLIC_KEY`
    and `VAPID_SUBJECT` (a `mailto:` or `https:` URL the push services may
    contact) turn on reminders as browser notifications; make the pair once
    with `pnpm --filter @travelmo/parser exec web-push generate-vapid-keys`

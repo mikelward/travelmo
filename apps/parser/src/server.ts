@@ -13,6 +13,7 @@ import {
   type GmailState,
   type GoogleCalendarChoice,
   type ImportedProfile,
+  type LinkRefusal,
 } from "@travelmo/core";
 import { randomBytes } from "node:crypto";
 import { Hono, type Context } from "hono";
@@ -20,8 +21,9 @@ import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import type { DecodedIdToken } from "firebase-admin/auth";
-import { approvedUid, gateUser, grandfatherOnStart, onlyApproved, settleAccess } from "./access";
+import { approvedUid, gateUser, grandfatherOnStart, onlyApproved, settleAccess, verifiedEmailOf } from "./access";
 import { deleteAccount } from "./account";
+import { LinkRefused, addressesOf, confirmLink, removeLink, requestLink, uidForAddress } from "./emails";
 import {
   MailboxConflict,
   OtherMailboxConnected,
@@ -200,6 +202,7 @@ app.use("/account/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", 
 app.use("/trips/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/flights/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/access/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
+app.use("/emails/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 
 app.get("/healthz", (c) => c.text("ok"));
 
@@ -863,8 +866,25 @@ async function verifiedEmail(uid: string): Promise<string | undefined> {
   const record = await auth.getUser(uid);
   return record.emailVerified && record.email ? record.email.toLowerCase() : undefined;
 }
+// Every address that is the user's, for the trips and profiles shared
+// with them (SPEC "Linked email addresses").
+const addresses = (uid: string) => addressesOf(db, uid, verifiedEmail);
+// The account that signs in with an address Google verified, if any.
+async function signInOwner(email: string): Promise<string | undefined> {
+  try {
+    const record = await auth.getUserByEmail(email);
+    return record.emailVerified ? record.uid : undefined;
+  } catch (error) {
+    // Shared with an address nobody has signed in with.
+    if ((error as { code?: string }).code === "auth/user-not-found") return undefined;
+    throw error;
+  }
+}
+// Whose an address is: the account signing in with it, else the one that
+// linked it or connected it as its Gmail.
+const uidForEmail = uidForAddress(db, signInOwner);
 // A revoked account's link answers as an unknown one does.
-const exportIo = firestoreExportIo(db, verifiedEmail, async (uid) => {
+const exportIo = firestoreExportIo(db, addresses, async (uid) => {
   const approved = await approvedUid(db, uid, verifiedEmail, log);
   if (!approved) log("INFO", "calendar_export_unapproved_owner", { uid });
   return approved;
@@ -947,7 +967,7 @@ const reminderChannels = {
   fcm: fcmSender(getMessaging(firebaseApp)),
 };
 // Reminders stop for anyone no longer approved.
-const allReminderIo = firestoreReminderIo(db, verifiedEmail);
+const allReminderIo = firestoreReminderIo(db, verifiedEmail, addresses);
 const reminderIo = {
   ...allReminderIo,
   users: async () => onlyApproved(await allReminderIo.users(), (uid) => approvedUid(db, uid, verifiedEmail, log), log),
@@ -968,6 +988,86 @@ app.post("/internal/reminders", async (c) => {
   return c.json({ enabled: true, ...run });
 });
 
+// Linked email addresses (emails.ts; SPEC "Linked email addresses"). A
+// refusal answers with its reason, which the apps put in words.
+const refusalStatus: Record<LinkRefusal, 400 | 409 | 410 | 429> = {
+  invalid: 400,
+  yours: 400,
+  full: 400,
+  limit: 429,
+  taken: 409,
+  expired: 410,
+};
+const emailDeps = {
+  db,
+  mail: reminderChannels.mail,
+  origin: webOrigin,
+  now: deps.now,
+  log,
+  signInOwner,
+};
+// Runs one of the linking routes, logging why it failed by the operation
+// and the account, never the address or the token, and turning a refusal
+// into its status.
+async function linking<T>(operation: "add" | "confirm" | "remove", uid: string, work: () => Promise<T>): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    if (error instanceof LinkRefused) {
+      log("INFO", "email_route_refused", { operation, uid, reason: error.refusal });
+      throw new HTTPException(refusalStatus[error.refusal], {
+        res: new Response(JSON.stringify({ refusal: error.refusal }), {
+          status: refusalStatus[error.refusal],
+          headers: { "Content-Type": "application/json" },
+        }),
+      });
+    }
+    if (error instanceof AccountDeletedError) {
+      log("INFO", "email_link_account_deleted", { operation, uid });
+      throw new HTTPException(410, { message: "This account was deleted" });
+    }
+    // The error's name and code, not its message, which may name the
+    // address (a mail server's refusal, a parse error).
+    log("ERROR", "email_route_failed", { operation, uid, error: (error as Error).name, code: (error as { code?: unknown }).code });
+    // Answered here rather than rethrown: `onError` would log the message.
+    throw new HTTPException(500, { message: "Something went wrong. Try again later." });
+  }
+}
+const emailBody = async (c: Context<Env>, field: "email" | "token"): Promise<string> => {
+  const body = (await c.req.json().catch((error: unknown) => {
+    // Answered as a missing field below.
+    // The error's name only: a parse error's message quotes the body.
+    log("INFO", "email_body_unreadable", { field, error: (error as Error).name });
+    return {};
+  })) as Record<string, unknown>;
+  const value = body[field];
+  if (typeof value !== "string" || !value || value.length > 512) throw new HTTPException(400, { message: `Missing ${field}` });
+  return value;
+};
+
+// Sends a confirmation link to an address the user wants to link.
+app.post("/emails/add", async (c) => {
+  const token = await requireApprovedToken(c);
+  const email = await emailBody(c, "email");
+  if (!emailDeps.mail) throw new HTTPException(503, { message: "Email is not set up on this server" });
+  return c.json(await linking("add", token.uid, () => requestLink(emailDeps, token.uid, verifiedEmailOf(token), email)));
+});
+
+// The confirmation link's page calls this, signed in; only the account
+// that asked can confirm.
+app.post("/emails/confirm", async (c) => {
+  const uid = await requireUser(c);
+  const token = await emailBody(c, "token");
+  return c.json(await linking("confirm", uid, () => confirmLink(emailDeps, uid, token)));
+});
+
+app.post("/emails/remove", async (c) => {
+  const uid = await requireUser(c);
+  const email = await emailBody(c, "email");
+  await linking("remove", uid, () => removeLink(emailDeps, uid, email));
+  return c.body(null, 204);
+});
+
 // The one endpoint an account not yet approved may call (SPEC "Access"):
 // the app calls it when it finds the account not approved, and again after
 // asking for access. It lets in an account from before approvals or one
@@ -986,14 +1086,7 @@ app.post("/access/check", async (c) => {
       log,
       channels: reminderChannels,
       verifiedEmail,
-      uidForEmail: async (email) => {
-        try {
-          return (await auth.getUserByEmail(email)).uid;
-        } catch (error) {
-          if ((error as { code?: unknown }).code === "auth/user-not-found") return undefined;
-          throw error;
-        }
-      },
+      uidForEmail,
     },
     token,
   );
@@ -1015,17 +1108,9 @@ const flightStatusDailyLimit = Number(optionalEnv("FLIGHT_STATUS_DAILY_LIMIT", S
 if (!Number.isInteger(flightStatusDailyLimit) || flightStatusDailyLimit < 0) throw new Error("FLIGHT_STATUS_DAILY_LIMIT must be a whole number");
 const flightLookup = aeroApiKey ? aeroApiLookup(aeroApiKey) : undefined;
 const flightIo = firestoreFlightIo(db, {
-  // Only a sign-in Google verified counts, as for sharing itself.
-  async uidForEmail(email) {
-    try {
-      const record = await auth.getUserByEmail(email);
-      return record.emailVerified ? record.uid : undefined;
-    } catch (error) {
-      // Shared with an address nobody has signed in with: no one to tell.
-      if ((error as { code?: string }).code === "auth/user-not-found") return undefined;
-      throw error;
-    }
-  },
+  // Only a sign-in Google verified counts, or an address its account
+  // confirmed, as for sharing itself.
+  uidForEmail,
   pushSubscriptions: reminderIo.pushSubscriptions,
   removePushSubscription: reminderIo.removePushSubscription,
   devices: reminderIo.devices,
@@ -1093,11 +1178,11 @@ app.post("/internal/flight-status", async (c) => {
 // An open trip page asks for its flights now, at most once a minute each;
 // what it learns is news for everyone on the flight, as from the job.
 app.post("/flights/refresh", async (c) => {
-  const { uid, email, email_verified } = await requireApprovedToken(c);
+  const uid = await requireUser(c);
   const body = (await c.req.json().catch(() => ({}))) as { tripId?: unknown };
   if (typeof body.tripId !== "string" || !body.tripId) throw new HTTPException(400, { message: "Missing tripId" });
   const trip = await flightIo.trip(body.tripId);
-  if (!trip || !canSeeTrip(trip, uid, email_verified ? email : undefined)) throw new HTTPException(404, { message: "No such trip" });
+  if (!trip || !canSeeTrip(trip, uid, await addresses(uid))) throw new HTTPException(404, { message: "No such trip" });
   const options = flightOptions();
   if (!options) return c.json({ enabled: false });
   const run = await checkFlights(flightIo, options, { tripId: trip.id });

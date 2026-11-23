@@ -133,6 +133,14 @@ export async function seedGmail(uid: string, gmail: GmailConnection): Promise<vo
   await db.doc(paths.user(uid)).set({ gmail }, { merge: true });
 }
 
+// Addresses the parser confirmed for the account (SPEC "Linked email
+// addresses"): its private record, which the rules trust, then the
+// profile's copy, which the app shows and queries with.
+export async function seedLinkedEmails(uid: string, emails: string[]): Promise<void> {
+  await db.doc(paths.emailLinks(uid)).set({ pending: [], confirmed: emails }, { merge: true });
+  await db.doc(paths.user(uid)).set({ emails }, { merge: true });
+}
+
 export async function seedGoogleCalendar(uid: string, googleCalendar: GoogleCalendarConnection): Promise<void> {
   await db.doc(paths.user(uid)).set({ googleCalendar }, { merge: true });
 }

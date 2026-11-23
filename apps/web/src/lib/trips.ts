@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarFeed, ParsedMessage, Segment, SenderPatterns, Trip, UserProfile, paths } from "@travelmo/core";
+import { CalendarFeed, ParsedMessage, Segment, SenderPatterns, Trip, UserProfile, myAddresses, paths, queryAddresses } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import {
   collection,
@@ -31,7 +31,9 @@ function parseDocs<T extends z.ZodType>(schema: T, snapshot: QuerySnapshot<Docum
 export function useTrips(user: User): Trip[] | undefined {
   const [own, setOwn] = useState<Trip[]>();
   const [sharedWithMe, setSharedWithMe] = useState<Trip[]>();
-  const email = user.email?.toLowerCase();
+  // Shared with any of the user's addresses (SPEC "Linked email addresses"),
+  // in one query; keyed by the list, so a newly linked address re-queries.
+  const addresses = queryAddresses(useAddresses(user)).join("\n");
 
   useEffect(() => {
     return onSnapshot(
@@ -42,21 +44,21 @@ export function useTrips(user: User): Trip[] | undefined {
   }, [user.uid]);
 
   useEffect(() => {
-    if (!email) return;
+    if (!addresses) return;
     return onSnapshot(
-      query(collection(firestore(), paths.trips()), where("sharedWith", "array-contains", email)),
+      query(collection(firestore(), paths.trips()), where("sharedWith", "array-contains-any", addresses.split("\n"))),
       (s) => setSharedWithMe(parseDocs(Trip, s)),
       (error) => console.error("Shared trips subscription failed", error),
     );
-  }, [email]);
+  }, [addresses]);
 
   return useMemo(() => {
-    const shared = email ? sharedWithMe : [];
+    const shared = addresses ? sharedWithMe : [];
     if (!own || !shared) return undefined;
     const byId = new Map<string, Trip>();
     for (const trip of [...own, ...shared]) byId.set(trip.id, trip);
     return [...byId.values()];
-  }, [own, sharedWithMe, email]);
+  }, [own, sharedWithMe, addresses]);
 }
 
 export function useTrip(tripId: string): Trip | null | undefined {
@@ -164,6 +166,15 @@ export function useNow(intervalMs = 60_000): string {
     return () => clearInterval(timer);
   }, [intervalMs]);
   return now;
+}
+
+// Every address that is the user's: the sign-in, then those confirmed and
+// the connected Gmail, from the user document as it arrives.
+export function useAddresses(user: User): string[] {
+  const profile = useProfile(user.uid);
+  const signIn = user.emailVerified ? user.email : undefined;
+  const key = myAddresses(signIn, profile).join("\n");
+  return useMemo(() => (key ? key.split("\n") : []), [key]);
 }
 
 export function useProfile(uid: string): UserProfile | undefined {

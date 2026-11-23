@@ -89,9 +89,14 @@ export async function saveConnection(db: Firestore, uid: string, state: GmailSta
     await refuseIfDeleted(db, t, uid);
     const accountRef = db.doc(paths.gmailAccount(state.emailAddress));
     const stateRef = db.doc(paths.gmailState(uid));
-    const [account, current] = await Promise.all([t.get(accountRef), t.get(stateRef)]);
-    const owner = account.data()?.uid as string | undefined;
-    if (owner !== undefined && owner !== uid) throw new MailboxConflict(state.emailAddress);
+    // A connected mailbox's address counts as the user's (SPEC "Linked email
+    // addresses"), so one another account linked is refused as one it
+    // connected is.
+    const linkedRef = db.doc(paths.linkedEmail(state.emailAddress.toLowerCase()));
+    const [account, current, linked] = await Promise.all([t.get(accountRef), t.get(stateRef), t.get(linkedRef)]);
+    for (const owner of [account.data()?.uid, linked.data()?.uid] as (string | undefined)[]) {
+      if (owner !== undefined && owner !== uid) throw new MailboxConflict(state.emailAddress);
+    }
     const existing = current.exists ? GmailState.parse(current.data()) : undefined;
     if (existing && existing.emailAddress !== state.emailAddress) throw new OtherMailboxConnected(existing.emailAddress);
     t.set(stateRef, state);

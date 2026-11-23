@@ -7,7 +7,9 @@ import {
   accessInvite,
   accessRequest,
   accessStatus,
+  linkedEmails,
   paths,
+  UserProfile,
   type AccountAccess,
 } from "@travelmo/core";
 import type { User } from "firebase/auth";
@@ -43,7 +45,14 @@ const verifiedEmail = (user: User): string | undefined =>
 // account never reads the last one's.
 type Seen<T> = { path: string; value: T; confirmed: boolean };
 
-function useDocument<T>(path: string | undefined, read: (snapshot: DocumentSnapshot) => T, onError: (error: FirestoreError) => T): Seen<T> | undefined {
+// `retry` names what else the read depends on: a change of it subscribes
+// afresh, so a read the rules refused is tried again once they may allow it.
+function useDocument<T>(
+  path: string | undefined,
+  read: (snapshot: DocumentSnapshot) => T,
+  onError: (error: FirestoreError) => T,
+  retry = "",
+): Seen<T> | undefined {
   const [answer, setAnswer] = useState<Seen<T>>();
   const readRef = useRef(read);
   const errorRef = useRef(onError);
@@ -59,18 +68,20 @@ function useDocument<T>(path: string | undefined, read: (snapshot: DocumentSnaps
       (s) => setAnswer({ path, value: readRef.current(s), confirmed: !s.metadata.fromCache }),
       (error) => setAnswer({ path, value: errorRef.current(error), confirmed: true }),
     );
-  }, [path]);
+  }, [path, retry]);
   return answer?.path === path ? answer : undefined;
 }
 
 export function useAccess(user: User | null | undefined): Access {
   const email = user ? verifiedEmail(user) : undefined;
-  const profile = useDocument(
+  // Whether it exists, and the addresses the account linked (SPEC "Linked
+  // email addresses"), any of which may be an admin's.
+  const profile = useDocument<{ exists: boolean; linked: string[] }>(
     user ? paths.user(user.uid) : undefined,
-    (s) => s.exists(),
+    (s) => ({ exists: s.exists(), linked: s.exists() ? linkedEmails(UserProfile.safeParse(s.data()).data) : [] }),
     (error) => {
       console.error("Reading the user document failed", error);
-      return false;
+      return { exists: false, linked: [] };
     },
   );
   const record = useDocument<AccessRecord | undefined>(
@@ -87,25 +98,27 @@ export function useAccess(user: User | null | undefined): Access {
     },
   );
   const config = useDocument<AccessConfig | undefined>(
-    user && email ? paths.accessConfig() : undefined,
+    user ? paths.accessConfig() : undefined,
     (s) => (s.exists() ? AccessConfig.safeParse(s.data()).data : undefined),
     // Expected for everyone but admins: the list is theirs alone to read.
     (error) => {
       if (error.code !== "permission-denied") console.error("Reading the admins' list failed", error);
       return undefined;
     },
+    // Linking an admin's address (or connecting its Gmail) opens the list.
+    profile?.value.linked.join(" "),
   );
 
-  // An unverified address has no record and is no admin.
+  // An unverified address has no record.
   const none = { value: undefined, confirmed: true };
   const recordSeen = email ? record : none;
-  const configSeen = email ? config : none;
-  if (!user || !profile || !recordSeen || !configSeen) return { state: "loading" };
-  const status = accessStatus({ email, hasProfile: profile.value, record: recordSeen.value, config: configSeen.value });
-  if (status !== "approved" && !(profile.confirmed && recordSeen.confirmed && configSeen.confirmed)) return { state: "loading" };
-  const admins = configSeen.value?.admins ?? [];
-  const admin = !!email && admins.includes(email);
-  return { state: status, admin, admins, hasProfile: profile.value, ...(recordSeen.value ? { record: recordSeen.value } : {}) };
+  if (!user || !profile || !recordSeen || !config) return { state: "loading" };
+  const { exists: hasProfile, linked } = profile.value;
+  const status = accessStatus({ email, hasProfile, record: recordSeen.value, config: config.value, linked });
+  if (status !== "approved" && !(profile.confirmed && recordSeen.confirmed && config.confirmed)) return { state: "loading" };
+  const admins = config.value?.admins ?? [];
+  const admin = admins.some((address) => address === email || linked.includes(address));
+  return { state: status, admin, admins, hasProfile, ...(recordSeen.value ? { record: recordSeen.value } : {}) };
 }
 
 // Asking for access, for the signed-in address.

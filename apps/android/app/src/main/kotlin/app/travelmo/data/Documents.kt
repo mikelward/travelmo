@@ -1,5 +1,7 @@
 package app.travelmo.data
 
+import app.travelmo.core.AddressHolder
+import app.travelmo.core.PendingEmail
 import app.travelmo.core.FlightStatus
 import app.travelmo.core.FoundLoyalty
 import app.travelmo.core.LoyaltyPerson
@@ -175,6 +177,16 @@ private fun Map<String, Any?>.entries(key: String): List<ProfileEntry> =
         }
         ProfileEntry(title, fields)
     }
+
+/** The addresses `users/{uid}` names (SPEC "Linked email addresses"); anything malformed counts as absent. */
+fun addressHolderFromDocument(data: Map<String, Any?>): AddressHolder = AddressHolder(
+    emails = data.strings("emails"),
+    gmail = (data["gmail"] as? Map<*, *>)?.get("emailAddress") as? String,
+    pendingEmails = (data["pendingEmails"] as? List<*>).orEmpty().mapNotNull { p ->
+        val entry = p as? Map<*, *> ?: return@mapNotNull null
+        PendingEmail(entry["email"] as? String ?: return@mapNotNull null, entry["sentAt"] as? String ?: return@mapNotNull null, entry["expiresAt"] as? String ?: return@mapNotNull null)
+    },
+)
 
 /** users/{uid}/travelProfile/main as the parser writes it. */
 fun profileFromDocument(data: Map<String, Any?>): TravelProfile? {

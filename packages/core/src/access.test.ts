@@ -64,6 +64,26 @@ describe("accessStatus", () => {
     expect(accessStatus({ ...base, email: undefined, record: { email: "new@example.com", status: "approved" } })).toBe("none");
     expect(accessStatus({ ...base, record: { email: "other@example.com", status: "approved" } })).toBe("none");
   });
+
+  it("counts an admin's listing, an approval or an invite of a linked address", () => {
+    const linked = ["work@company.example"];
+    expect(accessStatus({ ...base, linked: ["admin@example.com"] })).toBe("approved");
+    expect(accessStatus({ ...base, linked, linkedRecords: [{ email: "work@company.example", status: "approved" }] })).toBe("approved");
+    expect(accessStatus({ ...base, linked, linkedRecords: [{ email: "work@company.example", invitedBy: "u1" }] })).toBe("approved");
+    // Not a declined one, a request, or the record of an address not linked.
+    expect(accessStatus({ ...base, linked, linkedRecords: [{ email: "work@company.example", status: "declined", invitedBy: "u1" }] })).toBe("none");
+    expect(accessStatus({ ...base, linked, linkedRecords: [{ email: "work@company.example", status: "requested" }] })).toBe("none");
+    expect(accessStatus({ ...base, linked, linkedRecords: [{ email: "other@example.com", status: "approved" }] })).toBe("none");
+    // The sign-in's decline still wins over a linked address's approval.
+    expect(
+      accessStatus({
+        ...base,
+        record: { email: "new@example.com", status: "declined" },
+        linked,
+        linkedRecords: [{ email: "work@company.example", status: "approved" }],
+      }),
+    ).toBe("declined");
+  });
 });
 
 describe("grandfatheredAccess", () => {
