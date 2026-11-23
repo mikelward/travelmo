@@ -1,5 +1,9 @@
 package app.travelmo.ui
 
+import app.travelmo.data.TripActions
+import app.travelmo.data.TripActionFailed
+import app.travelmo.core.describeRegroup
+import app.travelmo.core.describeDeletedTrips
 import app.travelmo.core.AddressHolder
 import app.travelmo.core.FlightStatus
 import app.travelmo.core.FoundLoyalty
@@ -311,5 +315,21 @@ class FakeAccountDeletion(private val failure: String? = null) : AccountDeletion
     override suspend fun deleteAccount() {
         calls++
         failure?.let { throw AccountDeletionFailed(it) }
+    }
+}
+
+/** Regrouping and deleting all trips as the parser would answer, counting calls; a [failure] message throws. */
+class FakeTripActions(private val failure: String? = null) : TripActions {
+    val calls = mutableListOf<String>()
+    override val available = true
+    override suspend fun regroup(): String {
+        calls += "regroup"
+        failure?.let { throw TripActionFailed(it) }
+        return describeRegroup(2, 1)
+    }
+    override suspend fun deleteAll(): String {
+        calls += "deleteAll"
+        failure?.let { throw TripActionFailed(it) }
+        return describeDeletedTrips(3)
     }
 }

@@ -316,6 +316,31 @@ class TripsViewModelTest {
     }
 
     @Test
+    fun `regrouping and deleting all trips go to the parser and say what they did`() = runTest {
+        val actions = FakeTripActions()
+        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, tripActions = actions)
+        viewModel.canRunTripActions shouldBe true
+        viewModel.regroupTrips("regroup")
+        viewModel.tripNotice.value shouldBe "Done: 2 trips rebuilt, 1 trip merged away."
+        viewModel.deleteAllTrips("delete")
+        viewModel.tripNotice.value shouldBe "Deleted 3 trips. Import past bookings to start again."
+        actions.calls shouldBe listOf("regroup", "deleteAll")
+        viewModel.outcomes.value shouldBe mapOf("regroup" to Outcome.Done, "delete" to Outcome.Done)
+    }
+
+    @Test
+    fun `a trip action that fails says why, and without a parser address points to the web`() = runTest {
+        val failing = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, tripActions = FakeTripActions(failure = "Couldn't reach Travelmo. Check your connection and try again."))
+        failing.regroupTrips("regroup")
+        failing.tripNotice.value shouldBe null
+        failing.outcomes.value shouldBe mapOf("regroup" to Outcome.Failed("Couldn't reach Travelmo. Check your connection and try again."))
+        val none = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL)
+        none.canRunTripActions shouldBe false
+        none.deleteAllTrips("delete")
+        none.outcomes.value shouldBe mapOf("delete" to Outcome.Failed("Use Settings on the web for this."))
+    }
+
+    @Test
     fun `an account the access check lets in sees its trips`() = runTest {
         val store = RefusingStore()
         val check = FakeAccessCheck(store)

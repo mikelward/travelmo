@@ -425,7 +425,7 @@ class ScreenScreenshotTest {
 
     private fun settings(name: String, dark: Boolean) {
         // With a messaging token, so the notifications switch is on the screen.
-        // With a parser address, so Delete account is a button.
+        // With a parser address, so Delete account and the trip actions are buttons.
         // With an address linked and another waiting for its link.
         val addresses = AddressHolder(
             emails = listOf("owner@work.example"),
@@ -433,7 +433,7 @@ class ScreenScreenshotTest {
         )
         val viewModel = TripsViewModel(
             FakeTripStore(addressHolder = addresses), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, pushDevice = FakePushDevice(),
-            accountDeletion = FakeAccountDeletion(), emailLinks = FakeEmailLinks(),
+            accountDeletion = FakeAccountDeletion(), emailLinks = FakeEmailLinks(), tripActions = FakeTripActions(),
         )
         capture(name, dark = dark) {
             SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})

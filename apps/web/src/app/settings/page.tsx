@@ -1,6 +1,6 @@
 "use client";
 
-import { RideCompany, groupSkips, maxRideCompanies, paths, type SenderPatterns, type SkipGroup } from "@travelmo/core";
+import { RideCompany, describeDeletedTrips, describeRegroup, groupSkips, maxRideCompanies, paths, type SenderPatterns, type SkipGroup } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -14,7 +14,6 @@ import { exportLinks, useCalendarExport } from "@/lib/calendarExport";
 import { describeBackfill, isReading, pausedReason } from "@/lib/backfill";
 import { useAuth } from "@/lib/auth";
 import { firestore } from "@/lib/firebase";
-import { describeDeletedTrips, describeRegroup } from "@/lib/regroup";
 import { useInstall } from "@/lib/install";
 import { useSaveForOffline } from "@/lib/offline";
 import { subscribePush, unsubscribePush, usePushState } from "@/lib/push";

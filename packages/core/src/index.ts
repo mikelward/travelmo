@@ -30,3 +30,4 @@ export * from "./flightStatus";
 export * from "./access";
 export * from "./rides";
 export * from "./emails";
+export * from "./tripActions";
