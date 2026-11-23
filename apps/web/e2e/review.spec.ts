@@ -26,3 +26,26 @@ test("Settings links to the import review page, which lists what was not importe
   await page.getByRole("link", { name: "Settings" }).first().click();
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
 });
+
+test("the review list is searched by keyword and by dates", async ({ page }) => {
+  const uid = await signIn(page, owner);
+  const base = { uid, segmentIds: [], source: "gmail" as const, outcome: "not_booking" as const };
+  await seedParsedMessage({ ...base, messageId: "sale", from: "News <news@cove.example>", subject: "Our summer sale", processedAt: "2026-10-30T12:00:00Z" });
+  await seedParsedMessage({ ...base, messageId: "survey", from: "Rail <hello@rail.example>", subject: "How was your trip?", processedAt: "2026-09-15T12:00:00Z" });
+
+  await page.goto("/settings/review");
+  await expect(page.getByText("Our summer sale")).toBeVisible();
+  await expect(page.getByText("How was your trip?")).toBeVisible();
+
+  await page.getByRole("searchbox", { name: "Search" }).fill("rail");
+  await expect(page.getByText("Our summer sale")).toBeHidden();
+  await expect(page.getByText("How was your trip?")).toBeVisible();
+
+  await page.getByRole("button", { name: "Clear" }).click();
+  await page.getByLabel("From").fill("2026-10-01");
+  await expect(page.getByText("How was your trip?")).toBeHidden();
+  await expect(page.getByText("Our summer sale")).toBeVisible();
+
+  await page.getByLabel("To").fill("2026-10-15");
+  await expect(page.getByText("Nothing matches.")).toBeVisible();
+});

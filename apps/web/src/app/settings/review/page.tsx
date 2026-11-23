@@ -1,6 +1,6 @@
 "use client";
 
-import type { ParsedMessage } from "@travelmo/core";
+import { dayRange, toReview, type ParsedMessage, type ReviewSearch } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
 import { useState } from "react";
@@ -14,6 +14,11 @@ import { useParsedMessages, useSenderPatterns } from "@/lib/trips";
 const buttonClass =
   "rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
 
+const fieldClass = "mt-1 rounded-lg border border-field bg-background px-3 py-2";
+
+// How many records the list loads, newest first, within any dates picked.
+const recent = 100;
+
 const outcomeLabels: Record<ParsedMessage["outcome"], string> = {
   processing: "Processing",
   filtered: "Skipped before reading",
@@ -23,11 +28,13 @@ const outcomeLabels: Record<ParsedMessage["outcome"], string> = {
 };
 
 function ReviewList({ user }: { user: User }) {
-  const records = useParsedMessages(user.uid);
+  const [search, setSearch] = useState<ReviewSearch>({ keyword: "", from: "", to: "" });
+  const records = useParsedMessages(user.uid, recent, dayRange(search.from, search.to));
   const patterns = useSenderPatterns(user.uid);
   const [busy, setBusy] = useState<string>();
   const [notice, setNotice] = useState<Record<string, string>>({});
-  const toReview = records?.filter((r) => r.outcome !== "imported" && r.outcome !== "processing") ?? [];
+  const shown = records ? toReview(records, search.keyword) : [];
+  const searching = Boolean(search.keyword.trim() || search.from || search.to);
 
   const act = async (record: ParsedMessage, action: () => Promise<string>) => {
     setBusy(record.messageId);
@@ -47,9 +54,34 @@ function ReviewList({ user }: { user: User }) {
         Recent emails and other imports that did not become bookings. Teach the importer about a sender, or import one anyway.
       </p>
       {records === undefined && <p className="mt-3 text-muted">Loading…</p>}
-      {records && toReview.length === 0 && <p className="mt-3 text-sm text-muted">Nothing to review.</p>}
+      <form role="search" className="mt-4 flex flex-wrap items-end gap-3 text-sm" onSubmit={(e) => e.preventDefault()}>
+        <label className="flex flex-col">
+          <span className="font-medium">Search</span>
+          <input
+            type="search"
+            value={search.keyword}
+            placeholder="Subject or sender"
+            onChange={(e) => setSearch({ ...search, keyword: e.target.value })}
+            className={fieldClass}
+          />
+        </label>
+        <label className="flex flex-col">
+          <span className="font-medium">From</span>
+          <input type="date" value={search.from} max={search.to || undefined} onChange={(e) => setSearch({ ...search, from: e.target.value })} className={fieldClass} />
+        </label>
+        <label className="flex flex-col">
+          <span className="font-medium">To</span>
+          <input type="date" value={search.to} min={search.from || undefined} onChange={(e) => setSearch({ ...search, to: e.target.value })} className={fieldClass} />
+        </label>
+        {searching && (
+          <button type="button" className={buttonClass} onClick={() => setSearch({ keyword: "", from: "", to: "" })}>
+            Clear
+          </button>
+        )}
+      </form>
+      {records && shown.length === 0 && <p className="mt-3 text-sm text-muted">{searching ? "Nothing matches." : "Nothing to review."}</p>}
       <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
-        {toReview.map((record) => {
+        {shown.map((record) => {
           // Records from other sources have no sender to teach and no email
           // to read again.
           const fromGmail = (record.source ?? "gmail") === "gmail";
@@ -99,6 +131,9 @@ function ReviewList({ user }: { user: User }) {
           );
         })}
       </ul>
+      {records && records.length === recent && (
+        <p className="mt-3 text-sm text-muted">Only the {recent} most recent are searched. Pick dates to look further back.</p>
+      )}
     </section>
   );
 }

@@ -184,16 +184,22 @@ export function useProfile(uid: string): UserProfile | undefined {
 
 // The most recent import decisions, newest first; the caller filters by
 // outcome so no composite index is needed.
-export function useParsedMessages(uid: string, max = 100): ParsedMessage[] | undefined {
-  const [records, setRecords] = useState<ParsedMessage[]>();
+// The newest records first, optionally only those processed in [start, end).
+export function useParsedMessages(uid: string, max = 100, range: { start?: string; end?: string } = {}): ParsedMessage[] | undefined {
+  const { start, end } = range;
+  // Tagged with the query they answer, so a new range shows as loading
+  // rather than the old range's records.
+  const key = `${uid}|${max}|${start ?? ""}|${end ?? ""}`;
+  const [loaded, setLoaded] = useState<{ key: string; records: ParsedMessage[] }>();
   useEffect(() => {
+    const bounds = [...(start ? [where("processedAt", ">=", start)] : []), ...(end ? [where("processedAt", "<", end)] : [])];
     return onSnapshot(
-      query(collection(firestore(), `${paths.user(uid)}/parsedMessages`), orderBy("processedAt", "desc"), limit(max)),
-      (s) => setRecords(parseDocs(ParsedMessage, s)),
+      query(collection(firestore(), `${paths.user(uid)}/parsedMessages`), ...bounds, orderBy("processedAt", "desc"), limit(max)),
+      (s) => setLoaded({ key, records: parseDocs(ParsedMessage, s) }),
       (error) => console.error("Parsed messages subscription failed", error),
     );
-  }, [uid, max]);
-  return records;
+  }, [key, uid, max, start, end]);
+  return loaded?.key === key ? loaded.records : undefined;
 }
 
 export function useFeeds(uid: string): CalendarFeed[] | undefined {
