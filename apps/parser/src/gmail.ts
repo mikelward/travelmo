@@ -50,6 +50,17 @@ export function toEmailMessage(message: gmail_v1.Schema$Message): EmailMessage {
   };
 }
 
+// Fetches a mailbox's emails under the ids their import records and
+// sources carry: Gmail's own, behind the mailbox's prefix (none for the
+// account's first; packages/core's gmailIdPrefix), so the same id in two
+// mailboxes is two emails.
+export function recordedAs(idPrefix: string | undefined, fetch: (id: string) => Promise<EmailMessage>) {
+  return async (id: string): Promise<EmailMessage> => {
+    const message = await fetch(id);
+    return { ...message, id: `${idPrefix ?? ""}${message.id}` };
+  };
+}
+
 // What Gmail charges against a user's per-minute quota ("Total Query Cost",
 // 6,000 units a minute per user) for the calls made in bulk: a full message
 // costs 60 units, a search 5 whatever the page size.

@@ -25,18 +25,22 @@ data class PendingEmail(val email: String, val sentAt: String, val expiresAt: St
 
 /**
  * What `users/{uid}` says about the account's addresses: those it confirmed
- * (`emails`, server-written), the Gmail it connected, which counts while
- * connected, and those waiting for confirmation.
+ * (`emails`, server-written), the Gmail mailboxes it connected ([gmails],
+ * oldest first), which count while connected, and those waiting for
+ * confirmation. [gmail] is one connected before there could be several.
  */
 data class AddressHolder(
     val emails: List<String> = emptyList(),
     val gmail: String? = null,
     val pendingEmails: List<PendingEmail> = emptyList(),
+    val gmails: List<String> = emptyList(),
 )
 
-/** The addresses the account confirmed besides its sign-in: those it linked, then its connected Gmail. */
+private fun mailboxAddresses(user: AddressHolder?): List<String?> = (user?.gmails.orEmpty() + listOfNotNull(user?.gmail)).map(::emailAddressOf)
+
+/** The addresses the account confirmed besides its sign-in: those it linked, then its connected Gmail mailboxes. */
 fun linkedEmails(user: AddressHolder?): List<String> =
-    (user?.emails.orEmpty().map(::emailAddressOf) + emailAddressOf(user?.gmail)).filterNotNull().distinct()
+    (user?.emails.orEmpty().map(::emailAddressOf) + mailboxAddresses(user)).filterNotNull().distinct()
 
 /** Every address that is the account's, its verified sign-in first. */
 fun myAddresses(signIn: String?, user: AddressHolder?): List<String> = (listOf(emailAddressOf(signIn)) + linkedEmails(user)).filterNotNull().distinct()
@@ -58,7 +62,7 @@ data class EmailRow(val email: String, val kind: EmailRowKind) {
 
 private fun live(pending: List<PendingEmail>?, now: String) = pending.orEmpty().filter { it.expiresAt > now }
 
-/** Settings' "Email addresses": the sign-in, those confirmed, the connected Gmail (unless confirmed too), then live pending ones. */
+/** Settings' "Email addresses": the sign-in, those confirmed, the connected Gmail mailboxes (unless confirmed too), then live pending ones. */
 fun emailRows(signIn: String?, user: AddressHolder?, now: String): List<EmailRow> {
     val rows = LinkedHashMap<String, EmailRow>()
     fun add(email: String?, kind: EmailRowKind) {
@@ -66,7 +70,7 @@ fun emailRows(signIn: String?, user: AddressHolder?, now: String): List<EmailRow
     }
     add(emailAddressOf(signIn), EmailRowKind.SIGN_IN)
     user?.emails.orEmpty().forEach { add(emailAddressOf(it), EmailRowKind.CONFIRMED) }
-    add(emailAddressOf(user?.gmail), EmailRowKind.GMAIL)
+    mailboxAddresses(user).forEach { add(it, EmailRowKind.GMAIL) }
     live(user?.pendingEmails, now).forEach { add(emailAddressOf(it.email), EmailRowKind.PENDING) }
     return rows.values.toList()
 }

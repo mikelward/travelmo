@@ -32,14 +32,16 @@ async function post<T>(user: User, path: string, body: unknown = {}): Promise<T>
 export const api = {
   connectGmail: (user: User) => post<{ url: string }>(user, gmailConnectPath),
   completeGmail: (user: User, state: string) => post<{ emailAddress: string }>(user, "/gmail/complete", { state }),
-  disconnectGmail: (user: User) => post<void>(user, gmailDisconnectPath),
+  // Each of several mailboxes by its address.
+  disconnectGmail: (user: User, emailAddress: string) => post<void>(user, gmailDisconnectPath, { emailAddress }),
   connectCalendar: (user: User) => post<{ url: string }>(user, "/calendar/connect"),
   completeCalendar: (user: User, state: string) =>
     post<{ emailAddress: string; calendars: number }>(user, "/calendar/complete", { state }),
   selectCalendars: (user: User, ids: string[]) => post<{ read: number; failed: number }>(user, "/calendar/select", { ids }),
   disconnectCalendar: (user: User) => post<void>(user, "/calendar/disconnect"),
-  startBackfill: (user: User, restart = false) => post<BackfillStarted>(user, backfillStartPath, restart ? { restart } : {}),
-  stopBackfill: (user: User) => post<void>(user, backfillStopPath),
+  startBackfill: (user: User, emailAddress: string, restart = false) =>
+    post<BackfillStarted>(user, backfillStartPath, restart ? { emailAddress, restart } : { emailAddress }),
+  stopBackfill: (user: User, emailAddress: string) => post<void>(user, backfillStopPath, { emailAddress }),
   reimport: (user: User, messageId: string) => post<{ outcome: string }>(user, "/gmail/reimport", { messageId }),
   importTripIt: (user: User, exported: unknown) => post<TripItResult>(user, "/import/tripit", { export: exported }),
   importIcs: (user: User, text: string) => post<CalendarResult>(user, "/import/ics", { text }),

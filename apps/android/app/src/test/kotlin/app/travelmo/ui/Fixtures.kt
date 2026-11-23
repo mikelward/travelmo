@@ -199,11 +199,10 @@ class FakeTripStore(
     private val segments: Map<String, List<Segment>> = fixtureSegments,
     private val profile: TravelProfile? = fixtureProfile,
     private val shared: List<TravelProfile> = listOf(fixtureSharedProfile),
-    private val gmailAccount: String? = null,
     private val flightStatuses: Map<String, FlightStatus> = emptyMap(),
     private val addressHolder: AddressHolder = AddressHolder(),
     private val parsed: List<ParsedRecord> = fixtureParsed,
-    private val gmailStatus: GmailStatus? = null,
+    private val gmailStatuses: List<GmailStatus> = emptyList(),
     /** Each `access/{email}` as stored, by address: the owner approved by default. */
     access: Map<String, Map<String, String>> = mapOf(OWNER_EMAIL to mapOf("email" to OWNER_EMAIL) + accessDecision(AccountAccess.APPROVED, "admin", FROZEN_NOW)),
     /** `config/access` as the owner may read it: null for someone not an admin. */
@@ -211,7 +210,7 @@ class FakeTripStore(
     /** Whether `users/{uid}` exists: every account from before approvals has one. */
     hasUserDocument: Boolean = true,
 ) : TripStore {
-    override fun gmailStatus(uid: String): Flow<GmailStatus?> = flowOf(gmailStatus)
+    override fun gmailStatuses(uid: String): Flow<List<GmailStatus>> = flowOf(gmailStatuses)
     /** The stored access records' fields, by address, as Firestore would merge them. */
     val accessFields = MutableStateFlow(access)
     val config = MutableStateFlow(accessConfig)
@@ -254,7 +253,6 @@ class FakeTripStore(
     override fun addressHolder(uid: String): Flow<AddressHolder> = flowOf(addressHolder)
     override fun ownProfile(uid: String): Flow<OwnProfile> = flowOf(OwnProfile(profile))
     val reminders = mutableListOf<Boolean>()
-    override fun gmailAccount(uid: String): Flow<String?> = flowOf(gmailAccount)
 
     override fun reminderEmail(uid: String): Flow<Boolean?> = flowOf(true)
 
@@ -437,13 +435,13 @@ class FakeGmailActions : GmailActions {
         calls += "connect"
         return "https://accounts.example/consent"
     }
-    override suspend fun start(restart: Boolean) {
-        calls += if (restart) "restart" else "start"
+    override suspend fun start(emailAddress: String, restart: Boolean) {
+        calls += "${if (restart) "restart" else "start"} $emailAddress"
     }
-    override suspend fun stop() {
-        calls += "stop"
+    override suspend fun stop(emailAddress: String) {
+        calls += "stop $emailAddress"
     }
-    override suspend fun disconnect() {
-        calls += "disconnect"
+    override suspend fun disconnect(emailAddress: String) {
+        calls += "disconnect $emailAddress"
     }
 }

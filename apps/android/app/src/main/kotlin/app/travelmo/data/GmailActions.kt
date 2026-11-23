@@ -20,23 +20,23 @@ interface GmailActions {
     /** Google's consent page for read-only Gmail access, to open in the browser. Throws [TripActionFailed]. */
     suspend fun connectUrl(): String
 
-    /** Starts or continues reading past emails; from the start with [restart]. Throws [TripActionFailed]. */
-    suspend fun start(restart: Boolean)
+    /** Starts or continues reading the past emails of the mailbox at [emailAddress]; from the start with [restart]. Throws [TripActionFailed]. */
+    suspend fun start(emailAddress: String, restart: Boolean)
 
-    /** Stops the reading where it got to. Throws [TripActionFailed]. */
-    suspend fun stop()
+    /** Stops that mailbox's reading where it got to. Throws [TripActionFailed]. */
+    suspend fun stop(emailAddress: String)
 
-    /** Disconnects Gmail. Throws [TripActionFailed]. */
-    suspend fun disconnect()
+    /** Disconnects that mailbox. Throws [TripActionFailed]. */
+    suspend fun disconnect(emailAddress: String)
 }
 
 object NoGmailActions : GmailActions {
     override val available = false
     private fun onWeb(): Nothing = throw TripActionFailed("Use Settings on the web for this.")
     override suspend fun connectUrl(): String = onWeb()
-    override suspend fun start(restart: Boolean) = onWeb()
-    override suspend fun stop() = onWeb()
-    override suspend fun disconnect() = onWeb()
+    override suspend fun start(emailAddress: String, restart: Boolean) = onWeb()
+    override suspend fun stop(emailAddress: String) = onWeb()
+    override suspend fun disconnect(emailAddress: String) = onWeb()
 }
 
 /** The parser's Gmail routes, as the web's api.ts calls them. */
@@ -54,16 +54,20 @@ class ParserGmailActions(private val client: ParserClient) : GmailActions {
         }
     }
 
-    override suspend fun start(restart: Boolean) {
-        call(BACKFILL_START_PATH, if (restart) """{"restart":true}""" else "{}", "Starting to read past emails")
+    // Each names its mailbox by address, as the web's api.ts does.
+    private fun body(emailAddress: String, restart: Boolean = false): String =
+        JSONObject().put("emailAddress", emailAddress).apply { if (restart) put("restart", true) }.toString()
+
+    override suspend fun start(emailAddress: String, restart: Boolean) {
+        call(BACKFILL_START_PATH, body(emailAddress, restart), "Starting to read past emails")
     }
 
-    override suspend fun stop() {
-        call(BACKFILL_STOP_PATH, "{}", "Stopping the reading of past emails")
+    override suspend fun stop(emailAddress: String) {
+        call(BACKFILL_STOP_PATH, body(emailAddress), "Stopping the reading of past emails")
     }
 
-    override suspend fun disconnect() {
-        call(GMAIL_DISCONNECT_PATH, "{}", "Disconnecting Gmail")
+    override suspend fun disconnect(emailAddress: String) {
+        call(GMAIL_DISCONNECT_PATH, body(emailAddress), "Disconnecting Gmail")
     }
 
     private suspend fun call(path: String, json: String, what: String): String {

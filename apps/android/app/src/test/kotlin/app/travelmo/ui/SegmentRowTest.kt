@@ -1,5 +1,6 @@
 package app.travelmo.ui
 
+import app.travelmo.data.GmailStatus
 import android.content.ClipboardManager
 import android.content.Intent
 import androidx.activity.ComponentActivity
@@ -197,8 +198,14 @@ class SegmentRowTest {
     }
 
     @Test
-    fun `the trip page opens the viewer's own import in the Gmail account they connected`() {
-        val store = FakeTripStore(gmailAccount = "owner@example.com")
+    fun `the trip page opens the viewer's own import in the Gmail account it came from`() {
+        // The email came from the first mailbox; a second one names its own emails.
+        val store = FakeTripStore(
+            gmailStatuses = listOf(
+                GmailStatus("owner@example.com", connectedAt = "2026-10-01T00:00:00Z"),
+                GmailStatus("owner@work.example", connectedAt = "2026-10-02T00:00:00Z", idPrefix = "gmail-k1-"),
+            ),
+        )
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
         composeRule.setContent {
             TravelmoTheme {

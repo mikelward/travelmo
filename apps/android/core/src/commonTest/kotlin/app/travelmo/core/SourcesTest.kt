@@ -37,4 +37,12 @@ class SourcesTest {
         emailLinkFor(unattributed, "me", ownsTrip = false).shouldBeNull()
         emailLinkFor(SourceRef(SourceKind.TRIPIT, "t1", uid = "me", at = "2030-01-01T00:00:00Z"), "me", ownsTrip = true).shouldBeNull()
     }
+
+    @Test
+    fun `an email opens in the one of the viewer's mailboxes it came from`() {
+        val mailboxes = listOf(GmailMailbox("me@example.com", "2030-01-01T00:00:00Z"), GmailMailbox("me@work.example", "2030-01-02T00:00:00Z", "gmail-k1-"))
+        val fromWork = SourceRef(SourceKind.GMAIL, "gmail-k1-m2", uid = "me", at = "2030-01-01T00:00:00Z")
+        emailLinkFor(fromWork, "me", ownsTrip = false, mailboxes) shouldBe "https://mail.google.com/mail/u/?authuser=me%40work.example#all/m2"
+        emailLinkFor(fromWork.copy(id = "m1"), "me", ownsTrip = false, mailboxes) shouldBe "https://mail.google.com/mail/u/?authuser=me%40example.com#all/m1"
+    }
 }

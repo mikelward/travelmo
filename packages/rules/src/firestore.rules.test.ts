@@ -237,6 +237,10 @@ describe("users", () => {
     await assertSucceeds(setDoc(doc(as(owner), paths.user(owner.uid)), { displayName: "Owner" }, { merge: true }));
     await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { gmail: { emailAddress: "forged@example.com" } }, { merge: true }));
     await assertFails(setDoc(doc(as(stranger), paths.user(stranger.uid)), { gmail: { emailAddress: "forged@example.com" } }));
+    // Nor any of several mailboxes.
+    const forged = { "forged@example.com": { emailAddress: "forged@example.com", connectedAt: "2026-11-01T00:00:00Z" } };
+    await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { gmails: forged }, { merge: true }));
+    await assertFails(setDoc(doc(as(stranger), paths.user(stranger.uid)), { gmails: forged }));
     // Nor a forwarding address: the parser issues those.
     await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { forward: { address: "abcdefghijklmnopqrst@travelmo.app", createdAt: "2026-11-08T00:00:00Z" } }, { merge: true }));
   });
@@ -329,6 +333,10 @@ describe("users", () => {
     await assertFails(setDoc(doc(as(owner), paths.parsedMessage(owner.uid, "m1")), { outcome: "imported" }));
     await assertSucceeds(getDoc(doc(as(owner), paths.parsedMessage(owner.uid, "m1"))));
     await assertFails(getDoc(doc(as(owner), paths.gmailState(owner.uid))));
+    await assertFails(getDoc(doc(as(owner), paths.gmailMailbox(owner.uid, "k1"))));
+    await assertFails(setDoc(doc(as(owner), paths.gmailMailbox(owner.uid, "k1")), { emailAddress: "forged@example.com", refreshToken: "x" }));
+    await assertFails(getDoc(doc(as(owner), paths.gmailIds(owner.uid))));
+    await assertFails(setDoc(doc(as(owner), paths.emailLinks(owner.uid)), { mailboxes: ["forged@example.com"] }, { merge: true }));
   });
 });
 
@@ -480,6 +488,9 @@ describe("linked email addresses", () => {
   const worker = { uid: "worker", email: "worker@example.com" };
   const work = "worker@work.example";
   const mailbox = "worker.mail@example.net";
+  // Two more connected since there could be several.
+  const travel = "worker.travel@example.org";
+  const family = "worker.family@example.org";
   const shared = (id: string, sharedWith: string[]): Trip => ({ ...trip, id, sharedWith });
   beforeEach(async () => {
     await env.withSecurityRulesDisabled(async (ctx) => {
@@ -493,10 +504,12 @@ describe("linked email addresses", () => {
       await setDoc(doc(db, paths.trip("work")), shared("work", [work]));
       await setDoc(doc(db, paths.segment("work", segment.id)), { ...segment, tripId: "work" });
       await setDoc(doc(db, paths.trip("mailbox")), shared("mailbox", [mailbox]));
+      await setDoc(doc(db, paths.trip("travel")), shared("travel", [travel]));
+      await setDoc(doc(db, paths.trip("family")), shared("family", [family]));
       await setDoc(doc(db, paths.trip("pending")), shared("pending", ["pending@work.example"]));
       await setDoc(doc(db, paths.trip("signin")), shared("signin", [worker.email]));
       await setDoc(doc(db, paths.linkedEmail(work)), { uid: worker.uid, linkedAt: "2026-11-23T00:00:00Z" });
-      await setDoc(doc(db, paths.emailLinks(worker.uid)), { pending: [], confirmed: [work] });
+      await setDoc(doc(db, paths.emailLinks(worker.uid)), { pending: [], confirmed: [work], mailboxes: [travel, family] });
     });
   });
 
@@ -508,6 +521,24 @@ describe("linked email addresses", () => {
     });
     await assertFails(getDoc(doc(as(planter), paths.trip("work"))));
     await assertFails(getDoc(doc(as(planter), paths.accessConfig())));
+    // Nor mailboxes written there.
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), paths.user(planter.uid)), { gmails: { [travel]: { emailAddress: travel, connectedAt: "2026-11-01T00:00:00Z" } } }, { merge: true });
+    });
+    await assertFails(getDoc(doc(as(planter), paths.trip("travel"))));
+  });
+
+  it("lets every connected Gmail mailbox open what was shared with it, until it is disconnected", async () => {
+    await assertSucceeds(getDoc(doc(as(worker), paths.trip("travel"))));
+    await assertSucceeds(getDoc(doc(as(worker), paths.trip("family"))));
+    const mine = [worker.email, work, mailbox, travel, family];
+    const snap = await assertSucceeds(getDocs(query(collection(as(worker), paths.trips()), where("sharedWith", "array-contains-any", mine))));
+    expect(snap.docs.map((d) => d.id).sort()).toEqual(["family", "mailbox", "signin", "travel", "work"]);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), paths.emailLinks(worker.uid)), { pending: [], confirmed: [work], mailboxes: [travel] });
+    });
+    await assertSucceeds(getDoc(doc(as(worker), paths.trip("travel"))));
+    await assertFails(getDoc(doc(as(worker), paths.trip("family"))));
   });
 
   it("lets a confirmed address or the connected Gmail open what was shared with it", async () => {

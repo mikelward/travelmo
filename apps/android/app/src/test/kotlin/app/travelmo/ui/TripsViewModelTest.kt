@@ -357,27 +357,48 @@ class TripsViewModelTest {
     }
 
     @Test
-    fun `gmail shows how far the reading got, and its buttons go to the parser`() = runTest {
+    fun `gmail shows how far each mailbox's reading got, and its buttons go to the parser for that mailbox`() = runTest {
         val reading = BackfillShown(scanned = 600, imported = 2, done = false, updatedAt = "2026-11-22T11:59:00Z", running = true)
+        val read = BackfillShown(scanned = 900, imported = 3, done = true, updatedAt = "2026-11-01T00:00:00Z")
         val actions = FakeGmailActions()
         val viewModel = TripsViewModel(
-            FakeTripStore(gmailStatus = GmailStatus("owner@example.com", reading)), OWNER, OWNER_EMAIL,
+            FakeTripStore(gmailStatuses = listOf(GmailStatus("owner@example.com", reading), GmailStatus("owner@work.example", read))), OWNER, OWNER_EMAIL,
             clock = { Instant.parse("2026-11-22T12:00:00Z") }, gmailActions = actions,
         )
         val watching = launch { viewModel.gmail.collect {} }
         runCurrent()
-        viewModel.gmail.value shouldBe TripsViewModel.GmailState.Connected("owner@example.com", reading, reading = true)
+        val state = viewModel.gmail.value as TripsViewModel.GmailState.Connected
+        state.mailboxes shouldBe listOf(
+            TripsViewModel.MailboxShown("owner@example.com", reading, reading = true),
+            TripsViewModel.MailboxShown("owner@work.example", read, reading = false),
+        )
+        state.canConnectMore shouldBe true
         viewModel.connectGmail("g")
         viewModel.gmailConsentUrl.value shouldBe "https://accounts.example/consent"
         viewModel.gmailConsentOpened()
         viewModel.gmailConsentUrl.value shouldBe null
         viewModel.outcomeSeen("g")
-        viewModel.startReading("g", restart = true)
+        viewModel.startReading("g", "owner@work.example", restart = true)
         viewModel.outcomeSeen("g")
-        viewModel.stopReading("g")
+        viewModel.stopReading("g", "owner@example.com")
         viewModel.outcomeSeen("g")
-        viewModel.disconnectGmail("g")
-        actions.calls shouldBe listOf("connect", "restart", "stop", "disconnect")
+        viewModel.disconnectGmail("g", "owner@work.example")
+        actions.calls shouldBe listOf("connect", "restart owner@work.example", "stop owner@example.com", "disconnect owner@work.example")
+        watching.cancel()
+    }
+
+    @Test
+    fun `gmail offers no more mailboxes past the limit, and none connected is not connected`() = runTest {
+        val five = (1..5).map { GmailStatus("box$it@example.com") }
+        val full = TripsViewModel(FakeTripStore(gmailStatuses = five), OWNER, OWNER_EMAIL, clock = { Instant.parse("2026-11-22T12:00:00Z") })
+        val none = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse("2026-11-22T12:00:00Z") })
+        val watching = launch {
+            launch { full.gmail.collect {} }
+            none.gmail.collect {}
+        }
+        runCurrent()
+        (full.gmail.value as TripsViewModel.GmailState.Connected).canConnectMore shouldBe false
+        none.gmail.value shouldBe TripsViewModel.GmailState.NotConnected
         watching.cancel()
     }
 

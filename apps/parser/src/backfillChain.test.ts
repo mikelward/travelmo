@@ -170,6 +170,22 @@ describe("startBackfill", () => {
     expect(w.read).toEqual([]);
   });
 
+  it("names the mailbox being read in every batch it queues", async () => {
+    const w = world({ pages: 2 });
+    await startBackfill("u1", "r1", false, w.io, "k1");
+    expect(w.queued).toEqual([{ uid: "u1", mailbox: "k1", run: "r1", step: 0 }]);
+    const first = w.queued.shift()!;
+    expect(await continueBackfill(first, w.io)).toMatchObject({ kind: "ran" });
+    expect(w.queued).toEqual([{ uid: "u1", mailbox: "k1", run: "r1", step: 1 }]);
+    // One that must wait hands on to a fresh message for the same mailbox.
+    const second = w.queued.shift()!;
+    w.failBatch(new Error("Gmail down"));
+    await expect(continueBackfill(second, w.io)).rejects.toThrow("Gmail down");
+    w.failBatch(undefined);
+    expect(await continueBackfill(second, w.io)).toMatchObject({ kind: "deferred" });
+    expect(w.queued).toEqual([{ uid: "u1", mailbox: "k1", run: "r1", step: 1, wake: "w1" }]);
+  });
+
   it("carries on from the stored place, or starts over when asked or when the last reading had finished", async () => {
     const w = world();
     w.stored = { cursor: "4", scanned: 1200, imported: 9, failed: 1, lastFailed: 1, done: false, updatedAt: "2026-11-01T00:00:00Z" };
@@ -636,6 +652,7 @@ describe("parseContinuePush", () => {
       deliveryAttempt: 2,
     });
     expect(parseContinuePush(envelope({ uid: "u1", run: "r1", step: 4, wake: "w1" }))).toMatchObject({ step: 4, wake: "w1" });
+    expect(parseContinuePush(envelope({ uid: "u1", mailbox: "k1", run: "r1", step: 4 }))).toMatchObject({ mailbox: "k1", step: 4 });
   });
 
   it("rejects anything else", () => {

@@ -11,3 +11,11 @@ export function errorFields(error: unknown): Record<string, unknown> {
   if (error instanceof Error) return { error: error.message, stack: error.stack };
   return { error: String(error) };
 }
+
+// What a failure was, without its message, which may name an address or
+// carry what a user wrote.
+export function errorKind(error: unknown): Record<string, unknown> {
+  if (!(error instanceof Error)) return { error: typeof error };
+  const { code, status } = error as { code?: unknown; status?: unknown };
+  return { error: error.name, ...(code !== undefined ? { code } : {}), ...(status !== undefined ? { status } : {}) };
+}

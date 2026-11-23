@@ -1,5 +1,6 @@
 package app.travelmo.data
 
+import app.travelmo.core.BackfillShown
 import app.travelmo.core.FoundLoyalty
 import app.travelmo.core.AddressHolder
 import app.travelmo.core.PendingEmail
@@ -163,7 +164,45 @@ class DocumentsTest {
                 "pendingEmails" to listOf(mapOf("email" to "next@example.org", "sentAt" to "a", "expiresAt" to "b"), mapOf("email" to "half@example.org")),
             ),
         )
-        holder shouldBe AddressHolder(listOf("owner@work.example"), "owner.mail@example.net", listOf(PendingEmail("next@example.org", "a", "b")))
+        holder shouldBe AddressHolder(listOf("owner@work.example"), pendingEmails = listOf(PendingEmail("next@example.org", "a", "b")), gmails = listOf("owner.mail@example.net"))
         addressHolderFromDocument(emptyMap()) shouldBe AddressHolder()
+    }
+
+    @Test
+    fun `reads every connected Gmail mailbox, oldest first, one from before there could be several included`() {
+        val reading = mapOf("scanned" to 300L, "imported" to 2L, "done" to false, "updatedAt" to "2026-11-02T00:00:00Z", "running" to true)
+        val data = mapOf(
+            "gmails" to mapOf(
+                "trips@example.org" to mapOf("emailAddress" to "trips@example.org", "connectedAt" to "2026-11-03T00:00:00Z", "idPrefix" to "gmail-k1-", "backfill" to reading),
+                "owner@example.com" to mapOf("emailAddress" to "owner@example.com", "connectedAt" to "2026-11-02T00:00:00Z", "idPrefix" to ""),
+                "broken@example.org" to mapOf("connectedAt" to "2026-11-01T00:00:00Z"),
+            ),
+            "gmail" to mapOf("emailAddress" to "old@example.net", "connectedAt" to "2026-10-01T00:00:00Z", "backfill" to mapOf("scanned" to "many")),
+        )
+        gmailStatusesOf(data) shouldBe listOf(
+            GmailStatus("old@example.net", null, "2026-10-01T00:00:00Z"),
+            GmailStatus("owner@example.com", null, "2026-11-02T00:00:00Z"),
+            GmailStatus("trips@example.org", BackfillShown(scanned = 300, imported = 2, done = false, updatedAt = "2026-11-02T00:00:00Z", running = true), "2026-11-03T00:00:00Z", "gmail-k1-"),
+        )
+        addressHolderFromDocument(data).gmails shouldBe listOf("old@example.net", "owner@example.com", "trips@example.org")
+        // Moved, the old one is not counted twice.
+        gmailStatusesOf(data + ("gmail" to mapOf("emailAddress" to "Owner@example.com", "connectedAt" to "2026-10-01T00:00:00Z"))).map { it.emailAddress } shouldBe
+            listOf("owner@example.com", "trips@example.org")
+        gmailStatusesOf(null) shouldBe emptyList()
+    }
+
+    @Test
+    fun `shows a moved mailbox's live progress, not the frozen copy kept for older apps`() {
+        val connected = mapOf("emailAddress" to "owner@example.com", "connectedAt" to "2026-10-01T00:00:00Z")
+        val data = mapOf(
+            "gmail" to connected,
+            "gmails" to mapOf(
+                "owner@example.com" to connected + mapOf(
+                    "idPrefix" to "",
+                    "backfill" to mapOf("scanned" to 40, "imported" to 3, "done" to false, "updatedAt" to "2026-11-23T00:00:00Z", "running" to true),
+                ),
+            ),
+        )
+        gmailStatusesOf(data).single().progress?.scanned shouldBe 40
     }
 }

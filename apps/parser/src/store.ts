@@ -1,11 +1,21 @@
 import { ParsedMessage, PendingCancellation, Segment, SenderPatterns, TravelProfile, Trip, paths, withFoundLoyalty } from "@travelmo/core";
-import { FieldValue, type DocumentSnapshot, type Firestore, type Transaction } from "firebase-admin/firestore";
+import { FieldPath, FieldValue, type DocumentReference, type DocumentSnapshot, type Firestore, type Transaction } from "firebase-admin/firestore";
 import { AccountDeletedError, wasDeleted } from "./deleted";
 import { changeClaimable, claimable, reclaimable, retryable, type TripStore } from "./importer";
 import { Examples, addExample, emptyExamples } from "./similarity";
 
 // How many times the user's trips were reset (tripsReset.ts), kept on the
 // import lock every import reads.
+// Every `private/gmail-<key>` document of the user, one per connected Gmail
+// mailbox (connections.ts), and none of its other private documents
+// (`gmail` sorts before these, `gmailIds` after).
+export function mailboxesQuery(db: Firestore, uid: string) {
+  return db
+    .collection(`${paths.user(uid)}/private`)
+    .where(FieldPath.documentId(), ">=", "gmail-")
+    .where(FieldPath.documentId(), "<", "gmail.");
+}
+
 export function generationOf(snap: DocumentSnapshot): number {
   const value: unknown = snap.get("generation");
   return typeof value === "number" ? value : 0;
@@ -117,17 +127,25 @@ export function firestoreStore(db: Firestore): TripStore {
         if (await deleted(t, uid)) throw new AccountDeletedError(uid);
         const generation = generationOf(await t.get(lock));
         let next = generation;
+        // What gmailMailboxes found, for clearBackfill.
+        let mailboxes: { ref: DocumentReference; field: FieldPath }[] = [];
         const result = await fn({
           generation,
           bumpGeneration() {
             next = generation + 1;
           },
-          async hasGmail() {
-            return (await t.get(db.doc(paths.gmailState(uid)))).exists;
+          async gmailMailboxes() {
+            const [snap, legacy] = await Promise.all([t.get(mailboxesQuery(db, uid)), t.get(db.doc(paths.gmailState(uid)))]);
+            mailboxes = snap.docs.map((d) => ({ ref: d.ref, field: new FieldPath("gmails", String(d.get("emailAddress")).trim().toLowerCase(), "backfill") }));
+            // One connected before there could be several, not moved yet.
+            if (legacy.exists) mailboxes.push({ ref: legacy.ref, field: new FieldPath("gmail", "backfill") });
+            return mailboxes.length;
           },
           clearBackfill() {
-            t.update(db.doc(paths.gmailState(uid)), { backfill: FieldValue.delete() });
-            t.update(db.doc(paths.user(uid)), { "gmail.backfill": FieldValue.delete() });
+            for (const { ref, field } of mailboxes) {
+              t.update(ref, { backfill: FieldValue.delete() });
+              t.update(db.doc(paths.user(uid)), field, FieldValue.delete());
+            }
           },
           async listTrips() {
             const snap = await t.get(db.collection(paths.trips()).where("ownerUid", "==", uid));

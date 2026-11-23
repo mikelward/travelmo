@@ -97,10 +97,11 @@ export type TripTx = {
   // can tell and give up rather than recreate what the reset removed.
   generation: number;
   bumpGeneration(): void;
-  // Whether the user has a Gmail connection whose reading position a reset
-  // would clear (a read), and clearing it (a write), so a reset forgets the
-  // place in the same transaction that moves the generation on.
-  hasGmail(): Promise<boolean>;
+  // How many Gmail mailboxes the user connected, whose reading positions a
+  // reset clears (a read), and clearing those it found (two writes each), so
+  // a reset forgets the places in the same transaction that moves the
+  // generation on.
+  gmailMailboxes(): Promise<number>;
   clearBackfill(): void;
   // Cancellations not yet matched to a booking (see markCancelled).
   listPendingCancellations(uid: string): Promise<PendingCancellation[]>;

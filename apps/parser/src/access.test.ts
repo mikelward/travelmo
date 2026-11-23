@@ -122,6 +122,9 @@ describe("gateUser", () => {
     await db.doc(paths.user(planter.uid)).set({ emails: [adminEmail] });
     await db.doc(paths.access(planter.email)).set({ email: planter.email, status: "declined", declinedBy: adminUid, declinedAt: iso });
     expect(await gateUser(db, planter)).toBe("unapproved");
+    // Nor Gmail mailboxes written there.
+    await db.doc(paths.user(planter.uid)).set({ gmails: { [adminEmail]: { emailAddress: adminEmail, connectedAt: iso } } });
+    expect(await gateUser(db, planter)).toBe("unapproved");
   });
 
   it("lets in an account from before approvals and keeps out a new one", async () => {

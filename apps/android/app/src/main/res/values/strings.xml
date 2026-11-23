@@ -97,7 +97,12 @@
     <string name="gmail">Gmail</string>
     <string name="gmail_connect_hint">Travelmo reads booking confirmations from your inbox and turns them into trips. It asks for read-only access and only sends emails that look like bookings to the extraction model. Connecting finishes in your browser.</string>
     <string name="connect_gmail">Connect Gmail</string>
-    <string name="gmail_connected_as">Connected as %1$s. New bookings import automatically; past ones come in when you import them, as far back as your mailbox goes.</string>
+    <string name="gmail_connected_hint">New bookings import automatically; past ones come in when you import them, as far back as each mailbox goes.</string>
+    <string name="connect_another_gmail">Connect another Gmail account</string>
+    <plurals name="gmail_limit">
+        <item quantity="one">You can connect up to %1$d Gmail account. Disconnect it to connect another.</item>
+        <item quantity="other">You can connect up to %1$d Gmail accounts. Disconnect one to connect another.</item>
+    </plurals>
     <string name="import_past_bookings">Import past bookings</string>
     <string name="read_again_from_start">Read again from the start</string>
     <string name="continue_reading">Continue reading past emails</string>

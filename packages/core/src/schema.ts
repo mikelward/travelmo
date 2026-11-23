@@ -226,6 +226,10 @@ export const GmailConnection = z.object({
   watchExpiration: isoDateTime.optional(),
   historyId: z.string().optional(),
   backfill: BackfillProgress.optional(),
+  // What this mailbox's emails' import records and sources are named by
+  // ahead of Gmail's message id (gmail.ts): empty for the account's first
+  // mailbox, as for one connected before there could be several.
+  idPrefix: z.string().optional(),
 });
 export type GmailConnection = z.infer<typeof GmailConnection>;
 
@@ -330,7 +334,10 @@ export const UserProfile = z.object({
   email: z.string().optional(),
   displayName: z.string().optional(),
   photoURL: z.string().optional(),
+  // The connected Gmail mailboxes, by lowercased address. `gmail` is one
+  // connected before there could be several, until the parser moves it.
   gmail: GmailConnection.optional(),
+  gmails: z.record(z.string(), GmailConnection).optional(),
   googleCalendar: GoogleCalendarConnection.optional(),
   reminders: ReminderSettings.optional(),
   forward: ForwardAddress.optional(),

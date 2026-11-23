@@ -142,7 +142,7 @@ fun TripDetailScreen(
     val loaded by viewModel.state.collectAsStateWithLifecycle()
     val people by viewModel.people.collectAsStateWithLifecycle()
     val ownProfile by viewModel.ownProfile.collectAsStateWithLifecycle()
-    val gmailAccount by viewModel.gmailAccount.collectAsStateWithLifecycle()
+    val gmailMailboxes by viewModel.gmailMailboxes.collectAsStateWithLifecycle()
     val rideSettings by viewModel.rideSettings.collectAsStateWithLifecycle()
     val addresses by viewModel.addresses.collectAsStateWithLifecycle()
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
@@ -227,7 +227,7 @@ fun TripDetailScreen(
                 warnings = tripWarnings(people, current, segments, viewModel.today()), today = viewModel.today(),
                 programsFor = { provider -> programsFor(provider, ownProfile?.let(::allLoyalty).orEmpty()) },
                 flightLines = { segment -> viewModel.flightLines(segment, flightStatuses) },
-                emailLink = { source -> emailLinkFor(source, uid, ownsTrip = isOwner, account = gmailAccount) },
+                emailLink = { source -> emailLinkFor(source, uid, ownsTrip = isOwner, mailboxes = gmailMailboxes) },
                 rides = RideSuggestions(
                     needs = viewModel.rideNeedsFor(segments, rideSettings).groupBy { it.segmentId },
                     companies = rideSettings?.companies.orEmpty(),

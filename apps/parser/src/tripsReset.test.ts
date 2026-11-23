@@ -1,11 +1,11 @@
-import { paths, type ExtractedBooking, type Segment, type Trip } from "@travelmo/core";
+import { mailboxKey, paths, type ExtractedBooking, type Segment, type Trip } from "@travelmo/core";
 import { getApps, initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { FieldPath, getFirestore } from "firebase-admin/firestore";
 import { describe, expect, it } from "vitest";
 import type { EmailMessage } from "./gmail";
 import type { BackfillBatch } from "./backfill";
 import { continueBackfill, startBackfill, type ChainIo, type ContinueMessage } from "./backfillChain";
-import { changeBackfill, loadState, updateHistoryId } from "./connections";
+import { changeBackfill, loadMailbox, saveConnection, updateHistoryId } from "./connections";
 import { AccountDeletedError } from "./deleted";
 import { cancelImported, emptyCounts, importMessage, importStructured, importTripIt, type ImportDeps } from "./importer";
 import { firestoreRetryStore, memoryRetryStore } from "./geocodeSweep";
@@ -56,6 +56,9 @@ describe("resetTrips", () => {
       homes: [{ city: "London", country: "GB", from: "2021-03-12" }],
     });
     await db.doc(paths.gmailState(uid)).set({ emailAddress: "owner@example.com", refreshToken: "token", backfill });
+    // A second mailbox, connected since there could be several.
+    await db.doc(paths.user(uid)).update(new FieldPath("gmails", "trips@example.org"), { emailAddress: "trips@example.org", connectedAt: at, backfill });
+    await db.doc(paths.gmailMailbox(uid, mailboxKey("trips@example.org"))).set({ emailAddress: "trips@example.org", refreshToken: "token2", backfill });
     await db.doc(paths.travelProfile(uid)).set({ ownerUid: uid, trustedEmails: [] });
     await put(trip("reset-own-1", uid), [segment("reset-own-1", "m1-0", { rating: 5, favorite: true }), segment("reset-own-1", "m1-1")]);
     await put(trip("reset-own-2", uid), []);
@@ -81,7 +84,9 @@ describe("resetTrips", () => {
     const user = (await db.doc(paths.user(uid)).get()).data();
     expect(user?.homes).toEqual([{ city: "London", country: "GB", from: "2021-03-12" }]);
     expect(user?.gmail).toEqual({ emailAddress: "owner@example.com", connectedAt: at });
+    expect(user?.gmails).toEqual({ "trips@example.org": { emailAddress: "trips@example.org", connectedAt: at } });
     expect((await db.doc(paths.gmailState(uid)).get()).data()).toEqual({ emailAddress: "owner@example.com", refreshToken: "token" });
+    expect((await db.doc(paths.gmailMailbox(uid, mailboxKey("trips@example.org"))).get()).data()).toEqual({ emailAddress: "trips@example.org", refreshToken: "token2" });
   });
 
   it("files the same email again afterwards", async () => {
@@ -369,12 +374,11 @@ describe("resetTrips", () => {
 
   it("does not write a mailbox reading's place back over a reset, and stops the reading", async () => {
     const uid = "reset-u5";
-    await db.doc(paths.user(uid)).set({ gmail: { emailAddress: "owner@example.com", connectedAt: at } });
-    await db.doc(paths.gmailState(uid)).set({ emailAddress: "owner@example.com", connectedAt: at, refreshToken: "token" });
+    await saveConnection(db, uid, { emailAddress: "owner@example.com", connectedAt: at, refreshToken: "token" });
     const queued: ContinueMessage[] = [];
     let duringBatch = async () => {};
     const io: ChainIo<unknown> = {
-      change: (fn) => changeBackfill(db, uid, fn),
+      change: (fn) => changeBackfill(db, uid, "owner@example.com", fn),
       runBatch: async (): Promise<BackfillBatch> => {
         await duringBatch();
         return { counts: { ...emptyCounts(), imported: 3 }, candidates: 300, progress: { cursor: "page-9", scanned: 300, imported: 3, failed: 0, done: false, updatedAt: at } };
@@ -393,8 +397,8 @@ describe("resetTrips", () => {
       await resetTrips(db, uid, quiet);
     };
     expect((await continueBackfill(queued[0]!, io)).kind).toBe("superseded");
-    expect((await db.doc(paths.gmailState(uid)).get()).get("backfill")).toBeUndefined();
-    expect((await db.doc(paths.user(uid)).get()).get("gmail.backfill")).toBeUndefined();
+    expect((await db.doc(paths.gmailMailbox(uid, mailboxKey("owner@example.com"))).get()).get("backfill")).toBeUndefined();
+    expect((await db.doc(paths.user(uid)).get()).get(new FieldPath("gmails", "owner@example.com", "backfill"))).toBeUndefined();
     expect(queued).toHaveLength(1);
     // A copy of the queued batch delivered after the reset is dropped.
     duringBatch = async () => {};
@@ -402,19 +406,18 @@ describe("resetTrips", () => {
     // A reading started after the reset saves as before.
     expect((await startBackfill(uid, "run-2", false, io)).kind).toBe("started");
     expect((await continueBackfill(queued[1]!, io)).kind).toBe("ran");
-    expect((await db.doc(paths.user(uid)).get()).get("gmail.backfill")).toMatchObject({ cursor: "page-9", run: "run-2", step: 1, running: true });
+    expect((await db.doc(paths.user(uid)).get()).get(new FieldPath("gmails", "owner@example.com", "backfill"))).toMatchObject({ cursor: "page-9", run: "run-2", step: 1, running: true });
   });
 
   it("keeps the mailbox's history position for a notification the reset overtook", async () => {
     const uid = "reset-u11";
     const store = firestoreStore(db);
-    await db.doc(paths.user(uid)).set({ gmail: { emailAddress: "owner@example.com", connectedAt: at } });
-    await db.doc(paths.gmailState(uid)).set({ emailAddress: "owner@example.com", connectedAt: at, refreshToken: "token", historyId: "100" });
+    await saveConnection(db, uid, { emailAddress: "owner11@example.com", connectedAt: at, refreshToken: "token", historyId: "100" });
     const before = await store.resetGeneration(uid);
     await resetTrips(db, uid, quiet);
-    expect(await updateHistoryId(db, uid, "owner@example.com", "200", before)).toBe(false);
-    expect((await db.doc(paths.gmailState(uid)).get()).get("historyId")).toBe("100");
-    expect(await updateHistoryId(db, uid, "owner@example.com", "200", await store.resetGeneration(uid))).toBe(true);
+    expect(await updateHistoryId(db, uid, "owner11@example.com", "200", before)).toBe(false);
+    expect((await db.doc(paths.gmailMailbox(uid, mailboxKey("owner11@example.com"))).get()).get("historyId")).toBe("100");
+    expect(await updateHistoryId(db, uid, "owner11@example.com", "200", await store.resetGeneration(uid))).toBe(true);
   });
 
   it("forgets the reading position in the pass that moves the generation on", async () => {
@@ -427,10 +430,10 @@ describe("resetTrips", () => {
     // anything else the reset does, reads the new generation...
     await deleteOwnTrips(uid, store);
     const generation = await store.resetGeneration(uid);
-    const state = await loadState(db, uid);
+    const state = await loadMailbox(db, uid, "owner@example.com");
     // ...and must not find the old place to carry on from and save again.
     expect(state?.backfill).toBeUndefined();
-    expect((await db.doc(paths.user(uid)).get()).get("gmail.backfill")).toBeUndefined();
+    expect((await db.doc(paths.user(uid)).get()).get(new FieldPath("gmails", "owner@example.com", "backfill"))).toBeUndefined();
     expect(generation).toBeGreaterThan(0);
   });
 

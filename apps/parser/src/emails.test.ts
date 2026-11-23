@@ -2,7 +2,7 @@ import { paths } from "@travelmo/core";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { gateUser } from "./access";
-import { MailboxConflict, saveConnection } from "./connections";
+import { MailboxConflict, removeConnection, saveConnection } from "./connections";
 import { addressesOf, confirmLink, LinkRefused, removeLink, requestLink, uidForAddress, type EmailDeps } from "./emails";
 import type { Mail } from "./mail";
 
@@ -294,6 +294,33 @@ describe("whose an address is", () => {
     expect(await uidFor(`${unique("nobody")}@example.com`)).toBeUndefined();
     // The connected Gmail counts among the account's addresses.
     expect(await addressesOf(db, connector.uid, async () => connector.email)).toEqual([connector.email, mailbox]);
+  });
+
+  it("counts every connected mailbox while it stays connected, and one connected before there could be several", async () => {
+    const me = await person();
+    const [first, second] = [`${unique("a-first")}@example.net`, `${unique("b-second")}@example.org`];
+    await saveConnection(db, me.uid, { refreshToken: "rt1", emailAddress: first, connectedAt: now });
+    await saveConnection(db, me.uid, { refreshToken: "rt2", emailAddress: second, connectedAt: now });
+    expect(await addressesOf(db, me.uid, async () => me.email)).toEqual([me.email, first, second]);
+    const uidFor = uidForAddress(db, async () => undefined);
+    expect(await uidFor(second)).toBe(me.uid);
+    const { deps } = setup();
+    expect(await refusal(requestLink(deps, me.uid, me.email, second))).toBe("yours");
+    await removeConnection(db, me.uid, second);
+    expect(await addressesOf(db, me.uid, async () => me.email)).toEqual([me.email, first]);
+    expect(await uidFor(second)).toBeUndefined();
+    // Not moved yet: still the account's.
+    const old = await person();
+    const legacy = `${unique("legacy")}@example.net`;
+    await db.doc(paths.user(old.uid)).set({ gmail: { emailAddress: legacy, connectedAt: now } }, { merge: true });
+    expect(await addressesOf(db, old.uid, async () => old.email)).toEqual([old.email, legacy]);
+  });
+
+  it("never counts mailboxes a client wrote on its profile before the rules locked them", async () => {
+    const planter = await person();
+    const victim = `${unique("victim")}@example.com`;
+    await db.doc(paths.user(planter.uid)).set({ gmails: { [victim]: { emailAddress: victim, connectedAt: now } } }, { merge: true });
+    expect(await addressesOf(db, planter.uid, async () => planter.email)).toEqual([planter.email]);
   });
 
   it("refuses connecting as Gmail a mailbox whose address another account linked", async () => {

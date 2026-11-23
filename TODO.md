@@ -231,6 +231,12 @@
 - [ ] Make connecting Gmail obvious: after the consent screen, Settings
       shows only a small green notice. Show the connected state and the
       next step (import past bookings) prominently in the Gmail section.
+- [x] Connect more than one Gmail account (up to five), each with its own
+      Import past bookings and Disconnect, on the web and Android.
+- [ ] Once every mailbox connected before there could be several has been
+      moved (the parser logs `gmail_moved` with `moved: 0` on every start),
+      stop reading and writing the user document's `gmail` (rules, parser,
+      web and Android), and drop the frozen copies.
 
 - [ ] Choose the app's heading and body fonts on the web and Android.
       Geist on the web for now; Fira Sans is the brand face (wordmark,
@@ -477,8 +483,8 @@ Guesses made on autopilot; change any of them freely.
   home show only once the traveler adds a company near home; the built-in
   list is Avis, Enterprise, Hertz, Budget, Sixt, National and Alamo, and no
   shuttle directory.
-- Linked email addresses: the connected Gmail counts as confirmed only
-  while connected (no stored claim of its own); only the sign-in's decline
+- Linked email addresses: each connected Gmail mailbox counts as confirmed
+  only while connected (no stored claim of its own); only the sign-in's decline
   locks an account out; at most ten linked and pending addresses and five
   links a day; trips shared with a linked
   address keep it when the account is deleted; another account signing up
@@ -856,3 +862,12 @@ Guesses made on autopilot; change any of them freely.
 - The booking form's country picker is hidden for flights (the airport code
   already says the country, and an imported one is kept); stays, activities
   and other journeys get one per place, defaulting to none.
+- Several Gmail mailboxes: at most five per account; the account's first
+  mailbox ever keeps Gmail's bare message ids and every other gets
+  `gmail-<key>-` ids (the same each time it is connected). A user who
+  disconnected their only mailbox before this shipped and now connects a
+  different one first gives that one the bare ids, as before. A request
+  that names no mailbox means the only one and is refused while there are
+  several; apps older than this show only the first mailbox (the frozen
+  `gmail`). Source links carry the mailbox in the source id rather than a
+  new `mailbox` field, so sharees never see the importer's other addresses.

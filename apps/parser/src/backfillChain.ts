@@ -49,11 +49,14 @@ export const backfillWaitMs = 60 * 1000;
 export const maxFailedBatches = 3;
 
 // `wake` marks a message queued to carry a waiting reading on (see
-// `deferred`); the first message of each step has none.
-export type ContinueMessage = { uid: string; run: string; step: number; wake?: string };
+// `deferred`); the first message of each step has none. `mailbox` is the
+// key of the mailbox being read (mailboxKey in packages/core's gmail.ts),
+// absent from batches queued before a user could connect several.
+export type ContinueMessage = { uid: string; mailbox?: string; run: string; step: number; wake?: string };
 
 const continueSchema = z.object({
   uid: z.string().min(1),
+  mailbox: z.string().min(1).optional(),
   run: z.string().min(1),
   step: z.number().int().nonnegative(),
   wake: z.string().min(1).optional(),
@@ -63,8 +66,13 @@ export function parseContinuePush(body: unknown): ContinueMessage & { pubsubMess
   const { data, pubsubMessageId, deliveryAttempt } = parsePush(body);
   const message = continueSchema.safeParse(data);
   if (!message.success) throw new BadPushEnvelope("Pub/Sub message is not a backfill batch");
-  const { wake, ...rest } = message.data;
-  return { ...rest, ...(wake ? { wake } : {}), pubsubMessageId, deliveryAttempt };
+  const { wake, mailbox, ...rest } = message.data;
+  return { ...rest, ...(mailbox ? { mailbox } : {}), ...(wake ? { wake } : {}), pubsubMessageId, deliveryAttempt };
+}
+
+// The same reading's message for `step`.
+function forStep(message: ContinueMessage, step: number, wake?: string): ContinueMessage {
+  return { uid: message.uid, ...(message.mailbox ? { mailbox: message.mailbox } : {}), run: message.run, step, ...(wake ? { wake } : {}) };
 }
 
 // A worker is reading a batch.
@@ -276,7 +284,7 @@ async function defer<S>(message: ContinueMessage, until: string, io: ChainIo<S>)
 // dies first, Pub/Sub delivers `message` again, which does just that. A
 // second copy of the fresh message, at worst, waits and is then dropped.
 async function handOn<S>(message: ContinueMessage, wake: string, io: ChainIo<S>): Promise<void> {
-  await io.publish({ uid: message.uid, run: message.run, step: message.step, wake });
+  await io.publish(forStep(message, message.step, wake));
   try {
     await io.change((current) => ({ next: decideHandedOn(current, message, wake), result: undefined }));
   } catch (error) {
@@ -286,7 +294,7 @@ async function handOn<S>(message: ContinueMessage, wake: string, io: ChainIo<S>)
 
 export type StartResult = { kind: "disconnected" } | { kind: "busy" } | { kind: "started" | "joined"; progress: BackfillProgress };
 
-export async function startBackfill<S>(uid: string, run: string, restart: boolean, io: ChainIo<S>): Promise<StartResult> {
+export async function startBackfill<S>(uid: string, run: string, restart: boolean, io: ChainIo<S>, mailbox?: string): Promise<StartResult> {
   const now = io.now();
   const changed = await io.change((current) => {
     const decision = decideStart(current, run, restart, now);
@@ -295,7 +303,7 @@ export async function startBackfill<S>(uid: string, run: string, restart: boolea
   if (!changed) return { kind: "disconnected" };
   const decision = changed.result;
   if (decision.kind !== "started") return decision.kind === "busy" ? { kind: "busy" } : { kind: "joined", progress: decision.next };
-  const first = { uid, run, step: 0 };
+  const first: ContinueMessage = { uid, ...(mailbox ? { mailbox } : {}), run, step: 0 };
   try {
     await queue(first, io);
   } catch (error) {
@@ -322,7 +330,7 @@ export type ContinueResult =
 // Pub/Sub's attempts run out long before a failed batch's wait does.
 export async function continueBackfill<S>(message: ContinueMessage, io: ChainIo<S>): Promise<ContinueResult> {
   const waitEnd = Date.parse(io.now()) + backfillWaitMs;
-  const following: ContinueMessage = { uid: message.uid, run: message.run, step: message.step + 1 };
+  const following = forStep(message, message.step + 1);
   let claim: { state: S; generation: number; next: BackfillProgress };
   for (;;) {
     const now = io.now();

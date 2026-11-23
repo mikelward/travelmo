@@ -13,7 +13,14 @@ export const paths = {
   // and when; Firebase never reuses a uid).
   deletedAccount: (uid: string) => `deletedAccounts/${uid}`,
   // Server-only: refresh tokens live here; rules deny every client read.
+  // One per connected Gmail mailbox, by its key (gmail.ts's mailboxKey).
+  gmailMailbox: (uid: string, key: string) => `users/${uid}/private/gmail-${key}`,
+  // The one mailbox connected before there could be several, until the
+  // parser moves it to `gmailMailbox` (apps/parser/src/connections.ts).
   gmailState: (uid: string) => `users/${uid}/private/gmail`,
+  // `first`: the mailbox whose emails are recorded under Gmail's bare
+  // message ids (the account's first, for good: gmail.ts's gmailIdPrefix).
+  gmailIds: (uid: string) => `users/${uid}/private/gmailIds`,
   googleCalendarState: (uid: string) => `users/${uid}/private/googleCalendar`,
   // Per chosen calendar (by a hash of its id): Google event id → iCalendar
   // UID, for events whose UID Google does not derive from their id.

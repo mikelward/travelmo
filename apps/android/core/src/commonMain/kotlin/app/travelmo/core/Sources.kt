@@ -57,12 +57,13 @@ fun gmailMessageUrl(messageId: String, account: String? = null): String {
 /**
  * An email links only for the user whose mailbox it was read from: the
  * source's `uid`, or for sources recorded before imports were attributed,
- * the trip's owner. As apps/web/src/lib/sourceLinks.ts.
+ * the trip's owner; it opens in that one of the viewer's [mailboxes]
+ * (gmailSourceLink). As apps/web/src/lib/sourceLinks.ts.
  */
-fun emailLinkFor(source: SourceRef, viewerUid: String, ownsTrip: Boolean, account: String? = null): String? {
+fun emailLinkFor(source: SourceRef, viewerUid: String, ownsTrip: Boolean, mailboxes: List<GmailMailbox> = emptyList()): String? {
     if (source.kind != SourceKind.GMAIL) return null
     val mine = if (source.uid != null) source.uid == viewerUid else ownsTrip
-    return if (mine) gmailMessageUrl(source.id, account) else null
+    return if (mine) gmailSourceLink(source.id, mailboxes) else null
 }
 
 /** JavaScript's encodeURIComponent: UTF-8 bytes as %XX, but for letters, digits and -_.!~*'(). */

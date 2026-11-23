@@ -51,8 +51,16 @@ service cloud.firestore {
       return /databases/$(database)/documents/users/$(request.auth.uid)/private/emails;
     }
     function linkedEmails() {
-      return signedIn() ? confirmedEmails().concat(gmailEmail()) : [];
+      return signedIn() ? confirmedEmails().concat(mailboxEmails()).concat(gmailEmail()) : [];
     }
+    // The connected Gmail mailboxes, as the parser recorded them beside the
+    // confirmed addresses; never the user document's `gmails`, a copy for
+    // the apps that clients could write before these rules locked it.
+    function mailboxEmails() {
+      return exists(linksPath()) ? get(linksPath()).data.get('mailboxes', []) : [];
+    }
+    // A mailbox connected before there could be several, until the parser
+    // moves it; clients could never write `gmail`.
     function confirmedEmails() {
       return exists(linksPath()) ? get(linksPath()).data.get('confirmed', []) : [];
     }
@@ -199,11 +207,11 @@ service cloud.firestore {
       function isSelf() {
         return signedIn() && request.auth.uid == uid;
       }
-      // `gmail`, `googleCalendar`, `forward`, `emails` and `pendingEmails`
-      // are written by the server; clients may not forge a connection, a
-      // forwarding address or a linked email address.
+      // `gmail`, `gmails`, `googleCalendar`, `forward`, `emails` and
+      // `pendingEmails` are written by the server; clients may not forge a
+      // connection, a forwarding address or a linked email address.
       function serverKeys() {
-        return ['gmail', 'googleCalendar', 'forward', 'emails', 'pendingEmails'];
+        return ['gmail', 'gmails', 'googleCalendar', 'forward', 'emails', 'pendingEmails'];
       }
       // Corrections to where home was (Profile): a list of at most fifty.
       // Rules cannot check each entry; the parser parses them and ignores a

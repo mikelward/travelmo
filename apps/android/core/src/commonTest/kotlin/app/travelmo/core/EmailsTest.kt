@@ -41,6 +41,14 @@ class EmailsTest {
     }
 
     @Test
+    fun `every connected mailbox counts and shows in Settings and is refused as a new link`() {
+        val two = AddressHolder(emails = listOf("work@company.example"), gmails = listOf("Mail@Example.net", "trips@example.org"))
+        myAddresses("me@example.com", two) shouldBe listOf("me@example.com", "work@company.example", "mail@example.net", "trips@example.org")
+        emailRows("me@example.com", two, now).filter { it.kind == EmailRowKind.GMAIL }.map { it.email } shouldBe listOf("mail@example.net", "trips@example.org")
+        checkNewLink("trips@example.org", "me@example.com", two, now) shouldBe LinkCheck.Refused(LinkRefusal.YOURS)
+    }
+
+    @Test
     fun `fit one query`() {
         val many = (0 until 40).map { "p$it@example.com" }
         queryAddresses(many).size shouldBe 30

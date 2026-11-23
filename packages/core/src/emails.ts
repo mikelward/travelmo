@@ -1,4 +1,5 @@
 import { normalizeEmail } from "./access";
+import { gmailMailboxes } from "./gmail";
 import type { PendingEmail } from "./schema";
 
 // Linked email addresses (SPEC "Linked email addresses"): a user signs in
@@ -9,8 +10,9 @@ import type { PendingEmail } from "./schema";
 // Android app.
 
 // How many addresses an account may link besides its sign-in, pending ones
-// included. With the sign-in and a connected Gmail that stays well under
-// Firestore's limit of 30 values in one `array-contains-any` query.
+// included. With the sign-in and the connected Gmail mailboxes (five at
+// most, gmail.ts) that stays well under Firestore's limit of 30 values in
+// one `array-contains-any` query.
 export const maxLinkedEmails = 10;
 export const maxQueryEmails = 30;
 // How long a confirmation link works, and how many confirmation emails an
@@ -19,19 +21,25 @@ export const confirmationTtlMs = 24 * 60 * 60 * 1000;
 export const dailyConfirmationLimit = 5;
 
 // What `users/{uid}` says about the account's addresses: `emails`, those it
-// confirmed (server-written), and the Gmail mailbox it connected, which
-// counts as confirmed while it stays connected: the consent proved it.
+// confirmed (server-written), and the Gmail mailboxes it connected, which
+// count as confirmed while they stay connected: the consent proved them.
+// `gmail` is one connected before there could be several (gmail.ts).
+type Mailbox = { emailAddress: string; connectedAt?: string | undefined };
 export type AddressHolder = {
   emails?: readonly string[] | undefined;
-  gmail?: { emailAddress: string } | undefined;
+  gmail?: Mailbox | undefined;
+  gmails?: Readonly<Record<string, Mailbox>> | undefined;
 };
+
+const mailboxAddresses = (user: AddressHolder | undefined): (string | undefined)[] =>
+  gmailMailboxes<Mailbox>({ gmail: user?.gmail, gmails: user?.gmails }).map((m) => normalizeEmail(m.emailAddress));
 
 const unique = (emails: Iterable<string | undefined>): string[] => [...new Set([...emails].filter((e): e is string => !!e))];
 
 // The addresses the account confirmed besides its sign-in, lowercased:
-// those it linked, then its connected Gmail.
+// those it linked, then its connected Gmail mailboxes.
 export function linkedEmails(user: AddressHolder | undefined): string[] {
-  return unique([...(user?.emails ?? []).map((e) => normalizeEmail(e)), normalizeEmail(user?.gmail?.emailAddress)]);
+  return unique([...(user?.emails ?? []).map((e) => normalizeEmail(e)), ...mailboxAddresses(user)]);
 }
 
 // Every address that is the account's: its verified sign-in first.
@@ -61,8 +69,8 @@ const live = (pending: readonly PendingEmail[] | undefined, now: string): Pendin
   (pending ?? []).filter((p) => p.expiresAt > now);
 
 // Settings' "Email addresses": the sign-in, those confirmed, the connected
-// Gmail (unless confirmed too), then those waiting for confirmation that
-// have not expired. Confirmed and pending ones can be removed.
+// Gmail mailboxes (unless confirmed too), then those waiting for
+// confirmation that have not expired. Confirmed and pending ones can be removed.
 export function emailRows(
   signIn: string | null | undefined,
   user: (AddressHolder & { pendingEmails?: readonly PendingEmail[] | undefined }) | undefined,
@@ -77,7 +85,7 @@ export function emailRows(
   };
   add(normalizeEmail(signIn), "signIn");
   for (const email of user?.emails ?? []) add(normalizeEmail(email), "confirmed");
-  add(normalizeEmail(user?.gmail?.emailAddress), "gmail");
+  for (const email of mailboxAddresses(user)) add(email, "gmail");
   for (const p of live(user?.pendingEmails, now)) add(normalizeEmail(p.email), "pending");
   return rows;
 }
@@ -144,7 +152,11 @@ export function confirmationMessage(email: string, url: string): { subject: stri
 // rules before linked addresses let a client write it, so it is never
 // trusted.
 export type PendingLink = PendingEmail & { tokenHash: string };
-export type EmailLinks = { pending: PendingLink[]; confirmed?: string[]; day?: string; sent?: number };
+// `mailboxes` are the lowercased addresses of the Gmail mailboxes the
+// account connected, which count as confirmed while they stay connected;
+// the parser keeps them here, beside `confirmed`, for the rules to read in
+// the same lookup.
+export type EmailLinks = { pending: PendingLink[]; confirmed?: string[]; mailboxes?: string[]; day?: string; sent?: number };
 
 const day = (now: string) => now.slice(0, 10);
 

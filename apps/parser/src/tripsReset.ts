@@ -29,14 +29,15 @@ export async function deleteOwnTrips(uid: string, store: TripStore, budget = wri
       // Every pass moves the generation on, the last included, so an import
       // that began before or during the reset files and records nothing.
       tx.bumpGeneration();
-      // The reading position goes in the same transaction, every pass: a
+      // The reading positions go in the same transaction, every pass: a
       // mailbox reading never sees the new generation with the old place.
-      const gmail = await tx.hasGmail();
+      const mailboxes = await tx.gmailMailboxes();
       const owned = (await tx.listTrips()).filter((trip) => trip.ownerUid === uid);
       // Reads first.
       const plan: { tripId: string; segmentIds: string[]; whole: boolean }[] = [];
-      // Two writes stay free for the reading position.
-      let room = budget - 2;
+      // Two writes a mailbox stay free for the reading positions.
+      const kept = 2 * mailboxes;
+      let room = budget - kept;
       for (const trip of owned) {
         if (room <= 0) break;
         const segments = await tx.listSegments(trip.id);
@@ -62,8 +63,8 @@ export async function deleteOwnTrips(uid: string, store: TripStore, budget = wri
       }
       for (const id of records) tx.deleteParsed(id);
       for (const p of pending) tx.deletePendingCancellation(uid, p.messageId);
-      if (gmail) tx.clearBackfill();
-      return { deleted, writes: budget - 2 - room };
+      if (mailboxes) tx.clearBackfill();
+      return { deleted, writes: budget - kept - room };
     });
     trips += done.deleted;
     if (done.writes === 0) return { trips };

@@ -451,12 +451,16 @@ class ScreenScreenshotTest {
         val addresses = AddressHolder(
             emails = listOf("owner@work.example"),
             pendingEmails = listOf(PendingEmail("owner@other.example", FROZEN_NOW, "2026-11-02T12:00:00Z")),
+            gmails = listOf("owner@example.com", "owner.trips@example.org"),
         )
         val viewModel = TripsViewModel(
             FakeTripStore(
                 addressHolder = addresses,
-                // Gmail connected and reading past emails.
-                gmailStatus = GmailStatus("owner@example.com", BackfillShown(scanned = 1200, imported = 14, done = false, updatedAt = FROZEN_NOW, running = true)),
+                // Two Gmail mailboxes, one reading past emails, the other read.
+                gmailStatuses = listOf(
+                    GmailStatus("owner@example.com", BackfillShown(scanned = 1200, imported = 14, done = false, updatedAt = FROZEN_NOW, running = true)),
+                    GmailStatus("owner.trips@example.org", BackfillShown(scanned = 300, imported = 2, done = true, updatedAt = FROZEN_NOW)),
+                ),
             ),
             OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, pushDevice = FakePushDevice(),
             accountDeletion = FakeAccountDeletion(), emailLinks = FakeEmailLinks(), tripActions = FakeTripActions(), gmailActions = FakeGmailActions(),

@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { owner, signIn } from "./helpers";
-import { clearData, seedFeed, seedGmail, seedGoogleCalendar } from "./seed";
+import { gmailIdPrefix } from "@travelmo/core";
+import { clearData, seedFeed, seedGmail, seedGoogleCalendar, seedLegacyGmail } from "./seed";
 
 test.beforeEach(async () => {
   await clearData();
@@ -133,7 +134,7 @@ test("importing past bookings starts once, then follows the parser's progress", 
   await page.goto("/settings");
   await page.getByRole("button", { name: "Import past bookings" }).click();
   await expect.poll(() => sent.length).toBe(1);
-  expect(sent).toEqual([{}]);
+  expect(sent).toEqual([{ emailAddress: "traveler@example.com" }]);
   // The parser reads on by itself and records how far it got.
   const running = { scanned: 600, imported: 2, done: false, running: true, run: "r1", step: 2, updatedAt: new Date().toISOString() };
   await seedGmail(uid, { ...gmail, backfill: running });
@@ -154,7 +155,58 @@ test("importing past bookings starts once, then follows the parser's progress", 
   );
   await page.getByRole("button", { name: "Continue reading past emails" }).click();
   await expect.poll(() => sent.length).toBe(2);
-  expect(sent[1]).toEqual({});
+  expect(sent[1]).toEqual({ emailAddress: "traveler@example.com" });
+});
+
+test("several Gmail accounts each import and disconnect on their own", async ({ page }) => {
+  const uid = await signIn(page, owner);
+  await seedGmail(uid, {
+    emailAddress: "traveler@example.com",
+    connectedAt: "2026-11-01T00:00:00Z",
+    backfill: { scanned: 900, imported: 3, done: true, updatedAt: "2026-11-01T00:00:00Z" },
+  });
+  await seedGmail(uid, { emailAddress: "trips@example.org", connectedAt: "2026-11-02T00:00:00Z", idPrefix: gmailIdPrefix("trips@example.org") });
+  const sent: { path: string; body: unknown }[] = [];
+  for (const path of ["/gmail/backfill", "/gmail/disconnect"]) {
+    await page.route(`http://localhost:8080${path}`, async (route) => {
+      sent.push({ path, body: route.request().postDataJSON() });
+      await route.fulfill(
+        path === "/gmail/disconnect"
+          ? { status: 204 }
+          : { json: { progress: { scanned: 0, imported: 0, done: false, running: true, updatedAt: new Date().toISOString() } } },
+      );
+    });
+  }
+  await page.goto("/settings");
+  const mailboxes = page.getByTestId("gmail-mailbox");
+  await expect(mailboxes).toHaveCount(2);
+  const first = mailboxes.filter({ hasText: "traveler@example.com" });
+  const second = mailboxes.filter({ hasText: "trips@example.org" });
+  await expect(first.getByTestId("backfill-progress")).toHaveText("Whole mailbox read: 900 booking-like emails read, 3 bookings imported.");
+  await expect(second.getByTestId("backfill-progress")).toHaveCount(0);
+  await second.getByRole("button", { name: "Import past bookings" }).click();
+  await expect.poll(() => sent).toEqual([{ path: "/gmail/backfill", body: { emailAddress: "trips@example.org" } }]);
+  await first.getByRole("button", { name: "Disconnect" }).click();
+  await expect.poll(() => sent.length).toBe(2);
+  expect(sent[1]).toEqual({ path: "/gmail/disconnect", body: { emailAddress: "traveler@example.com" } });
+  await expect(page.getByRole("button", { name: "Connect another Gmail account" })).toBeVisible();
+});
+
+test("no more Gmail accounts can be connected past the limit", async ({ page }) => {
+  const uid = await signIn(page, owner);
+  for (let i = 0; i < 5; i++) await seedGmail(uid, { emailAddress: `box${i}@example.com`, connectedAt: `2026-11-0${i + 1}T00:00:00Z` });
+  await page.goto("/settings");
+  await expect(page.getByTestId("gmail-mailbox")).toHaveCount(5);
+  await expect(page.getByRole("button", { name: "Connect another Gmail account" })).toHaveCount(0);
+  await expect(page.getByText("You can connect up to 5 Gmail accounts. Disconnect one to connect another.")).toBeVisible();
+});
+
+test("a Gmail account connected before there could be several still shows", async ({ page }) => {
+  const uid = await signIn(page, owner);
+  await seedLegacyGmail(uid, { emailAddress: "traveler@example.com", connectedAt: "2026-11-01T00:00:00Z" });
+  await page.goto("/settings");
+  await expect(page.getByTestId("gmail-mailbox")).toHaveText(/traveler@example\.com/);
+  await expect(page.getByRole("button", { name: "Connect another Gmail account" })).toBeVisible();
 });
 
 test("a finished reading starts over from the beginning when asked", async ({ page }) => {
@@ -172,7 +224,7 @@ test("a finished reading starts over from the beginning when asked", async ({ pa
   await page.goto("/settings");
   await expect(page.getByTestId("backfill-progress")).toHaveText("Whole mailbox read: 900 booking-like emails read, 3 bookings imported.");
   await page.getByRole("button", { name: "Read again from the start" }).click();
-  await expect.poll(() => sent).toEqual([{ restart: true }]);
+  await expect.poll(() => sent).toEqual([{ emailAddress: "traveler@example.com", restart: true }]);
 });
 
 test("a batch with failed imports pauses the reading and says why", async ({ page }) => {
