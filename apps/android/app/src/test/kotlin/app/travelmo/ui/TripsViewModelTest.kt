@@ -1,9 +1,15 @@
 package app.travelmo.ui
 
+import app.travelmo.core.FlightStatus
+import app.travelmo.core.Place
+import app.travelmo.core.Segment
 import app.travelmo.core.SegmentDraft
 import app.travelmo.core.deviceId
 import app.travelmo.core.SegmentType
+import app.travelmo.data.FlightRefresh
 import app.travelmo.data.TripStore
+import java.time.Instant
+import kotlinx.coroutines.flow.first
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -213,5 +219,40 @@ class TripsViewModelTest {
         viewModel.saveSegment("form-2", "liverpool", draft, "l-stay")
         store.gate.complete(Unit)
         viewModel.outcomes.value shouldBe mapOf("form-2" to Outcome.Failed("Trip no longer exists"))
+    }
+
+    // An invented flight leaving Sydney at 09:00 local (22:00Z the day before).
+    private val flight = Segment(
+        "f1", "sydney", SegmentType.FLIGHT, "XX 100 SYD to SIN", "2026-12-13T09:00:00+11:00", "2026-12-13T15:30:00+08:00",
+        origin = Place("Sydney", code = "SYD"),
+    )
+    private val gate = FlightStatus(
+        ident = "XX100", date = "2026-12-13", origin = "SYD", found = true, departureGate = "8", baggageClaim = "16",
+        scheduledOut = "2026-12-12T22:00:00Z", scheduledIn = "2026-12-13T07:30:00Z", checkedAt = "2026-12-12T20:00:00Z",
+    )
+    private fun flightModel(at: String, statuses: Map<String, FlightStatus>, asked: MutableList<String>) = TripsViewModel(
+        FakeTripStore(segments = mapOf("sydney" to listOf(flight)), flightStatuses = statuses), OWNER, OWNER_EMAIL,
+        clock = { Instant.parse(at) },
+        flightRefresh = FlightRefresh { asked += it },
+    )
+
+    @Test
+    fun `an open trip has its flight looked at once one is due, and not before`() = runTest {
+        val asked = mutableListOf<String>()
+        flightModel("2026-12-12T15:00:00Z", emptyMap(), asked).refreshFlights("sydney")
+        asked shouldBe emptyList()
+        flightModel("2026-12-12T20:00:30Z", mapOf("XX100_2026-12-13_SYD" to gate), asked).refreshFlights("sydney")
+        asked shouldBe emptyList()
+        flightModel("2026-12-12T20:01:00Z", mapOf("XX100_2026-12-13_SYD" to gate), asked).refreshFlights("sydney")
+        asked shouldBe listOf("sydney")
+    }
+
+    @Test
+    fun `a flight's row says its gate and carousel near departure`() = runTest {
+        val viewModel = flightModel("2026-12-12T21:00:00Z", mapOf("XX100_2026-12-13_SYD" to gate), mutableListOf())
+        val statuses = viewModel.flightStatuses("sydney").first()
+        statuses shouldBe mapOf("XX100_2026-12-13_SYD" to gate)
+        viewModel.flightLines(flight, statuses) shouldBe listOf("Departs from gate 8", "Bags on carousel 16")
+        flightModel("2026-12-10T21:00:00Z", emptyMap(), mutableListOf()).flightLines(flight, statuses) shouldBe emptyList()
     }
 }

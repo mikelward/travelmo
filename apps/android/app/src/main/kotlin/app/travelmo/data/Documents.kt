@@ -1,5 +1,6 @@
 package app.travelmo.data
 
+import app.travelmo.core.FlightStatus
 import app.travelmo.core.Place
 import app.travelmo.core.PlaceDraft
 import app.travelmo.core.ProfileEntry
@@ -82,6 +83,33 @@ fun segmentFromDocument(id: String, tripId: String, data: Map<String, Any?>): Se
         // Imports record every source they were read from; older documents
         // only list their Gmail message ids.
         sources = segmentSources(data.sourceRefs(), data.strings("gmailMessageIds"), data.text("createdAt") ?: ""),
+    )
+}
+
+/** A flight's live gates and carousel (`flightStatus/{key}`), written by the parser. */
+fun flightStatusFromDocument(data: Map<String, Any?>): FlightStatus? {
+    val ident = data.text("ident") ?: return null
+    val date = data.text("date") ?: return null
+    val found = data["found"] as? Boolean ?: return null
+    val checkedAt = data.text("checkedAt") ?: return null
+    return FlightStatus(
+        ident = ident,
+        date = date,
+        origin = data.text("origin"),
+        found = found,
+        departureGate = data.text("departureGate"),
+        departureTerminal = data.text("departureTerminal"),
+        arrivalGate = data.text("arrivalGate"),
+        arrivalTerminal = data.text("arrivalTerminal"),
+        baggageClaim = data.text("baggageClaim"),
+        scheduledOut = data.text("scheduledOut"),
+        estimatedOut = data.text("estimatedOut"),
+        actualOut = data.text("actualOut"),
+        scheduledIn = data.text("scheduledIn"),
+        estimatedIn = data.text("estimatedIn"),
+        actualIn = data.text("actualIn"),
+        cancelled = data["cancelled"] == true,
+        checkedAt = checkedAt,
     )
 }
 

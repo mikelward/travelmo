@@ -284,7 +284,7 @@
 - [ ] Maybe later: opt-in Android crash reports (Firebase Crashlytics),
       as in the sibling apps, behind a Settings switch that is off by
       default. The privacy policy already promises the opt-in.
-- [ ] Live flight updates, first part: the departure and arrival gate and
+- [x] Live flight updates, first part: the departure and arrival gate and
       terminal and the baggage carousel, on the flight's card and as a
       notification when one is set or changes, from FlightAware AeroAPI
       (Personal tier), polled by the parser every minute from two hours
@@ -323,6 +323,17 @@
 ## Decisions needing review
 
 Guesses made on autopilot; change any of them freely.
+
+- Live flight status: the flight number is read from the booking's title
+  (no field of its own yet); one status per flight number, local date and
+  departure airport, readable by any signed-in user who names it (public
+  flight data, never listed); old statuses are kept rather than swept, a
+  few hundred bytes a flight; news goes to the owner and sharees of every
+  trip holding the flight, through the reminders' notification channels
+  and the Android `reminders` channel rather than one of its own; the
+  daily cap defaults to 1,000 calls (about $5); a status shows from a day
+  before departure; an open trip page asks for a look from six hours
+  before.
 
 - Gmail quota for "Import past bookings": a reading spends at most 4,000 of
   a user's 6,000 units a minute (about 66 messages), leaving the rest for

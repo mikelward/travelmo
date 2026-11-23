@@ -53,6 +53,8 @@ import { smtpConfig, smtpMailer } from "./mail";
 import { fcmSender } from "./fcm";
 import { pushConfig, webPushSender } from "./push";
 import { firestoreReminderIo, sendReminders } from "./reminders";
+import { aeroApiLookup } from "./aeroapi";
+import { canSeeTrip, checkFlights, defaultFlightStatusDailyLimit, firestoreFlightIo, retryPendingNews, type FlightOptions } from "./flightStatus";
 import { airportPlace } from "@travelmo/core/airportPlaces";
 import { visaTable } from "@travelmo/core/visaRules";
 import { app as firebaseApp, auth, db } from "./firebase";
@@ -194,6 +196,7 @@ app.use("/export/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "
 app.use("/forward/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/account/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/trips/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
+app.use("/flights/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 
 app.get("/healthz", (c) => c.text("ok"));
 
@@ -927,6 +930,67 @@ app.post("/internal/geocode-sweep", async (c) => {
   const result = await sweepGeocodeRetries(deps);
   log("INFO", "geocode_sweep", { ...result, enabled: Boolean(deps.geocode) });
   return c.json(result);
+});
+
+// Live gates and carousels (flightStatus.ts) are on with an AeroAPI key.
+const aeroApiKey = process.env.AEROAPI_KEY;
+const flightStatusDailyLimit = Number(optionalEnv("FLIGHT_STATUS_DAILY_LIMIT", String(defaultFlightStatusDailyLimit)));
+if (!Number.isInteger(flightStatusDailyLimit) || flightStatusDailyLimit < 0) throw new Error("FLIGHT_STATUS_DAILY_LIMIT must be a whole number");
+const flightLookup = aeroApiKey ? aeroApiLookup(aeroApiKey) : undefined;
+const flightIo = firestoreFlightIo(db, {
+  // Only a sign-in Google verified counts, as for sharing itself.
+  async uidForEmail(email) {
+    try {
+      const record = await auth.getUserByEmail(email);
+      return record.emailVerified ? record.uid : undefined;
+    } catch (error) {
+      // Shared with an address nobody has signed in with: no one to tell.
+      if ((error as { code?: string }).code === "auth/user-not-found") return undefined;
+      throw error;
+    }
+  },
+  pushSubscriptions: reminderIo.pushSubscriptions,
+  removePushSubscription: reminderIo.removePushSubscription,
+  devices: reminderIo.devices,
+  removeDevice: reminderIo.removeDevice,
+});
+const flightOptions = (): FlightOptions | undefined =>
+  flightLookup && {
+    lookup: flightLookup,
+    limit: flightStatusDailyLimit,
+    now: deps.now(),
+    clock: deps.now,
+    origin: webOrigin,
+    channels: { ...(reminderChannels.push ? { push: reminderChannels.push } : {}), fcm: reminderChannels.fcm },
+    log: (level, event, fields) => log(level, event, fields),
+  };
+
+// Cloud Scheduler calls this every minute (deploy/scheduler.sh): the
+// flights near departure or arrival get their look, and their news goes out.
+app.post("/internal/flight-status", async (c) => {
+  await requireInternalCaller(c);
+  const options = flightOptions();
+  if (!options) return c.json({ enabled: false });
+  const retried = await retryPendingNews(flightIo, options);
+  const run = await checkFlights(flightIo, options);
+  if (run.checked || run.failed || run.capped || retried.delivered || retried.dropped) log("INFO", "flight_status_checked", { ...run, retried });
+  return c.json({ enabled: true, ...run, retried });
+});
+
+// An open trip page asks for its flights now, at most once a minute each;
+// what it learns is news for everyone on the flight, as from the job.
+app.post("/flights/refresh", async (c) => {
+  const { uid, email, email_verified } = await requireIdToken(c);
+  if ((await db.doc(paths.deletedAccount(uid)).get()).exists) throw new HTTPException(410, { message: "This account was deleted" });
+  const body = (await c.req.json().catch(() => ({}))) as { tripId?: unknown };
+  if (typeof body.tripId !== "string" || !body.tripId) throw new HTTPException(400, { message: "Missing tripId" });
+  const trip = await flightIo.trip(body.tripId);
+  if (!trip || !canSeeTrip(trip, uid, email_verified ? email : undefined)) throw new HTTPException(404, { message: "No such trip" });
+  const options = flightOptions();
+  if (!options) return c.json({ enabled: false });
+  const run = await checkFlights(flightIo, options, { tripId: trip.id });
+  if (run.checked || run.failed) log("INFO", "flight_status_refreshed", { uid, tripId: trip.id, ...run });
+  return c.json({ enabled: true, checked: run.checked });
 });
 
 // A non-2xx response makes Pub/Sub redeliver; after the subscription's

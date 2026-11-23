@@ -34,6 +34,18 @@ describe("fcmSender", () => {
     expect(message.android).toEqual({ ttl: 86_400_000 });
   });
 
+  it("lets news that soon goes stale ask for a shorter life", async () => {
+    const sent: { android?: unknown }[] = [];
+    const send = fcmSender({
+      send: async (message) => {
+        sent.push(message);
+        return "projects/p/messages/1";
+      },
+    });
+    await send(device, notification, 1800);
+    expect(sent[0]!.android).toEqual({ ttl: 1_800_000 });
+  });
+
   it("cuts a body that would overflow Messaging's payload to whole lines and a pointer to the page", async () => {
     // A notification at the web push budget, with a long token beside it.
     const lines = Array.from({ length: 60 }, (_, i) => `Line ${i + 1}: a passport or visa that runs out too soon for this trip.`);

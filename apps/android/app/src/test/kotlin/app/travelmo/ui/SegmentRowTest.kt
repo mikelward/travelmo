@@ -49,6 +49,12 @@ class SegmentRowTest {
     }
 
     @Test
+    fun `a flight's row shows its gate and carousel`() {
+        composeRule.setContent { TravelmoTheme { SegmentRow(stay, flightLines = listOf("Departs from terminal 1, gate 8", "Bags on carousel 16")) } }
+        composeRule.onNodeWithText("Departs from terminal 1, gate 8 · Bags on carousel 16").assertExists()
+    }
+
+    @Test
     fun `every type has its own icon`() {
         val icons = SegmentType.entries.map(::segmentIcon)
         icons.toSet().size shouldBe SegmentType.entries.size

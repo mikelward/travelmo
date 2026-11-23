@@ -1,5 +1,6 @@
 package app.travelmo.data
 
+import app.travelmo.core.FlightStatus
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentDraft
 import app.travelmo.core.localDate
@@ -36,6 +37,9 @@ interface TripStore {
 
     /** One trip's bookings, live; empty while it loads. */
     fun segments(tripId: String): Flow<List<Segment>>
+
+    /** A flight's live gates and carousel by its key (flightStatusKey); null until the parser has looked. */
+    fun flightStatus(key: String): Flow<FlightStatus?>
 
     /** The user's own travel profile, live, from its first answer on: an answer with no profile is one too. A read that fails is logged and keeps the caller waiting. */
     fun ownProfile(uid: String): Flow<OwnProfile>
@@ -134,6 +138,20 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
                 }
             }
         }
+
+    override fun flightStatus(key: String): Flow<FlightStatus?> = callbackFlow {
+        val registration = db.collection("flightStatus").document(key).addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                TravelmoLog.error(error, "Reading the status of flight %s failed", sensitive(key))
+                trySend(null)
+                return@addSnapshotListener
+            }
+            val status = snapshot?.data?.let(::flightStatusFromDocument)
+            if (snapshot?.exists() == true && status == null) TravelmoLog.warning("Malformed flight status %s", sensitive(key))
+            trySend(status)
+        }
+        awaitClose { registration.remove() }
+    }
 
     override fun ownProfile(uid: String): Flow<OwnProfile> = callbackFlow {
         val registration = db.collection("users").document(uid).collection("travelProfile").document("main").addSnapshotListener { snapshot, error ->

@@ -49,4 +49,5 @@ export const api = {
   deleteAccount: (user: User) => post<void>(user, "/account/delete"),
   regroupTrips: (user: User) => post<RegroupResult>(user, "/trips/regroup"),
   deleteAllTrips: (user: User) => post<{ trips: number }>(user, "/trips/delete-all"),
+  refreshFlights: (user: User, tripId: string) => post<{ enabled: boolean; checked?: number }>(user, "/flights/refresh", { tripId }),
 };

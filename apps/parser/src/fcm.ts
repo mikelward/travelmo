@@ -13,7 +13,9 @@ import type { Messaging, TokenMessage } from "firebase-admin/messaging";
 // messages queue as sent. The app draws each one in its reminders channel.
 
 // "sent", or "gone" when the token is no longer registered. Anything else throws.
-export type DeviceSender = (device: Device, notification: ReminderNotification) => Promise<"sent" | "gone">;
+// `ttlSeconds` is how long Messaging may hold it for an offline phone; a
+// day by default.
+export type DeviceSender = (device: Device, notification: ReminderNotification, ttlSeconds?: number) => Promise<"sent" | "gone">;
 
 // A day's time to live, as for web push: the next run sends the news again.
 const ttlMs = 24 * 60 * 60 * 1000;
@@ -29,7 +31,7 @@ const utf8Length = (text: string): number => new TextEncoder().encode(text).leng
 // What the app draws: the title and body, the trip's URL as the tap target,
 // and a tag per trip so a later reminder for the same trip replaces the
 // earlier one on the phone's shade (not in Messaging's queue).
-export function reminderMessage(device: Device, notification: ReminderNotification): TokenMessage {
+export function reminderMessage(device: Device, notification: ReminderNotification, ttl = ttlMs): TokenMessage {
   const lines = notification.body.split("\n");
   const build = (kept: number): TokenMessage => ({
     token: device.token,
@@ -39,7 +41,7 @@ export function reminderMessage(device: Device, notification: ReminderNotificati
       url: notification.url,
       tag: notification.tag,
     },
-    android: { ttl: ttlMs },
+    android: { ttl },
   });
   let kept = lines.length;
   let message = build(kept);
@@ -59,9 +61,9 @@ const isGone = (error: unknown): boolean => {
 };
 
 export function fcmSender(messaging: Pick<Messaging, "send">): DeviceSender {
-  return async (device, notification) => {
+  return async (device, notification, ttlSeconds) => {
     try {
-      await messaging.send(reminderMessage(device, notification));
+      await messaging.send(reminderMessage(device, notification, ttlSeconds === undefined ? ttlMs : ttlSeconds * 1000));
       return "sent";
     } catch (error) {
       if (isGone(error)) return "gone";

@@ -17,7 +17,9 @@ export type PushConfig = { publicKey: string; privateKey: string; subject: strin
 
 // "sent", or "gone" when the push service says the subscription no longer
 // exists, so the caller can drop it. Anything else throws.
-export type PushSender = (subscription: PushSubscription, notification: ReminderNotification) => Promise<"sent" | "gone">;
+// `ttlSeconds` is how long the push service may hold it for an offline
+// browser; a day by default.
+export type PushSender = (subscription: PushSubscription, notification: ReminderNotification, ttlSeconds?: number) => Promise<"sent" | "gone">;
 
 type Env = Record<string, string | undefined>;
 
@@ -52,10 +54,10 @@ const isGone = (error: unknown): boolean => {
 export function webPushSender(config: PushConfig, send: Send = sendNotification): PushSender {
   const vapidDetails = { subject: config.subject, publicKey: config.publicKey, privateKey: config.privateKey };
   const agent = new Agent({ lookup: publicOnlyLookup() });
-  return async (subscription, notification) => {
+  return async (subscription, notification, ttl = ttlSeconds) => {
     try {
       normalizeFeedUrl(subscription.endpoint);
-      await send(subscription, JSON.stringify(notification), { vapidDetails, TTL: ttlSeconds, agent, timeout: socketTimeoutMs });
+      await send(subscription, JSON.stringify(notification), { vapidDetails, TTL: ttl, agent, timeout: socketTimeoutMs });
       return "sent";
     } catch (error) {
       if (isGone(error)) return "gone";

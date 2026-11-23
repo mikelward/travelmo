@@ -6,7 +6,10 @@ import app.travelmo.auth.GoogleAccount
 import app.travelmo.data.AccountDeletion
 import app.travelmo.data.FirestoreTrips
 import app.travelmo.data.NoAccountDeletion
+import app.travelmo.data.FlightRefresh
+import app.travelmo.data.NoFlightRefresh
 import app.travelmo.data.ParserAccountDeletion
+import app.travelmo.data.ParserFlightRefresh
 import app.travelmo.data.TripStore
 import app.travelmo.log.DebugLogging
 import app.travelmo.log.TravelmoLog
@@ -48,6 +51,9 @@ class TravelmoApplication : Application() {
 
     /** Deleting the account through the parser; nothing without Firebase or a parser address. */
     val accountDeletion: AccountDeletion by lazy { if (firebaseReady) ParserAccountDeletion(BuildConfig.PARSER_URL) else NoAccountDeletion }
+
+    /** Looking at an open trip's flights through the parser; nothing without Firebase or a parser address. */
+    val flightRefresh: FlightRefresh by lazy { if (firebaseReady) ParserFlightRefresh(BuildConfig.PARSER_URL) else NoFlightRefresh }
 
     /** This phone as a reminder device; nothing without Firebase. */
     val pushDevice: PushDevice by lazy { if (firebaseReady) FirebasePushDevice(this) else NoPushDevice }

@@ -9,7 +9,7 @@ export const metadata = { title: "Privacy" };
 // docs/PRIVACY.md (the same text for GitHub Pages and repository readers)
 // with it: e2e/privacy.spec.ts fails when the two say different things.
 const CONTACT = "play@mikelward.com";
-const UPDATED = "22 November 2026";
+const UPDATED = "23 November 2026";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -90,6 +90,10 @@ export default function PrivacyPage() {
           <li>
             <strong>Google Maps Platform</strong> looks up the places in your bookings by name, and suggests addresses as
             you type one.
+          </li>
+          <li>
+            <strong>FlightAware</strong> is asked about a flight&apos;s number, date and departure airport, never who is
+            on it, to give its gates and baggage carousel near departure and arrival.
           </li>
           <li>
             <strong>Cloudflare</strong> receives emails you forward to your Travelmo address and passes them on.

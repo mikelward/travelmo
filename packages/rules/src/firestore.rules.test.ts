@@ -305,6 +305,32 @@ describe("server-only collections", () => {
   });
 });
 
+describe("flight status", () => {
+  const key = "XX100_2026-12-13_SYD";
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), paths.flightStatus(key)), { ident: "XX100", date: "2026-12-13", found: true, departureGate: "8", checkedAt: "2026-12-12T21:00:00Z" });
+    });
+  });
+
+  it("is readable by any signed-in client that names the flight", async () => {
+    await assertSucceeds(getDoc(doc(as(stranger), paths.flightStatus(key))));
+    await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), paths.flightStatus(key))));
+  });
+
+  it("is never listed or written by a client, nor is its budget read", async () => {
+    await assertFails(getDocs(collection(as(owner), "flightStatus")));
+    await assertFails(setDoc(doc(as(owner), paths.flightStatus(key)), { ident: "XX100", date: "2026-12-13", found: true, checkedAt: "2026-12-12T21:00:00Z" }));
+    await assertFails(updateDoc(doc(as(owner), paths.flightStatus(key)), { departureGate: "9" }));
+    await assertFails(deleteDoc(doc(as(owner), paths.flightStatus(key))));
+    await assertFails(getDoc(doc(as(owner), paths.flightStatusBudget("2026-12-12"))));
+    await assertFails(setDoc(doc(as(owner), paths.flightStatusBudget("2026-12-12")), { calls: 0 }));
+    await assertFails(getDoc(doc(as(owner), paths.flightStatusClaim(key))));
+    await assertFails(getDoc(doc(as(owner), paths.flightStatusNewsEntry(`${key}__${owner.uid}`))));
+    await assertFails(setDoc(doc(as(owner), paths.flightStatusClaim(key)), { until: "2026-12-12T21:00:30Z" }));
+  });
+});
+
 describe("a deleted account", () => {
   // Its sign-in token is still good for up to an hour after deletion.
   beforeEach(async () => {

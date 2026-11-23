@@ -23,3 +23,6 @@ fun accountDeletionFailure(status: Int?): String = when (status) {
     401, 403 -> "Couldn't confirm it's you. Sign out, sign in again and try again."
     else -> "Couldn't delete your account (error $status). Try again."
 }
+
+/** Has an open trip's flights looked at now (SPEC "Live flight status"). */
+const val FLIGHTS_REFRESH_PATH = "/flights/refresh"

@@ -23,3 +23,4 @@ export * from "./reminders";
 export * from "./status";
 export * from "./forward";
 export * from "./review";
+export * from "./flightStatus";

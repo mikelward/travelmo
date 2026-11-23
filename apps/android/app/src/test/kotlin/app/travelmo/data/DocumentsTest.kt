@@ -14,6 +14,22 @@ import org.junit.jupiter.api.Test
 
 class DocumentsTest {
     @Test
+    fun `reads a flight's status as the parser writes it, and drops one missing what it needs`() {
+        val status = flightStatusFromDocument(
+            mapOf(
+                "ident" to "XX100", "date" to "2026-12-13", "origin" to "SYD", "found" to true,
+                "departureGate" to "8", "departureTerminal" to "1", "baggageClaim" to "16",
+                "scheduledOut" to "2026-12-12T22:00:00Z", "checkedAt" to "2026-12-12T21:00:00Z",
+            ),
+        )!!
+        status.departureGate shouldBe "8"
+        status.baggageClaim shouldBe "16"
+        status.arrivalGate.shouldBeNull()
+        status.cancelled shouldBe false
+        flightStatusFromDocument(mapOf("ident" to "XX100", "date" to "2026-12-13", "checkedAt" to "2026-12-12T21:00:00Z")).shouldBeNull()
+    }
+
+    @Test
     fun `reads a trip as the web app writes it`() {
         val trip = tripFromDocument(
             "t1",
