@@ -6,6 +6,7 @@ import {
   emailRows,
   isMine,
   isRemovable,
+  linkRefusalText,
   linkedEmails,
   maxLinkedEmails,
   myAddresses,
@@ -112,6 +113,10 @@ describe("refusalOf", () => {
     expect(refusalOf('{"refusal":"taken"}')).toBe("taken");
     expect(refusalOf('{"refusal":"other"}')).toBeUndefined();
     expect(refusalOf("Internal error")).toBeUndefined();
+    expect(refusalOf('{"refusal":"notInvited"}')).toBe("notInvited");
+  });
+  it("puts every refusal in plain words", () => {
+    expect(linkRefusalText.notInvited).toBe("That address hasn't been invited to Travelmo.");
   });
 });
 

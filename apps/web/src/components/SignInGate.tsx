@@ -7,7 +7,11 @@ import { Logo } from "@/components/Logo";
 import { RequestAccess } from "@/components/RequestAccess";
 import { useAuth } from "@/lib/auth";
 
-export function SignInGate({ children }: { children: (user: User) => ReactNode }) {
+// `whileWaiting` opens the page to an account not approved yet that has not
+// been declined: the page confirming a linked address, which is how such an
+// account links the address it was invited at (SPEC "Linked email
+// addresses"). Every other page shows the invite-only screen instead.
+export function SignInGate({ children, whileWaiting = false }: { children: (user: User) => ReactNode; whileWaiting?: boolean }) {
   const { user, access, signIn } = useAuth();
   const [error, setError] = useState<string>();
   // An account without access deletes itself from the request screen, which
@@ -38,6 +42,9 @@ export function SignInGate({ children }: { children: (user: User) => ReactNode }
     );
   }
   if (access.state === "loading") return <p className="text-muted">Loading…</p>;
-  if (access.state !== "approved") return <RequestAccess user={user} status={access.state} onDeleted={onDeleted} />;
+  const waiting = access.state === "none" || access.state === "requested";
+  if (access.state !== "approved" && !(whileWaiting && waiting)) {
+    return <RequestAccess user={user} status={access.state} onDeleted={onDeleted} />;
+  }
   return <>{children(user)}</>;
 }

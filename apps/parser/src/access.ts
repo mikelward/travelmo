@@ -89,6 +89,17 @@ export async function gateUser(db: Firestore, token: TokenFacts, log?: AccessLog
   return status === "approved" ? "ok" : "unapproved";
 }
 
+// For the routes that link an address (SPEC "Linked email addresses"),
+// which take an account not approved yet ("waiting") so the invite-only
+// page can link the address it was invited at; requestLink and confirmLink
+// then hold it to addresses that let it in. An account whose sign-in an
+// admin declined or revoked is refused as requireUser refuses it.
+export async function gateLinking(db: Firestore, token: TokenFacts, log?: AccessLog): Promise<"ok" | "waiting" | "declined" | "deleted"> {
+  if ((await db.doc(paths.deletedAccount(token.uid)).get()).exists) return "deleted";
+  const { status } = await loadAccess(db, token.uid, verifiedEmailOf(token), log);
+  return status === "approved" ? "ok" : status === "declined" ? "declined" : "waiting";
+}
+
 // For work done for a user with no token at hand (a Gmail notification, a
 // mailbox reading's batch, a forwarded email): the address comes from Auth.
 export async function approvedUid(

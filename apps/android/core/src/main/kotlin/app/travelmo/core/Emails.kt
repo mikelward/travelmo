@@ -79,6 +79,7 @@ enum class LinkRefusal(val wire: String, val text: String) {
     LIMIT("limit", "Too many confirmation emails today. Try again tomorrow."),
     TAKEN("taken", "That address belongs to another Travelmo account."),
     EXPIRED("expired", "This link has expired or is for another account. Add the address again."),
+    NOT_INVITED("notInvited", "That address hasn't been invited to Travelmo."),
     ;
 
     companion object {
@@ -101,7 +102,7 @@ fun checkNewLink(raw: String, signIn: String?, user: AddressHolder?, now: String
     return LinkCheck.Ok(email)
 }
 
-private val refusalField = Regex("\"refusal\"\\s*:\\s*\"([a-z]+)\"")
+private val refusalField = Regex("\"refusal\"\\s*:\\s*\"([a-zA-Z]+)\"")
 
 /** The parser's refusal (`{"refusal":"taken"}`); null for anything else. */
 fun refusalOf(body: String): LinkRefusal? = LinkRefusal.fromWire(refusalField.find(body)?.groupValues?.get(1))

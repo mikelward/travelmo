@@ -21,7 +21,7 @@ import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import type { DecodedIdToken } from "firebase-admin/auth";
-import { approvedUid, gateUser, grandfatherOnStart, onlyApproved, settleAccess, verifiedEmailOf } from "./access";
+import { approvedUid, gateLinking, gateUser, grandfatherOnStart, onlyApproved, settleAccess, verifiedEmailOf } from "./access";
 import { deleteAccount } from "./account";
 import { LinkRefused, addressesOf, confirmLink, removeLink, requestLink, uidForAddress } from "./emails";
 import {
@@ -222,7 +222,8 @@ async function requireIdToken(c: Context<Env>): Promise<DecodedIdToken> {
   }
 }
 
-// Every user endpoint but /account/delete and /access/check: a sign-in
+// Every user endpoint but /account/delete, /access/check and adding and
+// confirming an email address (requireLinkingToken): a sign-in
 // token stays valid for up to an hour after its account is deleted, so a
 // deleted account is refused here before any handler can write for it
 // again; and an account not approved to use the app is refused (SPEC
@@ -990,13 +991,14 @@ app.post("/internal/reminders", async (c) => {
 
 // Linked email addresses (emails.ts; SPEC "Linked email addresses"). A
 // refusal answers with its reason, which the apps put in words.
-const refusalStatus: Record<LinkRefusal, 400 | 409 | 410 | 429> = {
+const refusalStatus: Record<LinkRefusal, 400 | 403 | 409 | 410 | 429> = {
   invalid: 400,
   yours: 400,
   full: 400,
   limit: 429,
   taken: 409,
   expired: 410,
+  notInvited: 403,
 };
 const emailDeps = {
   db,
@@ -1045,20 +1047,36 @@ const emailBody = async (c: Context<Env>, field: "email" | "token"): Promise<str
   return value;
 };
 
+// Adding and confirming take an account not approved yet too, so the
+// invite-only page can link the address it was invited at (gateLinking);
+// requestLink and confirmLink hold such an account to addresses that let it
+// in. A deleted account, or one whose sign-in was declined, is refused as
+// requireUser refuses it.
+async function requireLinkingToken(c: Context<Env>): Promise<{ token: DecodedIdToken; approved: boolean }> {
+  const token = await requireIdToken(c);
+  const gate = await gateLinking(db, token, log);
+  if (gate === "deleted") throw new HTTPException(410, { message: "This account was deleted" });
+  if (gate === "declined") {
+    log("INFO", "user_not_approved", { uid: token.uid, path: c.req.path });
+    throw new HTTPException(403, { message: "This account is not approved yet" });
+  }
+  return { token, approved: gate === "ok" };
+}
+
 // Sends a confirmation link to an address the user wants to link.
 app.post("/emails/add", async (c) => {
-  const token = await requireApprovedToken(c);
+  const { token, approved } = await requireLinkingToken(c);
   const email = await emailBody(c, "email");
   if (!emailDeps.mail) throw new HTTPException(503, { message: "Email is not set up on this server" });
-  return c.json(await linking("add", token.uid, () => requestLink(emailDeps, token.uid, verifiedEmailOf(token), email)));
+  return c.json(await linking("add", token.uid, () => requestLink(emailDeps, token.uid, verifiedEmailOf(token), email, approved)));
 });
 
 // The confirmation link's page calls this, signed in; only the account
 // that asked can confirm.
 app.post("/emails/confirm", async (c) => {
-  const uid = await requireUser(c);
+  const { token: idToken, approved } = await requireLinkingToken(c);
   const token = await emailBody(c, "token");
-  return c.json(await linking("confirm", uid, () => confirmLink(emailDeps, uid, token)));
+  return c.json(await linking("confirm", idToken.uid, () => confirmLink(emailDeps, idToken.uid, token, approved)));
 });
 
 app.post("/emails/remove", async (c) => {
