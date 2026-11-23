@@ -401,14 +401,19 @@
         check new mail and Import past bookings.
   - [ ] Ask Fastmail's partnerships team for an OAuth client with a mail
         read scope, so connecting is one tap instead of a pasted token.
-  - [ ] Encrypt stored mail credentials (Gmail refresh tokens, Fastmail
-        tokens, IMAP passwords) with Cloud KMS, so only the parser can
-        read them and a Firestore leak reveals nothing usable.
+  - [x] Encrypt stored mail credentials (Gmail and Calendar refresh
+        tokens, parked OAuth tokens, Fastmail tokens) with Cloud KMS, so
+        only the parser can read them and a Firestore leak reveals
+        nothing usable.
+  - [ ] Maintainer: run `deploy/kms.sh`, set `CREDENTIALS_KMS_KEY` on the
+        parser, and check `credentials_sealed` in its log.
   - [ ] IMAP with app passwords (iCloud, Infomaniak, Yahoo, others), as a
         `MailSource`: inbox opened read-only, new mail polled with the
         Fastmail job, the backfill through IMAP search; server settings
-        filled in for known providers. Neither iCloud nor Infomaniak
-        offers OAuth for mail.
+        filled in for known providers; passwords sealed with Cloud KMS as
+        the other credentials are (`sealing.ts`, and found by
+        `sealStored.ts`). Neither iCloud nor Infomaniak offers OAuth for
+        mail.
 
 ## iOS app
 

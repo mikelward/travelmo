@@ -285,7 +285,23 @@ One Google Cloud project holds everything.
    `roles/datastore.user`, `roles/secretmanager.secretAccessor`,
    `roles/firebasecloudmessaging.admin` and `roles/firebaseauth.admin`
    (Delete account removes the sign-in account; without it the data goes
-   but the request fails with "insufficient permission").
+   but the request fails with "insufficient permission"). Then
+   `PROJECT=… REGION=<the parser's region> PARSER_SA=<the parser's service
+   account> deploy/kms.sh` enables Cloud KMS and creates the key the parser
+   encrypts stored mail credentials with (Gmail and Calendar refresh tokens,
+   Fastmail API tokens; SPEC "Stored credentials"): a key ring `travelmo`
+   and a symmetric key `credentials`, rotated every 90 days, which only the
+   parser's service account may encrypt and decrypt with
+   (`roles/cloudkms.cryptoKeyEncrypterDecrypter` on that key alone). It
+   prints the `CREDENTIALS_KMS_KEY` value for step 3. Each key version
+   costs about $0.06 a month (four a year with rotation, all kept so old
+   ciphertext still decrypts) and each call about $0.03 per 10,000: one per
+   Gmail notification, Fastmail poll, batch of "Import past bookings" and
+   connection made. A connected Fastmail mailbox, polled every five
+   minutes, is about 8,600 calls a month, under three cents; a Gmail
+   mailbox's calls follow its mail, usually fewer. While Cloud KMS
+   is unreachable, nothing that needs a token works; Pub/Sub and the
+   scheduled jobs try again.
 3. **Parser** on Cloud Run. Build the image from the repository root with
    `gcloud builds submit . --config=apps/parser/cloudbuild.yaml
    --substitutions=_IMAGE=<region>-docker.pkg.dev/<project>/travelmo/parser`
@@ -301,8 +317,15 @@ One Google Cloud project holds everything.
    by `deploy/pubsub.sh`, step 4), `GOOGLE_OAUTH_CLIENT_ID`,
    `GOOGLE_OAUTH_CLIENT_SECRET` (from Secret Manager),
    `GOOGLE_OAUTH_REDIRECT_URL`, `INTERNAL_AUDIENCE` (the service URL),
-   `INTERNAL_CALLERS`, and either `GEMINI_API_KEY` or Vertex AI access through
+   `INTERNAL_CALLERS`, `CREDENTIALS_KMS_KEY` (printed by `deploy/kms.sh`,
+   step 2), and either `GEMINI_API_KEY` or Vertex AI access through
    the service account (`GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`).
+   Without `CREDENTIALS_KMS_KEY` mail credentials are stored unencrypted
+   and the parser logs `credentials_unencrypted` as it starts; with it,
+   those stored before are encrypted as it starts (`credentials_sealed` in
+   its log, with counts; `credential_seal_failed` for any it could not,
+   retried on the next start). Deploy the Firestore indexes first: finding
+   them needs the collection-group indexes on `private`.
    Make the key in AI Studio on a project with billing on: the free tier's
    terms let Google use prompts to improve its products, and the privacy
    policy (`/privacy`) promises email is never used to train AI models.
@@ -461,7 +484,9 @@ while a due parser is skipped for missing settings waits for it
 the parser has only just gained; a failed parser deploy stops the job
 before them. Gmail mailboxes connected before an account could connect
 several move to where each is kept now as the parser starts, with nothing
-to run by hand (`gmail_moved` in its log; SPEC "Several mailboxes").
+to run by hand (`gmail_moved` in its log; SPEC "Several mailboxes"), and
+so do stored credentials not yet encrypted, once `CREDENTIALS_KMS_KEY` is set
+(`credentials_sealed`; SPEC "Stored credentials").
 
 The web app needs nothing here: App Hosting builds `main` itself. The parser's
 deploy names only the image, so the service keeps its environment variables,
@@ -530,4 +555,7 @@ push services and Firebase Cloud Messaging (both free), and all a fourth Cloud S
 cents a month); forwarding addresses ride Cloudflare Email Routing and a
 Worker, free at this volume, with the model cost of a Gmail import per
 forwarded email; checking who may use the app adds a few Firestore reads
-per page and per import; see `SPEC.md`.
+per page and per import; encrypting stored mail credentials with Cloud KMS
+is about $0.06 a month per key version and up to three cents a month per
+connected mailbox (a call per notification, poll or reading batch); see
+`SPEC.md`.

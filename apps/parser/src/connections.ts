@@ -2,6 +2,7 @@ import { GmailState, GoogleCalendarState, gmailIdPrefix, mailboxKey, maxGmailMai
 import { FieldPath, FieldValue, type DocumentReference, type DocumentSnapshot, type Firestore, type Transaction } from "firebase-admin/firestore";
 import { refuseIfDeleted } from "./deleted";
 import { errorKind } from "./log";
+import { credentialContext, credentialSealer, withOpenedCredential } from "./sealing";
 import { generationOf, mailboxesQuery } from "./store";
 
 export const oauthStateTtlMs = 10 * 60 * 1000;
@@ -49,15 +50,40 @@ export function takeOAuthState(db: Firestore, nonce: string, now: number): Promi
 
 // Refuses a deleted account (deleted.ts), so a consent Google answered
 // after deletion began is not parked with its token.
+// The token is sealed (sealing.ts) before the transaction, which may run
+// more than once, and opened after it.
 export async function savePending(db: Firestore, token: string, pending: PendingConnection): Promise<void> {
+  const refreshToken = await credentialSealer().seal(pending.refreshToken, credentialContext.pending(token));
   await db.runTransaction(async (t) => {
     await refuseIfDeleted(db, t, pending.uid);
-    t.create(db.doc(paths.pendingConnection(token)), pending);
+    t.create(db.doc(paths.pendingConnection(token)), { ...pending, refreshToken });
   });
 }
 
-export function takePending(db: Firestore, token: string, now: number): Promise<PendingConnection | undefined> {
-  return take<PendingConnection>(db, paths.pendingConnection(token), now);
+// The parked token is opened before the code is spent: a KMS failure then
+// leaves the consent parked for a retry rather than lost.
+export async function takePending(db: Firestore, token: string, now: number): Promise<PendingConnection | undefined> {
+  const context = credentialContext.pending(token);
+  const parked: unknown = (await db.doc(paths.pendingConnection(token)).get()).get("refreshToken");
+  const opened = typeof parked === "string" ? await credentialSealer().open(parked, context) : undefined;
+  const pending = await take<PendingConnection>(db, paths.pendingConnection(token), now);
+  if (!pending) return undefined;
+  // Parked once and never rewritten, so what was opened is what was taken.
+  return { ...pending, refreshToken: pending.refreshToken === parked && opened !== undefined ? opened : await credentialSealer().open(pending.refreshToken, context) };
+}
+
+
+// The tokens of every consent the user has parked, redeemed or not, for
+// account deletion to revoke.
+export async function pendingTokens(db: Firestore, uid: string): Promise<string[]> {
+  const snap = await db.collection("pendingConnections").where("uid", "==", uid).get();
+  const tokens = await Promise.all(
+    snap.docs.map(async (d) => {
+      const token: unknown = d.get("refreshToken");
+      return typeof token === "string" ? [await credentialSealer().open(token, credentialContext.pending(d.id))] : [];
+    }),
+  );
+  return tokens.flat();
 }
 
 export async function mailboxOwner(db: Firestore, emailAddress: string): Promise<string | undefined> {
@@ -103,6 +129,15 @@ function updatePublic(t: Transaction, userRef: DocumentReference, user: Document
 // clients could write before the rules locked it.
 function trustMailbox(db: Firestore, t: Transaction, uid: string, address: string): void {
   t.set(db.doc(paths.emailLinks(uid)), { mailboxes: FieldValue.arrayUnion(lower(address)) }, { merge: true });
+}
+
+// A mailbox's state as stored, its token sealed, and back (sealing.ts).
+async function openMailbox(uid: string, state: GmailState): Promise<GmailState> {
+  return { ...state, refreshToken: await credentialSealer().open(state.refreshToken, credentialContext.gmail(uid, state.emailAddress)) };
+}
+
+async function sealMailbox(uid: string, state: GmailState): Promise<GmailState> {
+  return { ...state, refreshToken: await credentialSealer().seal(state.refreshToken, credentialContext.gmail(uid, state.emailAddress)) };
 }
 
 function publicPart(state: GmailState): GmailConnection {
@@ -169,7 +204,8 @@ async function moveIfLegacy(db: Firestore, uid: string): Promise<void> {
 export async function loadMailboxes(db: Firestore, uid: string): Promise<GmailState[]> {
   await moveIfLegacy(db, uid);
   const snap = await mailboxesQuery(db, uid).get();
-  return snap.docs.map((d) => GmailState.parse(d.data())).sort((a, b) => a.connectedAt.localeCompare(b.connectedAt) || a.emailAddress.localeCompare(b.emailAddress));
+  const all = await Promise.all(snap.docs.map((d) => openMailbox(uid, GmailState.parse(d.data()))));
+  return all.sort((a, b) => a.connectedAt.localeCompare(b.connectedAt) || a.emailAddress.localeCompare(b.emailAddress));
 }
 
 // One mailbox, by its address.
@@ -177,7 +213,7 @@ export async function loadMailbox(db: Firestore, uid: string, emailAddress: stri
   const read = async () => {
     const snap = await mailboxDoc(db, uid, emailAddress).get();
     const state = snap.exists ? GmailState.parse(snap.data()) : undefined;
-    return state && lower(state.emailAddress) === lower(emailAddress) ? state : undefined;
+    return state && lower(state.emailAddress) === lower(emailAddress) ? openMailbox(uid, state) : undefined;
   };
   const found = await read();
   if (found) return found;
@@ -199,9 +235,11 @@ export async function resolveMailbox(db: Firestore, uid: string, key?: string): 
 // `maxGmailMailboxes`; connecting one again replaces its connection. The
 // account's first mailbox ever keeps Gmail's bare message ids for its
 // emails; every other gets ids that name it (gmailIdPrefix), so two
-// mailboxes' ids never meet. Returns the connection as stored.
+// mailboxes' ids never meet. Returns the connection as stored, its token
+// as given.
 export async function saveConnection(db: Firestore, uid: string, state: GmailState): Promise<GmailState> {
-  return db.runTransaction(async (t) => {
+  const sealed = await sealMailbox(uid, state);
+  const idPrefix = await db.runTransaction(async (t) => {
     await refuseIfDeleted(db, t, uid);
     const accountRef = db.doc(paths.gmailAccount(state.emailAddress));
     const stateRef = mailboxDoc(db, uid, state.emailAddress);
@@ -230,14 +268,15 @@ export async function saveConnection(db: Firestore, uid: string, state: GmailSta
     const idPrefix = first === undefined || first === lower(state.emailAddress) ? "" : gmailIdPrefix(state.emailAddress);
     if (first === undefined) t.set(idsRef, { first: lower(state.emailAddress) });
     trustMailbox(db, t, uid, state.emailAddress);
-    const stored: GmailState = { ...state, idPrefix };
+    const stored: GmailState = { ...sealed, idPrefix };
     t.set(stateRef, stored);
     // This mailbox's entry replaced whole; the others stay.
     if (user.exists) updatePublic(t, userRef, user, [[publicEntry(state.emailAddress), publicPart(stored)]]);
     else t.set(userRef, { gmails: { [lower(state.emailAddress)]: publicPart(stored) } });
     t.set(accountRef, { uid });
-    return stored;
+    return idPrefix;
   });
+  return { ...state, idPrefix };
 }
 
 // Background work only touches a connection that still exists for the same
@@ -270,27 +309,38 @@ export function updateWatch(db: Firestore, uid: string, emailAddress: string, wa
 // Changes how far the reading of one mailbox has got, as `change` decides
 // from the stored progress and the trips' reset generation, read in the same
 // transaction; undefined when that mailbox is not connected.
-export function changeBackfill<R>(
+export async function changeBackfill<R>(
   db: Firestore,
   uid: string,
   emailAddress: string,
   change: (current: BackfillProgress | undefined, generation: number) => { next?: BackfillProgress | undefined; result: R },
 ): Promise<{ state: GmailState; generation: number; result: R } | undefined> {
-  return db.runTransaction(async (t) => {
-    const stateRef = mailboxDoc(db, uid, emailAddress);
-    const userRef = db.doc(paths.user(uid));
-    const [snap, lock, user] = await Promise.all([t.get(stateRef), t.get(db.doc(paths.importLock(uid))), t.get(userRef)]);
-    if (!snap.exists) return undefined;
-    const state = GmailState.parse(snap.data());
-    if (lower(state.emailAddress) !== lower(emailAddress)) return undefined;
-    const generation = generationOf(lock);
-    const { next, result } = change(state.backfill, generation);
-    if (next) {
-      t.update(stateRef, { backfill: next });
-      updatePublic(t, userRef, user, [[publicEntry(emailAddress, "backfill"), next]]);
-    }
-    return { state, generation, result };
-  });
+  const stateRef = mailboxDoc(db, uid, emailAddress);
+  const changed = await withOpenedCredential(
+    async () => {
+      const snap = await stateRef.get();
+      return snap.exists ? GmailState.parse(snap.data()) : undefined;
+    },
+    (state) => state.refreshToken,
+    async (state) => (await openMailbox(uid, state)).refreshToken,
+    (unchanged) =>
+      db.runTransaction(async (t) => {
+        const userRef = db.doc(paths.user(uid));
+        const [snap, lock, user] = await Promise.all([t.get(stateRef), t.get(db.doc(paths.importLock(uid))), t.get(userRef)]);
+        if (!snap.exists) return undefined;
+        const state = GmailState.parse(snap.data());
+        if (lower(state.emailAddress) !== lower(emailAddress)) return undefined;
+        if (!unchanged(state)) return "replaced" as const;
+        const generation = generationOf(lock);
+        const { next, result } = change(state.backfill, generation);
+        if (next) {
+          t.update(stateRef, { backfill: next });
+          updatePublic(t, userRef, user, [[publicEntry(emailAddress, "backfill"), next]]);
+        }
+        return { state, rest: { generation, result } };
+      }),
+  );
+  return changed && { ...changed.rest, state: { ...changed.state, refreshToken: changed.opened } };
 }
 
 export function updateHistoryId(db: Firestore, uid: string, emailAddress: string, historyId: string, generation?: number): Promise<boolean> {
@@ -323,7 +373,9 @@ export async function removeConnection(db: Firestore, uid: string, emailAddress:
 
 export async function loadCalendarState(db: Firestore, uid: string): Promise<GoogleCalendarState | undefined> {
   const snap = await db.doc(paths.googleCalendarState(uid)).get();
-  return snap.exists ? GoogleCalendarState.parse(snap.data()) : undefined;
+  if (!snap.exists) return undefined;
+  const state = GoogleCalendarState.parse(snap.data());
+  return { ...state, refreshToken: await credentialSealer().open(state.refreshToken, credentialContext.calendar(uid)) };
 }
 
 function publicCalendar(state: GoogleCalendarState): GoogleCalendarConnection {
@@ -332,9 +384,10 @@ function publicCalendar(state: GoogleCalendarState): GoogleCalendarConnection {
 }
 
 export async function saveCalendarState(db: Firestore, uid: string, state: GoogleCalendarState): Promise<void> {
+  const refreshToken = await credentialSealer().seal(state.refreshToken, credentialContext.calendar(uid));
   await db.runTransaction(async (t) => {
     await refuseIfDeleted(db, t, uid);
-    t.set(db.doc(paths.googleCalendarState(uid)), state);
+    t.set(db.doc(paths.googleCalendarState(uid)), { ...state, refreshToken });
     t.set(db.doc(paths.user(uid)), { googleCalendar: publicCalendar(state) }, { merge: true });
   });
 }
@@ -394,7 +447,9 @@ export async function calendarUsers(db: Firestore): Promise<string[]> {
 // when any one token is revoked. So a token is revoked only when no other
 // connection of the user still relies on the same Google account (by its
 // address; with none known, on any account): disconnecting Calendar must
-// not silently stop Gmail. The token is dropped either way.
+// not silently stop Gmail. The token is dropped either way. Tokens are
+// compared as loaded, unsealed: sealing the same one twice gives two
+// different ciphertexts.
 export function revocable(
   token: string,
   emailAddress: string | undefined,

@@ -20,11 +20,11 @@ When you connect Gmail, Travelmo gets read-only access to that mailbox; you can 
 
 Travelmo's use and transfer of information received from Google APIs adheres to the [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements. Email content is used only to find your bookings and add them to your trips. It is not used for advertising, not sold, not read by people except to fix a problem you report or where the law requires it, and not used to train AI models.
 
-You can disconnect each Gmail account, or Google Calendar, in Settings at any time; Travelmo then revokes its access.
+Travelmo keeps this access encrypted on its servers. You can disconnect each Gmail account, or Google Calendar, in Settings at any time; Travelmo then revokes its access.
 
 ## Fastmail
 
-When you connect Fastmail, you give Travelmo a read-only API token you made in Fastmail's settings, and Travelmo keeps it on its servers. It uses the token only to read new email every few minutes, and past email when you import it, handling each email as it does with Gmail: only ones that look like bookings go to Gemini, and it never sends, changes or deletes email.
+When you connect Fastmail, you give Travelmo a read-only API token you made in Fastmail's settings, and Travelmo keeps it encrypted on its servers. It uses the token only to read new email every few minutes, and past email when you import it, handling each email as it does with Gmail: only ones that look like bookings go to Gemini, and it never sends, changes or deletes email.
 
 Disconnecting Fastmail in Settings deletes the token from Travelmo. Travelmo can't revoke a Fastmail token, so delete it in Fastmail too.
 
