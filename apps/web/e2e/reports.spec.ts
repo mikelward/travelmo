@@ -18,6 +18,13 @@ test("reports count days in each country, trips per year, and mark the map", asy
 
   const countries = page.getByRole("table", { name: "Days in each country" });
   await expect(countries.getByRole("row")).toHaveText(["CountryDaysTrips", "Portugal51", "United Kingdom21"]);
+  // A country opens to the trips with days there.
+  await countries.getByRole("button", { name: "Portugal" }).click();
+  const inPortugal = page.getByRole("list", { name: "Trips in Portugal" });
+  await expect(inPortugal.getByRole("listitem")).toHaveCount(1);
+  await inPortugal.getByRole("link").click();
+  await expect(page).toHaveURL(/\/trips\/e2e-lisbon$/);
+  await page.goBack();
   const years = page.getByRole("table", { name: "Trips per year" });
   await expect(years.getByRole("row")).toHaveText(["YearTripsDaysCountries", "2025152"]);
   await expect(page.getByText("1 trip still ahead isn't counted.")).toBeVisible();

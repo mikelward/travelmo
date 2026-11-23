@@ -66,7 +66,12 @@ class ReportsTest {
         report.trips shouldBe 2
         report.upcoming shouldBe 1
         report.days shouldBe 11
-        report.countries shouldBe listOf(CountryReport("FR", 6, 1), CountryReport("JP", 4, 1), CountryReport("US", 2, 1), CountryReport("BE", 1, 1))
+        report.countries shouldBe listOf(
+            CountryReport("FR", 6, 1, listOf("paris")),
+            CountryReport("JP", 4, 1, listOf("tokyo")),
+            CountryReport("US", 2, 1, listOf("paris")),
+            CountryReport("BE", 1, 1, listOf("paris")),
+        )
         report.years shouldBe listOf(YearReport("2025", 1, 9, 4), YearReport("2024", 1, 2, 1))
         report.airports.map { it.code to it.country } shouldBe listOf("CDG" to "FR", "JFK" to "US")
         report.places shouldBe emptyList()
@@ -117,7 +122,7 @@ class ReportsTest {
         val report = travelReport(listOf(paris, tokyo), "2025-11-01", year = "2024")
         report.trips shouldBe 1
         report.days shouldBe 2
-        report.countries shouldBe listOf(CountryReport("JP", 2, 1))
+        report.countries shouldBe listOf(CountryReport("JP", 2, 1, listOf("tokyo")))
         report.airports shouldBe emptyList()
         report.years.size shouldBe 2
         val newYear = TripWithSegments(trip("ny", "2024-12-31", "2025-01-01"), listOf(flight("JFK", "CDG", "2024-12-31T22:00:00-05:00", "2025-01-01T11:30:00+01:00")))

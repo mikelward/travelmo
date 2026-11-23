@@ -229,7 +229,9 @@ place (a stay, a station, a restaurant) whose booking knows its coordinates.
 A year picker narrows the
 counts and the map to one year; the trips-per-year table always shows every
 year. Trips still ahead are not counted, and a trip under way counts up to
-today.
+today. Each country in the days table opens to the trips with days there,
+latest first, each linking to its trip (web and Android), so a country
+that looks wrong can be traced to the booking that put it there.
 
 A place's country is the one its booking names, and its spot (`lat`, `lon`)
 the one its booking carries. Imports fill both in when the source gave none:

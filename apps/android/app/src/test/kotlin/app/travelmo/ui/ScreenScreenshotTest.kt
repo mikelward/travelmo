@@ -1,5 +1,7 @@
 package app.travelmo.ui
 
+import androidx.compose.ui.test.performScrollTo
+
 import app.travelmo.core.BackfillShown
 import app.travelmo.data.GmailStatus
 
@@ -400,6 +402,24 @@ class ScreenScreenshotTest {
     fun reports() {
         val viewModel = viewModel()
         capture("reports") { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, bottomBar = { HomeNavigationBar(HomeTab.REPORTS) {} }) }
+    }
+
+    // A country opened to the trips with days there.
+    @Test
+    fun reports_country() = reportsCountry("reports_country", dark = false)
+
+    @Test
+    fun reports_country_dark() = reportsCountry("reports_country_dark", dark = true)
+
+    private fun reportsCountry(name: String, dark: Boolean) {
+        val viewModel = viewModel()
+        composeRule.setContent {
+            TravelmoTheme(darkTheme = dark) { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, bottomBar = { HomeNavigationBar(HomeTab.REPORTS) {} }) }
+        }
+        composeRule.onNodeWithText("Portugal").performScrollTo().performClick()
+        composeRule.onNodeWithText("Lisbon · ", substring = true).performScrollTo()
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
     }
 
     @Test

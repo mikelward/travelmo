@@ -118,7 +118,8 @@ export function tripDays(
   return new Map([...tripDayPlaces(trip, segments, today, lookup)].map(([day, { countries }]) => [day, countries]));
 }
 
-export type CountryReport = { country: string; days: number; trips: number };
+// `tripIds`: the trips with days there, latest first, for listing them.
+export type CountryReport = { country: string; days: number; trips: number; tripIds: string[] };
 export type YearReport = { year: string; trips: number; days: number; countries: number };
 export type AirportVisit = { code: string; country: string; lat: number; lon: number };
 // A place other than an airport whose booking says where it is.
@@ -160,6 +161,7 @@ export function travelReport(
   const yearTrips = new Map<string, number>();
   const airports = new Map<string, AirportVisit>();
   const places = new Map<string, PlaceVisit>();
+  const tripStart = new Map<string, string>();
   let trips = 0;
   let unplaced = 0;
   let upcoming = 0;
@@ -173,6 +175,7 @@ export function travelReport(
       upcoming += 1;
       continue;
     }
+    tripStart.set(trip.id, bounds.start);
     const startYear = bounds.start.slice(0, 4);
     yearTrips.set(startYear, (yearTrips.get(startYear) ?? 0) + 1);
     if (inYear(bounds.start)) trips += 1;
@@ -235,7 +238,10 @@ export function travelReport(
     trips,
     days: dayCountries.size,
     countries: [...daysIn]
-      .map(([country, days]) => ({ country, days, trips: countryTrips.get(country)?.size ?? 0 }))
+      .map(([country, days]) => {
+        const ids = [...(countryTrips.get(country) ?? [])].sort((a, b) => (tripStart.get(b) ?? "").localeCompare(tripStart.get(a) ?? "") || a.localeCompare(b));
+        return { country, days, trips: ids.length, tripIds: ids };
+      })
       .sort((a, b) => b.days - a.days || a.country.localeCompare(b.country)),
     years,
     airports: [...airports.values()].sort((a, b) => a.code.localeCompare(b.code)),

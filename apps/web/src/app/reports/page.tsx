@@ -1,9 +1,9 @@
 "use client";
 
-import { displayTitles, favoritePlaces, travelReport, type FavoritePlace, type PlaceLookup, type TravelReport } from "@travelmo/core";
+import { displayTitles, favoritePlaces, formatDateRange, travelReport, type FavoritePlace, type PlaceLookup, type TravelReport, type Trip } from "@travelmo/core";
 import Link from "next/link";
 import type { User } from "firebase/auth";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { ResidenceDays } from "@/components/ResidenceDays";
 import { SignInGate } from "@/components/SignInGate";
 import { WorldMap, type WorldMapData } from "@/components/WorldMap";
@@ -46,7 +46,10 @@ function Summary({ report }: { report: TravelReport }) {
   );
 }
 
-function Countries({ report }: { report: TravelReport }) {
+// Each country opens to the trips with days there, so a surprising one can
+// be found and fixed.
+function Countries({ report, titles, trips }: { report: TravelReport; titles: Map<string, string>; trips: ReadonlyMap<string, Trip> }) {
+  const [open, setOpen] = useState<string>();
   if (!report.countries.length) return null;
   return (
     <section className="mt-8">
@@ -61,11 +64,41 @@ function Countries({ report }: { report: TravelReport }) {
         </thead>
         <tbody>
           {report.countries.map((c) => (
-            <tr key={c.country} className="border-t border-zinc-200 dark:border-zinc-800">
-              <td className="py-1">{countryName(c.country)}</td>
-              <td className="py-1 text-right tabular-nums">{c.days}</td>
-              <td className="py-1 text-right tabular-nums">{c.trips}</td>
-            </tr>
+            <Fragment key={c.country}>
+              <tr className="border-t border-zinc-200 dark:border-zinc-800">
+                <td className="py-1">
+                  <button
+                    type="button"
+                    aria-expanded={open === c.country}
+                    onClick={() => setOpen(open === c.country ? undefined : c.country)}
+                    className="text-left hover:underline"
+                  >
+                    {countryName(c.country)}
+                  </button>
+                </td>
+                <td className="py-1 text-right tabular-nums">{c.days}</td>
+                <td className="py-1 text-right tabular-nums">{c.trips}</td>
+              </tr>
+              {open === c.country && (
+                <tr>
+                  <td colSpan={3} className="pb-2">
+                    <ul aria-label={`Trips in ${countryName(c.country)}`} className="ml-4">
+                      {c.tripIds.map((id) => {
+                        const trip = trips.get(id);
+                        return (
+                          <li key={id}>
+                            <Link href={`/trips/${id}`} className="hover:underline">
+                              {titles.get(id) ?? trip?.title ?? "A trip"}
+                            </Link>
+                            {trip && <span className="text-muted"> · {formatDateRange(trip.start, trip.end)}</span>}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </td>
+                </tr>
+              )}
+            </Fragment>
           ))}
         </tbody>
       </table>
@@ -181,6 +214,7 @@ function Report({ user }: { user: User }) {
     return deriveHomes(byTrip, [], profile.homes ?? []).periods;
   }, [trips, segments, profile, user.uid]);
   const titles = useMemo(() => displayTitles(trips ?? []), [trips]);
+  const tripsById = useMemo(() => new Map((trips ?? []).map((t) => [t.id, t])), [trips]);
 
   if (tables instanceof Error) return <p className="text-danger">The map couldn&apos;t be loaded: {tables.message}</p>;
   if (!report || !tables || !all || !segments) return <p className="text-muted">Loading reports…</p>;
@@ -230,7 +264,7 @@ function Report({ user }: { user: User }) {
           spot.
         </p>
       )}
-      <Countries report={report} />
+      <Countries report={report} titles={titles} trips={tripsById} />
       <Favorites places={favoritePlaces(all.withSegments)} titles={titles} />
       {homes && <ResidenceDays trips={all.withSegments} homes={homes} lookup={tables.lookup} today={today} titles={titles} />}
       <Years report={all.report} onPick={setYear} />

@@ -96,7 +96,8 @@ fun tripDayPlaces(trip: Trip, segments: List<Segment>, today: String, lookup: (S
 fun tripDays(trip: Trip, segments: List<Segment>, today: String, lookup: (String) -> AirportPlace? = ::airportPlace): Map<String, Set<String>> =
     tripDayPlaces(trip, segments, today, lookup).mapValues { it.value.countries }
 
-data class CountryReport(val country: String, val days: Int, val trips: Int)
+/** [tripIds]: the trips with days there, latest first, for listing them. */
+data class CountryReport(val country: String, val days: Int, val trips: Int, val tripIds: List<String> = emptyList())
 
 data class YearReport(val year: String, val trips: Int, val days: Int, val countries: Int)
 
@@ -139,6 +140,7 @@ fun travelReport(all: List<TripWithSegments>, today: String, year: String? = nul
     val yearTrips = HashMap<String, Int>()
     val airports = HashMap<String, AirportVisit>()
     val places = LinkedHashMap<String, PlaceVisit>()
+    val tripStart = HashMap<String, String>()
     var trips = 0
     var unplaced = 0
     var upcoming = 0
@@ -152,6 +154,7 @@ fun travelReport(all: List<TripWithSegments>, today: String, year: String? = nul
             upcoming += 1
             continue
         }
+        tripStart[trip.id] = bounds.first
         val startYear = bounds.first.substring(0, 4)
         yearTrips[startYear] = (yearTrips[startYear] ?: 0) + 1
         if (inYear(bounds.first)) trips += 1
@@ -207,7 +210,10 @@ fun travelReport(all: List<TripWithSegments>, today: String, year: String? = nul
     return TravelReport(
         trips = trips,
         days = dayCountries.size,
-        countries = daysIn.map { (country, days) -> CountryReport(country, days, countryTrips[country]?.size ?: 0) }
+        countries = daysIn.map { (country, days) ->
+            val ids = countryTrips[country].orEmpty().sortedWith(compareByDescending<String> { tripStart[it].orEmpty() }.thenBy { it })
+            CountryReport(country, days, ids.size, ids)
+        }
             .sortedWith(compareByDescending<CountryReport> { it.days }.thenBy { it.country }),
         years = years,
         airports = airports.values.sortedBy { it.code },
