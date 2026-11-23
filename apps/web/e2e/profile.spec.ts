@@ -126,3 +126,14 @@ test("each loyalty number is shown under whose it is, on the profile and on a bo
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("table", { name: "Loyalty programs: Sam Sample" })).toContainText("EA 999");
 });
+
+test("home is set by city and a country written as a name, saved as its code", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  await seedTravelProfile(ownerUid, { ownerEmail: owner, trustedEmails: [], documents: [], loyalty: [], travelers: [] });
+  await page.goto("/profile");
+  await page.getByLabel("City").fill("London");
+  await page.getByLabel("Country").fill("United Kingdom");
+  await page.locator('input[type="date"]').fill("2022-01-15");
+  await page.getByRole("button", { name: "Set" }).click();
+  await expect(page.getByText("London, GB from 15 Jan 2022")).toBeVisible();
+});

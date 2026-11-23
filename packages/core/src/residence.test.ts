@@ -89,6 +89,11 @@ describe("presenceTimeline", () => {
     expect([...(timeline.get("2026-03-03")?.tripIds ?? [])]).toEqual(["paris"]);
   });
 
+  it("counts days at a home saved as UK as days in GB", () => {
+    const timeline = presenceTimeline([], [{ city: "London", country: "UK" }], "2026-03-01", "2026-03-01", airportPlace);
+    expect(countries(timeline, "2026-03-01", "2026-03-01")).toEqual({ "2026-03-01": ["GB"] });
+  });
+
   it("counts an overnight flight's departure day only where it left", () => {
     const singapore = trip("sg", "2026-04-10", "2026-04-11", [flight("LHR", "SIN", "2026-04-10T21:00:00+01:00", "2026-04-11T17:00:00+08:00")]);
     const timeline = presenceTimeline([singapore], london, "2026-04-10", "2026-04-11", airportPlace);

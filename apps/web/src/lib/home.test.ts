@@ -28,11 +28,15 @@ describe("parseCorrection", () => {
   it("takes a city, an optional country code and a date", () => {
     expect(parseCorrection(" London ", "gb", "2021-03-12")).toEqual({ city: "London", country: "GB", from: "2021-03-12" });
     expect(parseCorrection("London", "", "2021-03-12")).toEqual({ city: "London", from: "2021-03-12" });
+    // A short form or a name is saved as its code.
+    expect(parseCorrection("London", "UK", "2021-03-12")).toEqual({ city: "London", country: "GB", from: "2021-03-12" });
+    expect(parseCorrection("Boston", "United States", "2021-03-12")).toEqual({ city: "Boston", country: "US", from: "2021-03-12" });
   });
 
   it("says what is missing", () => {
     expect(parseCorrection("", "GB", "2021-03-12")).toBe("Enter a city.");
     expect(parseCorrection("London", "GBR", "2021-03-12")).toBe("Use a two-letter country code, such as GB.");
+    expect(parseCorrection("London", "ZZ", "2021-03-12")).toBe("Use a two-letter country code, such as GB.");
     expect(parseCorrection("London", "GB", "")).toBe("Enter a date.");
   });
 });

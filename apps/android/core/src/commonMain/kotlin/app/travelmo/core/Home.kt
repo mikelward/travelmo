@@ -29,10 +29,37 @@ private fun town(place: Place?): Town? {
     return Town(place.city ?: place.name, place.country)
 }
 
-// Same city, ignoring case, and the same country when both give one.
+// Same city, ignoring case, accents and the local or English name, and the
+// same country when both give one, however it is written ("UK" is GB).
 private fun sameTown(a: Town, b: Town): Boolean =
-    a.city.trim().equals(b.city.trim(), ignoreCase = true) &&
-        (a.country == null || b.country == null || a.country.equals(b.country, ignoreCase = true))
+    sameCity(a.city, b.city) && (a.country == null || b.country == null || countryCode(a.country) == countryCode(b.country))
+
+/** A country as its ISO code, whether written as one or by name ("UK", "United Kingdom" and "GB" are all GB). */
+fun countryCode(country: String): String = countryCodeOf(country) ?: country.trim().uppercase()
+
+// Cities with an English name besides their own, by their own name folded,
+// as packages/core's home.ts lists them.
+private val cityNames = mapOf(
+    "goteborg" to "gothenburg", "munchen" to "munich", "koln" to "cologne", "wien" to "vienna", "praha" to "prague",
+    "warszawa" to "warsaw", "krakow" to "cracow", "kobenhavn" to "copenhagen", "lisboa" to "lisbon", "roma" to "rome",
+    "milano" to "milan", "napoli" to "naples", "firenze" to "florence", "venezia" to "venice", "torino" to "turin",
+    "geneve" to "geneva", "bruxelles" to "brussels", "brussel" to "brussels", "den haag" to "the hague", "sevilla" to "seville",
+    "athina" to "athens", "moskva" to "moscow", "ciudad de mexico" to "mexico city",
+)
+
+private val marks = Regex("\\p{M}+")
+
+// Letters that are not an accented letter, so no accent comes off them.
+private val plainLetters = mapOf('ø' to "o", 'æ' to "ae", 'œ' to "oe", 'ß' to "ss", 'ł' to "l", 'đ' to "d", 'ð' to "d", 'þ' to "th", 'ı' to "i")
+
+private fun foldCity(city: String): String {
+    val folded = decomposed(city).replace(marks, "").trim().lowercase()
+        .map { plainLetters[it] ?: it.toString() }.joinToString("")
+    return cityNames[folded] ?: folded
+}
+
+/** Whether two city names are one city: ignoring case, accents and the local or English name. */
+fun sameCity(a: String, b: String): Boolean = foldCity(a) == foldCity(b)
 
 private fun sameTown(a: Town, b: HomePeriod): Boolean = sameTown(a, Town(b.city, b.country))
 
@@ -162,7 +189,8 @@ fun homeCorrections(corrections: List<HomeCorrection>): List<HomePeriod> {
     val sorted = corrections.associateBy { it.from }.values.sortedBy { it.from }
     return sorted.mapIndexed { i, c ->
         val next = sorted.getOrNull(i + 1)
-        HomePeriod(c.city, c.country, from = c.from, until = next?.let { LocalDate.parse(it.from).minus(DatePeriod(days = 1)).toString() })
+        // As a code, however it was saved ("UK" before the web's form required one).
+        HomePeriod(c.city, c.country?.let(::countryCode), from = c.from, until = next?.let { LocalDate.parse(it.from).minus(DatePeriod(days = 1)).toString() })
     }
 }
 

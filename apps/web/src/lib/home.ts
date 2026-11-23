@@ -2,10 +2,12 @@
 
 import {
   HomeCorrection,
+  countryCode,
   describeHomes,
   effectiveHomes,
   formatDate,
   homeTimeline,
+  isCountryCode,
   maxHomeCorrections,
   paths,
   type HomePeriod,
@@ -31,11 +33,12 @@ export function correctionText(c: HomeCorrection): string {
 
 // A correction from the form's fields, or why it cannot be one.
 export function parseCorrection(city: string, country: string, from: string): HomeCorrection | string {
-  const code = country.trim().toUpperCase();
+  // A name or a common short form ("UK") is saved as its ISO code.
+  const code = country.trim() ? countryCode(country) : "";
+  if (!city.trim()) return "Enter a city.";
+  if (code && !isCountryCode(code)) return "Use a two-letter country code, such as GB.";
   const parsed = HomeCorrection.safeParse({ city: city.trim(), ...(code ? { country: code } : {}), from });
   if (parsed.success) return parsed.data;
-  if (!city.trim()) return "Enter a city.";
-  if (code && code.length !== 2) return "Use a two-letter country code, such as GB.";
   return "Enter a date.";
 }
 

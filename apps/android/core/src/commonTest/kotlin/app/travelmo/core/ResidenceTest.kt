@@ -43,6 +43,12 @@ class ResidenceTest {
     }
 
     @Test
+    fun `counts days at a home saved as UK as days in GB`() {
+        countries(presenceTimeline(emptyList(), listOf(HomePeriod("London", "UK")), "2026-03-01", "2026-03-01"), "2026-03-01", "2026-03-01") shouldBe
+            mapOf("2026-03-01" to listOf("GB"))
+    }
+
+    @Test
     fun `puts a travel day in both countries and the days with no trip at home`() {
         val timeline = presenceTimeline(listOf(roundTrip("paris", "2026-03-02", "2026-03-05")), london, "2026-03-01", "2026-03-06")
         countries(timeline, "2026-03-01", "2026-03-06") shouldBe mapOf(
