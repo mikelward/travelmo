@@ -10,6 +10,10 @@ const val GMAIL_DISCONNECT_PATH = "/gmail/disconnect"
 const val BACKFILL_START_PATH = "/gmail/backfill"
 const val BACKFILL_STOP_PATH = "/gmail/backfill/stop"
 const val FASTMAIL_CONNECT_PATH = "/fastmail/connect"
+
+/** The parser routes that issue and stop the forwarding address, as forward.ts. */
+const val FORWARD_ISSUE_PATH = "/forward/issue"
+const val FORWARD_STOP_PATH = "/forward/stop"
 const val FASTMAIL_DISCONNECT_PATH = "/fastmail/disconnect"
 const val FASTMAIL_BACKFILL_START_PATH = "/fastmail/backfill"
 const val FASTMAIL_BACKFILL_STOP_PATH = "/fastmail/backfill/stop"

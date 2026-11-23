@@ -86,6 +86,9 @@ interface TripStore {
      */
     fun addressHolder(uid: String): Flow<AddressHolder>
 
+    /** The user's forwarding address (`forward.address` on their user document), live; [Forwarding.address] null when they have none, the flow's value null while it loads. */
+    fun forwarding(uid: String): Flow<Forwarding?>
+
     /** Whether the user asked for reminders by email (`reminders.email` on their user document), live; null while it loads. */
     fun reminderEmail(uid: String): Flow<Boolean?>
 
@@ -231,6 +234,13 @@ class TripGoneException(message: String) : Exception(message)
  */
 data class Seen<T>(val value: T, val confirmed: Boolean)
 
+/** The user's forwarding address, when they have one. */
+data class Forwarding(val address: String?)
+
+/** `forward.address` on the user document, as the parser writes it. */
+internal fun forwardingOf(data: Map<String, Any?>?): Forwarding =
+    Forwarding(((data?.get("forward") as? Map<*, *>)?.get("address") as? String)?.takeIf { it.length >= 3 })
+
 /** The user document's fields for car and ride suggestions (SPEC "Car and ride suggestions"). */
 data class RideSettings(
     val companies: List<RideCompany> = emptyList(),
@@ -368,6 +378,18 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         return db.collectionGroup("travelProfile").whereArrayContainsAny("trustedEmails", asked).snapshots().orNothing("shared profiles").map { snapshot ->
             snapshot?.documents.orEmpty().mapNotNull { doc -> profileFromDocument(doc.data ?: emptyMap()) }
         }
+    }
+
+    override fun forwarding(uid: String): Flow<Forwarding?> = callbackFlow {
+        val registration = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                TravelmoLog.error(error, "Reading the forwarding address failed")
+                trySend(Forwarding(null))
+                return@addSnapshotListener
+            }
+            trySend(forwardingOf(snapshot?.data))
+        }
+        awaitClose { registration.remove() }
     }
 
     override fun addressHolder(uid: String): Flow<AddressHolder> = callbackFlow {

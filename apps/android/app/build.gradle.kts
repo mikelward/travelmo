@@ -93,6 +93,19 @@ if (parserUrl.isNotEmpty() && !Regex("""https?://[^\s"\\$]+""").matches(parserUr
     throw GradleException("travelmoParserUrl must be an http(s) URL; got \"$parserUrl\".")
 }
 
+// The domain of the forwarding addresses the parser issues (the web's
+// NEXT_PUBLIC_FORWARD_DOMAIN): -PtravelmoForwardDomain or
+// TRAVELMO_FORWARD_DOMAIN. Settings offers "Forward by email" only when it
+// is set, or to someone who already has an address.
+val forwardDomain: String = (
+    // The committed empty property is no setting, so the variable still counts.
+    providers.gradleProperty("travelmoForwardDomain").orNull?.takeIf { it.isNotBlank() }
+        ?: providers.environmentVariable("TRAVELMO_FORWARD_DOMAIN").orNull
+    )?.trim().orEmpty()
+if (forwardDomain.isNotEmpty() && !Regex("""[A-Za-z0-9.-]+\.[A-Za-z]{2,}""").matches(forwardDomain)) {
+    throw GradleException("travelmoForwardDomain must be a domain name; got \"$forwardDomain\".")
+}
+
 // Robolectric runs the tests on an Android framework jar it would otherwise
 // download itself at test time, outside Gradle's cache and retries, which made
 // CI flaky. Gradle fetches it instead, into a directory Robolectric reads in
@@ -131,6 +144,7 @@ android {
         versionCode = if (fixedTestVersion) 1 else gitCommitCount
         versionName = if (fixedTestVersion) "test" else "$gitCommitCount ($gitShortSha)"
         buildConfigField("String", "PARSER_URL", "\"$parserUrl\"")
+        buildConfigField("String", "FORWARD_DOMAIN", "\"$forwardDomain\"")
         // The instrumented tests (src/androidTest): FirestoreTrips against
         // the Firestore emulator on an Android emulator (scripts/connected-tests.sh).
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

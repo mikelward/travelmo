@@ -1,6 +1,9 @@
 package app.travelmo.ui
 
 import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -17,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -58,8 +62,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.BuildConfig
@@ -78,6 +82,7 @@ import app.travelmo.core.parseCountries
 import app.travelmo.core.pausedReason
 import app.travelmo.core.rideCompanyOrNull
 import app.travelmo.log.DebugLogging
+import app.travelmo.log.TravelmoLog
 import app.travelmo.notify.ReminderNotifications
 import com.mikelward.androidlog.android.ShareOutcome
 import com.mikelward.androidzoom.MAX_FONT_SCALE
@@ -101,6 +106,7 @@ private const val DELETE_TRIPS_TOKEN = "settings/trips/delete"
 private const val ADD_EMAIL_TOKEN = "settings/emails/add"
 private const val REMOVE_EMAIL_TOKEN = "settings/emails/remove"
 private const val SENDER_RULES_TOKEN = "settings/senders"
+private const val FORWARD_TOKEN = "settings/forward"
 private const val ADD_COMPANY_TOKEN = "settings/rides/add"
 private const val REMOVE_COMPANY_TOKEN = "settings/rides/remove"
 
@@ -158,6 +164,7 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
             SenderRulesSection(viewModel)
             RideCompaniesSection(viewModel)
             EmailAddressesSection(user, viewModel)
+            ForwardSection(viewModel)
             Text(stringResource(R.string.reminders), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
             Text(stringResource(R.string.reminders_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
@@ -188,6 +195,68 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
             )
         }
     }
+}
+
+/**
+ * Settings' "Forward by email", as on the web: the user's own address to
+ * forward bookings to, created, copied, replaced or turned off. Shown when
+ * the deployment has a forwarding domain, or the user already has one.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ForwardSection(viewModel: TripsViewModel) {
+    val forwarding by viewModel.forwarding.collectAsStateWithLifecycle()
+    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val outcome = outcomes[FORWARD_TOKEN]
+    val busy = outcome is Outcome.Busy
+    val context = LocalContext.current
+    // Which change is waiting for the user to confirm it: replace or turn off.
+    var confirming by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(outcome) { if (outcome is Outcome.Done) viewModel.outcomeSeen(FORWARD_TOKEN) }
+    val shown = forwarding ?: return
+    if (!viewModel.canForward(shown)) return
+    Text(stringResource(R.string.forward_by_email), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(R.string.forward_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val address = shown.address
+    if (address == null) {
+        Button(onClick = { viewModel.issueForward(FORWARD_TOKEN) }, enabled = !busy, modifier = Modifier.padding(top = 8.dp)) {
+            Text(stringResource(if (busy) R.string.creating else R.string.create_forwarding_address))
+        }
+    } else {
+        SelectionContainer { Text(address, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp)) }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+            OutlinedButton(onClick = { copyForwardAddress(context, address) }) { Text(stringResource(R.string.copy_address)) }
+            OutlinedButton(onClick = { confirming = true }, enabled = !busy) { Text(stringResource(R.string.replace_address)) }
+            OutlinedButton(onClick = { confirming = false }, enabled = !busy) { Text(stringResource(R.string.turn_off)) }
+        }
+    }
+    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+    confirming?.let { replace ->
+        AppAlertDialog(
+            onDismissRequest = { confirming = null },
+            text = { Text(stringResource(if (replace) R.string.replace_forward_confirm else R.string.stop_forward_confirm)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirming = null
+                        if (replace) viewModel.issueForward(FORWARD_TOKEN) else viewModel.stopForward(FORWARD_TOKEN)
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) { Text(stringResource(if (replace) R.string.replace_address else R.string.turn_off)) }
+            },
+            dismissButton = { TextButton(onClick = { confirming = null }) { Text(stringResource(R.string.keep)) } },
+        )
+    }
+}
+
+/** Puts the forwarding address on the clipboard; Android confirms the copy itself. */
+private fun copyForwardAddress(context: Context, address: String) {
+    val clipboard = context.getSystemService(ClipboardManager::class.java)
+    if (clipboard == null) {
+        TravelmoLog.warning("No clipboard to copy the forwarding address to")
+        return
+    }
+    clipboard.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.forward_by_email), address))
 }
 
 /**

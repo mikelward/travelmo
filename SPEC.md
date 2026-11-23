@@ -1666,7 +1666,10 @@ switched in between, re-checks every redirect (three at most), and stops at
 ### Forwarded email
 
 People whose confirmations are not in Gmail forward them to an address of
-their own, `<token>@<FORWARD_DOMAIN>`, created from Settings: the token is
+their own, `<token>@<FORWARD_DOMAIN>`, created from Settings on the web or
+Android (offered where the build has the domain, `NEXT_PUBLIC_FORWARD_DOMAIN`
+or Android's `travelmoForwardDomain`, or to someone who already has an
+address; copied, replaced or turned off there): the token is
 twenty lowercase base32 characters (100 bits), only its hash is stored
 (`forwardAddresses`), and issuing again retires the old one. The domain is
 on Cloudflare: Email Routing's catch-all rule hands every message for it to

@@ -124,6 +124,15 @@
     <string name="import_review_hint">Recent emails and other imports that did not become bookings. Teach the importer about a sender, or import one anyway.</string>
     <string name="open_import_review">Review imports</string>
     <string name="sender_rules">Sender rules</string>
+    <string name="forward_by_email">Forward by email</string>
+    <string name="forward_hint">No Gmail, or a confirmation in another mailbox? Forward it to your own Travelmo address and it is read like any booking email, within a minute. The address is yours alone: anyone who has it can add bookings to your trips, so replace it if it gets out. Attachments are not read, so forward the email itself rather than a PDF.</string>
+    <string name="create_forwarding_address">Create forwarding address</string>
+    <string name="creating">Creating…</string>
+    <string name="copy_address">Copy address</string>
+    <string name="replace_address">Replace address</string>
+    <string name="turn_off">Turn off</string>
+    <string name="replace_forward_confirm">Replace the address? Emails sent to the old one bounce from now on.</string>
+    <string name="stop_forward_confirm">Turn off the forwarding address? Emails sent to it bounce from now on.</string>
     <string name="sender_rules_hint">One domain per line. Always-import senders skip the subject check; never-import senders are dropped before anything is read.</string>
     <string name="always_import_list">Always import</string>
     <string name="never_import_list">Never import</string>

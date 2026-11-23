@@ -397,7 +397,9 @@ One Google Cloud project holds everything.
    of the parser's pair, lets Settings offer reminders as notifications in
    the browser; left unset, the switch is hidden. `NEXT_PUBLIC_FORWARD_DOMAIN`,
    the parser's `FORWARD_DOMAIN`, lets Settings offer a forwarding address;
-   left unset, that section is hidden.
+   left unset, that section is hidden. The Android app's equivalent is
+   `travelmoForwardDomain` in `apps/android/gradle.properties` (or
+   `-PtravelmoForwardDomain=…`, `TRAVELMO_FORWARD_DOMAIN`).
 8. **Forwarding addresses** (optional) on Cloudflare, for people whose
    confirmations are not in Gmail: each user gets `<token>@<domain>` from
    Settings and forwards booking emails to it. Add the domain to Cloudflare
