@@ -19,6 +19,9 @@ fun domainOf(from: String): String? {
     return domain?.takeIf { '.' in it }
 }
 
+/** A list as typed, one domain a line: trimmed, in lower case, blank lines and repeats left out. */
+fun cleanSenderList(lines: List<String>): List<String> = lines.map { it.trim().lowercase() }.filter { it.isNotEmpty() }.distinct()
+
 /** The parser's rule: a pattern covers its own domain and every subdomain. */
 fun covers(pattern: String, domain: String): Boolean = domain == pattern || domain.endsWith(".$pattern")
 

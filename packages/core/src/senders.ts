@@ -12,6 +12,12 @@ export function domainOf(from: string): string | undefined {
   return domain && domain.includes(".") ? domain : undefined;
 }
 
+// A list as typed, one domain a line: trimmed, in lower case, blank lines
+// and repeats left out.
+export function cleanSenderList(lines: readonly string[]): string[] {
+  return [...new Set(lines.map((s) => s.trim().toLowerCase()).filter(Boolean))];
+}
+
 // The parser's rule: a pattern covers its own domain and every subdomain.
 export function covers(pattern: string, domain: string): boolean {
   return domain === pattern || domain.endsWith(`.${pattern}`);

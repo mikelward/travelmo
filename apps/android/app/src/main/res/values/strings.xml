@@ -113,6 +113,11 @@
     <string name="import_review">Import review</string>
     <string name="import_review_hint">Recent emails and other imports that did not become bookings. Teach the importer about a sender, or import one anyway.</string>
     <string name="open_import_review">Review imports</string>
+    <string name="sender_rules">Sender rules</string>
+    <string name="sender_rules_hint">One domain per line. Always-import senders skip the subject check; never-import senders are dropped before anything is read.</string>
+    <string name="always_import_list">Always import</string>
+    <string name="never_import_list">Never import</string>
+    <string name="saved">Saved</string>
     <string name="search">Search</string>
     <string name="review_from">From</string>
     <string name="review_to">To</string>

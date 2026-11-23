@@ -59,6 +59,7 @@ import app.travelmo.core.MAX_GMAIL_MAILBOXES
 import app.travelmo.data.NoGmailActions
 import app.travelmo.data.GmailActions
 import app.travelmo.core.SenderPatterns
+import app.travelmo.core.cleanSenderList
 import app.travelmo.core.SenderList
 import app.travelmo.core.ParsedRecord
 import app.travelmo.data.SearchedRecords
@@ -572,6 +573,11 @@ class TripsViewModel(
     fun reimport(token: String, messageId: String) = run(token, "reimport") {
         val said = importReview.reimport(messageId)
         _reviewNotices.update { it + (messageId to said) }
+    }
+
+    /** Saves the sender rules as typed, one domain a line ([cleanSenderList]). */
+    fun saveSenderPatterns(token: String, allow: String, deny: String) = run(token, "saveSenderPatterns") {
+        store.setSenderPatterns(uid, SenderPatterns(allow = cleanSenderList(allow.lines()), deny = cleanSenderList(deny.lines())))
     }
 
     /** Always or never imports a sender's mail from now on. */

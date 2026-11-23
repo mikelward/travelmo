@@ -1,6 +1,6 @@
 "use client";
 
-import { RideCompany, describeBackfill, describeDeletedTrips, gmailMailboxes, isReading, maxGmailMailboxes, pausedReason, describeRegroup, groupSkips, maxRideCompanies, paths, type GmailConnection, type SenderPatterns, type SkipGroup } from "@travelmo/core";
+import { RideCompany, cleanSenderList, describeBackfill, describeDeletedTrips, gmailMailboxes, isReading, maxGmailMailboxes, pausedReason, describeRegroup, groupSkips, maxRideCompanies, paths, type GmailConnection, type SenderPatterns, type SkipGroup } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -694,8 +694,7 @@ function PatternsSection({ user }: { user: User }) {
 
   const save = async () => {
     if (!patterns) return;
-    const clean = (list: string[]) => [...new Set(list.map((s) => s.trim().toLowerCase()).filter(Boolean))];
-    const next = { allow: clean(patterns.allow), deny: clean(patterns.deny) };
+    const next = { allow: cleanSenderList(patterns.allow), deny: cleanSenderList(patterns.deny) };
     try {
       await setDoc(doc(firestore(), paths.senderPatterns(user.uid)), next);
       setDraft(undefined);

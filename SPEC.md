@@ -1015,7 +1015,10 @@ one, whose bookings are edited on the trip page, nor one whose import is
 live — and runs the import with the pre-filter skipped). Teaching a sender also
 drops any pattern on the other list that covers it, so the newest decision
 is the one the parser follows. A booking's Sources dialog on the trip page
-offers "Always import this sender" on imported bookings.
+offers "Always import this sender" on imported bookings. Settings on the
+web and Android also edits both lists directly ("Sender rules", one domain
+a line, saved together; `cleanSenderList` trims, lowercases and drops blank
+lines and repeats).
 
 The similarity pre-filter (`apps/parser/src/similarity.ts`) learns from
 the model's verdicts. Every email that reaches the model is embedded
