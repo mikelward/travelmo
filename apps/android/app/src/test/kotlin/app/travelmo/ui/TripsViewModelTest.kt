@@ -16,6 +16,8 @@ import app.travelmo.data.OwnProfile
 import app.travelmo.data.RideSettings
 import app.travelmo.data.TripStore
 import app.travelmo.core.HomeCorrection
+import app.travelmo.core.SenderList
+import app.travelmo.core.SenderPatterns
 import app.travelmo.core.rideNeedKey
 import java.time.Instant
 import kotlinx.coroutines.flow.first
@@ -338,6 +340,18 @@ class TripsViewModelTest {
         none.canRunTripActions shouldBe false
         none.deleteAllTrips("delete")
         none.outcomes.value shouldBe mapOf("delete" to Outcome.Failed("Use Settings on the web for this."))
+    }
+
+    @Test
+    fun `import review reads a message again and teaches senders, saying what each did`() = runTest {
+        val store = FakeTripStore()
+        val review = FakeImportReview()
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, importReview = review)
+        viewModel.reimport("again", "ticket")
+        review.asked shouldBe listOf("ticket")
+        viewModel.learnSender("learn", "news", "news.example", SenderList.ALLOW)
+        store.patterns.value shouldBe SenderPatterns(allow = listOf("news.example"))
+        viewModel.reviewNotices.value shouldBe mapOf("ticket" to "Imported", "news" to "Always importing news.example")
     }
 
     @Test

@@ -19,6 +19,9 @@ import app.travelmo.data.ParserFlightRefresh
 import app.travelmo.data.NoTripActions
 import app.travelmo.data.ParserClient
 import app.travelmo.data.ParserTripActions
+import app.travelmo.data.ImportReview
+import app.travelmo.data.NoImportReview
+import app.travelmo.data.ParserImportReview
 import app.travelmo.data.TripActions
 import app.travelmo.data.TripStore
 import app.travelmo.log.DebugLogging
@@ -69,6 +72,9 @@ class TravelmoApplication : Application() {
 
     /** Regrouping and deleting all trips through the parser; nothing without Firebase or a parser address. */
     val tripActions: TripActions by lazy { if (firebaseReady) ParserTripActions(ParserClient(BuildConfig.PARSER_URL)) else NoTripActions }
+
+    /** Import review's "Import anyway" through the parser; nothing without Firebase or a parser address. */
+    val importReview: ImportReview by lazy { if (firebaseReady) ParserImportReview(ParserClient(BuildConfig.PARSER_URL)) else NoImportReview }
 
     /** Settling the account's access with the parser; nothing without Firebase or a parser address. */
     val accessCheck: AccessCheck by lazy { if (firebaseReady) ParserAccessCheck(BuildConfig.PARSER_URL) else NoAccessCheck }

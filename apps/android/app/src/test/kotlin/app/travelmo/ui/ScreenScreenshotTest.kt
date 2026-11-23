@@ -418,6 +418,19 @@ class ScreenScreenshotTest {
     fun reports_residence_dark() = residence("reports_residence_dark", dark = true)
 
     @Test
+    fun import_review() = importReview("import_review", dark = false)
+
+    @Test
+    fun import_review_dark() = importReview("import_review_dark", dark = true)
+
+    private fun importReview(name: String, dark: Boolean) {
+        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, importReview = FakeImportReview())
+        capture(name, dark = dark) {
+            ImportReviewScreen(viewModel = viewModel, onBack = {}, zone = java.time.ZoneId.of("Europe/London"))
+        }
+    }
+
+    @Test
     fun settings() = settings("settings", dark = false)
 
     @Test

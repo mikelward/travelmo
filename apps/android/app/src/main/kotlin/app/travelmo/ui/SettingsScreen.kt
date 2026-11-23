@@ -78,13 +78,13 @@ private const val ADD_EMAIL_TOKEN = "settings/emails/add"
 private const val REMOVE_EMAIL_TOKEN = "settings/emails/remove"
 
 /**
- * The account, regrouping or deleting all trips, reminders by email and
+ * The account, regrouping or deleting all trips, Import review, reminders by email and
  * as notifications on this phone, the text size, the debug log, deleting
  * the account and the build; the other import settings are on the web for now.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewModel, onBack: () -> Unit) {
+fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewModel, onBack: () -> Unit, onOpenReview: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val stored by viewModel.reminderEmail.collectAsStateWithLifecycle()
@@ -122,6 +122,9 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
                 Text(stringResource(R.string.sign_out))
             }
             TripsSection(viewModel)
+            Text(stringResource(R.string.import_review), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+            Text(stringResource(R.string.import_review_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedButton(onClick = onOpenReview, modifier = Modifier.padding(top = 8.dp)) { Text(stringResource(R.string.open_import_review)) }
             EmailAddressesSection(user, viewModel)
             Text(stringResource(R.string.reminders), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
             Text(stringResource(R.string.reminders_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
