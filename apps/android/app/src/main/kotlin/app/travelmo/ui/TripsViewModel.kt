@@ -58,6 +58,9 @@ import app.travelmo.core.GmailMailbox
 import app.travelmo.core.MAX_GMAIL_MAILBOXES
 import app.travelmo.data.NoGmailActions
 import app.travelmo.data.GmailActions
+import app.travelmo.data.CalendarExportShown
+import app.travelmo.data.NoCalendarExportActions
+import app.travelmo.data.CalendarExportActions
 import app.travelmo.data.CalendarFeedShown
 import app.travelmo.data.NoFeedActions
 import app.travelmo.data.FeedActions
@@ -65,6 +68,8 @@ import app.travelmo.data.Forwarding
 import app.travelmo.data.NoForwardActions
 import app.travelmo.data.ForwardActions
 import app.travelmo.core.RideCompany
+import app.travelmo.core.exportLinks
+import app.travelmo.core.ExportLinks
 import app.travelmo.data.FastmailActions
 import app.travelmo.data.NoFastmailActions
 import app.travelmo.core.SenderPatterns
@@ -178,6 +183,10 @@ class TripsViewModel(
     private val gmailActions: GmailActions = NoGmailActions,
     /** The parser's Fastmail connection and mailbox reading; none by default. */
     private val fastmailActions: FastmailActions = NoFastmailActions,
+    /** The parser's calendar export link; none by default. */
+    private val calendarExportActions: CalendarExportActions = NoCalendarExportActions,
+    /** The parser's address, for the export link's URL (BuildConfig.PARSER_URL); none by default. */
+    private val parserUrl: String = "",
     /** The parser's calendar feeds; none by default. */
     private val feedActions: FeedActions = NoFeedActions,
     /** The parser's forwarding address; none by default. */
@@ -597,6 +606,23 @@ class TripsViewModel(
     fun setReviewSearching(on: Boolean) {
         reviewSearching.value = on
     }
+
+    /** The user's calendar export link, live; null while it loads. */
+    val calendarExport: StateFlow<CalendarExportShown?> = accessSettled.flatMapLatest { store.calendarExport(uid) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Whether this build can create and change the export link here. */
+    val canExport: Boolean
+        get() = calendarExportActions.available && parserUrl.isNotBlank()
+
+    /** The export link three ways, from this build's parser. */
+    fun exportLinksFor(token: String): ExportLinks = exportLinks(token, parserUrl)
+
+    /** Issues an export link, replacing any old one. */
+    fun issueCalendarExport(token: String) = run(token, "issueCalendarExport") { calendarExportActions.issue() }
+
+    /** Turns the export link off. */
+    fun stopCalendarExport(token: String) = run(token, "stopCalendarExport") { calendarExportActions.stop() }
 
     /** The user's calendar feeds, live; null while they load. */
     val feeds: StateFlow<List<CalendarFeedShown>?> = accessSettled.flatMapLatest { store.feeds(uid) }

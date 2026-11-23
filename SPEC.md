@@ -1844,8 +1844,9 @@ user can run a backfill to fill any gap.
 
 ## Calendar export
 
-Settings offers a link that Google Calendar, Apple Calendar or Outlook
-subscribes to: an iCalendar feed (`packages/core/src/calendarExport.ts`) of
+Settings, on the web and Android, offers a link that Google Calendar,
+Apple Calendar or Outlook subscribes to (copied, added to Google Calendar,
+opened in a calendar app, replaced or turned off there; `exportLinks`): an iCalendar feed (`packages/core/src/calendarExport.ts`) of
 the user's trips, their own and those shared with them, from a year back
 on. Each trip is an all-day event across its dates, and each booking a
 timed event, in UTC so every app places it alike, with the route or place

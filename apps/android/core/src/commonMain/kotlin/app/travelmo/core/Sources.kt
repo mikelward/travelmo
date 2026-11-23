@@ -69,7 +69,7 @@ fun emailLinkFor(source: SourceRef, viewerUid: String, ownsTrip: Boolean, mailbo
 }
 
 /** JavaScript's encodeURIComponent: UTF-8 bytes as %XX, but for letters, digits and -_.!~*'(). */
-private fun encodeUriComponent(value: String): String = buildString {
+internal fun encodeUriComponent(value: String): String = buildString {
     for (byte in value.encodeToByteArray()) {
         val c = byte.toInt() and 0xFF
         if (c < 0x80 && (c.toChar().isLetterOrDigit() || c.toChar() in "-_.!~*'()")) append(c.toChar())
