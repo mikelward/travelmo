@@ -1,64 +1,69 @@
 package app.travelmo.ui
 
-import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.performScrollToNode
-
-import app.travelmo.core.BackfillShown
-import app.travelmo.data.FastmailStatus
-import app.travelmo.data.GmailStatus
-
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
-import app.travelmo.data.RideSettings
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.travelmo.R
 import app.travelmo.auth.GoogleAccount
 import app.travelmo.auth.SignInResult
 import app.travelmo.auth.SignedIn
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Surface
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import app.travelmo.core.AccessConfig
 import app.travelmo.core.AccountAccess
 import app.travelmo.core.AddressHolder
-import app.travelmo.core.accessDecision
-import app.travelmo.core.accessInvite
-import app.travelmo.core.accessRequest
+import app.travelmo.core.BackfillShown
 import app.travelmo.core.FlightStatus
 import app.travelmo.core.HomePeriod
 import app.travelmo.core.PendingEmail
-import app.travelmo.core.TripWithSegments
-import app.travelmo.core.displayTitles
 import app.travelmo.core.Place
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentType
 import app.travelmo.core.Trip
+import app.travelmo.core.TripWithSegments
+import app.travelmo.core.accessDecision
+import app.travelmo.core.accessInvite
+import app.travelmo.core.accessRequest
+import app.travelmo.core.displayTitles
+import app.travelmo.data.FastmailStatus
+import app.travelmo.data.GmailStatus
+import app.travelmo.data.RideSettings
+import app.travelmo.shared.Res
+import app.travelmo.shared.add_reminder
+import app.travelmo.shared.connect_imap
 import app.travelmo.ui.theme.TravelmoTheme
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.captureScreenRoboImage
+import com.mikelward.androidlog.android.ShareOutcome
 import com.mikelward.androidzoom.FontSizeSettings
 import com.mikelward.androidzoom.compose.FontSizeState
 import com.mikepenz.aboutlibraries.Libs
 import com.mikepenz.aboutlibraries.util.withJson
 import java.time.Instant
 import java.util.TimeZone
-import com.mikelward.androidlog.android.ShareOutcome
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.runBlocking
+import org.jetbrains.compose.resources.getString
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+
+
 
 /**
  * Every screen, rendered to app/snapshots/<name>.png under Robolectric at a
@@ -394,7 +399,7 @@ class ScreenScreenshotTest {
                 SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
             }
         }
-        composeRule.onNodeWithText(composeRule.activity.getString(R.string.add_reminder)).performScrollTo()
+        composeRule.onNodeWithText(runBlocking { getString(Res.string.add_reminder) }).performScrollTo()
         composeRule.waitForIdle()
         composeRule.onRoot().captureRoboImage(filePath = "$outputDir/settings_trip_reminders.png")
     }
@@ -638,7 +643,7 @@ class ScreenScreenshotTest {
             }
         }
         // The section's end on screen, so the whole section shows.
-        composeRule.onNodeWithText(composeRule.activity.getString(R.string.connect_imap)).performScrollTo()
+        composeRule.onNodeWithText(runBlocking { getString(Res.string.connect_imap) }).performScrollTo()
         composeRule.waitForIdle()
         composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
     }

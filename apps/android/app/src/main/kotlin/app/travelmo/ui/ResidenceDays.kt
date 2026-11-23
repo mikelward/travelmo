@@ -23,11 +23,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import app.travelmo.R
 import app.travelmo.core.HomePeriod
 import app.travelmo.core.LimitType
 import app.travelmo.core.ResidenceStatus
@@ -38,8 +35,46 @@ import app.travelmo.core.countryName
 import app.travelmo.core.formatDateRange
 import app.travelmo.core.residenceReport
 import app.travelmo.core.residenceRuleSets
+import app.travelmo.shared.Res
+import app.travelmo.shared.residence_applying_today
+import app.travelmo.shared.residence_as_of_today
+import app.travelmo.shared.residence_close
+import app.travelmo.shared.residence_close_to_test
+import app.travelmo.shared.residence_days
+import app.travelmo.shared.residence_days_ending
+import app.travelmo.shared.residence_enough
+import app.travelmo.shared.residence_estimate
+import app.travelmo.shared.residence_just_enough
+import app.travelmo.shared.residence_left
+import app.travelmo.shared.residence_longest
+import app.travelmo.shared.residence_meets_test
+import app.travelmo.shared.residence_more
+import app.travelmo.shared.residence_no_home_country
+import app.travelmo.shared.residence_no_long_absence
+import app.travelmo.shared.residence_no_time_away
+import app.travelmo.shared.residence_not_enough
+import app.travelmo.shared.residence_not_met
+import app.travelmo.shared.residence_of_days
+import app.travelmo.shared.residence_official_guidance
+import app.travelmo.shared.residence_over
+import app.travelmo.shared.residence_over_by
+import app.travelmo.shared.residence_rules
+import app.travelmo.shared.residence_short
+import app.travelmo.shared.residence_spare
+import app.travelmo.shared.residence_stays
+import app.travelmo.shared.residence_this_year
+import app.travelmo.shared.residence_time_away
+import app.travelmo.shared.residence_title
+import app.travelmo.shared.residence_under_31
+import app.travelmo.shared.residence_unknown_away
+import app.travelmo.shared.residence_unknown_in
+import app.travelmo.shared.residence_weighted
+import app.travelmo.shared.residence_within
+import app.travelmo.shared.residence_worst_stretch
 import com.mikelward.androidzoom.compose.pinchFontSizeHost
 import java.util.Locale
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Days in and out of countries against residence and visa limits, as the
@@ -55,14 +90,14 @@ fun ResidenceDays(trips: List<TripWithSegments>, homes: List<HomePeriod>, today:
     val report = remember(trips, homes, set, today) { residenceReport(trips, homes, set, today) }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(modifier = modifier.fillMaxWidth()) {
-        Text(stringResource(R.string.residence_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 8.dp))
+        Text(stringResource(Res.string.residence_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 8.dp))
         var open by remember { mutableStateOf(false) }
         ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }) {
             OutlinedTextField(
                 value = set.label,
                 onValueChange = {},
                 readOnly = true,
-                label = { Text(stringResource(R.string.residence_rules)) },
+                label = { Text(stringResource(Res.string.residence_rules)) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
                 modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
             )
@@ -71,16 +106,16 @@ fun ResidenceDays(trips: List<TripWithSegments>, homes: List<HomePeriod>, today:
             }
         }
         Text(
-            stringResource(if (set.application) R.string.residence_applying_today else R.string.residence_as_of_today),
+            stringResource(if (set.application) Res.string.residence_applying_today else Res.string.residence_as_of_today),
             style = MaterialTheme.typography.bodyMedium,
             color = muted,
             modifier = Modifier.padding(top = 4.dp),
         )
         if (!report.homeCountryKnown) {
-            Text(stringResource(R.string.residence_no_home_country), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
+            Text(stringResource(Res.string.residence_no_home_country), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
         }
         for (result in report.results) Result(result, titles, onOpenTrip)
-        Text(stringResource(R.string.residence_estimate), style = MaterialTheme.typography.bodyMedium, color = muted, modifier = Modifier.padding(top = 8.dp))
+        Text(stringResource(Res.string.residence_estimate), style = MaterialTheme.typography.bodyMedium, color = muted, modifier = Modifier.padding(top = 8.dp))
     }
 }
 
@@ -102,25 +137,25 @@ private fun Result(result: RuleResult, titles: Map<String, String>, onOpenTrip: 
         Text(statusText(result), style = MaterialTheme.typography.bodyMedium, color = statusColor(result.status))
         if (kind !is RuleKind.LongestAbsence) {
             val window = formatDateRange(result.window.start, result.window.end)
-            val line = if (rolling) stringResource(R.string.residence_worst_stretch, window) else window
+            val line = if (rolling) stringResource(Res.string.residence_worst_stretch, window) else window
             // The window ending today, when it is not the worst one.
             val current = result.current?.takeIf { rolling && it.window != result.window }?.let {
-                " · " + pluralStringResource(R.plurals.residence_days_ending, it.used, it.used, formatDateRange(it.window.end, it.window.end))
+                " · " + pluralStringResource(Res.plurals.residence_days_ending, it.used, it.used, formatDateRange(it.window.end, it.window.end))
             }.orEmpty()
             Text(line + current, style = MaterialTheme.typography.bodyMedium, color = muted)
         }
         if (result.unknownDays > 0) {
             Text(
-                pluralStringResource(if (stays) R.plurals.residence_unknown_in else R.plurals.residence_unknown_away, result.unknownDays, result.unknownDays),
+                pluralStringResource(if (stays) Res.plurals.residence_unknown_in else Res.plurals.residence_unknown_away, result.unknownDays, result.unknownDays),
                 style = MaterialTheme.typography.bodyMedium,
                 color = muted,
             )
         }
         if (result.stretches.isNotEmpty()) {
-            Text(stringResource(if (stays) R.string.residence_stays else R.string.residence_time_away), style = MaterialTheme.typography.labelLarge, color = muted, modifier = Modifier.padding(top = 4.dp))
+            Text(stringResource(if (stays) Res.string.residence_stays else Res.string.residence_time_away), style = MaterialTheme.typography.labelLarge, color = muted, modifier = Modifier.padding(top = 4.dp))
             for (s in result.stretches.reversed().take(SHOWN_STRETCHES)) {
                 val where = s.countries.joinToString(", ") { countryName(it) }
-                val text = listOf(formatDateRange(s.start, s.end), pluralStringResource(R.plurals.residence_days, s.days, s.days), where).filter { it.isNotEmpty() }.joinToString(" · ")
+                val text = listOf(formatDateRange(s.start, s.end), pluralStringResource(Res.plurals.residence_days, s.days, s.days), where).filter { it.isNotEmpty() }.joinToString(" · ")
                 val trip = s.tripIds.firstOrNull()
                 Text(
                     if (trip != null) "$text · ${titles[trip] ?: trip}" else text,
@@ -129,10 +164,10 @@ private fun Result(result: RuleResult, titles: Map<String, String>, onOpenTrip: 
                 )
             }
             val more = result.stretches.size - SHOWN_STRETCHES
-            if (more > 0) Text(pluralStringResource(R.plurals.residence_more, more, more), style = MaterialTheme.typography.bodyMedium, color = muted)
+            if (more > 0) Text(pluralStringResource(Res.plurals.residence_more, more, more), style = MaterialTheme.typography.bodyMedium, color = muted)
         }
         Text(
-            stringResource(R.string.residence_official_guidance),
+            stringResource(Res.string.residence_official_guidance),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.clickable { uri.openUri(rule.source) }.padding(vertical = 4.dp),
@@ -153,29 +188,29 @@ private fun statusText(result: RuleResult): String = when (val kind = result.rul
     is RuleKind.Limit -> when {
         kind.type == LimitType.MIN_PRESENT -> stringResource(
             when (result.status) {
-                ResidenceStatus.OK -> R.string.residence_enough
-                ResidenceStatus.NEAR -> R.string.residence_just_enough
-                ResidenceStatus.OVER -> R.string.residence_not_enough
+                ResidenceStatus.OK -> Res.string.residence_enough
+                ResidenceStatus.NEAR -> Res.string.residence_just_enough
+                ResidenceStatus.OVER -> Res.string.residence_not_enough
             },
         )
         else -> stringResource(
             when (result.status) {
-                ResidenceStatus.OK -> R.string.residence_within
-                ResidenceStatus.NEAR -> R.string.residence_close
-                ResidenceStatus.OVER -> R.string.residence_over
+                ResidenceStatus.OK -> Res.string.residence_within
+                ResidenceStatus.NEAR -> Res.string.residence_close
+                ResidenceStatus.OVER -> Res.string.residence_over
             },
         )
     }
     is RuleKind.LongestAbsence -> when (result.status) {
-        ResidenceStatus.OK -> stringResource(R.string.residence_no_long_absence)
+        ResidenceStatus.OK -> stringResource(Res.string.residence_no_long_absence)
         ResidenceStatus.NEAR -> kind.notes.near
         ResidenceStatus.OVER -> kind.notes.over
     }
     RuleKind.SubstantialPresence -> when {
-        result.status == ResidenceStatus.OVER -> stringResource(R.string.residence_meets_test)
-        (result.current?.used ?: 0) < 31 -> stringResource(R.string.residence_under_31)
-        result.status == ResidenceStatus.NEAR -> stringResource(R.string.residence_close_to_test)
-        else -> stringResource(R.string.residence_not_met)
+        result.status == ResidenceStatus.OVER -> stringResource(Res.string.residence_meets_test)
+        (result.current?.used ?: 0) < 31 -> stringResource(Res.string.residence_under_31)
+        result.status == ResidenceStatus.NEAR -> stringResource(Res.string.residence_close_to_test)
+        else -> stringResource(Res.string.residence_not_met)
     }
 }
 
@@ -188,23 +223,23 @@ private fun countText(result: RuleResult): String {
     val remaining = result.remaining.toInt()
     return when (val kind = result.rule.kind) {
         is RuleKind.Limit -> {
-            val of = pluralStringResource(R.plurals.residence_of_days, result.limit, grouped(used), grouped(result.limit))
+            val of = pluralStringResource(Res.plurals.residence_of_days, result.limit, grouped(used), grouped(result.limit))
             val rest = when {
-                kind.type == LimitType.MIN_PRESENT && remaining > 0 -> pluralStringResource(R.plurals.residence_short, remaining, remaining)
-                kind.type == LimitType.MIN_PRESENT -> pluralStringResource(R.plurals.residence_spare, -remaining, -remaining)
-                remaining >= 0 -> pluralStringResource(R.plurals.residence_left, remaining, remaining)
-                else -> pluralStringResource(R.plurals.residence_over_by, -remaining, -remaining)
+                kind.type == LimitType.MIN_PRESENT && remaining > 0 -> pluralStringResource(Res.plurals.residence_short, remaining, remaining)
+                kind.type == LimitType.MIN_PRESENT -> pluralStringResource(Res.plurals.residence_spare, -remaining, -remaining)
+                remaining >= 0 -> pluralStringResource(Res.plurals.residence_left, remaining, remaining)
+                else -> pluralStringResource(Res.plurals.residence_over_by, -remaining, -remaining)
             }
             "$of · $rest"
         }
         is RuleKind.LongestAbsence -> if (used == 0) {
-            stringResource(R.string.residence_no_time_away)
+            stringResource(Res.string.residence_no_time_away)
         } else {
-            pluralStringResource(R.plurals.residence_longest, used, used, formatDateRange(result.window.start, result.window.end))
+            pluralStringResource(Res.plurals.residence_longest, used, used, formatDateRange(result.window.start, result.window.end))
         }
         RuleKind.SubstantialPresence -> {
             val thisYear = result.current?.used ?: 0
-            stringResource(R.string.residence_weighted, String.format(Locale.US, "%,.1f", result.used).removeSuffix(".0"), grouped(result.limit), pluralStringResource(R.plurals.residence_this_year, thisYear, thisYear))
+            stringResource(Res.string.residence_weighted, String.format(Locale.US, "%,.1f", result.used).removeSuffix(".0"), grouped(result.limit), pluralStringResource(Res.plurals.residence_this_year, thisYear, thisYear))
         }
     }
 }

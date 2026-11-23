@@ -65,5 +65,8 @@ rootProject.name = "travelmo"
 // next, the status lines, date formatting) live there, testable without an
 // SDK, and `:core:verifyNoAndroid` keeps it that way. `:app` owns Android:
 // Compose, Firebase, sign-in.
+// `:shared` is what the iOS app will share with this one beyond `:core`:
+// for now the screens' text, as Compose Multiplatform resources.
 include(":core")
+include(":shared")
 include(":app")

@@ -1,5 +1,6 @@
 package app.travelmo.ui
 
+import org.jetbrains.compose.resources.StringResource
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -42,14 +43,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.travelmo.R
 import app.travelmo.core.FoundLoyalty
 import app.travelmo.core.MAX_TRUSTED
 import app.travelmo.core.ParsedCorrection
@@ -62,9 +61,54 @@ import app.travelmo.core.homeLine
 import app.travelmo.core.loyaltyByPerson
 import app.travelmo.core.loyaltySummary
 import app.travelmo.core.parseCorrection
+import app.travelmo.shared.Res
+import app.travelmo.shared.a_booking_email
+import app.travelmo.shared.cancel
+import app.travelmo.shared.city
+import app.travelmo.shared.col_account
+import app.travelmo.shared.col_balance
+import app.travelmo.shared.col_program
+import app.travelmo.shared.col_status
+import app.travelmo.shared.country
+import app.travelmo.shared.documents
+import app.travelmo.shared.enter_email
+import app.travelmo.shared.found_from_email
+import app.travelmo.shared.found_in_emails
+import app.travelmo.shared.from_sender
+import app.travelmo.shared.home
+import app.travelmo.shared.home_from_date
+import app.travelmo.shared.home_not_known
+import app.travelmo.shared.home_pick_from
+import app.travelmo.shared.home_worked_out
+import app.travelmo.shared.loading
+import app.travelmo.shared.loyalty_details
+import app.travelmo.shared.loyalty_mine
+import app.travelmo.shared.loyalty_programs
+import app.travelmo.shared.loyalty_theirs
+import app.travelmo.shared.loyalty_you
+import app.travelmo.shared.ok
+import app.travelmo.shared.only_you
+import app.travelmo.shared.profile
+import app.travelmo.shared.profile_empty
+import app.travelmo.shared.profile_nothing_yet
+import app.travelmo.shared.remove_found_loyalty
+import app.travelmo.shared.remove_home
+import app.travelmo.shared.save
+import app.travelmo.shared.set
+import app.travelmo.shared.share
+import app.travelmo.shared.share_profile_hint
+import app.travelmo.shared.shared_with
+import app.travelmo.shared.shared_with_you
+import app.travelmo.shared.someone_else
+import app.travelmo.shared.someone_else_more
+import app.travelmo.shared.someone_who_trusts_you
+import app.travelmo.shared.stop_sharing_with
+import app.travelmo.shared.travelers
+import app.travelmo.shared.whose_is
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The travel profile, as the web's /profile: documents, the loyalty
@@ -102,13 +146,13 @@ fun ProfileScreen(viewModel: TripsViewModel, bottomBar: @Composable () -> Unit) 
             onDismiss = { editing = null },
         )
     }
-    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.profile)) }, actions = { AppMenu() }) }, bottomBar = bottomBar) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(Res.string.profile)) }, actions = { AppMenu() }) }, bottomBar = bottomBar) { padding ->
         val list = rememberLazyListState()
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).scrollEdgeCue(list, scrollCueColors()), state = list, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
             val own = profile
             if (own == null || !own.hasDetails) {
                 item(key = "empty") {
-                    Text(stringResource(R.string.profile_empty), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(Res.string.profile_empty), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
                 profileSections(
@@ -124,9 +168,9 @@ fun ProfileScreen(viewModel: TripsViewModel, bottomBar: @Composable () -> Unit) 
                     whoseError = whoseError,
                 )
             }
-            item(key = "home-title") { SectionTitle(stringResource(R.string.home)) }
+            item(key = "home-title") { SectionTitle(stringResource(Res.string.home)) }
             item(key = "home") { HomeSection(viewModel) }
-            item(key = "shared-with") { SectionTitle(stringResource(R.string.shared_with)) }
+            item(key = "shared-with") { SectionTitle(stringResource(Res.string.shared_with)) }
             item(key = "sharing") {
                 // Until the profile has answered, the list it would replace is
                 // unknown, so nothing can be shared or removed yet.
@@ -139,13 +183,13 @@ fun ProfileScreen(viewModel: TripsViewModel, bottomBar: @Composable () -> Unit) 
             }
             val others = shared.filter { it.ownerUid != own?.ownerUid }
             if (others.isNotEmpty()) {
-                item(key = "shared-with-you") { SectionTitle(stringResource(R.string.shared_with_you)) }
+                item(key = "shared-with-you") { SectionTitle(stringResource(Res.string.shared_with_you)) }
                 for (p in others) {
                     item(key = "from-${p.ownerUid}") {
-                        Text(stringResource(R.string.from_sender, p.ownerEmail ?: stringResource(R.string.someone_who_trusts_you)), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 8.dp))
+                        Text(stringResource(Res.string.from_sender, p.ownerEmail ?: stringResource(Res.string.someone_who_trusts_you)), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 8.dp))
                     }
                     if (p.hasDetails) profileSections(p, prefix = p.ownerUid) else item(key = "nothing-${p.ownerUid}") {
-                        Text(stringResource(R.string.profile_nothing_yet), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(Res.string.profile_nothing_yet), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -165,17 +209,17 @@ private fun LazyListScope.profileSections(
     onWhose: ((program: String, number: String) -> Unit)? = null,
     whoseError: String? = null,
 ) {
-    entries(stringResource = R.string.documents, entries = profile.documents, prefix = "$prefix-doc")
+    entries(stringResource = Res.string.documents, entries = profile.documents, prefix = "$prefix-doc")
     val loyalty = allLoyalty(profile)
     if (loyalty.isNotEmpty()) {
-        item(key = "$prefix-loyalty-title") { SectionTitle(stringResource(R.string.loyalty_programs)) }
+        item(key = "$prefix-loyalty-title") { SectionTitle(stringResource(Res.string.loyalty_programs)) }
         // The owner's first, then each other person's, named whenever any is someone else's.
         val groups = loyaltyByPerson(loyalty)
         for (group in groups) {
             item(key = "$prefix-loyalty-table-${group.person.orEmpty()}") {
                 Column {
                     if (groups.size > 1 || group.person != null) {
-                        val name = group.person ?: stringResource(if (onWhose != null) R.string.loyalty_you else R.string.loyalty_theirs)
+                        val name = group.person ?: stringResource(if (onWhose != null) Res.string.loyalty_you else Res.string.loyalty_theirs)
                         Text(
                             name,
                             style = MaterialTheme.typography.titleSmall,
@@ -192,7 +236,7 @@ private fun LazyListScope.profileSections(
         }
     }
     if (onRemoveFound != null && profile.foundLoyalty.isNotEmpty()) {
-        item(key = "$prefix-found-title") { SectionTitle(stringResource(R.string.found_in_emails)) }
+        item(key = "$prefix-found-title") { SectionTitle(stringResource(Res.string.found_in_emails)) }
         for (found in profile.foundLoyalty) {
             item(key = "$prefix-found-${found.program}-${found.number}") { FoundRow(found, onRemove = { onRemoveFound(found) }) }
         }
@@ -200,12 +244,12 @@ private fun LazyListScope.profileSections(
             item(key = "$prefix-found-error") { Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
         }
     }
-    entries(stringResource = R.string.loyalty_details, entries = loyalty, prefix = "$prefix-loy")
-    entries(stringResource = R.string.travelers, entries = profile.travelers, prefix = "$prefix-trav")
+    entries(stringResource = Res.string.loyalty_details, entries = loyalty, prefix = "$prefix-loy")
+    entries(stringResource = Res.string.travelers, entries = profile.travelers, prefix = "$prefix-trav")
 }
 
 /** Each entry folds away; they start folded, so a passport number is not on screen until asked for. */
-private fun LazyListScope.entries(stringResource: Int, entries: List<ProfileEntry>, prefix: String) {
+private fun LazyListScope.entries(stringResource: StringResource, entries: List<ProfileEntry>, prefix: String) {
     if (entries.isEmpty()) return
     item(key = "$prefix-title") { SectionTitle(stringResource(stringResource)) }
     for ((i, entry) in entries.withIndex()) {
@@ -220,13 +264,13 @@ private fun FoundRow(found: FoundLoyalty, onRemove: () -> Unit) {
         Column(modifier = Modifier.weight(1f)) {
             Text("${found.program} · ${found.number}", style = MaterialTheme.typography.bodyLarge)
             Text(
-                stringResource(R.string.found_from_email, found.label ?: stringResource(R.string.a_booking_email)),
+                stringResource(Res.string.found_from_email, found.label ?: stringResource(Res.string.a_booking_email)),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         IconButton(onClick = onRemove) {
-            Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.remove_found_loyalty, found.program))
+            Icon(Icons.Filled.Close, contentDescription = stringResource(Res.string.remove_found_loyalty, found.program))
         }
     }
 }
@@ -250,33 +294,33 @@ private fun PersonDialog(program: String, number: String, people: List<String>, 
     }
     AppAlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.whose_is, program, number)) },
+        title = { Text(stringResource(Res.string.whose_is, program, number)) },
         text = {
             if (naming) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it.take(80) },
-                    label = { Text(stringResource(R.string.someone_else)) },
+                    label = { Text(stringResource(Res.string.someone_else)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
             } else {
                 Column {
-                    for ((label, person) in listOf(stringResource(R.string.loyalty_mine) to null) + people.map { it to it }) {
+                    for ((label, person) in listOf(stringResource(Res.string.loyalty_mine) to null) + people.map { it to it }) {
                         TextButton(onClick = { pick(person) }, modifier = Modifier.fillMaxWidth()) {
                             Text(label, modifier = Modifier.fillMaxWidth())
                         }
                     }
                     TextButton(onClick = { naming = true }, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(R.string.someone_else_more), modifier = Modifier.fillMaxWidth())
+                        Text(stringResource(Res.string.someone_else_more), modifier = Modifier.fillMaxWidth())
                     }
                 }
             }
         },
         confirmButton = {
-            if (naming) TextButton(onClick = { pick(name.trim()) }, enabled = name.isNotBlank()) { Text(stringResource(R.string.save)) }
+            if (naming) TextButton(onClick = { pick(name.trim()) }, enabled = name.isNotBlank()) { Text(stringResource(Res.string.save)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
     )
 }
 
@@ -290,17 +334,17 @@ private fun Sharing(trusted: List<String>, busy: Boolean, error: String?, onSave
     var address by rememberSaveable { mutableStateOf("") }
     // An address the form itself refuses, kept in the field to be corrected; a refusal from the write comes from the caller.
     var formError by rememberSaveable { mutableStateOf<String?>(null) }
-    val notAnAddress = stringResource(R.string.enter_email)
+    val notAnAddress = stringResource(Res.string.enter_email)
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text(stringResource(R.string.share_profile_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(Res.string.share_profile_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (trusted.isEmpty()) {
-            Text(stringResource(R.string.only_you), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+            Text(stringResource(Res.string.only_you), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
         }
         for (email in trusted) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(email, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                 IconButton(onClick = { onSave(trusted - email) }, enabled = !busy) {
-                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.stop_sharing_with, email))
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(Res.string.stop_sharing_with, email))
                 }
             }
         }
@@ -323,7 +367,7 @@ private fun Sharing(trusted: List<String>, busy: Boolean, error: String?, onSave
                     }
                 },
                 enabled = !busy && address.isNotBlank() && trusted.size < MAX_TRUSTED,
-            ) { Text(stringResource(R.string.share)) }
+            ) { Text(stringResource(Res.string.share)) }
         }
         (formError ?: error)?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp)) }
     }
@@ -364,26 +408,26 @@ private fun HomeSection(viewModel: TripsViewModel) {
     val corrections = settings?.homes
     Column(modifier = Modifier.fillMaxWidth()) {
         if (periods == null || corrections == null) {
-            Text(stringResource(R.string.loading), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(Res.string.loading), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             return@Column
         }
-        Text(homeLine(periods) ?: stringResource(R.string.home_not_known), style = MaterialTheme.typography.bodyLarge)
-        Text(stringResource(R.string.home_worked_out), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(homeLine(periods) ?: stringResource(Res.string.home_not_known), style = MaterialTheme.typography.bodyLarge)
+        Text(stringResource(Res.string.home_worked_out), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         for (c in corrections.sortedBy { it.from }) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(correctionText(c), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                 IconButton(onClick = { adding = false; viewModel.removeHomeCorrection(HOME_TOKEN, c.from) }, enabled = !busy) {
-                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.remove_home, correctionText(c)))
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(Res.string.remove_home, correctionText(c)))
                 }
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-            OutlinedTextField(value = city, onValueChange = { city = it; problem = null }, label = { Text(stringResource(R.string.city)) }, singleLine = true, enabled = !busy, modifier = Modifier.weight(1f))
-            OutlinedTextField(value = country, onValueChange = { country = it; problem = null }, label = { Text(stringResource(R.string.country)) }, placeholder = { Text("GB") }, singleLine = true, enabled = !busy, modifier = Modifier.weight(1f))
+            OutlinedTextField(value = city, onValueChange = { city = it; problem = null }, label = { Text(stringResource(Res.string.city)) }, singleLine = true, enabled = !busy, modifier = Modifier.weight(1f))
+            OutlinedTextField(value = country, onValueChange = { country = it; problem = null }, label = { Text(stringResource(Res.string.country)) }, placeholder = { Text("GB") }, singleLine = true, enabled = !busy, modifier = Modifier.weight(1f))
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
             OutlinedButton(onClick = { picking = true }, enabled = !busy) {
-                Text(from?.let { stringResource(R.string.home_from_date, formatDateWithYear(it)) } ?: stringResource(R.string.home_pick_from))
+                Text(from?.let { stringResource(Res.string.home_from_date, formatDateWithYear(it)) } ?: stringResource(Res.string.home_pick_from))
             }
             Button(
                 onClick = {
@@ -397,7 +441,7 @@ private fun HomeSection(viewModel: TripsViewModel) {
                     }
                 },
                 enabled = !busy && city.isNotBlank() && from != null,
-            ) { Text(stringResource(R.string.set)) }
+            ) { Text(stringResource(Res.string.set)) }
         }
         (problem ?: (outcome as? Outcome.Failed)?.message)?.let {
             Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
@@ -415,9 +459,9 @@ private fun HomeSection(viewModel: TripsViewModel) {
                     from = state.selectedDateMillis?.let { Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toString() } ?: from
                     problem = null
                     picking = false
-                }) { Text(stringResource(R.string.ok)) }
+                }) { Text(stringResource(Res.string.ok)) }
             },
-            dismissButton = { TextButton(onClick = { picking = false }) { Text(stringResource(R.string.cancel)) } },
+            dismissButton = { TextButton(onClick = { picking = false }) { Text(stringResource(Res.string.cancel)) } },
         ) { DatePicker(state = state) }
     }
 }
@@ -456,10 +500,10 @@ private fun LoyaltyTable(entries: List<ProfileEntry>, onWhose: ((program: String
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.padding(vertical = 4.dp)) {
-            Text(stringResource(R.string.col_program), style = MaterialTheme.typography.labelLarge, color = muted, modifier = Modifier.weight(1.4f))
-            Text(stringResource(R.string.col_account), style = MaterialTheme.typography.labelLarge, color = muted, modifier = Modifier.weight(1f))
-            Text(stringResource(R.string.col_balance), style = MaterialTheme.typography.labelLarge, color = muted, textAlign = TextAlign.End, modifier = Modifier.weight(0.8f))
-            Text(stringResource(R.string.col_status), style = MaterialTheme.typography.labelLarge, color = muted, modifier = Modifier.weight(0.9f).padding(start = 8.dp))
+            Text(stringResource(Res.string.col_program), style = MaterialTheme.typography.labelLarge, color = muted, modifier = Modifier.weight(1.4f))
+            Text(stringResource(Res.string.col_account), style = MaterialTheme.typography.labelLarge, color = muted, modifier = Modifier.weight(1f))
+            Text(stringResource(Res.string.col_balance), style = MaterialTheme.typography.labelLarge, color = muted, textAlign = TextAlign.End, modifier = Modifier.weight(0.8f))
+            Text(stringResource(Res.string.col_status), style = MaterialTheme.typography.labelLarge, color = muted, modifier = Modifier.weight(0.9f).padding(start = 8.dp))
             if (onWhose != null) Spacer(Modifier.width(40.dp))
         }
         for (entry in entries) {
@@ -478,7 +522,7 @@ private fun LoyaltyTable(entries: List<ProfileEntry>, onWhose: ((program: String
                     val account = s.account
                     if (account != null) {
                         IconButton(onClick = { onWhose(s.title, account) }, modifier = Modifier.size(40.dp)) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.whose_is, s.title, account))
+                            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(Res.string.whose_is, s.title, account))
                         }
                     } else {
                         Spacer(Modifier.size(40.dp))

@@ -1,10 +1,10 @@
 package app.travelmo.ui
 
+import org.jetbrains.compose.resources.StringResource
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.annotation.DrawableRes
-import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,8 +20,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -59,7 +59,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -69,41 +68,89 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
-import kotlinx.coroutines.delay
 import app.travelmo.R
+import app.travelmo.core.MAX_TRIP_REMINDERS
 import app.travelmo.core.PersonWarning
 import app.travelmo.core.ProfileEntry
+import app.travelmo.core.RideCompany
+import app.travelmo.core.RideNeed
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentType
 import app.travelmo.core.SourceKind
 import app.travelmo.core.SourceRef
 import app.travelmo.core.Trip
-import app.travelmo.core.MAX_TRIP_REMINDERS
+import app.travelmo.core.allLoyalty
 import app.travelmo.core.displayTitles
 import app.travelmo.core.emailLinkFor
-import app.travelmo.core.allLoyalty
-import app.travelmo.core.RideCompany
-import app.travelmo.core.RideNeed
-import app.travelmo.core.rideNeedKey
-import app.travelmo.core.sharedWithAny
 import app.travelmo.core.fittedRange
 import app.travelmo.core.formatDate
 import app.travelmo.core.formatDateRange
-import app.travelmo.core.shownEnd
-import app.travelmo.core.shownStart
 import app.travelmo.core.isCancelled
 import app.travelmo.core.loyaltyLine
 import app.travelmo.core.otherTrips
 import app.travelmo.core.programsFor
 import app.travelmo.core.referenceLine
+import app.travelmo.core.rideNeedKey
 import app.travelmo.core.routeLine
 import app.travelmo.core.segmentsByDay
+import app.travelmo.core.sharedWithAny
+import app.travelmo.core.shownEnd
+import app.travelmo.core.shownStart
 import app.travelmo.core.timesLine
 import app.travelmo.core.tripWarnings
 import app.travelmo.log.TravelmoLog
-import app.travelmo.ui.theme.TravelmoTheme
+import app.travelmo.shared.Res
+import app.travelmo.shared.add_booking
+import app.travelmo.shared.back
+import app.travelmo.shared.badge_shared
+import app.travelmo.shared.booking_actions
+import app.travelmo.shared.cancel
+import app.travelmo.shared.cancelled
+import app.travelmo.shared.choose_trip
+import app.travelmo.shared.close
+import app.travelmo.shared.copy_reference
+import app.travelmo.shared.delete
+import app.travelmo.shared.delete_booking_text
+import app.travelmo.shared.delete_booking_title
+import app.travelmo.shared.delete_trip
+import app.travelmo.shared.delete_trip_text
+import app.travelmo.shared.delete_trip_title
+import app.travelmo.shared.deleting_interrupted
+import app.travelmo.shared.edit
+import app.travelmo.shared.finish_deleting
+import app.travelmo.shared.fit_dates
+import app.travelmo.shared.from_sender
+import app.travelmo.shared.keep
+import app.travelmo.shared.merge_into
+import app.travelmo.shared.merge_text
+import app.travelmo.shared.merge_title
+import app.travelmo.shared.move_booking_title
+import app.travelmo.shared.move_to
+import app.travelmo.shared.only_you
+import app.travelmo.shared.open_in_gmail
+import app.travelmo.shared.rename
+import app.travelmo.shared.rename_trip
+import app.travelmo.shared.restore
+import app.travelmo.shared.save
+import app.travelmo.shared.share
+import app.travelmo.shared.shared_with
+import app.travelmo.shared.source_fastmail
+import app.travelmo.shared.source_forward
+import app.travelmo.shared.source_gmail
+import app.travelmo.shared.source_ics
+import app.travelmo.shared.source_imap
+import app.travelmo.shared.source_tripit
+import app.travelmo.shared.sources
+import app.travelmo.shared.stop_sharing_with
+import app.travelmo.shared.trip_loading
+import app.travelmo.shared.trip_name
+import app.travelmo.shared.trip_no_bookings
+import app.travelmo.shared.trip_not_found
 import app.travelmo.ui.theme.TextButtonInset
+import app.travelmo.ui.theme.TravelmoTheme
 import com.mikelward.androidzoom.compose.pinchFontSizeHost
+import kotlinx.coroutines.delay
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * A trip's bookings by day, as the web's trip page lists them. The owner and
@@ -189,7 +236,7 @@ fun TripDetailScreen(
                 title = { Text(trip?.title ?: "", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(Res.string.back))
                     }
                 },
                 actions = { AppMenu() },
@@ -200,7 +247,7 @@ fun TripDetailScreen(
                 ExtendedFloatingActionButton(
                     onClick = { onAddBooking(editable.start) },
                     icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                    text = { Text(stringResource(R.string.add_booking)) },
+                    text = { Text(stringResource(Res.string.add_booking)) },
                 )
             }
         },
@@ -208,15 +255,15 @@ fun TripDetailScreen(
         deleting?.let { segment ->
             AppAlertDialog(
                 onDismissRequest = { deleting = null },
-                title = { Text(stringResource(R.string.delete_booking_title)) },
-                text = { Text(stringResource(R.string.delete_booking_text, segment.title)) },
+                title = { Text(stringResource(Res.string.delete_booking_title)) },
+                text = { Text(stringResource(Res.string.delete_booking_text, segment.title)) },
                 confirmButton = {
                     TextButton(onClick = {
                         deleting = null
                         viewModel.deleteSegment("${prefix}segment/${segment.id}/delete", tripId, segment.id)
-                    }) { Text(stringResource(R.string.delete)) }
+                    }) { Text(stringResource(Res.string.delete)) }
                 },
-                dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.keep)) } },
+                dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(Res.string.keep)) } },
             )
         }
         moving?.let { segment ->
@@ -263,8 +310,8 @@ fun TripDetailScreen(
                 titles = displayTitles(trips.orEmpty()),
                 modifier = Modifier.padding(padding),
             )
-            loaded.groups == null -> Text(stringResource(R.string.trip_loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp))
-            else -> Text(stringResource(R.string.trip_not_found), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp))
+            loaded.groups == null -> Text(stringResource(Res.string.trip_loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp))
+            else -> Text(stringResource(Res.string.trip_not_found), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp))
         }
     }
 }
@@ -331,15 +378,15 @@ private fun TripBody(
     if (confirmingDelete && tripActions != null) {
         AppAlertDialog(
             onDismissRequest = { confirmingDelete = false },
-            title = { Text(stringResource(R.string.delete_trip_title)) },
-            text = { Text(stringResource(R.string.delete_trip_text, trip.title)) },
+            title = { Text(stringResource(Res.string.delete_trip_title)) },
+            text = { Text(stringResource(Res.string.delete_trip_text, trip.title)) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmingDelete = false
                     tripActions.delete()
-                }) { Text(stringResource(R.string.delete)) }
+                }) { Text(stringResource(Res.string.delete)) }
             },
-            dismissButton = { TextButton(onClick = { confirmingDelete = false }) { Text(stringResource(R.string.keep)) } },
+            dismissButton = { TextButton(onClick = { confirmingDelete = false }) { Text(stringResource(Res.string.keep)) } },
         )
     }
     val list = rememberLazyListState()
@@ -347,7 +394,7 @@ private fun TripBody(
         item(key = "dates") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(formatDateRange(trip.shownStart, trip.shownEnd), style = MaterialTheme.typography.bodyMedium, color = muted)
-                if (shared) Text(stringResource(R.string.badge_shared).uppercase(), style = MaterialTheme.typography.labelSmall, color = TravelmoTheme.colors.shared)
+                if (shared) Text(stringResource(Res.string.badge_shared).uppercase(), style = MaterialTheme.typography.labelSmall, color = TravelmoTheme.colors.shared)
             }
             if (canManage && tripActions != null) {
                 // Renaming and fitting the dates sit by the dates, as on the web;
@@ -358,9 +405,9 @@ private fun TripBody(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.offset(x = -TextButtonInset),
                 ) {
-                    TextButton(onClick = { renaming = true }, enabled = !busy) { Text(stringResource(R.string.rename)) }
+                    TextButton(onClick = { renaming = true }, enabled = !busy) { Text(stringResource(Res.string.rename)) }
                     fittedRange(trip, segments)?.let { range ->
-                        TextButton(onClick = tripActions.fit, enabled = !busy) { Text(stringResource(R.string.fit_dates, formatDateRange(range.first, range.second))) }
+                        TextButton(onClick = tripActions.fit, enabled = !busy) { Text(stringResource(Res.string.fit_dates, formatDateRange(range.first, range.second))) }
                     }
                 }
             }
@@ -379,7 +426,7 @@ private fun TripBody(
         }
         if (days.isEmpty()) {
             item(key = "empty") {
-                Text(stringResource(R.string.trip_no_bookings), color = muted, modifier = Modifier.padding(top = 16.dp))
+                Text(stringResource(Res.string.trip_no_bookings), color = muted, modifier = Modifier.padding(top = 16.dp))
             }
         }
         for ((date, items) in days) {
@@ -401,12 +448,12 @@ private fun TripBody(
             }
             item(key = "delete") {
                 TextButton(onClick = { confirmingDelete = true }, enabled = !busy, modifier = Modifier.padding(top = 24.dp).offset(x = -TextButtonInset)) {
-                    Text(stringResource(R.string.delete_trip), color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(Res.string.delete_trip), color = MaterialTheme.colorScheme.error)
                 }
             }
         } else if (trip.sharedWith.isNotEmpty()) {
             item(key = "shared-with") {
-                SectionTitle(stringResource(R.string.shared_with))
+                SectionTitle(stringResource(Res.string.shared_with))
                 for (address in trip.sharedWith) Text(address, style = MaterialTheme.typography.bodyMedium)
             }
         }
@@ -431,8 +478,8 @@ private fun InterruptedDeletion(busy: Boolean, finish: () -> Unit) {
             .background(MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f))
             .padding(12.dp),
     ) {
-        Text(stringResource(R.string.deleting_interrupted), style = MaterialTheme.typography.bodyMedium)
-        Button(onClick = finish, enabled = !busy, modifier = Modifier.padding(top = 8.dp)) { Text(stringResource(R.string.finish_deleting)) }
+        Text(stringResource(Res.string.deleting_interrupted), style = MaterialTheme.typography.bodyMedium)
+        Button(onClick = finish, enabled = !busy, modifier = Modifier.padding(top = 8.dp)) { Text(stringResource(Res.string.finish_deleting)) }
     }
 }
 
@@ -441,15 +488,15 @@ private fun InterruptedDeletion(busy: Boolean, finish: () -> Unit) {
 private fun Sharing(trip: Trip, busy: Boolean, actions: TripActions) {
     var address by rememberSaveable { mutableStateOf("") }
     Column {
-        SectionTitle(stringResource(R.string.shared_with))
+        SectionTitle(stringResource(Res.string.shared_with))
         if (trip.sharedWith.isEmpty()) {
-            Text(stringResource(R.string.only_you), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(Res.string.only_you), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         for (email in trip.sharedWith) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(email, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                 IconButton(onClick = { actions.unshare(email) }, enabled = !busy) {
-                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.stop_sharing_with, email))
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(Res.string.stop_sharing_with, email))
                 }
             }
         }
@@ -461,7 +508,7 @@ private fun Sharing(trip: Trip, busy: Boolean, actions: TripActions) {
                 singleLine = true,
                 modifier = Modifier.weight(1f),
             )
-            Button(onClick = { actions.share(address); address = "" }, enabled = !busy && address.isNotBlank()) { Text(stringResource(R.string.share)) }
+            Button(onClick = { actions.share(address); address = "" }, enabled = !busy && address.isNotBlank()) { Text(stringResource(Res.string.share)) }
         }
     }
 }
@@ -474,14 +521,14 @@ private fun MergeInto(targets: List<Trip>, titles: Map<String, String>, busy: Bo
     var open by remember { mutableStateOf(false) }
     val target = targets.firstOrNull { it.id == targetId }
     Column {
-        SectionTitle(stringResource(R.string.merge_title))
-        Text(stringResource(R.string.merge_text), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        SectionTitle(stringResource(Res.string.merge_title))
+        Text(stringResource(Res.string.merge_text), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }, modifier = Modifier.padding(top = 8.dp)) {
             OutlinedTextField(
                 value = target?.let { tripChoice(it) } ?: "",
                 onValueChange = {},
                 readOnly = true,
-                placeholder = { Text(stringResource(R.string.choose_trip)) },
+                placeholder = { Text(stringResource(Res.string.choose_trip)) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
                 modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
             )
@@ -492,7 +539,7 @@ private fun MergeInto(targets: List<Trip>, titles: Map<String, String>, busy: Bo
             }
         }
         Button(onClick = { target?.let { merge(it.id) } }, enabled = !busy && target != null, modifier = Modifier.padding(top = 8.dp)) {
-            Text(stringResource(R.string.merge_into, target?.let { titles[it.id] ?: it.title } ?: "…"))
+            Text(stringResource(Res.string.merge_into, target?.let { titles[it.id] ?: it.title } ?: "…"))
         }
     }
 }
@@ -505,10 +552,10 @@ private fun RenameDialog(current: String, onDismiss: () -> Unit, onRename: (Stri
     var title by rememberSaveable { mutableStateOf(current) }
     AppAlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.rename_trip)) },
-        text = { OutlinedTextField(value = title, onValueChange = { title = it }, singleLine = true, label = { Text(stringResource(R.string.trip_name)) }) },
-        confirmButton = { TextButton(onClick = { onRename(title) }) { Text(stringResource(R.string.save)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+        title = { Text(stringResource(Res.string.rename_trip)) },
+        text = { OutlinedTextField(value = title, onValueChange = { title = it }, singleLine = true, label = { Text(stringResource(Res.string.trip_name)) }) },
+        confirmButton = { TextButton(onClick = { onRename(title) }) { Text(stringResource(Res.string.save)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
     )
 }
 
@@ -517,7 +564,7 @@ private fun RenameDialog(current: String, onDismiss: () -> Unit, onRename: (Stri
 private fun MoveDialog(segment: Segment, targets: List<Trip>, onDismiss: () -> Unit, onMove: (Trip) -> Unit) {
     AppAlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.move_booking_title, segment.title)) },
+        title = { Text(stringResource(Res.string.move_booking_title, segment.title)) },
         text = {
             // A long travel history scrolls rather than running off the dialog.
             LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
@@ -527,7 +574,7 @@ private fun MoveDialog(segment: Segment, targets: List<Trip>, onDismiss: () -> U
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
     )
 }
 
@@ -564,7 +611,7 @@ fun SegmentRow(
         Column(modifier = Modifier.weight(1f)) {
             // As on the web: a cancelled booking stays listed, struck through.
             if (segment.isCancelled) {
-                Text(stringResource(R.string.cancelled).uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                Text(stringResource(Res.string.cancelled).uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
             }
             Text(
                 segment.title,
@@ -579,7 +626,7 @@ fun SegmentRow(
             }
             referenceLine(segment)?.let { line ->
                 // A long press on the line copies the reference too, as ⋮ does.
-                val copy = reference?.let { ref -> Modifier.longPressUnlessPinch(stringResource(R.string.copy_reference)) { copyReference(context, ref) } } ?: Modifier
+                val copy = reference?.let { ref -> Modifier.longPressUnlessPinch(stringResource(Res.string.copy_reference)) { copyReference(context, ref) } } ?: Modifier
                 Text(line, style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp).then(copy))
             }
             // One program a line, so whose each number is stays plain.
@@ -592,26 +639,26 @@ fun SegmentRow(
         if (actions != null || hasSources || reference != null) {
             Box {
                 IconButton(onClick = { menu = true }, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.booking_actions), tint = muted)
+                    Icon(Icons.Filled.MoreVert, contentDescription = stringResource(Res.string.booking_actions), tint = muted)
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, modifier = Modifier.pinchFontSizeHost()) {
                     reference?.let { ref ->
-                        DropdownMenuItem(text = { Text(stringResource(R.string.copy_reference)) }, onClick = { menu = false; copyReference(context, ref) })
+                        DropdownMenuItem(text = { Text(stringResource(Res.string.copy_reference)) }, onClick = { menu = false; copyReference(context, ref) })
                     }
                     if (hasSources) {
-                        DropdownMenuItem(text = { Text(stringResource(R.string.sources)) }, onClick = { menu = false; showingSources = true })
+                        DropdownMenuItem(text = { Text(stringResource(Res.string.sources)) }, onClick = { menu = false; showingSources = true })
                     }
                     if (actions != null) {
-                        DropdownMenuItem(text = { Text(stringResource(R.string.edit)) }, onClick = { menu = false; actions.onEdit(segment) })
+                        DropdownMenuItem(text = { Text(stringResource(Res.string.edit)) }, onClick = { menu = false; actions.onEdit(segment) })
                         if (segment.isCancelled) {
                             actions.onRestore?.let { restore ->
-                                DropdownMenuItem(text = { Text(stringResource(R.string.restore)) }, onClick = { menu = false; restore(segment) })
+                                DropdownMenuItem(text = { Text(stringResource(Res.string.restore)) }, onClick = { menu = false; restore(segment) })
                             }
                         }
                         actions.onMove?.let { move ->
-                            DropdownMenuItem(text = { Text(stringResource(R.string.move_to)) }, onClick = { menu = false; move(segment) })
+                            DropdownMenuItem(text = { Text(stringResource(Res.string.move_to)) }, onClick = { menu = false; move(segment) })
                         }
-                        DropdownMenuItem(text = { Text(stringResource(R.string.delete)) }, onClick = { menu = false; actions.onDelete(segment) })
+                        DropdownMenuItem(text = { Text(stringResource(Res.string.delete)) }, onClick = { menu = false; actions.onDelete(segment) })
                     }
                 }
             }
@@ -629,10 +676,10 @@ fun SegmentRow(
 private fun SourcesDialog(segment: Segment, emailLink: (SourceRef) -> String?, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val openLabel = stringResource(R.string.open_in_gmail)
+    val openLabel = stringResource(Res.string.open_in_gmail)
     AppAlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.sources)) },
+        title = { Text(stringResource(Res.string.sources)) },
         text = {
             Column(modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
                 for (source in segment.sources) {
@@ -654,11 +701,11 @@ private fun SourcesDialog(segment: Segment, emailLink: (SourceRef) -> String?, o
                     }
                 }
                 segment.sender?.let {
-                    Text(stringResource(R.string.from_sender, it), style = MaterialTheme.typography.bodyMedium, color = muted, modifier = Modifier.padding(vertical = 8.dp))
+                    Text(stringResource(Res.string.from_sender, it), style = MaterialTheme.typography.bodyMedium, color = muted, modifier = Modifier.padding(vertical = 8.dp))
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.close)) } },
     )
 }
 
@@ -675,14 +722,13 @@ private fun copyReference(context: Context, reference: String) {
     clipboard.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.booking_reference), reference))
 }
 
-@StringRes
-private fun sourceKindLabel(kind: SourceKind): Int = when (kind) {
-    SourceKind.GMAIL -> R.string.source_gmail
-    SourceKind.TRIPIT -> R.string.source_tripit
-    SourceKind.ICS -> R.string.source_ics
-    SourceKind.FORWARD -> R.string.source_forward
-    SourceKind.FASTMAIL -> R.string.source_fastmail
-    SourceKind.IMAP -> R.string.source_imap
+private fun sourceKindLabel(kind: SourceKind): StringResource = when (kind) {
+    SourceKind.GMAIL -> Res.string.source_gmail
+    SourceKind.TRIPIT -> Res.string.source_tripit
+    SourceKind.ICS -> Res.string.source_ics
+    SourceKind.FORWARD -> Res.string.source_forward
+    SourceKind.FASTMAIL -> Res.string.source_fastmail
+    SourceKind.IMAP -> Res.string.source_imap
 }
 
 /** The traveler's stars and heart, shown when there are any. */

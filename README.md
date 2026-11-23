@@ -74,7 +74,9 @@ builds only, so `next dev` runs without it.
 ### Android
 
 `apps/android` is a Gradle build of its own (JDK 21; the wrapper fetches
-Gradle). `:core` is Kotlin Multiplatform (the JVM and iOS) with the models and the logic the web's
+Gradle). `:shared` holds the screens' text as Compose Multiplatform
+resources, for the iOS app to come (its `strings.xml` takes an apostrophe
+or a percent sign as written, not escaped). `:core` is Kotlin Multiplatform (the JVM and iOS) with the models and the logic the web's
 `packages/core` has (grouping, what comes next, the status lines, date
 formatting), tested without an SDK and kept free of Android by
 `:core:verifyNoAndroid`; `:app` is the Compose app: sign-in, the trip list,

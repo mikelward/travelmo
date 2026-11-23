@@ -422,7 +422,11 @@ Kotlin Multiplatform, sharing the Android app's Kotlin (SPEC "iOS app").
 - [x] Build `apps/android/core` for iOS too, its tests on the iOS
       Simulator in CI.
 - [ ] Move the Compose screens to a module both apps build (Compose
-      Multiplatform).
+      Multiplatform):
+  - [x] their text (`apps/android/shared`, `Res.string.*`);
+  - [ ] logging and data access behind interfaces;
+  - [ ] the theme and the screens;
+  - [ ] the view model and navigation.
 - [ ] The iOS app: Firebase Auth and Firestore, Google sign-in, Sign in
       with Apple (how Apple's private relay addresses meet sharing and
       Gmail import is the user's call), notifications.

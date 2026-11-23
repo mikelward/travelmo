@@ -31,13 +31,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.travelmo.R
 import app.travelmo.core.Trip
 import app.travelmo.core.TripBar
 import app.travelmo.core.addMonths
@@ -46,7 +44,14 @@ import app.travelmo.core.monthLabel
 import app.travelmo.core.monthOf
 import app.travelmo.core.monthWeeks
 import app.travelmo.core.weekBars
+import app.travelmo.shared.Res
+import app.travelmo.shared.next_month
+import app.travelmo.shared.no_trips_in
+import app.travelmo.shared.previous_month
+import app.travelmo.shared.today
+import app.travelmo.shared.trips_loading
 import app.travelmo.ui.theme.TravelmoTheme
+import org.jetbrains.compose.resources.stringResource
 
 private val weekdays = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
@@ -74,13 +79,13 @@ fun CalendarScreen(
                 title = { Text(monthLabel(month)) },
                 actions = {
                     IconButton(onClick = { onMonthChange(addMonths(month, -1)) }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.previous_month))
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(Res.string.previous_month))
                     }
                     TextButton(onClick = { onMonthChange(monthOf(today)) }, enabled = month != monthOf(today)) {
-                        Text(stringResource(R.string.today))
+                        Text(stringResource(Res.string.today))
                     }
                     IconButton(onClick = { onMonthChange(addMonths(month, 1)) }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.next_month), modifier = Modifier.scale(scaleX = -1f, scaleY = 1f))
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(Res.string.next_month), modifier = Modifier.scale(scaleX = -1f, scaleY = 1f))
                     }
                     AppMenu()
                 },
@@ -90,7 +95,7 @@ fun CalendarScreen(
     ) { padding ->
         val all = trips
         if (all == null) {
-            Text(stringResource(R.string.trips_loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp))
+            Text(stringResource(Res.string.trips_loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp))
         } else {
             val inMonth = all.filter { monthOf(it.start) <= month && monthOf(it.end) >= month }
             val scroll = rememberScrollState()
@@ -98,7 +103,7 @@ fun CalendarScreen(
                 MonthGrid(month = month, trips = inMonth, titles = displayTitles(all), today = today, uid = uid, onOpenTrip = onOpenTrip)
                 if (inMonth.isEmpty()) {
                     Text(
-                        stringResource(R.string.no_trips_in, monthLabel(month)),
+                        stringResource(Res.string.no_trips_in, monthLabel(month)),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 16.dp),
