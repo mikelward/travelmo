@@ -1648,7 +1648,9 @@ the event counts first.
 ### Calendar feeds
 
 A user can subscribe to a calendar feed (TripIt's, or any calendar's
-subscription link) from Settings; the parser reads it when it is added and
+subscription link) from Settings on the web or Android (each listed with
+what its last read did, `describeCalendarResult` wording the first); the
+parser reads it when it is added and
 then daily (`/internal/poll-feeds`, from Cloud Scheduler), through the same
 path as an uploaded file, at most 100 model reads per feed per day. A link
 often carries a secret token, so feeds live under `users/{uid}/feeds`,

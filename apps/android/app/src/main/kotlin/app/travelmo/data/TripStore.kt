@@ -86,6 +86,9 @@ interface TripStore {
      */
     fun addressHolder(uid: String): Flow<AddressHolder>
 
+    /** The user's calendar feeds (`users/{uid}/feeds`), oldest first, live; null while they load. */
+    fun feeds(uid: String): Flow<List<CalendarFeedShown>?>
+
     /** The user's forwarding address (`forward.address` on their user document), live; [Forwarding.address] null when they have none, the flow's value null while it loads. */
     fun forwarding(uid: String): Flow<Forwarding?>
 
@@ -234,6 +237,26 @@ class TripGoneException(message: String) : Exception(message)
  */
 data class Seen<T>(val value: T, val confirmed: Boolean)
 
+/** A calendar feed as Settings lists it: the link's label or host, and what its last read did. */
+data class CalendarFeedShown(
+    val id: String,
+    val url: String,
+    val label: String? = null,
+    val lastFetchedAt: String? = null,
+    val lastResult: String? = null,
+    val lastError: String? = null,
+) {
+    /** The feed's own label, else the host of its link. */
+    val name: String
+        get() = label ?: runCatching { java.net.URI(url).host }.getOrNull() ?: url
+}
+
+/** One `users/{uid}/feeds` document as the parser writes it; null without a link. */
+internal fun calendarFeedOf(id: String, data: Map<String, Any?>?): CalendarFeedShown? {
+    val url = data?.get("url") as? String ?: return null
+    return CalendarFeedShown(id, url, data["label"] as? String, data["lastFetchedAt"] as? String, data["lastResult"] as? String, data["lastError"] as? String)
+}
+
 /** The user's forwarding address, when they have one. */
 data class Forwarding(val address: String?)
 
@@ -378,6 +401,19 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         return db.collectionGroup("travelProfile").whereArrayContainsAny("trustedEmails", asked).snapshots().orNothing("shared profiles").map { snapshot ->
             snapshot?.documents.orEmpty().mapNotNull { doc -> profileFromDocument(doc.data ?: emptyMap()) }
         }
+    }
+
+    override fun feeds(uid: String): Flow<List<CalendarFeedShown>?> = callbackFlow {
+        val registration = db.collection("users").document(uid).collection("feeds").orderBy("addedAt")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    TravelmoLog.error(error, "Reading the calendar feeds failed")
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                trySend(snapshot?.documents.orEmpty().mapNotNull { calendarFeedOf(it.id, it.data) })
+            }
+        awaitClose { registration.remove() }
     }
 
     override fun forwarding(uid: String): Flow<Forwarding?> = callbackFlow {

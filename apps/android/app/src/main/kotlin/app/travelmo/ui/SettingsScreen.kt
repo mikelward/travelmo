@@ -107,6 +107,8 @@ private const val ADD_EMAIL_TOKEN = "settings/emails/add"
 private const val REMOVE_EMAIL_TOKEN = "settings/emails/remove"
 private const val SENDER_RULES_TOKEN = "settings/senders"
 private const val FORWARD_TOKEN = "settings/forward"
+private const val ADD_FEED_TOKEN = "settings/feeds/add"
+private const val REMOVE_FEED_TOKEN = "settings/feeds/remove"
 private const val ADD_COMPANY_TOKEN = "settings/rides/add"
 private const val REMOVE_COMPANY_TOKEN = "settings/rides/remove"
 
@@ -158,6 +160,7 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
             GmailSection(viewModel)
             FastmailSection(viewModel)
             TripsSection(viewModel)
+            FeedsSection(viewModel)
             Text(stringResource(R.string.import_review), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
             Text(stringResource(R.string.import_review_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedButton(onClick = onOpenReview, modifier = Modifier.padding(top = 8.dp)) { Text(stringResource(R.string.open_import_review)) }
@@ -194,6 +197,72 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
                 modifier = Modifier.padding(top = 24.dp),
             )
         }
+    }
+}
+
+/**
+ * Settings' "Calendar feeds", as on the web: a calendar subscription link
+ * the parser reads every day, each listed with what its last read did, and
+ * removed without touching its bookings.
+ */
+@Composable
+private fun FeedsSection(viewModel: TripsViewModel) {
+    val feeds by viewModel.feeds.collectAsStateWithLifecycle()
+    val added by viewModel.feedAdded.collectAsStateWithLifecycle()
+    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val adding = outcomes[ADD_FEED_TOKEN]
+    val removing = outcomes[REMOVE_FEED_TOKEN]
+    val busy = adding is Outcome.Busy || removing is Outcome.Busy
+    var url by rememberSaveable { mutableStateOf("") }
+    LaunchedEffect(adding) {
+        if (adding is Outcome.Done) {
+            url = ""
+            viewModel.outcomeSeen(ADD_FEED_TOKEN)
+        }
+    }
+    LaunchedEffect(removing) { if (removing is Outcome.Done) viewModel.outcomeSeen(REMOVE_FEED_TOKEN) }
+    val list = feeds ?: return
+    Text(stringResource(R.string.calendar_feeds), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(R.string.calendar_feeds_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    for (feed in list) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(feed.name, style = MaterialTheme.typography.bodyLarge)
+                val read = feed.lastFetchedAt?.let { stringResource(R.string.feed_read_on, it.take(10)) } ?: stringResource(R.string.feed_not_read)
+                Text(
+                    listOfNotNull(read, feed.lastResult?.takeIf { feed.lastError == null }).joinToString(" · "),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                feed.lastError?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
+            }
+            if (viewModel.canEditFeeds) {
+                IconButton(onClick = { viewModel.removeFeed(REMOVE_FEED_TOKEN, feed.id) }, enabled = !busy) {
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.remove_feed, feed.name))
+                }
+            }
+        }
+    }
+    if (!viewModel.canEditFeeds) {
+        Text(stringResource(R.string.feeds_on_web), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+        return
+    }
+    OutlinedTextField(
+        value = url,
+        onValueChange = { url = it },
+        label = { Text(stringResource(R.string.calendar_feed_link)) },
+        placeholder = { Text("webcal://… or https://…") },
+        singleLine = true,
+        enabled = !busy,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+    )
+    Button(onClick = { viewModel.addFeed(ADD_FEED_TOKEN, url) }, enabled = !busy && url.isNotBlank(), modifier = Modifier.padding(top = 8.dp)) {
+        Text(stringResource(if (adding is Outcome.Busy) R.string.reading else R.string.add_feed))
+    }
+    if (adding == null || adding is Outcome.Done) added?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp)) }
+    for (outcome in listOf(adding, removing)) {
+        (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
     }
 }
 

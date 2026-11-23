@@ -58,6 +58,9 @@ import app.travelmo.core.GmailMailbox
 import app.travelmo.core.MAX_GMAIL_MAILBOXES
 import app.travelmo.data.NoGmailActions
 import app.travelmo.data.GmailActions
+import app.travelmo.data.CalendarFeedShown
+import app.travelmo.data.NoFeedActions
+import app.travelmo.data.FeedActions
 import app.travelmo.data.Forwarding
 import app.travelmo.data.NoForwardActions
 import app.travelmo.data.ForwardActions
@@ -175,6 +178,8 @@ class TripsViewModel(
     private val gmailActions: GmailActions = NoGmailActions,
     /** The parser's Fastmail connection and mailbox reading; none by default. */
     private val fastmailActions: FastmailActions = NoFastmailActions,
+    /** The parser's calendar feeds; none by default. */
+    private val feedActions: FeedActions = NoFeedActions,
     /** The parser's forwarding address; none by default. */
     private val forwardActions: ForwardActions = NoForwardActions,
     /** Whether this build's deployment has a forwarding domain (BuildConfig.FORWARD_DOMAIN). */
@@ -592,6 +597,28 @@ class TripsViewModel(
     fun setReviewSearching(on: Boolean) {
         reviewSearching.value = on
     }
+
+    /** The user's calendar feeds, live; null while they load. */
+    val feeds: StateFlow<List<CalendarFeedShown>?> = accessSettled.flatMapLatest { store.feeds(uid) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Whether this build can add and remove feeds here. */
+    val canEditFeeds: Boolean
+        get() = feedActions.available
+
+    private val _feedAdded = MutableStateFlow<String?>(null)
+
+    /** What the last feed added here read, until the next add. */
+    val feedAdded: StateFlow<String?> = _feedAdded
+
+    /** Subscribes to a calendar feed and says what its first read did. */
+    fun addFeed(token: String, url: String) = run(token, "addFeed") {
+        _feedAdded.value = null
+        _feedAdded.value = feedActions.add(url)
+    }
+
+    /** Drops a calendar feed; its bookings stay. */
+    fun removeFeed(token: String, id: String) = run(token, "removeFeed") { feedActions.remove(id) }
 
     /** The user's forwarding address, live; null while it loads. */
     val forwarding: StateFlow<Forwarding?> = accessSettled.flatMapLatest { store.forwarding(uid) }
