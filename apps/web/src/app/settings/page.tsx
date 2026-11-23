@@ -1,6 +1,6 @@
 "use client";
 
-import { groupSkips, paths, type SenderPatterns, type SkipGroup } from "@travelmo/core";
+import { RideCompany, groupSkips, maxRideCompanies, paths, type SenderPatterns, type SkipGroup } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -20,6 +20,7 @@ import { subscribePush, unsubscribePush, usePushState } from "@/lib/push";
 import { describeCalendarResult, previewIcs } from "@/lib/ics";
 import { describeTripItResult, previewTripIt } from "@/lib/tripit";
 import { useFeeds, useProfile, useSenderPatterns, useTrips } from "@/lib/trips";
+import { addRideCompany, removeRideCompany } from "@/lib/rides";
 
 const buttonClass =
   "rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
@@ -563,6 +564,103 @@ function FeedsSection({ user }: { user: User }) {
   );
 }
 
+// The user's own companies for cars and rides: a minicab firm near home for
+// the airport run, or a rental company they like. Trip pages offer them on
+// flights with no car or ride booked (rideNeeds in packages/core).
+function RideCompaniesSection({ user }: { user: User }) {
+  const profile = useProfile(user.uid);
+  const companies = profile?.rideCompanies ?? [];
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const [near, setNear] = useState<RideCompany["near"]>("home");
+  const [error, setError] = useState<string>();
+
+  const add = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(undefined);
+    const parsed = RideCompany.safeParse({ name, url, near });
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.path[0] === "name" ? "Enter a name." : "Use a link that starts with https://.");
+      return;
+    }
+    try {
+      await addRideCompany(user.uid, parsed.data);
+      setName("");
+      setUrl("");
+    } catch (err) {
+      console.error("Adding a ride company failed", err);
+      setError((err as Error).message);
+    }
+  };
+
+  const remove = async (company: RideCompany) => {
+    setError(undefined);
+    try {
+      await removeRideCompany(user.uid, company);
+    } catch (err) {
+      console.error("Removing a ride company failed", err);
+      setError((err as Error).message);
+    }
+  };
+
+  return (
+    <section className="mt-10">
+      <h2 className="text-lg font-medium">Car and ride companies</h2>
+      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+        When a flight has no car or ride booked, its trip suggests rental companies such as Avis and Enterprise.
+        Add your own, such as a local minicab firm, to offer them too.
+      </p>
+      <form onSubmit={add} className="mt-3 flex flex-wrap gap-2">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Name"
+          aria-label="Company name"
+          className="min-w-0 flex-1 basis-32 rounded-lg border border-field bg-background px-3 py-2 text-sm"
+        />
+        <input
+          type="url"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://…"
+          aria-label="Booking page"
+          className="min-w-0 flex-[2] basis-48 rounded-lg border border-field bg-background px-3 py-2 text-sm"
+        />
+        <select
+          value={near}
+          onChange={(e) => setNear(e.target.value as RideCompany["near"])}
+          aria-label="Suggest for"
+          className="rounded-lg border border-field bg-background px-3 py-2 text-sm"
+        >
+          <option value="home">Rides to and from home</option>
+          <option value="anywhere">Cars wherever I land</option>
+        </select>
+        <button type="submit" disabled={!name.trim() || !url.trim() || companies.length >= maxRideCompanies} className={buttonClass}>
+          Add
+        </button>
+      </form>
+      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+      {companies.length > 0 && (
+        <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800" aria-label="Your companies">
+          {companies.map((c, i) => (
+            <li key={`${c.name}|${c.url}|${i}`} className="flex items-start justify-between gap-3 py-3 text-sm">
+              <div className="min-w-0">
+                <a href={c.url} target="_blank" rel="noreferrer" className="font-medium underline">
+                  {c.name}
+                </a>
+                <p className="text-zinc-600 dark:text-zinc-400">{c.near === "home" ? "Rides to and from home" : "Cars wherever I land"}</p>
+              </div>
+              <button type="button" className={buttonClass} onClick={() => remove(c)}>
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function PatternsSection({ user }: { user: User }) {
   const saved = useSenderPatterns(user.uid);
   const [draft, setDraft] = useState<SenderPatterns>();
@@ -953,6 +1051,7 @@ export default function SettingsPage() {
           </Suspense>
           <CalendarExportSection user={user} />
           <RemindersSection user={user} />
+          <RideCompaniesSection user={user} />
           <PatternsSection user={user} />
           <ReviewSection />
           <DeleteAccountSection user={user} onDeleted={onDeleted} />

@@ -251,6 +251,15 @@ describe("users", () => {
     await assertFails(getDoc(doc(as(partner), paths.user(owner.uid))));
   });
 
+  it("a user keeps their own ride companies and hidden ride suggestions, and nobody else sees them", async () => {
+    const rideCompanies = [{ name: "Example Cars", url: "https://cars.example.com/", near: "home" }];
+    await assertSucceeds(setDoc(doc(as(owner), paths.user(owner.uid)), { rideCompanies, hiddenRideNeeds: ["s1/car"] }, { merge: true }));
+    await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { rideCompanies: "Example Cars" }, { merge: true }));
+    await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { rideCompanies: Array.from({ length: 21 }, () => rideCompanies[0]) }, { merge: true }));
+    await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { hiddenRideNeeds: Array.from({ length: 201 }, (_, i) => `s${i}/car`) }, { merge: true }));
+    await assertFails(setDoc(doc(as(partner), paths.user(owner.uid)), { rideCompanies }, { merge: true }));
+  });
+
   it("a user may turn reminders on, but not read or write what was mailed", async () => {
     await assertSucceeds(setDoc(doc(as(owner), paths.user(owner.uid)), { reminders: { email: true } }, { merge: true }));
     await assertFails(getDoc(doc(as(owner), paths.reminderLog(owner.uid, "t1"))));

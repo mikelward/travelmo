@@ -287,6 +287,26 @@ export const HomeCorrection = z.object({
 export type HomeCorrection = z.infer<typeof HomeCorrection>;
 export const maxHomeCorrections = 50;
 
+// A company the traveler books cars or rides with, added in Settings: a
+// minicab firm near home, or a rental company they like. `near` says which
+// suggestions it joins: rides to and from the airport at home, or a car
+// wherever a flight lands.
+export const RideCompany = z.object({
+  name: z.string().trim().min(1).max(60),
+  url: z
+    .string()
+    .trim()
+    .max(500)
+    .url()
+    .refine((u) => u.startsWith("https://"), "Use a link that starts with https://"),
+  near: z.enum(["home", "anywhere"]),
+});
+export type RideCompany = z.infer<typeof RideCompany>;
+export const maxRideCompanies = 20;
+
+// Ride suggestions the user hid (rideNeedKey in rides.ts), newest last.
+export const maxHiddenRideNeeds = 200;
+
 export const UserProfile = z.object({
   email: z.string().optional(),
   displayName: z.string().optional(),
@@ -296,6 +316,17 @@ export const UserProfile = z.object({
   reminders: ReminderSettings.optional(),
   forward: ForwardAddress.optional(),
   homes: z.array(HomeCorrection).max(maxHomeCorrections).optional(),
+  // An entry that does not parse (a link that is not https://) is left out,
+  // not the whole profile.
+  rideCompanies: z
+    .array(z.unknown())
+    .max(maxRideCompanies)
+    .transform((entries) => entries.flatMap((e) => {
+      const parsed = RideCompany.safeParse(e);
+      return parsed.success ? [parsed.data] : [];
+    }))
+    .optional(),
+  hiddenRideNeeds: z.array(z.string()).max(maxHiddenRideNeeds).optional(),
 });
 export type UserProfile = z.infer<typeof UserProfile>;
 

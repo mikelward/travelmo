@@ -176,16 +176,38 @@ type Located = Pick<ExtractedSegment, "type" | "start" | "origin" | "destination
 // lands), or more than `connectionHours` apart. Either may be given first.
 export function connectionGap(a: Located, b: Located): number | undefined {
   const [ride, journey] = isTransfer(a) ? [a, b] : [b, a];
-  if (!isTransfer(ride) || !journeyTypes.has(journey.type)) return undefined;
-  const wait = (from: string, to: string) => {
-    const ms = Date.parse(to) - Date.parse(from);
-    return ms >= 0 && ms <= connectionHours * 3_600_000 ? ms : undefined;
-  };
-  const gaps = [
-    journey.destination && atHub(ride.origin!, journey.destination) ? wait(journey.end ?? journey.start, ride.start) : undefined,
-    journey.origin && atHub(ride.destination!, journey.origin) ? wait(ride.end ?? ride.start, journey.start) : undefined,
-  ].filter((gap): gap is number => gap !== undefined);
+  const gaps = [rideFromArrival(ride, journey), rideToDeparture(ride, journey)].filter((gap): gap is number => gap !== undefined);
   return gaps.length > 0 ? Math.min(...gaps) : undefined;
+}
+
+const waitBetween = (from: string, to: string) => {
+  const ms = Date.parse(to) - Date.parse(from);
+  return ms >= 0 && ms <= connectionHours * 3_600_000 ? ms : undefined;
+};
+
+// How long after a journey arrives a transfer leaves its airport or
+// station; undefined when the transfer does not take the traveler on from
+// it (connectionGap).
+export function rideFromArrival(ride: Located, journey: Located): number | undefined {
+  if (!isTransfer(ride) || !journeyTypes.has(journey.type) || !journey.destination) return undefined;
+  return atHub(ride.origin!, journey.destination) ? waitBetween(journey.end ?? journey.start, ride.start) : undefined;
+}
+
+// How long before a journey leaves a transfer reaches its airport or
+// station; undefined when the transfer does not bring the traveler to it.
+export function rideToDeparture(ride: Located, journey: Located): number | undefined {
+  if (!isTransfer(ride) || !journeyTypes.has(journey.type) || !journey.origin) return undefined;
+  return atHub(ride.destination!, journey.origin) ? waitBetween(ride.end ?? ride.start, journey.start) : undefined;
+}
+
+// Whether a place is in the same town as an airport or station, or is it:
+// where a car hired for a flight is collected.
+export function nearHub(place: Place | undefined, hub: Place | undefined): boolean {
+  if (!place || !hub) return false;
+  if (atHub(place, hub)) return true;
+  const a = town(place);
+  const b = town(hub);
+  return !!a && !!b && sameTown(a, b);
 }
 
 // Whether a transfer meets a journey (connectionGap).
@@ -223,6 +245,19 @@ export function transferTitle(
   };
   const route = `${label(segment.origin!)} to ${label(segment.destination!)}`;
   return route.charAt(0).toUpperCase() + route.slice(1);
+}
+
+// Whether a place is in the town that was home on a date; false when
+// either is unknown.
+export function inHomeTown(
+  place: Place | undefined,
+  date: string,
+  periods: readonly HomePeriod[],
+  overrides: readonly HomePeriod[] = [],
+): boolean {
+  const where = town(place);
+  const home = homeAt(periods, date, overrides);
+  return !!where && !!home && sameTown(where, home);
 }
 
 // Whether a booking that is not a journey (a stay, a ticket, a car) happens

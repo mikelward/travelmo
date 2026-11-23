@@ -184,14 +184,22 @@ service cloud.firestore {
       function validHomes(data) {
         return !('homes' in data) || (data.homes is list && data.homes.size() <= 50);
       }
+      // The user's own car and ride companies (Settings) and the ride
+      // suggestions they hid: lists of at most twenty and two hundred. The
+      // app parses each entry and leaves out one that does not parse, so a
+      // link that is not https:// is never shown.
+      function validRides(data) {
+        return (!('rideCompanies' in data) || (data.rideCompanies is list && data.rideCompanies.size() <= 20))
+          && (!('hiddenRideNeeds' in data) || (data.hiddenRideNeeds is list && data.hiddenRideNeeds.size() <= 200));
+      }
       // Readable to its owner even before approval: the app reads it to
       // tell an account from before approvals from a new one.
       allow read: if isSelf();
       allow create: if member() && isSelf() && !request.resource.data.keys().hasAny(['gmail', 'googleCalendar', 'forward'])
-        && validHomes(request.resource.data);
+        && validHomes(request.resource.data) && validRides(request.resource.data);
       allow update: if member() && isSelf()
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['gmail', 'googleCalendar', 'forward'])
-        && validHomes(request.resource.data);
+        && validHomes(request.resource.data) && validRides(request.resource.data);
 
       // What the parser has sent as reminders: nobody's to read or write.
       match /reminders/{tripId} {

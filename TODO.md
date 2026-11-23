@@ -346,10 +346,26 @@
 - [ ] Check-in reminders: deep links to each airline's check-in page in
       place of its home page, once each is checked from a browser; more
       airlines in the table as their windows are confirmed.
+- [x] Suggest a car or ride for a flight with none booked: rental
+      companies where it lands, the traveler's own companies (Settings) for
+      rides to and from the airport at home; hidden per suggestion.
+- [ ] Android: car and ride suggestions on the trip page, as the web shows
+      them (`:core`'s `rideNeeds` is in; the app still needs to read the
+      profile's `rideCompanies`, `hiddenRideNeeds` and `homes`); companies
+      stay edited on the web.
+- [ ] Car suggestions: open each rental company's search at the arrival
+      airport and dates in place of its home page, once each link is
+      checked from a browser.
 
 ## Decisions needing review
 
 Guesses made on autopilot; change any of them freely.
+
+- Car and ride suggestions: home is this trip's own round trip (or Profile's
+  corrections), not the timeline of every trip, to save reads; rides at
+  home show only once the traveler adds a company near home; the built-in
+  list is Avis, Enterprise, Hertz, Budget, Sixt, National and Alamo, and no
+  shuttle directory.
 
 - Cancellations and trip dates: rather than every screen loading a trip's
   bookings to work out what is still booked (the trip list loads them for
