@@ -70,6 +70,7 @@ const generic = new Set([
   "card",
   "club",
   "com",
+  "flier",
   "flyer",
   "frequent",
   "group",
@@ -87,6 +88,7 @@ const generic = new Set([
   "membership",
   "miles",
   "net",
+  "number",
   "org",
   "plus",
   "points",
@@ -182,14 +184,22 @@ export function withFoundLoyalty(found: readonly FoundLoyalty[], seen: FoundLoya
 }
 
 // Whether a name on a membership could be the account's owner: they share
-// a name of two or more letters ("MR J SMITH" and "Jane Smith"). With either
-// unknown, it could.
+// a name of two or more letters ("MR J SMITH" and "Jane Smith"), and their
+// first names agree, as the same name or an initial ("J"). Family who share
+// a surname ("Jessica Ward" on "Mikel Ward"'s booking) are not the owner.
+// With either name unknown, or only one name to go on, it could be.
 export function couldBeOwner(holder: string | undefined, ownerName: string | undefined): boolean {
   if (!holder || !ownerName) return true;
-  const titles = new Set(["mr", "mrs", "ms", "miss", "mx", "dr"]);
-  const names = (s: string) => (s.toLowerCase().match(/\p{L}{2,}/gu) ?? []).filter((w) => !titles.has(w));
-  const owner = new Set(names(ownerName));
-  return names(holder).some((w) => owner.has(w));
+  // In the order people say them ("SMITH/JANE MR" → jane smith), titles gone.
+  const names = (s: string): string[] => (personName(s) ?? "").toLowerCase().match(/\p{L}+/gu) ?? [];
+  const [held, owner] = [names(holder), names(ownerName)];
+  if (!held.some((w) => w.length >= 2 && owner.includes(w))) return false;
+  if (held.length < 2 || owner.length < 2) return true;
+  const [first, ownerFirst] = [held[0]!, owner[0]!];
+  if (first.length === 1 || ownerFirst.length === 1) return first[0] === ownerFirst[0];
+  // The holder's first name among the owner's names (a middle name used as
+  // the first one).
+  return owner.includes(first);
 }
 
 // A member's name as an email gives it, as a person is called: without a
