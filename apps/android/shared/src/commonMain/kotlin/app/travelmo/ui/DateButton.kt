@@ -16,9 +16,6 @@ import androidx.compose.ui.Modifier
 import app.travelmo.shared.Res
 import app.travelmo.shared.cancel
 import app.travelmo.shared.ok
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneOffset
 import org.jetbrains.compose.resources.stringResource
 
 /** A button saying [label] that opens a date picker on [date] (an ISO date) and hands back the day picked. */
@@ -28,13 +25,13 @@ fun DateButton(label: String, date: String, onPick: (String) -> Unit, modifier: 
     var picking by rememberSaveable { mutableStateOf(false) }
     OutlinedButton(onClick = { picking = true }, modifier = modifier) { Text(label) }
     if (picking) {
-        val state = rememberDatePickerState(initialSelectedDateMillis = LocalDate.parse(date).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
+        val state = rememberDatePickerState(initialSelectedDateMillis = pickerMillis(date))
         DatePickerDialog(
             onDismissRequest = { picking = false },
             confirmButton = {
                 TextButton(onClick = {
                     // The picker answers in UTC midnights.
-                    state.selectedDateMillis?.let { onPick(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toString()) }
+                    state.selectedDateMillis?.let { onPick(pickerDate(it)) }
                     picking = false
                 }) { Text(stringResource(Res.string.ok)) }
             },

@@ -76,8 +76,10 @@ builds only, so `next dev` runs without it.
 ### Android
 
 `apps/android` is a Gradle build of its own (JDK 21; the wrapper fetches
-Gradle). `:shared` holds, for the iOS app to come, the screens' text as
-Compose Multiplatform resources, the interfaces the screens read data and
+Gradle). `:shared` holds, for the iOS app to come, the palette and most
+screens (Compose Multiplatform, with the app's pieces through `AppChrome`),
+their text, the logo and the wordmark's font as Compose Multiplatform
+resources (`scripts/icon-sources.mjs` writes the logo there), the interfaces the screens read data and
 take actions through (each with a no-op version for tests and previews;
 `:app` implements them with Firebase and the parser) and the log shared
 code writes to, which `:app` sends to its debug log. Its `strings.xml`

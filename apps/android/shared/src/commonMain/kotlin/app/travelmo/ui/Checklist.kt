@@ -70,11 +70,8 @@ import app.travelmo.shared.remove_named
 import app.travelmo.shared.save
 import app.travelmo.shared.weeks_before
 import app.travelmo.ui.theme.TextButtonInset
-import com.mikelward.androidzoom.compose.FontSizeWindow
-import com.mikelward.androidzoom.compose.pinchFontSizeHost
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneOffset
+
+
 import org.jetbrains.compose.resources.stringResource
 
 // The traveler's own reminders before a trip (SPEC "Before you go"), as the
@@ -87,7 +84,7 @@ private const val REMOVE_TOKEN = "settings/tripReminders/remove"
 /** Settings' "Before international trips": the user's reminders, each with how long before; edit, remove, add. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun TripRemindersSection(viewModel: TripsViewModel) {
+fun TripRemindersSection(viewModel: TripsViewModel) {
     val reminders by viewModel.standingReminders.collectAsStateWithLifecycle()
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
     val saving = outcomes[SAVE_TOKEN]
@@ -144,7 +141,7 @@ class Checklist(
 
 /** A trip's "Before you go": the viewer's reminders for it, each ticked off for them alone, and Add a reminder. */
 @Composable
-internal fun BeforeYouGo(checklist: Checklist, today: String) {
+fun BeforeYouGo(checklist: Checklist, today: String) {
     var adding by rememberSaveable { mutableStateOf(false) }
     if (adding) {
         ReminderDialog(
@@ -255,7 +252,7 @@ private fun ReminderDialog(title: String, initial: Reminder, dated: Boolean, onD
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
     )
     if (picking) {
-        val start = date.takeIf { it.isNotEmpty() }?.let { LocalDate.parse(it).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli() }
+        val start = date.takeIf { it.isNotEmpty() }?.let { pickerMillis(it) }
         val state = rememberDatePickerState(initialSelectedDateMillis = start)
         // A window of its own, so it re-applies the text size and hosts the pinch.
         DatePickerDialog(
@@ -264,7 +261,7 @@ private fun ReminderDialog(title: String, initial: Reminder, dated: Boolean, onD
             confirmButton = {
                 FontSizeWindow {
                     TextButton(onClick = {
-                        state.selectedDateMillis?.let { date = Instant.ofEpochMilli(it).atOffset(ZoneOffset.UTC).toLocalDate().toString(); error = null }
+                        state.selectedDateMillis?.let { date = pickerDate(it); error = null }
                         picking = false
                     }) { Text(stringResource(Res.string.ok)) }
                 }

@@ -101,7 +101,7 @@ val LocalOpenAccess = compositionLocalOf<(() -> Unit)?> { null }
  * available", last, opens the Play listing.
  */
 @Composable
-fun AppMenu(modifier: Modifier = Modifier, items: @Composable (close: () -> Unit) -> Unit = {}) {
+fun AndroidAppMenu(modifier: Modifier = Modifier, items: @Composable (close: () -> Unit) -> Unit = {}) {
     val context = LocalContext.current
     val reportBug = LocalReportBug.current
     val updateAvailable = LocalUpdateAvailable.current

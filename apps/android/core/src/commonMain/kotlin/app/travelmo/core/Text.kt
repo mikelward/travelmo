@@ -6,11 +6,15 @@ import kotlin.math.floor
 // Text and hashing that java.text and java.security gave the JVM, written
 // out so every platform answers alike.
 
+/** [value] with three decimals, as Java's "%.3f" wrote it: 51.4775 is "51.478". */
+internal fun fixed3(value: Double): String = fixed(value, 3)
+
 /**
- * [value] with three decimals, rounding half up on its shortest decimal
- * form, as Java's "%.3f" does: 51.4775 is "51.478".
+ * [value] with [decimals] decimals (one or more), rounding half up on its
+ * shortest decimal form, as Java's "%.Nf" does: 51.4775 to 3 is "51.478".
  */
-internal fun fixed3(value: Double): String {
+fun fixed(value: Double, decimals: Int): String {
+    require(decimals >= 1) { "At least one decimal, got $decimals" }
     require(value.isFinite()) { "Not a finite number: $value" }
     val negative = value < 0 || (value == 0.0 && 1.0 / value < 0)
     var text = abs(value).toString()
@@ -28,7 +32,7 @@ internal fun fixed3(value: Double): String {
         digits = "0".repeat(-whole) + digits
         whole = 0
     }
-    val kept = whole + 3
+    val kept = whole + decimals
     digits = digits.padEnd(kept + 1, '0')
     val rounded = StringBuilder(digits.substring(0, kept))
     if (digits[kept] >= '5') {
@@ -36,16 +40,24 @@ internal fun fixed3(value: Double): String {
         while (i >= 0 && rounded[i] == '9') rounded[i--] = '0'
         if (i >= 0) rounded[i] = rounded[i] + 1 else rounded.insert(0, '1')
     }
-    val number = rounded.toString().padStart(4, '0')
-    val integer = number.dropLast(3).trimStart('0').ifEmpty { "0" }
-    return "${if (negative) "-" else ""}$integer.${number.takeLast(3)}"
+    val number = rounded.toString().padStart(decimals + 1, '0')
+    val integer = number.dropLast(decimals).trimStart('0').ifEmpty { "0" }
+    return "${if (negative) "-" else ""}$integer.${number.takeLast(decimals)}"
 }
 
 /** "1234567" as "1,234,567", as en-US writes it. */
-internal fun groupThousands(value: Long): String {
+fun groupThousands(value: Long): String {
     val digits = value.toString().removePrefix("-")
     val grouped = digits.reversed().chunked(3).joinToString(",").reversed()
     return if (value < 0) "-$grouped" else grouped
+}
+
+/** [value] with [decimals] decimals and its thousands grouped, as Java's "%,.Nf" with Locale.US: 1234.56 to 1 is "1,234.6". */
+fun groupedDecimal(value: Double, decimals: Int): String {
+    val text = fixed(value, decimals)
+    val negative = text.startsWith("-")
+    val (integer, fraction) = text.removePrefix("-").split('.')
+    return "${if (negative) "-" else ""}${groupThousands(integer.toLong())}.$fraction"
 }
 
 /** The nearest whole number, halves up, as Java's Math.round: 2.5 is 3, -2.5 is -2. */
