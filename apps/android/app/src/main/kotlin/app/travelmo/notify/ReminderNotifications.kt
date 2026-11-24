@@ -4,9 +4,11 @@ import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -18,14 +20,24 @@ import app.travelmo.log.TravelmoLog
 import com.mikelward.androidlog.safe
 
 /**
- * The reminder channel and how a reminder from the parser is shown. A tap
- * opens the trip, or an admin's access request the Access page
- * ([MainActivity] reads [EXTRA_URL]), or a check-in
- * reminder's airline site in the browser. Access requests have a channel
- * of their own.
+ * The notification channels and how a message from the parser is shown. A
+ * tap opens the trip, or an admin's access request the Access page
+ * ([MainActivity] reads [EXTRA_URL]), or a check-in reminder's airline
+ * site in the browser. News of a flight (a gate, delay, cancellation,
+ * diversion or carousel) has a channel of its own that interrupts, with
+ * its own chime; everything else is a reminder.
  */
 object ReminderNotifications {
     const val CHANNEL_ID = "reminders"
+
+    /**
+     * Flight news. Android fixes a channel's sound when it is made, so a new
+     * sound needs a new id (and the old one deleted, as [OLD_ACCESS_CHANNEL_ID] was).
+     */
+    const val FLIGHT_CHANNEL_ID = "flight_changes"
+
+    /** The parser tags flight news `flight-<flight>` (`apps/parser/src/flightStatus.ts`). */
+    private const val FLIGHT_TAG_PREFIX = "flight-"
 
     /** The channel admins' access requests had, before nobody could ask; removed where an older version made it. */
     private const val OLD_ACCESS_CHANNEL_ID = "access_requests"
@@ -39,8 +51,22 @@ object ReminderNotifications {
         val channel = NotificationChannel(CHANNEL_ID, context.getString(R.string.reminders_channel), NotificationManager.IMPORTANCE_DEFAULT)
         channel.description = context.getString(R.string.reminders_channel_description)
         manager.createNotificationChannel(channel)
+        val flights = NotificationChannel(FLIGHT_CHANNEL_ID, context.getString(R.string.flight_changes_channel), NotificationManager.IMPORTANCE_HIGH)
+        flights.description = context.getString(R.string.flight_changes_channel_description)
+        flights.setSound(chimeUri(context), AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+        manager.createNotificationChannel(flights)
         manager.deleteNotificationChannel(OLD_ACCESS_CHANNEL_ID)
     }
+
+    /** The channel a message with this [tag] is shown in. */
+    fun channelFor(tag: String): String = if (tag.startsWith(FLIGHT_TAG_PREFIX)) FLIGHT_CHANNEL_ID else CHANNEL_ID
+
+    /**
+     * By name, not by `R.raw` id: the channel keeps this URI across upgrades,
+     * and a resource's numeric id can change from one build to the next.
+     */
+    private fun chimeUri(context: Context) =
+        "${ContentResolver.SCHEME_ANDROID_RESOURCE}://${context.packageName}/raw/flight_chime".toUri()
 
     /** Whether the app may post notifications at all: the permission, and the app not blocked in the system settings. */
     fun allowed(context: Context): Boolean =
@@ -59,7 +85,7 @@ object ReminderNotifications {
         }
         ensureChannel(context)
         val tap = PendingIntent.getActivity(context, tag.hashCode(), tapIntent(context, url, tag), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+        val notification = NotificationCompat.Builder(context, channelFor(tag))
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(body.lineSequence().firstOrNull().orEmpty())

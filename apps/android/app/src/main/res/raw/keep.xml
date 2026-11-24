@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The release resource shrinker keeps these: the app and Firebase look up the
-     google-services plugin's strings by name, which the shrinker can't always see. Missing on a build without google-services.json; that's fine. -->
+     google-services plugin's strings by name, which the shrinker can't always see. Missing on a build without google-services.json; that's fine.
+     The flight changes chime is named only in its channel's sound URI (by name, since an id
+     can change across upgrades), so the shrinker can't see it either. -->
 <resources xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@string/default_web_client_id,@string/google_app_id" />
+    tools:keep="@string/default_web_client_id,@string/google_app_id,@raw/flight_chime" />
