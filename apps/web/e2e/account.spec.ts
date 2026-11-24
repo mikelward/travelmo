@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 import { owner, signIn } from "./helpers";
 import { clearData } from "./seed";
 
+const unfinished = { status: 410, body: "Deleting your account didn't finish." };
+
 test.beforeEach(async () => {
   await clearData();
 });
@@ -42,6 +44,35 @@ test("a failed deletion says so and keeps the user signed in", async ({ page }) 
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page.getByText(/Couldn't delete your account: .*500.* Try again\./)).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+});
+
+// A deletion that stopped before the sign-in went: the parser refuses
+// everything with a 410 that says so, and the app offers to finish.
+test("an account whose deletion didn't finish is offered to finish it", async ({ page }) => {
+  await signIn(page, owner);
+  await page.route("http://localhost:8080/trips/regroup", (route) => route.fulfill(unfinished));
+  let deletes = 0;
+  await page.route("http://localhost:8080/account/delete", async (route) => {
+    deletes++;
+    await route.fulfill(deletes === 1 ? { status: 500, body: "Internal error" } : { status: 204 });
+  });
+
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "Regroup" }).click();
+  await expect(page.getByRole("heading", { name: "Deleting your account didn't finish" })).toBeVisible();
+  await page.getByRole("button", { name: "Finish deleting" }).click();
+  await expect(page.getByText(/Couldn't delete your account: .*500.* Try again\./)).toBeVisible();
+  await page.getByRole("button", { name: "Finish deleting" }).click();
+  await expect(page.getByRole("heading", { name: "Account deleted" })).toBeVisible();
+  expect(deletes).toBe(2);
+});
+
+test("an account the rules shut out for a deletion that didn't finish is offered to finish it", async ({ page }) => {
+  await page.route("http://localhost:8080/access/check", (route) => route.fulfill(unfinished));
+  await page.route("http://localhost:8080/account/delete", (route) => route.fulfill({ status: 204 }));
+  await signIn(page, "newcomer@example.com", { approved: false });
+  await page.getByRole("button", { name: "Finish deleting" }).click();
+  await expect(page.getByRole("heading", { name: "Account deleted" })).toBeVisible();
 });
 
 test("the header leads with Trips and signing out is at the foot of Settings", async ({ page }) => {

@@ -14,6 +14,15 @@ fun parserEndpoint(baseUrl: String?, path: String): String? {
 const val ACCOUNT_DELETE_PATH = "/account/delete"
 
 /**
+ * The parser's answer (410) to a request from an account whose deletion
+ * stopped part way: the sign-in, which goes last, is still there. The app
+ * offers to finish deleting it (packages/core/src/accountDeletion.ts).
+ */
+const val DELETION_UNFINISHED_TEXT = "Deleting your account didn't finish."
+
+fun isDeletionUnfinished(status: Int, body: String): Boolean = status == 410 && body.trim() == DELETION_UNFINISHED_TEXT
+
+/**
  * What Settings says when deleting the account did not go through: by the
  * parser's status, or with none when the parser could not be reached. A
  * retry finishes whatever an interrupted deletion left.

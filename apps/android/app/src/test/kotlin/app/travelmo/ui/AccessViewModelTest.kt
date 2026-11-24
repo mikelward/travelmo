@@ -8,6 +8,7 @@ import app.travelmo.core.accessDecision
 import app.travelmo.core.accessInvite
 import app.travelmo.core.accessRecordOf
 import app.travelmo.data.AccessCheck
+import app.travelmo.data.AccountDeletionUnfinished
 import app.travelmo.data.TripStore
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -107,6 +108,15 @@ class AccessViewModelTest {
         val check = CountingAccessCheck(AccountAccess.NONE)
         viewModel(newcomerStore(), check = check)
         check.calls shouldBe 1
+    }
+
+    @Test
+    fun `an account whose deletion stopped part way is offered to finish it`() = runTest {
+        val unfinished = object : AccessCheck {
+            override suspend fun check(): AccountAccess? = throw AccountDeletionUnfinished()
+        }
+        viewModel(newcomerStore(), check = unfinished).deletionUnfinished.value shouldBe true
+        viewModel(newcomerStore(), check = CountingAccessCheck(AccountAccess.NONE)).deletionUnfinished.value shouldBe false
     }
 
     @Test

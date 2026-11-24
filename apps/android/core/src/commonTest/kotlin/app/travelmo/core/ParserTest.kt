@@ -27,4 +27,11 @@ class ParserTest {
         accountDeletionFailure(403) shouldContain "sign in again"
         accountDeletionFailure(500) shouldBe "Couldn't delete your account (error 500). Try again."
     }
+
+    @Test
+    fun `knows the parser's answer for a deletion that stopped part way and nothing else`() {
+        isDeletionUnfinished(410, "$DELETION_UNFINISHED_TEXT\n") shouldBe true
+        isDeletionUnfinished(410, "This account was deleted") shouldBe false
+        isDeletionUnfinished(400, DELETION_UNFINISHED_TEXT) shouldBe false
+    }
 }

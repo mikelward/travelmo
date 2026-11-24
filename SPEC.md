@@ -2475,6 +2475,16 @@ sign-in screen says the same. Android builds call the parser at the
 address given at build time (`travelmoParserUrl`, README "Android"); a
 build without one points to the web instead.
 
+A deletion can stop part way and leave the sign-in (the Auth user once
+failed to delete, before the parser could). The parser's 410 for a deleted
+account then says "Deleting your account didn't finish." once the marker
+is over 15 minutes old (a deletion runs in one request, which Cloud Run
+ends well before then) and the Auth user still exists; otherwise "This
+account was deleted". On that answer, to any request (on Android, the
+access check each launch makes), both apps show "Deleting your account
+didn't finish" in place of every page, with "Finish deleting", which calls
+`POST /account/delete` again without asking a second time, and Sign out.
+
 ## HTTP surface of the parser
 
 | Route | Auth | Purpose |

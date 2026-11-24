@@ -838,6 +838,19 @@ class ScreenScreenshotTest {
         }
     }
 
+    @Test
+    fun deletion_unfinished() = deletionUnfinished("deletion_unfinished", dark = false)
+
+    @Test
+    fun deletion_unfinished_dark() = deletionUnfinished("deletion_unfinished_dark", dark = true)
+
+    private fun deletionUnfinished(name: String, dark: Boolean) {
+        val viewModel = TripsViewModel(FakeTripStore(), "u-new", "new@example.com", clock = { Instant.parse(FROZEN_NOW) }, accountDeletion = FakeAccountDeletion())
+        capture(name, dark = dark) {
+            FinishDeletionScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), viewModel = viewModel)
+        }
+    }
+
     // The committed export, loaded here rather than off the main thread as
     // the screen does, so the list is there when the picture is taken.
     @Test

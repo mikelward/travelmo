@@ -51,6 +51,7 @@ import app.travelmo.core.LinkCheck
 import app.travelmo.core.checkNewLink
 import app.travelmo.core.myAddresses
 import app.travelmo.data.AccessCheck
+import app.travelmo.data.AccountDeletionUnfinished
 import app.travelmo.data.AccountDeletion
 import app.travelmo.data.EmailLinkFailed
 import app.travelmo.data.EmailLinks
@@ -315,6 +316,15 @@ class TripsViewModel(
         AccessState.Known(status, isAdmin(verifiedEmail, linked, config.value), hasProfile, record.value, config.value?.admins.orEmpty())
     }.distinctUntilChanged().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AccessState.Loading)
 
+    private val _deletionUnfinished = MutableStateFlow(false)
+
+    /**
+     * Whether the parser said this account's deletion stopped part way; the
+     * app then offers to finish it in place of everything else (SPEC
+     * "Deleting an account").
+     */
+    val deletionUnfinished: StateFlow<Boolean> = _deletionUnfinished
+
     init {
         // Once per signed-in view model (SPEC "Access"): the parser lets in
         // an account from before approvals that the rules cannot tell is
@@ -324,7 +334,13 @@ class TripsViewModel(
         // account whose trips came back empty may be one, so its queries are
         // asked again once it is in.
         viewModelScope.launch {
-            if (accessCheck.check() == AccountAccess.APPROVED && trips.value.isNullOrEmpty()) accessSettled.update { it + 1 }
+            val answer = try {
+                accessCheck.check()
+            } catch (e: AccountDeletionUnfinished) {
+                _deletionUnfinished.value = true
+                return@launch
+            }
+            if (answer == AccountAccess.APPROVED && trips.value.isNullOrEmpty()) accessSettled.update { it + 1 }
         }
         viewModelScope.launch {
             var refused = false

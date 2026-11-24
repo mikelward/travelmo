@@ -40,3 +40,4 @@ export * from "./checklist";
 export * from "./airlinePrograms";
 export * from "./tripsExport";
 export * from "./foundLoyalty";
+export * from "./accountDeletion";

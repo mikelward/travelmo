@@ -473,6 +473,8 @@
     <string name="delete_account_confirm_title">Delete your account?</string>
     <string name="delete_account_confirm">Everything in it is deleted. This cannot be undone.</string>
     <string name="deleting">Deleting…</string>
+    <string name="deletion_unfinished">Deleting your account didn't finish</string>
+    <string name="deletion_unfinished_hint">Some of it may still be stored.</string>
     <string name="account_deleted">Your account was deleted.</string>
 
     <!-- Access (SPEC "Access"): the invite-only screen and the admins' Access page, as on the web. -->

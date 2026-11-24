@@ -1,4 +1,4 @@
-import { paths } from "@travelmo/core";
+import { deletionUnfinishedText, paths } from "@travelmo/core";
 import type { Firestore, Transaction } from "firebase-admin/firestore";
 
 // Account deletion writes `deletedAccounts/{uid}` before anything else
@@ -31,4 +31,39 @@ export async function wasDeleted(db: Firestore, t: Transaction, uid: string): Pr
 
 export async function refuseIfDeleted(db: Firestore, t: Transaction, uid: string): Promise<void> {
   if (await wasDeleted(db, t, uid)) throw new AccountDeletedError(uid);
+}
+
+export const deletedText = "This account was deleted";
+
+// Deletion runs in one request, which Cloud Run ends within its timeout
+// (the default 5 minutes); a sign-in still there well after that means it
+// stopped part way. Within it, a deletion may still be running.
+export const deletionStalledAfterMs = 15 * 60_000;
+
+export type DeletedLog = (severity: "INFO" | "WARNING", event: string, fields: Record<string, unknown>) => void;
+
+// What a deleted account's 410 says: that deleting it did not finish when
+// its sign-in, which goes last (account.ts), outlived the deletion, so the
+// apps offer to finish it; otherwise that it was deleted.
+export async function deletedAccountText(
+  db: Firestore,
+  uid: string,
+  now: string,
+  signInExists: (uid: string) => Promise<boolean>,
+  log: DeletedLog,
+): Promise<string> {
+  const at: unknown = (await db.doc(paths.deletedAccount(uid)).get()).get("at");
+  const started = typeof at === "string" ? Date.parse(at) : NaN;
+  if (!(Date.parse(now) - started > deletionStalledAfterMs)) return deletedText;
+  let exists: boolean;
+  try {
+    exists = await signInExists(uid);
+  } catch (error) {
+    // Unknown: the account is refused as deleted either way.
+    log("WARNING", "deleted_sign_in_lookup_failed", { uid, error: (error as Error).name });
+    return deletedText;
+  }
+  if (!exists) return deletedText;
+  log("WARNING", "account_deletion_unfinished", { uid, startedAt: at });
+  return deletionUnfinishedText;
 }

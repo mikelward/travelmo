@@ -2,7 +2,7 @@
 
 import type { User } from "firebase/auth";
 import { useState, type ReactNode } from "react";
-import { AccountDeleted, useAccountDeletion } from "@/components/DeleteAccount";
+import { AccountDeleted, FinishDeletion, useAccountDeletion, useDeletionUnfinished } from "@/components/DeleteAccount";
 import { Logo } from "@/components/Logo";
 import { InviteOnly } from "@/components/InviteOnly";
 import { useAuth } from "@/lib/auth";
@@ -17,6 +17,7 @@ export function SignInGate({ children, whileWaiting = false }: { children: (user
   // An account without access deletes itself from the request screen, which
   // signing out afterwards would otherwise replace with the sign-in prompt.
   const { deleted, onDeleted } = useAccountDeletion();
+  const unfinished = useDeletionUnfinished(user);
 
   if (deleted) return <AccountDeleted />;
   if (user === undefined) {
@@ -41,6 +42,7 @@ export function SignInGate({ children, whileWaiting = false }: { children: (user
       </div>
     );
   }
+  if (unfinished) return <FinishDeletion user={user} onDeleted={onDeleted} />;
   if (access.state === "loading") return <p className="text-muted">Loading…</p>;
   const waiting = access.state === "none";
   if (access.state !== "approved" && !(whileWaiting && waiting)) {

@@ -66,8 +66,11 @@ import app.travelmo.shared.delete_account_confirm_title
 import app.travelmo.shared.delete_account_hint
 import app.travelmo.shared.delete_account_on_web
 import app.travelmo.shared.deleting
+import app.travelmo.shared.deletion_unfinished
+import app.travelmo.shared.deletion_unfinished_hint
 import app.travelmo.shared.email_address
 import app.travelmo.shared.email_link_sent
+import app.travelmo.shared.finish_deleting
 import app.travelmo.shared.invite
 import app.travelmo.shared.invite_only
 import app.travelmo.shared.invite_only_declined
@@ -137,6 +140,49 @@ fun InviteOnlyScreen(account: SignedInAccount, viewModel: TripsViewModel, status
         }
         // As on the sign-in screen: no top bar, so the app's menu sits where one would end.
         AppMenu(modifier = Modifier.fillMaxSize().safeDrawingPadding().wrapContentSize(Alignment.TopEnd))
+    }
+}
+
+private const val FINISH_DELETION_TOKEN = "access/account/finish"
+
+/**
+ * In place of the app once the parser says deleting the account stopped
+ * part way, as the web's FinishDeletion: asking again deletes what is left
+ * (SPEC "Deleting an account"). It was confirmed the first time, so it
+ * asks nothing more.
+ */
+@Composable
+fun FinishDeletionScreen(account: SignedInAccount, viewModel: TripsViewModel) {
+    val scope = rememberCoroutineScope()
+    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val outcome = outcomes[FINISH_DELETION_TOKEN]
+    Surface(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(24.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(stringResource(Res.string.deletion_unfinished), style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+            Text(
+                stringResource(Res.string.deletion_unfinished_hint),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            Button(
+                onClick = { viewModel.deleteAccount(FINISH_DELETION_TOKEN) { account.signOutDeleted() } },
+                enabled = outcome !is Outcome.Busy,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError),
+                modifier = Modifier.padding(top = 24.dp),
+            ) { Text(stringResource(if (outcome is Outcome.Busy) Res.string.deleting else Res.string.finish_deleting)) }
+            (outcome as? Outcome.Failed)?.let {
+                Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
+            }
+            TextButton(onClick = { scope.launch { account.signOut() } }, modifier = Modifier.padding(top = 16.dp)) {
+                Text(stringResource(Res.string.sign_out))
+            }
+        }
     }
 }
 
