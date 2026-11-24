@@ -864,8 +864,10 @@ silent notification (channel "Flight progress"), which Android 16 and later
 promote to a chip in the status bar showing the most useful thing now: the
 terminal and gate before it leaves ("T3 G28", whichever is known, a value
 that names itself such as "B12" left bare, the departure time before either
-is known), in the air a countdown to the landing estimate
-that the phone runs itself, so it keeps going in flight mode ("2:10:00"),
+is known), in the air the time left until the landing estimate, which Android words
+and keeps current itself, so it keeps going in flight mode ("2h 10m"
+rather than a stopwatch's "2:10:00"; in the last two minutes, the icon
+alone),
 and the carousel once landed ("Bags 16", "16A" when that does not fit,
 else the arrival gate). A chip holds seven characters at most: the gate
 alone when terminal and gate together do not fit, anything longer cut
