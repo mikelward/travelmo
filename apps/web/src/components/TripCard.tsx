@@ -1,8 +1,8 @@
-import { allCancelled, tripCancelled, checkInLine, displayBounds, formatDate, formatDateRange, localDate, localTime, tripNextUp, tripStatus, type FlightStatus, type Segment, type Trip } from "@travelmo/core";
+import { tripCancelled, checkInLine, displayBounds, formatDate, formatDateRange, localDate, localTime, tripNextUp, tripStatus, type FlightStatus, type Segment, type Trip } from "@travelmo/core";
 import Link from "next/link";
 
 // A trip's card: the title (as displayTitles shows it among the list), its
-// dates, whether every booking was cancelled, and given the time now (for a
+// dates, both struck through once it was cancelled, and given the time now (for a
 // trip under way) what comes next (tripNextUp), with the live status of its
 // next flight, and the flight's online check-in until the viewer says they
 // checked in. The list's top carries the document warnings.
@@ -27,8 +27,10 @@ export function TripCard({
   onCheckedIn?: (segmentId: string) => void;
 }) {
   const badge = trip.deleting ? "Deleting" : shared ? "Shared" : undefined;
-  // A cancelled trip has nothing coming.
-  const going = segments && now && !tripCancelled(trip, segments);
+  // A cancelled trip (by hand, or every booking) is struck through, as a
+  // cancelled booking is, and has nothing coming.
+  const cancelled = tripCancelled(trip, segments);
+  const going = segments && now && !cancelled;
   const { stay, checkIn } = going ? tripStatus(segments, now) : {};
   const next = going ? tripNextUp(segments, now, flightStatuses) : undefined;
   const showCheckIn = checkIn && !checkedIn?.has(checkIn.segment.id);
@@ -40,19 +42,20 @@ export function TripCard({
     >
       <Link href={`/trips/${trip.id}`} className="block p-4">
         <div className="flex items-baseline justify-between gap-4">
-          <h3 className="truncate text-lg font-medium">{title}</h3>
+          <h3 className={`truncate text-lg font-medium${cancelled ? " text-muted line-through" : ""}`}>
+            {title}
+            {cancelled && (
+              <span className="sr-only" data-testid="trip-cancelled">
+                {" "}
+                (cancelled)
+              </span>
+            )}
+          </h3>
           {badge && <span className="shrink-0 text-xs uppercase tracking-wide text-muted">{badge}</span>}
         </div>
-        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{formatDateRange(displayBounds(trip).start, displayBounds(trip).end)}</p>
-        {trip.cancelledAt ? (
-          <p className="mt-2 text-sm text-danger" data-testid="trip-cancelled">
-            Trip cancelled
-          </p>
-        ) : segments && allCancelled(segments) && (
-          <p className="mt-2 text-sm text-danger" data-testid="trip-cancelled">
-            Every booking cancelled
-          </p>
-        )}
+        <p className={`mt-1 text-sm text-zinc-600 dark:text-zinc-400${cancelled ? " line-through" : ""}`}>
+          {formatDateRange(displayBounds(trip).start, displayBounds(trip).end)}
+        </p>
         {stay && (
           <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="trip-stay">
             Staying at {stay.title}

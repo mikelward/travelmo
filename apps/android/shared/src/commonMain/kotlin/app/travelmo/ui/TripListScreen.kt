@@ -1,5 +1,9 @@
 package app.travelmo.ui
 
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextDecoration
 import org.jetbrains.compose.resources.StringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -43,7 +47,7 @@ import app.travelmo.core.Segment
 import app.travelmo.core.Trip
 import app.travelmo.core.TripGroups
 import app.travelmo.core.WarningWhen
-import app.travelmo.core.allCancelled
+import app.travelmo.core.tripCancelled
 import app.travelmo.core.checkInLine
 import app.travelmo.core.displayTitles
 import app.travelmo.core.formatDate
@@ -70,8 +74,7 @@ import app.travelmo.shared.section_now
 import app.travelmo.shared.section_past
 import app.travelmo.shared.section_upcoming
 import app.travelmo.shared.staying_at
-import app.travelmo.shared.trip_all_cancelled
-import app.travelmo.shared.trip_cancelled
+import app.travelmo.shared.cancelled
 import app.travelmo.shared.trips_empty
 import app.travelmo.shared.trips_empty_hint
 import app.travelmo.shared.trips_loading
@@ -231,8 +234,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.section(
 }
 
 /**
- * One trip: the title (as [displayTitles] shows it among the list), its dates, whether every booking was
- * cancelled when its [segments] are loaded, and with [showNext] (a trip under way) what comes next, with the live
+ * One trip: the title (as [displayTitles] shows it among the list) and its dates, both struck through once it was
+ * cancelled (by hand, or every booking once its [segments] are loaded), as a cancelled booking is; and with [showNext] (a trip under way) what comes next, with the live
  * status of its next flight from [flightStatuses].
  */
 @Composable
@@ -253,34 +256,45 @@ fun TripCard(
         shared -> stringResource(Res.string.badge_shared) to TravelmoTheme.colors.shared
         else -> null
     }
+    val cancelled = tripCancelled(trip, segments)
+    val cancelledLabel = stringResource(Res.string.cancelled)
+    val struck = if (cancelled) TextDecoration.LineThrough else null
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
+            // The strike-through, said: a screen reader doesn't read it.
+            .semantics(mergeDescendants = true) { if (cancelled) stateDescription = cancelledLabel }
             .padding(16.dp),
     ) {
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(
                 title,
                 style = MaterialTheme.typography.titleLarge,
+                color = if (cancelled) MaterialTheme.colorScheme.onSurfaceVariant else Color.Unspecified,
+                textDecoration = struck,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
             badge?.let { (text, color) -> Text(text.uppercase(), style = MaterialTheme.typography.labelMedium, color = color) }
         }
-        Text(formatDateRange(trip.shownStart, trip.shownEnd), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
-        if (trip.cancelledAt != null) {
-            // A cancelled trip has nothing coming.
-            Text(stringResource(Res.string.trip_cancelled), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
-        } else if (segments != null) StatusLines(segments, now, showNext, flightStatuses, checkedIn, onCheckedIn)
+        Text(
+            formatDateRange(trip.shownStart, trip.shownEnd),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textDecoration = struck,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        // A cancelled trip has nothing coming.
+        if (!cancelled && segments != null) StatusLines(segments, now, showNext, flightStatuses, checkedIn, onCheckedIn)
     }
 }
 
 /**
- * Whether every booking was cancelled, then with [showNext] the stay under way, what comes next ([tripNextUp], with the
+ * With [showNext], the stay under way, what comes next ([tripNextUp], with the
  * live status of its flight from [flightStatuses]), and the flight's check-in window until the user marks it [checkedIn].
  */
 @Composable
@@ -293,10 +307,6 @@ private fun StatusLines(
     onCheckedIn: ((segmentId: String) -> Unit)?,
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    if (allCancelled(segments)) {
-        Text(stringResource(Res.string.trip_all_cancelled), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
-        return
-    }
     if (!showNext) return
     val status = tripStatus(segments, now)
     status.stay?.let { stay ->
