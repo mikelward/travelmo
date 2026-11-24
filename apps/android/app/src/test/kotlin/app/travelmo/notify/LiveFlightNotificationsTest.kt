@@ -78,6 +78,18 @@ class LiveFlightNotificationsTest {
     }
 
     @Test
+    fun `in the air the chip counts down to landing, which the phone runs offline`() {
+        val flying = message("actualOut" to "2026-12-12T22:00:00Z", "estimatedIn" to "2026-12-13T07:10:00Z")
+        LiveFlightNotifications.show(context, flying, at("2026-12-13T02:35:00Z"))
+
+        val posted = shadowOf(manager).allNotifications.single()
+        NotificationCompat.getShortCriticalText(posted).shouldBeNull()
+        posted.`when` shouldBe at("2026-12-13T07:10:00Z")
+        posted.extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER) shouldBe true
+        posted.extras.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN) shouldBe true
+    }
+
+    @Test
     fun `a later message replaces it and a cancellation takes it down`() {
         LiveFlightNotifications.show(context, message(), at("2026-12-12T21:00:00Z"))
         LiveFlightNotifications.show(context, message("departureGate" to "30"), at("2026-12-12T21:01:00Z"))

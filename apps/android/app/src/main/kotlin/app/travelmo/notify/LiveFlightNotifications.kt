@@ -68,11 +68,19 @@ object LiveFlightNotifications {
                 .putExtra(EXTRA_ENDS_AT, live.endsAt),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+        // In the air, the chip is a countdown to landing that the phone runs itself, so it keeps
+        // going in flight mode; otherwise it is the chip's text.
+        val landsAt = live.landsAt
+        if (landsAt != null) {
+            builder.setWhen(landsAt).setShowWhen(true).setUsesChronometer(true).setChronometerCountDown(true)
+        } else {
+            builder.setShortCriticalText(live.chip)
+        }
+        val notification = builder
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(message.booking.title)
             .setContentText(live.text)
-            .setShortCriticalText(live.chip)
             .setRequestPromotedOngoing(true)
             .setStyle(NotificationCompat.ProgressStyle().addProgressSegment(NotificationCompat.ProgressStyle.Segment(100)).setProgress(live.progress))
             .setOngoing(true)

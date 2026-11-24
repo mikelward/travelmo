@@ -180,7 +180,12 @@ class FlightStatusTest {
     fun liveUpdateChipShowsWhicheverPlaceIsKnownAndAGateThatNamesItself() {
         liveFlight(status(departureTerminal = "3"), flight, "2026-12-12T21:00:00Z")!!.chip shouldBe "T3"
         liveFlight(status(departureGate = "B12", departureTerminal = "1"), flight, "2026-12-12T21:00:00Z")!!.chip shouldBe "T1 B12"
-        liveFlight(status(departureGate = "B12", departureTerminal = "Intl"), flight, "2026-12-12T21:00:00Z")!!.chip shouldBe "Intl B12"
+        // Never over seven characters: the gate alone when both do not fit, else cut short.
+        liveFlight(status(departureGate = "B12", departureTerminal = "Intl"), flight, "2026-12-12T21:00:00Z")!!.chip shouldBe "B12"
+        liveFlight(status(departureGate = "B12A", departureTerminal = "2"), flight, "2026-12-12T21:00:00Z")!!.chip shouldBe "T2 B12A"
+        liveFlight(status(departureGate = "Remote 101"), flight, "2026-12-12T21:00:00Z")!!.chip shouldBe "Remote"
+        liveFlight(status(departureGate = "Remote 101", departureTerminal = "3"), flight, "2026-12-12T21:00:00Z")!!.chip shouldBe "Remote"
+        liveFlight(status(departureTerminal = "International"), flight, "2026-12-12T21:00:00Z")!!.chip shouldBe "Interna"
     }
 
     @Test
@@ -191,16 +196,22 @@ class FlightStatusTest {
     }
 
     @Test
-    fun liveUpdateInTheAirShowsTheLandingTimeAndHowFarAlong() {
+    fun liveUpdateInTheAirCountsDownToLandingAndShowsHowFarAlong() {
         val live = liveFlight(
             status(departureGate = "28", arrivalGate = "D46", actualOut = "2026-12-12T22:00:00Z", estimatedIn = "2026-12-13T07:10:00Z"),
             flight,
             "2026-12-13T02:35:00Z",
         )!!
-        live.chip shouldBe "Lands 15:10"
+        // A countdown to the landing estimate, no words: they do not fit.
+        live.chip shouldBe null
+        live.landsAt shouldBe instantMillis("2026-12-13T07:10:00Z")
         live.text shouldBe "Lands 20 min early, at 15:10 · Arrives at gate D46"
         live.progress shouldBe 50
         live.endsAt shouldBe instantMillis("2026-12-13T07:55:00Z")
+        // Past the estimate and not yet down: nothing to count down to.
+        val late = liveFlight(status(actualOut = "2026-12-12T22:00:00Z", estimatedIn = "2026-12-13T07:10:00Z"), flight, "2026-12-13T07:12:00Z")!!
+        late.chip shouldBe "Landing"
+        late.landsAt shouldBe null
     }
 
     @Test
@@ -212,6 +223,7 @@ class FlightStatusTest {
         before.progress shouldBe 100
         val bags = liveFlight(landed.copy(baggageClaim = "16"), flight, "2026-12-13T07:30:00Z")!!
         bags.chip shouldBe "Bags 16"
+        liveFlight(landed.copy(baggageClaim = "16A"), flight, "2026-12-13T07:30:00Z")!!.chip shouldBe "16A"
         bags.text shouldBe "Bags on carousel 16"
     }
 
