@@ -1,7 +1,9 @@
 package app.travelmo.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -41,6 +43,19 @@ class ResidenceDaysTest {
         composeRule.onNodeWithText("Schengen short stays (90 days in 180)").performClick()
         // Entering and leaving both count as days in the area.
         composeRule.onNodeWithText("6 of 90 days · 84 days left").performScrollTo()
+    }
+
+    @Test
+    fun `counts UK settlement from the move to the UK and lists the days it can't place`() {
+        // The Edinburgh stay's booking names no place.
+        val store = FakeTripStore()
+        store.rides.value = RideSettings(homes = listOf(HomeCorrection("London", "GB", "2024-03-03")))
+        show(store)
+        composeRule.onNodeWithText("Since you moved to the UK on 3 Mar 2024").performScrollTo()
+        composeRule.onNodeWithText("Days we can't place").performScrollTo()
+        // Listed there, and as time away.
+        composeRule.onAllNodesWithText("31 Oct – 1 Nov 2026 · 2 days · Edinburgh").assertCountEquals(2)
+        composeRule.onNodeWithText("Give these trips' bookings a place, or set home on your Profile.").performScrollTo()
     }
 
     @Test

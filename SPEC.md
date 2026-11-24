@@ -340,7 +340,9 @@ Below the counts, "Residence and visa days" checks the days in and out of
 countries against the limits people ask about
 (`packages/core/src/residence.ts`, mirrored in `:core`): UK settlement
 (no more than 180 days outside the UK in any 12 months of the five years
-before applying), UK citizenship (450 days outside in the five years
+before applying, or since moving to the UK when that is later: the first
+day of the run of homes in the UK that reaches the date; a period shorter
+than 12 months is counted on its own days), UK citizenship (450 days outside in the five years
 before applying, 90 in the last 12 months), Schengen short stays (90 days
 in any 180, in the 29 members since Bulgaria and Romania joined in full in
 2025, Ireland and Cyprus not among them), US citizenship (913 days in the
@@ -370,16 +372,20 @@ out (`effectiveHomes`); a day of a trip before its first booking is too. A
 day nothing places (a booking naming no country, or home with no country)
 counts against the traveler: as away for a limit on absences or a minimum
 of days in, as in for a limit on days in, and the page says how many there
-were; with no country for home, it asks for one on the Profile.
+were, and lists them by run of days with the trips that have them, to
+fix; with no country for home, it asks for one on the Profile.
 
 The person picks a set of rules and a date ("Applying on" for an
 application, "On" otherwise; today by default; the Android app counts to
 today). Trips booked up to the date count, so a date ahead shows what
 planned trips would leave. Each rule shows the days used of the limit,
-what is left (or short, or to spare), the worst window and its dates (for
-a rolling limit, also the window ending on the date), whether it is within
-the limit, within a tenth of it, or over, and the absences or stays behind
-it with their countries and trips. A note says it is an estimate from the
+what is left (or short, or to spare), the worst window and its dates
+("Worst 12 months: …", and for a rolling limit the days in the window
+ending on the date: "Last 12 months: 75 days"), the qualifying period
+counted ("Since you moved to the UK on …", or its dates), whether it is
+within the limit, within a tenth of it, or over, and the absences or stays
+behind it with their countries and trips (every absence in a qualifying
+period, else those in the worst window). A note says it is an estimate from the
 bookings Travelmo knows about, not legal advice. It reads nothing new: no
 lookups, no server, no cost.
 

@@ -306,11 +306,15 @@
     <string name="residence_as_of_today">As of today</string>
     <string name="residence_no_home_country">Days with no trip count as at home, but home has no country yet. Add one on your Profile.</string>
     <string name="residence_estimate">An estimate from the bookings Travelmo knows about, with days between trips counted at home. It isn't legal advice.</string>
-    <string name="residence_worst_stretch">Worst stretch: %1$s</string>
-    <plurals name="residence_days_ending">
-        <item quantity="one">%1$d day in the one ending %2$s</item>
-        <item quantity="other">%1$d days in the one ending %2$s</item>
+    <string name="residence_worst">Worst %1$s: %2$s</string>
+    <plurals name="residence_last">
+        <item quantity="one">Last %2$s: %1$d day</item>
+        <item quantity="other">Last %2$s: %1$d days</item>
     </plurals>
+    <string name="residence_since_moved">Since you moved to %1$s on %2$s</string>
+    <string name="residence_counted_over">Counted over %1$s</string>
+    <string name="residence_cant_place">Days we can't place</string>
+    <string name="residence_cant_place_hint">Give these trips' bookings a place, or set home on your Profile.</string>
     <plurals name="residence_unknown_away">
         <item quantity="one">Includes %1$d day we can't place in a country, counted as away to be safe.</item>
         <item quantity="other">Includes %1$d days we can't place in a country, counted as away to be safe.</item>
