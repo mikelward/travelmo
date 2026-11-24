@@ -108,7 +108,9 @@ that mikelward/androidlog publishes into its own `maven` branch (declared in
 `settings.gradle.kts`, scoped to that group); it stays on the phone, and
 Settings shares a report of it through the share sheet. The text size is
 the fleet's shared `com.mikelward.androidzoom`, published and declared the
-same way.
+same way. In a Claude Code cloud session, `.claude/hooks/session-start.sh`
+installs the Android SDK and accepts its licenses, logging what it did to
+`~/.local/state/travelmo/session-start.log`.
 
 ```sh
 cd apps/android
