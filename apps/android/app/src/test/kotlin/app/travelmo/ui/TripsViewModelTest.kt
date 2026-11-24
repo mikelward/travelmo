@@ -152,9 +152,9 @@ class TripsViewModelTest {
         viewModel.outcomes.value shouldBe mapOf("rename" to Outcome.Done)
         store.renamed shouldBe listOf("liverpool" to "Merseyside")
         viewModel.mergeTrips("merge", "dublin", "liverpool")
-        viewModel.deleteTrip("delete", "paris")
+        viewModel.deleteTrip("delete", "amsterdam")
         store.merged shouldBe listOf("dublin" to "liverpool")
-        store.deletedTrips shouldBe listOf("paris")
+        store.deletedTrips shouldBe listOf("amsterdam")
     }
 
     @Test

@@ -13,6 +13,9 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.travelmo.core.HomeCorrection
+import app.travelmo.core.Segment
+import app.travelmo.core.SegmentType
+import app.travelmo.core.Trip
 import app.travelmo.data.RideSettings
 import app.travelmo.ui.theme.TravelmoTheme
 import kotlin.time.Instant
@@ -35,8 +38,8 @@ class ResidenceDaysTest {
 
     @Test
     fun `counts time away for UK settlement and days in for Schengen, from home and the trips`() {
-        // Without the Edinburgh stay, whose booking names no place.
-        val store = FakeTripStore(trips = fixtureTrips.filter { it.id != "edinburgh" })
+        // Without the Paris trip, under way.
+        val store = FakeTripStore(trips = fixtureTrips.filter { it.id != "paris" })
         store.rides.value = RideSettings(homes = listOf(HomeCorrection("London", "GB", "2020-01-01")))
         show(store)
         composeRule.onNodeWithText("Residence and visa days").performScrollTo()
@@ -51,20 +54,23 @@ class ResidenceDaysTest {
 
     @Test
     fun `counts UK settlement from the move to the UK and lists the days it can't place`() {
-        // The Edinburgh stay's booking names no place.
-        val store = FakeTripStore()
+        // A weekend whose stay names no place.
+        val store = FakeTripStore(
+            trips = fixtureTrips + Trip("weekend", "Weekend away", "2026-10-09", "2026-10-11", OWNER),
+            segments = fixtureSegments + ("weekend" to listOf(Segment("w-stay", "weekend", SegmentType.LODGING, "Example Inn", "2026-10-09T15:00:00+00:00", "2026-10-11T11:00:00+00:00"))),
+        )
         store.rides.value = RideSettings(homes = listOf(HomeCorrection("London", "GB", "2024-03-03")))
         show(store)
         composeRule.onNodeWithText("Since you moved to the UK on 3 Mar 2024").performScrollTo()
         composeRule.onNodeWithText("Days we can't place").performScrollTo()
         // Listed there, and as time away.
-        composeRule.onAllNodesWithText("31 Oct – 1 Nov 2026 · 2 days · Edinburgh").assertCountEquals(2)
+        composeRule.onAllNodesWithText("9–11 Oct 2026 · 3 days · Weekend away").assertCountEquals(2)
         composeRule.onNodeWithText("Give these trips' bookings a place, or set home on your Profile.").performScrollTo()
     }
 
     @Test
     fun `counts to a day picked instead of today`() {
-        val store = FakeTripStore(trips = fixtureTrips.filter { it.id != "edinburgh" })
+        val store = FakeTripStore(trips = fixtureTrips.filter { it.id != "paris" })
         store.rides.value = RideSettings(homes = listOf(HomeCorrection("London", "GB", "2020-01-01")))
         show(store)
         composeRule.onNodeWithText("4 of 180 days · 176 days left").performScrollTo()
