@@ -30,7 +30,8 @@ function Section({
   uid: string;
   segmentsByTrip: Record<string, Segment[]>;
   now: string;
-  // Whether the cards say what comes next: only a trip under way does.
+  // Whether the cards say what comes next: only a trip under way does. A
+  // card whose bookings are loaded says they were all cancelled either way.
   showNext: boolean;
 }) {
   if (trips.length === 0) return null;
@@ -44,7 +45,8 @@ function Section({
             trip={trip}
             title={titles.get(trip.id) ?? trip.title}
             shared={trip.ownerUid !== uid}
-            {...(showNext && segmentsByTrip[trip.id] ? { segments: segmentsByTrip[trip.id], now } : {})}
+            {...(segmentsByTrip[trip.id] ? { segments: segmentsByTrip[trip.id] } : {})}
+            {...(showNext ? { now } : {})}
           />
         ))}
       </div>
