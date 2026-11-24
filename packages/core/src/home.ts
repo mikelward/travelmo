@@ -664,6 +664,70 @@ export function isConnection(
   return gap > 0 && gap <= 12 * 3_600_000 && sameArea(landing.destination, next.origin);
 }
 
+// How far a rebooking may move a journey, in days.
+// How far apart a rebooking's flights and the ones it replaced may leave.
+export const rebookedWithinDays = 14;
+
+type Flight = Pick<ExtractedSegment, "type" | "start" | "end" | "origin" | "destination" | "confirmation">;
+
+const bookingReference = (flight: Flight) => flight.confirmation?.toUpperCase().replace(/[^A-Z0-9]/g, "") ?? "";
+
+// Every journey the flights make: each whole run of connections
+// (isConnection) under one reference, from a flight nothing connects onto
+// to one that connects onto nothing. A flight on several runs is on each:
+// an itinerary and a rebooking that kept its first leg, or its last, are
+// two journeys sharing it, however the legs of other itineraries
+// interleave. A connection booked separately is a journey of its own.
+const maxJourneys = 64;
+function journeys<S extends Flight>(flights: readonly S[]): S[][] {
+  const sorted = [...flights].sort((a, b) => compareInstants(a.start, b.start));
+  const joins = (landing: S, next: S) => bookingReference(landing) === bookingReference(next) && isConnection({ ...landing, title: "" }, { ...next, title: "" });
+  const onward = sorted.map((flight, i) => sorted.filter((next, j) => j > i && joins(flight, next)));
+  const reached = new Set(onward.flat());
+  const out: S[][] = [];
+  const walk = (path: S[]) => {
+    if (out.length >= maxJourneys) return;
+    const next = onward[sorted.indexOf(path[path.length - 1]!)]!;
+    if (next.length === 0) out.push(path);
+    for (const flight of next) walk([...path, flight]);
+  };
+  for (const flight of sorted) if (!reached.has(flight)) walk([flight]);
+  return out;
+}
+
+// The flights of an older email (`older`) that a newer one (`newer`)
+// rebooked, each with every newer journey that replaced it (the caller
+// dates the cancellation by the latest email confirming one whole): a
+// journey under the same reference, between the same cities (or their
+// other airports), leaving within two weeks of it. Coming home two days
+// early on other flights leaves the original flight home behind; this
+// finds it, so it can be filed cancelled. Whole journeys are compared, legs
+// the newer email kept included, so a rebooking that keeps the first leg
+// and changes the rest still finds the onward flight it dropped; the
+// caller leaves out the legs the newer email confirmed again (sameBooking).
+export function rebookedFlights<S extends Flight, N extends Flight>(older: readonly S[], newer: readonly N[]): { flight: S; by: N[][] }[] {
+  const fresh = journeys(newer.filter((f) => f.type === "flight" && bookingReference(f)));
+  const found = new Map<S, N[][]>();
+  for (const journey of journeys(older.filter((f) => f.type === "flight" && bookingReference(f)))) {
+    const first = journey[0]!;
+    const last = journey[journey.length - 1]!;
+    const by = fresh.filter((other) => {
+      const from = other[0]!;
+      const to = other[other.length - 1]!;
+      return (
+        journey.every((f) => bookingReference(f) === bookingReference(from)) &&
+        other.every((f) => bookingReference(f) === bookingReference(from)) &&
+        sameArea(first.origin, from.origin) &&
+        sameArea(last.destination, to.destination) &&
+        Math.abs(Date.parse(from.start) - Date.parse(first.start)) <= rebookedWithinDays * 86_400_000
+      );
+    });
+    // A leg two journeys share once, with what replaced either.
+    for (const flight of by.length > 0 ? journey : []) found.set(flight, [...new Set([...(found.get(flight) ?? []), ...by])]);
+  }
+  return older.filter((f) => found.has(f)).map((flight) => ({ flight, by: found.get(flight)! }));
+}
+
 // Whether a journey that lands away from home opens the trip that follows:
 // that trip's first booking is a journey leaving the same city, or another
 // of its airports or stations, after it lands. A flight from Zagreb to New

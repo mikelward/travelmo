@@ -8,6 +8,7 @@ import {
   normalizeReference,
   notBookings,
   overlappingTrips,
+  rebookedWithinDays,
   sameBooking,
   sameEvent,
   segmentDateRange,
@@ -31,6 +32,7 @@ import {
   emptyCounts,
   originalSentAt,
   placeSegments,
+  rebookedByEmail,
   settlingTripDates,
   sourceTripPrefix,
   tripTitle,
@@ -223,7 +225,9 @@ export async function refreshEmail(
     // trips holding this email's bookings, and those around its dates for
     // the duplicates.
     const trips = (await tx.listTrips()).filter((trip) => trip.ownerUid === uid && !trip.deleting);
-    const around = { start: shiftDate(range.start, -untimedMatchDays), end: shiftDate(range.end, untimedMatchDays) };
+    // Far enough for the flights a rebooking replaced (rebookedByEmail).
+    const reach = placed.some((s) => s.type === "flight" && s.confirmation) ? Math.max(untimedMatchDays, rebookedWithinDays) : untimedMatchDays;
+    const around = { start: shiftDate(range.start, -reach), end: shiftDate(range.end, reach) };
     const near = new Set(overlappingTrips(trips, around).map((t) => t.id));
     const read = trips.filter((trip) => ownTrips.has(trip.id) || near.has(trip.id));
     const segmentsByTrip = new Map(await Promise.all(read.map(async (trip) => [trip.id, await tx.listSegments(trip.id)] as const)));
@@ -397,6 +401,23 @@ export async function refreshEmail(
         carrying.push(fresh);
       }
       counts.added = added.length;
+    }
+
+    // A rebooking: the flights of older emails it flies another way are
+    // filed cancelled by it, as an import files them (rebookedByEmail), so
+    // bookings read before that existed are corrected too.
+    if (sent) {
+      // Every booking as this refresh leaves it, the ones it carries too, so
+      // a leg it kept still joins the original's journey; those are never
+      // cancelled.
+      const keys = new Set(carrying.map(segmentKey));
+      const current = [...all.filter((o) => !deletes.has(segmentKey(o))).map((o) => writes.get(segmentKey(o)) ?? o), ...added];
+      const rebooked = rebookedByEmail(current, placed, { id: record.messageId, sentAt: sent, subject: message.subject }, timestamp).filter((s) => !keys.has(segmentKey(s)));
+      for (const written of rebooked) {
+        writes.set(segmentKey(written), written);
+        counts.updated += 1;
+        deps.log("booking_rebooked", { uid, tripId: written.tripId, segmentId: written.id, messageId: record.messageId });
+      }
     }
 
     const first = carrying[0];

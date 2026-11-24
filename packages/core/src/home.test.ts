@@ -26,6 +26,7 @@ import {
   airportCodes,
   parseAirportCodes,
   homeTownKey,
+  rebookedFlights,
 } from "./home";
 import type { ExtractedSegment, Place, Trip } from "./schema";
 
@@ -968,5 +969,56 @@ describe("chosen home airports", () => {
     expect(parseAirportCodes(" sfo, SJC  oak sfo")).toEqual({ codes: ["SFO", "SJC", "OAK"] });
     expect(parseAirportCodes("")).toEqual({ codes: [] });
     expect(parseAirportCodes("San Francisco")).toEqual({ error: '"Francisco" isn\'t an airport or station code.' });
+  });
+});
+
+describe("rebookedFlights", () => {
+  const bos: Place = { name: "Boston Logan", code: "BOS", city: "Boston", country: "US" };
+  const dtw: Place = { name: "Detroit Metro", code: "DTW", city: "Detroit", country: "US" };
+  const sfo: Place = { name: "San Francisco International", code: "SFO", city: "San Francisco", country: "US" };
+  const sea: Place = { name: "Seattle-Tacoma", code: "SEA", city: "Seattle", country: "US" };
+  const flight = (title: string, start: string, end: string, origin: Place, destination: Place, confirmation = "F8D7IY"): ExtractedSegment => ({ type: "flight", title, start, end, origin, destination, confirmation });
+  const original = flight("Delta 1123 BOS to SFO", "2021-12-03T08:25:00-05:00", "2021-12-03T12:23:00-08:00", bos, sfo);
+  const toDetroit = flight("Delta 919 BOS to DTW", "2021-12-01T13:00:00-05:00", "2021-12-01T15:19:00-05:00", bos, dtw);
+  const toSfo = flight("Delta 2980 DTW to SFO", "2021-12-01T16:45:00-05:00", "2021-12-01T18:56:00-08:00", dtw, sfo);
+
+  it("finds the flight a rebooking replaced with other flights between the same cities", () => {
+    expect(rebookedFlights([original], [toDetroit, toSfo])).toEqual([{ flight: original, by: [[toDetroit, toSfo]] }]);
+  });
+
+  it("gives every journey that replaced it, so the latest rebooking dates the cancellation", () => {
+    const later = flight("Delta 5 BOS to SFO", "2021-12-02T08:00:00-05:00", "2021-12-02T11:30:00-08:00", bos, sfo);
+    expect(rebookedFlights([original], [toDetroit, toSfo, later])).toEqual([{ flight: original, by: [[toDetroit, toSfo], [later]] }]);
+  });
+
+  it("leaves a flight under another reference, to another city, or weeks away", () => {
+    expect(rebookedFlights([original], [{ ...toDetroit, confirmation: "OTHER1" }, { ...toSfo, confirmation: "OTHER1" }])).toEqual([]);
+    expect(rebookedFlights([original], [toDetroit])).toEqual([]);
+    expect(rebookedFlights([{ ...original, destination: sea }], [toDetroit, toSfo])).toEqual([]);
+    expect(rebookedFlights([original], [{ ...toDetroit, start: "2022-01-20T13:00:00-05:00" }, { ...toSfo, start: "2022-01-20T16:45:00-05:00" }])).toEqual([]);
+  });
+
+  it("takes the whole of a connecting journey it replaced", () => {
+    const viaSea = [flight("BOS to SEA", "2021-12-03T08:00:00-05:00", "2021-12-03T11:00:00-08:00", bos, sea), flight("SEA to SFO", "2021-12-03T13:00:00-08:00", "2021-12-03T15:00:00-08:00", sea, sfo)];
+    expect(rebookedFlights(viaSea, [toDetroit, toSfo]).map((r) => r.flight)).toEqual(viaSea);
+    // One that keeps its first leg: whole journeys compared, so the onward flight it dropped is found.
+    const keptFirst = [toDetroit, flight("DTW to SEA", "2021-12-01T17:00:00-05:00", "2021-12-01T19:00:00-08:00", dtw, sea), flight("SEA to SFO", "2021-12-01T21:00:00-08:00", "2021-12-01T23:00:00-08:00", sea, sfo)];
+    expect(rebookedFlights([toDetroit, toSfo], keptFirst).map((r) => r.flight)).toEqual([toDetroit, toSfo]);
+    // Two itineraries whose legs interleave are still each one journey.
+    const a = [flight("A1 BOS to DTW", "2021-12-01T08:00:00-05:00", "2021-12-01T10:00:00-05:00", bos, dtw), flight("A2 DTW to SFO", "2021-12-01T12:00:00-05:00", "2021-12-01T14:00:00-08:00", dtw, sfo)];
+    const b = [flight("B1 BOS to SEA", "2021-12-01T09:00:00-05:00", "2021-12-01T12:00:00-08:00", bos, sea), flight("B2 SEA to SFO", "2021-12-01T14:00:00-08:00", "2021-12-01T16:00:00-08:00", sea, sfo)];
+    const c = flight("C BOS to SFO", "2021-12-02T08:00:00-05:00", "2021-12-02T11:30:00-08:00", bos, sfo);
+    expect(rebookedFlights([...a, ...b], [c]).map((r) => r.flight.title)).toEqual(["A1 BOS to DTW", "A2 DTW to SFO", "B1 BOS to SEA", "B2 SEA to SFO"]);
+    // An itinerary and the rebooking that kept its first leg are each a
+    // journey, so a third rebooking replaces both.
+    const keptOnward = keptFirst.slice(1);
+    expect(rebookedFlights([toDetroit, toSfo, ...keptOnward], [c]).map((r) => r.flight)).toEqual([toDetroit, toSfo, ...keptOnward]);
+    // An itinerary and a rebooking that kept its last leg are each a journey too.
+    const earlier = flight("BOS to DTW early", "2021-12-01T06:00:00-05:00", "2021-12-01T08:00:00-05:00", bos, dtw);
+    expect(rebookedFlights([...a.slice(0, 1), earlier, a[1]!], [c]).map((r) => r.flight.title)).toEqual(["A1 BOS to DTW", "BOS to DTW early", "A2 DTW to SFO"]);
+    // A connection booked under another reference is a journey of its own.
+    const direct = flight("BOS to SFO", "2021-12-01T08:00:00-05:00", "2021-12-01T11:30:00-08:00", bos, sfo);
+    const onward = flight("SFO to SEA", "2021-12-01T13:00:00-08:00", "2021-12-01T15:00:00-08:00", sfo, sea, "OTHER2");
+    expect(rebookedFlights([original], [direct, onward]).map((r) => r.flight)).toEqual([original]);
   });
 });

@@ -349,4 +349,70 @@ class HomeTest {
         withChosenAirports(listOf(HomePeriod("München", "DE")), listOf(ChosenHomeAirports("Munich", "DE", listOf("MUC")))).single().let { airportCodes(it) } shouldBe listOf("MUC")
         parseAirportCodes("Manchester Airport") shouldBe ParsedAirports.Problem("\"Manchester\" isn't an airport or station code.")
     }
+
+    private val bos = Place("Boston Logan", code = "BOS", city = "Boston", country = "US")
+    private val dtw = Place("Detroit Metro", code = "DTW", city = "Detroit", country = "US")
+    private val sfo = Place("San Francisco International", code = "SFO", city = "San Francisco", country = "US")
+    private val sea = Place("Seattle-Tacoma", code = "SEA", city = "Seattle", country = "US")
+    private fun leg(title: String, start: String, end: String, origin: Place, destination: Place, confirmation: String = "F8D7IY") =
+        Segment(title, "t", SegmentType.FLIGHT, title, start, end, confirmation = confirmation, origin = origin, destination = destination)
+    private val original = leg("Delta 1123 BOS to SFO", "2021-12-03T08:25:00-05:00", "2021-12-03T12:23:00-08:00", bos, sfo)
+    private val toDetroit = leg("Delta 919 BOS to DTW", "2021-12-01T13:00:00-05:00", "2021-12-01T15:19:00-05:00", bos, dtw)
+    private val toSfo = leg("Delta 2980 DTW to SFO", "2021-12-01T16:45:00-05:00", "2021-12-01T18:56:00-08:00", dtw, sfo)
+
+    @Test
+    fun `finds the flight a rebooking replaced with other flights between the same cities`() {
+        rebookedFlights(listOf(original), listOf(toDetroit, toSfo)) shouldBe listOf(RebookedFlight(original, listOf(listOf(toDetroit, toSfo))))
+    }
+
+    @Test
+    fun `gives every journey that replaced it so the latest rebooking dates the cancellation`() {
+        val later = leg("Delta 5 BOS to SFO", "2021-12-02T08:00:00-05:00", "2021-12-02T11:30:00-08:00", bos, sfo)
+        rebookedFlights(listOf(original), listOf(toDetroit, toSfo, later)) shouldBe listOf(RebookedFlight(original, listOf(listOf(toDetroit, toSfo), listOf(later))))
+    }
+
+    @Test
+    fun `leaves a flight under another reference or to another city or weeks away`() {
+        rebookedFlights(listOf(original), listOf(toDetroit.copy(confirmation = "OTHER1"), toSfo.copy(confirmation = "OTHER1"))) shouldBe emptyList()
+        rebookedFlights(listOf(original), listOf(toDetroit)) shouldBe emptyList()
+        rebookedFlights(listOf(original.copy(destination = sea)), listOf(toDetroit, toSfo)) shouldBe emptyList()
+        rebookedFlights(listOf(original), listOf(toDetroit.copy(start = "2022-01-20T13:00:00-05:00"), toSfo.copy(start = "2022-01-20T16:45:00-05:00"))) shouldBe emptyList()
+    }
+
+    @Test
+    fun `takes the whole of a connecting journey it replaced`() {
+        val viaSea = listOf(
+            leg("BOS to SEA", "2021-12-03T08:00:00-05:00", "2021-12-03T11:00:00-08:00", bos, sea),
+            leg("SEA to SFO", "2021-12-03T13:00:00-08:00", "2021-12-03T15:00:00-08:00", sea, sfo),
+        )
+        rebookedFlights(viaSea, listOf(toDetroit, toSfo)).map { it.flight } shouldBe viaSea
+        // One that keeps its first leg: whole journeys compared, so the onward flight it dropped is found.
+        val keptFirst = listOf(
+            toDetroit,
+            leg("DTW to SEA", "2021-12-01T17:00:00-05:00", "2021-12-01T19:00:00-08:00", dtw, sea),
+            leg("SEA to SFO", "2021-12-01T21:00:00-08:00", "2021-12-01T23:00:00-08:00", sea, sfo),
+        )
+        rebookedFlights(listOf(toDetroit, toSfo), keptFirst).map { it.flight } shouldBe listOf(toDetroit, toSfo)
+        // Two itineraries whose legs interleave are still each one journey.
+        val a = listOf(
+            leg("A1 BOS to DTW", "2021-12-01T08:00:00-05:00", "2021-12-01T10:00:00-05:00", bos, dtw),
+            leg("A2 DTW to SFO", "2021-12-01T12:00:00-05:00", "2021-12-01T14:00:00-08:00", dtw, sfo),
+        )
+        val b = listOf(
+            leg("B1 BOS to SEA", "2021-12-01T09:00:00-05:00", "2021-12-01T12:00:00-08:00", bos, sea),
+            leg("B2 SEA to SFO", "2021-12-01T14:00:00-08:00", "2021-12-01T16:00:00-08:00", sea, sfo),
+        )
+        val c = leg("C BOS to SFO", "2021-12-02T08:00:00-05:00", "2021-12-02T11:30:00-08:00", bos, sfo)
+        rebookedFlights(a + b, listOf(c)).map { it.flight.title } shouldBe listOf("A1 BOS to DTW", "A2 DTW to SFO", "B1 BOS to SEA", "B2 SEA to SFO")
+        // An itinerary and the rebooking that kept its first leg are each a journey, so a third rebooking replaces both.
+        val keptOnward = keptFirst.drop(1)
+        rebookedFlights(listOf(toDetroit, toSfo) + keptOnward, listOf(c)).map { it.flight } shouldBe listOf(toDetroit, toSfo) + keptOnward
+        // An itinerary and a rebooking that kept its last leg are each a journey too.
+        val earlier = leg("BOS to DTW early", "2021-12-01T06:00:00-05:00", "2021-12-01T08:00:00-05:00", bos, dtw)
+        rebookedFlights(listOf(a[0], earlier, a[1]), listOf(c)).map { it.flight.title } shouldBe listOf("A1 BOS to DTW", "BOS to DTW early", "A2 DTW to SFO")
+        // A connection booked under another reference is a journey of its own.
+        val direct = leg("BOS to SFO", "2021-12-01T08:00:00-05:00", "2021-12-01T11:30:00-08:00", bos, sfo)
+        val onward = leg("SFO to SEA", "2021-12-01T13:00:00-08:00", "2021-12-01T15:00:00-08:00", sfo, sea, "OTHER2")
+        rebookedFlights(listOf(original), listOf(direct, onward)).map { it.flight } shouldBe listOf(original)
+    }
 }
