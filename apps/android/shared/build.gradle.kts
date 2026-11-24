@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.android.kotlin.multiplatform.library)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.compose.multiplatform)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 // What the Android app shares with the iOS app beyond `:core`: the text of
@@ -37,6 +38,9 @@ kotlin {
             api(libs.compose.mp.material3)
             api(libs.compose.mp.material.icons.core)
             api(libs.lifecycle.runtime.compose.mp)
+            api(libs.androidx.navigation3.runtime)
+            api(libs.navigation3.ui.mp)
+            api(libs.kotlinx.serialization.core)
         }
         androidMain.dependencies {
             // The fleet's shared text size: Android's screens zoom with a pinch (SPEC "Text size").

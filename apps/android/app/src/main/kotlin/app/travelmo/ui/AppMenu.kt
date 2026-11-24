@@ -81,13 +81,6 @@ val LocalReportBug = staticCompositionLocalOf<suspend (Context) -> ShareOutcome>
  */
 val LocalUpdateAvailable = compositionLocalOf { false }
 
-/**
- * Opens the Access page (SPEC "Access"), for an admin only: the signed-in
- * app provides it while the account is one, and the menu then starts with
- * Access, as the web's header shows it to admins alone. Null for everyone
- * else, and on the Access page itself.
- */
-val LocalOpenAccess = compositionLocalOf<(() -> Unit)?> { null }
 
 /**
  * The overflow every screen's top bar ends with, as in the sibling apps
