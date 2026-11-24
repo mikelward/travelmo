@@ -19,6 +19,8 @@ import app.travelmo.log.DebugLogging
 import app.travelmo.ui.theme.TravelmoTheme
 import com.mikelward.androidlog.android.ShareOutcome
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import app.travelmo.core.TripWithSegments
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -38,11 +40,12 @@ class AppMenuTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     private var reports = 0
+    private var shared: String? = null
 
     private fun show(outcome: ShareOutcome = ShareOutcome.SHARED, updateAvailable: Boolean = false, open: Boolean = true) {
         composeRule.setContent {
             TravelmoTheme {
-                CompositionLocalProvider(LocalReportBug provides { reports++; outcome }, LocalUpdateAvailable provides updateAvailable) { AppMenu() }
+                CompositionLocalProvider(LocalReportBug provides { _, _ -> reports++; outcome }, LocalUpdateAvailable provides updateAvailable) { AppMenu() }
             }
         }
         if (open) {
@@ -205,7 +208,7 @@ class AppMenuTest {
         }
         composeRule.setContent {
             TravelmoTheme {
-                CompositionLocalProvider(LocalReportBug provides { reports++; ShareOutcome.SHARED }, LocalBugReportSender provides sender, LocalReportScreen provides screen) { AppMenu() }
+                CompositionLocalProvider(LocalReportBug provides { _, preamble -> reports++; shared = preamble; ShareOutcome.SHARED }, LocalBugReportSender provides sender, LocalReportScreen provides screen) { AppMenu() }
             }
         }
         composeRule.onNodeWithContentDescription("More options").performClick()
@@ -261,6 +264,22 @@ class AppMenuTest {
         reports shouldBe 1
         sentTexts shouldBe emptyList()
         composeRule.onNodeWithText(disclosure).assertDoesNotExist()
+    }
+
+    @Test
+    fun `share instead leads with what was written and the trip's bookings, as a sent report does`() {
+        DebugLogging.skipReportConsent(composeRule.activity)
+        val liverpool = fixtureTrips.first { it.id == "liverpool" }
+        showSending(ReportScreen("Trip") { TripWithSegments(liverpool, fixtureSegments.getValue("liverpool")) })
+        composeRule.onNodeWithText("What went wrong?").performTextInput("This trip has the wrong train")
+        tap("Share instead")
+        composeRule.waitUntil { reports == 1 }
+        val preamble = shared!!
+        preamble.lines().first() shouldBe "This trip has the wrong train"
+        preamble shouldContain "--- Trip: Liverpool (liverpool), ${fixtureSegments.getValue("liverpool").size} bookings ---"
+        preamble shouldContain "1. train: Avanti to Liverpool"
+        preamble shouldContain "   Confirmation: ABC123"
+        sentTexts shouldBe emptyList()
     }
 
     @Test

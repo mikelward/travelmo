@@ -92,7 +92,7 @@ class MainActivity : ComponentActivity() {
                 val signedIn = user
                 val isSignedIn = signedIn != null
                 // Report a bug, from the ⋮ menu, shows the screen it was opened from.
-                val reportBug: suspend (Context) -> ShareOutcome = remember(isSignedIn) { { DebugLogging.share(it, signedIn = isSignedIn, screenshot = true) } }
+                val reportBug: suspend (Context, String?) -> ShareOutcome = remember(isSignedIn) { { context, preamble -> DebugLogging.share(context, signedIn = isSignedIn, screenshot = true, preamble = preamble) } }
                 val crashReport = remember(isSignedIn) {
                     CrashReport(
                         crashed = DebugLogging.unacknowledgedCrash,

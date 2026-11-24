@@ -27,3 +27,46 @@ fun bugReportFailure(status: Int?): String = when (status) {
     503 -> "Sending reports isn't set up yet."
     else -> "That didn't work (error $status). Try again."
 }
+
+/** A place in full, as bugReports.ts's reportedPlaceText: name and address, city and country, code, and its point. */
+fun reportedPlaceText(place: Place?): String? {
+    if (place == null) return null
+    val parts = listOf(
+        listOfNotNull(place.name, place.address).joinToString(", "),
+        listOfNotNull(place.city, place.country).joinToString(", "),
+        place.code.orEmpty(),
+        if (place.lat != null && place.lon != null) "${place.lat},${place.lon}" else "",
+    ).filter { it.isNotEmpty() }
+    return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+}
+
+/** The trip's bookings as lines a person reads, as bugReports.ts's reportedTripText. */
+fun reportedTripText(trip: Trip, bookings: List<Segment>): String = buildList {
+    add("--- Trip: ${trip.title} (${trip.id}), ${bookings.size} booking${if (bookings.size == 1) "" else "s"} ---")
+    bookings.forEachIndexed { i, b ->
+        add("")
+        add("${i + 1}. ${b.type.wire}: ${b.title}${if (b.cancelledAt != null) " (cancelled)" else ""}")
+        val start = b.start
+        val whenText = listOfNotNull(start, b.end).joinToString(" to ")
+        if (whenText.isNotEmpty()) add("   When: $whenText")
+        reportedPlaceText(b.origin)?.let { add("   Origin: $it") }
+        reportedPlaceText(b.destination)?.let { add("   Destination: $it") }
+        b.provider?.let { add("   Provider: $it") }
+        b.confirmation?.let { add("   Confirmation: $it") }
+        b.notes?.let { add("   Notes: ${it.replace("\n", " ")}") }
+        val sources = b.sources.map { "${it.label ?: "(no label)"} (${it.kind.wire})" }
+        if (sources.isNotEmpty()) add("   Sources: ${sources.joinToString("; ")}")
+    }
+}.joinToString("\n")
+
+/**
+ * What a shared report (Share instead) leads with, as a sent one does: what
+ * the user wrote, then on a trip's screen its bookings; null when neither.
+ */
+fun sharedReportPreamble(text: String, trip: Trip?, bookings: List<Segment>?): String? {
+    val parts = listOfNotNull(
+        text.trim().takeIf { it.isNotEmpty() },
+        if (trip != null && bookings != null) reportedTripText(trip, bookings) else null,
+    )
+    return parts.takeIf { it.isNotEmpty() }?.joinToString("\n\n")
+}

@@ -4,6 +4,8 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import app.travelmo.core.sharedReportPreamble
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -73,7 +75,10 @@ import org.jetbrains.compose.resources.stringResource
  * someone is signed in, so a screen several layers down offers the same
  * report without each layer passing it on; a test hands in its own.
  */
-val LocalReportBug = staticCompositionLocalOf<suspend (Context) -> ShareOutcome> { { DebugLogging.share(it, signedIn = false, screenshot = true) } }
+// How long Share instead waits for the trip's bookings before sharing without them.
+private const val TRIP_WAIT_MS = 5_000L
+
+val LocalReportBug = staticCompositionLocalOf<suspend (Context, String?) -> ShareOutcome> { { context, preamble -> DebugLogging.share(context, signedIn = false, screenshot = true, preamble = preamble) } }
 
 /**
  * Whether Google Play has a newer version (PlayUpdateChecker). The activity
@@ -108,10 +113,18 @@ fun AndroidAppMenu(modifier: Modifier = Modifier, items: @Composable (close: () 
     val sender = LocalBugReportSender.current
     val screen = LocalReportScreen.current
     var showSend by rememberSaveable { mutableStateOf(false) }
+    // What the user wrote in the send dialog, kept while the consent dialog asks first.
+    var shareText by rememberSaveable { mutableStateOf("") }
+    // Shared as a sent report is: what the user wrote, then on a trip's
+    // screen its bookings, ahead of the log (SPEC "Bug reports").
     val shareReport = {
         sharing = true
         scope.launch {
-            val outcome = reportBug(context)
+            val trip = screen.trip?.let { load ->
+                withTimeoutOrNull(TRIP_WAIT_MS) { load() }.also { if (it == null) TravelmoLog.warning("The trip's bookings didn't load; sharing the report without them") }
+            }
+            val outcome = reportBug(context, sharedReportPreamble(shareText, trip?.trip, trip?.segments))
+            shareText = ""
             sharing = false
             val note = when (outcome) {
                 ShareOutcome.SHARED -> null
@@ -200,6 +213,7 @@ fun AndroidAppMenu(modifier: Modifier = Modifier, items: @Composable (close: () 
             onSend = { scope.launch { form.send(text) } },
             onShareInstead = {
                 showSend = false
+                shareText = text
                 if (DebugLogging.reportConsentNeeded(context)) showConsent = true else shareReport()
             },
             onDismiss = { showSend = false },

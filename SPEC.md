@@ -2564,7 +2564,10 @@ confirmation numbers and names, plus" the page's address and the browser
 (web) or the app's log and a screenshot of this screen (Android), "We use
 them only to fix the problem."; elsewhere the same without the bookings.
 The choice is Send or Cancel (Android adds Share instead, the share sheet
-as before). Sending shows "Sending…", then "Sent. We'll reply by email."
+as before, its text leading with what the user wrote and, on a trip's
+screen, the trip's bookings as the email lists them (`reportedTripText`,
+`sharedReportPreamble`), so a report that could not be sent still carries
+them). Sending shows "Sending…", then "Sent. We'll reply by email."
 or "Couldn't send the report." with the reason (`bugReportFailure`).
 
 `POST /reports` takes `{text, log?, screenshot? (base64 PNG), page?, app
