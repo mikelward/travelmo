@@ -4,6 +4,7 @@ import {
   fillCities,
   awayPlace,
   isConnection,
+  opensTrip,
   compareInstants,
   courseName,
   findTripForBooking,
@@ -1159,6 +1160,69 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     // Where home was, by what this booking still books (a journey filed
     // cancelled was never travelled).
     periods = homeTimeline([...[...segmentsByTrip.values()].flat(), ...deciding]);
+    const journey = (s: ExtractedSegment) => journeyTypes.has(s.type);
+    const earliest = <S extends ExtractedSegment>(segments: readonly S[]) => segments.reduce((a, b) => (compareInstants(b.start, a.start) < 0 ? b : a));
+    const latest = <S extends ExtractedSegment>(segments: readonly S[]) => segments.reduce((a, b) => (compareInstants(b.start, a.start) > 0 ? b : a));
+    // The later trip this booking opens, if it is nothing but journeys that
+    // land away where that trip's first journey leaves from (opensTrip):
+    // Zagreb to New York joins the week there ending in the flight home from
+    // Newark, not the Zagreb trip before it.
+    // Only the very next trip, so a flight never skips a visit and a
+    // return home in between to join a later one; and only for what is
+    // still booked.
+    const opened = (trips: readonly Trip[]) => {
+      if (!anyLive || !deciding.every(journey)) return undefined;
+      const landing = latest(deciding);
+      const next = trips
+        .flatMap((trip) => {
+          const theirs = liveSegmentsOf(trip.id).filter((s) => !isCancelled(s));
+          return theirs.length > 0 ? [{ trip, first: earliest(theirs) }] : [];
+        })
+        .filter(({ first }) => compareInstants(first.start, landing.start) > 0)
+        .sort((a, b) => compareInstants(a.first.start, b.first.start))[0];
+      return next && next.trip.sharedWith.length === 0 && opensTrip(landing, next.first, periods, overrides) ? next.trip : undefined;
+    };
+    // The bookings of earlier trips that this one opens instead: each
+    // trip's last booking (its segments sharing a first source), when it is
+    // nothing but unedited journeys landing where this booking first leaves
+    // from, and nothing else in that trip starts after it.
+    // Only from the very trip before, for the same reason, and only when
+    // this booking still books travel.
+    const adoptable = (trips: readonly Trip[]): Segment[] => {
+      if (!anyLive) return [];
+      const leaving = earliest(deciding);
+      if (!journey(leaving) || (target && target.sharedWith.length > 0)) return [];
+      const before = trips
+        .flatMap((trip) => {
+          const theirs = segmentsOf(trip.id).filter((s) => compareInstants(s.start, leaving.start) < 0);
+          return theirs.length > 0 ? [{ trip, last: latest(theirs) }] : [];
+        })
+        .sort((a, b) => compareInstants(b.last.start, a.last.start))[0];
+      // Joining that very trip already, there is nothing to bring over.
+      return (before && before.trip.id !== target?.id ? [before.trip] : []).flatMap((trip) => {
+        const theirs = segmentsOf(trip.id);
+        if (trip.sharedWith.length > 0 || theirs.length === 0) return [];
+        // Its last booking: the latest segment and every one linked to it by
+        // any shared source, however indirectly, as Regroup groups them (a
+        // first leg confirmed alone, then with its connection by a later email).
+        const keys = (s: Segment) => segmentSources(s).map((ref) => `${ref.kind}:${ref.id}`);
+        const unit = [latest(theirs)];
+        const linked = new Set(keys(unit[0]!));
+        for (let grew = true; grew; ) {
+          grew = false;
+          for (const s of theirs) {
+            if (unit.includes(s) || !keys(s).some((k) => linked.has(k))) continue;
+            unit.push(s);
+            for (const k of keys(s)) linked.add(k);
+            grew = true;
+          }
+        }
+        if (!unit.every(journey) || unit.some((s) => s.updatedAt !== s.createdAt)) return [];
+        if (theirs.some((s) => !unit.includes(s) && compareInstants(s.start, earliest(unit).start) > 0)) return [];
+        const going = liveSegments(unit);
+        return going.length > 0 && opensTrip(latest(going), leaving, periods, overrides) ? unit : [];
+      });
+    };
 
     const hint = booking.trip;
     let target: Trip | undefined;
@@ -1188,8 +1252,17 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
       // With home known, a day out at home and a trip away never join by
       // nearness of dates (findTripForBooking).
       const assignable = live.filter((trip) => !trip.id.startsWith(holdingTripPrefix));
-      target = assignable.find((trip) => preferred.has(trip.id)) ?? findTripForBooking(assignable, liveSegmentsOf, deciding, periods, overrides);
+      target = assignable.find((trip) => preferred.has(trip.id)) ?? opened(assignable) ?? findTripForBooking(assignable, liveSegmentsOf, deciding, periods, overrides);
     }
+    // Booked the other way round: a journey that ended an earlier trip by
+    // landing where this booking leaves from comes over to open its trip,
+    // as Regroup files it, unless the user edited it or either trip is
+    // shared (bookings never move between trips shared differently).
+    const adopted = hint ? [] : adoptable(live.filter((trip) => !trip.id.startsWith(holdingTripPrefix) && !trip.id.startsWith(sourceTripPrefix)));
+    // The trip's own dates cover them as booked, cancelled legs too, so each
+    // is found again by date; when the person travels is settled after.
+    const adoptedRange = bookedDateRange(adopted);
+    const filedRange = adoptedRange ? { start: min(freshRange.start, adoptedRange.start), end: max(freshRange.end, adoptedRange.end) } : freshRange;
     let tripId: string;
     if (target) {
       tripId = target.id;
@@ -1201,7 +1274,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
       // Its own dates cover every booking in it, cancelled ones too, so
       // each is found again by date; when the person now travels is
       // settled once everything is written (settle).
-      const own = hint ? { start: min(hint.start, freshRange.start), end: max(hint.end, freshRange.end) } : freshRange;
+      const own = hint ? { start: min(hint.start, filedRange.start), end: max(hint.end, filedRange.end) } : filedRange;
       const filled = growth(tripId);
       const want = filled ? { start: min(own.start, filled.start), end: max(own.end, filled.end) } : own;
       wanted.set(tripId, want);
@@ -1211,9 +1284,9 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
       tripId = hint && !trips.some((trip) => trip.id === hint.id) ? hint.id : store.newId();
       tx.createTrip({
         id: tripId,
-        title: hint?.title ?? tripTitle(deciding, periods, overrides),
-        start: hint ? min(hint.start, freshRange.start) : freshRange.start,
-        end: hint ? max(hint.end, freshRange.end) : freshRange.end,
+        title: hint?.title ?? tripTitle([...liveSegments(adopted), ...deciding], periods, overrides),
+        start: hint ? min(hint.start, filedRange.start) : filedRange.start,
+        end: hint ? max(hint.end, filedRange.end) : filedRange.end,
         ownerUid: uid,
         sharedWith: [],
         createdAt: timestamp,
@@ -1238,8 +1311,17 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
       };
     });
     for (const segment of written) tx.putSegment(segment);
+    // Moved as they are, revision and all, as Regroup moves bookings; a trip
+    // left with none of its bookings goes.
+    const moved = adopted.map((segment) => ({ ...segment, tripId }));
+    for (const segment of adopted) tx.deleteSegment(segment.tripId, segment.id);
+    for (const segment of moved) tx.putSegment(segment);
+    for (const from of new Set(adopted.map((segment) => segment.tripId))) {
+      if (segmentsOf(from).every((segment) => adopted.includes(segment))) tx.deleteTrip(from);
+      else tx.touchTrip(from, timestamp);
+    }
     settleUpgradedTrips(written);
-    settleTitles(written);
+    settleTitles([...written, ...moved]);
     tx.settle(live, segmentsOf);
     return { tripId, segmentIds: written.map((s) => s.id), duplicates, matched, written: [...written, ...merges, ...upgradedSegments.values()] };
   });
