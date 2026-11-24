@@ -173,6 +173,18 @@ describe("ExtractedBooking schema", () => {
   });
 });
 
+describe("mergeDetails", () => {
+  const flight = { type: "flight" as const, title: "FR 123 MAN to DUB", start: "2026-12-15T08:00:00+00:00", end: "2026-12-15T09:00:00+00:00" };
+  it("takes a newer email's times, moving the arrival with a departure that comes alone", () => {
+    expect(mergeDetails(flight, { ...flight, start: "2026-12-15T10:00:00+00:00", end: "2026-12-15T11:30:00+00:00" }, { newer: true })).toMatchObject({ start: "2026-12-15T10:00:00+00:00", end: "2026-12-15T11:30:00+00:00" });
+    const { end: _end, ...noArrival } = flight;
+    expect(mergeDetails(flight, { ...noArrival, start: "2026-12-15T10:00:00+00:00" }, { newer: true })).toMatchObject({ start: "2026-12-15T10:00:00+00:00", end: "2026-12-15T11:00:00+00:00" });
+    // An older email, or one the user edited, changes no times.
+    expect(mergeDetails(flight, { ...flight, start: "2026-12-15T10:00:00+00:00" })).toMatchObject({ start: flight.start, end: flight.end });
+    expect(mergeDetails(flight, { ...flight, start: "2026-12-15T10:00:00+00:00" }, { newer: true, edited: true })).toMatchObject({ start: flight.start });
+  });
+});
+
 describe("sameBooking", () => {
   const flight = {
     type: "flight" as const,
@@ -189,6 +201,18 @@ describe("sameBooking", () => {
     expect(sameBooking(flight, { ...flight, start: "2030-05-01T18:15:00+01:00" })).toBe(false);
     expect(sameBooking(flight, { ...flight, destination: { name: "Orly", code: "ORY" } })).toBe(false);
     expect(sameBooking(flight, { ...flight, type: "train" })).toBe(false);
+  });
+  it("matches a journey moved by a schedule change: the same reference and service that day", () => {
+    const ua = { ...flight, title: "UA122 EWR to LHR", start: "2026-04-11T09:10:00-04:00", confirmation: "B0ECXM", origin: { name: "New York/Newark", code: "EWR" }, destination: { name: "London", code: "LHR" } };
+    const moved = { ...ua, title: "UA 122 EWR to LHR", start: "2026-04-11T09:20:00-04:00", origin: { name: "Newark", code: "EWR" } };
+    expect(sameBooking(ua, moved)).toBe(true);
+    // Another flight on the same booking, or the same flight days later, is not it.
+    expect(sameBooking(ua, { ...moved, title: "UA 940 EWR to LHR" })).toBe(false);
+    expect(sameBooking(ua, { ...moved, start: "2026-04-13T09:20:00-04:00" })).toBe(false);
+    expect(sameBooking(ua, { ...moved, confirmation: undefined })).toBe(false);
+    // Another leg of the same flight number is another journey.
+    const gum = { ...ua, title: "UA 154 GUM to TKK", start: "2026-04-11T07:00:00+10:00", origin: { name: "Guam", code: "GUM" }, destination: { name: "Chuuk", code: "TKK" } };
+    expect(sameBooking(gum, { ...gum, title: "UA 154 TKK to PNI", start: "2026-04-11T09:30:00+10:00", origin: { name: "Chuuk", code: "TKK" }, destination: { name: "Pohnpei", code: "PNI" } })).toBe(false);
   });
   it("needs more than the time when a route is only partly known", () => {
     expect(sameBooking(flight, { type: "flight", title: "Example Air", start: flight.start })).toBe(false);

@@ -959,8 +959,13 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     const withCancellation = (merged: Segment, segment: Segment): Segment =>
       settled(merged, standingCancellation(merged, [...(segment.sources ?? []).map((r) => r.sentAt), bookedAt], waiting, pending), timestamp);
     // A place the user corrected by hand stays (mergeDetails).
+    // This email is the newest word on a booking when it was sent after every
+    // email behind it that dates the booking. A receipt or a TripIt export
+    // says nothing of when (no sentAt), so it neither blocks nor counts.
+    const newerThan = (segment: Segment) =>
+      !!bookedAt && (segment.sources ?? []).every((s) => s.sentAt === undefined || compareInstants(s.sentAt, bookedAt) < 0);
     const mergedOf = (segment: Segment, found: ExtractedSegment): Segment =>
-      withCancellation(mergeDetails(segment, found, { edited: segment.updatedAt !== segment.createdAt }), segment);
+      withCancellation(mergeDetails(segment, found, { edited: segment.updatedAt !== segment.createdAt, newer: newerThan(segment) }), segment);
     const merges: Segment[] = [];
     const recordSources = (target?: string) => {
       const changedTrips = new Set<string>();
