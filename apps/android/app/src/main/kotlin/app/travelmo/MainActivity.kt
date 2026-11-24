@@ -1,5 +1,6 @@
 package app.travelmo
 
+import app.travelmo.ui.rememberSignedInAccount
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -189,7 +190,7 @@ private fun SignedInApp(
     // included, and one not approved sees its empty trip list a moment.
     val refused = (access as? AccessState.Known)?.takeIf { it.status != AccountAccess.APPROVED }
     if (refused != null) {
-        InviteOnlyScreen(account = app.account, viewModel = viewModel, status = refused.status)
+        InviteOnlyScreen(account = rememberSignedInAccount(app.account), viewModel = viewModel, status = refused.status)
         return
     }
     val backStack = rememberNavBackStack(Home)

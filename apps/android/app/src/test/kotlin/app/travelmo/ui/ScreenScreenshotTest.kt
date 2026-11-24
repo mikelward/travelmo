@@ -834,7 +834,7 @@ class ScreenScreenshotTest {
             accountDeletion = FakeAccountDeletion(), emailLinks = FakeEmailLinks(),
         )
         capture(name, dark = dark) {
-            InviteOnlyScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), viewModel = viewModel, status = AccountAccess.NONE)
+            InviteOnlyScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), viewModel = viewModel, status = AccountAccess.NONE)
         }
     }
 

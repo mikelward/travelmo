@@ -1,7 +1,5 @@
 package app.travelmo.ui
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -47,7 +45,6 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -74,7 +71,6 @@ import app.travelmo.core.travelReport
 import app.travelmo.core.tripRows
 import app.travelmo.core.tripRowsCsv
 import app.travelmo.core.worldMap
-import app.travelmo.log.TravelmoLog
 import app.travelmo.shared.Res
 import app.travelmo.shared.abroad_only
 import app.travelmo.shared.all_years
@@ -109,8 +105,6 @@ import app.travelmo.shared.unplaced_bookings
 import app.travelmo.shared.unplaced_hint
 import app.travelmo.shared.year
 import app.travelmo.ui.theme.TravelmoTheme
-import com.mikelward.androidzoom.compose.pinchFontSizeHost
-import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -365,29 +359,15 @@ fun WorldMap(data: WorldMapData, visited: Set<String>, airports: List<AirportVis
  */
 @Composable
 private fun DownloadTrips(trips: List<TripWithSegments>, periods: List<HomePeriod>, titles: Map<String, String>, today: String) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var byPlace by rememberSaveable { mutableStateOf(false) }
     var international by rememberSaveable { mutableStateOf(false) }
     // The last start date to include: today unless the user picks another.
     var until by rememberSaveable { mutableStateOf(today) }
     var said by remember { mutableStateOf<StringResource?>(null) }
-    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        val text = if (byPlace) placeRowsCsv(placeRows(trips, periods, until, international, titles)) else tripRowsCsv(tripRows(trips, periods, until, international, titles))
-        scope.launch {
-            said = try {
-                withContext(Dispatchers.IO) {
-                    context.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) } ?: throw IOException("No stream to write to")
-                }
-                TravelmoLog.info("Saved the trips summary")
-                Res.string.trips_saved
-            } catch (e: IOException) {
-                TravelmoLog.failure(e, "Saving the trips summary failed")
-                Res.string.trips_save_failed
-            }
-        }
-    }
+    val save = LocalAppChrome.current.rememberTextSaver(
+        "text/csv",
+        text = { if (byPlace) placeRowsCsv(placeRows(trips, periods, until, international, titles)) else tripRowsCsv(tripRows(trips, periods, until, international, titles)) },
+    ) { saved -> said = if (saved) Res.string.trips_saved else Res.string.trips_save_failed }
     SectionTitle(stringResource(Res.string.download_trips))
     Text(stringResource(Res.string.download_trips_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Column(modifier = Modifier.selectableGroup().padding(top = 4.dp)) {
@@ -409,7 +389,7 @@ private fun DownloadTrips(trips: List<TripWithSegments>, periods: List<HomePerio
         Text(stringResource(Res.string.abroad_only), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 12.dp, top = 10.dp, bottom = 10.dp))
     }
     DateButton(stringResource(Res.string.trips_up_to, formatDateWithYear(until)), until, { until = it }, Modifier.padding(top = 4.dp))
-    OutlinedButton(onClick = { said = null; save.launch(if (byPlace) "travelmo-places.csv" else "travelmo-trips.csv") }, modifier = Modifier.padding(top = 4.dp)) {
+    OutlinedButton(onClick = { said = null; save(if (byPlace) "travelmo-places.csv" else "travelmo-trips.csv") }, modifier = Modifier.padding(top = 4.dp)) {
         Text(stringResource(Res.string.download_csv))
     }
     said?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp)) }

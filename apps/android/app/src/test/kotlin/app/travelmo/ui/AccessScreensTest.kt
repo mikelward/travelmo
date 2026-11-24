@@ -44,7 +44,7 @@ class AccessScreensTest {
             TravelmoTheme {
                 val access by viewModel.access.collectAsStateWithLifecycle()
                 val known = access as? AccessState.Known
-                if (known != null && known.status != AccountAccess.APPROVED) InviteOnlyScreen(account, viewModel, known.status)
+                if (known != null && known.status != AccountAccess.APPROVED) InviteOnlyScreen(rememberSignedInAccount(account), viewModel, known.status)
             }
         }
     }

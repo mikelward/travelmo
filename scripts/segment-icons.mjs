@@ -1,5 +1,5 @@
 // Writes the booking-type icons for both apps from one table: Android vector
-// drawables (res/drawable/ic_segment_*.xml) and the web's SegmentIcon.tsx.
+// drawables (shared composeResources/drawable/ic_segment_*.xml) and the web's SegmentIcon.tsx.
 // The paths are Material Icons, filled style (Apache License 2.0), from
 // @material-design-icons/svg. CI runs this and fails on any diff.
 import { writeFileSync } from "node:fs";
@@ -20,7 +20,8 @@ const ICONS = {
   other: ["event", "M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"],
 };
 
-const res = join(repo, "apps/android/app/src/main/res/drawable");
+// Compose resources in :shared, which the trip page (shared with the iOS app) reads.
+const res = join(repo, "apps/android/shared/src/commonMain/composeResources/drawable");
 for (const [type, [name, d]] of Object.entries(ICONS)) {
   writeFileSync(join(res, `ic_segment_${type}.xml`), `<?xml version="1.0" encoding="utf-8"?>
 <!-- Written by scripts/segment-icons.mjs; edit that instead. Material Icons

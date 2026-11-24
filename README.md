@@ -79,7 +79,8 @@ builds only, so `next dev` runs without it.
 Gradle). `:shared` holds, for the iOS app to come, the palette and most
 screens (Compose Multiplatform, with the app's pieces through `AppChrome`),
 their text, the logo and the wordmark's font as Compose Multiplatform
-resources (`scripts/icon-sources.mjs` writes the logo there), the interfaces the screens read data and
+resources (`scripts/icon-sources.mjs` writes the logo there, and
+`scripts/segment-icons.mjs` the booking-type icons), the interfaces the screens read data and
 take actions through (each with a no-op version for tests and previews;
 `:app` implements them with Firebase and the parser) and the log shared
 code writes to, which `:app` sends to its debug log. Its `strings.xml`

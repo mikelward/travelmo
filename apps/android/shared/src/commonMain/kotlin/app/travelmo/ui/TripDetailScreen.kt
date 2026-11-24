@@ -1,5 +1,16 @@
 package app.travelmo.ui
 
+import app.travelmo.shared.ic_segment_train
+import app.travelmo.shared.ic_segment_other
+import app.travelmo.shared.ic_segment_lodging
+import app.travelmo.shared.ic_segment_flight
+import app.travelmo.shared.ic_segment_ferry
+import app.travelmo.shared.ic_segment_car_rental
+import app.travelmo.shared.ic_segment_bus
+import app.travelmo.shared.ic_segment_activity
+import app.travelmo.shared.booking_reference
+import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.pluralStringResource
 import app.travelmo.shared.never_import_sender
 import app.travelmo.shared.always_import_sender
@@ -11,10 +22,6 @@ import app.travelmo.shared.trips_count
 import app.travelmo.core.effectiveDecision
 import app.travelmo.core.SenderList
 import org.jetbrains.compose.resources.StringResource
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -67,8 +74,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -78,7 +83,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
-import app.travelmo.R
 import app.travelmo.core.MAX_TRIP_REMINDERS
 import app.travelmo.core.PersonWarning
 import app.travelmo.core.ProfileEntry
@@ -108,7 +112,6 @@ import app.travelmo.core.shownEnd
 import app.travelmo.core.shownStart
 import app.travelmo.core.timesLine
 import app.travelmo.core.tripWarnings
-import app.travelmo.log.TravelmoLog
 import app.travelmo.shared.Res
 import app.travelmo.shared.add_booking
 import app.travelmo.shared.back
@@ -158,7 +161,6 @@ import app.travelmo.shared.trip_no_bookings
 import app.travelmo.shared.trip_not_found
 import app.travelmo.ui.theme.TextButtonInset
 import app.travelmo.ui.theme.TravelmoTheme
-import com.mikelward.androidzoom.compose.pinchFontSizeHost
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 
@@ -637,7 +639,8 @@ fun SegmentRow(
     flightLines: List<String> = emptyList(),
     senderOffers: SenderOffers? = null,
 ) {
-    val context = LocalContext.current
+    val chrome = LocalAppChrome.current
+    val referenceLabel = stringResource(Res.string.booking_reference)
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     var menu by remember { mutableStateOf(false) }
     var showingSources by rememberSaveable(segment.id) { mutableStateOf(false) }
@@ -671,7 +674,7 @@ fun SegmentRow(
             }
             referenceLine(segment)?.let { line ->
                 // A long press on the line copies the reference too, as ⋮ does.
-                val copy = reference?.let { ref -> Modifier.longPressUnlessPinch(stringResource(Res.string.copy_reference)) { copyReference(context, ref) } } ?: Modifier
+                val copy = reference?.let { ref -> Modifier.longPressUnlessPinch(stringResource(Res.string.copy_reference)) { chrome.copyToClipboard(referenceLabel, ref) } } ?: Modifier
                 Text(line, style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp).then(copy))
             }
             // One program a line, so whose each number is stays plain.
@@ -688,7 +691,7 @@ fun SegmentRow(
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, modifier = Modifier.pinchFontSizeHost()) {
                     reference?.let { ref ->
-                        DropdownMenuItem(text = { Text(stringResource(Res.string.copy_reference)) }, onClick = { menu = false; copyReference(context, ref) })
+                        DropdownMenuItem(text = { Text(stringResource(Res.string.copy_reference)) }, onClick = { menu = false; chrome.copyToClipboard(referenceLabel, ref) })
                     }
                     if (hasSources) {
                         DropdownMenuItem(text = { Text(stringResource(Res.string.sources)) }, onClick = { menu = false; showingSources = true })
@@ -719,7 +722,7 @@ fun SegmentRow(
  */
 @Composable
 private fun SourcesDialog(segment: Segment, emailLink: (SourceRef) -> String?, senderOffers: SenderOffers?, onDismiss: () -> Unit) {
-    val context = LocalContext.current
+    val chrome = LocalAppChrome.current
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val openLabel = stringResource(Res.string.open_in_gmail)
     AppAlertDialog(
@@ -731,7 +734,7 @@ private fun SourcesDialog(segment: Segment, emailLink: (SourceRef) -> String?, s
                     val kind = stringResource(sourceKindLabel(source.kind))
                     val link = emailLink(source)
                     val open = if (link != null) {
-                        Modifier.clickable(onClickLabel = openLabel, role = Role.Button) { openLink(context, link, "a booking's email") }
+                        Modifier.clickable(onClickLabel = openLabel, role = Role.Button) { chrome.openLink(link, "a booking's email") }
                     } else {
                         Modifier
                     }
@@ -758,19 +761,6 @@ private fun SourcesDialog(segment: Segment, emailLink: (SourceRef) -> String?, s
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.close)) } },
     )
-}
-
-/**
- * Puts a booking's reference, alone, on the clipboard. No toast: Android 13
- * and later (all the app runs on) confirm a copy themselves.
- */
-private fun copyReference(context: Context, reference: String) {
-    val clipboard = context.getSystemService(ClipboardManager::class.java)
-    if (clipboard == null) {
-        TravelmoLog.warning("No clipboard to copy a booking reference to")
-        return
-    }
-    clipboard.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.booking_reference), reference))
 }
 
 private fun sourceKindLabel(kind: SourceKind): StringResource = when (kind) {
@@ -800,14 +790,13 @@ private fun Verdict(segment: Segment) {
 }
 
 /** The icon for a booking's type, from scripts/segment-icons.mjs. */
-@DrawableRes
-fun segmentIcon(type: SegmentType): Int = when (type) {
-    SegmentType.FLIGHT -> R.drawable.ic_segment_flight
-    SegmentType.TRAIN -> R.drawable.ic_segment_train
-    SegmentType.BUS -> R.drawable.ic_segment_bus
-    SegmentType.FERRY -> R.drawable.ic_segment_ferry
-    SegmentType.LODGING -> R.drawable.ic_segment_lodging
-    SegmentType.CAR_RENTAL -> R.drawable.ic_segment_car_rental
-    SegmentType.ACTIVITY -> R.drawable.ic_segment_activity
-    SegmentType.OTHER -> R.drawable.ic_segment_other
+fun segmentIcon(type: SegmentType): DrawableResource = when (type) {
+    SegmentType.FLIGHT -> Res.drawable.ic_segment_flight
+    SegmentType.TRAIN -> Res.drawable.ic_segment_train
+    SegmentType.BUS -> Res.drawable.ic_segment_bus
+    SegmentType.FERRY -> Res.drawable.ic_segment_ferry
+    SegmentType.LODGING -> Res.drawable.ic_segment_lodging
+    SegmentType.CAR_RENTAL -> Res.drawable.ic_segment_car_rental
+    SegmentType.ACTIVITY -> Res.drawable.ic_segment_activity
+    SegmentType.OTHER -> Res.drawable.ic_segment_other
 }

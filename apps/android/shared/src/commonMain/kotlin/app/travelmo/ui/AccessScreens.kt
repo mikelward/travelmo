@@ -1,7 +1,5 @@
 package app.travelmo.ui
 
-import app.travelmo.shared.logo
-import org.jetbrains.compose.resources.painterResource
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -21,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -37,20 +36,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.travelmo.R
-import app.travelmo.auth.GoogleAccount
 import app.travelmo.core.AccessConfig
 import app.travelmo.core.AccessRecord
 import app.travelmo.core.AccountAccess
@@ -62,6 +59,13 @@ import app.travelmo.shared.access_approved
 import app.travelmo.shared.access_approved_hint
 import app.travelmo.shared.access_invite_label
 import app.travelmo.shared.back
+import app.travelmo.shared.delete
+import app.travelmo.shared.delete_account
+import app.travelmo.shared.delete_account_confirm
+import app.travelmo.shared.delete_account_confirm_title
+import app.travelmo.shared.delete_account_hint
+import app.travelmo.shared.delete_account_on_web
+import app.travelmo.shared.deleting
 import app.travelmo.shared.email_address
 import app.travelmo.shared.email_link_sent
 import app.travelmo.shared.invite
@@ -70,11 +74,14 @@ import app.travelmo.shared.invite_only_declined
 import app.travelmo.shared.invite_only_none
 import app.travelmo.shared.invite_only_unverified
 import app.travelmo.shared.invited_elsewhere
+import app.travelmo.shared.keep
 import app.travelmo.shared.loading
+import app.travelmo.shared.logo
 import app.travelmo.shared.revoke
 import app.travelmo.shared.send_link
 import app.travelmo.shared.sign_out
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
 private const val LINK_TOKEN = "access/link"
@@ -91,8 +98,7 @@ private const val DELETE_ACCOUNT_TOKEN = "access/account/delete"
  * opens the app here.
  */
 @Composable
-fun InviteOnlyScreen(account: GoogleAccount, viewModel: TripsViewModel, status: AccountAccess) {
-    val context = LocalContext.current
+fun InviteOnlyScreen(account: SignedInAccount, viewModel: TripsViewModel, status: AccountAccess) {
     val scope = rememberCoroutineScope()
     val email = viewModel.verifiedEmail
     val waiting = status == AccountAccess.NONE
@@ -120,7 +126,7 @@ fun InviteOnlyScreen(account: GoogleAccount, viewModel: TripsViewModel, status: 
                         modifier = Modifier.padding(top = 8.dp),
                     )
                     if (email != null && waiting && viewModel.canLinkEmails) InvitedElsewhere(viewModel)
-                    TextButton(onClick = { scope.launch { account.signOut(context) } }, modifier = Modifier.padding(top = 16.dp)) {
+                    TextButton(onClick = { scope.launch { account.signOut() } }, modifier = Modifier.padding(top = 16.dp)) {
                         Text(stringResource(Res.string.sign_out))
                     }
                     Column(modifier = Modifier.fillMaxWidth()) {
@@ -280,5 +286,48 @@ private fun ApprovedRow(record: AccessRecord, button: @Composable () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(vertical = 4.dp)) {
         Text(record.email, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f).padding(end = 8.dp))
         button()
+    }
+}
+
+/**
+ * Deleting the account, as on the web: a dialog asks first, then the parser
+ * deletes everything and the app signs out, and the sign-in screen says the
+ * account is gone. A build with no parser address says to use the web.
+ * The invite-only screen offers it too, since Settings needs access.
+ */
+@Composable
+fun DeleteAccountSection(account: SignedInAccount, viewModel: TripsViewModel, token: String) {
+    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val outcome = outcomes[token]
+    var confirming by remember { mutableStateOf(false) }
+    Text(stringResource(Res.string.delete_account), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(Res.string.delete_account_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (!viewModel.canDeleteAccount) {
+        Text(stringResource(Res.string.delete_account_on_web), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+        return
+    }
+    OutlinedButton(
+        onClick = { confirming = true },
+        enabled = outcome !is Outcome.Busy,
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+        modifier = Modifier.padding(top = 8.dp),
+    ) { Text(stringResource(if (outcome is Outcome.Busy) Res.string.deleting else Res.string.delete_account)) }
+    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+    if (confirming) {
+        AppAlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text(stringResource(Res.string.delete_account_confirm_title)) },
+            text = { Text(stringResource(Res.string.delete_account_confirm)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirming = false
+                        viewModel.deleteAccount(token) { account.signOutDeleted() }
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) { Text(stringResource(Res.string.delete)) }
+            },
+            dismissButton = { TextButton(onClick = { confirming = false }) { Text(stringResource(Res.string.keep)) } },
+        )
     }
 }
