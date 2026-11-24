@@ -49,16 +49,32 @@ describe("changeRefresh", () => {
   });
 });
 
-describe("importedRecords", () => {
-  it("lists the records that made bookings, in order of id, after a given one", async () => {
+describe("claiming an email to read again", () => {
+  it("keeps what the email is on the claim, so a claim left behind is still known", async () => {
+    const uid = "refresh-store-u5";
+    await db.doc(paths.parsedMessage(uid, "m1")).set({
+      messageId: "m1", uid, outcome: "not_booking", segmentIds: [], processedAt: at, reason: "sender example.com allowed",
+      from: "Example Air <tickets@air.example>", subject: "Your e-ticket", sentAt: "2026-10-18T15:25:00Z",
+    });
+    const store = firestoreStore(db);
+    expect(await store.reclaimMessage(uid, "m1", "2027-01-05T11:00:00Z")).toBe(true);
+    expect((await db.doc(paths.parsedMessage(uid, "m1")).get()).data()).toEqual({
+      messageId: "m1", uid, outcome: "processing", segmentIds: [], processedAt: "2027-01-05T11:00:00Z",
+      from: "Example Air <tickets@air.example>", subject: "Your e-ticket", sentAt: "2026-10-18T15:25:00Z",
+    });
+  });
+});
+
+describe("refreshRecords", () => {
+  it("lists the records that made bookings, were found not to be one, failed or are being read, in order of id, after a given one", async () => {
     const uid = "refresh-store-u3";
     const record = (messageId: string, outcome: string) => ({ messageId, uid, outcome, segmentIds: [], processedAt: at });
-    for (const [id, outcome] of [["c", "imported"], ["a", "imported"], ["b", "not_booking"], ["d", "imported"]] as const) {
+    for (const [id, outcome] of [["c", "imported"], ["a", "imported"], ["b", "not_booking"], ["d", "imported"], ["e", "filtered"], ["f", "failed"], ["g", "processing"]] as const) {
       await db.doc(paths.parsedMessage(uid, id)).set(record(id, outcome));
     }
     const store = firestoreStore(db);
-    expect((await store.importedRecords(uid, undefined, 10)).map((r) => r.messageId)).toEqual(["a", "c", "d"]);
-    expect((await store.importedRecords(uid, "a", 1)).map((r) => r.messageId)).toEqual(["c"]);
+    expect((await store.refreshRecords(uid, undefined, 10)).map((r) => r.messageId)).toEqual(["a", "b", "c", "d", "f", "g"]);
+    expect((await store.refreshRecords(uid, "a", 1)).map((r) => r.messageId)).toEqual(["b"]);
   });
 
   it("passes over a record that no longer parses without cutting the page short", async () => {
@@ -68,8 +84,8 @@ describe("importedRecords", () => {
     await db.doc(paths.parsedMessage(uid, "b")).set({ outcome: "imported", junk: true });
     const store = firestoreStore(db);
     // A short page would read as the end; this one is full.
-    expect((await store.importedRecords(uid, undefined, 2)).map((r) => r.messageId)).toEqual(["a", "c"]);
-    expect((await store.importedRecords(uid, "c", 2)).map((r) => r.messageId)).toEqual(["d", "e"]);
-    expect((await store.importedRecords(uid, "e", 2)).map((r) => r.messageId)).toEqual([]);
+    expect((await store.refreshRecords(uid, undefined, 2)).map((r) => r.messageId)).toEqual(["a", "c"]);
+    expect((await store.refreshRecords(uid, "c", 2)).map((r) => r.messageId)).toEqual(["d", "e"]);
+    expect((await store.refreshRecords(uid, "e", 2)).map((r) => r.messageId)).toEqual([]);
   });
 });

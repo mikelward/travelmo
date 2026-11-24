@@ -575,6 +575,10 @@ export const ParsedMessage = z.object({
   // When the email was sent (a forward's original), for finding it by date
   // in the review list; absent for other sources and older records.
   sentAt: isoDateTime.optional(),
+  // Which version of the email reader (the parser's `readerVersion`) found
+  // no booking in it, so "Refresh from email" reads again what an older one
+  // judged; absent for records from before versions were kept.
+  readerVersion: z.number().int().positive().optional(),
 });
 export type ParsedMessage = z.infer<typeof ParsedMessage>;
 

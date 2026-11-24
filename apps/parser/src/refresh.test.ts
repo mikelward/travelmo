@@ -1,12 +1,14 @@
 import type { BackfillProgress, ExtractedBooking, ExtractedSegment, ParsedMessage, RefreshProgress, Segment, Trip } from "@travelmo/core";
 import { describe, expect, it } from "vitest";
 import { continueBackfill, startBackfill, type ChainIo, type ContinueMessage } from "./backfillChain";
+import { readerVersion } from "./extract";
 import { GmailRateLimited, type EmailMessage } from "./gmail";
 import { ImportSupersededError, type ImportDeps, type TripTx } from "./importer";
 import {
   editedAtSince,
   handEdited,
   isMailboxRecord,
+  readAgain,
   refreshEmail,
   refreshPage,
   refreshRecord,
@@ -488,6 +490,79 @@ describe("refreshRecord", () => {
   });
 });
 
+describe("refreshRecord, an email an older reader found no booking in", () => {
+  // Virgin Atlantic's e-tickets were judged no booking while the reader took
+  // their plain text, only a footer.
+  const judged = record("m1", { outcome: "not_booking", segmentIds: [], tripId: undefined, from: "Cove <stay@cove.example>", reason: "sender cove.example allowed" });
+
+  it("imports it afresh, adding what today's reader finds, and records the reading", async () => {
+    const w = world();
+    w.memory.parsed.set(`${uid}/m1`, judged);
+    const outcome = await refreshRecord(uid, judged, w.deps(async () => found(stay)), { generation: 0, snapshot: [], fetch: async () => email("m1") });
+    expect(outcome).toEqual({ kind: "refreshed", counts: { updated: 0, added: 1, removed: 0, merged: 0, kept: 0 } });
+    expect(w.memory.parsed.get(`${uid}/m1`)).toMatchObject({ outcome: "imported", segmentIds: ["m1-0"] });
+    expect([...w.memory.segments.values()].map((s) => s.title)).toEqual(["Cove Liverpool"]);
+  });
+
+  it("records today's reader when it still finds no booking, so the next refresh passes it", async () => {
+    const w = world();
+    w.memory.parsed.set(`${uid}/m1`, judged);
+    const outcome = await refreshRecord(uid, judged, w.deps(async () => ({ isBooking: false, segments: [] })), { generation: 0, snapshot: [], fetch: async () => email("m1") });
+    expect(outcome).toEqual({ kind: "refreshed", counts: { updated: 0, added: 0, removed: 0, merged: 0, kept: 0 } });
+    expect(w.memory.parsed.get(`${uid}/m1`)).toMatchObject({ outcome: "not_booking", readerVersion });
+  });
+
+  it("fails when the model does, and reads it again on the second try", async () => {
+    const w = world();
+    w.memory.parsed.set(`${uid}/m1`, judged);
+    const broken = w.deps(async () => {
+      throw new Error("Gemini returned no text");
+    });
+    expect(await refreshRecord(uid, judged, broken, { generation: 0, snapshot: [], fetch: async () => email("m1") })).toEqual({ kind: "failed" });
+    const failed = w.memory.parsed.get(`${uid}/m1`)!;
+    expect(failed.outcome).toBe("failed");
+    const again = await refreshRecord(uid, failed, w.deps(async () => found(stay)), { generation: 0, snapshot: [], fetch: async () => email("m1") });
+    expect(again).toMatchObject({ kind: "refreshed", counts: { added: 1 } });
+  });
+});
+
+describe("readAgain", () => {
+  const none = { allow: [], deny: [] };
+  const judged = (extra: Partial<ParsedMessage> = {}) =>
+    record("m1", { outcome: "not_booking", segmentIds: [], from: "Virgin Atlantic <booking@service.virginatlantic.com>", ...extra });
+
+  it("reads again what an older reader found no booking in, from a travel company", () => {
+    expect(readAgain(judged(), none, now)).toBe(true);
+    expect(readAgain(judged({ readerVersion }), none, now)).toBe(false);
+  });
+
+  it("reads again a sender the user always imports, never one they never import", () => {
+    const shop = judged({ from: "Shop <orders@shop.example>" });
+    expect(readAgain(shop, none, now)).toBe(false);
+    expect(readAgain(shop, { allow: ["shop.example"], deny: [] }, now)).toBe(true);
+    expect(readAgain(judged(), { allow: [], deny: ["virginatlantic.com"] }, now)).toBe(false);
+  });
+
+  it("reads again one whose reading failed, whatever reader judged it", () => {
+    expect(readAgain(judged({ outcome: "failed", readerVersion }), none, now)).toBe(true);
+    expect(readAgain(judged({ outcome: "failed", from: "Shop <orders@shop.example>" }), none, now)).toBe(false);
+  });
+
+  it("reads again one whose reading stopped part way, once its claim has run out", () => {
+    const claimed = (processedAt: string) => judged({ outcome: "processing", readerVersion, processedAt });
+    expect(readAgain(claimed("2027-02-01T11:00:00Z"), none, now)).toBe(true);
+    expect(readAgain(claimed("2027-02-01T11:55:00Z"), none, now)).toBe(false);
+    expect(readAgain({ ...claimed("2027-02-01T11:00:00Z"), from: undefined }, none, now)).toBe(false);
+  });
+
+  it("leaves bookings, other outcomes and emails not in a mailbox alone", () => {
+    expect(readAgain(judged({ outcome: "imported" }), none, now)).toBe(false);
+    expect(readAgain(judged({ outcome: "filtered" }), none, now)).toBe(false);
+    expect(readAgain(judged({ messageId: "fwd-1", source: "forward" }), none, now)).toBe(false);
+    expect(readAgain(judged({ from: undefined }), none, now)).toBe(false);
+  });
+});
+
 describe("isMailboxRecord", () => {
   it("reads again only emails from a mailbox", () => {
     expect(isMailboxRecord(record("m1"))).toBe(true);
@@ -506,7 +581,8 @@ function batchIo(records: ParsedMessage[], outcomes: Map<string, RecordOutcome> 
   const refreshed: string[] = [];
   let clock = Date.parse(now);
   const io: RefreshBatchIo = {
-    records: (after, limit) => memory.importedRecords(uid, after, limit),
+    records: (after, limit) => memory.refreshRecords(uid, after, limit),
+    senderPatterns: async () => ({ allow: [], deny: [] }),
     record: (id) => memory.getParsed(uid, id),
     snapshot: async () => [],
     refresh: async (r) => {
@@ -535,6 +611,31 @@ describe("runRefreshBatch", () => {
     const batch = await runRefreshBatch(fresh(), io);
     expect(refreshed).toEqual(["a1", "imap-a6"]);
     expect(batch.progress).toMatchObject({ scanned: 2, total: 2, updated: 2, imported: 2, done: true, cursor: "tripit-a5" });
+  });
+
+  it("also reads the emails an older reader found no booking in from travel senders, counting them in the total", async () => {
+    const travel = { outcome: "not_booking" as const, segmentIds: [], from: "Virgin Atlantic <booking@service.virginatlantic.com>" };
+    const { io, refreshed } = batchIo([
+      record("b1"),
+      record("b2", travel),
+      record("b3", { ...travel, readerVersion }),
+      record("b4", { ...travel, from: "Shop <orders@shop.example>" }),
+    ]);
+    const batch = await runRefreshBatch(fresh(), io);
+    expect(refreshed).toEqual(["b1", "b2"]);
+    expect(batch.progress).toMatchObject({ scanned: 2, total: 2, done: true });
+  });
+
+  it("finds again an email whose reading again stopped part way, and reads it", async () => {
+    const w = world();
+    const travel = record("c1", { outcome: "not_booking", segmentIds: [], tripId: undefined, from: "Virgin Atlantic <booking@service.virginatlantic.com>" });
+    w.memory.parsed.set(`${uid}/c1`, travel);
+    // The worker claimed it, then died before writing what it found.
+    expect(await w.memory.reclaimMessage(uid, "c1", "2027-02-01T11:00:00Z")).toBe(true);
+    const { io, refreshed } = batchIo([w.memory.parsed.get(`${uid}/c1`)!]);
+    const batch = await runRefreshBatch(fresh(), io);
+    expect(refreshed).toEqual(["c1"]);
+    expect(batch.progress).toMatchObject({ scanned: 1, total: 1, done: true });
   });
 
   it("carries on from where the last batch stopped when it runs out of time", async () => {
@@ -595,6 +696,20 @@ describe("runRefreshBatch", () => {
     const again = await runRefreshBatch(batch.progress as RefreshProgress, io);
     expect(again.progress).toMatchObject({ scanned: 2, failed: 0, updated: 2, done: true });
     expect(again.progress.failedIds).toBeUndefined();
+  });
+
+  it("keeps an email whose reading again was left claimed as failed, and reads it once the claim runs out", async () => {
+    const travel = { segmentIds: [], tripId: undefined, from: "Virgin Atlantic <booking@service.virginatlantic.com>" };
+    const claimed = (processedAt: string) => record("m1", { ...travel, outcome: "processing", processedAt });
+    const retrying = { ...fresh(), scanned: 1, failed: 1, retrying: ["m1"] };
+    const live = batchIo([claimed("2027-02-01T11:55:00Z")]);
+    const kept = await runRefreshBatch(retrying, live.io);
+    expect(live.refreshed).toEqual([]);
+    expect(kept.progress).toMatchObject({ done: true, failed: 1, failedIds: ["m1"] });
+    const stale = batchIo([claimed("2027-02-01T11:00:00Z")]);
+    const readNow = await runRefreshBatch(retrying, stale.io);
+    expect(stale.refreshed).toEqual(["m1"]);
+    expect(readNow.progress).toMatchObject({ done: true, failed: 0 });
   });
 
   it("drops a failed email whose record is gone by the second try", async () => {

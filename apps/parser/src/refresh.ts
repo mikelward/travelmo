@@ -26,23 +26,25 @@ import {
   type Trip,
 } from "@travelmo/core";
 import { maxFailedIds, type BackfillBatch } from "./backfill";
-import { isModelRateLimit } from "./extract";
+import { isModelRateLimit, readerVersion } from "./extract";
 import { GmailRateLimited, type EmailMessage } from "./gmail";
 import {
   ImportSupersededError,
   attachmentsOf,
   emptyCounts,
+  importMessage,
   originalSentAt,
   placeSegments,
   rebookedByEmail,
   settlingTripDates,
+  staleClaim,
   sourceTripPrefix,
   tripTitle,
   withWaitingCancellations,
   type ImportCounts,
   type ImportDeps,
 } from "./importer";
-import { senderDomain } from "./prefilter";
+import { senderDomain, travelSender, type SenderPatterns } from "./prefilter";
 
 // "Refresh from email" (SPEC "Refresh from email"): the emails the user's
 // bookings came from, and only those, read again by today's extraction and
@@ -473,6 +475,25 @@ export function isMailboxRecord(record: ParsedMessage): boolean {
   return record.source === undefined || record.source === "gmail" || record.source === "fastmail" || record.source === "imap";
 }
 
+// An email from a travel sender (prefilter.ts `travelSender`), in a
+// mailbox, that "Refresh from email" reads again with today's reader: one
+// an older reader found no booking in, in case today's does better
+// (Virgin Atlantic's e-tickets, whose plain text was only a footer, before
+// the reader took their HTML), or one whose reading failed (the model's
+// error or rate limit, or a re-read whose batch stopped before listing it)
+// or stopped part way (a claim whose worker died, `staleClaim`), so none is
+// lost.
+export function readAgain(record: ParsedMessage, patterns: SenderPatterns, now: string): boolean {
+  const older = record.outcome === "not_booking" && (record.readerVersion ?? 0) < readerVersion;
+  const unfinished = record.outcome === "failed" || staleClaim(record, now);
+  return (older || unfinished) && isMailboxRecord(record) && travelSender(record.from, patterns);
+}
+
+// The records a refresh reads: those that made bookings, from a mailbox,
+// and those to read again with today's reader (readAgain).
+const refreshes = (patterns: SenderPatterns, now: string) => (record: ParsedMessage) =>
+  record.outcome === "imported" ? isMailboxRecord(record) : readAgain(record, patterns, now);
+
 export type RecordOutcome =
   | { kind: "refreshed"; counts: EmailRefresh }
   // The email is gone from its mailbox, or the mailbox is not connected.
@@ -504,6 +525,7 @@ export async function refreshRecord(
     deps.log("refresh_email_missing", { uid, messageId: record.messageId });
     return { kind: "missing" };
   }
+  if (record.outcome !== "imported") return importAgain(uid, record, message, deps, options.generation);
   try {
     const counts = await refreshEmail(uid, record, message, deps, options);
     deps.log("refreshed", { uid, messageId: record.messageId, ...counts });
@@ -523,6 +545,22 @@ export async function refreshRecord(
   }
 }
 
+// An email an older reader found no booking in (readAgain), or one whose
+// reading again failed, imported afresh as "Import anyway" does: the
+// bookings it now finds are added, and its record says what today's reader
+// made of it. A failed reading (the model's rate limit included) is tried
+// again at the end of the refresh, as one of the emails that failed.
+async function importAgain(uid: string, record: ParsedMessage, message: EmailMessage, deps: ImportDeps, generation: number): Promise<RecordOutcome> {
+  const again = record.outcome === "failed" ? { retryFailed: true } : { reclaim: true };
+  // A mailbox record's source (isMailboxRecord), Gmail's left unsaid.
+  const source = record.source === "fastmail" || record.source === "imap" ? record.source : "gmail";
+  const outcome = await importMessage(uid, message, deps, { force: true, ...again, source, generation });
+  deps.log("refresh_read_again", { uid, messageId: record.messageId, outcome });
+  if (outcome === "failed") return { kind: "failed" };
+  const added = outcome === "imported" ? ((await deps.store.getParsed(uid, record.messageId))?.segmentIds.length ?? 0) : 0;
+  return { kind: "refreshed", counts: { ...nothingChanged(), added } };
+}
+
 // Records read per batch: more than a batch gets through in its time.
 export const refreshPage = 100;
 // How long a refresh that Gmail or the model rate limited waits before
@@ -530,7 +568,11 @@ export const refreshPage = 100;
 export const refreshPauseMs = 60 * 1000;
 
 export type RefreshBatchIo = {
+  // The import records a refresh may read (imported or not a booking), in
+  // id order after `after`; it picks which (refreshes).
   records: (after: string | undefined, limit: number) => Promise<ParsedMessage[]>;
+  // The user's always/never import senders, for which emails to read again.
+  senderPatterns: () => Promise<SenderPatterns>;
   // One import record by id, for reading failed emails again.
   record: (messageId: string) => Promise<ParsedMessage | undefined>;
   // The user's bookings, read once a batch (refreshEmail's `snapshot`).
@@ -543,12 +585,12 @@ export type RefreshBatchIo = {
 };
 
 // The emails a refresh will read, counted once when it starts.
-async function countEmails(io: RefreshBatchIo): Promise<number> {
+async function countEmails(io: RefreshBatchIo, wanted: (record: ParsedMessage) => boolean): Promise<number> {
   let after: string | undefined;
   let total = 0;
   for (;;) {
     const page = await io.records(after, 500);
-    total += page.filter(isMailboxRecord).length;
+    total += page.filter(wanted).length;
     if (page.length < 500) return total;
     after = page[page.length - 1]!.messageId;
   }
@@ -564,11 +606,12 @@ async function countEmails(io: RefreshBatchIo): Promise<number> {
 // Gmail's, longer for the model's (`counts.failed` slows the chain).
 export async function runRefreshBatch(from: RefreshProgress, io: RefreshBatchIo): Promise<BackfillBatch> {
   if (from.retrying?.length) return retryRefresh(from, io);
-  const total = from.total ?? (await countEmails(io));
+  const wanted = refreshes(await io.senderPatterns(), io.now());
+  const total = from.total ?? (await countEmails(io, wanted));
   const tally = tallyOf(from);
   let cursor = from.cursor;
   const page = await io.records(cursor, refreshPage);
-  const snapshot = page.some(isMailboxRecord) ? await io.snapshot() : [];
+  let snapshot = page.some(wanted) ? await io.snapshot() : [];
   const counts = emptyCounts();
   const failedIds: string[] = [];
   let retryAfter: string | undefined;
@@ -576,11 +619,14 @@ export async function runRefreshBatch(from: RefreshProgress, io: RefreshBatchIo)
   let read = 0;
   for (const record of page) {
     if (read > 0 && io.timeLeftMs() <= 0) break;
-    if (!isMailboxRecord(record)) {
+    if (!wanted(record)) {
       cursor = record.messageId;
       continue;
     }
     const outcome = await io.refresh(record, snapshot);
+    // Bookings an email read again added are in the user's bookings now,
+    // which the emails after it are compared with.
+    if (record.outcome !== "imported" && outcome.kind === "refreshed" && outcome.counts.added > 0) snapshot = await io.snapshot();
     if (outcome.kind === "superseded") break;
     if (outcome.kind === "rateLimited") {
       ({ retryAfter, rateLimited } = limited(outcome.by, counts, io));
@@ -622,6 +668,7 @@ async function retryRefresh(from: RefreshProgress, io: RefreshBatchIo): Promise<
   const tally = tallyOf(from);
   const stillFailed = [...(from.failedIds ?? [])];
   const snapshot = ids.length ? await io.snapshot() : [];
+  const wanted = ids.length ? refreshes(await io.senderPatterns(), io.now()) : () => false;
   const counts = emptyCounts();
   let retryAfter: string | undefined;
   let rateLimited = false;
@@ -629,7 +676,17 @@ async function retryRefresh(from: RefreshProgress, io: RefreshBatchIo): Promise<
   for (const id of ids) {
     if (read > 0 && io.timeLeftMs() <= 0) break;
     const record = await io.record(id);
-    if (!record || record.outcome !== "imported" || !isMailboxRecord(record)) {
+    // Still claimed by a reading that may have died (its lease not yet run
+    // out): not read now, but still failed, so Settings lists it and Try
+    // again, or the next refresh once the claim is stale, reads it.
+    if (record?.outcome === "processing" && !wanted(record)) {
+      read += 1;
+      stillFailed.push(id);
+      continue;
+    }
+    // One imported, or one to read again (readAgain: a failed or stale
+    // reading); anything else (deleted, or read since) is no longer failed.
+    if (!record || !wanted(record)) {
       read += 1;
       tally.failed = Math.max(0, tally.failed - 1);
       continue;
