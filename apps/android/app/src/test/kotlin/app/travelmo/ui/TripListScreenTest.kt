@@ -93,7 +93,7 @@ class TripListScreenTest {
         search.performTextClearance()
         search.performTextInput("March 2026")
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Paris").assertExists()
+        composeRule.onNodeWithText("Amsterdam").assertExists()
         composeRule.onNodeWithText("Dublin").assertDoesNotExist()
 
         search.performTextClearance()

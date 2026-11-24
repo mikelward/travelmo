@@ -70,7 +70,7 @@ import kotlinx.coroutines.flow.update
 
 // The invented trips of design/android's boards, as the screenshot tests
 // render them: the owner is "owner", today is 1 November 2026, and the
-// Edinburgh trip is someone else's, shared with the owner.
+// Paris trip is someone else's, shared with the owner.
 
 const val OWNER = "owner"
 const val OWNER_EMAIL = "owner@example.com"
@@ -80,12 +80,12 @@ private fun trip(id: String, title: String, start: String, end: String, owner: S
     Trip(id, title, start, end, owner, sharedWith = if (owner == OWNER) emptyList() else listOf(OWNER_EMAIL), deleting = deleting)
 
 val fixtureTrips = listOf(
-    trip("edinburgh", "Edinburgh", "2026-10-31", "2026-11-03", owner = "partner"),
+    trip("paris", "Paris", "2026-10-31", "2026-11-03", owner = "partner"),
     trip("dublin", "Dublin", "2026-11-28", "2026-12-02"),
     trip("liverpool", "Liverpool", "2026-12-12", "2026-12-14"),
     trip("lisbon", "Lisbon", "2026-09-14", "2026-09-19"),
     trip("cornwall", "Cornwall", "2026-08-01", "2026-08-05", deleting = true),
-    trip("paris", "Paris", "2026-03-20", "2026-03-22"),
+    trip("amsterdam", "Amsterdam", "2026-03-20", "2026-03-22"),
 )
 
 // A trip under way with a flight leaving in three hours (15:00Z), and the
@@ -147,8 +147,16 @@ val fixtureStaySources = listOf(
 )
 
 val fixtureSegments: Map<String, List<Segment>> = mapOf(
-    "edinburgh" to listOf(
-        Segment("e-stay", "edinburgh", SegmentType.LODGING, "Grassmarket Hotel", "2026-10-31T15:00:00+00:00", "2026-11-03T11:00:00+00:00", provider = "Grassmarket", confirmation = "GM-2210"),
+    "paris" to listOf(
+        Segment(
+            "p-flight", "paris", SegmentType.FLIGHT, "AF 1081 LHR to CDG", "2026-10-31T09:15:00+00:00", "2026-10-31T11:35:00+01:00",
+            provider = "Air France", confirmation = "AF7K2M", origin = Place("London Heathrow", code = "LHR", city = "London", country = "GB"),
+            destination = Place("Paris Charles de Gaulle", code = "CDG", city = "Paris", country = "FR"),
+        ),
+        Segment(
+            "p-stay", "paris", SegmentType.LODGING, "Hôtel du Marais", "2026-10-31T15:00:00+01:00", "2026-11-03T11:00:00+01:00", provider = "Hôtel du Marais", confirmation = "HM-2210",
+            destination = Place("Hôtel du Marais", city = "Paris", country = "FR"),
+        ),
     ),
     "dublin" to listOf(
         Segment(

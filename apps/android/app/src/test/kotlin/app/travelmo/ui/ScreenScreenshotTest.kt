@@ -392,7 +392,7 @@ class ScreenScreenshotTest {
     @Test
     fun trip_detail_shared_dark() {
         val viewModel = viewModel()
-        capture("trip_detail_shared_dark", dark = true) { TripDetailScreen(viewModel = viewModel, tripId = "edinburgh", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+        capture("trip_detail_shared_dark", dark = true) { TripDetailScreen(viewModel = viewModel, tripId = "paris", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
     // The stay's Sources, from its ⋮ menu: the owner's own emails link into
@@ -490,7 +490,7 @@ class ScreenScreenshotTest {
     @Test
     fun trip_manage() {
         val viewModel = viewModel()
-        capture("trip_manage") { TripDetailScreen(viewModel = viewModel, tripId = "paris", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+        capture("trip_manage") { TripDetailScreen(viewModel = viewModel, tripId = "amsterdam", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
     @Test
@@ -502,7 +502,7 @@ class ScreenScreenshotTest {
     @Test
     fun trip_detail_shared() {
         val viewModel = viewModel()
-        capture("trip_detail_shared") { TripDetailScreen(viewModel = viewModel, tripId = "edinburgh", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+        capture("trip_detail_shared") { TripDetailScreen(viewModel = viewModel, tripId = "paris", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
     @Test
