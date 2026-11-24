@@ -45,6 +45,7 @@ import app.travelmo.core.monthOf
 import app.travelmo.core.monthWeeks
 import app.travelmo.core.weekBars
 import app.travelmo.shared.Res
+import app.travelmo.shared.nav_calendar
 import app.travelmo.shared.next_month
 import app.travelmo.shared.no_trips_in
 import app.travelmo.shared.previous_month
@@ -77,17 +78,8 @@ fun CalendarScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(monthLabel(month)) },
+                title = { Text(stringResource(Res.string.nav_calendar)) },
                 actions = {
-                    IconButton(onClick = { onMonthChange(addMonths(month, -1)) }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(Res.string.previous_month))
-                    }
-                    TextButton(onClick = { onMonthChange(monthOf(today)) }, enabled = month != monthOf(today)) {
-                        Text(stringResource(Res.string.today))
-                    }
-                    IconButton(onClick = { onMonthChange(addMonths(month, 1)) }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(Res.string.next_month), modifier = Modifier.scale(scaleX = -1f, scaleY = 1f))
-                    }
                     SettingsButton(onClick = onOpenSettings)
                     AppMenu()
                 },
@@ -95,23 +87,54 @@ fun CalendarScreen(
         },
         bottomBar = bottomBar,
     ) { padding ->
-        val all = trips
-        if (all == null) {
-            Text(stringResource(Res.string.trips_loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp))
-        } else {
-            val inMonth = all.filter { monthOf(it.start) <= month && monthOf(it.end) >= month }
-            val scroll = rememberScrollState()
-            Column(modifier = Modifier.fillMaxSize().padding(padding).scrollEdgeCue(scroll, scrollCueColors()).verticalScroll(scroll).padding(horizontal = 16.dp, vertical = 12.dp)) {
-                MonthGrid(month = month, trips = inMonth, titles = displayTitles(all), today = today, uid = uid, onOpenTrip = onOpenTrip)
-                if (inMonth.isEmpty()) {
-                    Text(
-                        stringResource(Res.string.no_trips_in, monthLabel(month)),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 16.dp),
-                    )
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            MonthSwitcher(month = month, today = today, onMonthChange = onMonthChange)
+            val all = trips
+            if (all == null) {
+                Text(stringResource(Res.string.trips_loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
+            } else {
+                val inMonth = all.filter { monthOf(it.start) <= month && monthOf(it.end) >= month }
+                val scroll = rememberScrollState()
+                Column(modifier = Modifier.fillMaxSize().scrollEdgeCue(scroll, scrollCueColors()).verticalScroll(scroll).padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) {
+                    MonthGrid(month = month, trips = inMonth, titles = displayTitles(all), today = today, uid = uid, onOpenTrip = onOpenTrip)
+                    if (inMonth.isEmpty()) {
+                        Text(
+                            stringResource(Res.string.no_trips_in, monthLabel(month)),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 16.dp),
+                        )
+                    }
                 }
             }
+        }
+    }
+}
+
+/**
+ * The month shown, between the arrows to the previous and next ones, and
+ * Today to come back to the current month. Below the top bar, which the
+ * month's name and four buttons would crowd on a phone.
+ */
+@Composable
+private fun MonthSwitcher(month: String, today: String, onMonthChange: (String) -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = { onMonthChange(addMonths(month, -1)) }) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(Res.string.previous_month))
+        }
+        Text(
+            monthLabel(month),
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        IconButton(onClick = { onMonthChange(addMonths(month, 1)) }) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(Res.string.next_month), modifier = Modifier.scale(scaleX = -1f, scaleY = 1f))
+        }
+        TextButton(onClick = { onMonthChange(monthOf(today)) }, enabled = month != monthOf(today)) {
+            Text(stringResource(Res.string.today))
         }
     }
 }
