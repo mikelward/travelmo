@@ -311,7 +311,11 @@ export function noticeDeparture(before: FlightStatus | undefined, after: FlightS
 // not news either way, and the card keeps saying where to go. A gate and
 // its terminal go together: one is kept only while the other is unchanged
 // (or lost too), so a new terminal never shows with the old one's gate.
+// An answer that misses a flight the last one found is the service
+// stumbling, not the flight vanishing: the last status stands, stamped with
+// this look, so the card and the phone's Live Update keep it.
 export function keepKnownPlaces(before: FlightStatus | undefined, after: FlightStatus): FlightStatus {
+  if (before?.found && !after.found) return { ...before, checkedAt: after.checkedAt };
   if (!before?.found || !after.found) return after;
   const kept: Partial<FlightStatus> = {};
   const pair = (gate: "departureGate" | "arrivalGate", terminal: "departureTerminal" | "arrivalTerminal") => {
