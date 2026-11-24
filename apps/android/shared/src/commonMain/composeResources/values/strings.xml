@@ -246,6 +246,9 @@
     <string name="cancelled">Cancelled</string>
     <string name="trip_all_cancelled">Every booking cancelled</string>
     <string name="trip_cancelled">Trip cancelled</string>
+    <string name="hide_cancelled">Hide cancelled</string>
+    <string name="hide_local_events">Hide local events</string>
+    <string name="all_trips_hidden">Every trip is hidden.</string>
     <string name="mark_trip_cancelled">Mark trip cancelled</string>
     <string name="mark_cancelled">Mark cancelled</string>
     <string name="checked_in_action">I’ve checked in</string>

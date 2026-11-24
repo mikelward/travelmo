@@ -332,6 +332,24 @@ answer, trips are matched by title and dates, under "Searching bookings…".
 A trip whose bookings couldn't be read is searched by title and dates
 only, and the web says so. With no match the list says "No trips match."
 
+### Filtering the trip list
+
+Below the search box, on the web and Android, two switches narrow the list:
+**Hide cancelled** leaves out a trip its owner cancelled and one whose every
+booking was cancelled (`tripCancelled`), and **Hide local events** leaves out
+a trip of outings alone: everything still booked in it is an activity, an
+"other" booking or a car hired and returned in one place, with no journey,
+stay or ride to somewhere else (`localOnly` in
+`packages/core/src/listFilters.ts`, mirrored in `ListFilters.kt`). A trip
+with nothing booked is neither. Both are off until the person turns them
+on, and are kept on that device (the browser's local storage; Android's
+own preferences file), not synced: they are about how this screen reads. A
+trip document says only whether its owner cancelled it, so while a switch
+is on every trip's bookings are read, as a search reads them (the web once,
+Android listening); until they answer, only owner-cancelled trips are left
+out. With a switch on and nothing left, the list says "Every trip is
+hidden."; the search applies to what the switches leave.
+
 `/calendar` shows the same trips month by month (`packages/core/src/calendar.ts`):
 weeks run Monday to Sunday, padded with the neighboring months' days, and
 each trip is a bar across the days it covers, clipped at the week's edges

@@ -52,6 +52,36 @@ class TripListScreenTest {
     }
 
     @Test
+    fun `the filters hide a cancelled trip and keep the choice`() {
+        val filters = app.travelmo.data.InMemoryListFilterStore()
+        val store = FakeTripStore(
+            trips = fixtureTrips + fixtureFlightTrip.copy(title = "Called off", cancelledAt = "2026-10-28T09:00:00Z"),
+            segments = fixtureSegments + ("sydney" to listOf(fixtureNextFlight)),
+        )
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, listFilterStore = filters)
+        composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }
+        composeRule.onNodeWithText("Called off").assertExists()
+        composeRule.onNodeWithText("Hide cancelled").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Called off").assertDoesNotExist()
+        filters.read().hideCancelled shouldBe true
+    }
+
+    @Test
+    fun `a search that finds only hidden trips says nothing matches`() {
+        val store = FakeTripStore(
+            trips = fixtureTrips + fixtureFlightTrip.copy(title = "Called off", cancelledAt = "2026-10-28T09:00:00Z"),
+            segments = fixtureSegments + ("sydney" to listOf(fixtureNextFlight)),
+        )
+        val filters = app.travelmo.data.InMemoryListFilterStore(app.travelmo.core.ListFilters(hideCancelled = true))
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, listFilterStore = filters)
+        composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }
+        composeRule.onNodeWithText("Search trips").performTextInput("called")
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("No trips match.").assertExists()
+    }
+
+    @Test
     fun `a trip under way's card names the next booking then when then the flight's gate`() {
         val viewModel = TripsViewModel(flightTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
         composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }
