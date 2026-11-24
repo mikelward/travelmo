@@ -10,6 +10,7 @@ import androidx.credentials.exceptions.GetCredentialException
 import androidx.credentials.exceptions.NoCredentialException
 import app.travelmo.core.normalizeEmail
 import app.travelmo.log.TravelmoLog
+import app.travelmo.notify.LiveFlightNotifications
 import com.mikelward.androidlog.safe
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -101,6 +102,8 @@ class GoogleAccount(
     suspend fun signOut(context: Context) {
         if (!available) return
         auth().signOut()
+        // The signed-out phone gets no more flight messages: take its Live Updates down too.
+        LiveFlightNotifications.forgetAll(context)
         try {
             credentialManager(context).clearCredentialState(ClearCredentialStateRequest())
         } catch (e: Exception) {

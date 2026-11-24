@@ -152,4 +152,49 @@ class LiveFlightNotificationsTest {
         LiveFlightNotifications.redraw(context, tag, at("2026-12-13T07:30:00Z"))
         NotificationCompat.getShortCriticalText(shadowOf(manager).allNotifications.single()) shouldBe "Landing"
     }
+
+    private fun liveData() = mapOf(
+        "kind" to "live", "tag" to "live-XX100_2026-12-13_SYD", "key" to "XX100_2026-12-13_SYD", "title" to "XX 100 SYD to SIN",
+        "url" to "https://travelmo.example/trips/t1", "start" to "2026-12-13T09:00:00+11:00", "end" to "2026-12-13T15:30:00+08:00",
+        "ident" to "XX100", "date" to "2026-12-13", "found" to "true", "departureGate" to "26", "departureTerminal" to "3",
+        "scheduledOut" to "2026-12-12T22:00:00Z", "scheduledIn" to "2026-12-13T07:30:00Z", "checkedAt" to "2026-12-12T21:00:00Z",
+    )
+
+    @Test
+    fun `leaving the app brings back one the system dropped, but not one swiped away`() {
+        LiveFlightNotifications.received(context, liveData(), at("2026-12-12T21:00:00Z"))
+        manager.cancelAll()
+        LiveFlightNotifications.redrawAll(context, at("2026-12-12T21:20:00Z"))
+        NotificationCompat.getShortCriticalText(shadowOf(manager).allNotifications.single()) shouldBe "T3 G26"
+
+        LiveFlightDismissedReceiver().onReceive(context, shadowOf(shadowOf(manager).allNotifications.single().deleteIntent).savedIntent)
+        manager.cancelAll()
+        LiveFlightNotifications.redrawAll(context, at("2026-12-12T21:30:00Z"))
+        shadowOf(manager).allNotifications.shouldBeEmpty()
+    }
+
+    @Test
+    fun `notifications turned off or signing out takes every Live Update down for good`() {
+        LiveFlightNotifications.received(context, liveData(), at("2026-12-12T21:00:00Z"))
+        LiveFlightNotifications.forgetAll(context)
+        shadowOf(manager).allNotifications.shouldBeEmpty()
+        shadowOf(context.getSystemService(android.app.AlarmManager::class.java)).scheduledAlarms.shouldBeEmpty()
+
+        // Nothing kept: neither leaving the app nor an alarm draws it again.
+        LiveFlightNotifications.redrawAll(context, at("2026-12-12T22:15:00Z"))
+        LiveFlightNotifications.redraw(context, "live-XX100_2026-12-13_SYD", at("2026-12-12T22:15:00Z"))
+        shadowOf(manager).allNotifications.shouldBeEmpty()
+    }
+
+    @Test
+    fun `after landing it is kept, so leaving the app brings the carousel back and turning off takes it down`() {
+        val landed = liveData() + mapOf("actualOut" to "2026-12-12T22:05:00Z", "actualIn" to "2026-12-13T07:20:00Z", "baggageClaim" to "16")
+        LiveFlightNotifications.received(context, landed, at("2026-12-13T07:25:00Z"))
+        manager.cancelAll()
+        LiveFlightNotifications.redrawAll(context, at("2026-12-13T07:35:00Z"))
+        NotificationCompat.getShortCriticalText(shadowOf(manager).allNotifications.single()) shouldBe "Bags 16"
+
+        LiveFlightNotifications.forgetAll(context)
+        shadowOf(manager).allNotifications.shouldBeEmpty()
+    }
 }
