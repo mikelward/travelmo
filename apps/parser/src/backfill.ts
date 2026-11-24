@@ -34,6 +34,9 @@ export const backfillChunk = 1;
 // How long a batch that Gmail kept rate limiting has the next one wait:
 // Gmail's quota is per minute.
 export const rateLimitPauseMs = 60 * 1000;
+// Failed emails remembered to try again at the end; past this many, the
+// rest are counted but left for "Read again from the start".
+export const maxFailedIds = 1000;
 
 export type BackfillIo = {
   page: (pageToken: string | undefined) => Promise<MessagePage>;
@@ -55,6 +58,7 @@ export type BackfillBatch = { counts: ImportCounts; candidates: number; progress
 
 export async function runBackfillBatch(previous: BackfillProgress | undefined, restart: boolean, io: BackfillIo): Promise<BackfillBatch> {
   const start = restart || !previous || previous.done ? undefined : previous;
+  if (start?.retrying) return retryFailed(start, io);
   const retry = {
     timeLeftMs: io.timeLeftMs ?? (() => 0),
     sleep: io.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))),
@@ -100,6 +104,7 @@ export async function runBackfillBatch(previous: BackfillProgress | undefined, r
   // messages read already are skipped, and only failed ones are tried again.
   const from = carryOn && start?.after && start.cursor === cursor ? found.ids.indexOf(start.after) + 1 : 0;
   let counts = emptyCounts();
+  const failedIds: string[] = [];
   let read = from;
   let retryAfter: string | undefined;
   while (read < found.ids.length) {
@@ -114,6 +119,8 @@ export async function runBackfillBatch(previous: BackfillProgress | undefined, r
       break;
     }
     counts = addCounts(counts, chunkCounts);
+    // A chunk is one email (`backfillChunk`), so a failure is that email's.
+    if (chunkCounts.failed) failedIds.push(...chunk);
     read += chunk.length;
   }
   const finished = read >= found.ids.length;
@@ -132,7 +139,56 @@ export async function runBackfillBatch(previous: BackfillProgress | undefined, r
     updatedAt: io.now(),
     ...(retryAfter ? { retryAfter } : {}),
   };
+  const remembered = [...(carryOn && start ? (start.failedIds ?? []) : []), ...failedIds].slice(0, maxFailedIds);
+  // Read through with failures: not done yet, the failed emails are tried
+  // again by id first.
+  if (progress.done && remembered.length) {
+    const { cursor: _cursor, after: _after, ...rest } = progress;
+    return { counts, candidates: found.ids.length, progress: { ...rest, done: false, retrying: remembered } };
+  }
+  if (remembered.length) progress.failedIds = remembered;
   return { counts, candidates: found.ids.length, progress, ...(retryAfter ? { rateLimited: true } : {}) };
+}
+
+// The emails that failed to import during the reading, tried again by id,
+// as many as time allows; each that succeeds no longer counts as failed.
+// The reading is done once each has had its second try.
+async function retryFailed(start: BackfillProgress, io: BackfillIo): Promise<BackfillBatch> {
+  const retry = {
+    timeLeftMs: io.timeLeftMs ?? (() => 0),
+    sleep: io.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))),
+    log: io.log,
+  };
+  const ids = start.retrying ?? [];
+  let counts = emptyCounts();
+  let read = 0;
+  let retryAfter: string | undefined;
+  while (read < ids.length) {
+    if (read > 0 && io.timeLeftMs && io.timeLeftMs() <= 0) break;
+    const chunk = ids.slice(read, read + backfillChunk);
+    try {
+      counts = addCounts(counts, await withRateLimitRetry(() => io.importIds(chunk), retry));
+    } catch (error) {
+      if (!(error instanceof GmailRateLimited)) throw error;
+      io.log("backfill_rate_limited", { error: error.message });
+      retryAfter = new Date(Date.parse(io.now()) + rateLimitPauseMs).toISOString();
+      break;
+    }
+    read += chunk.length;
+  }
+  const left = ids.slice(read);
+  const { retrying: _retrying, failedIds: _failedIds, ...rest } = placeOf(start);
+  const progress: BackfillProgress = {
+    ...rest,
+    imported: start.imported + counts.imported,
+    // Every email tried that did not fail again is no longer a failure.
+    failed: Math.max(0, (start.failed ?? 0) - (read - counts.failed)),
+    done: left.length === 0,
+    updatedAt: io.now(),
+    ...(left.length ? { retrying: left } : {}),
+    ...(retryAfter ? { retryAfter } : {}),
+  };
+  return { counts, candidates: read, progress, ...(retryAfter ? { rateLimited: true } : {}) };
 }
 
 // Where a reading had got to, and its totals.
@@ -143,6 +199,8 @@ function placeOf(progress: BackfillProgress): BackfillProgress {
     scanned: progress.scanned,
     imported: progress.imported,
     failed: progress.failed ?? 0,
+    ...(progress.failedIds?.length ? { failedIds: progress.failedIds } : {}),
+    ...(progress.retrying?.length ? { retrying: progress.retrying } : {}),
     done: false,
     updatedAt: progress.updatedAt,
   };

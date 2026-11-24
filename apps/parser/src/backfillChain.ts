@@ -44,9 +44,25 @@ export const backfillLeaseMs = claimLeaseMs + 60 * 1000;
 export const backfillWaitMs = 60 * 1000;
 
 // Batches in a row that may fail (each tried again once `retryAfter`
-// lapses) before the reading stops and Settings offers Continue; past that
-// the cause (a revoked grant, say) is not passing.
-export const maxFailedBatches = 3;
+// lapses, later each time: `failedBatchPauseMs`) before the reading stops
+// and Settings offers Continue; past that, about six hours on, the cause
+// (a revoked grant, say) is not passing.
+export const maxFailedBatches = 6;
+
+// How long a failed batch holds off the next try: at least as long as the
+// claim it may have left on the email it was importing (`claimLeaseMs`),
+// doubling with each failure in a row, up to two hours.
+export function failedBatchPauseMs(failures: number): number {
+  return Math.max(claimLeaseMs + 1000, Math.min(15 * 60_000 * 2 ** (failures - 1), 2 * 60 * 60_000));
+}
+
+// How long a batch in which emails failed to import (the model was down,
+// say) holds off the next: five minutes, doubling while batch after batch
+// has failures, up to an hour. A mailbox reading goes on regardless and
+// tries those emails again at the end.
+export function slowedPauseMs(slowed: number): number {
+  return Math.min(5 * 60_000 * 2 ** (slowed - 1), 60 * 60_000);
+}
 
 // `wake` marks a message queued to carry a waiting reading on (see
 // `deferred`); the first message of each step has none. `mailbox` is the
@@ -128,6 +144,7 @@ function place(progress: BackfillProgress): BackfillProgress {
     wake: _wake,
     handoff: _handoff,
     failures: _failures,
+    slowed: _slowed,
     ...rest
   } = progress;
   return rest;
@@ -203,19 +220,34 @@ export function decideHandedOn(current: BackfillProgress | undefined, message: C
 }
 
 // What a batch saves: its place, the next step, and whether to go on, which
-// Stop (pressed while it read) or a failed import turns off. A batch Gmail
-// rate limited goes on, its place saved and the next held off a minute
-// (`retryAfter` in its progress).
-export function decideFinish(current: BackfillProgress | undefined, message: ContinueMessage, batch: BackfillBatch): BackfillProgress | undefined {
+// Stop (pressed while it read) turns off. A batch Gmail rate limited goes
+// on, its place saved and the next held off a minute (`retryAfter` in its
+// progress). One in which emails failed to import goes on too, holding the
+// next off for a while (`slowedPauseMs`); those emails are tried again at
+// the end (backfill.ts). "Refresh from email" (`kind: "refresh"`) still
+// pauses on them, with Continue in Settings.
+export function decideFinish(
+  current: BackfillProgress | undefined,
+  message: ContinueMessage,
+  batch: BackfillBatch,
+  now: string,
+): BackfillProgress | undefined {
   if (!current || current.run !== message.run || current.step !== message.step) return undefined;
   const failed = batch.counts.failed;
+  const pauses = message.kind === "refresh" && failed > 0;
+  const slowed = failed > 0 && !pauses ? (current.slowed ?? 0) + 1 : undefined;
+  const slowedUntil = slowed ? new Date(Date.parse(now) + slowedPauseMs(slowed)).toISOString() : undefined;
+  const retryAfter = [batch.progress.retryAfter, slowedUntil].filter((at): at is string => at !== undefined).sort().at(-1);
+  const { retryAfter: _retryAfter, ...progress } = batch.progress;
   return {
-    ...batch.progress,
+    ...progress,
+    ...(retryAfter ? { retryAfter } : {}),
     run: message.run,
     step: message.step + 1,
-    running: current.running === true && !batch.progress.done && failed === 0,
+    running: current.running === true && !batch.progress.done && !pauses,
     queued: false,
-    ...(failed > 0 ? { lastFailed: failed } : {}),
+    ...(slowed ? { slowed } : {}),
+    ...(pauses ? { lastFailed: failed } : {}),
   };
 }
 
@@ -232,7 +264,7 @@ export function decideRelease(current: BackfillProgress | undefined, message: Co
     ...rest,
     failures,
     running: current.running === true && failures < maxFailedBatches,
-    retryAfter: new Date(Date.parse(now) + claimLeaseMs + 1000).toISOString(),
+    retryAfter: new Date(Date.parse(now) + failedBatchPauseMs(failures)).toISOString(),
   };
 }
 
@@ -408,7 +440,7 @@ export async function continueBackfill<S>(message: ContinueMessage, io: ChainIo<
   }
   const saved = await io.change((current, generation) => {
     if (generation !== claim.generation) return { result: undefined };
-    const next = decideFinish(current, message, batch);
+    const next = decideFinish(current, message, batch, io.now());
     return { next, result: next };
   });
   const progress = saved?.result;

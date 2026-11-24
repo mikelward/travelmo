@@ -192,8 +192,14 @@ export const BackfillProgress = z.object({
   after: z.string().optional(),
   scanned: z.number().int().nonnegative(),
   imported: z.number().int().nonnegative(),
-  // Emails whose import failed in this reading; starting over tries them again.
+  // Emails whose import failed in this reading and have not succeeded since.
   failed: z.number().int().nonnegative().optional(),
+  // The ids of those emails (up to `maxFailedIds`), tried again by id once
+  // the mailbox has been read through.
+  failedIds: z.array(z.string()).optional(),
+  // Set while those emails are being tried again: the ones still to try.
+  // Once it runs out, the reading is done, whatever failed again.
+  retrying: z.array(z.string()).optional(),
   done: z.boolean(),
   updatedAt: isoDateTime,
   // The reading under way: each start gets a new id, and each batch of it a
@@ -221,7 +227,11 @@ export const BackfillProgress = z.object({
   handoff: z.object({ from: z.string().optional() }).optional(),
   // Batches in a row that failed; the reading stops after a few.
   failures: z.number().int().positive().optional(),
-  // Emails whose import failed in the last batch, which paused the reading.
+  // Batches in a row with an email whose import failed; each holds the
+  // next off for longer, so a model that is down gets time to recover.
+  slowed: z.number().int().positive().optional(),
+  // Emails whose import failed in the last batch. A mailbox reading no
+  // longer pauses for them (older ones may have); "Refresh from email" does.
   lastFailed: z.number().int().positive().optional(),
 });
 export type BackfillProgress = z.infer<typeof BackfillProgress>;

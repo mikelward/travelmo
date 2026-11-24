@@ -362,6 +362,8 @@ private fun backfillOf(connection: Map<*, *>): BackfillShown? {
         failed = count("failed") ?: 0,
         running = p["running"] == true,
         leaseUntil = p["leaseUntil"] as? String,
-        lastFailed = count("lastFailed") ?: 0,
+        retryAfter = p["retryAfter"] as? String,
+        failures = count("failures") ?: 0,
+        retrying = (p["retrying"] as? List<*>)?.size ?: 0,
     )
 }
