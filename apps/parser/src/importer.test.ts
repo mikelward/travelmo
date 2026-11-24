@@ -743,7 +743,8 @@ describe("tripTitle", () => {
     const admission = { type: "activity" as const, title: "Hampton Court Palace Admission", start: "2026-12-20T12:00:00+00:00", destination: palace };
     expect(tripTitle([admission])).toBe("Hampton Court Palace");
     expect(tripTitle([{ ...lodging.segments[0]!, destination: { ...palace } }, admission])).toBe("East Molesey");
-    expect(tripTitle([admission, { ...admission, start: "2026-12-21T12:00:00+00:00" }])).toBe("East Molesey");
+    // Admission on two days is still the event, not its town.
+    expect(tripTitle([admission, { ...admission, start: "2026-12-21T12:00:00+00:00" }])).toBe("Hampton Court Palace Admission");
     const show = {
       type: "activity" as const,
       title: "The Graham Norton Show",
@@ -771,6 +772,9 @@ describe("tripTitle", () => {
       destination: place,
     }));
     expect(tripTitle(days)).toBe("Holiday Camp East Finchley - Junior Group");
+    // A ticket a day with the very same title is a course too, not "London".
+    const same = days.map((d) => ({ ...d, title: "Holiday Camp East Finchley - Junior Group" }));
+    expect(tripTitle(same)).toBe("Holiday Camp East Finchley - Junior Group");
     const course = {
       type: "activity" as const,
       title: "5 Day Summer Holiday Course: Peter Pan",
