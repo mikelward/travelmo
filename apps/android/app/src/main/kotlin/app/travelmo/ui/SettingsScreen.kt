@@ -249,7 +249,7 @@ import org.jetbrains.compose.resources.stringResource
 
 private const val REMINDER_TOKEN = "settings/reminders/email"
 private const val PUSH_TOKEN = "settings/reminders/push"
-private const val DELETE_ACCOUNT_TOKEN = "settings/account/delete"
+private const val SETTINGS_DELETE_ACCOUNT_TOKEN = "settings/account/delete"
 private const val GMAIL_TOKEN = "settings/gmail"
 private const val FASTMAIL_TOKEN = "settings/fastmail"
 private const val FASTMAIL_DISCONNECT_TOKEN = "settings/fastmail/disconnect"
@@ -355,7 +355,7 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
             TripRemindersSection(viewModel)
             TextSizeSection()
             DebugLogSection(signedIn = true)
-            DeleteAccountSection(account, viewModel)
+            DeleteAccountSection(rememberSignedInAccount(account), viewModel, SETTINGS_DELETE_ACCOUNT_TOKEN)
             Text(
                 stringResource(Res.string.version, BuildConfig.VERSION_NAME),
                 style = MaterialTheme.typography.bodyMedium,
@@ -1370,50 +1370,6 @@ private fun RefreshFromEmail(viewModel: TripsViewModel) {
     }
 }
 
-/**
- * Deleting the account, as on the web: a dialog asks first, then the parser
- * deletes everything and the app signs out, and the sign-in screen says the
- * account is gone. A build with no parser address says to use the web.
- * The invite-only screen offers it too, since Settings needs access.
- */
-@Composable
-internal fun DeleteAccountSection(account: GoogleAccount, viewModel: TripsViewModel, token: String = DELETE_ACCOUNT_TOKEN) {
-    val context = LocalContext.current
-    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
-    val outcome = outcomes[token]
-    var confirming by remember { mutableStateOf(false) }
-    Text(stringResource(Res.string.delete_account), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
-    Text(stringResource(Res.string.delete_account_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    if (!viewModel.canDeleteAccount) {
-        Text(stringResource(Res.string.delete_account_on_web), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
-        return
-    }
-    OutlinedButton(
-        onClick = { confirming = true },
-        enabled = outcome !is Outcome.Busy,
-        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-        modifier = Modifier.padding(top = 8.dp),
-    ) { Text(stringResource(if (outcome is Outcome.Busy) Res.string.deleting else Res.string.delete_account)) }
-    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
-    if (confirming) {
-        AppAlertDialog(
-            onDismissRequest = { confirming = false },
-            title = { Text(stringResource(Res.string.delete_account_confirm_title)) },
-            text = { Text(stringResource(Res.string.delete_account_confirm)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        confirming = false
-                        val appContext = context.applicationContext
-                        viewModel.deleteAccount(token) { account.signOutDeleted(appContext) }
-                    },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                ) { Text(stringResource(Res.string.delete)) }
-            },
-            dismissButton = { TextButton(onClick = { confirming = false }) { Text(stringResource(Res.string.keep)) } },
-        )
-    }
-}
 
 /**
  * The on-device debug log: a switch to stop recording (which also empties

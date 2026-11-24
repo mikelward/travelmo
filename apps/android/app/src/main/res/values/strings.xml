@@ -5,7 +5,6 @@
     <string name="link_failed">No app can open the link.</string>
     <string name="update_open_failed">No app can open Google Play.</string>
     <!-- The clipboard entry's label, which some keyboards show. -->
-    <string name="booking_reference">Booking reference</string>
     <string name="reminders_channel">Trip reminders</string>
     <string name="reminders_channel_description">Passports or visas that run out too soon, what each country asks of your passport, and your own reminders, before a trip.</string>
     <string name="flight_changes_channel">Flight changes</string>
