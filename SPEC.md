@@ -2808,8 +2808,15 @@ and `FontSizeWindow`, which do nothing on iOS. Navigation is shared too: the
 pages as Navigation 3 keys and `SignedInNavigation`, the home tabs and
 what each page opens; each app makes the back stack (Android's survives
 the activity's recreation) and opens a trip a notification asks for.
-Next: the iOS app itself
-(Firebase Auth and Firestore, Google sign-in and Sign in with Apple, which
+Firestore is shared as well: `FirestoreTrips`, the `TripStore` both apps
+use, is in `apps/android/firestore`, written against GitLive's Firebase
+Kotlin SDK, which offers Google's own Firestore API on Android and iOS
+alike and calls Google's Android and iOS SDKs underneath; writes go
+through its `setData` and `updateData`, which map plain maps on every
+platform. It is a module apart from `:shared` so that `:shared`'s tests
+link no Firebase; it is compiled for iOS in CI, and Android's instrumented
+tests run it against the Firestore emulator. Next: the iOS app itself
+(Firebase Auth, Google sign-in and Sign in with Apple, which
 App Store review asks of an app offering Google's, notifications through
 Cloud Messaging), then a TestFlight build from CI.
 

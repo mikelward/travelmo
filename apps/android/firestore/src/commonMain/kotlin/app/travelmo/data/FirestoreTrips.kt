@@ -47,9 +47,9 @@ import app.travelmo.core.segmentDateRange
 import app.travelmo.core.bookedDateRange
 import app.travelmo.core.liveBounds
 import app.travelmo.core.widenedFor
-import app.travelmo.log.TravelmoLog
-import com.mikelward.androidlog.safe
-import com.mikelward.androidlog.sensitive
+import app.travelmo.logging.SharedLog
+import app.travelmo.logging.safe
+import app.travelmo.logging.sensitive
 import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
@@ -68,7 +68,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
-import java.time.Instant
+import com.google.firebase.serialization.setData
+import com.google.firebase.serialization.updateData
+import kotlin.time.Clock
 
 
 // Records a search reads at a time.
@@ -86,7 +88,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             for (snapshot in listOfNotNull(mine, theirs)) {
                 for (doc in snapshot.documents) {
                     val trip = tripFromDocument(doc.id, doc.data ?: emptyMap())
-                    if (trip == null) TravelmoLog.warning("Malformed trip %s", sensitive(doc.reference.path)) else byId[trip.id] = trip
+                    if (trip == null) SharedLog.warning("Malformed trip %s", sensitive(doc.reference.path)) else byId[trip.id] = trip
                 }
             }
             byId.values.toList()
@@ -97,7 +99,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         db.collection("trips").document(tripId).collection("segments").snapshots().orNothing("segments of $tripId").map { snapshot ->
             snapshot?.documents.orEmpty().mapNotNull { doc ->
                 segmentFromDocument(doc.id, tripId, doc.data ?: emptyMap()).also {
-                    if (it == null) TravelmoLog.warning("Malformed segment %s", sensitive(doc.reference.path))
+                    if (it == null) SharedLog.warning("Malformed segment %s", sensitive(doc.reference.path))
                 }
             }
         }
@@ -105,26 +107,26 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     override suspend fun serverSegments(tripId: String): List<Segment> =
         db.collection("trips").document(tripId).collection("segments").get(Source.SERVER).await().documents.mapNotNull { doc ->
             segmentFromDocument(doc.id, tripId, doc.data ?: emptyMap()).also {
-                if (it == null) TravelmoLog.warning("Malformed segment %s", sensitive(doc.reference.path))
+                if (it == null) SharedLog.warning("Malformed segment %s", sensitive(doc.reference.path))
             }
         }
 
     override suspend fun serverOwnTrips(uid: String): List<Trip> =
         db.collection("trips").whereEqualTo("ownerUid", uid).get(Source.SERVER).await().documents.mapNotNull { doc ->
             tripFromDocument(doc.id, doc.data ?: emptyMap()).also {
-                if (it == null) TravelmoLog.warning("Malformed trip %s", sensitive(doc.reference.path))
+                if (it == null) SharedLog.warning("Malformed trip %s", sensitive(doc.reference.path))
             }
         }
 
     override fun flightStatus(key: String): Flow<FlightStatus?> = callbackFlow {
         val registration = db.collection("flightStatus").document(key).addSnapshotListener { snapshot, error ->
             if (error != null) {
-                TravelmoLog.error(error, "Reading the status of flight %s failed", sensitive(key))
+                SharedLog.error(error, "Reading the status of flight %s failed", sensitive(key))
                 trySend(null)
                 return@addSnapshotListener
             }
             val status = snapshot?.data?.let(::flightStatusFromDocument)
-            if (snapshot?.exists() == true && status == null) TravelmoLog.warning("Malformed flight status %s", sensitive(key))
+            if (snapshot?.exists() == true && status == null) SharedLog.warning("Malformed flight status %s", sensitive(key))
             trySend(status)
         }
         awaitClose { registration.remove() }
@@ -135,7 +137,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             if (error != null) {
                 // Nothing is sent: a profile that could not be read is not one
                 // that is absent, and sharing must not start a new one over it.
-                TravelmoLog.error(error, "Reading the travel profile failed")
+                SharedLog.error(error, "Reading the travel profile failed")
                 return@addSnapshotListener
             }
             trySend(OwnProfile(snapshot?.data?.let(::profileFromDocument)))
@@ -154,7 +156,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     override fun googleCalendar(uid: String): Flow<GoogleCalendarShown?> = callbackFlow {
         val registration = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
             if (error != null) {
-                TravelmoLog.error(error, "Reading the Google Calendar connection failed")
+                SharedLog.error(error, "Reading the Google Calendar connection failed")
                 trySend(GoogleCalendarShown(null))
                 return@addSnapshotListener
             }
@@ -166,7 +168,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     override fun calendarExport(uid: String): Flow<CalendarExportShown?> = callbackFlow {
         val registration = db.document("users/$uid/calendarExport/main").addSnapshotListener { snapshot, error ->
             if (error != null) {
-                TravelmoLog.error(error, "Reading the calendar export link failed")
+                SharedLog.error(error, "Reading the calendar export link failed")
                 trySend(CalendarExportShown(null))
                 return@addSnapshotListener
             }
@@ -179,7 +181,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         val registration = db.collection("users").document(uid).collection("feeds").orderBy("addedAt")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    TravelmoLog.error(error, "Reading the calendar feeds failed")
+                    SharedLog.error(error, "Reading the calendar feeds failed")
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
@@ -191,7 +193,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     override fun forwarding(uid: String): Flow<Forwarding?> = callbackFlow {
         val registration = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
             if (error != null) {
-                TravelmoLog.error(error, "Reading the forwarding address failed")
+                SharedLog.error(error, "Reading the forwarding address failed")
                 trySend(Forwarding(null))
                 return@addSnapshotListener
             }
@@ -204,7 +206,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         val registration = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
             if (error != null) {
                 // The sign-in alone still finds what was shared with it.
-                TravelmoLog.error(error, "Reading the user document for the email addresses failed")
+                SharedLog.error(error, "Reading the user document for the email addresses failed")
                 trySend(AddressHolder())
                 return@addSnapshotListener
             }
@@ -216,7 +218,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     override fun reminderEmail(uid: String): Flow<Boolean?> = callbackFlow {
         val registration = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
             if (error != null) {
-                TravelmoLog.error(error, "Reading the user document failed")
+                SharedLog.error(error, "Reading the user document failed")
                 trySend(null)
                 return@addSnapshotListener
             }
@@ -227,13 +229,13 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     }
 
     override suspend fun setReminderEmail(uid: String, on: Boolean) {
-        db.collection("users").document(uid).set(mapOf("reminders" to mapOf("email" to on)), SetOptions.merge()).await()
+        db.collection("users").document(uid).setData(mapOf("reminders" to mapOf("email" to on)), SetOptions.merge()).await()
     }
 
     override fun rideSettings(uid: String): Flow<RideSettings?> = callbackFlow {
         val registration = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
             if (error != null) {
-                TravelmoLog.error(error, "Reading the user document for ride suggestions failed")
+                SharedLog.error(error, "Reading the user document for ride suggestions failed")
                 trySend(null)
                 return@addSnapshotListener
             }
@@ -247,7 +249,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         db.runTransaction { tx ->
             val stored = (tx.get(ref).get("foundLoyalty") as? List<*>).orEmpty()
             val kept = stored.filterNot { (it as? Map<*, *>)?.let { m -> m["program"] == found.program && m["number"] == found.number } == true }
-            tx.update(ref, mapOf("foundLoyalty" to kept, "updatedAt" to Instant.now().toString()))
+            tx.updateData(ref, mapOf("foundLoyalty" to kept, "updatedAt" to Clock.System.now().toString()))
         }.await()
     }
 
@@ -259,7 +261,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             val next = withLoyaltyPerson(current, program, number, person).map { p ->
                 buildMap { put("program", p.program); put("number", p.number); p.person?.let { put("person", it) } }
             }
-            tx.update(ref, mapOf("loyaltyPeople" to next, "updatedAt" to Instant.now().toString()))
+            tx.updateData(ref, mapOf("loyaltyPeople" to next, "updatedAt" to Clock.System.now().toString()))
         }.await()
     }
 
@@ -280,7 +282,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     private fun <T> userDocument(uid: String, failure: String, fallback: T, read: (Map<String, Any?>?) -> T): Flow<T> = callbackFlow {
         val registration = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
             if (error != null) {
-                TravelmoLog.error(error, failure)
+                SharedLog.error(error, failure)
                 trySend(fallback)
                 return@addSnapshotListener
             }
@@ -294,7 +296,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             .orderBy("processedAt", Query.Direction.DESCENDING).limit(REVIEW_RECENT.toLong())
         val registration = query.addSnapshotListener { snapshot, error ->
             if (error != null) {
-                TravelmoLog.error(error, "Reading the import records failed")
+                SharedLog.error(error, "Reading the import records failed")
                 trySend(emptyList())
                 return@addSnapshotListener
             }
@@ -313,7 +315,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                TravelmoLog.error(e, "Reading import records for a search failed")
+                SharedLog.error(e, "Reading import records for a search failed")
                 emit(SearchedRecords(read.toList(), done = true))
                 return@flow
             }
@@ -328,7 +330,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     override fun senderPatterns(uid: String): Flow<SenderPatterns> = callbackFlow {
         val registration = db.document("users/$uid/settings/patterns").addSnapshotListener { snapshot, error ->
             if (error != null) {
-                TravelmoLog.error(error, "Reading the sender rules failed")
+                SharedLog.error(error, "Reading the sender rules failed")
                 trySend(SenderPatterns())
                 return@addSnapshotListener
             }
@@ -339,7 +341,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
 
     override suspend fun setSenderPatterns(uid: String, patterns: SenderPatterns) {
         // Merged, so any other field of the document stays.
-        db.document("users/$uid/settings/patterns").set(mapOf("allow" to patterns.allow, "deny" to patterns.deny), SetOptions.merge()).await()
+        db.document("users/$uid/settings/patterns").setData(mapOf("allow" to patterns.allow, "deny" to patterns.deny), SetOptions.merge()).await()
     }
 
     override suspend fun learnSender(uid: String, domain: String, which: SenderList) {
@@ -347,14 +349,14 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         db.runTransaction { tx ->
             val next = withLearned(senderPatternsOf(tx.get(ref).data), domain, which)
             // Merged, so any other field of the document stays.
-            tx.set(ref, mapOf("allow" to next.allow, "deny" to next.deny), SetOptions.merge())
+            tx.setData(ref, mapOf("allow" to next.allow, "deny" to next.deny), SetOptions.merge())
         }.await()
     }
 
     override suspend fun setHomeCorrections(uid: String, corrections: List<HomeCorrection>) {
         check(corrections.size <= MAX_HOME_CORRECTIONS) { "At most $MAX_HOME_CORRECTIONS." }
         val stored = corrections.map { c -> listOfNotNull("city" to c.city, c.country?.let { "country" to it }, "from" to c.from).toMap() }
-        db.collection("users").document(uid).set(mapOf("homes" to stored), SetOptions.merge()).await()
+        db.collection("users").document(uid).setData(mapOf("homes" to stored), SetOptions.merge()).await()
     }
 
     override suspend fun addRideCompany(uid: String, company: RideCompany) = editRideCompanies(uid) { rideCompaniesAdding(it, company) }
@@ -367,7 +369,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         val ref = db.collection("users").document(uid)
         db.runTransaction { tx ->
             val stored = (tx.get(ref).get("rideCompanies") as? List<*>).orEmpty()
-            change(stored)?.let { tx.set(ref, mapOf("rideCompanies" to it), SetOptions.merge()) }
+            change(stored)?.let { tx.setData(ref, mapOf("rideCompanies" to it), SetOptions.merge()) }
         }.await()
     }
 
@@ -375,7 +377,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         val ref = db.collection("users").document(uid)
         db.runTransaction { tx ->
             val stored = (tx.get(ref).get("hiddenRideNeeds") as? List<*>).orEmpty().filterIsInstance<String>()
-            tx.set(ref, mapOf("hiddenRideNeeds" to withHidden(stored, key)), SetOptions.merge())
+            tx.setData(ref, mapOf("hiddenRideNeeds" to withHidden(stored, key)), SetOptions.merge())
         }.await()
     }
 
@@ -383,7 +385,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         db.collection("users").document(uid).collection("tripReminders").snapshots()
             .map<QuerySnapshot, List<Reminder>?> { snap -> remindersOf(snap, dated = false) }
             .catch { error ->
-                TravelmoLog.error(error, "Reading the reminders before trips failed")
+                SharedLog.error(error, "Reading the reminders before trips failed")
                 emit(emptyList())
             }
 
@@ -392,7 +394,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         val done = callbackFlow {
             val registration = ref.addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    TravelmoLog.error(error, "Reading a trip's checklist failed")
+                    SharedLog.error(error, "Reading a trip's checklist failed")
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
@@ -403,7 +405,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         val added = ref.collection("added").snapshots()
             .map { snap -> remindersOf(snap, dated = true) }
             .catch { error ->
-                TravelmoLog.error(error, "Reading a trip's own reminders failed")
+                SharedLog.error(error, "Reading a trip's own reminders failed")
                 emit(emptyList())
             }
         return combine(done, added) { d, a -> MyChecklist(d, a) }
@@ -412,15 +414,15 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     override suspend fun saveReminder(uid: String, tripId: String?, reminder: Reminder) {
         val slots = if (tripId == null) db.collection("users").document(uid).collection("tripReminders") else checklistRef(uid, tripId).collection("added")
         val (prefix, max) = if (tripId == null) STANDING_SLOT_PREFIX to MAX_STANDING_REMINDERS else ONE_OFF_SLOT_PREFIX to MAX_TRIP_REMINDERS
-        val fields = reminderFields(reminder, Instant.now().toString())
+        val fields = reminderFields(reminder, Clock.System.now().toString())
         db.runTransaction { tx ->
             if (reminder.slot.isNotEmpty()) {
-                tx.set(slots.document(reminder.slot), fields)
+                tx.setData(slots.document(reminder.slot), fields)
                 return@runTransaction
             }
             val free = (0 until max).map { slots.document("$prefix$it") }.firstOrNull { !tx.get(it).exists() }
                 ?: throw IllegalStateException("At most $max.")
-            tx.set(free, fields)
+            tx.setData(free, fields)
         }.await()
     }
 
@@ -433,7 +435,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         val ref = checklistRef(uid, tripId)
         db.runTransaction { tx ->
             val before = doneOf(tx.get(ref).data)
-            tx.set(ref, mapOf("done" to withDone(before, id, done), "updatedAt" to Instant.now().toString()))
+            tx.setData(ref, mapOf("done" to withDone(before, id, done), "updatedAt" to Clock.System.now().toString()))
         }.await()
     }
 
@@ -446,7 +448,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     override fun pushDevice(uid: String, id: String): Flow<Boolean?> = callbackFlow {
         val registration = deviceRef(uid, id).addSnapshotListener { snapshot, error ->
             if (error != null) {
-                TravelmoLog.error(error, "Reading the device registration failed")
+                SharedLog.error(error, "Reading the device registration failed")
                 trySend(null)
                 return@addSnapshotListener
             }
@@ -456,8 +458,8 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     }
 
     override suspend fun registerDevice(uid: String, id: String, token: String) {
-        deviceRef(uid, id).set(mapOf("token" to token, "platform" to "android", "createdAt" to Instant.now().toString())).await()
-        db.collection("users").document(uid).set(mapOf("reminders" to mapOf("push" to true)), SetOptions.merge()).await()
+        deviceRef(uid, id).setData(mapOf("token" to token, "platform" to "android", "createdAt" to Clock.System.now().toString())).await()
+        db.collection("users").document(uid).setData(mapOf("reminders" to mapOf("push" to true)), SetOptions.merge()).await()
     }
 
     override suspend fun unregisterDevice(uid: String, id: String) {
@@ -467,7 +469,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         val devices = db.collection("users").document(uid).collection("devices").limit(1).get().await()
         val browsers = db.collection("users").document(uid).collection("pushSubscriptions").limit(1).get().await()
         if (devices.isEmpty && browsers.isEmpty) {
-            db.collection("users").document(uid).set(mapOf("reminders" to mapOf("push" to false)), SetOptions.merge()).await()
+            db.collection("users").document(uid).setData(mapOf("reminders" to mapOf("push" to false)), SetOptions.merge()).await()
         }
     }
 
@@ -486,7 +488,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     override suspend fun saveTrusted(uid: String, email: String?, exists: Boolean, emails: List<String>, before: List<String>) {
         val trusted = normalizeTrusted(emails, email)
         if (trusted.size > MAX_TRUSTED) throw IllegalArgumentException("Share with at most $MAX_TRUSTED people.")
-        val now = Instant.now().toString()
+        val now = Clock.System.now().toString()
         val doc = LinkedHashMap<String, Any>()
         if (!exists) {
             doc["ownerUid"] = uid
@@ -495,11 +497,11 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         doc["trustedEmails"] = trusted
         doc["updatedAt"] = now
         db.runBatch { batch ->
-            batch.set(db.collection("users").document(uid).collection("travelProfile").document("main"), doc, SetOptions.merge())
+            batch.setData(db.collection("users").document(uid).collection("travelProfile").document("main"), doc, SetOptions.merge())
             // Each address newly trusted is invited in the same write, so it
             // can open the profile without asking for access.
             for (address in trusted) {
-                if (address !in before && emailAddressOf(address) == address) batch.set(accessRef(address), accessInvite(address, uid, now), SetOptions.merge())
+                if (address !in before && emailAddressOf(address) == address) batch.setData(accessRef(address), accessInvite(address, uid, now), SetOptions.merge())
             }
         }.await()
     }
@@ -508,7 +510,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         db.collection("users").document(uid).seen(
             read = { snapshot -> if (snapshot.exists()) addressHolderFromDocument(snapshot.data.orEmpty()) else null },
             onError = { error ->
-                TravelmoLog.error(error, "Reading the user document for access failed")
+                SharedLog.error(error, "Reading the user document for access failed")
                 null
             },
         )
@@ -519,11 +521,11 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
                 if (!snapshot.exists()) {
                     null
                 } else {
-                    accessRecordOf(snapshot.data.orEmpty()).also { if (it == null) TravelmoLog.warning("Skipping a malformed access record") }
+                    accessRecordOf(snapshot.data.orEmpty()).also { if (it == null) SharedLog.warning("Skipping a malformed access record") }
                 }
             },
             onError = { error ->
-                TravelmoLog.error(error, "Reading the access record failed")
+                SharedLog.error(error, "Reading the access record failed")
                 null
             },
         )
@@ -535,9 +537,9 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
                 // Expected for everyone but admins: the list is theirs alone
                 // to read, so a refusal means "not an admin".
                 if (error.code == FirebaseFirestoreException.Code.PERMISSION_DENIED) {
-                    TravelmoLog.verbose("The admins' list is not readable: not an admin")
+                    SharedLog.info("The admins' list is not readable: not an admin")
                 } else {
-                    TravelmoLog.error(error, "Reading the admins' list failed")
+                    SharedLog.error(error, "Reading the admins' list failed")
                 }
                 null
             },
@@ -546,12 +548,12 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     override fun accessRecords(): Flow<List<AccessRecord>?> = callbackFlow {
         val registration = db.collection("access").addSnapshotListener { snapshot, error ->
             if (error != null) {
-                TravelmoLog.error(error, "Access records subscription failed")
+                SharedLog.error(error, "Access records subscription failed")
                 return@addSnapshotListener
             }
             trySend(
                 snapshot?.documents.orEmpty().mapNotNull { doc ->
-                    accessRecordOf(doc.data.orEmpty()).also { if (it == null) TravelmoLog.warning("Skipping malformed access record %s", sensitive(doc.id)) }
+                    accessRecordOf(doc.data.orEmpty()).also { if (it == null) SharedLog.warning("Skipping malformed access record %s", sensitive(doc.id)) }
                 },
             )
         }
@@ -559,11 +561,11 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     }
 
     override suspend fun recordSelf(email: String, uid: String, now: String) {
-        accessRef(email).set(accessSelfApproval(email, uid, now)).await()
+        accessRef(email).setData(accessSelfApproval(email, uid, now)).await()
     }
 
     override suspend fun decideAccess(email: String, decision: AccountAccess, adminUid: String, now: String) {
-        accessRef(email).set(mapOf("email" to email) + accessDecision(decision, adminUid, now), SetOptions.merge()).await()
+        accessRef(email).setData(mapOf("email" to email) + accessDecision(decision, adminUid, now), SetOptions.merge()).await()
     }
 
     private fun accessRef(email: String): DocumentReference = db.collection("access").document(email)
@@ -589,7 +591,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
      * moves only its revision.
      */
     override suspend fun saveSegment(tripId: String, draft: SegmentDraft, existingId: String?) {
-        val now = Instant.now().toString()
+        val now = Clock.System.now().toString()
         val tripRef = db.collection("trips").document(tripId)
         val segmentRef = if (existingId != null) tripRef.collection("segments").document(existingId) else tripRef.collection("segments").document()
         val range = listOfNotNull(draft.start, draft.end).map { localDate(it) }
@@ -598,10 +600,10 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             if (!tripSnap.exists()) throw TripGoneException("Trip no longer exists")
             if (tripSnap.getBoolean("deleting") == true) throw TripGoneException("This trip is being deleted")
             val stored = if (existingId != null) t.get(segmentRef).data else null
-            t.set(segmentRef, draftToDocument(draft, stored, segmentRef.id, tripId, now))
+            t.setData(segmentRef, draftToDocument(draft, stored, segmentRef.id, tripId, now))
             // A cancelled booking widens only the trip's own dates.
             val booked = range.min() to range.max()
-            t.update(tripRef, widened(tripSnap, booked, if (stored?.get("cancelledAt") is String) null else booked, now))
+            t.updateData(tripRef, widened(tripSnap, booked, if (stored?.get("cancelledAt") is String) null else booked, now))
             null
         }.await()
     }
@@ -610,7 +612,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         val tripRef = db.collection("trips").document(tripId)
         db.runBatch { batch ->
             batch.delete(tripRef.collection("segments").document(segmentId))
-            batch.update(tripRef, mapOf("updatedAt" to Instant.now().toString()))
+            batch.updateData(tripRef, mapOf("updatedAt" to Clock.System.now().toString()))
         }.await()
     }
 
@@ -619,7 +621,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
      * widens to hold it (Fit dates may have narrowed the trip meanwhile).
      */
     override suspend fun restoreSegment(tripId: String, segmentId: String) {
-        val now = Instant.now().toString()
+        val now = Clock.System.now().toString()
         val tripRef = db.collection("trips").document(tripId)
         val segmentRef = tripRef.collection("segments").document(segmentId)
         db.runTransaction { t ->
@@ -635,14 +637,14 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             // the booking's confirmation again, or any cancellation sent
             // before now, doesn't cancel it again.
             val restoredFrom = (data["cancelledBy"] as? String)?.let { mapOf("restoredFrom" to FieldValue.arrayUnion(it)) }.orEmpty()
-            t.update(segmentRef, mapOf("cancelledAt" to FieldValue.delete(), "cancelledBy" to FieldValue.delete(), "cancelledSentAt" to FieldValue.delete(), "restoredAt" to now, "updatedAt" to now) + restoredFrom)
-            t.update(tripRef, if (range != null) widened(trip, range, range, now) else mapOf("updatedAt" to now))
+            t.updateData(segmentRef, mapOf("cancelledAt" to FieldValue.delete(), "cancelledBy" to FieldValue.delete(), "cancelledSentAt" to FieldValue.delete(), "restoredAt" to now, "updatedAt" to now) + restoredFrom)
+            t.updateData(tripRef, if (range != null) widened(trip, range, range, now) else mapOf("updatedAt" to now))
             null
         }.await()
     }
 
     override suspend fun renameTrip(tripId: String, title: String) {
-        db.collection("trips").document(tripId).update(mapOf("title" to title.trim(), "updatedAt" to Instant.now().toString())).await()
+        db.collection("trips").document(tripId).updateData(mapOf("title" to title.trim(), "updatedAt" to Clock.System.now().toString())).await()
     }
 
     /**
@@ -669,14 +671,14 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
                 if (!snap.exists()) throw TripGoneException("Trip no longer exists")
                 if (snap.getBoolean("deleting") == true) throw TripGoneException("This trip is being deleted")
                 if (snap.getString("updatedAt") != seen) return@runTransaction false
-                t.update(
+                t.updateData(
                     tripRef,
                     mapOf(
                         "start" to range.first,
                         "end" to range.second,
                         "liveStart" to (live?.first ?: FieldValue.delete()),
                         "liveEnd" to (live?.second ?: FieldValue.delete()),
-                        "updatedAt" to Instant.now().toString(),
+                        "updatedAt" to Clock.System.now().toString(),
                     ),
                 )
                 true
@@ -689,16 +691,16 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     /** As the web's shareTrip: sharing also invites the address, in the same batch, so it can open the trip without asking. */
     override suspend fun shareTrip(tripId: String, email: String, inviterUid: String) {
         val address = emailAddressOf(email) ?: throw IllegalArgumentException("Enter an email address")
-        val now = Instant.now().toString()
+        val now = Clock.System.now().toString()
         db.runBatch { batch ->
-            batch.update(db.collection("trips").document(tripId), mapOf("sharedWith" to FieldValue.arrayUnion(address), "updatedAt" to now))
-            batch.set(accessRef(address), accessInvite(address, inviterUid, now), SetOptions.merge())
+            batch.updateData(db.collection("trips").document(tripId), mapOf("sharedWith" to FieldValue.arrayUnion(address), "updatedAt" to now))
+            batch.setData(accessRef(address), accessInvite(address, inviterUid, now), SetOptions.merge())
         }.await()
     }
 
     override suspend fun unshareTrip(tripId: String, email: String) {
         db.collection("trips").document(tripId)
-            .update(mapOf("sharedWith" to FieldValue.arrayRemove(email), "updatedAt" to Instant.now().toString())).await()
+            .updateData(mapOf("sharedWith" to FieldValue.arrayRemove(email), "updatedAt" to Clock.System.now().toString())).await()
     }
 
     // Marked deleting first, which stops every other writer, then read: if anything else arrived, the mark comes off.
@@ -711,19 +713,19 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
                 !snap.exists() -> "gone"
                 snap.getBoolean("deleting") == true -> "already"
                 else -> {
-                    t.update(tripRef, mapOf("deleting" to true, "updatedAt" to Instant.now().toString()))
+                    t.updateData(tripRef, mapOf("deleting" to true, "updatedAt" to Clock.System.now().toString()))
                     "marked"
                 }
             }
         }.await()
         if (mark == "gone") return true
         suspend fun release() {
-            tripRef.update(mapOf("deleting" to false, "updatedAt" to Instant.now().toString())).await()
+            tripRef.updateData(mapOf("deleting" to false, "updatedAt" to Clock.System.now().toString())).await()
         }
         val ids = try {
             tripRef.collection("segments").get().await().documents.map { it.id }
         } catch (e: Exception) {
-            if (e !is CancellationException) TravelmoLog.error(e, "Reading a trip's bookings before deleting it failed")
+            if (e !is CancellationException) SharedLog.error(e, "Reading a trip's bookings before deleting it failed")
             // Even when cancelled: the mark must not outlive the check.
             if (mark == "marked") withContext(NonCancellable) { release() }
             throw e
@@ -747,7 +749,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         val exists = db.runTransaction { t ->
             val snap = t.get(tripRef)
             if (!snap.exists()) return@runTransaction false
-            if (snap.getBoolean("deleting") != true) t.update(tripRef, mapOf("deleting" to true, "updatedAt" to Instant.now().toString()))
+            if (snap.getBoolean("deleting") != true) t.updateData(tripRef, mapOf("deleting" to true, "updatedAt" to Clock.System.now().toString()))
             true
         }.await()
         if (!exists) return
@@ -767,7 +769,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
      */
     override suspend fun moveSegment(fromTripId: String, segmentId: String, toTripId: String) {
         if (fromTripId == toTripId) return
-        val now = Instant.now().toString()
+        val now = Clock.System.now().toString()
         val fromRef = db.collection("trips").document(fromTripId)
         val toRef = db.collection("trips").document(toTripId)
         val segmentRef = fromRef.collection("segments").document(segmentId)
@@ -781,10 +783,10 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             val data = current.data ?: throw TripGoneException("That booking is no longer in this trip")
             val segment = segmentFromDocument(segmentId, fromTripId, data) ?: throw IllegalStateException("Malformed booking")
             val range = bookedDateRange(listOf(segment))
-            t.set(toRef.collection("segments").document(segmentId), data + mapOf("tripId" to toTripId, "updatedAt" to now))
+            t.setData(toRef.collection("segments").document(segmentId), data + mapOf("tripId" to toTripId, "updatedAt" to now))
             t.delete(segmentRef)
-            t.update(toRef, if (range != null) widened(to, range, segmentDateRange(listOf(segment)), now) else mapOf("updatedAt" to now))
-            t.update(fromRef, mapOf("updatedAt" to now))
+            t.updateData(toRef, if (range != null) widened(to, range, segmentDateRange(listOf(segment)), now) else mapOf("updatedAt" to now))
+            t.updateData(fromRef, mapOf("updatedAt" to now))
             null
         }.await()
     }
@@ -809,7 +811,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             val segments = docs.mapNotNull { doc -> doc.data?.let { segmentFromDocument(doc.id, sourceId, it) } }
             val range = bookedDateRange(segments)
             val live = segmentDateRange(segments)
-            val now = Instant.now().toString()
+            val now = Clock.System.now().toString()
             val applied = db.runTransaction { t ->
                 val s = t.get(sourceRef)
                 val g = t.get(targetRef)
@@ -817,10 +819,10 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
                 if (s.getBoolean("deleting") == true || g.getBoolean("deleting") == true) throw TripGoneException("This trip is being deleted")
                 if (s.getString("updatedAt") != seen) return@runTransaction false
                 for (doc in docs) {
-                    t.set(targetRef.collection("segments").document(doc.id), doc.data.orEmpty() + mapOf("tripId" to targetId, "updatedAt" to now))
+                    t.setData(targetRef.collection("segments").document(doc.id), doc.data.orEmpty() + mapOf("tripId" to targetId, "updatedAt" to now))
                     t.delete(doc.reference)
                 }
-                t.update(targetRef, if (range != null) widened(g, range, live, now) else mapOf("updatedAt" to now))
+                t.updateData(targetRef, if (range != null) widened(g, range, live, now) else mapOf("updatedAt" to now))
                 t.delete(sourceRef)
                 true
             }.await()
@@ -863,7 +865,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
 
     private fun Flow<QuerySnapshot>.orNothing(what: String): Flow<QuerySnapshot?> =
         map<QuerySnapshot, QuerySnapshot?> { it }.catch { error ->
-            TravelmoLog.error(error, "Reading %s failed", safe(what))
+            SharedLog.error(error, "Reading %s failed", safe(what))
             emit(null)
         }
 

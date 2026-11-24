@@ -76,7 +76,9 @@ builds only, so `next dev` runs without it.
 ### Android
 
 `apps/android` is a Gradle build of its own (JDK 21; the wrapper fetches
-Gradle). `:shared` holds, for the iOS app to come, the palette and most
+Gradle). `:firestore` is the Firestore code both apps use (GitLive's
+Firebase Kotlin SDK); building for iOS needs Xcode 26 or later (Swift 6.2,
+for the Firebase iOS SDK it fetches through Swift Package Manager). `:shared` holds, for the iOS app to come, the palette and most
 screens (Compose Multiplatform, with the app's pieces through `AppChrome`),
 their text, the logo and the wordmark's font as Compose Multiplatform
 resources (`scripts/icon-sources.mjs` writes the logo there, and
