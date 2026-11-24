@@ -488,4 +488,13 @@
     <string name="revoke">Revoke</string>
     <!-- An address and the day it asked, as on the web: "new@example.com · Sun 22 Nov". -->
     <string name="access_requested_on">%1$s · %2$s</string>
+    <string name="download_trips">Download trips</string>
+    <string name="download_trips_hint">A spreadsheet of where you went and when, for visa and residence forms. Events, tickets and cancelled trips are left out.</string>
+    <string name="trips_up_to">Trips starting up to %1$s</string>
+    <string name="row_per_trip">One row per trip</string>
+    <string name="row_per_place">One row per place</string>
+    <string name="abroad_only">Outside my home country only</string>
+    <string name="download_csv">Download CSV</string>
+    <string name="trips_saved">Saved.</string>
+    <string name="trips_save_failed">Couldn't save the file. Try again.</string>
 </resources>

@@ -1,5 +1,7 @@
 package app.travelmo.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -13,6 +15,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -20,16 +28,22 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
@@ -37,6 +51,8 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -45,18 +61,28 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.core.AirportVisit
 import app.travelmo.core.FavoritePlace
+import app.travelmo.core.HomePeriod
 import app.travelmo.core.PlaceVisit
 import app.travelmo.core.TravelReport
 import app.travelmo.core.TripWithBookings
+import app.travelmo.core.TripWithSegments
 import app.travelmo.core.WorldMapData
 import app.travelmo.core.countryName
 import app.travelmo.core.displayTitles
 import app.travelmo.core.favoritePlaces
 import app.travelmo.core.formatDateRange
+import app.travelmo.core.formatDateWithYear
+import app.travelmo.core.placeRows
+import app.travelmo.core.placeRowsCsv
 import app.travelmo.core.travelReport
+import app.travelmo.core.tripRows
+import app.travelmo.core.tripRowsCsv
 import app.travelmo.core.worldMap
+import app.travelmo.log.TravelmoLog
 import app.travelmo.shared.Res
+import app.travelmo.shared.abroad_only
 import app.travelmo.shared.all_years
+import app.travelmo.shared.cancel
 import app.travelmo.shared.col_countries
 import app.travelmo.shared.col_country
 import app.travelmo.shared.col_days
@@ -65,22 +91,38 @@ import app.travelmo.shared.col_year
 import app.travelmo.shared.countries_count
 import app.travelmo.shared.days_away
 import app.travelmo.shared.days_in_each_country
+import app.travelmo.shared.download_csv
+import app.travelmo.shared.download_trips
+import app.travelmo.shared.download_trips_hint
 import app.travelmo.shared.favorite_mark
 import app.travelmo.shared.favorite_places
 import app.travelmo.shared.map_description
 import app.travelmo.shared.map_empty
 import app.travelmo.shared.no_trips_yet
+import app.travelmo.shared.ok
 import app.travelmo.shared.reports_loading
 import app.travelmo.shared.reports_title
+import app.travelmo.shared.row_per_place
+import app.travelmo.shared.row_per_trip
 import app.travelmo.shared.trips_ahead
 import app.travelmo.shared.trips_count
 import app.travelmo.shared.trips_per_year
+import app.travelmo.shared.trips_save_failed
+import app.travelmo.shared.trips_saved
+import app.travelmo.shared.trips_up_to
 import app.travelmo.shared.unknown_days
 import app.travelmo.shared.unplaced_bookings
 import app.travelmo.shared.unplaced_hint
 import app.travelmo.shared.year
 import app.travelmo.ui.theme.TravelmoTheme
 import com.mikelward.androidzoom.compose.pinchFontSizeHost
+import java.io.IOException
+import java.time.LocalDate
+import java.time.ZoneOffset
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -170,6 +212,9 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, botto
                         onRow = { row -> year = whole.years[row].year },
                     )
                 }
+            }
+            homes?.let { periods ->
+                item(key = "download") { DownloadTrips(input.orEmpty(), periods, titles, today) }
             }
             if (whole.upcoming > 0) {
                 item(key = "upcoming") {
@@ -319,4 +364,79 @@ fun WorldMap(data: WorldMapData, visited: Set<String>, airports: List<AirportVis
             }
         }
     }
+}
+
+/**
+ * A summary of every trip to save as CSV, for visa and residence forms, as
+ * on the web: one row per trip or per place, optionally only what was
+ * abroad. The phone's file picker says where the file goes.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DownloadTrips(trips: List<TripWithSegments>, periods: List<HomePeriod>, titles: Map<String, String>, today: String) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var byPlace by rememberSaveable { mutableStateOf(false) }
+    var international by rememberSaveable { mutableStateOf(false) }
+    // The last start date to include: today unless the user picks another.
+    var until by rememberSaveable { mutableStateOf(today) }
+    var picking by rememberSaveable { mutableStateOf(false) }
+    var said by remember { mutableStateOf<StringResource?>(null) }
+    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val text = if (byPlace) placeRowsCsv(placeRows(trips, periods, until, international, titles)) else tripRowsCsv(tripRows(trips, periods, until, international, titles))
+        scope.launch {
+            said = try {
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) } ?: throw IOException("No stream to write to")
+                }
+                TravelmoLog.info("Saved the trips summary")
+                Res.string.trips_saved
+            } catch (e: IOException) {
+                TravelmoLog.failure(e, "Saving the trips summary failed")
+                Res.string.trips_save_failed
+            }
+        }
+    }
+    SectionTitle(stringResource(Res.string.download_trips))
+    Text(stringResource(Res.string.download_trips_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Column(modifier = Modifier.selectableGroup().padding(top = 4.dp)) {
+        for ((place, label) in listOf(false to Res.string.row_per_trip, true to Res.string.row_per_place)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().selectable(selected = byPlace == place, role = Role.RadioButton) { byPlace = place },
+            ) {
+                RadioButton(selected = byPlace == place, onClick = null)
+                Text(stringResource(label), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 12.dp, top = 10.dp, bottom = 10.dp))
+            }
+        }
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().toggleable(value = international, role = Role.Checkbox) { international = it },
+    ) {
+        Checkbox(checked = international, onCheckedChange = null)
+        Text(stringResource(Res.string.abroad_only), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 12.dp, top = 10.dp, bottom = 10.dp))
+    }
+    OutlinedButton(onClick = { picking = true }, modifier = Modifier.padding(top = 4.dp)) {
+        Text(stringResource(Res.string.trips_up_to, formatDateWithYear(until)))
+    }
+    if (picking) {
+        val state = rememberDatePickerState(initialSelectedDateMillis = LocalDate.parse(until).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
+        DatePickerDialog(
+            onDismissRequest = { picking = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    // The picker answers in UTC midnights.
+                    state.selectedDateMillis?.let { until = java.time.Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toString() }
+                    picking = false
+                }) { Text(stringResource(Res.string.ok)) }
+            },
+            dismissButton = { TextButton(onClick = { picking = false }) { Text(stringResource(Res.string.cancel)) } },
+        ) { DatePicker(state = state) }
+    }
+    OutlinedButton(onClick = { said = null; save.launch(if (byPlace) "travelmo-places.csv" else "travelmo-trips.csv") }, modifier = Modifier.padding(top = 4.dp)) {
+        Text(stringResource(Res.string.download_csv))
+    }
+    said?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp)) }
 }

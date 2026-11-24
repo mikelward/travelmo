@@ -334,6 +334,31 @@ in the Equal Earth projection drawn to SVG paths by
 `apps/web/scripts/worldmap.mjs` (`apps/web/src/lib/worldMap.json`, 27 KB
 compressed), and the airport table load only on this page.
 
+### Download trips
+
+Reports, on the web and Android, downloads a CSV of where the user went, for
+visa and residence forms (`tripsExport.ts`, mirrored in `TripsExport.kt`),
+from the trips that start by a day the user picks ("Trips starting up to",
+today by default, so a later day takes in planned trips), leaving out
+trips wholly cancelled. It reads only journeys (where each
+arrives, never where it leaves), stays and cars, so an event or a ticket
+says nothing; places in the home town of their day are left out.
+
+- **One row per trip** (`Trip,Start,End,Cities,Countries`): the trip's
+  dates, and its towns and countries in order, several joined with "; ".
+- **One row per place** (`City,Country,Start,End,Trip`): each town from the
+  day someone got there until the day they moved on (the next town's first
+  day), or for the last, the later of its stay's end and the trip's. Two
+  towns of one name in different countries stay apart.
+
+"Outside my home country only" keeps a trip with any place, or a place,
+outside the home country of that place's own day (home can change
+mid-trip); with home's country unknown, nothing
+is left out. Countries are English names; fields are quoted as RFC 4180
+says, and one starting `=`, `+`, `-`, `@` or a tab gets a leading `'` so a
+spreadsheet doesn't run it as a formula. The web saves the file through the browser, Android through the
+system's file picker.
+
 ### Residence and visa days
 
 Below the counts, "Residence and visa days" checks the days in and out of

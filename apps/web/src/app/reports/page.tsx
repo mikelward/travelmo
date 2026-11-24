@@ -1,6 +1,6 @@
 "use client";
 
-import { displayTitles, favoritePlaces, formatDateRange, travelReport, type FavoritePlace, type PlaceLookup, type TravelReport, type Trip } from "@travelmo/core";
+import { displayTitles, favoritePlaces, formatDateRange, placeRows, placeRowsCsv, travelReport, tripRows, tripRowsCsv, type FavoritePlace, type HomePeriod, type PlaceLookup, type SummaryTrip, type TravelReport, type Trip } from "@travelmo/core";
 import Link from "next/link";
 import type { User } from "firebase/auth";
 import { Fragment, useEffect, useMemo, useState } from "react";
@@ -102,6 +102,64 @@ function Countries({ report, titles, trips }: { report: TravelReport; titles: Ma
           ))}
         </tbody>
       </table>
+    </section>
+  );
+}
+
+// A summary of every trip to download, for visa and settlement forms: one
+// row per trip or per place, optionally only what was abroad.
+function DownloadTrips({ trips, homes, lookup, titles, today }: { trips: readonly SummaryTrip[]; homes?: readonly HomePeriod[]; lookup: PlaceLookup; titles: Map<string, string>; today: string }) {
+  const [byPlace, setByPlace] = useState(false);
+  const [international, setInternational] = useState(false);
+  const [until, setUntil] = useState(today);
+  const download = () => {
+    const options = { periods: homes ?? [], lookup, international, titles, until: until || today };
+    const text = byPlace ? placeRowsCsv(placeRows(trips, options)) : tripRowsCsv(tripRows(trips, options));
+    const url = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = byPlace ? "travelmo-places.csv" : "travelmo-trips.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+  return (
+    <section className="mt-8" aria-labelledby="download-trips">
+      <h2 id="download-trips" className="text-lg font-medium">
+        Download trips
+      </h2>
+      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+        A spreadsheet of where you went and when, for visa and residence forms. Events, tickets and cancelled trips are left
+        out.
+      </p>
+      <fieldset className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+        <legend className="sr-only">Rows</legend>
+        <label className="flex items-center gap-2">
+          <input type="radio" name="rows" checked={!byPlace} onChange={() => setByPlace(false)} /> One row per trip
+        </label>
+        <label className="flex items-center gap-2">
+          <input type="radio" name="rows" checked={byPlace} onChange={() => setByPlace(true)} /> One row per place
+        </label>
+      </fieldset>
+      <label className="mt-2 flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={international} onChange={(e) => setInternational(e.target.checked)} /> Outside my home country only
+      </label>
+      <label className="mt-2 flex items-center gap-2 text-sm">
+        Trips starting up to
+        <input
+          type="date"
+          value={until}
+          onChange={(e) => setUntil(e.target.value)}
+          className="rounded-lg border border-field bg-background px-2 py-1"
+        />
+      </label>
+      <button
+        type="button"
+        onClick={download}
+        disabled={!homes}
+        className="mt-3 rounded-lg border border-field px-3 py-1.5 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:hover:bg-zinc-900"
+      >
+        Download CSV
+      </button>
     </section>
   );
 }
@@ -268,6 +326,7 @@ function Report({ user }: { user: User }) {
       <Favorites places={favoritePlaces(all.withSegments)} titles={titles} />
       {homes && <ResidenceDays trips={all.withSegments} homes={homes} lookup={tables.lookup} today={today} titles={titles} />}
       <Years report={all.report} onPick={setYear} />
+      <DownloadTrips trips={all.withSegments} homes={homes} lookup={tables.lookup} titles={titles} today={today} />
       {all.report.upcoming > 0 && (
         <p className="mt-6 text-sm text-muted">
           {plural(all.report.upcoming, "trip")} still ahead {all.report.upcoming === 1 ? "isn't" : "aren't"} counted.
