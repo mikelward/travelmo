@@ -136,7 +136,7 @@ export function TripRemindersSection({ uid }: { uid: string }) {
     <section className="mt-10">
       <h2 className="text-lg font-medium">Before international trips</h2>
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-        Things to do before every trip abroad.
+        Things to do before every trip abroad. Prescriptions, phone plans, shopping, etc.
       </p>
       {list.length > 0 && (
         <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800" aria-label="Your reminders">
