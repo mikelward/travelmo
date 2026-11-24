@@ -134,10 +134,11 @@ function LoyaltyTable({ entries, ownUid }: { entries: ProfileEntry[]; ownUid?: s
             <table className="mt-2 w-full text-sm" aria-label={named ? `Loyalty programs: ${name}` : "Loyalty programs"}>
               <thead className="text-left text-muted">
                 <tr>
-                  <th className="py-1 font-normal">Program</th>
-                  <th className="py-1 font-normal">Account</th>
-                  <th className="py-1 text-right font-normal">Balance</th>
-                  <th className="py-1 font-normal">Status</th>
+                  <th className="py-1 pr-2 font-normal">Program</th>
+                  <th className="py-1 pr-2 font-normal">Account</th>
+                  <th className="py-1 pr-2 text-right font-normal">Balance</th>
+                  {/* Apart from Balance, which is right-aligned beside it. */}
+                  <th className="py-1 pl-4 font-normal">Status</th>
                   {ownUid && <th className="w-8 py-1 font-normal"><span className="sr-only">Whose</span></th>}
                 </tr>
               </thead>
@@ -147,7 +148,7 @@ function LoyaltyTable({ entries, ownUid }: { entries: ProfileEntry[]; ownUid?: s
                     <td className="py-1 pr-2">{r.title}</td>
                     <td className="py-1 pr-2 break-all">{r.account ?? ""}</td>
                     <td className="py-1 pr-2 text-right tabular-nums">{r.balance ?? ""}</td>
-                    <td className="py-1">{r.nextStatus && r.status ? `${r.status} (next: ${r.nextStatus})` : (r.status ?? "")}</td>
+                    <td className="py-1 pl-4">{r.nextStatus && r.status ? `${r.status} (next: ${r.nextStatus})` : (r.status ?? "")}</td>
                     {ownUid && (
                       <td className="py-1 text-right">
                         {r.account && (

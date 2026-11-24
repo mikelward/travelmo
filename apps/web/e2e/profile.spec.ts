@@ -29,6 +29,16 @@ test("the owner sees their imported profile, shares it with a partner, and the p
   // Programs at a glance; the full entry folds below.
   await expect(page.getByRole("table", { name: "Loyalty programs" }).getByRole("row")).toHaveText(["ProgramAccountBalanceStatusWhose", "Example Air MilesEA12312,000Gold⋮"]);
   await expect(page.getByText("Elite status")).toBeHidden();
+  // Every heading stands apart from the next: Balance is right-aligned and Status left-aligned beside it.
+  const gaps = await page.getByRole("table", { name: "Loyalty programs" }).locator("thead th").evaluateAll((cells) => {
+    const textBox = (cell: Element) => {
+      const range = document.createRange();
+      range.selectNodeContents(cell);
+      return range.getBoundingClientRect();
+    };
+    return cells.slice(1).map((cell, i) => textBox(cell).left - textBox(cells[i]!).right).filter((_, i) => cells[i + 1]!.textContent);
+  });
+  for (const gap of gaps) expect(gap).toBeGreaterThanOrEqual(8);
   // Documents stay folded until asked for.
   await expect(page.getByText("X1234567")).toBeHidden();
   await page.getByText("Travel document: Passport").click();

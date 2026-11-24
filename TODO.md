@@ -336,7 +336,7 @@
       "Transfer" rather than "Car". Transfers are inferred today from a car
       or "other" booking whose two ends differ, which needs no schema,
       rules or Android model change.
-- [ ] Web, found in the light and dark audit: the calendar's `role="grid"`
+- [x] Web, found in the light and dark audit: the calendar's `role="grid"`
       has no rows or cells (axe `aria-required-children`); the booking
       form's time fields clip "09:00" at desktop width; the Profile
       loyalty table runs its Balance and Status headers together.
