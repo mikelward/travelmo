@@ -1247,8 +1247,12 @@ Everything below the model is source-agnostic (`fileBooking` in
 source id, and gets the same duplicate check, trip assignment, segment ids
 and parsed-message record. Duplicates are matched across sources, since a
 TripIt export has no confirmation numbers to match on (`sameBooking`): the
-same type, the same local start minute for journeys and activities or the
-same dates for stays and rentals, and then evidence of identity, since
+same type, the same local start minute for journeys and activities (or,
+for a journey moved by a schedule change, the same reference and service
+number, "UA 122" being "UA122", that day within six hours; the newest
+email by when it was sent sets the journey's times, unless the user edited
+it: `mergeDetails`) or the same
+dates for stays and rentals, and then evidence of identity, since
 dropping a real booking loses it: equal confirmation numbers when both have
 one, otherwise agreeing codes at both ends of a journey, or a distinctive
 word shared by the two titles or place names other than their city and,

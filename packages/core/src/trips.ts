@@ -367,7 +367,7 @@ export function sameBooking(a: ExtractedSegment, b: ExtractedSegment): boolean {
   const wall = (instant: string) => instant.slice(0, 16);
   if ((isPaymentReceipt(a) || isPaymentReceipt(b)) && wall(a.start) !== wall(b.start)) return sameUntimed(a, b);
   if (timedTypes.has(a.type)) {
-    if (wall(a.start) !== wall(b.start)) return false;
+    if (wall(a.start) !== wall(b.start) && !retimed(a, b)) return false;
   } else {
     if (localDate(a.start) !== localDate(b.start)) return false;
     if (a.end && b.end && localDate(a.end) !== localDate(b.end)) return false;
@@ -396,6 +396,22 @@ export function sameBooking(a: ExtractedSegment, b: ExtractedSegment): boolean {
   }
   for (const word of ours) if (theirs.has(word)) return true;
   return false;
+}
+
+// One journey moved by a schedule change: the same reference and service
+// (UA 122 and UA122) on the same day, leaving within six hours of each
+// other, as an airline's "your flight time has changed" email tells it.
+// Airports or stations both name must agree: one flight number can fly
+// several legs (UA 154 Guam to Chuuk to Pohnpei).
+function retimed(a: ExtractedSegment, b: ExtractedSegment): boolean {
+  if (!journeyTypes.has(a.type) || !a.confirmation || !b.confirmation) return false;
+  const differ = (x?: Place, y?: Place) => !!x?.code && !!y?.code && x.code.toUpperCase() !== y.code.toUpperCase();
+  if (differ(a.origin, b.origin) || differ(a.destination, b.destination)) return false;
+  if (normalizeReference(a.confirmation) !== normalizeReference(b.confirmation)) return false;
+  if (localDate(a.start) !== localDate(b.start)) return false;
+  if (Math.abs(Date.parse(a.start) - Date.parse(b.start)) > 6 * 3_600_000) return false;
+  const [x, y] = [serviceNumbers(a.title, true), serviceNumbers(b.title, true)];
+  return [...x].some((n) => [...y].some((m) => sameService(n, m)));
 }
 
 // A name as compared: compatibility forms folded, accents dropped, case
@@ -522,8 +538,28 @@ export function identitiesConflict(x: EventIdentity, y: EventIdentity): boolean 
 // more specific one (betterPlace): the suburb and address a confirmation
 // gives over the town its request named, keeping what only the old place
 // said (fillPlace).
-export function mergeDetails<S extends ExtractedSegment>(existing: S, found: ExtractedSegment, { edited = false }: { edited?: boolean } = {}): S {
+// The same moment some milliseconds on, written in the instant's own offset
+// (status.ts's shiftInstant, which imports this file).
+function shifted(instant: string, ms: number): string {
+  const offset = /([+-]\d{2}:\d{2}|Z)$/.exec(instant)?.[1] ?? "Z";
+  const minutes = offset === "Z" ? 0 : (offset.startsWith("-") ? -1 : 1) * (Number(offset.slice(1, 3)) * 60 + Number(offset.slice(4, 6)));
+  const local = new Date(Date.parse(instant) + ms + minutes * 60_000).toISOString().slice(0, 19);
+  return `${local}${offset === "Z" ? "Z" : offset}`;
+}
+
+// A journey's times come from the newest email that gives them (`newer`:
+// sent after every email already behind it), as a schedule change moves a
+// flight; times the user set by hand stay.
+export function mergeDetails<S extends ExtractedSegment>(existing: S, found: ExtractedSegment, { edited = false, newer = false }: { edited?: boolean; newer?: boolean } = {}): S {
   const merged: S = { ...existing };
+  if (newer && !edited && journeyTypes.has(existing.type) && found.type === existing.type) {
+    // A change that gives no arrival moves the old one with the departure,
+    // keeping the journey's length, rather than leaving it before it.
+    const moved = Date.parse(found.start) - Date.parse(existing.start);
+    merged.start = found.start;
+    if (found.end !== undefined) merged.end = found.end;
+    else if (existing.end !== undefined) merged.end = shifted(existing.end, moved);
+  }
   if (!edited && betterPlace(existing, found)) merged.destination = fillPlace(found.destination!, existing.destination!);
   if (merged.provider === undefined && found.provider !== undefined) merged.provider = found.provider;
   if (merged.confirmation === undefined && found.confirmation !== undefined) merged.confirmation = found.confirmation;

@@ -1000,6 +1000,25 @@ describe("importTripIt", () => {
     expect(store.trips.get(gmailTrip.id)).toMatchObject({ start: "2026-12-10", end: "2026-12-31" });
   });
 
+  it("takes a flight's times from the newest email for its reference, in whichever order they are read", async () => {
+    const booked: ExtractedBooking = { isBooking: true, segments: [{ ...flight.segments[0]!, confirmation: "B0ECXM" }] };
+    const moved: ExtractedBooking = { isBooking: true, segments: [{ ...booked.segments[0]!, title: "FR123 MAN to DUB", start: "2026-12-15T08:20:00+00:00", end: "2026-12-15T09:20:00+00:00" }] };
+    const first = email({ id: "m-booked", subject: "Your Ryanair itinerary", date: "Mon, 1 Nov 2026 10:00:00 +0000" });
+    const change = email({ id: "m-change", subject: "Your flight time has changed", date: "Thu, 5 Nov 2026 10:00:00 +0000" });
+    for (const order of [[first, change], [change, first]]) {
+      const store = memoryStore();
+      for (const message of order) await importMessage("u1", message, deps(store, async () => (message === change ? moved : booked)));
+      const flights = [...store.segments.values()];
+      expect(flights.map((s) => [s.start, s.end])).toEqual([["2026-12-15T08:20:00+00:00", "2026-12-15T09:20:00+00:00"]]);
+    }
+    // A receipt in between dates nothing, so the change still moves the flight.
+    const store = memoryStore();
+    const receipt = email({ id: "m-receipt", subject: "Ryanair booking B0ECXM", date: "Tue, 3 Nov 2026 10:00:00 +0000" });
+    const paid: ExtractedBooking = { isBooking: true, segments: [{ ...booked.segments[0]!, title: "Payment receipt FR 123", notes: "Payment received" }] };
+    for (const message of [first, receipt, change]) await importMessage("u1", message, deps(store, async () => (message === change ? moved : message === receipt ? paid : booked)));
+    expect([...store.segments.values()].map((s) => [s.start, s.sources?.map((r) => r.id)])).toEqual([["2026-12-15T08:20:00+00:00", ["m-booked", "m-receipt", "m-change"]]]);
+  });
+
   it("keeps the source of a booking dropped as a duplicate on the booking it matched", async () => {
     const store = memoryStore();
     await importMessage("u1", email({ id: "m2", subject: "Your Ryanair itinerary" }), deps(store, async () => flight));
