@@ -1,8 +1,8 @@
 "use client";
 
 import type { User } from "firebase/auth";
-import { useState } from "react";
-import { api } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { api, deletionUnfinishedFor, onDeletionUnfinished } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { forgetFirestoreCache } from "@/lib/firebase";
 
@@ -34,6 +34,47 @@ export function AccountDeleted() {
       <h1 className="mb-6 text-2xl font-semibold">Account deleted</h1>
       <p className="text-zinc-600 dark:text-zinc-400">Your account and everything in it are gone.</p>
     </>
+  );
+}
+
+// Whether the parser said this account's deletion stopped part way.
+export function useDeletionUnfinished(user: User | null | undefined): boolean {
+  const [uid, setUid] = useState(deletionUnfinishedFor);
+  useEffect(() => onDeletionUnfinished(() => setUid(deletionUnfinishedFor())), []);
+  return !!user && uid === user.uid;
+}
+
+// In place of every page once deleting the account stopped part way: what
+// is left is deleted by asking again (SPEC "Deleting an account").
+export function FinishDeletion({ user, onDeleted }: { user: User; onDeleted: () => void }) {
+  const { signOut } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const finish = async () => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await api.deleteAccount(user);
+    } catch (e) {
+      console.error("Finishing the account's deletion failed", e);
+      setError(`Couldn't delete your account: ${(e as Error).message}. Try again.`);
+      setBusy(false);
+      return;
+    }
+    onDeleted();
+  };
+  return (
+    <div className="mx-auto mt-16 max-w-sm rounded-xl border border-zinc-200 p-8 text-center dark:border-zinc-800">
+      <h1 className="text-xl font-medium">Deleting your account didn&apos;t finish</h1>
+      <p className="mt-2 text-muted">Some of it may still be stored.</p>
+      <button type="button" disabled={busy} onClick={finish} className="mt-6 w-full rounded-lg bg-red-600 px-4 py-2 font-medium text-white disabled:opacity-50">
+        {busy ? "Deleting…" : "Finish deleting"}
+      </button>
+      {error && <p className="mt-4 text-sm text-danger">{error}</p>}
+      <button type="button" onClick={() => void signOut()} className="mt-6 text-sm text-muted hover:underline">
+        Sign out
+      </button>
+    </div>
   );
 }
 

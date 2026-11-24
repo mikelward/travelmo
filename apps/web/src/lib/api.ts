@@ -1,5 +1,5 @@
 import type { User } from "firebase/auth";
-import { backfillStartPath, backfillStopPath, calendarConnectPath, calendarDisconnectPath, calendarExportIssuePath, calendarSelectPath, calendarExportStopPath, deleteAllTripsPath, fastmailBackfillStartPath, fastmailBackfillStopPath, fastmailConnectPath, fastmailDisconnectPath, feedAddPath, imapBackfillStartPath, imapBackfillStopPath, imapConnectPath, imapDisconnectPath, feedRemovePath, forwardIssuePath, forwardStopPath, gmailConnectPath, gmailDisconnectPath, linkRefusalText, refusalOf, refreshPath, refreshStopPath, regroupPath, type AccountAccess, type CalendarExport, type ForwardAddress, type RegroupResult } from "@travelmo/core";
+import { accountDeletePath, backfillStartPath, backfillStopPath, calendarConnectPath, calendarDisconnectPath, calendarExportIssuePath, calendarSelectPath, calendarExportStopPath, deleteAllTripsPath, fastmailBackfillStartPath, fastmailBackfillStopPath, fastmailConnectPath, fastmailDisconnectPath, feedAddPath, imapBackfillStartPath, imapBackfillStopPath, imapConnectPath, imapDisconnectPath, feedRemovePath, forwardIssuePath, forwardStopPath, gmailConnectPath, gmailDisconnectPath, isDeletionUnfinished, linkRefusalText, refusalOf, refreshPath, refreshStopPath, regroupPath, type AccountAccess, type CalendarExport, type ForwardAddress, type RegroupResult } from "@travelmo/core";
 import type { CalendarResult } from "./ics";
 import type { TripItResult } from "./tripit";
 
@@ -27,6 +27,26 @@ export function parserUrl(): string {
   return url.replace(/\/$/, "");
 }
 
+// The account the parser last said had a deletion stop part way: the app
+// shows FinishDeletion in place of any page for it (SPEC "Deleting an
+// account").
+let unfinishedUid: string | undefined;
+const unfinishedListeners = new Set<() => void>();
+
+export function deletionUnfinishedFor(): string | undefined {
+  return unfinishedUid;
+}
+
+export function onDeletionUnfinished(listener: () => void): () => void {
+  unfinishedListeners.add(listener);
+  return () => void unfinishedListeners.delete(listener);
+}
+
+function markDeletionUnfinished(uid: string): void {
+  unfinishedUid = uid;
+  for (const listener of unfinishedListeners) listener();
+}
+
 // `plain`: the parser's message for a refused request is shown as it is.
 async function post<T>(user: User, path: string, body: unknown = {}, plain = false): Promise<T> {
   const token = await user.getIdToken();
@@ -36,7 +56,9 @@ async function post<T>(user: User, path: string, body: unknown = {}, plain = fal
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    throw new Error(failureMessage(path, response.status, await response.text(), plain));
+    const text = await response.text();
+    if (isDeletionUnfinished(response.status, text)) markDeletionUnfinished(user.uid);
+    throw new Error(failureMessage(path, response.status, text, plain));
   }
   return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
 }
@@ -77,7 +99,7 @@ export const api = {
   stopCalendarExport: (user: User) => post<void>(user, calendarExportStopPath),
   issueForward: (user: User) => post<ForwardAddress>(user, forwardIssuePath),
   stopForward: (user: User) => post<void>(user, forwardStopPath),
-  deleteAccount: (user: User) => post<void>(user, "/account/delete"),
+  deleteAccount: (user: User) => post<void>(user, accountDeletePath),
   checkAccess: (user: User) => post<{ status: AccountAccess }>(user, "/access/check"),
   addEmail: (user: User, email: string) => post<{ email: string }>(user, "/emails/add", { email }),
   confirmEmail: (user: User, token: string) => post<{ email: string }>(user, "/emails/confirm", { token }),

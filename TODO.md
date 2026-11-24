@@ -263,7 +263,7 @@
       `POST /trips/regroup` as the web does.
 - [x] Android: "Delete all trips" in Settings, calling
       `POST /trips/delete-all` and asking first, as the web does.
-- [ ] Finish a half-done account deletion: when the deletion marker exists
+- [x] Finish a half-done account deletion: when the deletion marker exists
       but the sign-in account does not go (in production it once failed
       deleting the Firebase Auth user, before the parser held
       `roles/firebaseauth.admin`), every action fails with "410 This account

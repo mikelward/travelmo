@@ -3,6 +3,7 @@ package app.travelmo.data
 import app.travelmo.core.ACCESS_CHECK_PATH
 import app.travelmo.core.AccountAccess
 import app.travelmo.core.accessCheckAnswer
+import app.travelmo.core.isDeletionUnfinished
 import app.travelmo.core.parserEndpoint
 import app.travelmo.log.TravelmoLog
 import com.google.firebase.auth.FirebaseAuth
@@ -20,7 +21,8 @@ import kotlinx.coroutines.withContext
  * [ParserAccountDeletion] sends it. It lets in an account from before
  * approvals that the rules cannot tell is one (an Android-only owner has no
  * user document), and answers where the account stands. Failures are
- * logged and answer null: the app carries on as the rules allow.
+ * logged and answer null: the app carries on as the rules allow. A deletion
+ * that stopped part way is thrown as [AccountDeletionUnfinished].
  */
 class ParserAccessCheck(
     private val baseUrl: String,
@@ -34,6 +36,10 @@ class ParserAccessCheck(
                 return null
             }
             val (status, body) = post(endpoint, token)
+            if (isDeletionUnfinished(status, body)) {
+                TravelmoLog.warning("Checking access found the account's deletion unfinished")
+                throw AccountDeletionUnfinished()
+            }
             if (status !in 200..299) {
                 TravelmoLog.warning("Checking access failed: HTTP %s", safe(status.toString()))
                 return null
@@ -42,6 +48,8 @@ class ParserAccessCheck(
                 if (it == null) TravelmoLog.warning("Checking access answered something unreadable") else TravelmoLog.info("Access is %s", safe(it.wire))
             }
         } catch (e: CancellationException) {
+            throw e
+        } catch (e: AccountDeletionUnfinished) {
             throw e
         } catch (e: IOException) {
             TravelmoLog.warning("Checking access failed: the parser could not be reached (%s)", safe(e.javaClass.simpleName))
@@ -63,7 +71,8 @@ class ParserAccessCheck(
             connection.setRequestProperty("Content-Type", "application/json")
             connection.outputStream.use { it.write("{}".toByteArray()) }
             val status = connection.responseCode
-            val body = if (status in 200..299) connection.inputStream.bufferedReader().use { it.readText() } else ""
+            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+            val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
             status to body
         } finally {
             connection.disconnect()

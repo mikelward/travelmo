@@ -50,6 +50,18 @@ class AccessScreensTest {
     }
 
     @Test
+    fun `an account whose deletion stopped part way finishes it from its own screen`() {
+        val deletion = FakeAccountDeletion(failure = "Couldn't delete your account (error 500). Try again.")
+        val viewModel = TripsViewModel(FakeTripStore(), "u-new", newcomer, clock = { Instant.parse(FROZEN_NOW) }, accountDeletion = deletion)
+        composeRule.setContent { TravelmoTheme { FinishDeletionScreen(rememberSignedInAccount(account), viewModel) } }
+        composeRule.onNodeWithText("Deleting your account didn't finish").assertExists()
+        composeRule.onNodeWithText("Finish deleting").performClick()
+        composeRule.waitUntil { deletion.calls == 1 }
+        composeRule.onNodeWithText("Couldn't delete your account (error 500). Try again.").assertExists()
+        composeRule.onNodeWithText("Sign out").assertExists()
+    }
+
+    @Test
     fun `a new account cannot ask for access, and is told to ask someone to share a trip`() {
         val store = FakeTripStore(access = emptyMap(), hasUserDocument = false)
         showInviteOnly(newcomerModel(store))

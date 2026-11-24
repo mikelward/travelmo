@@ -61,7 +61,7 @@ import {
   updateHistoryId,
   updateWatch,
 } from "./connections";
-import { AccountDeletedError } from "./deleted";
+import { AccountDeletedError, deletedAccountText } from "./deleted";
 import { optionalEnv, requireEnv } from "./env";
 import { geminiEmbedder, geminiExtractor } from "./extract";
 import { cachedGeocoder, defaultDailyLimit, firestoreGeocodeStore, googleGeocoder } from "./geocode";
@@ -312,11 +312,26 @@ async function requireUser(c: Context<Env>): Promise<string> {
   return (await requireApprovedToken(c)).uid;
 }
 
+// A deleted account's refusal; it says so when the deletion stopped part
+// way, so the apps can offer to finish it (deleted.ts).
+async function accountGone(uid: string): Promise<HTTPException> {
+  const signInExists = async (id: string) => {
+    try {
+      await auth.getUser(id);
+      return true;
+    } catch (error) {
+      if ((error as { code?: unknown }).code === "auth/user-not-found") return false;
+      throw error;
+    }
+  };
+  return new HTTPException(410, { message: await deletedAccountText(db, uid, deps.now(), signInExists, log) });
+}
+
 // requireUser for a handler that needs the token's claims too.
 async function requireApprovedToken(c: Context<Env>): Promise<Awaited<ReturnType<typeof requireIdToken>>> {
   const token = await requireIdToken(c);
   const gate = await gateUser(db, token, log);
-  if (gate === "deleted") throw new HTTPException(410, { message: "This account was deleted" });
+  if (gate === "deleted") throw await accountGone(token.uid);
   if (gate === "unapproved") {
     log("INFO", "user_not_approved", { uid: token.uid, path: c.req.path });
     throw new HTTPException(403, { message: "This account is not approved yet" });
@@ -458,7 +473,7 @@ app.post("/gmail/complete", async (c) => {
     if (error instanceof MailboxConflict || error instanceof TooManyMailboxes) {
       throw new HTTPException(409, { message: error.message });
     }
-    if (error instanceof AccountDeletedError) throw new HTTPException(410, { message: "This account was deleted" });
+    if (error instanceof AccountDeletedError) throw await accountGone(uid);
     throw error;
   }
   log("INFO", "gmail_connected", { uid, mailbox: mailboxKey(profile.emailAddress), mailboxes: again ? connected.length : connected.length + 1 });
@@ -535,7 +550,7 @@ app.post("/fastmail/connect", async (c) => {
     });
   } catch (error) {
     if (error instanceof OtherMailboxConnected) throw new HTTPException(409, { message: error.message });
-    if (error instanceof AccountDeletedError) throw new HTTPException(410, { message: "This account was deleted" });
+    if (error instanceof AccountDeletedError) throw await accountGone(uid);
     throw error;
   }
   log("INFO", "fastmail_connected", { uid });
@@ -631,7 +646,7 @@ app.post("/imap/connect", async (c) => {
     await saveImapConnection(db, uid, { emailAddress, password, ...server, connectedAt: new Date().toISOString(), mailboxState });
   } catch (error) {
     if (error instanceof TooManyImapMailboxes) throw new HTTPException(409, { message: error.message });
-    if (error instanceof AccountDeletedError) throw new HTTPException(410, { message: "This account was deleted" });
+    if (error instanceof AccountDeletedError) throw await accountGone(uid);
     throw error;
   }
   log("INFO", "imap_connected", { uid, mailbox: key, provider: choice.kind === "known" ? choice.provider.name : "other", mailboxes: again ? connected.length : connected.length + 1 });
@@ -1055,7 +1070,7 @@ app.post("/calendar/complete", async (c) => {
   } catch (error) {
     if (!(error instanceof AccountDeletedError)) throw error;
     await revokeQuietly(pending.refreshToken, uid);
-    throw new HTTPException(410, { message: "This account was deleted" });
+    throw await accountGone(uid);
   }
   log("INFO", "google_calendar_connected", { uid, calendars: listed.length });
   return c.json({ emailAddress, calendars: listed.length });
@@ -1510,7 +1525,7 @@ async function linking<T>(operation: "add" | "confirm" | "remove", uid: string, 
     }
     if (error instanceof AccountDeletedError) {
       log("INFO", "email_link_account_deleted", { operation, uid });
-      throw new HTTPException(410, { message: "This account was deleted" });
+      throw await accountGone(uid);
     }
     // The error's name and code, not its message, which may name the
     // address (a mail server's refusal, a parse error).
@@ -1539,7 +1554,7 @@ const emailBody = async (c: Context<Env>, field: "email" | "token"): Promise<str
 async function requireLinkingToken(c: Context<Env>): Promise<{ token: DecodedIdToken; approved: boolean }> {
   const token = await requireIdToken(c);
   const gate = await gateLinking(db, token, log);
-  if (gate === "deleted") throw new HTTPException(410, { message: "This account was deleted" });
+  if (gate === "deleted") throw await accountGone(token.uid);
   if (gate === "declined") {
     log("INFO", "user_not_approved", { uid: token.uid, path: c.req.path });
     throw new HTTPException(403, { message: "This account is not approved yet" });
@@ -1576,9 +1591,7 @@ app.post("/emails/remove", async (c) => {
 // answers where the account stands.
 app.post("/access/check", async (c) => {
   const token = await requireIdToken(c);
-  if ((await db.doc(paths.deletedAccount(token.uid)).get()).exists) {
-    throw new HTTPException(410, { message: "This account was deleted" });
-  }
+  if ((await db.doc(paths.deletedAccount(token.uid)).get()).exists) throw await accountGone(token.uid);
   const status = await settleAccess(
     {
       db,

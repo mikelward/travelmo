@@ -38,6 +38,7 @@ import app.travelmo.notify.ReminderNotifications
 import app.travelmo.ui.AccessScreen
 import app.travelmo.ui.AccessState
 import app.travelmo.ui.BookingFormScreen
+import app.travelmo.ui.FinishDeletionScreen
 import app.travelmo.ui.InviteOnlyScreen
 import app.travelmo.ui.LocalOpenAccess
 import app.travelmo.ui.CalendarScreen
@@ -167,6 +168,11 @@ private fun SignedInApp(
     }
     val viewModel: TripsViewModel = viewModel(key = user.uid, factory = factory)
     val access by viewModel.access.collectAsStateWithLifecycle()
+    val deletionUnfinished by viewModel.deletionUnfinished.collectAsStateWithLifecycle()
+    if (deletionUnfinished) {
+        FinishDeletionScreen(account = rememberSignedInAccount(app.account), viewModel = viewModel)
+        return
+    }
     // Only once the server has said so (SPEC "Access"): until then the app
     // shows as before, so an approved account never waits on it, offline
     // included, and one not approved sees its empty trip list a moment.
