@@ -27,7 +27,12 @@ export function flightLinesFor(segment: Segment, statuses: Record<string, Flight
 // The live status of the trip's flights near departure, by flight key: one
 // listener per flight, and only for the few flights within a day or so.
 export function useFlightStatuses(segments: readonly Segment[] | undefined, now: string): Record<string, FlightStatus> {
-  const keys = shownFlightKeys(segments, now).join("\n");
+  return useFlightStatusesOf(shownFlightKeys(segments, now));
+}
+
+// The live status of these flights, by key: one listener each.
+export function useFlightStatusesOf(wanted: readonly string[]): Record<string, FlightStatus> {
+  const keys = [...new Set(wanted)].sort().join("\n");
   const [statuses, setStatuses] = useState<Record<string, FlightStatus>>({});
   useEffect(() => {
     if (!keys) return;

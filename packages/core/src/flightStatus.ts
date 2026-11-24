@@ -199,6 +199,49 @@ function divertedLine(status: FlightStatus, booked: Booked | undefined): string 
   return to && to !== booked?.destination?.code?.toUpperCase() ? `Diverted to ${to}` : "Diverted";
 }
 
+// Whether a departure time is worth saying: the flight has not left and
+// is off schedule, or news of a delay went out (so back on time is said).
+const leavesLate = (status: FlightStatus): boolean =>
+  !status.actualOut && status.estimatedOut !== undefined && (offSchedule(status.scheduledOut, status.estimatedOut) || status.noticedOut !== undefined);
+
+// Whether the flight has taken off as of `at`: the service says it left,
+// or the time it is expected to leave (else the one scheduled, else the
+// booking's) has passed. A cancelled flight goes by its booking's time.
+export function flightDeparted(booked: Pick<ExtractedSegment, "start">, status: FlightStatus | undefined, at: string): boolean {
+  if (status?.found && !status.cancelled) {
+    if (status.actualOut) return true;
+    const out = status.estimatedOut ?? status.scheduledOut;
+    if (out) return Date.parse(at) >= Date.parse(out);
+  }
+  return Date.parse(at) >= Date.parse(booked.start);
+}
+
+// "Terminal 3 · Gate 12", "Terminal E · Bags on carousel 7": what is known.
+function listed(parts: readonly (string | false | undefined)[]): string | undefined {
+  const known = parts.filter((p): p is string => Boolean(p));
+  return known.length ? known.join(" · ") : undefined;
+}
+
+// The next thing to do for a flight, for a trip card's last line: before
+// takeoff, how late it leaves when it is late, else the terminal and gate
+// it leaves from; after, the terminal and gate it arrives at and where the
+// bags come out. A cancelled or diverted flight says that instead.
+// Nothing when nothing is known.
+export function flightNextStep(status: FlightStatus | undefined, booked: Booked, now: string): string | undefined {
+  if (!status?.found) return undefined;
+  if (status.cancelled) return "Flight cancelled";
+  if (!flightDeparted(booked, status, now)) {
+    if (leavesLate(status)) return `Leaves ${timing(status.scheduledOut!, status.estimatedOut!, booked.start)}`;
+    return listed([status.departureTerminal && `Terminal ${status.departureTerminal}`, status.departureGate && `Gate ${status.departureGate}`]);
+  }
+  if (status.diverted) return divertedLine(status, booked);
+  return listed([
+    status.arrivalTerminal && `Terminal ${status.arrivalTerminal}`,
+    status.arrivalGate && `Gate ${status.arrivalGate}`,
+    status.baggageClaim && `Bags on carousel ${status.baggageClaim}`,
+  ]);
+}
+
 // What the flight's card says: whether it is cancelled or diverted, how late
 // it leaves and lands, where it leaves from and arrives at, and where the
 // bags come out. Times read as the airports' clocks do when the booking is
@@ -209,8 +252,7 @@ export function flightStatusLines(status: FlightStatus | undefined, booked?: Boo
   if (!status?.found) return [];
   if (status.cancelled) return ["Flight cancelled"];
   const { departure, arrival, bags } = places(status);
-  const leaves =
-    !status.actualOut && status.estimatedOut !== undefined && (offSchedule(status.scheduledOut, status.estimatedOut) || status.noticedOut !== undefined);
+  const leaves = leavesLate(status);
   const lands = !status.actualIn && offSchedule(status.scheduledIn, status.estimatedIn);
   return [
     ...(status.diverted ? [divertedLine(status, booked)] : []),

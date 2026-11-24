@@ -24,6 +24,7 @@ import app.travelmo.core.flightStatusKey
 import app.travelmo.core.flightStatusLines
 import app.travelmo.core.flightStatusShown
 import app.travelmo.core.shownFlightKeys
+import app.travelmo.core.nextUpFlightKeys
 import app.travelmo.core.ListWarning
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentDraft
@@ -138,6 +139,8 @@ data class TripListState(
     val now: String,
     /** Document warnings once, for the list's top: each document for the earliest trip it bears on. */
     val warnings: List<ListWarning> = emptyList(),
+    /** The live status of the next flight of each trip under way, by flight key ([nextUpFlightKeys]). */
+    val flightStatuses: Map<String, FlightStatus> = emptyMap(),
 )
 
 /** How a write asked for by a screen is going, as that screen sees it. */
@@ -390,11 +393,16 @@ class TripsViewModel(
         decideAccess(token, address, AccountAccess.APPROVED)
     }
 
-    val state: StateFlow<TripListState> = combine(groups, details, now, people) { groups, details, now, people ->
+    /** The live status of each card under way's next flight: a listener per flight, re-chosen each minute. */
+    private val listFlightStatuses: Flow<Map<String, FlightStatus>> = combine(groups, details, now) { groups, details, now ->
+        groups?.current.orEmpty().flatMap { trip -> details[trip.id]?.let { nextUpFlightKeys(it, now) }.orEmpty() }.distinct().sorted()
+    }.distinctUntilChanged().flatMapLatest(::statusesOf)
+
+    val state: StateFlow<TripListState> = combine(groups, details, now, people, listFlightStatuses) { groups, details, now, people, statuses ->
         val today = today()
         val trips = groups?.let { it.current + it.upcoming + it.past }.orEmpty()
         val byTrip = trips.filter { it.id in details }.associate { trip -> trip.id to tripWarnings(people, trip, details[trip.id], today) }
-        TripListState(groups, details, now, listWarnings(byTrip, trips))
+        TripListState(groups, details, now, listWarnings(byTrip, trips), statuses)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TripListState(null, emptyMap(), clock().toString()))
 
 
@@ -424,15 +432,17 @@ class TripsViewModel(
     fun flightStatuses(tripId: String): Flow<Map<String, FlightStatus>> =
         combine(store.segments(tripId), now) { segments, now -> shownFlightKeys(segments, now) }
             .distinctUntilChanged()
-            .flatMapLatest { keys ->
-                if (keys.isEmpty()) {
-                    flowOf(emptyMap())
-                } else {
-                    combine(keys.map { key -> store.flightStatus(key).map { key to it } }) { pairs ->
-                        pairs.mapNotNull { (key, status) -> status?.let { key to it } }.toMap()
-                    }
-                }
+            .flatMapLatest(::statusesOf)
+
+    /** These flights' live statuses by key, a listener each; a flight the parser has not looked at is left out. */
+    private fun statusesOf(keys: List<String>): Flow<Map<String, FlightStatus>> =
+        if (keys.isEmpty()) {
+            flowOf(emptyMap())
+        } else {
+            combine(keys.map { key -> store.flightStatus(key).map { key to it } }) { pairs ->
+                pairs.mapNotNull { (key, status) -> status?.let { key to it } }.toMap()
             }
+        }
 
     /** What a flight's row says of its delays, gates and carousel now. */
     fun flightLines(segment: Segment, statuses: Map<String, FlightStatus>): List<String> {

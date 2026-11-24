@@ -23,6 +23,7 @@ export * from "./favorites";
 export * from "./visas";
 export * from "./reminders";
 export * from "./status";
+export * from "./nextUp";
 export * from "./airlines";
 export * from "./checkIn";
 export * from "./forward";
