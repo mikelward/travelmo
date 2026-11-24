@@ -16,9 +16,11 @@ import {
   isHomeTrip,
   sameCity,
   isTransfer,
+  journeyHome,
   nearHub,
   outingRuns,
   transferTitle,
+  withHomeAirports,
 } from "./home";
 import type { ExtractedSegment, Place, Trip } from "./schema";
 
@@ -846,5 +848,84 @@ describe("connections and the trips they open", () => {
     expect(opensTrip(toNewYork, { ...home, origin: { name: "Boston Logan", code: "BOS", city: "Boston", country: "US" } }, london)).toBe(false);
     // Landing at home ends a trip; it opens nothing.
     expect(opensTrip({ ...toNewYork, destination: { name: "Heathrow", code: "LHR", city: "London", country: "GB" } }, { ...home, origin: { name: "Heathrow", code: "LHR", city: "London", country: "GB" } }, london)).toBe(false);
+  });
+});
+
+describe("home airports", () => {
+  // Home corrected to Mountain View; every trip flies from SFO, in San Francisco.
+  const sfo: Place = { name: "San Francisco International", code: "SFO", city: "San Francisco", country: "US" };
+  const bos: Place = { name: "Boston Logan", code: "BOS", city: "Boston", country: "US" };
+  const dtw: Place = { name: "Detroit Metro", code: "DTW", city: "Detroit", country: "US" };
+  const sea: Place = { name: "Seattle-Tacoma", code: "SEA", city: "Seattle", country: "US" };
+  const leg = (start: string, origin: Place, destination: Place): ExtractedSegment => ({ type: "flight", title: `${origin.code} to ${destination.code}`, start, origin, destination });
+  const boston = [leg("2021-11-22T08:00:00-08:00", sfo, bos), leg("2021-12-01T13:00:00-05:00", bos, dtw), leg("2021-12-01T16:45:00-05:00", dtw, sfo)];
+  const seattle = [leg("2021-12-03T08:00:00-08:00", sfo, sea), leg("2021-12-06T18:00:00-08:00", sea, sfo)];
+  const corrected = homeCorrections([{ city: "Mountain View", country: "US", from: "2011-01-01" }]);
+  const trip = (id: string, start: string, end: string): Trip => ({ id, title: id, start, end, ownerUid: "u1", sharedWith: [], createdAt: "2021-01-01T00:00:00Z", updatedAt: "2021-01-01T00:00:00Z" });
+
+  it("are where two or more round trips leave from or come back into while home is there, however far away", () => {
+    const [home] = withHomeAirports(corrected, [...boston, ...seattle]);
+    expect(home!.airports?.map((a) => a.code)).toEqual(["SFO"]);
+    // One round trip says nothing: it could start at a relative's.
+    expect(withHomeAirports(corrected, boston)[0]!.airports).toBeUndefined();
+  });
+
+  it("leave out side trips on a visit whose way out was never imported", () => {
+    const lhr: Place = { name: "London Heathrow", code: "LHR", city: "London", country: "GB" };
+    const jfk: Place = { name: "John F. Kennedy", code: "JFK", city: "New York", country: "US" };
+    const pwm: Place = { name: "Portland Jetport", code: "PWM", city: "Portland", country: "US" };
+    const london = [leg("2021-03-01T09:00:00+00:00", lhr, sea), leg("2021-03-08T09:00:00-08:00", sea, lhr), leg("2021-05-01T09:00:00+01:00", lhr, sea), leg("2021-05-08T09:00:00-07:00", sea, lhr)];
+    const visit = [
+      leg("2021-09-03T09:00:00-04:00", bos, jfk),
+      leg("2021-09-05T09:00:00-04:00", jfk, bos),
+      leg("2021-09-10T09:00:00-04:00", bos, pwm),
+      leg("2021-09-12T09:00:00-04:00", pwm, bos),
+      leg("2021-09-20T19:00:00-04:00", bos, lhr),
+      // Home again: the next round trip is from London.
+      leg("2021-10-01T09:00:00+01:00", lhr, sea),
+      leg("2021-10-08T09:00:00-07:00", sea, lhr),
+    ];
+    const homes = withHomeAirports(homeCorrections([{ city: "London", country: "GB", from: "2020-01-01" }]), [...london, ...visit]);
+    expect(homes[0]!.airports?.map((a) => a.code)).toEqual(["LHR"]);
+    expect(journeyHome(bos, "2021-09-05", [], homes)).toBe(false);
+  });
+
+  it("count round trips from a nearby airport home was worked out from too", () => {
+    // SFO and Oakland, 18 km apart, are one home as homeTimeline tells it.
+    const sfoAt: Place = { ...sfo, lat: 37.62, lon: -122.38 };
+    const oak: Place = { name: "Oakland International", code: "OAK", city: "Oakland", country: "US", lat: 37.72, lon: -122.22 };
+    const trips = [
+      leg("2021-01-01T08:00:00-08:00", sfoAt, sea), leg("2021-01-05T08:00:00-08:00", sea, sfoAt),
+      leg("2021-02-01T08:00:00-08:00", oak, sea), leg("2021-02-05T08:00:00-08:00", sea, oak),
+      leg("2021-03-01T08:00:00-08:00", oak, sea), leg("2021-03-05T08:00:00-08:00", sea, oak),
+    ];
+    expect(withHomeAirports(corrected, trips)[0]!.airports?.map((a) => a.code)).toEqual(["OAK"]);
+  });
+
+  it("tell same-named stations in other towns apart", () => {
+    const washington: Place = { name: "Union Station", city: "Washington", country: "US" };
+    const chicago: Place = { name: "Union Station", city: "Chicago", country: "US" };
+    const nyp: Place = { name: "Penn Station", city: "New York", country: "US" };
+    const train = (start: string, origin: Place, destination: Place): ExtractedSegment => ({ type: "train", title: "Amtrak", start, origin, destination });
+    const trips = [train("2021-01-01T08:00:00-05:00", washington, nyp), train("2021-01-03T08:00:00-05:00", nyp, washington), train("2021-02-01T08:00:00-05:00", washington, nyp), train("2021-02-03T08:00:00-05:00", nyp, washington)];
+    const homes = withHomeAirports(homeCorrections([{ city: "Arlington", country: "US", from: "2020-01-01" }]), trips);
+    expect(journeyHome(washington, "2021-03-01", [], homes)).toBe(true);
+    expect(journeyHome(chicago, "2021-03-01", [], homes)).toBe(false);
+  });
+
+  it("make landing at one coming home, and a hotel by it still away", () => {
+    const overrides = withHomeAirports(corrected, [...boston, ...seattle]);
+    expect(journeyHome(sfo, "2021-12-01", [], overrides)).toBe(true);
+    expect(journeyHome(bos, "2021-12-01", [], overrides)).toBe(false);
+    expect(journeyHome(sfo, "2021-12-01", [], corrected)).toBe(false);
+    const hotel: ExtractedSegment = { type: "lodging", title: "SFO hotel", start: "2021-12-01T15:00:00-08:00", destination: { ...sfo, name: "SFO hotel" } };
+    expect(isAtHome(hotel, [], overrides)).toBe(false);
+  });
+
+  it("keep a trip two days after flying home to SFO apart from it", () => {
+    const overrides = withHomeAirports(corrected, [...boston, ...seattle]);
+    expect(findTripForBooking([trip("boston", "2021-11-22", "2021-12-01")], () => boston, [seattle[0]!], [], overrides)).toBeUndefined();
+    // As it was before: with no home airports, it joins.
+    expect(findTripForBooking([trip("boston", "2021-11-22", "2021-12-01")], () => boston, [seattle[0]!], [], corrected)?.id).toBe("boston");
   });
 });

@@ -17,6 +17,8 @@ data class HomePeriod(
     val country: String? = null,
     val from: String? = null,
     val until: String? = null,
+    /** The airports and stations travelled from while living here ([withHomeAirports]): a journey back into one is a journey home. */
+    val airports: List<Place> = emptyList(),
 )
 
 private data class Town(val city: String, val country: String?, val lat: Double? = null, val lon: Double? = null)
@@ -83,7 +85,7 @@ fun sameCity(a: String, b: String): Boolean = foldCity(a) == foldCity(b)
 
 private fun sameTown(a: Town, b: HomePeriod): Boolean = sameTown(a, Town(b.city, b.country))
 
-private data class RoundTrip(val base: Town, val start: String)
+private data class RoundTrip(val base: Town, val start: String, val from: Place, val back: Place)
 
 // How long someone can be away from a town and still live there, in days: a
 // longer round trip says nothing about where home is (they lived away, or its
@@ -115,7 +117,7 @@ private fun roundTrips(segments: List<Segment>): List<RoundTrip> {
             i++
             continue
         }
-        trips += RoundTrip(base, localDate(journeys[i].start))
+        trips += RoundTrip(base, localDate(journeys[i].start), journeys[i].origin!!, journeys[back].destination!!)
         i = back + 1
     }
     return trips
@@ -127,9 +129,12 @@ private fun roundTrips(segments: List<Segment>): List<RoundTrip> {
  * them. A single trip from somewhere else is not a move, and nor are trips
  * from somewhere when the next round trip after them is from home again.
  */
-fun homeTimeline(segments: List<Segment>): List<HomePeriod> {
+fun homeTimeline(segments: List<Segment>): List<HomePeriod> = homeBases(segments).map { it.first }
+
+// homeTimeline's periods with the town each was worked out from, its point included, as home.ts's homeBases.
+private fun homeBases(segments: List<Segment>): List<Pair<HomePeriod, Town>> {
     val trips = roundTrips(segments)
-    val periods = mutableListOf<HomePeriod>()
+    val periods = mutableListOf<Pair<HomePeriod, Town>>()
     var current: Town? = null
     var i = 0
     while (i < trips.size) {
@@ -137,7 +142,7 @@ fun homeTimeline(segments: List<Segment>): List<HomePeriod> {
         val home = current
         if (home == null) {
             current = trip.base
-            periods += HomePeriod(trip.base.city, trip.base.country)
+            periods += HomePeriod(trip.base.city, trip.base.country) to trip.base
             i++
             continue
         }
@@ -149,13 +154,54 @@ fun homeTimeline(segments: List<Segment>): List<HomePeriod> {
         while (end + 1 < trips.size && sameTown(trips[end + 1].base, trip.base)) end++
         val after = trips.getOrNull(end + 1)
         if (end > i && (after == null || !sameTown(after.base, home))) {
-            periods[periods.lastIndex] = periods.last().copy(until = LocalDate.parse(trip.start).minus(DatePeriod(days = 1)).toString())
-            periods += HomePeriod(trip.base.city, trip.base.country, from = trip.start)
+            val (last, lastBase) = periods.last()
+            periods[periods.lastIndex] = last.copy(until = LocalDate.parse(trip.start).minus(DatePeriod(days = 1)).toString()) to lastBase
+            periods += HomePeriod(trip.base.city, trip.base.country, from = trip.start) to trip.base
             current = trip.base
         }
         i = end + 1
     }
     return periods
+}
+
+// How many round trips must leave from or come back into an airport or station while someone lives somewhere for it to
+// be one of that home's: one could be a trip from a relative's on a visit.
+private const val HOME_AIRPORT_TRIPS = 2
+
+// One airport or station: by its code, else by its name in its city and country, as names repeat (Washington's Union
+// Station and Chicago's).
+private fun placeKey(place: Place) =
+    (place.code ?: listOf(place.name, place.city.orEmpty(), place.country?.let(::countryCode).orEmpty()).joinToString("|")).trim().lowercase()
+
+/**
+ * Each period with the airports and stations its round trips in [segments] leave from or come back into, each at least
+ * twice while it was home, as home.ts's withHomeAirports: a correction to Mountain View gets the SFO its trips start from.
+ */
+fun withHomeAirports(periods: List<HomePeriod>, segments: List<Segment>): List<HomePeriod> {
+    // Only round trips from what the journeys say was home at the time: side trips on a visit whose way out was never
+    // imported leave from where the visit was, not from home.
+    // As homeTimeline tells them, by name or by being near (SFO and Oakland).
+    val bases = homeBases(segments)
+    val trips = roundTrips(segments).filter { t -> bases.firstOrNull { it.first.covers(t.start) }?.let { sameTown(t.base, it.second) } == true }
+    return periods.map { period ->
+        val counts = LinkedHashMap<String, Pair<Place, Int>>()
+        for (trip in trips.filter { period.covers(it.start) }) {
+            for ((key, place) in listOf(trip.from, trip.back).associateBy(::placeKey)) {
+                counts[key] = (counts[key]?.first ?: place) to ((counts[key]?.second ?: 0) + 1)
+            }
+        }
+        period.copy(airports = counts.values.filter { it.second >= HOME_AIRPORT_TRIPS }.map { it.first })
+    }
+}
+
+/**
+ * Whether a journey's end ([place], on [date]) is home: in the home of its day, or one of that home's airports or
+ * stations, as home.ts's journeyHome. Only for journeys: a hotel by the airport is not at home.
+ */
+fun journeyHome(place: Place?, date: String, periods: List<HomePeriod>, overrides: List<HomePeriod> = emptyList()): Boolean {
+    if (inHomeTown(place, date, periods, overrides)) return true
+    val home = homeAt(periods, date, overrides) ?: return false
+    return place != null && home.airports.any { placeKey(it) == placeKey(place) }
 }
 
 private fun HomePeriod.covers(date: String) = (from == null || from <= date) && (until == null || date <= until)
@@ -339,7 +385,7 @@ fun isConnection(landing: Segment, next: Segment): Boolean {
 fun opensTrip(landing: Segment, next: Segment, periods: List<HomePeriod>, overrides: List<HomePeriod> = emptyList()): Boolean {
     if (landing.type !in journeyTypes || next.type !in journeyTypes) return false
     val landed = arrives(landing)
-    if (inHomeTown(landing.destination, landed.take(10), periods, overrides)) return false
+    if (journeyHome(landing.destination, landed.take(10), periods, overrides)) return false
     return compareInstants(next.start, landed) > 0 && sameArea(landing.destination, next.origin)
 }
 

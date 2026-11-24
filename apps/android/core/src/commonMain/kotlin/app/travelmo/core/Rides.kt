@@ -118,12 +118,12 @@ fun rideNeeds(
         val fromCovered = rides.any { rideFromArrival(it, flight) != null }
         if (instantMillis(landed) <= nowMs) continue
         if (!arrivesFrom && !toCovered && instantMillis(flight.start) > nowMs &&
-            inHomeTown(flight.origin, localDate(flight.start), periods, overrides)
+            journeyHome(flight.origin, localDate(flight.start), periods, overrides)
         ) {
             needs += RideNeed(flight.id, RideNeedKind.TO_AIRPORT)
         }
         if (leavesOnward || fromCovered) continue
-        if (inHomeTown(flight.destination, localDate(landed), periods, overrides)) {
+        if (journeyHome(flight.destination, localDate(landed), periods, overrides)) {
             needs += RideNeed(flight.id, RideNeedKind.FROM_AIRPORT)
             continue
         }

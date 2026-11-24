@@ -1,4 +1,4 @@
-import { homeAt, inHomeTown, nearHub, rideFromArrival, rideToDeparture, type HomePeriod } from "./home";
+import { homeAt, journeyHome, nearHub, rideFromArrival, rideToDeparture, type HomePeriod } from "./home";
 import { countryCodeOf, isCountryCode } from "./countries";
 import { maxRideCompanies, type RideCompany, type Segment } from "./schema";
 import { liveSegments } from "./trips";
@@ -64,11 +64,11 @@ export function rideNeeds(
     const toCovered = rides.some((r) => rideToDeparture(r, flight) !== undefined);
     const fromCovered = rides.some((r) => rideFromArrival(r, flight) !== undefined);
     if (Date.parse(landed) <= Date.parse(now)) continue;
-    if (!arrivesFrom && !toCovered && Date.parse(flight.start) > Date.parse(now) && inHomeTown(flight.origin, localDate(flight.start), periods, overrides)) {
+    if (!arrivesFrom && !toCovered && Date.parse(flight.start) > Date.parse(now) && journeyHome(flight.origin, localDate(flight.start), periods, overrides)) {
       needs.push({ segmentId: flight.id, kind: "toAirport" });
     }
     if (leavesOnward || fromCovered) continue;
-    const atHome = inHomeTown(flight.destination, localDate(landed), periods, overrides);
+    const atHome = journeyHome(flight.destination, localDate(landed), periods, overrides);
     if (atHome) {
       needs.push({ segmentId: flight.id, kind: "fromAirport" });
       continue;

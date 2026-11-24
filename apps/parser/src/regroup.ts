@@ -3,6 +3,7 @@ import {
   findTripForBooking,
   opensTrip,
   homeTimeline,
+  withHomeAirports,
   isCancelled,
   liveSegments,
   outingRuns,
@@ -74,7 +75,10 @@ export function planRegroup(
   keptEmpty: ReadonlySet<string> = new Set(trips.filter((trip) => (segmentsByTrip.get(trip.id) ?? []).length === 0).map((trip) => trip.id)),
 ): RegroupPlan {
   const live = trips.filter((trip) => !trip.deleting);
-  const periods = homeTimeline(live.flatMap((trip) => segmentsByTrip.get(trip.id) ?? []));
+  const known = live.flatMap((trip) => segmentsByTrip.get(trip.id) ?? []);
+  const periods = withHomeAirports(homeTimeline(known), known);
+  // The person's corrections too get the airports their round trips leave from.
+  overrides = withHomeAirports(overrides, known);
   const eligible = live.filter((trip) => !trip.id.startsWith(sourceTripPrefix));
 
   // Segments that share any source are one booking, however they are

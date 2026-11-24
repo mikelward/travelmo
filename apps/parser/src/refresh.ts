@@ -2,6 +2,7 @@ import {
   bookedDateRange,
   findTripForBooking,
   homeTimeline,
+  withHomeAirports,
   isCancelled,
   mergeDetails,
   normalizeReference,
@@ -353,18 +354,20 @@ export async function refreshEmail(
     const added: Segment[] = [];
     if (unmatched.length) {
       const segments = unmatched.map((u) => u.segment);
-      const periods = homeTimeline([...all, ...segments]);
+      const known = [...all, ...segments];
+      const periods = withHomeAirports(homeTimeline(known), known);
+      const homeOverrides = withHomeAirports(overrides, known);
       const remaining = (tripId: string) => (segmentsByTrip.get(tripId) ?? []).filter((s) => !deletes.has(segmentKey(s)));
       const filable = read.filter((trip) => !trip.id.startsWith(sourceTripPrefix));
       let tripId =
         carrying[0]?.tripId ??
         (record.tripId && tripOf.has(record.tripId) ? record.tripId : undefined) ??
-        findTripForBooking(filable, remaining, segments, periods, overrides)?.id;
+        findTripForBooking(filable, remaining, segments, periods, homeOverrides)?.id;
       if (!tripId) {
         const dates = bookedDateRange(segments)!;
         created = {
           id: deps.store.newId(),
-          title: tripTitle(segments, periods, overrides),
+          title: tripTitle(segments, periods, homeOverrides),
           start: dates.start,
           end: dates.end,
           ownerUid: uid,

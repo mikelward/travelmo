@@ -23,6 +23,7 @@ import {
   normalizeReference,
   type ExtractedCancellation,
   homeTimeline,
+  withHomeAirports,
   type HomePeriod,
   icsEventText,
   isTravelCalendar,
@@ -906,7 +907,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
   const range = segmentDateRange(booking.segments);
   if (!range) throw new Error(`booking ${booking.sourceId} has no segments`);
   const timestamp = deps.now();
-  const overrides = (await deps.homeOverrides?.(uid)) ?? [];
+  const corrections = (await deps.homeOverrides?.(uid)) ?? [];
   const result = await store.withUserLock(uid, async (lockTx) => {
     const tx = settlingTripDates(lockTx, timestamp);
     if (booking.generation !== undefined && tx.generation !== booking.generation) throw new ImportSupersededError();
@@ -918,7 +919,10 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     const nearby = overlappingTrips(live, { start: shiftDate(range.start, -homeWindowDays), end: shiftDate(range.end, homeWindowDays) });
     const segmentsByTrip = new Map(await Promise.all(nearby.map(async (trip) => [trip.id, await tx.listSegments(trip.id)] as const)));
     const segmentsOf = (tripId: string) => segmentsByTrip.get(tripId) ?? [];
-    let periods = homeTimeline([...[...segmentsByTrip.values()].flat(), ...booking.segments]);
+    // Home as worked out and as corrected, each with the airports its round
+    // trips leave from (withHomeAirports).
+    const homes = (segments: readonly ExtractedSegment[]) => ({ periods: withHomeAirports(homeTimeline(segments), segments), overrides: withHomeAirports(corrections, segments) });
+    let { periods, overrides } = homes([...[...segmentsByTrip.values()].flat(), ...booking.segments]);
     // Cancellations read before this booking was (the mailbox is read newest
     // first); read here, before any write, as a transaction requires.
     const pending = await tx.listPendingCancellations(uid);
@@ -1173,7 +1177,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     };
     // Where home was, by what this booking still books (a journey filed
     // cancelled was never travelled).
-    periods = homeTimeline([...[...segmentsByTrip.values()].flat(), ...deciding]);
+    ({ periods, overrides } = homes([...[...segmentsByTrip.values()].flat(), ...deciding]));
     const journey = (s: ExtractedSegment) => journeyTypes.has(s.type);
     const earliest = <S extends ExtractedSegment>(segments: readonly S[]) => segments.reduce((a, b) => (compareInstants(b.start, a.start) < 0 ? b : a));
     const latest = <S extends ExtractedSegment>(segments: readonly S[]) => segments.reduce((a, b) => (compareInstants(b.start, a.start) > 0 ? b : a));

@@ -286,4 +286,54 @@ class HomeTest {
         val lhr = Place("Heathrow", code = "LHR", city = "London", country = "GB")
         opensTrip(toNewYork.copy(destination = lhr), homeFlight.copy(origin = lhr), london) shouldBe false
     }
+
+    @Test
+    fun `home's airports are where two round trips leave from while living there and landing at one is coming home`() {
+        val sfo = Place("San Francisco International", code = "SFO", city = "San Francisco", country = "US")
+        val bos = Place("Boston Logan", code = "BOS", city = "Boston", country = "US")
+        val sea = Place("Seattle-Tacoma", code = "SEA", city = "Seattle", country = "US")
+        fun leg(id: String, start: String, from: Place, to: Place) = Segment(id, "t", SegmentType.FLIGHT, "${from.code} to ${to.code}", start, origin = from, destination = to)
+        val boston = listOf(leg("b1", "2021-11-22T08:00:00-08:00", sfo, bos), leg("b2", "2021-12-01T13:00:00-05:00", bos, sfo))
+        val seattle = listOf(leg("s1", "2021-12-03T08:00:00-08:00", sfo, sea), leg("s2", "2021-12-06T18:00:00-08:00", sea, sfo))
+        val corrected = homeCorrections(listOf(HomeCorrection("Mountain View", "US", "2011-01-01")))
+        val withAirports = withHomeAirports(corrected, boston + seattle)
+        withAirports.single().airports.map { it.code } shouldBe listOf("SFO")
+        withHomeAirports(corrected, boston).single().airports shouldBe emptyList()
+        journeyHome(sfo, "2021-12-01", emptyList(), withAirports) shouldBe true
+        journeyHome(sfo, "2021-12-01", emptyList(), corrected) shouldBe false
+        // Side trips on a visit whose way out was never imported say nothing about home's airports.
+        val lhr = Place("London Heathrow", code = "LHR", city = "London", country = "GB")
+        val jfk = Place("John F. Kennedy", code = "JFK", city = "New York", country = "US")
+        val londonTrips = listOf(
+            leg("l1", "2021-03-01T09:00:00+00:00", lhr, sea), leg("l2", "2021-03-08T09:00:00-08:00", sea, lhr),
+            leg("l3", "2021-05-01T09:00:00+01:00", lhr, sea), leg("l4", "2021-05-08T09:00:00-07:00", sea, lhr),
+            leg("v1", "2021-09-03T09:00:00-04:00", bos, jfk), leg("v2", "2021-09-05T09:00:00-04:00", jfk, bos),
+            leg("v3", "2021-09-10T09:00:00-04:00", bos, jfk), leg("v4", "2021-09-12T09:00:00-04:00", jfk, bos),
+            leg("v5", "2021-09-20T19:00:00-04:00", bos, lhr),
+            leg("l5", "2021-10-01T09:00:00+01:00", lhr, sea), leg("l6", "2021-10-08T09:00:00-07:00", sea, lhr),
+        )
+        withHomeAirports(homeCorrections(listOf(HomeCorrection("London", "GB", "2020-01-01"))), londonTrips).single().airports.map { it.code } shouldBe listOf("LHR")
+        // SFO and Oakland, 18 km apart, are one home as homeTimeline tells it.
+        val sfoAt = sfo.copy(lat = 37.62, lon = -122.38)
+        val oak = Place("Oakland International", code = "OAK", city = "Oakland", country = "US", lat = 37.72, lon = -122.22)
+        val bayTrips = listOf(
+            leg("o1", "2021-01-01T08:00:00-08:00", sfoAt, sea), leg("o2", "2021-01-05T08:00:00-08:00", sea, sfoAt),
+            leg("o3", "2021-02-01T08:00:00-08:00", oak, sea), leg("o4", "2021-02-05T08:00:00-08:00", sea, oak),
+            leg("o5", "2021-03-01T08:00:00-08:00", oak, sea), leg("o6", "2021-03-05T08:00:00-08:00", sea, oak),
+        )
+        withHomeAirports(corrected, bayTrips).single().airports.map { it.code } shouldBe listOf("OAK")
+        // Same-named stations in other towns are not home's.
+        val washington = Place("Union Station", city = "Washington", country = "US")
+        val nyp = Place("Penn Station", city = "New York", country = "US")
+        fun train(id: String, start: String, from: Place, to: Place) = Segment(id, "t", SegmentType.TRAIN, "Amtrak", start, origin = from, destination = to)
+        val amtrak = listOf(
+            train("a1", "2021-01-01T08:00:00-05:00", washington, nyp), train("a2", "2021-01-03T08:00:00-05:00", nyp, washington),
+            train("a3", "2021-02-01T08:00:00-05:00", washington, nyp), train("a4", "2021-02-03T08:00:00-05:00", nyp, washington),
+        )
+        val arlington = withHomeAirports(homeCorrections(listOf(HomeCorrection("Arlington", "US", "2020-01-01"))), amtrak)
+        journeyHome(washington, "2021-03-01", emptyList(), arlington) shouldBe true
+        journeyHome(Place("Union Station", city = "Chicago", country = "US"), "2021-03-01", emptyList(), arlington) shouldBe false
+        // Landing home at SFO opens nothing: the next trip is its own.
+        opensTrip(boston[1], seattle[0], emptyList(), withAirports) shouldBe false
+    }
 }
