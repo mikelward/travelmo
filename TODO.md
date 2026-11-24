@@ -695,8 +695,9 @@ Guesses made on autopilot; change any of them freely.
   fixed. The reports map is a sketch; the real one would be the web app's
   world map data.
 - Airport zones come from the OpenFlights database (ODbL) via the
-  `airport-data` package, filled from coordinates with `tz-lookup` where
-  it has none; generated and committed, not fetched at build time.
+  `airport-data` package and OurAirports (public domain), filled from
+  coordinates with `tz-lookup` where they have none; generated and
+  committed, not fetched at build time.
 - Offline: the service worker is Serwist's runtime caching bundled by
   esbuild (`@serwist/next` needs webpack; this app builds with Turbopack),
   caching pages, router payloads and build assets as they are used rather

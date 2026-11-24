@@ -3,13 +3,16 @@
 // src/airportPlaces.json, IATA code to [ISO country, latitude, longitude], for
 // placing a flight on the reports page's map and in its country.
 //
-// Source: the OpenFlights airport database (ODbL, https://openflights.org/data),
-// itself built from OurAirports (public domain), as packaged by `airport-data`.
-// Airports it lists without a zone get one from their coordinates (tz-lookup).
-// Codes are kept only when the zone is one this runtime's Intl knows.
+// Sources: the OpenFlights airport database (ODbL, https://openflights.org/data),
+// as packaged by `airport-data`, then OurAirports (public domain,
+// https://ourairports.com/data/), which is kept current: it adds the codes
+// OpenFlights lacks and wins where the two disagree (a code reassigned to
+// another airport, a country renamed or split). Airports without a zone get
+// one from their coordinates (tz-lookup). Codes are kept only when the zone is
+// one this runtime's Intl knows.
 //
-//   pnpm --filter @travelmo/core airports
-import { writeFile } from "node:fs/promises";
+//   pnpm --filter @travelmo/core airports [path to OurAirports' airports.csv]
+import { readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -82,6 +85,36 @@ function countryOf(airport) {
 
 const round = (n) => Math.round(n * 100) / 100;
 
+// RFC 4180: quoted fields may hold commas, newlines and doubled quotes.
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (c === '"' && text[i + 1] === '"') {
+        field += '"';
+        i += 1;
+      } else if (c === '"') quoted = false;
+      else field += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ",") {
+      row.push(field);
+      field = "";
+    } else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i += 1;
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+    } else field += c;
+  }
+  if (field || row.length) rows.push([...row, field]);
+  return rows;
+}
+
 const zones = new Map();
 const places = new Map();
 const unplaced = new Set();
@@ -102,9 +135,37 @@ for (const airport of airports) {
 }
 if (unplaced.size) throw new Error(`No ISO code for: ${[...unplaced].join(", ")}`);
 
+// OurAirports, closed airports aside, by its IATA codes.
+const ourAirportsUrl = "https://raw.githubusercontent.com/davidmegginson/ourairports-data/main/airports.csv";
+const csv = process.argv[2] ? await readFile(process.argv[2], "utf8") : await (await fetch(ourAirportsUrl)).text();
+let added = 0;
+let corrected = 0;
+const [header, ...rows] = parseCsv(csv);
+const column = (name) => {
+  const i = header.indexOf(name);
+  if (i < 0) throw new Error(`OurAirports has no ${name} column`);
+  return i;
+};
+const [iata, type, country, lat, lon] = ["iata_code", "type", "iso_country", "latitude_deg", "longitude_deg"].map(column);
+for (const row of rows) {
+  const code = row[iata]?.trim();
+  if (!code || !/^[A-Z]{3}$/.test(code) || row[type] === "closed" || !/^[A-Z]{2}$/.test(row[country] ?? "")) continue;
+  const latitude = Number(row[lat]);
+  const longitude = Number(row[lon]);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) continue;
+  const known_ = places.get(code);
+  if (known_ && known_[0] === row[country]) continue;
+  const zone = tzLookup(latitude, longitude);
+  if (!known(zone)) continue;
+  if (known_) corrected += 1;
+  else added += 1;
+  zones.set(code, zone);
+  places.set(code, [row[country], round(latitude), round(longitude)]);
+}
+
 const sorted = (map) => Object.fromEntries([...map].sort(([a], [b]) => a.localeCompare(b)));
 await writeFile(new URL("../src/airports.json", import.meta.url), `${JSON.stringify(sorted(zones), null, 1)}\n`);
 // One line per airport: diffs stay readable at a third of the size.
 const placeLines = Object.entries(sorted(places)).map(([code, place]) => `${JSON.stringify(code)}:${JSON.stringify(place)}`);
 await writeFile(new URL("../src/airportPlaces.json", import.meta.url), `{\n${placeLines.join(",\n")}\n}\n`);
-console.log(`${zones.size} airports (${fromCoordinates} zones from coordinates), ${places.size} placed`);
+console.log(`${zones.size} airports (${fromCoordinates} zones from coordinates), ${places.size} placed; OurAirports added ${added}, corrected ${corrected}`);

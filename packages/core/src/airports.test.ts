@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { airportZone } from "./airports";
 import zones from "./airports.json";
+import { airportPlace } from "./airportPlaces";
 
 describe("airportZone", () => {
   it("knows the zone of major airports", () => {
@@ -24,5 +25,14 @@ describe("airportZone", () => {
       expect(() => new Intl.DateTimeFormat("en", { timeZone: zone })).not.toThrow();
     }
     expect(Object.keys(zones).length).toBeGreaterThan(5000);
+  });
+});
+
+describe("airportPlace", () => {
+  it("knows airports OpenFlights lacks, and a code's current country from OurAirports", () => {
+    expect(airportPlace("BER")?.country).toBe("DE");
+    expect(airportZone("BER")).toBe("Europe/Berlin");
+    expect(airportPlace("PRN")?.country).toBe("XK");
+    expect(airportPlace("LAS")?.country).toBe("US");
   });
 });
