@@ -302,8 +302,9 @@
     <string name="no_trips_yet">No trips yet.</string>
     <string name="residence_title">Residence and visa days</string>
     <string name="residence_rules">Rules</string>
-    <string name="residence_applying_today">If you applied today</string>
-    <string name="residence_as_of_today">As of today</string>
+    <string name="residence_applying_on">If you applied on %1$s</string>
+    <string name="residence_as_of">As of %1$s</string>
+    <string name="residence_fewer">Show fewer</string>
     <string name="residence_no_home_country">Days with no trip count as at home, but home has no country yet. Add one on your Profile.</string>
     <string name="residence_estimate">An estimate from the bookings Travelmo knows about, with days between trips counted at home. It isn't legal advice.</string>
     <string name="residence_worst">Worst %1$s: %2$s</string>
@@ -330,8 +331,8 @@
         <item quantity="other">%1$d days</item>
     </plurals>
     <plurals name="residence_more">
-        <item quantity="one">and %1$d more</item>
-        <item quantity="other">and %1$d more</item>
+        <item quantity="one">Show %1$d more</item>
+        <item quantity="other">Show %1$d more</item>
     </plurals>
     <string name="residence_official_guidance">Official guidance</string>
     <string name="residence_enough">Enough days</string>

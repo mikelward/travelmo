@@ -386,7 +386,7 @@
 - [x] Residence and visa days on Reports: days in and out of countries
       against UK settlement and citizenship, Schengen, US citizenship,
       green card and tax, Canada and Australia limits.
-- [ ] Residence and visa days on Android: a date picker, as the web has
+- [x] Residence and visa days on Android: a date picker, as the web has
       (it counts to today), and the stays and time away past the latest
       five.
 - [ ] Mailboxes beyond Gmail, read as Gmail is (new mail and the whole

@@ -34,12 +34,14 @@ import app.travelmo.core.Stretch
 import app.travelmo.core.TripWithSegments
 import app.travelmo.core.countryName
 import app.travelmo.core.formatDateRange
+import app.travelmo.core.formatDateWithYear
 import app.travelmo.core.residenceReport
 import app.travelmo.core.residenceRuleSets
 import app.travelmo.core.spanText
 import app.travelmo.shared.Res
-import app.travelmo.shared.residence_applying_today
-import app.travelmo.shared.residence_as_of_today
+import app.travelmo.shared.residence_applying_on
+import app.travelmo.shared.residence_as_of
+import app.travelmo.shared.residence_fewer
 import app.travelmo.shared.residence_close
 import app.travelmo.shared.residence_close_to_test
 import app.travelmo.shared.residence_days
@@ -85,7 +87,7 @@ import org.jetbrains.compose.resources.stringResource
 /**
  * Days in and out of countries against residence and visa limits, as the
  * web's reports page shows them (packages/core/src/residence.ts, mirrored in
- * `:core`), counted to today: pick a set of rules, see each count, its worst
+ * `:core`), counted to today or a day picked: pick a set of rules, see each count, its worst
  * stretch, and the time away or stays behind it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -93,7 +95,9 @@ import org.jetbrains.compose.resources.stringResource
 fun ResidenceDays(trips: List<TripWithSegments>, homes: List<HomePeriod>, today: String, titles: Map<String, String>, onOpenTrip: (String) -> Unit, modifier: Modifier = Modifier) {
     var setId by rememberSaveable { mutableStateOf(residenceRuleSets.first().id) }
     val set = residenceRuleSets.firstOrNull { it.id == setId } ?: residenceRuleSets.first()
-    val report = remember(trips, homes, set, today) { residenceReport(trips, homes, set, today) }
+    // The day to count to: today unless the user picks another, such as the day they mean to apply.
+    var date by rememberSaveable { mutableStateOf(today) }
+    val report = remember(trips, homes, set, date) { residenceReport(trips, homes, set, date) }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(modifier = modifier.fillMaxWidth()) {
         Text(stringResource(Res.string.residence_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 8.dp))
@@ -111,11 +115,11 @@ fun ResidenceDays(trips: List<TripWithSegments>, homes: List<HomePeriod>, today:
                 for (s in residenceRuleSets) DropdownMenuItem(text = { Text(s.label) }, onClick = { setId = s.id; open = false })
             }
         }
-        Text(
-            stringResource(if (set.application) Res.string.residence_applying_today else Res.string.residence_as_of_today),
-            style = MaterialTheme.typography.bodyMedium,
-            color = muted,
-            modifier = Modifier.padding(top = 4.dp),
+        DateButton(
+            stringResource(if (set.application) Res.string.residence_applying_on else Res.string.residence_as_of, formatDateWithYear(date)),
+            date,
+            { date = it },
+            Modifier.padding(top = 8.dp),
         )
         if (!report.homeCountryKnown) {
             Text(stringResource(Res.string.residence_no_home_country), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
@@ -125,7 +129,7 @@ fun ResidenceDays(trips: List<TripWithSegments>, homes: List<HomePeriod>, today:
     }
 }
 
-/** At most this many stretches are listed, latest first; the rest are counted. */
+/** At most this many stretches are listed at first, latest first; the rest on asking. */
 private const val SHOWN_STRETCHES = 5
 
 @Composable
@@ -193,7 +197,8 @@ private fun Result(result: RuleResult, titles: Map<String, String>, onOpenTrip: 
 private fun Stretches(label: String, items: List<Stretch>, titles: Map<String, String>, onOpenTrip: (String) -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Text(label, style = MaterialTheme.typography.labelLarge, color = muted, modifier = Modifier.padding(top = 4.dp))
-    for (s in items.reversed().take(SHOWN_STRETCHES)) {
+    var all by rememberSaveable { mutableStateOf(false) }
+    for (s in items.reversed().let { if (all) it else it.take(SHOWN_STRETCHES) }) {
         val where = s.countries.joinToString(", ") { countryName(it) }
         val text = listOf(formatDateRange(s.start, s.end), pluralStringResource(Res.plurals.residence_days, s.days, s.days), where).filter { it.isNotEmpty() }.joinToString(" · ")
         val trip = s.tripIds.firstOrNull()
@@ -204,7 +209,14 @@ private fun Stretches(label: String, items: List<Stretch>, titles: Map<String, S
         )
     }
     val more = items.size - SHOWN_STRETCHES
-    if (more > 0) Text(pluralStringResource(Res.plurals.residence_more, more, more), style = MaterialTheme.typography.bodyMedium, color = muted)
+    if (more > 0) {
+        Text(
+            if (all) stringResource(Res.string.residence_fewer) else pluralStringResource(Res.plurals.residence_more, more, more),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable { all = !all }.padding(vertical = 4.dp),
+        )
+    }
 }
 
 @Composable
