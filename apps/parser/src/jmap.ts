@@ -1,5 +1,5 @@
 import { backfillBatch, backfillSubjects, statementDays, statementSubjects } from "./backfill";
-import type { EmailMessage, MessagePage } from "./gmail";
+import { isPdf, withinAttachmentLimits, type EmailMessage, type MessagePage } from "./gmail";
 import type { MailSource } from "./mailSource";
 import type { ChangesResult } from "./newMailPoll";
 import { travelLoyaltyDomains } from "./prefilter";
@@ -57,7 +57,10 @@ export class JmapNotFound extends Error {
 
 export type FetchFn = (url: string, init: RequestInit) => Promise<Response>;
 
-export type JmapSession = { apiUrl: string; accountId: string; username: string; readOnly: boolean; maxObjectsInGet?: number };
+// `downloadUrl` is the session's template for a blob (RFC 8620 §2), absent
+// when the server names none on Fastmail's hosts: attachments are then not
+// read.
+export type JmapSession = { apiUrl: string; accountId: string; username: string; readOnly: boolean; maxObjectsInGet?: number; downloadUrl?: string };
 
 // How many ids one /get takes when the server does not say (RFC 8620 asks
 // servers for at least 500).
@@ -70,6 +73,7 @@ export async function jmapSession(token: string, fetchFn: FetchFn = fetch): Prom
   if (!res.ok) throw new JmapHttpError(res.status, res.headers, "session");
   const body = (await res.json()) as {
     apiUrl?: unknown;
+    downloadUrl?: unknown;
     username?: unknown;
     primaryAccounts?: Record<string, unknown>;
     accounts?: Record<string, { isReadOnly?: unknown }>;
@@ -86,13 +90,16 @@ export async function jmapSession(token: string, fetchFn: FetchFn = fetch): Prom
     username: typeof body.username === "string" ? body.username : "",
     readOnly: body.accounts?.[accountId]?.isReadOnly === true,
     ...(maxGet ? { maxObjectsInGet: maxGet } : {}),
+    ...(typeof body.downloadUrl === "string" && onFastmail(body.downloadUrl, true) ? { downloadUrl: body.downloadUrl } : {}),
   };
 }
 
-function onFastmail(url: string): boolean {
+// Fastmail serves blobs from its own separate domain.
+function onFastmail(url: string, orUserContent = false): boolean {
   try {
     const { protocol, hostname } = new URL(url);
-    return protocol === "https:" && (hostname === "fastmail.com" || hostname.endsWith(".fastmail.com"));
+    const within = (domain: string) => hostname === domain || hostname.endsWith(`.${domain}`);
+    return protocol === "https:" && (within("fastmail.com") || (orUserContent && within("fastmailusercontent.com")));
   } catch {
     // Not a URL at all: refused like any other host.
     return false;
@@ -106,12 +113,26 @@ export type Jmap = {
   accountId: string;
   // The most ids one /get may name.
   maxObjectsInGet: number;
+  // A blob's bytes, when the session says where to download them.
+  download?: (blobId: string, type: string, name: string) => Promise<Uint8Array>;
 };
 
-export function jmapClient(token: string, session: Pick<JmapSession, "apiUrl" | "accountId" | "maxObjectsInGet">, fetchFn: FetchFn = fetch): Jmap {
+export function jmapClient(token: string, session: Pick<JmapSession, "apiUrl" | "accountId" | "maxObjectsInGet" | "downloadUrl">, fetchFn: FetchFn = fetch): Jmap {
+  const template = session.downloadUrl;
   return {
     accountId: session.accountId,
     maxObjectsInGet: session.maxObjectsInGet ?? defaultMaxObjectsInGet,
+    ...(template
+      ? {
+          download: async (blobId: string, type: string, name: string) => {
+            const values: Record<string, string> = { accountId: session.accountId, blobId, type, name };
+            const url = template.replace(/\{(accountId|blobId|type|name)\}/g, (_, key: string) => encodeURIComponent(values[key]!));
+            const res = await fetchFn(url, { headers: { Authorization: `Bearer ${token}` } });
+            if (!res.ok) throw new JmapHttpError(res.status, res.headers, "download");
+            return new Uint8Array(await res.arrayBuffer());
+          },
+        }
+      : {}),
     call: async (calls) => {
       const res = await fetchFn(session.apiUrl, {
         method: "POST",
@@ -200,6 +221,7 @@ type JmapEmail = {
   textBody?: { partId?: string }[];
   htmlBody?: { partId?: string }[];
   bodyValues?: Record<string, { value?: string }>;
+  attachments?: { blobId?: string | null; size?: number | null; name?: string | null; type?: string | null }[] | null;
 };
 
 function sender(from: JmapEmail["from"]): string {
@@ -213,7 +235,8 @@ function partsText(parts: JmapEmail["textBody"], values: JmapEmail["bodyValues"]
 }
 
 // One email, reduced as Gmail's and forwarded ones are: plain text when it
-// is the whole message, else the HTML flattened. Attachments are not read.
+// is the whole message, else the HTML flattened; its PDFs are downloaded
+// only when asked for, as Gmail's are.
 export async function fetchEmail(jmap: Jmap, emailId: string): Promise<EmailMessage> {
   const [result] = await jmap.call([
     [
@@ -221,7 +244,7 @@ export async function fetchEmail(jmap: Jmap, emailId: string): Promise<EmailMess
       {
         accountId: jmap.accountId,
         ids: [emailId],
-        properties: ["id", "threadId", "from", "subject", "sentAt", "receivedAt", "header:List-Unsubscribe:asText", "textBody", "htmlBody", "bodyValues"],
+        properties: ["id", "threadId", "from", "subject", "sentAt", "receivedAt", "header:List-Unsubscribe:asText", "textBody", "htmlBody", "bodyValues", "attachments"],
         fetchTextBodyValues: true,
         fetchHTMLBodyValues: true,
         maxBodyValueBytes: maxBodyBytes,
@@ -240,6 +263,27 @@ export async function fetchEmail(jmap: Jmap, emailId: string): Promise<EmailMess
     date: email.sentAt ?? email.receivedAt ?? "",
     listUnsubscribe: Boolean(email["header:List-Unsubscribe:asText"]),
     text: bodyText(partsText(email.textBody, email.bodyValues), partsText(email.htmlBody, email.bodyValues)),
+    ...pdfsOf(jmap, email),
+  };
+}
+
+function pdfsOf(jmap: Jmap, email: JmapEmail): Pick<EmailMessage, "attachments"> {
+  const download = jmap.download;
+  if (!download) return {};
+  const found = (email.attachments ?? [])
+    .filter((a) => a.blobId && isPdf(a.type, a.name))
+    .map((a) => ({ blobId: a.blobId!, name: a.name ?? "", type: a.type ?? "application/pdf", size: a.size ?? 0 }));
+  const parts = withinAttachmentLimits(found);
+  if (parts.length === 0) return {};
+  return {
+    attachments: async () =>
+      Promise.all(
+        parts.map(async (part) => {
+          const bytes = await download(part.blobId, part.type, part.name);
+          if (bytes.byteLength > part.size) throw new Error("Fastmail sent an attachment bigger than it said");
+          return { name: part.name, mimeType: "application/pdf" as const, data: Buffer.from(bytes).toString("base64") };
+        }),
+      ),
   };
 }
 

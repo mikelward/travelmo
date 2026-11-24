@@ -24,11 +24,15 @@ type Email = {
   text?: string | undefined;
   html?: string | undefined;
   unsubscribe?: string | undefined;
+  // Attached files, each a blob the download URL serves.
+  files?: { blobId: string; name: string; type: string; bytes: string }[];
 };
 
 // Just enough of a JMAP server: a session, mailboxes, a search over subject
 // and mailbox, emails with bodies, and changes since a state.
-function fakeFastmail(options: { readOnly?: boolean; apiUrl?: string; emails?: Email[]; maxObjectsInGet?: number } = {}) {
+const downloadUrl = "https://www.fastmailusercontent.com/jmap/download/{accountId}/{blobId}/{name}?type={type}";
+
+function fakeFastmail(options: { readOnly?: boolean; apiUrl?: string; downloadUrl?: string | null; emails?: Email[]; maxObjectsInGet?: number } = {}) {
   const token = "fmu1-token";
   const emails: Email[] = options.emails ?? [];
   const mailboxes = [
@@ -40,6 +44,7 @@ function fakeFastmail(options: { readOnly?: boolean; apiUrl?: string; emails?: E
   let state = 1;
   const created: Record<number, string[]> = {};
   const requests: { url: string; calls: unknown[] }[] = [];
+  const downloads: string[] = [];
   const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
     new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...headers } });
   const matches = (email: Email, filter: Record<string, unknown>): boolean => {
@@ -87,6 +92,7 @@ function fakeFastmail(options: { readOnly?: boolean; apiUrl?: string; emails?: E
               textBody: e.text !== undefined ? [{ partId: "1" }] : [],
               htmlBody: e.html !== undefined ? [{ partId: "2" }] : e.text !== undefined ? [{ partId: "1" }] : [],
               bodyValues: { ...(e.text !== undefined ? { 1: { value: e.text } } : {}), ...(e.html !== undefined ? { 2: { value: e.html } } : {}) },
+              attachments: (e.files ?? []).map((f) => ({ blobId: f.blobId, name: f.name, type: f.type, size: Buffer.byteLength(f.bytes) })),
             })),
             notFound: (args.ids as string[]).filter((id) => !found.some((e) => e.id === id)),
           },
@@ -108,11 +114,18 @@ function fakeFastmail(options: { readOnly?: boolean; apiUrl?: string; emails?: E
     if (url === fastmailSessionUrl) {
       return json({
         apiUrl: options.apiUrl ?? "https://api.fastmail.com/jmap/api/",
+        ...(options.downloadUrl === null ? {} : { downloadUrl: options.downloadUrl ?? downloadUrl }),
         username: "traveler@fastmail.com",
         primaryAccounts: { "urn:ietf:params:jmap:mail": "u1" },
         accounts: { u1: { isReadOnly: options.readOnly ?? true } },
         capabilities: { "urn:ietf:params:jmap:core": { maxObjectsInGet: options.maxObjectsInGet ?? 500 } },
       });
+    }
+    if (url.startsWith("https://www.fastmailusercontent.com/jmap/download/")) {
+      downloads.push(url);
+      const blobId = decodeURIComponent(new URL(url).pathname.split("/")[4]!);
+      const file = emails.flatMap((e) => e.files ?? []).find((f) => f.blobId === blobId);
+      return file ? new Response(file.bytes) : json({}, 404);
     }
     const body = JSON.parse(String(init.body)) as { methodCalls: [string, Record<string, unknown>, string][] };
     requests.push({ url, calls: body.methodCalls });
@@ -122,6 +135,7 @@ function fakeFastmail(options: { readOnly?: boolean; apiUrl?: string; emails?: E
     token,
     fetchFn,
     requests,
+    downloads,
     emails,
     // New mail arrives: one more state, with these emails created in it.
     deliver: (...more: Email[]) => {
@@ -153,6 +167,7 @@ describe("jmapSession", () => {
       username: "traveler@fastmail.com",
       readOnly: true,
       maxObjectsInGet: 500,
+      downloadUrl,
     });
     expect((await jmapSession(fm.token, fakeFastmail({ readOnly: false }).fetchFn)).readOnly).toBe(false);
   });
@@ -161,6 +176,11 @@ describe("jmapSession", () => {
     await expect(jmapSession("wrong", fakeFastmail().fetchFn)).rejects.toMatchObject({ status: 401 });
     const elsewhere = fakeFastmail({ apiUrl: "https://attacker.example/jmap/" });
     await expect(jmapSession(elsewhere.token, elsewhere.fetchFn)).rejects.toThrow("unexpectedApiUrl");
+  });
+
+  it("downloads from nowhere but Fastmail's own hosts", async () => {
+    const elsewhere = fakeFastmail({ downloadUrl: "https://attacker.example/{blobId}" });
+    expect((await jmapSession(elsewhere.token, elsewhere.fetchFn)).downloadUrl).toBeUndefined();
   });
 });
 
@@ -223,6 +243,33 @@ describe("fastmailSource", () => {
       text: "Flight XY123 on 2 Feb",
     });
     expect((await source.fetch(fastmailRecordId("M2"))).text).toBe("Room for two nights");
+  });
+
+  it("downloads its PDFs only when asked, by type or by name", async () => {
+    const files = [
+      { blobId: "B1", name: "e-ticket.pdf", type: "application/pdf", bytes: "%PDF-1.4 ticket" },
+      { blobId: "B2", name: "photo.jpg", type: "image/jpeg", bytes: "jpeg" },
+      { blobId: "B3", name: "invoice.PDF", type: "application/octet-stream", bytes: "%PDF-1.4 invoice" },
+    ];
+    const { source, fm } = await setup([email("M1", "Your e-ticket", "2026-01-01T10:00:00Z", { files })]);
+    const message = await source.fetch(fastmailRecordId("M1"));
+    expect(fm.downloads).toEqual([]);
+    expect(await message.attachments?.()).toEqual([
+      { name: "e-ticket.pdf", mimeType: "application/pdf", data: Buffer.from("%PDF-1.4 ticket").toString("base64") },
+      { name: "invoice.PDF", mimeType: "application/pdf", data: Buffer.from("%PDF-1.4 invoice").toString("base64") },
+    ]);
+    expect(fm.downloads).toEqual([
+      "https://www.fastmailusercontent.com/jmap/download/u1/B1/e-ticket.pdf?type=application%2Fpdf",
+      "https://www.fastmailusercontent.com/jmap/download/u1/B3/invoice.PDF?type=application%2Foctet-stream",
+    ]);
+  });
+
+  it("reads an email without its PDFs when the session names nowhere to download them", async () => {
+    const fm = fakeFastmail({ downloadUrl: null, emails: [email("M1", "Your e-ticket", "2026-01-01T10:00:00Z", { files: [{ blobId: "B1", name: "t.pdf", type: "application/pdf", bytes: "%PDF" }] })] });
+    const jmap = jmapClient(fm.token, await jmapSession(fm.token, fm.fetchFn), fm.fetchFn);
+    const message = await fastmailSource(async () => jmap).fetch(fastmailRecordId("M1"));
+    expect(message.text).toBe("Your booking M1");
+    expect(message.attachments).toBeUndefined();
   });
 
   it("says when an email is gone, as Gmail's 404 does", async () => {

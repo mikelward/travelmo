@@ -462,9 +462,9 @@ One Google Cloud project holds everything.
    forwarded emails read per user per day (default 50). The Worker relays
    each message as it arrived to `/inbound/cloudflare`, where the parser
    parses it, finds whose address it was sent to and runs the usual import;
-   a message to a retired or unknown address, or one over 2 MB, bounces to
+   a message to a retired or unknown address, or one over 16 MB, bounces to
    the sender with the reason. Email Routing and the Worker are free at
-   this volume on Cloudflare's free plan; attachments are not read.
+   this volume on Cloudflare's free plan.
 9. **Admins**: only approved accounts may use Travelmo (SPEC "Access").
    Nobody already using it is locked out, and there is nothing to run by
    hand: as the parser starts, before it serves, it records as approved

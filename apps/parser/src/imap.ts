@@ -3,7 +3,7 @@ import { ImapFlow, type SearchObject } from "imapflow";
 import { isIP } from "node:net";
 import { backfillBatch, backfillSubjects, statementDays, statementSubjects } from "./backfill";
 import type { EmailMessage, MessagePage } from "./gmail";
-import { parseInbound } from "./inbound";
+import { offered, parseInbound } from "./inbound";
 import { errorKind, log } from "./log";
 import type { MailSource } from "./mailSource";
 import type { ChangesResult } from "./newMailPoll";
@@ -16,9 +16,10 @@ import { isPublicAddress, publicOnlyLookup } from "./safefetch";
 // Connections are implicit TLS only (port 993 usually); a server that
 // offers only plaintext or STARTTLS is refused.
 
-// What the import reads of a message at most: booking emails are text and
-// HTML well within this, and a large attachment after them is cut off.
-export const imapMaxBytes = 2 * 1024 * 1024;
+// What the import reads of a message at most: its text and the PDFs the
+// model is shown (gmail.ts's limits) fit, as a forwarded message's do
+// (inbound.ts); a message cut off here keeps its text but not its PDFs.
+export const imapMaxBytes = 16 * 1024 * 1024;
 
 // New mail one poll imports at most, oldest first; the rest waits for the
 // next poll.
@@ -190,15 +191,15 @@ export async function searchPage(inbox: ImapInbox, key: string, query: SearchObj
 }
 
 // One message, downloaded whole up to imapMaxBytes and reduced as a
-// forwarded one is (inbound.ts's parseInbound).
+// forwarded one is (inbound.ts's parseInbound), its PDFs included.
 export async function fetchMessage(inbox: ImapInbox, key: string, id: string): Promise<EmailMessage> {
   const parsed = parseImapRecordId(id);
   if (!parsed || parsed.key !== key) throw new Error("Not a record id of this IMAP mailbox");
   if (parsed.uidValidity !== inbox.uidValidity) throw new ImapNotFound();
   const found = await inbox.client.fetchOne(String(parsed.uid), { uid: true, source: { maxLength: imapMaxBytes } }, { uid: true });
   if (!found || found.uid !== parsed.uid || !found.source) throw new ImapNotFound();
-  const mail = await parseInbound(found.source);
-  return { id, threadId: id, from: mail.from, subject: mail.subject, date: mail.date, listUnsubscribe: mail.listUnsubscribe, text: mail.text };
+  const mail = await parseInbound(found.source, found.source.length < imapMaxBytes);
+  return { id, threadId: id, from: mail.from, subject: mail.subject, date: mail.date, listUnsubscribe: mail.listUnsubscribe, text: mail.text, ...offered(mail.attachments) };
 }
 
 // Where new mail is read from: the inbox's UIDVALIDITY and the last UID
