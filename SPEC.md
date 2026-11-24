@@ -1692,7 +1692,15 @@ count), worked out from the same
 bookings for home as worked out and as corrected. Home corrected to
 Mountain View gets the SFO its trips fly from, so landing at SFO comes
 home; one round trip is not enough, as it could start at a relative's. Only
-journeys count this way: a hotel by the airport is not at home. Outings never
+journeys count this way: a hotel by the airport is not at home. Profile,
+on the web and Android, lists each home town's airports ("Mountain View
+airports: SFO") with Edit, which takes their codes ("SFO, SJC": IATA's or a
+station's, three to five letters or digits, at most ten); the choice,
+stored by town on the user document (`homeAirports`, a list of at most
+fifty, parsed by the parser and ignored when it does not parse), replaces
+the worked-out airports for that home, as worked out or corrected
+(`withChosenAirports`), for a home far from the airports its bookings
+show, or a first trip from a new one. Outings never
 join by nearness of dates alone, home known or not, since a town that is
 not named as home (Muswell Hill, Bromley) or a home not yet worked out on a
 fresh import would otherwise string a summer of outings and the trips

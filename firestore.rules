@@ -241,11 +241,13 @@ service cloud.firestore {
       function serverKeys() {
         return ['gmail', 'gmails', 'fastmail', 'imaps', 'googleCalendar', 'forward', 'emails', 'pendingEmails', 'refresh'];
       }
-      // Corrections to where home was (Profile): a list of at most fifty.
+      // Corrections to where home was (Profile), and the airports chosen for
+      // each home: lists of at most fifty.
       // Rules cannot check each entry; the parser parses them and ignores a
       // list that does not parse.
       function validHomes(data) {
-        return !('homes' in data) || (data.homes is list && data.homes.size() <= 50);
+        return (!('homes' in data) || (data.homes is list && data.homes.size() <= 50))
+          && (!('homeAirports' in data) || (data.homeAirports is list && data.homeAirports.size() <= 50));
       }
       // The user's own car and ride companies (Settings) and the ride
       // suggestions they hid: lists of at most twenty and two hundred. The

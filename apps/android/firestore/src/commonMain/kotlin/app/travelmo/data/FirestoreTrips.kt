@@ -26,6 +26,7 @@ import app.travelmo.core.REVIEW_SEARCH_CAP
 import app.travelmo.core.REVIEW_RECENT
 import app.travelmo.core.ParsedRecord
 import app.travelmo.core.withLoyaltyPerson
+import app.travelmo.core.ChosenHomeAirports
 import app.travelmo.core.HomeCorrection
 import app.travelmo.core.MAX_HOME_CORRECTIONS
 import app.travelmo.core.MAX_STANDING_REMINDERS
@@ -360,6 +361,12 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         check(corrections.size <= MAX_HOME_CORRECTIONS) { "At most $MAX_HOME_CORRECTIONS." }
         val stored = corrections.map { c -> listOfNotNull("city" to c.city, c.country?.let { "country" to it }, "from" to c.from).toMap() }
         db.collection("users").document(uid).setData(mapOf("homes" to stored), SetOptions.merge()).await()
+    }
+
+    override suspend fun setHomeAirports(uid: String, chosen: List<ChosenHomeAirports>) {
+        check(chosen.size <= MAX_HOME_CORRECTIONS) { "At most $MAX_HOME_CORRECTIONS homes." }
+        val stored = chosen.map { c -> listOfNotNull("city" to c.city, c.country?.let { "country" to it }, "airports" to c.airports).toMap() }
+        db.collection("users").document(uid).setData(mapOf("homeAirports" to stored), SetOptions.merge()).await()
     }
 
     override suspend fun addRideCompany(uid: String, company: RideCompany) = editRideCompanies(uid) { rideCompaniesAdding(it, company) }

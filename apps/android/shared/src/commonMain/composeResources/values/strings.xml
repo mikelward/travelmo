@@ -519,4 +519,8 @@
     <string name="trips_saved">Saved.</string>
     <string name="trips_save_failed">Couldn't save the file. Try again.</string>
     <string name="booking_reference">Booking reference</string>
+    <string name="home_airports">%1$s airports: %2$s</string>
+    <string name="home_airports_label">%1$s airports</string>
+    <string name="home_airports_none">none yet</string>
+    <string name="edit_home_airports">Edit %1$s airports</string>
 </resources>

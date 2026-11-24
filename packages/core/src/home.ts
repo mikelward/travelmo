@@ -2,7 +2,7 @@ import { airportPlace } from "./airportPlaces";
 import { countryCodeOf, isCountryCode } from "./countries";
 import { formatDate } from "./format";
 import { compareInstants } from "./instant";
-import { HomeCorrection, maxHomeCityLength, type ExtractedSegment, type Place, type SegmentType, type Trip } from "./schema";
+import { HomeAirportCode, HomeCorrection, maxHomeAirports, maxHomeCityLength, type ChosenHomeAirports, type ExtractedSegment, type Place, type SegmentType, type Trip } from "./schema";
 import { daysBetween, findTripForRange, isUntimed, liveSegments, segmentDateRange } from "./trips";
 
 // Where someone lives, over time. Nobody types it in: it is worked out from
@@ -245,6 +245,61 @@ export function withHomeAirports(periods: readonly HomePeriod[], segments: reado
     delete rest.airports;
     return airports.length > 0 ? { ...rest, airports } : rest;
   });
+}
+
+// The airports a person chose for each home (Profile), by its town, in
+// place of those worked out; a home they chose none for keeps its own.
+// Each is known by its code alone, which is how journeys are matched to it
+// (journeyHome).
+export function withChosenAirports(periods: readonly HomePeriod[], chosen: readonly ChosenHomeAirports[]): HomePeriod[] {
+  return periods.map((period) => {
+    // Its own town's choice, else one saved without a country for its city.
+    const choice =
+      chosen.find((c) => homeTownKey(c.city, c.country) === homeTownKey(period.city, period.country)) ??
+      chosen.find((c) => sameCity(c.city, period.city) && (!c.country || !period.country));
+    if (!choice) return period;
+    const rest: HomePeriod = { ...period };
+    delete rest.airports;
+    return choice.airports.length > 0 ? { ...rest, airports: choice.airports.map((code) => ({ name: code, code })) } : rest;
+  });
+}
+
+// Home as worked out from `segments` and as corrected, each with its
+// airports: worked out from its round trips, unless the person chose them.
+export function homesWithAirports(
+  segments: readonly Booking[],
+  corrections: readonly HomePeriod[],
+  chosen: readonly ChosenHomeAirports[] = [],
+): { periods: HomePeriod[]; overrides: HomePeriod[] } {
+  return {
+    periods: withChosenAirports(withHomeAirports(homeTimeline(segments), segments), chosen),
+    overrides: withChosenAirports(withHomeAirports(corrections, segments), chosen),
+  };
+}
+
+// One home town, as Profile lists its airports and as its choice is stored:
+// by city and country, as two Londons are two homes.
+// Its city folded as sameCity folds it, so München and Munich are one.
+export function homeTownKey(city: string, country?: string): string {
+  return `${foldCity(city)}|${country ? countryCode(country) : ""}`;
+}
+
+// A home's airports as Profile lists them: their codes, else their names.
+export function airportCodes(period: HomePeriod): string[] {
+  return (period.airports ?? []).map((a) => a.code ?? a.name);
+}
+
+// Airport or station codes as typed ("SFO, sjc"), or why they can't be.
+export function parseAirportCodes(text: string): { codes: string[] } | { error: string } {
+  const words = text.split(/[\s,;]+/).filter(Boolean);
+  const codes: string[] = [];
+  for (const word of words) {
+    const parsed = HomeAirportCode.safeParse(word);
+    if (!parsed.success) return { error: `"${word}" isn't an airport or station code.` };
+    if (!codes.includes(parsed.data)) codes.push(parsed.data);
+  }
+  if (codes.length > maxHomeAirports) return { error: `Up to ${maxHomeAirports} airports.` };
+  return { codes };
 }
 
 const covers = (period: HomePeriod, date: string) =>

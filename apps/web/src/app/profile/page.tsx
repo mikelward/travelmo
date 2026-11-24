@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Dialog } from "@/components/BookingMenu";
 import { SignInGate } from "@/components/SignInGate";
-import { correctionText, failedReadsText, homeLine, logged, parseCorrection, saveCorrections, useHomes } from "@/lib/home";
+import { airportCodes, homeTownKey, correctionText, failedReadsText, homeLine, logged, parseAirportCodes, parseCorrection, saveCorrections, saveHomeAirports, useHomes, type Homes } from "@/lib/home";
 import { useSaveForOffline } from "@/lib/offline";
 import { maxTrusted, removeFoundLoyalty, saveTrusted, setLoyaltyPerson, useSharedProfiles, useTravelProfile } from "@/lib/travelProfile";
 
@@ -357,6 +357,7 @@ function HomeSection({ user }: { user: User }) {
               ))}
             </ul>
           )}
+          <HomeAirports user={user} homes={homes} />
           <form
             className="mt-3 flex flex-wrap items-center gap-2 text-sm"
             onSubmit={(e) => {
@@ -395,6 +396,90 @@ function HomeSection({ user }: { user: User }) {
         </>
       )}
     </section>
+  );
+}
+
+// Each home's airports and stations: a journey back into one ends a trip.
+// Worked out from the trips that leave from them, unless chosen here.
+function HomeAirports({ user, homes }: { user: User; homes: Homes }) {
+  const [editing, setEditing] = useState<string>();
+  const [codes, setCodes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  // One row per home town, its latest period's airports.
+  const towns = new Map<string, (typeof homes.periods)[number]>();
+  for (const period of homes.periods) towns.set(homeTownKey(period.city, period.country), period);
+  if (towns.size === 0) return null;
+  const save = async (city: string, country: string | undefined) => {
+    const parsed = parseAirportCodes(codes);
+    if ("error" in parsed) return setError(parsed.error);
+    setBusy(true);
+    setError(undefined);
+    try {
+      const others = homes.chosen.filter((c) => homeTownKey(c.city, c.country) !== homeTownKey(city, country));
+      await logged("choosing airports", () => saveHomeAirports(user.uid, [...others, { city, ...(country ? { country } : {}), airports: parsed.codes }]));
+      setEditing(undefined);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-3">
+      <ul aria-label="Home airports" className="divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
+        {[...towns].map(([key, period]) => {
+          const shown = airportCodes(period);
+          return (
+            <li key={key} className="py-2">
+              {editing === key ? (
+                <form
+                  className="flex flex-wrap items-center gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void save(period.city, period.country);
+                  }}
+                >
+                  <label htmlFor="home-airports">{period.city} airports</label>
+                  <input
+                    id="home-airports"
+                    value={codes}
+                    onChange={(e) => setCodes(e.target.value)}
+                    placeholder="SFO, SJC"
+                    className="w-40 rounded-lg border border-field bg-background px-3 py-2"
+                  />
+                  <button type="submit" disabled={busy} className={buttonClass}>
+                    Save
+                  </button>
+                  <button type="button" disabled={busy} className={buttonClass} onClick={() => setEditing(undefined)}>
+                    Cancel
+                  </button>
+                </form>
+              ) : (
+                <div className="flex items-center justify-between gap-3">
+                  <span>
+                    {period.city} airports: {shown.length > 0 ? shown.join(", ") : "none yet"}
+                  </span>
+                  <button
+                    type="button"
+                    className={buttonClass}
+                    aria-label={`Edit ${period.city} airports`}
+                    onClick={() => {
+                      setEditing(key);
+                      setCodes(shown.join(", "));
+                      setError(undefined);
+                    }}
+                  >
+                    Edit
+                  </button>
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+    </div>
   );
 }
 

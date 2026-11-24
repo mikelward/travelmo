@@ -3,13 +3,14 @@ import {
   findTripForBooking,
   opensTrip,
   homeTimeline,
-  withHomeAirports,
+  homesWithAirports,
   isCancelled,
   liveSegments,
   outingRuns,
   bookedDateRange,
   segmentDateRange,
   segmentSources,
+  type ChosenHomeAirports,
   type HomePeriod,
   type Segment,
   type Trip,
@@ -73,12 +74,15 @@ export function planRegroup(
   newId: () => string,
   overrides: readonly HomePeriod[] = [],
   keptEmpty: ReadonlySet<string> = new Set(trips.filter((trip) => (segmentsByTrip.get(trip.id) ?? []).length === 0).map((trip) => trip.id)),
+  chosen: readonly ChosenHomeAirports[] = [],
 ): RegroupPlan {
   const live = trips.filter((trip) => !trip.deleting);
   const known = live.flatMap((trip) => segmentsByTrip.get(trip.id) ?? []);
-  const periods = withHomeAirports(homeTimeline(known), known);
-  // The person's corrections too get the airports their round trips leave from.
-  overrides = withHomeAirports(overrides, known);
+  // Home as worked out and as corrected, each with its airports: those its
+  // round trips leave from, unless the person chose them.
+  const homes = homesWithAirports(known, overrides, chosen);
+  const periods = homes.periods;
+  overrides = homes.overrides;
   const eligible = live.filter((trip) => !trip.id.startsWith(sourceTripPrefix));
 
   // Segments that share any source are one booking, however they are
@@ -370,11 +374,12 @@ export type RegroupResult = { changed: number; deleted: number; placed: number }
 // bookings when it began are never deleted, whatever a later pass sees.
 export async function regroupTrips(
   uid: string,
-  deps: Pick<ImportDeps, "store" | "now" | "log" | "homeOverrides">,
+  deps: Pick<ImportDeps, "store" | "now" | "log" | "homeOverrides" | "chosenHomeAirports">,
   budget = writeBudget,
 ): Promise<RegroupResult> {
   const placed = await placeBookings(uid, deps);
   const overrides = (await deps.homeOverrides?.(uid)) ?? [];
+  const chosen = (await deps.chosenHomeAirports?.(uid)) ?? [];
   let keptEmpty: Set<string> | undefined;
   let changed: number | undefined;
   let deleted = 0;
@@ -387,7 +392,7 @@ export async function regroupTrips(
       const segmentsByTrip = new Map(await Promise.all(trips.map(async (trip) => [trip.id, await tx.listSegments(trip.id)] as const)));
       // Within the transaction, so a retried first pass reads it afresh.
       const empty = keptEmpty ?? new Set(trips.filter((trip) => (segmentsByTrip.get(trip.id) ?? []).length === 0).map((trip) => trip.id));
-      const plan = planRegroup(trips, segmentsByTrip, () => deps.store.newId(), overrides, empty);
+      const plan = planRegroup(trips, segmentsByTrip, () => deps.store.newId(), overrides, empty, chosen);
       const changedTrips = plan.trips.filter((t) => t.changed).length;
       const applied =
         changedTrips === 0 && plan.deleted.length === 0 ? { deleted: [], more: false } : applyPlan(tx, uid, plan, deps.now(), budget);

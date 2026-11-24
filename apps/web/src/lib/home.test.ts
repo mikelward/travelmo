@@ -20,12 +20,12 @@ describe("deriveHomes", () => {
   const byTrip = { t: [flight("a", "2025-04-01T09:00:00+00:00", "London", "Rome"), flight("b", "2025-04-05T18:00:00+00:00", "Rome", "London")] };
 
   it("works out home from the trips read, with corrections over it", () => {
-    expect(deriveHomes(byTrip, [], [])).toEqual({ periods: [{ city: "London" }], corrections: [], failed: 0 });
+    expect(deriveHomes(byTrip, [], [])).toEqual({ periods: [{ city: "London" }], corrections: [], chosen: [], failed: 0 });
   });
 
   it("counts the trips that could not be read", () => {
     expect(deriveHomes(byTrip, ["x", "y"], []).failed).toBe(2);
-    expect(deriveHomes({}, ["x"], [])).toEqual({ periods: [], corrections: [], failed: 1 });
+    expect(deriveHomes({}, ["x"], [])).toEqual({ periods: [], corrections: [], chosen: [], failed: 1 });
   });
 });
 

@@ -18,6 +18,9 @@ import app.travelmo.core.REVIEW_SEARCH_CAP
 import app.travelmo.core.REVIEW_RECENT
 import app.travelmo.core.ParsedRecord
 import app.travelmo.core.HomeCorrection
+import app.travelmo.core.parseAirportCodes
+import app.travelmo.core.ParsedAirports
+import app.travelmo.core.ChosenHomeAirports
 import app.travelmo.core.DEFAULT_LEAD
 import app.travelmo.core.Reminder
 import app.travelmo.core.isReminderId
@@ -98,6 +101,9 @@ interface TripStore {
 
     /** Replaces the user's corrections to home (`homes` on their user document), as the web's Profile saves them. */
     suspend fun setHomeCorrections(uid: String, corrections: List<HomeCorrection>)
+
+    /** Replaces the airports chosen for each home (`homeAirports` on their user document), as the web's Profile saves them. */
+    suspend fun setHomeAirports(uid: String, chosen: List<ChosenHomeAirports>)
 
     /** Adds one of the user's own car and ride companies to the list as stored now, as the web does. */
     suspend fun addRideCompany(uid: String, company: RideCompany)
@@ -339,6 +345,8 @@ data class RideSettings(
     val companies: List<RideCompany> = emptyList(),
     val hidden: List<String> = emptyList(),
     val homes: List<HomeCorrection> = emptyList(),
+    /** The airports chosen for each home on Profile (`homeAirports`). */
+    val homeAirports: List<ChosenHomeAirports> = emptyList(),
 )
 
 private fun storedCompany(entry: Any?): RideCompany? {
@@ -380,7 +388,14 @@ fun rideSettingsOf(data: Map<String, Any?>?): RideSettings {
         val from = (map["from"] as? String)?.takeIf { isCalendarDate(it) } ?: return@mapNotNull null
         HomeCorrection(city, (map["country"] as? String)?.takeIf { it.length == 2 }, from)
     }
-    return RideSettings(companies, hidden, homes)
+    val homeAirports = (data?.get("homeAirports") as? List<*>).orEmpty().mapNotNull { entry ->
+        val map = entry as? Map<*, *> ?: return@mapNotNull null
+        val city = (map["city"] as? String)?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+        val codes = (map["airports"] as? List<*>)?.filterIsInstance<String>() ?: return@mapNotNull null
+        val parsed = parseAirportCodes(codes.joinToString(" ")) as? ParsedAirports.Codes ?: return@mapNotNull null
+        ChosenHomeAirports(city, (map["country"] as? String)?.takeIf { it.length == 2 }, parsed.codes)
+    }
+    return RideSettings(companies, hidden, homes, homeAirports)
 }
 
 private fun isCalendarDate(text: String): Boolean = try {

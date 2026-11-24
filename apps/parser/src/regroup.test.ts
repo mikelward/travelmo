@@ -771,4 +771,22 @@ describe("regroupTrips with home's airports", () => {
     await regroupTrips("u1", { ...deps(store), homeOverrides: async () => homeCorrections(corrections) });
     expect(summary(store).map((t) => t.segments)).toEqual([["b-back", "b-out"], ["s-back", "s-out"]]);
   });
+
+  it("ends a trip at an airport the person chose for home, though no two round trips leave from it", async () => {
+    const sjc = { name: "San Jose", code: "SJC", city: "San Jose", country: "US" };
+    const store = memoryStore();
+    store.trips.set("chain", trip("chain", "Boston", "2021-11-22", "2021-12-06"));
+    for (const s of [
+      flight("b-out", "mb", "2021-11-22T08:00:00-08:00", sjc, bos),
+      flight("b-back", "mb", "2021-12-01T13:00:00-05:00", bos, sjc),
+      flight("s-out", "ms", "2021-12-03T08:00:00-08:00", sjc, sea),
+      flight("s-back", "ms", "2021-12-06T18:00:00-08:00", sea, sjc),
+    ])
+      store.segments.set(s.id, s);
+    const chosen = [{ city: "Mountain View", country: "US", airports: ["SJC"] }];
+    // Two round trips from SJC would find it; with one each way, only the choice does.
+    store.segments.delete("s-back");
+    await regroupTrips("u1", { ...deps(store), homeOverrides: async () => homeCorrections(corrections), chosenHomeAirports: async () => chosen });
+    expect(summary(store).map((t) => t.segments)).toEqual([["b-back", "b-out"], ["s-out"]]);
+  });
 });

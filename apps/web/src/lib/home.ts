@@ -1,8 +1,8 @@
 "use client";
 
-import { effectiveHomes, homeTimeline, maxHomeCorrections, paths, type HomeCorrection, type HomePeriod, type Segment } from "@travelmo/core";
+import { effectiveHomes, homeTimeline, maxHomeCorrections, paths, withChosenAirports, withHomeAirports, type ChosenHomeAirports, type HomeCorrection, type HomePeriod, type Segment } from "@travelmo/core";
 
-export { correctionText, homeLine, parseCorrection } from "@travelmo/core";
+export { airportCodes, correctionText, homeLine, homeTownKey, parseAirportCodes, parseCorrection } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { firestore } from "./firebase";
@@ -10,11 +10,19 @@ import { useAllSegments, useProfile, useTrips } from "./trips";
 
 // Where home was over time, and how many trips could not be read to work it
 // out: with any, the timeline may be missing what those trips would say.
-export type Homes = { periods: HomePeriod[]; corrections: HomeCorrection[]; failed: number };
+// Each period carries its airports: those chosen for it, else those its
+// round trips leave from (withHomeAirports).
+export type Homes = { periods: HomePeriod[]; corrections: HomeCorrection[]; chosen: ChosenHomeAirports[]; failed: number };
 
-export function deriveHomes(byTrip: Record<string, Segment[]>, failed: readonly string[], corrections: readonly HomeCorrection[]): Homes {
-  const inferred = homeTimeline(Object.values(byTrip).flat());
-  return { periods: effectiveHomes(inferred, corrections), corrections: [...corrections], failed: failed.length };
+export function deriveHomes(
+  byTrip: Record<string, Segment[]>,
+  failed: readonly string[],
+  corrections: readonly HomeCorrection[],
+  chosen: readonly ChosenHomeAirports[] = [],
+): Homes {
+  const segments = Object.values(byTrip).flat();
+  const periods = withChosenAirports(withHomeAirports(effectiveHomes(homeTimeline(segments), corrections), segments), chosen);
+  return { periods, corrections: [...corrections], chosen: [...chosen], failed: failed.length };
 }
 
 // As the reports page says it for trips it could not read.
@@ -31,7 +39,7 @@ export function useHomes(user: User): Homes | undefined {
   const own = trips?.filter((t) => t.ownerUid === user.uid).map((t) => t.id);
   const all = useAllSegments(own);
   if (!all || !profile) return undefined;
-  return deriveHomes(all.byTrip, all.failed, profile.homes ?? []);
+  return deriveHomes(all.byTrip, all.failed, profile.homes ?? [], profile.homeAirports ?? []);
 }
 
 // Runs a change to the corrections, logging a failure by what it was doing
@@ -48,4 +56,10 @@ export async function logged<T>(operation: string, action: () => Promise<T>): Pr
 export async function saveCorrections(uid: string, corrections: readonly HomeCorrection[]): Promise<void> {
   if (corrections.length > maxHomeCorrections) throw new Error(`At most ${maxHomeCorrections}.`);
   await setDoc(doc(firestore(), paths.user(uid)), { homes: corrections }, { merge: true });
+}
+
+// The airports chosen for each home, one entry per home town.
+export async function saveHomeAirports(uid: string, chosen: readonly ChosenHomeAirports[]): Promise<void> {
+  if (chosen.length > maxHomeCorrections) throw new Error(`At most ${maxHomeCorrections} homes.`);
+  await setDoc(doc(firestore(), paths.user(uid)), { homeAirports: chosen }, { merge: true });
 }

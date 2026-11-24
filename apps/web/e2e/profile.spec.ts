@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { owner, partner, signIn, signOut } from "./helpers";
-import { clearData, readTravelProfile, seedTravelProfile, seedTrip } from "./seed";
+import { clearData, readTravelProfile, readUser, seedFlight, seedTravelProfile, seedTrip } from "./seed";
 
 test.beforeEach(async () => {
   await clearData();
@@ -146,4 +146,33 @@ test("home is set by city and a country written as a name, saved as its code", a
   await page.locator('input[type="date"]').fill("2022-01-15");
   await page.getByRole("button", { name: "Set" }).click();
   await expect(page.getByText("London, GB from 15 Jan 2022")).toBeVisible();
+});
+
+// A journey back into one of home's airports ends a trip (SPEC "Home").
+test("home's airports are worked out from the trips that leave from them, and can be chosen", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  const man = { name: "Manchester", code: "MAN", country: "GB" };
+  const dxb = { name: "Dubai", code: "DXB", country: "AE" };
+  for (const [id, out, back] of [
+    ["e2e-dubai-1", "2026-03-01", "2026-03-08"],
+    ["e2e-dubai-2", "2026-05-01", "2026-05-08"],
+  ] as const) {
+    await seedTrip(ownerUid, id, {}, { title: "Dubai", start: out, end: back });
+    await seedFlight(id, { id: `${id}-out`, start: `${out}T09:00:00+00:00`, end: `${out}T19:00:00+04:00`, origin: man, destination: dxb });
+    await seedFlight(id, { id: `${id}-back`, start: `${back}T09:00:00+04:00`, end: `${back}T14:00:00+00:00`, origin: dxb, destination: man });
+  }
+  await page.goto("/profile");
+  const airports = page.getByRole("list", { name: "Home airports" });
+  await expect(airports).toContainText("Manchester airports: MAN");
+
+  await airports.getByRole("button", { name: "Edit Manchester airports" }).click();
+  await page.getByLabel("Manchester airports").fill("man, lpl");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(airports).toContainText("Manchester airports: MAN, LPL");
+  await expect.poll(async () => (await readUser(ownerUid))?.homeAirports).toEqual([{ city: "Manchester", country: "GB", airports: ["MAN", "LPL"] }]);
+
+  await airports.getByRole("button", { name: "Edit Manchester airports" }).click();
+  await page.getByLabel("Manchester airports").fill("Manchester Airport");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText('"Manchester" isn\'t an airport or station code.')).toBeVisible();
 });
