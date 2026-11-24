@@ -395,7 +395,7 @@ class ScreenScreenshotTest {
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, pushDevice = FakePushDevice())
         composeRule.setContent {
             TravelmoTheme(darkTheme = false, fontSize = FontSizeState(FontSizeSettings(scale = 1f), onScaleSettled = {}, onPinchEnabledChange = {})) {
-                SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
+                SettingsScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = user, viewModel = viewModel, onBack = {})
             }
         }
         composeRule.onNodeWithText(runBlocking { getString(Res.string.add_reminder) }).performScrollTo()
@@ -415,7 +415,7 @@ class ScreenScreenshotTest {
         val viewModel = TripsViewModel(FakeTripStore(refreshProgress = running), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, tripActions = FakeTripActions())
         composeRule.setContent {
             TravelmoTheme(darkTheme = dark, fontSize = FontSizeState(FontSizeSettings(scale = 1f), onScaleSettled = {}, onPinchEnabledChange = {})) {
-                SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
+                SettingsScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = user, viewModel = viewModel, onBack = {})
             }
         }
         composeRule.onNodeWithText("Refreshing your bookings", substring = true).performScrollTo()
@@ -580,7 +580,7 @@ class ScreenScreenshotTest {
             accountDeletion = FakeAccountDeletion(), emailLinks = FakeEmailLinks(), tripActions = FakeTripActions(), gmailActions = FakeGmailActions(),
         )
         capture(name, dark = dark) {
-            SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
+            SettingsScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = user, viewModel = viewModel, onBack = {})
         }
     }
 
@@ -595,7 +595,7 @@ class ScreenScreenshotTest {
         val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
         composeRule.setContent {
             TravelmoTheme(darkTheme = dark) {
-                SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
+                SettingsScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = user, viewModel = viewModel, onBack = {})
             }
         }
         composeRule.onNodeWithText("Save").performScrollTo()
@@ -616,7 +616,7 @@ class ScreenScreenshotTest {
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
         composeRule.setContent {
             TravelmoTheme(darkTheme = dark) {
-                SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
+                SettingsScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = user, viewModel = viewModel, onBack = {})
             }
         }
         composeRule.onNodeWithText("Add").performScrollTo()
@@ -645,7 +645,7 @@ class ScreenScreenshotTest {
         val fontSize = FontSizeState(FontSizeSettings(scale = 1f), onScaleSettled = {}, onPinchEnabledChange = {})
         composeRule.setContent {
             TravelmoTheme(fontSize = fontSize) {
-                SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
+                SettingsScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = user, viewModel = viewModel, onBack = {})
             }
         }
         composeRule.onNodeWithText(last).performScrollTo()
@@ -675,7 +675,7 @@ class ScreenScreenshotTest {
         val fontSize = FontSizeState(FontSizeSettings(scale = 1f), onScaleSettled = {}, onPinchEnabledChange = {})
         composeRule.setContent {
             TravelmoTheme(fontSize = fontSize) {
-                SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
+                SettingsScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = user, viewModel = viewModel, onBack = {})
             }
         }
         // The section's end on screen, so the whole section shows.
@@ -704,7 +704,7 @@ class ScreenScreenshotTest {
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, feedActions = actions)
         composeRule.setContent {
             TravelmoTheme(darkTheme = dark) {
-                SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
+                SettingsScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = user, viewModel = viewModel, onBack = {})
             }
         }
         composeRule.onNodeWithText("Add feed").performScrollTo()
@@ -739,7 +739,7 @@ class ScreenScreenshotTest {
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, googleCalendarActions = actions)
         composeRule.setContent {
             TravelmoTheme(darkTheme = dark) {
-                SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
+                SettingsScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = user, viewModel = viewModel, onBack = {})
             }
         }
         composeRule.onNodeWithText("Save choice").performScrollTo()
@@ -765,7 +765,7 @@ class ScreenScreenshotTest {
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, calendarExportActions = actions, parserUrl = "https://parser.example")
         composeRule.setContent {
             TravelmoTheme(darkTheme = dark) {
-                SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
+                SettingsScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = user, viewModel = viewModel, onBack = {})
             }
         }
         composeRule.onNodeWithText("Turn off").performScrollTo()
@@ -791,7 +791,7 @@ class ScreenScreenshotTest {
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, forwardActions = actions, forwardOffered = true)
         composeRule.setContent {
             TravelmoTheme(darkTheme = dark) {
-                SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
+                SettingsScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = user, viewModel = viewModel, onBack = {})
             }
         }
         composeRule.onNodeWithText("Turn off").performScrollTo()

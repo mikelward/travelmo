@@ -39,6 +39,17 @@ interface AppChrome {
      */
     @Composable
     fun rememberTextSaver(mimeType: String, text: () -> String, onSaved: (Boolean) -> Unit): (suggestedName: String) -> Unit
+
+    /** The app's version as Settings names it. */
+    val versionName: String
+
+    /** Settings' reminders on this device, after those by email (Android: as notifications). */
+    @Composable
+    fun PushSettings(viewModel: TripsViewModel)
+
+    /** Settings' sections for this device, before deleting the account (Android: text size and the debug log). */
+    @Composable
+    fun DeviceSettings()
 }
 
 /** No menu, no crash reports, and links, copies and saves that go nowhere: what a preview shows. */
@@ -58,6 +69,14 @@ object NoAppChrome : AppChrome {
 
     @Composable
     override fun rememberTextSaver(mimeType: String, text: () -> String, onSaved: (Boolean) -> Unit): (suggestedName: String) -> Unit = {}
+
+    override val versionName: String = ""
+
+    @Composable
+    override fun PushSettings(viewModel: TripsViewModel) {}
+
+    @Composable
+    override fun DeviceSettings() {}
 }
 
 val LocalAppChrome = staticCompositionLocalOf<AppChrome> { NoAppChrome }

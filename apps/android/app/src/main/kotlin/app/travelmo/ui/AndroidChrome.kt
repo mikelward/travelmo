@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import app.travelmo.BuildConfig
 import app.travelmo.log.TravelmoLog
 import com.mikelward.androidlog.safe
 import java.io.IOException
@@ -66,5 +67,16 @@ class AndroidChrome(private val context: Context) : AppChrome {
             }
         }
         return { name -> launcher.launch(name) }
+    }
+
+    override val versionName: String = BuildConfig.VERSION_NAME
+
+    @Composable
+    override fun PushSettings(viewModel: TripsViewModel) = PushSwitch(viewModel)
+
+    @Composable
+    override fun DeviceSettings() {
+        TextSizeSection()
+        DebugLogSection(signedIn = true)
     }
 }
