@@ -61,11 +61,12 @@ fun withLatest(searched: List<ParsedRecord>, latest: List<ParsedRecord>): List<P
     return (latest + searched.filterNot { it.messageId in fresh }).sortedByDescending { it.processedAt }
 }
 
-/** "Sent 23 May 2026", or "Read 23 Nov 2026" when the email's date is unknown, in [zone] (IANA). */
+/** "Sent 23 May 2026 · Read 23 Nov 2026", or only when it was read if the email's date is unknown, in [zone] (IANA). */
 fun reviewDate(record: ParsedRecord, zone: String): String {
-    val at = instantOf(record) ?: return ""
-    val date = at.toLocalDateTime(TimeZone.of(zone)).date.toString()
-    return "${if (record.sentAt != null) "Sent" else "Read"} ${formatDayMonthYear(date)}"
+    val day = { at: String -> runCatching { Instant.parse(at) }.getOrNull()?.let { formatDayMonthYear(it.toLocalDateTime(TimeZone.of(zone)).date.toString()) } }
+    val read = day(record.processedAt)?.let { "Read $it" }
+    val sent = record.sentAt?.let(day)?.let { "Sent $it" }
+    return listOfNotNull(sent, read).joinToString(" · ")
 }
 
 /** What a record's outcome says, as the web's list says it. */

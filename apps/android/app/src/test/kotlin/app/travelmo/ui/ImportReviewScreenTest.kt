@@ -29,11 +29,11 @@ class ImportReviewScreenTest {
     }
 
     @Test
-    fun `lists what did not become a booking, with when it was sent, and finds one by name`() {
+    fun `lists what did not become a booking, with when it was sent and read, and finds one by name`() {
         show(FakeTripStore())
         composeRule.onNodeWithText("Example Air e-Ticket XY12AB").performScrollTo()
-        composeRule.onNodeWithText("Sent 23 May 2026", substring = true).performScrollTo()
-        composeRule.onNodeWithText("Read 23 Nov 2026", substring = true).performScrollTo()
+        composeRule.onNodeWithText("Sent 23 May 2026 · Read 23 Nov 2026", substring = true).performScrollTo()
+        composeRule.onNodeWithText("Read 23 Nov 2026 · unknown sender", substring = true).performScrollTo()
         composeRule.onNodeWithText("Your stay at Cove Liverpool").assertDoesNotExist()
         composeRule.onNodeWithText("Search").performTextInput("example air")
         composeRule.onNodeWithText("Our winter sale").assertDoesNotExist()
@@ -62,7 +62,7 @@ class ImportReviewScreenTest {
     fun `a Fastmail email says where it came from and can be imported anyway`() {
         val review = FakeImportReview()
         show(FakeTripStore(), review)
-        composeRule.onNodeWithText("Sent 2 Nov 2026 · Example Ferries <sail@ferry.example> · Fastmail · Read, not a booking").performScrollTo()
+        composeRule.onNodeWithText("Sent 2 Nov 2026 · Read 23 Nov 2026 · Example Ferries <sail@ferry.example> · Fastmail · Read, not a booking").performScrollTo()
         composeRule.onNodeWithText("Read 23 Nov 2026 · unknown sender · TripIt · Failed (Couldn't read it)").performScrollTo()
         composeRule.onNodeWithText("Never import ferry.example").performScrollTo()
         composeRule.onAllNodesWithText("Import anyway")[2].performScrollTo().performClick()

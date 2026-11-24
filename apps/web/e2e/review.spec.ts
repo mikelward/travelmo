@@ -68,8 +68,8 @@ test("a search finds an email whatever it was read among, by name or by when it 
 
   await page.getByRole("searchbox", { name: "Search" }).fill("example air");
   await expect(page.getByText("Example Air e-Ticket XY12AB")).toBeVisible();
-  // Each row says when its email was sent, or when it was read.
-  await expect(page.getByRole("listitem").filter({ hasText: "Example Air e-Ticket XY12AB" })).toContainText("Sent 23 May 2026");
+  // Each row says when its email was sent and when it was read.
+  await expect(page.getByRole("listitem").filter({ hasText: "Example Air e-Ticket XY12AB" })).toContainText("Sent 23 May 2026 · Read 23 Nov 2026");
 
   await page.getByRole("button", { name: "Clear" }).click();
   await page.getByLabel("From").fill("2026-05-01");

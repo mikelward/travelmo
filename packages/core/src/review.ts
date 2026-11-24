@@ -38,14 +38,14 @@ export function inRange(record: Pick<ParsedMessage, "sentAt" | "processedAt">, r
 }
 
 /**
- * The date a review row shows, in the viewer's own zone: when the email was
- * sent, or, for a record that does not say, when it was read.
+ * The dates a review row shows, in the viewer's own zone: when the email was
+ * sent, if the record says, and when it was read.
  */
 export function reviewDate(record: Pick<ParsedMessage, "sentAt" | "processedAt">, locale = "en-GB", timeZone?: string): string {
-  const day = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric", ...(timeZone ? { timeZone } : {}) }).format(
-    new Date(record.sentAt ?? record.processedAt),
-  );
-  return record.sentAt ? `Sent ${day}` : `Read ${day}`;
+  const day = (at: string) =>
+    new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric", ...(timeZone ? { timeZone } : {}) }).format(new Date(at));
+  const read = `Read ${day(record.processedAt)}`;
+  return record.sentAt ? `Sent ${day(record.sentAt)} · ${read}` : read;
 }
 
 /**
