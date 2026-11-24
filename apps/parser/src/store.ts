@@ -1,4 +1,4 @@
-import { ParsedMessage, PendingCancellation, Segment, SenderPatterns, TravelProfile, Trip, paths, withFoundLoyalty } from "@travelmo/core";
+import { ParsedMessage, PendingCancellation, Segment, SenderPatterns, TravelProfile, Trip, paths, withFoundLoyalties } from "@travelmo/core";
 import { FieldPath, FieldValue, type DocumentReference, type DocumentSnapshot, type Firestore, type Transaction } from "firebase-admin/firestore";
 import { AccountDeletedError, wasDeleted } from "./deleted";
 import { changeClaimable, claimable, reclaimable, retryable, type TripStore } from "./importer";
@@ -245,13 +245,14 @@ export function firestoreStore(db: Firestore): TripStore {
       // Read-modify-write in a transaction, so an import and the owner's
       // Remove, or two imports, keep each other's changes.
       const ref = db.doc(paths.travelProfile(uid));
-      await db.runTransaction(async (t) => {
+      return db.runTransaction(async (t) => {
         if (await deleted(t, uid)) throw new AccountDeletedError(uid);
         const snap = await t.get(ref);
         const current = snap.exists ? (TravelProfile.safeParse(snap.data()).data?.foundLoyalty ?? []) : [];
-        const next = found.reduce(withFoundLoyalty, current);
+        const { found: next, refused } = withFoundLoyalties(current, found);
         const now = new Date().toISOString();
         t.set(ref, snap.exists ? { foundLoyalty: next, updatedAt: now } : { ownerUid: uid, trustedEmails: [], foundLoyalty: next, updatedAt: now }, { merge: true });
+        return { refused };
       });
     },
     async senderPatterns(uid) {

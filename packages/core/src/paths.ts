@@ -8,6 +8,9 @@ export const paths = {
   // Server-only: when the parser last recorded the accounts from before
   // approvals (apps/parser/src/access.ts's grandfatherAccounts).
   accessGrandfathered: () => "config/accessGrandfathered",
+  // Server-only: which revision of stored loyalty numbers the parser has
+  // run (apps/parser/src/loyaltyRevision.ts), and how it went.
+  foundLoyaltyRevision: () => "config/foundLoyaltyRevision",
   // Server-only: written first when an account is deleted and kept, so an
   // import already under way cannot recreate the user's data (holds the uid
   // and when; Firebase never reuses a uid).

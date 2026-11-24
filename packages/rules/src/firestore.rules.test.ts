@@ -4,7 +4,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { paths, type Segment, type Trip } from "@travelmo/core";
+import { maxFoundLoyalty, paths, type Segment, type Trip } from "@travelmo/core";
 import { arrayUnion, collection, collectionGroup, deleteDoc, deleteField, doc, getDoc, getDocs, query, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
 import { readFileSync } from "node:fs";
 
@@ -559,7 +559,9 @@ describe("travel profiles", () => {
     });
     await assertSucceeds(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { foundLoyalty: [found], updatedAt: "2026-11-03T00:00:00Z" }));
     await assertFails(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { foundLoyalty: "EA123" }));
-    await assertFails(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { foundLoyalty: Array.from({ length: 51 }, () => found) }));
+    // More than the fifty once kept, up to the bound (maxFoundLoyalty).
+    await assertSucceeds(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { foundLoyalty: Array.from({ length: 51 }, () => found) }));
+    await assertFails(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { foundLoyalty: Array.from({ length: maxFoundLoyalty + 1 }, () => found) }));
     await assertFails(updateDoc(doc(as(partner), paths.travelProfile(owner.uid)), { foundLoyalty: [] }));
     // A profile an import started, with no sharing list yet.
     await env.withSecurityRulesDisabled(async (ctx) => {
@@ -842,6 +844,9 @@ describe("access", () => {
     await assertFails(setDoc(doc(as(admin), paths.accessConfig()), { admins: [admin.email, owner.email] }));
     await assertFails(setDoc(doc(as(owner), paths.accessConfig()), { admins: [owner.email] }));
     await assertFails(setDoc(doc(as(owner), "config/other"), { x: 1 }));
+    // The parser's own markers, such as how far stored loyalty numbers were revised.
+    await assertFails(getDoc(doc(as(owner), paths.foundLoyaltyRevision())));
+    await assertFails(setDoc(doc(as(owner), paths.foundLoyaltyRevision()), { revision: 99 }));
   });
 
   it("lets an admin with no user document use the app", async () => {

@@ -1,4 +1,4 @@
-import { maxFoundLoyalty, maxLoyaltyPeople, type FoundLoyalty, type LoyaltyPerson, type ProfileEntry, type TravelProfile } from "./schema";
+import { foundLoyaltyBudgetBytes, maxFoundLoyalty, maxLoyaltyPeople, type FoundLoyalty, type LoyaltyPerson, type ProfileEntry, type TravelProfile } from "./schema";
 
 // A loyalty program at a glance. An imported program is a list of labeled
 // values in whatever order and wording its source used (travelProfile.ts
@@ -142,17 +142,33 @@ const sameProgram = (a: string, b: string) => {
   const [x, y] = [nameWords(a), nameWords(b)];
   return a.trim().toLowerCase() === b.trim().toLowerCase() || !x.size || !y.size || [...x].some((w) => y.has(w));
 };
-const sameMembership = (a: Pick<FoundLoyalty, "program" | "number">, b: Pick<FoundLoyalty, "program" | "number">) =>
-  plainNumber(a.number) === plainNumber(b.number) && sameProgram(a.program, b.program);
+// One number as written two ways (plainNumber).
+export const sameNumber = (a: string, b: string) => plainNumber(a) === plainNumber(b);
+// One membership: the same number in the same program.
+export const sameMembership = (a: Pick<FoundLoyalty, "program" | "number">, b: Pick<FoundLoyalty, "program" | "number">) =>
+  sameNumber(a.number, b.number) && sameProgram(a.program, b.program);
+
+const encoder = new TextEncoder();
+// About what an entry takes in the stored document: its UTF-8 JSON, plus a
+// margin for Firestore's own encoding.
+const entryBytes = (f: FoundLoyalty) => encoder.encode(JSON.stringify(f)).length + 32;
+
+// Whether the list has no room for one more entry (maxFoundLoyalty,
+// foundLoyaltyBudgetBytes).
+function full(found: readonly FoundLoyalty[], next: FoundLoyalty): boolean {
+  if (found.length >= maxFoundLoyalty) return true;
+  return found.reduce((n, f) => n + entryBytes(f), entryBytes(next)) > foundLoyaltyBudgetBytes;
+}
 
 // The found list with one more sighting: one already there is refreshed
-// (moved to the end, with what the new email adds), the oldest dropped when
-// the list is full.
+// (moved to the end, with what the new email adds). A new one is refused
+// once the list is full (by count or by size, bounds nobody reaches); none
+// is ever dropped to make room.
 export function withFoundLoyalty(found: readonly FoundLoyalty[], seen: FoundLoyalty): FoundLoyalty[] {
   const before = found.find((f) => sameMembership(f, seen));
   // A balance keeps the subject of the email it came from.
   const withSource = (f: FoundLoyalty): FoundLoyalty => (f.balance && f.label && !f.balanceLabel ? { ...f, balanceLabel: f.label } : f);
-  if (!before) return [...found, withSource(seen)].slice(-maxFoundLoyalty);
+  if (!before) return full(found, withSource(seen)) ? [...found] : [...found, withSource(seen)];
   // The newest balance wins, and apart from it the newest status: a
   // statement read late, or an email with neither, does not undo a newer one.
   const newerBalance = !!seen.balance && (!before.balanceAt || (!!seen.balanceAt && seen.balanceAt >= before.balanceAt));
@@ -180,7 +196,19 @@ export function withFoundLoyalty(found: readonly FoundLoyalty[], seen: FoundLoya
     ...(source.balance && source.balanceAt ? { balanceAt: source.balanceAt } : {}),
     ...(source.balance && source.balanceLabel ? { balanceLabel: source.balanceLabel } : {}),
   };
-  return [...found.filter((f) => f !== before), merged].slice(-maxFoundLoyalty);
+  return [...found.filter((f) => f !== before), merged];
+}
+
+// The found list with several sightings (withFoundLoyalty), and how many
+// new ones were refused because it was full, for the caller to log.
+export function withFoundLoyalties(found: readonly FoundLoyalty[], seen: readonly FoundLoyalty[]): { found: FoundLoyalty[]; refused: number } {
+  let refused = 0;
+  const next = seen.reduce<FoundLoyalty[]>((list, s) => {
+    const next = withFoundLoyalty(list, s);
+    if (next.length === list.length && !list.some((f) => sameMembership(f, s))) refused += 1;
+    return next;
+  }, [...found]);
+  return { found: next, refused };
 }
 
 // Whether a name on a membership could be the account's owner: they share
