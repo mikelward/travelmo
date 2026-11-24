@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { formatDateRange, isCancelled, segmentSources, type Segment, type Trip } from "@travelmo/core";
+import { formatDateRange, isCancelled, segmentSources, sourceSearch, type Segment, type SourceRef, type Trip } from "@travelmo/core";
 import { emailLinkFor, sourceKindLabels, type EmailLinks } from "@/lib/sourceLinks";
 
 const buttonClass = "rounded-lg border border-field px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-900";
@@ -53,8 +53,20 @@ function SourcesDialog({
   onClose: () => void;
 }) {
   const sources = segmentSources(segment);
+  const [copied, setCopied] = useState(false);
+  // On a phone, Gmail's mobile site drops the link's message id, so the
+  // tap also copies a search for the email to paste there.
+  const copySearch = (source: SourceRef) => {
+    if (!window.matchMedia("(pointer: coarse)").matches) return;
+    const search = sourceSearch(segment, source);
+    navigator.clipboard.writeText(search).then(
+      () => setCopied(true),
+      (error: unknown) => console.error("Copying the Gmail search failed", error),
+    );
+  };
   return (
     <Dialog title="Sources" onClose={onClose}>
+      {copied && <p className="pb-2 text-sm">Search copied. Paste it in Gmail&apos;s search.</p>}
       <ul data-testid="segment-sources">
         {sources.map((source) => {
           const kind = sourceKindLabels[source.kind];
@@ -63,7 +75,7 @@ function SourcesDialog({
           return (
             <li key={`${source.kind}/${source.id}`} className="py-2">
               {href ? (
-                <a href={href} target="_blank" rel="noreferrer" className="underline">
+                <a href={href} target="_blank" rel="noreferrer" onClick={() => copySearch(source)} className="underline">
                   {name}
                 </a>
               ) : (

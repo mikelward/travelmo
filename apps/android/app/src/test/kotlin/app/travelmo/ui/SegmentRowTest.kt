@@ -5,6 +5,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import app.travelmo.data.GmailStatus
 import android.content.ClipboardManager
+import android.content.ComponentName
+import android.content.IntentFilter
 import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.geometry.Offset
@@ -199,6 +201,24 @@ class SegmentRowTest {
         val intent = started.nextStartedActivity
         intent.action shouldBe Intent.ACTION_VIEW
         intent.dataString shouldBe "https://mail.google.com/mail/u/0/#all/m-cove"
+    }
+
+    @Test
+    fun `with the Gmail app an email opens there with a search for it on the clipboard`() {
+        val gmail = ComponentName("com.google.android.gm", "com.google.android.gm.ConversationListActivityGmail")
+        shadowOf(composeRule.activity.packageManager).apply {
+            addActivityIfNotPresent(gmail)
+            addIntentFilterForActivity(gmail, IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
+        }
+        composeRule.setContent { TravelmoTheme { SegmentRow(stay, emailLink = { emailLinkFor(it, OWNER, ownsTrip = true) }) } }
+        composeRule.onNodeWithContentDescription("Booking actions").performClick()
+        composeRule.onNodeWithText("Sources").performClick()
+        composeRule.onNodeWithText("Booking confirmed: Cove Liverpool").performClick()
+
+        shadowOf(composeRule.activity).nextStartedActivity.component shouldBe gmail
+        val clip = composeRule.activity.getSystemService(ClipboardManager::class.java).primaryClip!!
+        clip.getItemAt(0).text.toString() shouldBe "subject:\"Booking confirmed: Cove Liverpool\""
+        ShadowToast.getTextOfLatestToast() shouldBe "Search copied. Paste it in Gmail's search."
     }
 
     @Test

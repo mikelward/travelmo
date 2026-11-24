@@ -35,6 +35,8 @@ class AndroidChrome(private val context: Context) : AppChrome {
 
     override fun openLink(url: String, what: String) = openLink(context, url, what)
 
+    override fun openGmailSearch(search: String, url: String) = openGmailSearch(context, search, url)
+
     override fun copyToClipboard(label: String, text: String) {
         val clipboard = context.getSystemService(ClipboardManager::class.java)
         if (clipboard == null) {

@@ -98,6 +98,7 @@ import app.travelmo.core.Trip
 import app.travelmo.core.allLoyalty
 import app.travelmo.core.displayTitles
 import app.travelmo.core.emailLinkFor
+import app.travelmo.core.sourceSearch
 import app.travelmo.core.fittedRange
 import app.travelmo.core.formatDate
 import app.travelmo.core.formatDateRange
@@ -762,7 +763,9 @@ private fun SourcesDialog(segment: Segment, emailLink: (SourceRef) -> String?, s
                     val kind = stringResource(sourceKindLabel(source.kind))
                     val link = emailLink(source)
                     val open = if (link != null) {
-                        Modifier.clickable(onClickLabel = openLabel, role = Role.Button) { chrome.openLink(link, "a booking's email") }
+                        Modifier.clickable(onClickLabel = openLabel, role = Role.Button) {
+                            chrome.openGmailSearch(sourceSearch(segment, source), link)
+                        }
                     } else {
                         Modifier
                     }

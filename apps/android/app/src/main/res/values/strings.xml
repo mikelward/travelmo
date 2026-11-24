@@ -3,6 +3,7 @@
 <resources>
     <string name="app_name">Travelmo</string>
     <string name="link_failed">No app can open the link.</string>
+    <string name="gmail_search_copied">Search copied. Paste it in Gmail\'s search.</string>
     <string name="update_open_failed">No app can open Google Play.</string>
     <!-- The clipboard entry's label, which some keyboards show. -->
     <string name="reminders_channel">Trip reminders</string>

@@ -63,4 +63,23 @@ class SourcesTest {
         val email = SourceRef(SourceKind.IMAP, "imap-k1-1700000000-5", uid = "me", at = "2030-01-01T00:00:00Z")
         emailLinkFor(email, "me", ownsTrip = true).shouldBeNull()
     }
+
+    @Test
+    fun `finds an email by its sender and subject and the days around it across a month's end`() {
+        gmailSearch("cove.example", "Your \"Cove\"  stay", "2026-11-30T23:30:00-08:00") shouldBe
+            "from:cove.example subject:\"Your Cove stay\" after:2026/11/29 before:2026/12/02"
+        gmailSearch(null, null, "2026-03-01T10:00:00Z") shouldBe "after:2026/02/28 before:2026/03/03"
+        gmailSearch("cove.example", null, "") shouldBe "from:cove.example"
+    }
+
+    @Test
+    fun `searches by the booking's sender only when the email is its only one and by the sent date alone`() {
+        val confirmation = SourceRef(SourceKind.GMAIL, "m1", label = "Your stay", at = "2026-11-20T00:00:00Z", sentAt = "2026-10-01T09:00:00Z")
+        val agency = SourceRef(SourceKind.GMAIL, "m2", label = "Booking confirmed", at = "2026-11-21T00:00:00Z")
+        val stay = Segment(id = "s", tripId = "t", type = SegmentType.LODGING, title = "Cove", start = "2026-12-12T15:00:00Z", sender = "cove.example", sources = listOf(confirmation))
+        sourceSearch(stay, confirmation) shouldBe "from:cove.example subject:\"Your stay\" after:2026/09/30 before:2026/10/03"
+        sourceSearch(stay.copy(sources = listOf(confirmation, agency)), agency) shouldBe "subject:\"Booking confirmed\""
+        val forward = confirmation.copy(label = "Fwd: Your stay")
+        sourceSearch(stay.copy(sources = listOf(forward)), forward) shouldBe "subject:\"Fwd: Your stay\""
+    }
 }

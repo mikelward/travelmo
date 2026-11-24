@@ -1,5 +1,9 @@
 package app.travelmo.core
 
+import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.plus
+
 // Where a booking was read from, as packages/core/src/sources.ts: every
 // email, TripIt trip or calendar event, and the link that opens an email in
 // the mailbox it came from (Gmail only: Fastmail and IMAP mailboxes have no stable address for
@@ -29,6 +33,8 @@ data class SourceRef(
     val uid: String? = null,
     /** An ISO instant. */
     val at: String,
+    /** When an email source was sent (its Date), if known. */
+    val sentAt: String? = null,
 )
 
 /**
@@ -55,6 +61,43 @@ fun segmentSources(sources: List<SourceRef>, gmailMessageIds: List<String>, crea
 fun gmailMessageUrl(messageId: String, account: String? = null): String {
     val user = if (account.isNullOrEmpty()) "u/0/" else "u/?authuser=${encodeUriComponent(account)}"
     return "https://mail.google.com/mail/$user#all/${encodeUriComponent(messageId)}"
+}
+
+/**
+ * A Gmail search for an email, for where a link to it can't open it (the
+ * Gmail app takes no such link, and Gmail's mobile site drops the message
+ * id): its sender's domain, its subject, and the days around when it was
+ * sent, wide enough for any time zone the mailbox searches in. As
+ * packages/core/src/sources.ts's gmailSearch.
+ */
+fun gmailSearch(sender: String?, subject: String?, sentAt: String?): String {
+    val sent = sentAt?.take(10)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    fun day(offset: Int) = sent?.plus(DatePeriod(days = offset))?.toString()?.replace("-", "/")
+    val words = subject?.replace("\"", " ")?.split(Regex("\\s+"))?.filter { it.isNotEmpty() }?.joinToString(" ")
+    return listOfNotNull(
+        sender?.takeIf { it.isNotEmpty() }?.let { "from:$it" },
+        words?.takeIf { it.isNotEmpty() }?.let { "subject:\"$it\"" },
+        day(-1)?.let { "after:$it" },
+        day(2)?.let { "before:$it" },
+    ).joinToString(" ")
+}
+
+/** "Fwd: ", "FW: ", "TR: ", "WG: " and the like, as packages/core/src/forward.ts's. */
+private val FORWARD_PREFIX = Regex("^\\s*(?:fwd?|fw|tr|wg)\\s*:", RegexOption.IGNORE_CASE)
+
+/**
+ * The search for one of a booking's emails. The booking keeps one sender,
+ * the first email's, so it narrows the search only when that is the one
+ * email; and only a sent date counts, as `at` is when it was imported. A
+ * forward ("Fwd: …") keeps its original's sender and date, not its own, so
+ * it is searched by subject alone. As packages/core/src/sources.ts's
+ * sourceSearch.
+ */
+fun sourceSearch(segment: Segment, source: SourceRef): String {
+    val label = source.label
+    if (label != null && FORWARD_PREFIX.containsMatchIn(label)) return gmailSearch(null, label, null)
+    val emails = segment.sources.count { it.kind != SourceKind.TRIPIT && it.kind != SourceKind.ICS }
+    return gmailSearch(if (emails == 1) segment.sender else null, source.label, source.sentAt)
 }
 
 /**
