@@ -1,4 +1,16 @@
-import { calendarPrefilter, prefilter, senderDomain } from "./prefilter";
+import { calendarPrefilter, prefilter, senderDomain, travelSender } from "./prefilter";
+
+describe("travelSender", () => {
+  const none = { allow: [], deny: [] };
+  it("is a travel company or a sender the user always imports, never one they never import", () => {
+    expect(travelSender("Virgin Atlantic <booking@service.virginatlantic.com>", none)).toBe(true);
+    expect(travelSender("Booking.com <noreply@booking.com>", none)).toBe(true);
+    expect(travelSender("Shop <orders@shop.example>", none)).toBe(false);
+    expect(travelSender("Shop <orders@shop.example>", { allow: ["shop.example"], deny: [] })).toBe(true);
+    expect(travelSender("Virgin Atlantic <booking@service.virginatlantic.com>", { allow: [], deny: ["virginatlantic.com"] })).toBe(false);
+    expect(travelSender(undefined, none)).toBe(false);
+  });
+});
 
 describe("senderDomain", () => {
   it("reads the domain from display-name and bare forms", () => {

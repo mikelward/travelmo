@@ -1,8 +1,11 @@
 import { ParsedMessage, PendingCancellation, Segment, SenderPatterns, TravelProfile, Trip, paths, withFoundLoyalties } from "@travelmo/core";
 import { FieldPath, FieldValue, type DocumentReference, type DocumentSnapshot, type Firestore, type Transaction } from "firebase-admin/firestore";
 import { AccountDeletedError, wasDeleted } from "./deleted";
-import { changeClaimable, claimable, reclaimable, retryable, type TripStore } from "./importer";
+import { changeClaimable, claimRecord, claimable, reclaimable, retryable, type TripStore } from "./importer";
 import { Examples, addExample, emptyExamples } from "./similarity";
+
+// The import records "Refresh from email" picks from (refreshRecords).
+const refreshOutcomes = ["imported", "not_booking", "failed", "processing"] satisfies ParsedMessage["outcome"][];
 
 // How many times the user's trips were reset (tripsReset.ts), kept on the
 // import lock every import reads.
@@ -56,7 +59,7 @@ export function firestoreStore(db: Firestore): TripStore {
       const snap = await t.get(ref);
       const existing = snap.exists ? ParsedMessage.parse(snap.data()) : undefined;
       if (!allowed(existing)) return false;
-      t.set(ref, { messageId, uid, outcome: "processing", segmentIds: [], processedAt } satisfies ParsedMessage);
+      t.set(ref, claimRecord(existing, uid, messageId, processedAt));
       return true;
     });
   }
@@ -105,15 +108,15 @@ export function firestoreStore(db: Firestore): TripStore {
       const snap = await db.doc(paths.parsedMessage(uid, messageId)).get();
       return snap.exists ? ParsedMessage.parse(snap.data()) : undefined;
     },
-    async importedRecords(uid, after, limit) {
-      // An equality and the id order: served by single-field indexes.
+    async refreshRecords(uid, after, limit) {
+      // One of two outcomes and the id order: served by single-field indexes.
       // A record that no longer parses is passed over, never fatal, and
       // never shortens the page: a short page is the callers' sign of the
       // end, so reading goes on until `limit` parse or none are left.
       const records: ParsedMessage[] = [];
       let cursor = after;
       for (;;) {
-        let query = db.collection(paths.parsedMessages(uid)).where("outcome", "==", "imported").orderBy(FieldPath.documentId());
+        let query = db.collection(paths.parsedMessages(uid)).where("outcome", "in", refreshOutcomes).orderBy(FieldPath.documentId());
         if (cursor !== undefined) query = query.startAfter(cursor);
         const want = limit - records.length;
         const snap = await query.limit(want).get();

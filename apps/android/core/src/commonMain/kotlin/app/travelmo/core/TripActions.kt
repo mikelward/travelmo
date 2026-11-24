@@ -40,7 +40,7 @@ fun tripActionFailure(status: Int?): String = when (status) {
 }
 
 /** What Refresh from email does, under its button. */
-const val REFRESH_BLURB = "Reads the emails your bookings came from again and updates those bookings. Bookings you edited stay as you left them."
+const val REFRESH_BLURB = "Reads your travel emails again and updates your bookings. Bookings you edited stay as you left them."
 
 /**
  * How far the last Refresh from email got (refresh on the user document):

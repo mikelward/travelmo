@@ -66,7 +66,7 @@ import {
 } from "@travelmo/core";
 import { airportPlace } from "@travelmo/core/airportPlaces";
 import { cityCountry } from "@travelmo/core/cityCountries";
-import type { Extractor } from "./extract";
+import { readerVersion, type Extractor } from "./extract";
 import type { RetryStore } from "./geocodeSweep";
 import { isNotFound, type Attachment, type EmailMessage } from "./gmail";
 import type { MailProvider } from "./mailSource";
@@ -134,6 +134,21 @@ export class ImportSupersededError extends Error {
 // the next delivery may take it over.
 export const claimLeaseMs = 15 * 60 * 1000;
 
+// The record a claim writes: what the email is (its source, sender,
+// subject, date, and the reader that last judged it) is kept, so a claim
+// whose worker died is still known for what it was: "Refresh from email"
+// reads a stale one from a travel sender again (refresh.ts `readAgain`).
+export function claimRecord(existing: ParsedMessage | undefined, uid: string, messageId: string, processedAt: string): ParsedMessage {
+  const kept = existing ? { source: existing.source, from: existing.from, subject: existing.subject, sentAt: existing.sentAt, readerVersion: existing.readerVersion } : {};
+  const known = Object.fromEntries(Object.entries(kept).filter(([, value]) => value !== undefined));
+  return { messageId, uid, ...known, outcome: "processing", segmentIds: [], processedAt };
+}
+
+// Whether a claim's lease ran out with no outcome written: its worker died.
+export function staleClaim(existing: ParsedMessage, now: string): boolean {
+  return existing.outcome === "processing" && leaseExpired(existing, now);
+}
+
 function leaseExpired(existing: ParsedMessage, now: string): boolean {
   return Date.parse(now) - Date.parse(existing.processedAt) > claimLeaseMs;
 }
@@ -195,10 +210,12 @@ export type TripStore = {
   // `generation`; false, writing nothing, once a reset has moved it on.
   setParsedIfCurrent(record: ParsedMessage, generation: number): Promise<boolean>;
   getParsed(uid: string, messageId: string): Promise<ParsedMessage | undefined>;
-  // Up to `limit` of the user's import records that made bookings (outcome
-  // "imported"), in order of id, after the one with id `after`: what
-  // "Refresh from email" reads again (refresh.ts).
-  importedRecords(uid: string, after: string | undefined, limit: number): Promise<ParsedMessage[]>;
+  // Up to `limit` of the user's import records that made bookings, were
+  // found not to be one, failed or are being read (outcome "imported",
+  // "not_booking", "failed" or "processing"), in order of
+  // id, after the one with id `after`: what "Refresh from email" picks the
+  // emails to read again from (refresh.ts).
+  refreshRecords(uid: string, after: string | undefined, limit: number): Promise<ParsedMessage[]>;
   // Every booking in the user's own live trips, read outside any lock: a
   // snapshot for planning an import, never for deciding a write.
   listUserSegments(uid: string): Promise<Segment[]>;
@@ -460,7 +477,7 @@ export async function importMessage(
     // sender) is no booking, but its balance and status are kept; any other
     // email that is no booking keeps nothing.
     if (statement && booking.memberships?.length) await keepMemberships(uid, message, booking.memberships, booking.segments, now(), deps, sent);
-    await save(record("not_booking", { reason }));
+    await save(record("not_booking", { reason, readerVersion }));
     await learn("others");
     log("not_booking", { uid, messageId: message.id });
     return "not_booking";

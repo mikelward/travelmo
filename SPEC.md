@@ -1914,10 +1914,29 @@ them, the travel profile, home corrections, connections and feeds stay.
 To bring bookings imported before a fix to extraction or matching up to
 date without deleting anything, "Refresh from email" in Settings on the web
 and Android (`POST /trips/refresh`, `apps/parser/src/refresh.ts`) reads
-again only the emails that made bookings: the user's import records with
+again the emails that made bookings: the user's import records with
 outcome `imported` from a mailbox (Gmail, Fastmail, IMAP; not TripIt items,
 calendar events or forwards, which cannot be fetched again), never a
-mailbox search. Each email is fetched from the mailbox its record id names
+mailbox search. It also reads again, as "Import anyway" does
+(`importAgain`), each email an older email reader found no booking in
+(`not_booking`, its `readerVersion` older than the parser's, or none
+recorded) from a travel sender: a seed sender, a travel program's domain
+or one the user always imports, never one they never import
+(`readAgain`). The reader's version goes up with any change to how an
+email becomes the model's text, the instructions or the model that could
+find a booking it missed (Virgin Atlantic's e-tickets, read while only their
+plain-text footer was), so a refresh after such a fix picks those emails
+up; each "not a booking" record keeps the version that judged it, and one
+judged again by today's reader is passed by the next refresh. One whose
+reading fails is tried again at the end with the others, and any failed
+email from a travel sender is read again by every refresh, so one whose
+batch stopped before listing it isn't lost. A claim keeps what
+the email is (source, sender, subject, date, reader version;
+`claimRecord`), so one left behind by a worker that died part way through
+reading it (its lease run out, `staleClaim`) is still recognized, and a
+refresh reads it again when it is from a travel sender; one still claimed
+when the refresh tries its failed emails again stays failed, listed for Try
+again, rather than counted as read. Each email is fetched from the mailbox its record id names
 (as `/gmail/reimport` does), read by the model with today's prompt, placed
 from the airport and city tables and the geocoder, and filed by today's
 matching, in place, in one transaction under the import's per-user lock
@@ -2873,7 +2892,8 @@ of a few hundred tokens a hundredth of that; a hundred users importing
 fifty bookings a month is a few dollars. Bringing stored loyalty numbers up to a new way of reading them
 (`foundLoyaltyRevision`) costs Firestore reads, plus one such model call per
 email that still needs reading again, once. "Refresh from email" costs one
-model call per email that made bookings (a user with five hundred such
+model call per email that made bookings, plus one per travel email an older
+reader found no booking in, once after each new reader version (a user with five hundred such
 emails spends well under a dollar, and nothing for an email whose mailbox
 is gone), 60 Gmail units per email fetched (paced at 4,000 a minute,
 about 66 emails a minute, within each user's 6,000), one read of the

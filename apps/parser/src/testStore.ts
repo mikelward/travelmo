@@ -1,5 +1,5 @@
 import { withFoundLoyalties, type FoundLoyalty, type ParsedMessage, type PendingCancellation, type Segment, type Trip } from "@travelmo/core";
-import { changeClaimable, claimable, reclaimable, retryable, type TripStore, type TripTx } from "./importer";
+import { changeClaimable, claimRecord, claimable, reclaimable, retryable, type TripStore, type TripTx } from "./importer";
 import { addExample, emptyExamples, type Examples } from "./similarity";
 
 // An in-memory TripStore for the pipeline's tests: the same contract as the
@@ -92,21 +92,21 @@ export function memoryStore(): Memory {
       const key = `${uid}/${id}`;
       if (generation !== undefined && (generations.get(uid) ?? 0) !== generation) return false;
       if (!claimable(parsed.get(key), processedAt)) return false;
-      parsed.set(key, { messageId: id, uid, outcome: "processing", segmentIds: [], processedAt });
+      parsed.set(key, claimRecord(parsed.get(key), uid, id, processedAt));
       return true;
     },
     reclaimMessage: async (uid, id, processedAt, generation) => {
       const key = `${uid}/${id}`;
       if (generation !== undefined && (generations.get(uid) ?? 0) !== generation) return false;
       if (!reclaimable(parsed.get(key), processedAt)) return false;
-      parsed.set(key, { messageId: id, uid, outcome: "processing", segmentIds: [], processedAt });
+      parsed.set(key, claimRecord(parsed.get(key), uid, id, processedAt));
       return true;
     },
     retryMessage: async (uid, id, processedAt, generation) => {
       const key = `${uid}/${id}`;
       if (generation !== undefined && (generations.get(uid) ?? 0) !== generation) return false;
       if (!retryable(parsed.get(key), processedAt)) return false;
-      parsed.set(key, { messageId: id, uid, outcome: "processing", segmentIds: [], processedAt });
+      parsed.set(key, claimRecord(parsed.get(key), uid, id, processedAt));
       return true;
     },
     claimChange: async (uid, id, processedAt, expected, generation) => {
@@ -125,9 +125,9 @@ export function memoryStore(): Memory {
     },
     setParsed: async (r) => void parsed.set(`${r.uid}/${r.messageId}`, r),
     getParsed: async (uid, id) => parsed.get(`${uid}/${id}`),
-    importedRecords: async (uid, after, limit) =>
+    refreshRecords: async (uid, after, limit) =>
       [...parsed.values()]
-        .filter((r) => r.uid === uid && r.outcome === "imported" && (after === undefined || r.messageId > after))
+        .filter((r) => r.uid === uid && (r.outcome === "imported" || r.outcome === "not_booking" || r.outcome === "failed" || r.outcome === "processing") && (after === undefined || r.messageId > after))
         .sort((a, b) => (a.messageId < b.messageId ? -1 : a.messageId > b.messageId ? 1 : 0))
         .slice(0, limit),
     readSegment: async (tripId, id) => tx.getSegment(tripId, id),

@@ -959,7 +959,8 @@ function refreshIo(uid: string): ChainIo<undefined> {
       };
       try {
         return await runRefreshBatch(from, {
-          records: (after, limit) => deps.store.importedRecords(uid, after, limit),
+          records: (after, limit) => deps.store.refreshRecords(uid, after, limit),
+          senderPatterns: () => deps.store.senderPatterns(uid),
           record: (messageId) => deps.store.getParsed(uid, messageId),
           snapshot: () => deps.store.listUserSegments(uid),
           refresh: (record, snapshot) => refreshRecord(uid, record, deps, { generation, snapshot, fetch }),

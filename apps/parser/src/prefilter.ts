@@ -124,6 +124,16 @@ export const seedSenderDomains = [
   "ticketmaster.co.uk",
 ] as const;
 
+// Whether an email comes from a travel company (a seed sender or a travel
+// program's domain) or a sender the user always imports, and not one they
+// never import: whose emails "Refresh from email" reads again once the
+// email reader improves (refresh.ts `readAgain`).
+export function travelSender(from: string | undefined, patterns: SenderPatterns): boolean {
+  const domain = from ? senderDomain(from) : undefined;
+  if (domain === undefined || patterns.deny.some((p) => domainMatches(domain, p))) return false;
+  return [...seedSenderDomains, ...travelLoyaltyDomains, ...patterns.allow].some((p) => domainMatches(domain, p));
+}
+
 export function senderDomain(from: string): string | undefined {
   const match = /<?([^\s<>@]+)@([^\s<>]+?)>?\s*$/.exec(from.trim());
   return match?.[2]?.toLowerCase();

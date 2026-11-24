@@ -1,4 +1,5 @@
 import { gmailIdPrefix, maxFoundLoyalty, parseIcs, parseTripItExport, type ExtractedBooking, type ExtractedSegment, type ParsedMessage, type Segment, type Trip } from "@travelmo/core";
+import { readerVersion } from "./extract";
 import { recordedAs, type EmailMessage } from "./gmail";
 import {
   claimLeaseMs,
@@ -403,11 +404,12 @@ describe("importMessage", () => {
     expect(store.segments.get("m2-0")?.tripId).not.toBe(dying.id);
   });
 
-  it("records not_booking when the model says so", async () => {
+  it("records not_booking when the model says so, with the reader that said it", async () => {
     const store = memoryStore();
     const outcome = await importMessage("u1", email(), deps(store, async () => ({ isBooking: false, segments: [] })));
     expect(outcome).toBe("not_booking");
     expect(store.trips.size).toBe(0);
+    expect([...store.parsed.values()][0]).toMatchObject({ outcome: "not_booking", readerVersion });
   });
 
   // Invented, shaped like a palace trust's membership email: no visit date,

@@ -33,7 +33,7 @@ export function describeDeletedTrips(trips: number): string {
 }
 
 // What "Refresh from email" does, under its button.
-export const refreshBlurb = "Reads the emails your bookings came from again and updates those bookings. Bookings you edited stay as you left them.";
+export const refreshBlurb = "Reads your travel emails again and updates your bookings. Bookings you edited stay as you left them.";
 
 // The parts of the refresh's progress (`refresh` on the user document) that
 // Settings shows.

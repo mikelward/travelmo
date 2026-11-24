@@ -5,6 +5,14 @@ import type { Attachment, EmailMessage } from "./gmail";
 import type { Embedder } from "./importer";
 import { embeddingDimensions } from "./similarity";
 
+// The email reader's version: how an email becomes the text the model reads
+// (text.ts), the instructions below and the model. Bump it with any change
+// that could turn an email it found no booking in into one: "Refresh from
+// email" then reads again the emails an older reader judged that way, from
+// travel senders (refresh.ts `readAgain`). Records from before versions were
+// kept have none, and count as older.
+export const readerVersion = 1;
+
 export type Extractor = (message: EmailMessage, attachments?: readonly Attachment[]) => Promise<ExtractedBooking>;
 
 // The model's answer when the project's quota or rate is used up (429,
