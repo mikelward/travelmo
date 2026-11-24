@@ -1378,8 +1378,9 @@ the user has (read in pages of a thousand, up to 20,000), since one import
 reads thousands of emails. A search matches words in the subject, sender or
 reason, and optionally dates: when the email was sent (`sentAt`, a forward's
 original), or when it was read for a record without one (older records,
-other sources). Each row shows that date ("Sent 23 May 2026", or "Read …"
-when the email's is unknown), the sender and the outcome. It offers three actions: always import that sender, never
+other sources). Each row shows when the email was sent and when Travelmo
+last read it ("Sent 18 Oct 2026 · Read 24 Nov 2026", or the reading alone
+when the email's date is unknown), the sender and the outcome. It offers three actions: always import that sender, never
 import it, or import this one anyway (`POST /gmail/reimport`, which reclaims
 the record of a message that did not become a booking — never an imported
 one, whose bookings are edited on the trip page, nor one whose import is

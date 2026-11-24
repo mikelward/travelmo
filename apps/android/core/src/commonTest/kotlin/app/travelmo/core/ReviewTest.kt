@@ -32,7 +32,7 @@ class ReviewTest {
 
     @Test
     fun `says when the email was sent or when it was read if that is unknown`() {
-        reviewDate(record("x", sentAt = "2026-05-23T07:22:58Z"), london) shouldBe "Sent 23 May 2026"
+        reviewDate(record("x", sentAt = "2026-05-23T07:22:58Z"), london) shouldBe "Sent 23 May 2026 · Read 23 Nov 2026"
         reviewDate(record("y"), london) shouldBe "Read 23 Nov 2026"
     }
 
