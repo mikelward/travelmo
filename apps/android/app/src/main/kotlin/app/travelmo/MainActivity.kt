@@ -36,6 +36,7 @@ import app.travelmo.core.AccountAccess
 import app.travelmo.core.TripWithSegments
 import app.travelmo.core.tripIdFromReminderUrl
 import app.travelmo.log.DebugLogging
+import app.travelmo.notify.LiveFlightNotifications
 import app.travelmo.notify.ReminderNotifications
 import app.travelmo.ui.AccessScreen
 import app.travelmo.ui.AccessState
@@ -129,6 +130,13 @@ class MainActivity : ComponentActivity() {
         // On every foreground: the first launch (onResume follows onCreate),
         // and a return from the Play listing or the background.
         playUpdateChecker.checkForUpdate { updateAvailable = it }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Leaving the app: each live flight's Live Update drawn again from its last message, so
+        // one the system dropped is back.
+        LiveFlightNotifications.redrawAll(this)
     }
 
     // singleTask: a tap while the app is open arrives here, not in onCreate.

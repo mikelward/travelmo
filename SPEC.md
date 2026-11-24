@@ -894,7 +894,12 @@ its departure estimate, so a phone put in flight mode at the gate still
 moves on to the countdown, and at the landing estimate it shows "Landing".
 The alarm is inexact, so it needs no exact-alarm permission, and Doze may
 hold it a few minutes. A message, whenever one arrives, corrects all of
-this. Delays, gate changes and the rest still
+this. The message is kept until the flight is over, past the last
+alarm, so after landing it still has the carousel to draw. Leaving the app draws every kept one again, so one the system
+dropped comes back (a swiped one stays away). Turning notifications off in
+the app, or signing out, takes them all down and forgets them. Each time
+the phone takes one down it notes why in the debug log (over, cancelled,
+not found, or no longer watched). Delays, gate changes and the rest still
 come as "Flight changes" alerts with the chime. The web has no equivalent.
 Push services hold flight news for an offline browser or phone for half
 an hour, not the day reminders get, since directions to a gate are no use

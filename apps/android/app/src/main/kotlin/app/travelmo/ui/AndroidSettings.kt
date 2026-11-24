@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.R
 import app.travelmo.log.DebugLogging
+import app.travelmo.notify.LiveFlightNotifications
 import app.travelmo.notify.ReminderNotifications
 import app.travelmo.shared.Res
 import app.travelmo.shared.back
@@ -118,6 +119,8 @@ fun PushSwitch(viewModel: TripsViewModel) {
                     blocked = false
                     chosen = false
                     viewModel.setPushDevice(PUSH_TOKEN, false)
+                    // The kept Live Updates too, or their alarms would draw them again.
+                    LiveFlightNotifications.forgetAll(context)
                 } else if (ReminderNotifications.allowed(context)) {
                     turnOn()
                 } else {

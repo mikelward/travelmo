@@ -29,6 +29,8 @@ import java.time.Instant
  * It moves on without the network too: the last message is kept, and an alarm draws it again when
  * the flight is taken to have left and when its landing estimate comes ([LiveFlight.redrawAt]
  * [app.travelmo.core.LiveFlight.redrawAt]), so a phone in flight mode still counts down to landing.
+ * Leaving the app draws every kept one again ([redrawAll]), so one the system dropped comes back;
+ * turning notifications off in the app, or signing out, takes them all down ([forgetAll]).
  */
 object LiveFlightNotifications {
     const val CHANNEL_ID = "live_flights"
@@ -63,6 +65,24 @@ object LiveFlightNotifications {
         liveFlightMessage(data)?.let { show(context, it, now) } ?: forget(context, tag)
     }
 
+    /** Draws every kept flight's Live Update again, as of [now]: on leaving the app. A swiped one stays away. */
+    fun redrawAll(context: Context, now: Long = System.currentTimeMillis()) {
+        context.getSharedPreferences(MESSAGES, Context.MODE_PRIVATE).all.keys.forEach { redraw(context, it, now) }
+    }
+
+    /**
+     * Notifications turned off in the app, or signed out: no more messages are coming, so every
+     * kept Live Update is taken down, forgotten, and its alarm cancelled.
+     */
+    fun forgetAll(context: Context) {
+        val manager = NotificationManagerCompat.from(context)
+        context.getSharedPreferences(MESSAGES, Context.MODE_PRIVATE).all.keys.forEach {
+            manager.cancel(it, 0)
+            forget(context, it)
+        }
+        TravelmoLog.info("Live Updates forgotten: notifications off or signed out")
+    }
+
     private fun forget(context: Context, tag: String) {
         context.getSharedPreferences(MESSAGES, Context.MODE_PRIVATE).edit { remove(tag) }
         context.getSystemService(AlarmManager::class.java).cancel(redrawIntent(context, tag))
@@ -76,15 +96,18 @@ object LiveFlightNotifications {
     )
 
     /**
-     * Draws it again at [at], or forgets it when nothing will change without news. Inexact, so no
-     * exact-alarm permission: Android may hold it a few minutes in Doze, which a flight can spare.
+     * Draws it again at [at], or, when nothing will change without news (landing, landed), sets no
+     * alarm but keeps the message until the flight is over, so leaving the app can still bring back
+     * the carousel and turning notifications off can still find it. Inexact, so no exact-alarm
+     * permission: Android may hold it a few minutes in Doze, which a flight can spare.
      */
     private fun scheduleRedraw(context: Context, tag: String, at: Long?) {
+        val alarms = context.getSystemService(AlarmManager::class.java)
         if (at == null) {
-            forget(context, tag)
+            alarms.cancel(redrawIntent(context, tag))
             return
         }
-        context.getSystemService(AlarmManager::class.java).setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, redrawIntent(context, tag))
+        alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, redrawIntent(context, tag))
     }
 
     private fun ensureChannel(context: Context) {
@@ -100,6 +123,14 @@ object LiveFlightNotifications {
         val manager = NotificationManagerCompat.from(context)
         val live = liveFlight(message.status, message.booking, Instant.ofEpochMilli(now).toString())
         if (live == null || live.endsAt <= now) {
+            // Why, coarsely, so a Live Update that vanished early can be explained from the debug log.
+            val why = when {
+                live != null -> "over"
+                message.status.cancelled -> "cancelled"
+                !message.status.found -> "flight not found"
+                else -> "not watched now"
+            }
+            TravelmoLog.info("Live Update taken down: %s", safe(why))
             manager.cancel(message.tag, 0)
             forget(context, message.tag)
             return
