@@ -162,7 +162,9 @@ describe("linking an address", () => {
             }),
     });
     const first = refusal(requestLink(deps, me.uid, me.email, work));
-    await expect.poll(() => fail).toBeDefined();
+    // The request reaches the mail only after its emulator round trips,
+    // which a busy CI machine can take seconds over.
+    await expect.poll(() => fail, { timeout: 15_000 }).toBeDefined();
     await requestLink(deps, me.uid, me.email, work);
     fail!();
     expect(await first).toBe("error: smtp timed out");
