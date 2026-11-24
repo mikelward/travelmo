@@ -124,6 +124,15 @@
     <string name="import_review_hint">Recent emails and other imports that did not become bookings. Teach the importer about a sender, or import one anyway.</string>
     <string name="open_import_review">Review imports</string>
     <string name="sender_rules">Sender rules</string>
+    <string name="home">Home</string>
+    <string name="home_not_known">Not known yet.</string>
+    <string name="home_worked_out">Worked out from your trips.</string>
+    <string name="remove_home">Remove %1$s</string>
+    <string name="city">City</string>
+    <string name="country">Country</string>
+    <string name="home_pick_from">From…</string>
+    <string name="home_from_date">From %1$s</string>
+    <string name="set">Set</string>
     <string name="calendar_feeds">Calendar feeds</string>
     <string name="calendar_feeds_hint">Paste a calendar subscription link, such as the one in TripIt\'s settings, and Travelmo reads it every day: new trips come in, and a cancelled event removes its booking unless you edited it or it also came from an email. Bookings stay when you remove a feed.</string>
     <string name="calendar_feed_link">Calendar feed link</string>

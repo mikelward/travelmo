@@ -204,6 +204,9 @@ data class HomeCorrection(val city: String, val country: String? = null, val fro
 
 const val MAX_HOME_CORRECTIONS = 50
 
+/** The longest city name a correction keeps, as schema.ts's maxHomeCityLength. */
+const val MAX_HOME_CITY_LENGTH = 100
+
 /** The corrections as periods, each until the day before the next; two on one date keep the later. */
 fun homeCorrections(corrections: List<HomeCorrection>): List<HomePeriod> {
     val sorted = corrections.associateBy { it.from }.values.sortedBy { it.from }
@@ -291,4 +294,31 @@ fun nearHub(place: Place?, hub: Place?): Boolean {
     val a = town(place) ?: return false
     val b = town(hub) ?: return false
     return sameTown(a, b)
+}
+
+/** The Profile's home line, as home.ts: "Home: London since Mar 2021 · Boston 2018–2021"; null when nothing is known. */
+fun homeLine(periods: List<HomePeriod>): String? = describeHomes(periods).takeIf { it.isNotEmpty() }?.let { "Home: $it" }
+
+/** One correction as the Profile lists it: "London, GB from 12 Mar 2021". */
+fun correctionText(c: HomeCorrection): String = "${if (c.country != null) "${c.city}, ${c.country}" else c.city} from ${formatDayMonthYear(c.from)}"
+
+/** A correction from the Profile's fields, or why it cannot be one. */
+sealed interface ParsedCorrection {
+    data class Correction(val correction: HomeCorrection) : ParsedCorrection
+    data class Problem(val text: String) : ParsedCorrection
+}
+
+/** As home.ts's parseCorrection: a city, an optional country (a name or short form saved as its code) and a date. */
+fun parseCorrection(city: String, country: String, from: String): ParsedCorrection {
+    // A name or a common short form ("UK") is saved as its ISO code.
+    val code = country.trim().takeIf { it.isNotEmpty() }?.let(::countryCode)
+    if (city.isBlank()) return ParsedCorrection.Problem("Enter a city.")
+    if (city.trim().length > MAX_HOME_CITY_LENGTH) return ParsedCorrection.Problem("Use a city name of at most $MAX_HOME_CITY_LENGTH characters.")
+    if (code != null && (code.length != 2 || !isCountryCode(code))) return ParsedCorrection.Problem("Use a two-letter country code, such as GB.")
+    val date = try {
+        LocalDate.parse(from.trim()).toString()
+    } catch (e: IllegalArgumentException) {
+        return ParsedCorrection.Problem("Enter a date.")
+    }
+    return ParsedCorrection.Correction(HomeCorrection(city.trim(), code, date))
 }

@@ -22,6 +22,7 @@ import app.travelmo.core.REVIEW_RECENT
 import app.travelmo.core.ParsedRecord
 import app.travelmo.core.withLoyaltyPerson
 import app.travelmo.core.HomeCorrection
+import app.travelmo.core.MAX_HOME_CORRECTIONS
 import app.travelmo.core.DEFAULT_LEAD
 import app.travelmo.core.MAX_STANDING_REMINDERS
 import app.travelmo.core.MAX_TRIP_REMINDERS
@@ -124,6 +125,9 @@ interface TripStore {
 
     /** Hides one ride suggestion for good, in a transaction over the stored list, as the web does. */
     suspend fun hideRideNeed(uid: String, key: String)
+
+    /** Replaces the user's corrections to home (`homes` on their user document), as the web's Profile saves them. */
+    suspend fun setHomeCorrections(uid: String, corrections: List<HomeCorrection>)
 
     /** Adds one of the user's own car and ride companies to the list as stored now, as the web does. */
     suspend fun addRideCompany(uid: String, company: RideCompany)
@@ -691,6 +695,12 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             // Merged, so any other field of the document stays.
             tx.set(ref, mapOf("allow" to next.allow, "deny" to next.deny), SetOptions.merge())
         }.await()
+    }
+
+    override suspend fun setHomeCorrections(uid: String, corrections: List<HomeCorrection>) {
+        check(corrections.size <= MAX_HOME_CORRECTIONS) { "At most $MAX_HOME_CORRECTIONS." }
+        val stored = corrections.map { c -> listOfNotNull("city" to c.city, c.country?.let { "country" to it }, "from" to c.from).toMap() }
+        db.collection("users").document(uid).set(mapOf("homes" to stored), SetOptions.merge()).await()
     }
 
     override suspend fun addRideCompany(uid: String, company: RideCompany) = editRideCompanies(uid) { rideCompaniesAdding(it, company) }

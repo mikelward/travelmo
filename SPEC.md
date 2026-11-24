@@ -1373,9 +1373,11 @@ periods too, and once there are any they are the whole timeline: there is
 no home before the earliest, since what was worked out is what they
 corrected (`homeAt`).
 
-The Profile shows home over time in a line ("Home: London since Mar 2021 ·
+The Profile, on the web and Android, shows home over time in a line ("Home: London since Mar 2021 ·
 Boston 2018–2021", `describeHomes`), worked out from the user's own trips
-with their corrections over it (`effectiveHomes`), and takes corrections:
+with their corrections over it (`effectiveHomes`), and takes corrections
+(`parseCorrection`, listed by `correctionText`; Android picks the date with
+a date picker):
 home is a town (and optionally a country: a code, or a name or short form
 such as "UK", saved as its code) from a date. A correction saved before the
 form took names ("UK") is read as its code. Towns are one when their

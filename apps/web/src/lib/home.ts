@@ -1,46 +1,12 @@
 "use client";
 
-import {
-  HomeCorrection,
-  countryCode,
-  describeHomes,
-  effectiveHomes,
-  formatDate,
-  homeTimeline,
-  isCountryCode,
-  maxHomeCorrections,
-  paths,
-  type HomePeriod,
-  type Segment,
-} from "@travelmo/core";
+import { effectiveHomes, homeTimeline, maxHomeCorrections, paths, type HomeCorrection, type HomePeriod, type Segment } from "@travelmo/core";
+
+export { correctionText, homeLine, parseCorrection } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { firestore } from "./firebase";
 import { useAllSegments, useProfile, useTrips } from "./trips";
-
-// The Profile's home line: "Home: London since Mar 2021 · Boston 2018–2021",
-// or nothing when no trip says where home is and nobody said.
-export function homeLine(periods: readonly HomePeriod[]): string | undefined {
-  const text = describeHomes(periods);
-  return text ? `Home: ${text}` : undefined;
-}
-
-// One correction as the Profile lists it: "London, GB from 12 Mar 2021".
-export function correctionText(c: HomeCorrection): string {
-  const where = c.country ? `${c.city}, ${c.country}` : c.city;
-  return `${where} from ${formatDate(c.from, "en-GB", { weekday: undefined, year: "numeric" })}`;
-}
-
-// A correction from the form's fields, or why it cannot be one.
-export function parseCorrection(city: string, country: string, from: string): HomeCorrection | string {
-  // A name or a common short form ("UK") is saved as its ISO code.
-  const code = country.trim() ? countryCode(country) : "";
-  if (!city.trim()) return "Enter a city.";
-  if (code && !isCountryCode(code)) return "Use a two-letter country code, such as GB.";
-  const parsed = HomeCorrection.safeParse({ city: city.trim(), ...(code ? { country: code } : {}), from });
-  if (parsed.success) return parsed.data;
-  return "Enter a date.";
-}
 
 // Where home was over time, and how many trips could not be read to work it
 // out: with any, the timeline may be missing what those trips would say.

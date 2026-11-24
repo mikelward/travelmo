@@ -1,5 +1,6 @@
 package app.travelmo.ui
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -9,50 +10,61 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.border
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Button
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
-import app.travelmo.core.MAX_TRUSTED
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.R
 import app.travelmo.core.FoundLoyalty
+import app.travelmo.core.MAX_TRUSTED
+import app.travelmo.core.ParsedCorrection
 import app.travelmo.core.ProfileEntry
-import app.travelmo.core.allLoyalty
-import app.travelmo.core.loyaltyByPerson
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.TextButton
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import app.travelmo.core.TravelProfile
+import app.travelmo.core.allLoyalty
+import app.travelmo.core.correctionText
+import app.travelmo.core.formatDateWithYear
+import app.travelmo.core.homeLine
+import app.travelmo.core.loyaltyByPerson
 import app.travelmo.core.loyaltySummary
+import app.travelmo.core.parseCorrection
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 /**
  * The travel profile, as the web's /profile: documents, the loyalty
@@ -112,6 +124,8 @@ fun ProfileScreen(viewModel: TripsViewModel, bottomBar: @Composable () -> Unit) 
                     whoseError = whoseError,
                 )
             }
+            item(key = "home-title") { SectionTitle(stringResource(R.string.home)) }
+            item(key = "home") { HomeSection(viewModel) }
             item(key = "shared-with") { SectionTitle(stringResource(R.string.shared_with)) }
             item(key = "sharing") {
                 // Until the profile has answered, the list it would replace is
@@ -220,6 +234,7 @@ private fun FoundRow(found: FoundLoyalty, onRemove: () -> Unit) {
 private const val SHARE_TOKEN = "profile/share"
 private const val FOUND_PREFIX = "profile/found/"
 private const val PERSON_PREFIX = "profile/person/"
+private const val HOME_TOKEN = "profile/home"
 
 /**
  * Who a membership belongs to: the owner, someone already named, or, as a
@@ -311,6 +326,99 @@ private fun Sharing(trusted: List<String>, busy: Boolean, error: String?, onSave
             ) { Text(stringResource(R.string.share)) }
         }
         (formError ?: error)?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp)) }
+    }
+}
+
+/**
+ * The Profile's home, as on the web: where home has been, worked out from
+ * the user's trips with their corrections over it; each correction with
+ * Remove; and "Home is [city] [country] from [date]" to add one.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HomeSection(viewModel: TripsViewModel) {
+    val homes by viewModel.reportHomes.collectAsStateWithLifecycle()
+    val settings by viewModel.rideSettings.collectAsStateWithLifecycle()
+    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val outcome = outcomes[HOME_TOKEN]
+    val busy = outcome is Outcome.Busy
+    var city by rememberSaveable { mutableStateOf("") }
+    var country by rememberSaveable { mutableStateOf("") }
+    var from by rememberSaveable { mutableStateOf<String?>(null) }
+    var picking by rememberSaveable { mutableStateOf(false) }
+    var problem by rememberSaveable { mutableStateOf<String?>(null) }
+    // Cleared once an addition is saved; a removal leaves the form alone.
+    var adding by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(outcome) {
+        if (outcome is Outcome.Done) {
+            if (adding) {
+                city = ""
+                country = ""
+                from = null
+                adding = false
+            }
+            viewModel.outcomeSeen(HOME_TOKEN)
+        }
+    }
+    val periods = homes
+    val corrections = settings?.homes
+    Column(modifier = Modifier.fillMaxWidth()) {
+        if (periods == null || corrections == null) {
+            Text(stringResource(R.string.loading), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            return@Column
+        }
+        Text(homeLine(periods) ?: stringResource(R.string.home_not_known), style = MaterialTheme.typography.bodyLarge)
+        Text(stringResource(R.string.home_worked_out), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        for (c in corrections.sortedBy { it.from }) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(correctionText(c), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                IconButton(onClick = { adding = false; viewModel.removeHomeCorrection(HOME_TOKEN, c.from) }, enabled = !busy) {
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.remove_home, correctionText(c)))
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            OutlinedTextField(value = city, onValueChange = { city = it; problem = null }, label = { Text(stringResource(R.string.city)) }, singleLine = true, enabled = !busy, modifier = Modifier.weight(1f))
+            OutlinedTextField(value = country, onValueChange = { country = it; problem = null }, label = { Text(stringResource(R.string.country)) }, placeholder = { Text("GB") }, singleLine = true, enabled = !busy, modifier = Modifier.weight(1f))
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+            OutlinedButton(onClick = { picking = true }, enabled = !busy) {
+                Text(from?.let { stringResource(R.string.home_from_date, formatDateWithYear(it)) } ?: stringResource(R.string.home_pick_from))
+            }
+            Button(
+                onClick = {
+                    when (val parsed = parseCorrection(city, country, from.orEmpty())) {
+                        is ParsedCorrection.Problem -> problem = parsed.text
+                        is ParsedCorrection.Correction -> {
+                            problem = null
+                            adding = true
+                            viewModel.addHomeCorrection(HOME_TOKEN, parsed.correction)
+                        }
+                    }
+                },
+                enabled = !busy && city.isNotBlank() && from != null,
+            ) { Text(stringResource(R.string.set)) }
+        }
+        (problem ?: (outcome as? Outcome.Failed)?.message)?.let {
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+        }
+    }
+    if (picking) {
+        // Opens on the date chosen, else today.
+        val initial = (from?.let(LocalDate::parse) ?: LocalDate.now()).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        val state = rememberDatePickerState(initialSelectedDateMillis = initial)
+        DatePickerDialog(
+            onDismissRequest = { picking = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    // The picker answers in UTC midnights.
+                    from = state.selectedDateMillis?.let { Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toString() } ?: from
+                    problem = null
+                    picking = false
+                }) { Text(stringResource(R.string.ok)) }
+            },
+            dismissButton = { TextButton(onClick = { picking = false }) { Text(stringResource(R.string.cancel)) } },
+        ) { DatePicker(state = state) }
     }
 }
 

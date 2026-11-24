@@ -311,6 +311,9 @@ class FakeTripStore(
     val rides = MutableStateFlow(RideSettings())
     val hiddenRides = mutableListOf<String>()
     override fun rideSettings(uid: String): Flow<RideSettings?> = rides
+    override suspend fun setHomeCorrections(uid: String, corrections: List<app.travelmo.core.HomeCorrection>) {
+        rides.value = rides.value.copy(homes = corrections)
+    }
     override suspend fun addRideCompany(uid: String, company: RideCompany) {
         rides.value = rides.value.copy(companies = withRideCompany(rides.value.companies, company))
     }
