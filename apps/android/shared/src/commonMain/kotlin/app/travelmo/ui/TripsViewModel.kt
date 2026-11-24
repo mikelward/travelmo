@@ -572,6 +572,7 @@ class TripsViewModel(
     fun restoreSegment(token: String, tripId: String, segmentId: String) = run(token, "restoreSegment") { store.restoreSegment(tripId, segmentId) }
 
     fun moveSegment(token: String, fromTripId: String, segmentId: String, toTripId: String) = run(token, "moveSegment") { store.moveSegment(fromTripId, segmentId, toTripId) }
+    fun moveSegmentToNewTrip(token: String, fromTripId: String, segmentId: String) = run(token, "moveSegmentToNewTrip") { store.moveSegmentToNewTrip(fromTripId, segmentId, uid) }
 
     fun renameTrip(token: String, tripId: String, title: String) = run(token, "renameTrip") {
         if (title.isBlank()) throw IllegalArgumentException("Give the trip a name")

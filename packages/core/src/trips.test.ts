@@ -1,4 +1,4 @@
-import { daysBetween, eventVerb, findTripForRange, groupTrips, compareMatchRanks, isUntimed, matchRank, mergeDetails, mergePlace, nextEvent, notBookings, overlappingTrips, sameBooking, sameEvent, segmentDateRange, withoutValidityEnds } from "./trips";
+import { daysBetween, eventVerb, findTripForRange, nearbyTrips, newTripTitle, groupTrips, compareMatchRanks, isUntimed, matchRank, mergeDetails, mergePlace, nextEvent, notBookings, overlappingTrips, sameBooking, sameEvent, segmentDateRange, withoutValidityEnds } from "./trips";
 
 describe("nextEvent", () => {
   const stay = { type: "lodging" as const, title: "Cove Liverpool", start: "2026-12-12T15:00:00+00:00", end: "2026-12-14T11:00:00+00:00" };
@@ -153,6 +153,35 @@ describe("findTripForRange", () => {
 
   it("starts a new trip beyond the gap", () => {
     expect(findTripForRange(trips, { start: "2026-12-10", end: "2026-12-12" })).toBeUndefined();
+  });
+});
+
+describe("nearbyTrips", () => {
+  const stay: ExtractedSegment = { type: "lodging", title: "Hotel Example", start: "2026-12-10T15:00:00+01:00", end: "2026-12-12T11:00:00+01:00" };
+  const trips = [
+    trip("weeks-before", "2026-11-01", "2026-11-20"),
+    trip("just-before", "2026-11-20", "2026-11-26"),
+    trip("overlapping", "2026-12-11", "2026-12-15"),
+    trip("just-after", "2026-12-26", "2026-12-30"),
+    trip("next-year", "2027-03-01", "2027-03-05"),
+  ];
+
+  it("offers the trips within two weeks of the booking's dates", () => {
+    expect(nearbyTrips(trips, stay).map((t) => t.id)).toEqual(["just-before", "overlapping", "just-after"]);
+  });
+
+  it("goes by when a cancelled booking was, and the dates the trip is shown with", () => {
+    const cancelled = { ...stay, cancelledAt: "2026-11-01T00:00:00Z" };
+    const shrunk = { ...trip("shrunk", "2026-11-01", "2026-12-20"), liveStart: "2026-11-01", liveEnd: "2026-11-05" };
+    expect(nearbyTrips([shrunk, trip("overlapping", "2026-12-11", "2026-12-15")], cancelled).map((t) => t.id)).toEqual(["overlapping"]);
+  });
+});
+
+describe("newTripTitle", () => {
+  it("names the trip after where the booking goes, else its title", () => {
+    expect(newTripTitle({ title: "EK 18 MAN to DXB", destination: { name: "Dubai International", city: "Dubai", code: "DXB" } })).toBe("Dubai");
+    expect(newTripTitle({ title: "Stay", destination: { name: "Hotel Example" } })).toBe("Hotel Example");
+    expect(newTripTitle({ title: "Toy Story 5" })).toBe("Toy Story 5");
   });
 });
 

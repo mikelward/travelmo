@@ -247,6 +247,13 @@ interface TripStore {
     /** Moves a booking to another trip the viewer can edit, keeping its id; the target widens to hold it. */
     suspend fun moveSegment(fromTripId: String, segmentId: String, toTripId: String)
 
+    /**
+     * Moves a booking into a trip made for it, owned by [uid], named after where it goes, over its dates and
+     * shared as the trip it leaves when [uid] owns that one; returns the new trip's id. As the web's
+     * moveSegmentToNewTrip.
+     */
+    suspend fun moveSegmentToNewTrip(fromTripId: String, segmentId: String, uid: String): String
+
     /** Moves every booking of the source into the target and deletes the source; how many moved. Owner of the source only. */
     suspend fun mergeTrips(sourceId: String, targetId: String): Int
 }

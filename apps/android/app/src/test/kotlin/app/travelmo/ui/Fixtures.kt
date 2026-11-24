@@ -479,6 +479,12 @@ class FakeTripStore(
     override suspend fun moveSegment(fromTripId: String, segmentId: String, toTripId: String) {
         moved += Triple(fromTripId, segmentId, toTripId)
     }
+    /** Bookings moved to a trip made for them, as (from, segment, owner). */
+    val movedToNew = mutableListOf<Triple<String, String, String>>()
+    override suspend fun moveSegmentToNewTrip(fromTripId: String, segmentId: String, uid: String): String {
+        movedToNew += Triple(fromTripId, segmentId, uid)
+        return "new-trip"
+    }
     override suspend fun mergeTrips(sourceId: String, targetId: String): Int {
         merged += sourceId to targetId
         return segments[sourceId].orEmpty().size

@@ -201,6 +201,34 @@ export function findTripForRange(
   });
 }
 
+// How far, in days, a trip may be from a booking and still be offered first
+// when moving it: trips around the same dates, the rest behind "More".
+export const nearbyTripDays = 14;
+
+// The trips a booking moving out of its own is first offered: those within
+// `days` of its dates (any of them, cancelled too), by when the person
+// travels (displayBounds).
+export function nearbyTrips<T extends Pick<Trip, "start" | "end" | "liveStart" | "liveEnd">>(
+  trips: readonly T[],
+  segment: ExtractedSegment,
+  days = nearbyTripDays,
+): T[] {
+  const range = bookedDateRange([segment]);
+  if (!range) return [...trips];
+  return trips.filter((trip) => {
+    const shown = displayBounds(trip);
+    return daysBetween(shown.end, range.start) <= days && daysBetween(range.end, shown.start) <= days;
+  });
+}
+
+// What a trip made for one booking is called, until more bookings join and
+// an import renames it: where the booking goes (its town, else the place's
+// own name), else the booking's title, as the parser names a trip of one.
+export function newTripTitle(segment: Pick<ExtractedSegment, "title" | "destination" | "origin">): string {
+  const place = segment.destination ?? segment.origin;
+  return (place?.city || place?.name || segment.title).trim() || "Trip";
+}
+
 // An activity with no time of its own: the extractor's convention for a
 // dated thing with no stated time is local midnight and no end. It is shown
 // without a time.

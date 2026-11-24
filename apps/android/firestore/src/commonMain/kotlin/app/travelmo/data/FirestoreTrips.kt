@@ -47,6 +47,7 @@ import app.travelmo.core.normalizeEmail
 import app.travelmo.core.normalizeTrusted
 import app.travelmo.core.segmentDateRange
 import app.travelmo.core.bookedDateRange
+import app.travelmo.core.newTripTitle
 import app.travelmo.core.liveBounds
 import app.travelmo.core.widenedFor
 import app.travelmo.logging.SharedLog
@@ -815,6 +816,58 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             t.updateData(fromRef, mapOf("updatedAt" to now))
             null
         }.await()
+    }
+
+    /**
+     * As the web's moveSegmentToNewTrip: the rules check a booking against its trip as it already is, so the
+     * trip is made first and the booking then moved; a move that fails takes the empty trip away again.
+     */
+    override suspend fun moveSegmentToNewTrip(fromTripId: String, segmentId: String, uid: String): String {
+        val fromRef = db.collection("trips").document(fromTripId)
+        val from = fromRef.get().await()
+        if (!from.exists()) throw TripGoneException("Trip no longer exists")
+        val current = fromRef.collection("segments").document(segmentId).get().await()
+        val data = current.data
+        if (!current.exists() || data == null) throw TripGoneException("That booking is no longer in this trip")
+        val source = tripFromDocument(fromTripId, from.data ?: emptyMap()) ?: throw IllegalStateException("Malformed trip")
+        val segment = segmentFromDocument(segmentId, fromTripId, data) ?: throw IllegalStateException("Malformed booking")
+        val range = bookedDateRange(listOf(segment)) ?: throw IllegalStateException("That booking has no dates")
+        val ref = db.collection("trips").document()
+        val now = Clock.System.now().toString()
+        // The trip's own write is inside too: cancelled while it waits, it may still land.
+        try {
+            ref.setData(
+                mapOf(
+                    "id" to ref.id,
+                    "title" to newTripTitle(segment),
+                    "start" to range.first,
+                    "end" to range.second,
+                    "ownerUid" to uid,
+                    "sharedWith" to if (source.ownerUid == uid) source.sharedWith else emptyList(),
+                    "createdAt" to now,
+                    "updatedAt" to now,
+                ),
+            ).await()
+            moveSegment(fromTripId, segmentId, ref.id)
+        } catch (e: Exception) {
+            // Cancelling the coroutine doesn't cancel a transaction that may already have committed, so the
+            // trip goes only once the booking is known not to be in it; cancellation can't interrupt that.
+            withContext(NonCancellable) {
+                try {
+                    if (ref.collection("segments").document(segmentId).get(Source.SERVER).await().exists()) {
+                        SharedLog.error(e, "Moving a booking to a new trip reported a failure, but the booking is there; keeping the trip")
+                    } else {
+                        SharedLog.error(e, "Moving a booking to a new trip failed; removing the empty trip")
+                        ref.delete().await()
+                    }
+                } catch (cleanup: Exception) {
+                    // Unknown whether the move landed: the trip stays rather than risk orphaning the booking.
+                    SharedLog.error(cleanup, "Checking or removing the new trip failed; it stays")
+                }
+            }
+            throw e
+        }
+        return ref.id
     }
 
     /**

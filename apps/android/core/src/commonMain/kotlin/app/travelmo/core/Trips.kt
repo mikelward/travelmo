@@ -156,3 +156,26 @@ fun fittedRange(trip: Trip, segments: List<Segment>): Pair<String, String>? =
 /** The other trips a booking, or a whole trip, can move to: every other trip the viewer sees that is not being deleted, by start. */
 fun otherTrips(trips: List<Trip>, tripId: String): List<Trip> =
     trips.filter { it.id != tripId && !it.deleting }.sortedBy { it.start }
+
+/** How far, in days, a trip may be from a booking and still be offered first when moving it (nearbyTripDays in packages/core). */
+const val NEARBY_TRIP_DAYS = 14L
+
+/**
+ * The trips a booking moving out of its own is first offered, as
+ * packages/core's nearbyTrips: those within [days] of its dates (any of
+ * them, cancelled too), by the dates each is shown with.
+ */
+fun nearbyTrips(trips: List<Trip>, segment: Segment, days: Long = NEARBY_TRIP_DAYS): List<Trip> {
+    val range = bookedDateRange(listOf(segment)) ?: return trips
+    return trips.filter { daysBetween(it.shownEnd, range.first) <= days && daysBetween(range.second, it.shownStart) <= days }
+}
+
+/**
+ * What a trip made for one booking is called, as packages/core's
+ * newTripTitle: where the booking goes (its town, else the place's own
+ * name), else the booking's title.
+ */
+fun newTripTitle(segment: Segment): String {
+    val place = segment.destination ?: segment.origin
+    return listOf(place?.city, place?.name, segment.title).firstOrNull { !it.isNullOrBlank() }?.trim() ?: "Trip"
+}

@@ -863,8 +863,10 @@ everyone who sees the trip, then Edit, "Move to another trip…" and Delete for
 those who may edit. Sources opens a dialog listing each source's label and
 kind (an email the viewer imported links to Gmail), then "From" the sender
 with "Always import this sender" and "Never import this sender" for the owner
-(each where it isn't already the rule); Move to another trip… opens a dialog of the
-viewer's other trips. The row itself shows only the booking.
+(each where it isn't already the rule); Move to another trip… opens a dialog of
+"New trip" (the owner only), then the viewer's other trips within two weeks of
+the booking's dates (`nearbyTrips`), the rest behind "More…". The row itself
+shows only the booking.
 The same people can rate a booking one to five stars and mark it a favorite
 (`rating`, `favorite` on the segment; tapping the current star clears the
 rating): a write like any other, moving the booking's revision
@@ -925,6 +927,15 @@ list as "Deleting" and the trip page offers to finish it.
 
 A booking can be moved to another trip the viewer can edit: it keeps its id
 under the new trip, the target widens to hold it and the source's dates stay.
+The owner can also move it to a new trip (`moveSegmentToNewTrip`): one they
+own, named after where the booking goes (`newTripTitle`, so an import that
+adds to it later renames it), over the booking's dates and shared as the trip
+it left. The rules check a booking against its trip as it already is, so the
+trip is made first and the booking then moved; a move that fails deletes the
+empty trip again, but only once the server shows the booking isn't in it (a
+transaction can commit and still report a failure, and on Android a closed
+screen cancels the wait but not the transaction). A sharee isn't offered it: their new trip would take the
+booking from the owner's sight.
 The owner can merge a trip into another: every booking moves, the target
 widens, the source is deleted, and the target keeps its own sharing list.
 Both run as transactions; the merge reads the source's bookings first and
@@ -2868,7 +2879,8 @@ to bookings by the dates, and at the foot who it is shared with (each
 removable, an address to add), Merge into another trip and Delete this trip
 (asking first; an interrupted deletion offers to finish), each write the
 web's transaction with the trip's `updatedAt` as a revision; anyone who may
-edit can move a booking to another trip they see. Every write runs in the
+edit can move a booking to another trip they see, and the owner to a new one,
+from the same dialog as the web's. Every write runs in the
 ViewModel under a token, so a rotation keeps its outcome. The Profile tab
 shows the travel profile as `/profile` does (documents and travelers folded,
 the loyalty programs at a glance and in full, who it is shared with, and the

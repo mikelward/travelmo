@@ -315,6 +315,32 @@ class FirestoreTripsTest {
     }
 
     @Test
+    fun moveSegmentToNewTrip_makesATripForTheBookingSharedAsTheOneItLeft() = runBlocking {
+        val from = seedTrip()
+        seedSegment(from)
+        val id = owner.store.moveSegmentToNewTrip(from, "s1", owner.uid)
+        assertTrue(segments(from).isEmpty())
+        assertEquals(setOf("s1"), segments(id).keys)
+        val made = trip(id)
+        assertEquals("Liverpool", made["title"])
+        assertEquals("2026-12-12", made["start"])
+        assertEquals("2026-12-14", made["end"])
+        assertEquals(owner.uid, made["ownerUid"])
+        assertEquals(listOf(sharee.email), made["sharedWith"])
+    }
+
+    @Test
+    fun moveSegmentToNewTrip_leavesNoEmptyTripWhenTheMoveFails() = runBlocking {
+        val from = seedTrip()
+        seedSegment(from)
+        tripRef(from).update(mapOf("deleting" to true)).await()
+        val before = owner.db.collection("trips").whereEqualTo("ownerUid", owner.uid).get().await().size()
+        val failed = refused { owner.store.moveSegmentToNewTrip(from, "s1", owner.uid) }
+        assertTrue(failed.toString(), generateSequence(failed) { it.cause }.any { it is TripGoneException })
+        assertEquals(before, owner.db.collection("trips").whereEqualTo("ownerUid", owner.uid).get().await().size())
+    }
+
+    @Test
     fun moveSegment_letsAShareeOfBothTripsMoveABooking() = runBlocking {
         val from = seedTrip()
         val to = seedTrip(title = "Dublin", start = "2026-12-20", end = "2026-12-22")
