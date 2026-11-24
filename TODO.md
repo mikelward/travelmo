@@ -443,9 +443,11 @@ Kotlin Multiplatform, sharing the Android app's Kotlin (SPEC "iOS app").
   - [x] Settings, its Android-only sections (notifications, text size,
         debug log) coming from the app;
   - [x] navigation (the pages, the home tabs and the back stack's routes).
-- [ ] The iOS app: Firebase Auth and Firestore, Google sign-in, Sign in
-      with Apple (how Apple's private relay addresses meet sharing and
-      Gmail import is the user's call), notifications.
+- [ ] The iOS app:
+  - [x] Firestore for both apps in one implementation (`:firestore`,
+        GitLive's Firebase Kotlin SDK);
+  - [ ] the Xcode project, Firebase Auth, Google sign-in and Sign in with
+        Apple, the parser calls, notifications.
 - [ ] TestFlight builds from CI (needs the Apple Developer Program).
 
 ## Decisions needing review

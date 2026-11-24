@@ -69,4 +69,7 @@ rootProject.name = "travelmo"
 // for now the screens' text, as Compose Multiplatform resources.
 include(":core")
 include(":shared")
+// `:firestore` reads and writes Firestore for both apps (GitLive's SDK);
+// apart from `:shared` so its tests link no Firebase.
+include(":firestore")
 include(":app")

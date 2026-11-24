@@ -3068,6 +3068,98 @@
             ]
         },
         {
+            "uniqueId": "dev.gitlive:firebase-app",
+            "artifactVersion": "3.0.0-beta1",
+            "name": "firebase-kotlin-sdk",
+            "description": "The Firebase Kotlin SDK is a Kotlin-first SDK for Firebase. It's API is similar to the Firebase Android SDK Kotlin Extensions but also supports multiplatform projects, enabling you to use Firebase directly from your common source targeting iOS, Android or JS.",
+            "website": "https://github.com/GitLiveApp/firebase-kotlin-sdk",
+            "developers": [
+                {
+                    "name": "Nicholas Bransby-Williams"
+                }
+            ],
+            "scm": {
+                "connection": "scm:git:https://github.com/GitLiveApp/firebase-kotlin-sdk.git",
+                "developerConnection": "scm:git:https://github.com/GitLiveApp/firebase-kotlin-sdk.git",
+                "url": "https://github.com/GitLiveApp/firebase-kotlin-sdk"
+            },
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "funding": [
+                
+            ]
+        },
+        {
+            "uniqueId": "dev.gitlive:firebase-common",
+            "artifactVersion": "3.0.0-beta1",
+            "name": "firebase-kotlin-sdk",
+            "description": "The Firebase Kotlin SDK is a Kotlin-first SDK for Firebase. It's API is similar to the Firebase Android SDK Kotlin Extensions but also supports multiplatform projects, enabling you to use Firebase directly from your common source targeting iOS, Android or JS.",
+            "website": "https://github.com/GitLiveApp/firebase-kotlin-sdk",
+            "developers": [
+                {
+                    "name": "Nicholas Bransby-Williams"
+                }
+            ],
+            "scm": {
+                "connection": "scm:git:https://github.com/GitLiveApp/firebase-kotlin-sdk.git",
+                "developerConnection": "scm:git:https://github.com/GitLiveApp/firebase-kotlin-sdk.git",
+                "url": "https://github.com/GitLiveApp/firebase-kotlin-sdk"
+            },
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "funding": [
+                
+            ]
+        },
+        {
+            "uniqueId": "dev.gitlive:firebase-common-internal",
+            "artifactVersion": "3.0.0-beta1",
+            "name": "firebase-kotlin-sdk",
+            "description": "The Firebase Kotlin SDK is a Kotlin-first SDK for Firebase. It's API is similar to the Firebase Android SDK Kotlin Extensions but also supports multiplatform projects, enabling you to use Firebase directly from your common source targeting iOS, Android or JS.",
+            "website": "https://github.com/GitLiveApp/firebase-kotlin-sdk",
+            "developers": [
+                {
+                    "name": "Nicholas Bransby-Williams"
+                }
+            ],
+            "scm": {
+                "connection": "scm:git:https://github.com/GitLiveApp/firebase-kotlin-sdk.git",
+                "developerConnection": "scm:git:https://github.com/GitLiveApp/firebase-kotlin-sdk.git",
+                "url": "https://github.com/GitLiveApp/firebase-kotlin-sdk"
+            },
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "funding": [
+                
+            ]
+        },
+        {
+            "uniqueId": "dev.gitlive:firebase-firestore",
+            "artifactVersion": "3.0.0-beta1",
+            "name": "firebase-kotlin-sdk",
+            "description": "The Firebase Kotlin SDK is a Kotlin-first SDK for Firebase. It's API is similar to the Firebase Android SDK Kotlin Extensions but also supports multiplatform projects, enabling you to use Firebase directly from your common source targeting iOS, Android or JS.",
+            "website": "https://github.com/GitLiveApp/firebase-kotlin-sdk",
+            "developers": [
+                {
+                    "name": "Nicholas Bransby-Williams"
+                }
+            ],
+            "scm": {
+                "connection": "scm:git:https://github.com/GitLiveApp/firebase-kotlin-sdk.git",
+                "developerConnection": "scm:git:https://github.com/GitLiveApp/firebase-kotlin-sdk.git",
+                "url": "https://github.com/GitLiveApp/firebase-kotlin-sdk"
+            },
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "funding": [
+                
+            ]
+        },
+        {
             "uniqueId": "fonts:fira-sans",
             "name": "Fira Sans",
             "description": "The typeface of the app's name.",
@@ -3716,6 +3808,50 @@
             ],
             "scm": {
                 "url": "https://github.com/Kotlin/kotlinx-datetime"
+            },
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "funding": [
+                
+            ]
+        },
+        {
+            "uniqueId": "org.jetbrains.kotlinx:kotlinx-io-bytestring",
+            "artifactVersion": "0.9.2",
+            "name": "kotlinx-io-bytestring",
+            "description": "IO support for Kotlin",
+            "website": "https://github.com/Kotlin/kotlinx-io",
+            "developers": [
+                {
+                    "name": "JetBrains Team",
+                    "organisationUrl": "https://www.jetbrains.com"
+                }
+            ],
+            "scm": {
+                "url": "https://github.com/Kotlin/kotlinx-io"
+            },
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "funding": [
+                
+            ]
+        },
+        {
+            "uniqueId": "org.jetbrains.kotlinx:kotlinx-io-core",
+            "artifactVersion": "0.9.2",
+            "name": "kotlinx-io-core",
+            "description": "IO support for Kotlin",
+            "website": "https://github.com/Kotlin/kotlinx-io",
+            "developers": [
+                {
+                    "name": "JetBrains Team",
+                    "organisationUrl": "https://www.jetbrains.com"
+                }
+            ],
+            "scm": {
+                "url": "https://github.com/Kotlin/kotlinx-io"
             },
             "licenses": [
                 "Apache-2.0"

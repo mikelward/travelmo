@@ -162,7 +162,9 @@ jobs:
   # the iOS targets but cannot run them; macOS runners cost nothing on a
   # public repository.
   ios-core:
-    runs-on: macos-15
+    # macOS 26 for Xcode 26's Swift 6.2, which the Firebase iOS SDK that
+    # :firestore pulls in through Swift Package Manager needs.
+    runs-on: macos-26
     timeout-minutes: 30
     defaults:
       run:
@@ -180,6 +182,9 @@ jobs:
           cache-read-only: ${{ github.event_name != 'push' }}
       - name: Shared tests on the iOS Simulator
         run: ./gradlew :core:iosSimulatorArm64Test :shared:iosSimulatorArm64Test
+      # Firestore's iOS side links Firebase only in the app, so it is compiled here, not run.
+      - name: Firestore compiles for iOS
+        run: ./gradlew :firestore:compileKotlinIosSimulatorArm64 :firestore:compileKotlinIosArm64
   # The app's instrumented tests (app/src/androidTest): FirestoreTrips'
   # writes against the Firestore emulator with the real rules, on an Android
   # emulator the runner boots with hardware acceleration. Its own job, so the

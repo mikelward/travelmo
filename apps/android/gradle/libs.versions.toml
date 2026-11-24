@@ -17,6 +17,8 @@ serialization = "1.12.0"
 datetime = "0.8.0"
 # Compose Multiplatform: the screens and their text, shared with the iOS app.
 composeMultiplatform = "1.12.2"
+# GitLive's Firebase Kotlin SDK: one Firestore implementation for Android and iOS.
+gitliveFirebase = "3.0.0-beta1"
 # Compose Multiplatform's Material 3 and icons version apart from the rest.
 composeMpMaterial3 = "1.9.0"
 composeMpIcons = "1.7.3"
@@ -72,6 +74,8 @@ compose-mp-ui = { group = "org.jetbrains.compose.ui", name = "ui", version.ref =
 compose-mp-material3 = { group = "org.jetbrains.compose.material3", name = "material3", version.ref = "composeMpMaterial3" }
 compose-mp-material-icons-core = { group = "org.jetbrains.compose.material", name = "material-icons-core", version.ref = "composeMpIcons" }
 lifecycle-runtime-compose-mp = { group = "org.jetbrains.androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycle" }
+gitlive-firebase-firestore = { group = "dev.gitlive", name = "firebase-firestore", version.ref = "gitliveFirebase" }
+gitlive-firebase-auth = { group = "dev.gitlive", name = "firebase-auth", version.ref = "gitliveFirebase" }
 compose-mp-runtime = { group = "org.jetbrains.compose.runtime", name = "runtime", version.ref = "composeMultiplatform" }
 compose-mp-resources = { group = "org.jetbrains.compose.components", name = "components-resources", version.ref = "composeMultiplatform" }
 kotlinx-datetime = { group = "org.jetbrains.kotlinx", name = "kotlinx-datetime", version.ref = "datetime" }
