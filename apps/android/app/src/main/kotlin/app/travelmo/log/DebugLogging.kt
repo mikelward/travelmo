@@ -119,6 +119,8 @@ object DebugLogging {
         context: Context,
         signedIn: Boolean,
         screenshot: Boolean = false,
+        /** What the report leads with: what the user wrote and the trip's bookings (sharedReportPreamble). */
+        preamble: String? = null,
         /** The screenshot; a test hands in its own, as there is no window to copy. */
         capture: suspend (Activity) -> Uri? = ::captureScreenshot,
         /** The share sheet and clipboard; a test hands in its own to see the report and to make delivery fail. */
@@ -129,10 +131,10 @@ object DebugLogging {
         val shot = if (screenshot) screenshotOf(context, capture) else null
         val report = withContext(Dispatchers.IO) {
             runCatching {
-                DebugReport.collect(TravelmoLog, sink) { payload(signedIn) }
+                DebugReport.collect(TravelmoLog, sink) { payload(signedIn, preamble) }
             }.getOrElse { failure ->
                 TravelmoLog.failure(failure, "Building the debug report failed; sharing a minimal one")
-                DebugReport.collect(TravelmoLog, null) { payload(signedIn) }
+                DebugReport.collect(TravelmoLog, null) { payload(signedIn, preamble) }
             }
         }
         return withContext(Dispatchers.Main) {
@@ -274,7 +276,11 @@ object DebugLogging {
         screenshot = screenshot,
     )
 
-    private fun payload(signedIn: Boolean): String = buildString {
+    private fun payload(signedIn: Boolean, preamble: String? = null): String = buildString {
+        if (preamble != null) {
+            appendLine(preamble)
+            appendLine()
+        }
         appendLine("Travelmo ${safeVersion()} (${BuildConfig.APPLICATION_ID})")
         appendLine("Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT}), ${Build.MANUFACTURER} ${Build.MODEL}")
         appendLine("Signed in: $signedIn")
