@@ -17,6 +17,7 @@ import app.travelmo.shared.nav_calendar
 import app.travelmo.shared.nav_profile
 import app.travelmo.shared.nav_reports
 import app.travelmo.shared.nav_trips
+import app.travelmo.ui.theme.TravelmoTheme
 import org.jetbrains.compose.resources.stringResource
 
 /** The destinations the navigation bar switches between, as the web's navigation has them. */
@@ -24,10 +25,9 @@ enum class HomeTab { TRIPS, CALENDAR, REPORTS, PROFILE }
 
 @Composable
 fun HomeNavigationBar(selected: HomeTab, onSelect: (HomeTab) -> Unit) {
-    // The selected pill is the amber tertiary container, as in the mockups.
     val colors = NavigationBarItemDefaults.colors(
-        indicatorColor = MaterialTheme.colorScheme.tertiaryContainer,
-        selectedIconColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        indicatorColor = TravelmoTheme.colors.navIndicator,
+        selectedIconColor = TravelmoTheme.colors.onNavIndicator,
         selectedTextColor = MaterialTheme.colorScheme.onSurface,
     )
     NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
