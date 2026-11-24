@@ -178,6 +178,27 @@ describe("checkFlights", () => {
     expect(t.pushed[0]![1].body).toBe("Now departs from terminal 1, gate 9 (was terminal 1, gate 8)");
   });
 
+  it("tells of a delay once, by Sydney's clock, and of a cancellation", async () => {
+    let flight = answer({ estimated_out: "2026-12-12T22:40:00Z" });
+    const t = setup({ flights: () => [flight] });
+    await checkFlights(t.io, t.options("2026-12-12T21:00:00Z"));
+    expect(t.pushed[0]![1].body).toBe("Leaves 40 min late, at 09:40\nDeparts from terminal 1, gate 8");
+    expect(t.statuses.get(key)?.noticedOut).toBe("2026-12-12T22:40:00Z");
+    // Five more minutes is not news yet.
+    flight = answer({ estimated_out: "2026-12-12T22:45:00Z" });
+    t.pushed.length = 0;
+    await checkFlights(t.io, t.options("2026-12-12T21:01:00Z"));
+    expect(t.pushed).toEqual([]);
+    // Back on time is news.
+    flight = answer({ estimated_out: "2026-12-12T22:00:00Z" });
+    await checkFlights(t.io, t.options("2026-12-12T21:02:00Z"));
+    expect(t.pushed[0]![1].body).toBe("Now leaves on time, at 09:00");
+    t.pushed.length = 0;
+    flight = answer({ estimated_out: "2026-12-12T22:45:00Z", cancelled: true });
+    await checkFlights(t.io, t.options("2026-12-12T21:03:00Z"));
+    expect(t.pushed[0]![1].body).toBe("Flight cancelled");
+  });
+
   it("does not look before the window, and asks AeroAPI nothing for a booking with no flight number", async () => {
     const t = setup({ segments: [booking("t1"), booking("t2", { title: "Flight to SIN" })] });
     expect(await checkFlights(t.io, t.options("2026-12-12T19:00:00Z"))).toMatchObject({ flights: 1, checked: 0 });

@@ -77,6 +77,8 @@ describe("statusFromFlight", () => {
       checkedAt: "2026-12-12T21:00:00Z",
     });
     expect(statusFromFlight({ ...outbound, cancelled: true }, { ident: "XX100", date: "2026-12-13" }, "2026-12-12T21:00:00Z").cancelled).toBe(true);
+    const diverted = { ...outbound, diverted: true, destination: { code_iata: "KUL" } };
+    expect(statusFromFlight(diverted, { ident: "XX100", date: "2026-12-13" }, "2026-12-12T21:00:00Z")).toMatchObject({ diverted: true, divertedTo: "KUL" });
     expect(statusFromFlight(undefined, { ident: "XX100", date: "2026-12-13" }, "2026-12-12T21:00:00Z")).toEqual({
       ident: "XX100",
       date: "2026-12-13",

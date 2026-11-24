@@ -29,6 +29,7 @@ export const AeroFlight = z.object({
   terminal_destination: text,
   baggage_claim: text,
   cancelled: z.boolean().nullish(),
+  diverted: z.boolean().nullish(),
 });
 export type AeroFlight = z.infer<typeof AeroFlight>;
 
@@ -123,6 +124,8 @@ export function statusFromFlight(
     estimatedIn: isoInstant(flight.estimated_in),
     actualIn: isoInstant(flight.actual_in),
     ...(flight.cancelled ? { cancelled: true } : {}),
+    // A diverted flight's destination is where it now goes.
+    ...(flight.diverted ? { diverted: true, divertedTo: flight.destination?.code_iata ?? undefined } : {}),
   };
   const kept = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined)) as Partial<FlightStatus>;
   return { ...base, found: true, ...kept };

@@ -23,9 +23,14 @@ class FlightStatusTest {
         arrivalGate: String? = null,
         arrivalTerminal: String? = null,
         baggageClaim: String? = null,
+        estimatedOut: String? = null,
+        estimatedIn: String? = null,
         actualOut: String? = null,
         actualIn: String? = null,
         cancelled: Boolean = false,
+        diverted: Boolean = false,
+        divertedTo: String? = null,
+        noticedOut: String? = null,
         checkedAt: String = "2026-12-12T19:00:00Z",
     ) = FlightStatus(
         ident = "XX100",
@@ -39,9 +44,14 @@ class FlightStatusTest {
         baggageClaim = baggageClaim,
         scheduledOut = "2026-12-12T22:00:00Z",
         scheduledIn = "2026-12-13T07:30:00Z",
+        estimatedOut = estimatedOut,
+        estimatedIn = estimatedIn,
         actualOut = actualOut,
         actualIn = actualIn,
         cancelled = cancelled,
+        diverted = diverted,
+        divertedTo = divertedTo,
+        noticedOut = noticedOut,
         checkedAt = checkedAt,
     )
 
@@ -106,6 +116,34 @@ class FlightStatusTest {
         flightStatusLines(status(arrivalTerminal = "3")) shouldBe listOf("Arrives at terminal 3")
         flightStatusLines(null) shouldBe emptyList<String>()
         flightStatusLines(status(found = false, departureGate = "8")) shouldBe emptyList<String>()
+    }
+
+    @Test
+    fun saysHowLateTheFlightLeavesAndLandsByTheAirportsClocks() {
+        val late = status(estimatedOut = "2026-12-12T22:40:00Z", estimatedIn = "2026-12-13T07:10:00Z", departureGate = "8")
+        flightStatusLines(late, flight) shouldBe listOf("Leaves 40 min late, at 09:40", "Departs from gate 8", "Lands 20 min early, at 15:10")
+        flightStatusLines(status(estimatedOut = "2026-12-13T00:05:00Z")) shouldBe listOf("Leaves 2 h 5 min late")
+        flightStatusLines(status(estimatedOut = "2026-12-12T22:04:00Z", estimatedIn = "2026-12-13T07:26:00Z"), flight) shouldBe emptyList<String>()
+        flightStatusLines(status(estimatedOut = "2026-12-12T22:40:00Z", actualOut = "2026-12-12T22:41:00Z"), flight) shouldBe emptyList<String>()
+    }
+
+    @Test
+    fun saysAFlightLeavesOnTimeAgainAfterNewsOfItsDelay() {
+        val back = status(estimatedOut = "2026-12-12T22:00:00Z", noticedOut = "2026-12-12T22:00:00Z")
+        flightStatusLines(back, flight) shouldBe listOf("Leaves on time, at 09:00")
+    }
+
+    @Test
+    fun saysOnlyThatACancelledFlightIsCancelled() {
+        flightStatusLines(status(cancelled = true, departureGate = "8", estimatedOut = "2026-12-12T22:40:00Z"), flight) shouldBe listOf("Flight cancelled")
+    }
+
+    @Test
+    fun saysWhereADivertedFlightGoesWhenThatIsNotWhereItWasBookedTo() {
+        val booked = flight.copy(destination = Place("Singapore", code = "SIN"))
+        flightStatusLines(status(diverted = true, divertedTo = "KUL"), booked) shouldBe listOf("Diverted to KUL")
+        flightStatusLines(status(diverted = true, divertedTo = "SIN"), booked) shouldBe listOf("Diverted")
+        flightStatusLines(status(diverted = true), booked) shouldBe listOf("Diverted")
     }
 
     @Test

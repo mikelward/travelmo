@@ -23,6 +23,9 @@ data class FlightStatus(
     val estimatedIn: String? = null,
     val actualIn: String? = null,
     val cancelled: Boolean = false,
+    val diverted: Boolean = false,
+    val divertedTo: String? = null,
+    val noticedOut: String? = null,
     val checkedAt: String,
 )
 
@@ -99,11 +102,58 @@ fun shownFlightKeys(segments: List<Segment>, now: String): List<String> =
 private fun where(gate: String?, terminal: String?): String? =
     listOfNotNull(terminal?.let { "terminal $it" }, gate?.let { "gate $it" }).takeIf { it.isNotEmpty() }?.joinToString(", ")
 
-/** What the flight's card says: where it leaves from and arrives at, and where the bags come out. */
-fun flightStatusLines(status: FlightStatus?): List<String> {
+/** A departure or landing this far from the schedule is shown. */
+private const val DELAY_SHOWN = 5 * MINUTE
+
+/** "40 min", "1 h", "2 h 5 min". */
+private fun span(millis: Long): String {
+    val total = kotlin.math.round(kotlin.math.abs(millis) / MINUTE.toDouble()).toLong()
+    val hours = total / 60
+    val minutes = total % 60
+    return when {
+        hours == 0L -> "$minutes min"
+        minutes == 0L -> "$hours h"
+        else -> "$hours h $minutes min"
+    }
+}
+
+/** A UTC instant as the clock reads where [place] (an instant with that place's offset) is: "10:25". */
+private fun clockAt(at: String, place: String?): String? =
+    place?.let { localTime(shiftInstant(it, instantMillis(at) - instantMillis(it))) }
+
+/** "40 min late, at 10:25", "20 min early, at 18:10" or "on time, at 09:00". */
+private fun timing(scheduled: String, estimated: String, place: String?): String {
+    val off = instantMillis(estimated) - instantMillis(scheduled)
+    val word = if (kotlin.math.abs(off) < DELAY_SHOWN) "on time" else "${span(off)} ${if (off > 0) "late" else "early"}"
+    return clockAt(estimated, place)?.let { "$word, at $it" } ?: word
+}
+
+private fun offSchedule(scheduled: String?, estimated: String?): Boolean =
+    scheduled != null && estimated != null && kotlin.math.abs(instantMillis(estimated) - instantMillis(scheduled)) >= DELAY_SHOWN
+
+/**
+ * What the flight's card says: whether it is cancelled or diverted, how late it leaves and lands,
+ * where it leaves from and arrives at, and where the bags come out. Times read as the airports'
+ * clocks do when the booking is given; a cancelled flight says only that. A departure back on time
+ * after news of a delay still says so (it has a noticedOut).
+ */
+fun flightStatusLines(status: FlightStatus?, booked: Segment? = null): List<String> {
     if (status == null || !status.found) return emptyList()
+    if (status.cancelled) return listOf("Flight cancelled")
+    val to = status.divertedTo?.uppercase()
+    val diverted = when {
+        !status.diverted -> null
+        to != null && to != booked?.destination?.code?.uppercase() -> "Diverted to $to"
+        else -> "Diverted"
+    }
+    val leaves = status.actualOut == null && status.estimatedOut != null &&
+        (offSchedule(status.scheduledOut, status.estimatedOut) || status.noticedOut != null)
+    val lands = status.actualIn == null && offSchedule(status.scheduledIn, status.estimatedIn)
     return listOfNotNull(
+        diverted,
+        if (leaves) "Leaves ${timing(status.scheduledOut!!, status.estimatedOut!!, booked?.start)}" else null,
         where(status.departureGate, status.departureTerminal)?.let { "Departs from $it" },
+        if (lands) "Lands ${timing(status.scheduledIn!!, status.estimatedIn!!, booked?.end)}" else null,
         where(status.arrivalGate, status.arrivalTerminal)?.let { "Arrives at $it" },
         status.baggageClaim?.let { "Bags on carousel $it" },
     )

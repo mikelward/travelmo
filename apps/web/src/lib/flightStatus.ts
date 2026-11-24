@@ -17,10 +17,10 @@ export function shownFlightKeys(segments: readonly Segment[] | undefined, now: s
   return [...keys].sort();
 }
 
-// What a flight's row says of its gates and carousel, if anything.
+// What a flight's row says of its delays, gates and carousel, if anything.
 export function flightLinesFor(segment: Segment, statuses: Record<string, FlightStatus>, now: string): string[] | undefined {
   const key = flightStatusShown(segment, now) ? flightStatusKey(segment) : undefined;
-  const lines = key ? flightStatusLines(statuses[key]) : [];
+  const lines = key ? flightStatusLines(statuses[key], segment) : [];
   return lines.length ? lines : undefined;
 }
 
