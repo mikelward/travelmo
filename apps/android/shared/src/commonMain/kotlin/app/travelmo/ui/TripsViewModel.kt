@@ -12,6 +12,7 @@ import app.travelmo.core.tripMatches
 import app.travelmo.core.parseTripQuery
 import app.travelmo.core.ListFilters
 import app.travelmo.core.hiddenFromList
+import app.travelmo.core.tripDraftProblem
 import app.travelmo.core.senderCleanup
 import app.travelmo.core.SenderCleanup
 import androidx.lifecycle.ViewModel
@@ -675,6 +676,28 @@ class TripsViewModel(
 
     fun restoreSegment(token: String, tripId: String, segmentId: String) = run(token, "restoreSegment") { store.restoreSegment(tripId, segmentId) }
 
+    fun newTripId(): String = store.newTripId()
+
+    /** Add a trip's write for a new trip [id]: its outcome's token, under [NEW_TRIP_TOKEN]. */
+    fun addTrip(id: String, title: String, start: String?, end: String?) = createTrip("$NEW_TRIP_TOKEN$id", id, title, start, end)
+
+    /**
+     * Whether Add a trip may close now, forgetting the outcomes of its tries:
+     * not while one is being saved, whose outcome would otherwise close a
+     * dialog opened after it and open its trip over that.
+     */
+    fun leaveAddTrip(): Boolean {
+        val mine = _outcomes.value.filterKeys { it.startsWith(NEW_TRIP_TOKEN) }
+        if (mine.values.any { it is Outcome.Busy }) return false
+        mine.keys.forEach(::outcomeSeen)
+        return true
+    }
+
+    fun createTrip(token: String, id: String, title: String, start: String?, end: String?) = run(token, "createTrip") {
+        tripDraftProblem(title, start, end)?.let { throw IllegalArgumentException(it) }
+        store.createTrip(id, uid, title.trim(), start!!, end!!)
+    }
+
     fun cancelSegment(token: String, tripId: String, segmentId: String) = run(token, "cancelSegment") { store.cancelSegment(tripId, segmentId) }
 
     fun cancelTrip(token: String, tripId: String) = run(token, "cancelTrip") { store.cancelTrip(tripId) }
@@ -1274,3 +1297,6 @@ class TripsViewModel(
 
 /** A new reminder's id: random, so one that takes a freed slot is not ticked off where the one before it was. */
 fun newReminderId(): String = kotlin.uuid.Uuid.random().toHexString().take(20)
+
+/** The prefix of Add a trip's write tokens, followed by the new trip's id. */
+const val NEW_TRIP_TOKEN = "list/new-trip/"

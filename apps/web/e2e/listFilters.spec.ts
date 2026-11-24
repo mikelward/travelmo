@@ -96,3 +96,41 @@ test("search opens in place of the title, and closes with Back, Escape, or a cli
   await page.locator("main").click({ position: { x: 1, y: 1 } });
   await expect(title).toBeVisible();
 });
+
+test("Add a trip plans one by name and dates and opens it", async ({ page }) => {
+  await signIn(page, owner);
+  // With no trips yet, the empty list offers it too.
+  await page.getByRole("button", { name: "add a trip", exact: true }).click();
+  const form = page.getByRole("form", { name: "Add a trip" });
+  await form.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(form.getByText("Give the trip a name")).toBeVisible();
+  await form.getByRole("textbox", { name: "Name" }).fill("Weekend away");
+  await form.getByLabel("From").fill("2026-12-05");
+  await form.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Weekend away" })).toBeVisible();
+  await expect(page.getByTestId("trip-dates")).toHaveText(/5 Dec 2026/);
+  await expect(page.getByText("No bookings in this trip yet.")).toBeVisible();
+});
+
+test("the first trip added keeps its form, filled in and busy, until its write is confirmed", async ({ page }) => {
+  await signIn(page, owner);
+  // Writes wait, as on a slow connection: the trip shows from the cache first.
+  let release: (() => void) | undefined;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route(/google\.firestore\.v1\.Firestore\/Write/, async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.getByRole("button", { name: "add a trip", exact: true }).click();
+  const form = page.getByRole("form", { name: "Add a trip" });
+  await form.getByRole("textbox", { name: "Name" }).fill("Weekend away");
+  await form.getByLabel("From").fill("2026-12-05");
+  await form.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(page.getByTestId("trip-card")).toHaveCount(1);
+  await expect(form.getByRole("textbox", { name: "Name" })).toHaveValue("Weekend away");
+  await expect(form.getByRole("button", { name: "Adding…" })).toBeDisabled();
+  // Nor can it be left while the trip is being saved.
+  await expect(form.getByRole("button", { name: "Cancel" })).toBeDisabled();
+  release!();
+  await expect(page.getByRole("heading", { name: "Weekend away" })).toBeVisible();
+});

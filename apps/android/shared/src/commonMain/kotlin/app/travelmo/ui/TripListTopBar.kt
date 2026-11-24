@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import app.travelmo.core.ListFilters
 import app.travelmo.shared.Res
+import app.travelmo.shared.add_trip
 import app.travelmo.shared.app_name
 import app.travelmo.shared.close_search
 import app.travelmo.shared.clear_search
@@ -60,6 +61,7 @@ fun TripListTopBar(
     filters: ListFilters,
     onFilters: (ListFilters) -> Unit,
     onOpenSettings: () -> Unit,
+    onAddTrip: () -> Unit,
 ) {
     val focus = LocalFocusManager.current
     if (searching) {
@@ -104,7 +106,11 @@ fun TripListTopBar(
             },
         )
     } else {
-        AppTopBar(stringResource(Res.string.app_name), onOpenSettings = onOpenSettings) {
+        AppTopBar(
+            stringResource(Res.string.app_name),
+            onOpenSettings = onOpenSettings,
+            menuItems = { close -> DropdownMenuItem(text = { Text(stringResource(Res.string.add_trip)) }, onClick = { close(); onAddTrip() }) },
+        ) {
             IconButton(onClick = { onSearching(true) }) {
                 Icon(Icons.Filled.Search, contentDescription = stringResource(Res.string.search_trips))
             }

@@ -1,4 +1,4 @@
-import { daysBetween, eventVerb, oneBookingPerEvent, findTripForRange, fittingTrip, nearbyTrips, newTripTitle, groupTrips, compareMatchRanks, isUntimed, matchRank, mergeDetails, mergePlace, nextEvent, notBookings, overlappingTrips, sameBooking, sameEvent, segmentDateRange, withoutValidityEnds } from "./trips";
+import { daysBetween, eventVerb, oneBookingPerEvent, findTripForRange, fittingTrip, nearbyTrips, newTripTitle, groupTrips, compareMatchRanks, isUntimed, matchRank, mergeDetails, mergePlace, nextEvent, notBookings, overlappingTrips, sameBooking, sameEvent, segmentDateRange, tripDraftProblem, withoutValidityEnds } from "./trips";
 
 describe("nextEvent", () => {
   const stay = { type: "lodging" as const, title: "Cove Liverpool", start: "2026-12-12T15:00:00+00:00", end: "2026-12-14T11:00:00+00:00" };
@@ -645,5 +645,15 @@ describe("oneBookingPerEvent", () => {
     expect(oneBookingPerEvent([museum, aquarium])).toHaveLength(2);
     const room = { type: "lodging" as const, title: "Hotel", start: "2026-01-24T15:00:00+00:00", end: "2026-01-25T11:00:00+00:00", confirmation: "H1" };
     expect(oneBookingPerEvent([room, room])).toHaveLength(2);
+  });
+});
+
+describe("tripDraftProblem", () => {
+  it("needs a name and dates, the end not before the start", () => {
+    expect(tripDraftProblem(" ", "2026-12-01", "2026-12-02")).toBe("Give the trip a name");
+    expect(tripDraftProblem("Away", undefined, undefined)).toBe("Pick its dates");
+    expect(tripDraftProblem("Away", "2026-12-01", "")).toBe("Pick its dates");
+    expect(tripDraftProblem("Away", "2026-12-02", "2026-12-01")).toBe("It ends before it starts");
+    expect(tripDraftProblem("Away", "2026-12-01", "2026-12-01")).toBeUndefined();
   });
 });

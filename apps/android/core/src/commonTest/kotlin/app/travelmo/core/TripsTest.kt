@@ -160,4 +160,12 @@ class TripsTest {
         fittingTrip(listOf(trip("a", "2026-11-01", "2026-11-30").copy(deleting = true)), "u1", "2026-11-05").shouldBeNull()
         fittingTrip(listOf(trip("a", "2026-11-01", "2026-11-30").copy(cancelledAt = "2026-10-01T00:00:00Z")), "u1", "2026-11-05").shouldBeNull()
     }
+
+    @Test
+    fun `a trip planned by hand needs a name and dates with the end not before the start`() {
+        tripDraftProblem(" ", "2026-12-01", "2026-12-02") shouldBe "Give the trip a name"
+        tripDraftProblem("Away", null, null) shouldBe "Pick its dates"
+        tripDraftProblem("Away", "2026-12-02", "2026-12-01") shouldBe "It ends before it starts"
+        tripDraftProblem("Away", "2026-12-01", "2026-12-01") shouldBe null
+    }
 }
