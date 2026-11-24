@@ -1,5 +1,5 @@
-import { homeCorrections, journeyHome, sameArea, withChosenAirports, type ChosenHomeAirports, type HomePeriod } from "./home";
-import { maxOneWayTrips, type ExtractedSegment, type HomeCorrection, type Place } from "./schema";
+import { homeCorrections, journeyHome, sameArea, withChosenAirports, type HomePeriod } from "./home";
+import { maxOneWayTrips, type ChosenHomeAirports, type ExtractedSegment, type HomeCorrection, type Place } from "./schema";
 import { liveSegments, localDate } from "./trips";
 
 // A trip whose journeys don't come back to where they started: a booking is
