@@ -2797,9 +2797,11 @@ notifications, then the text size and the debug log), which Android supplies fro
 clipboard and file picker, and signing out through `SignedInAccount`,
 Android's Google sign-in, and the text size the
 Android user picks reaches menus and dialogs through `pinchFontSizeHost`
-and `FontSizeWindow`, which do nothing on iOS. Next, in order: navigation (the
-back stack and the home tabs) moves to `:shared`,
-then the iOS app itself
+and `FontSizeWindow`, which do nothing on iOS. Navigation is shared too: the
+pages as Navigation 3 keys and `SignedInNavigation`, the home tabs and
+what each page opens; each app makes the back stack (Android's survives
+the activity's recreation) and opens a trip a notification asks for.
+Next: the iOS app itself
 (Firebase Auth and Firestore, Google sign-in and Sign in with Apple, which
 App Store review asks of an app offering Google's, notifications through
 Cloud Messaging), then a TestFlight build from CI.

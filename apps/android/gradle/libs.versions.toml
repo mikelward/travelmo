@@ -26,6 +26,8 @@ lifecycle = "2.11.0"
 composeBom = "2026.09.00"
 # Navigation 3: the back stack is a plain list the app owns.
 navigation3 = "1.2.1"
+# Compose Multiplatform's Navigation 3 UI, for the navigation shared with the iOS app.
+navigation3Mp = "1.2.0"
 credentials = "1.6.0"
 googleid = "1.2.1"
 firebaseBom = "35.1.0"
@@ -85,6 +87,7 @@ androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-toolin
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-compose-material-icons-core = { group = "androidx.compose.material", name = "material-icons-core" }
 androidx-navigation3-runtime = { group = "androidx.navigation3", name = "navigation3-runtime", version.ref = "navigation3" }
+navigation3-ui-mp = { group = "org.jetbrains.androidx.navigation3", name = "navigation3-ui", version.ref = "navigation3Mp" }
 androidx-navigation3-ui = { group = "androidx.navigation3", name = "navigation3-ui", version.ref = "navigation3" }
 androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
 androidx-credentials-play-services-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentials" }
