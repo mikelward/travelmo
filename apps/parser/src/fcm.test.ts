@@ -1,6 +1,6 @@
 import type { ReminderNotification } from "@travelmo/core";
 import { describe, expect, it } from "vitest";
-import { fcmSender, messagePayloadLimit, reminderMessage } from "./fcm";
+import { fcmLiveSender, fcmSender, liveMessage, messagePayloadLimit, reminderMessage } from "./fcm";
 
 const device = { token: "fcm-token-1", platform: "android" as const, createdAt: "2026-11-07T00:00:00Z" };
 const notification: ReminderNotification = {
@@ -74,5 +74,52 @@ describe("fcmSender", () => {
     await expect(fcmSender(failing("messaging/internal-error"))(device, notification)).rejects.toThrow("nope");
     await expect(fcmSender(failing("messaging/invalid-argument", "notification.title is too long"))(device, notification)).rejects.toThrow();
     await expect(fcmSender({ send: async () => Promise.reject(new Error("socket hang up")) })(device, notification)).rejects.toThrow("socket hang up");
+  });
+});
+
+describe("fcmLiveSender", () => {
+  const update = {
+    key: "XX100_2026-12-13_SYD",
+    status: { ident: "XX100", date: "2026-12-13", origin: "SYD", found: true, departureGate: "8", departureTerminal: "1", cancelled: false, checkedAt: "2026-12-12T21:00:00Z" },
+    booking: { title: "XX 100 SYD to SIN", start: "2026-12-13T09:00:00+11:00", end: "2026-12-13T15:30:00+08:00", destination: { name: "Singapore", code: "SIN" } },
+    url: "https://travelmo.example/trips/t1",
+  };
+
+  it("sends the status and booking as strings, collapsing a queue of them into the newest", async () => {
+    const sent: unknown[] = [];
+    const send = fcmLiveSender({
+      send: async (message) => {
+        sent.push(message);
+        return "projects/p/messages/1";
+      },
+    });
+    expect(await send(device, update)).toBe("sent");
+    expect(sent).toEqual([liveMessage(device, update)]);
+    expect(liveMessage(device, update)).toEqual({
+      token: "fcm-token-1",
+      data: {
+        kind: "live",
+        tag: "live-XX100_2026-12-13_SYD",
+        key: "XX100_2026-12-13_SYD",
+        title: "XX 100 SYD to SIN",
+        url: "https://travelmo.example/trips/t1",
+        start: "2026-12-13T09:00:00+11:00",
+        end: "2026-12-13T15:30:00+08:00",
+        destination: "SIN",
+        ident: "XX100",
+        date: "2026-12-13",
+        origin: "SYD",
+        found: "true",
+        departureGate: "8",
+        departureTerminal: "1",
+        cancelled: "false",
+        checkedAt: "2026-12-12T21:00:00Z",
+      },
+      android: { ttl: 900_000, priority: "high", collapseKey: "live-XX100_2026-12-13_SYD" },
+    });
+  });
+
+  it("reports a token Messaging no longer knows as gone", async () => {
+    expect(await fcmLiveSender(failing("messaging/registration-token-not-registered"))(device, update)).toBe("gone");
   });
 });

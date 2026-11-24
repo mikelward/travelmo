@@ -96,7 +96,8 @@ view, the travel profile with its document warnings, reports, the
 open-source licenses, and Settings with sign-out, the reminders switches (by email, and as notifications on
 the phone over Firebase Cloud Messaging, which asks for the notification
 permission; flight changes come in a channel of their own with a chime that
-`apps/android/scripts/flight-chime.py` writes), the reminders before international trips, the text size, the debug log and deleting the account. Deleting calls the
+`apps/android/scripts/flight-chime.py` writes, and a flight under way has a
+Live Update with its gate, landing time or carousel in the status bar), the reminders before international trips, the text size, the debug log and deleting the account. Deleting calls the
 parser at `travelmoParserUrl` in `apps/android/gradle.properties` (the
 production address, as in `apphosting.yaml`; override it with
 `-PtravelmoParserUrl=…` or `TRAVELMO_PARSER_URL`, or set it empty to have

@@ -1,4 +1,4 @@
-import type { Device, ReminderNotification } from "@travelmo/core";
+import type { Device, FlightStatus, ReminderNotification, Segment } from "@travelmo/core";
 import type { Messaging, TokenMessage } from "firebase-admin/messaging";
 
 // Reminders to phones, through Firebase Cloud Messaging with the Admin
@@ -61,13 +61,60 @@ const isGone = (error: unknown): boolean => {
 };
 
 export function fcmSender(messaging: Pick<Messaging, "send">): DeviceSender {
-  return async (device, notification, ttlSeconds) => {
-    try {
-      await messaging.send(reminderMessage(device, notification, ttlSeconds === undefined ? ttlMs : ttlSeconds * 1000));
-      return "sent";
-    } catch (error) {
-      if (isGone(error)) return "gone";
-      throw error;
-    }
+  return (device, notification, ttlSeconds) =>
+    sendOrGone(() => messaging.send(reminderMessage(device, notification, ttlSeconds === undefined ? ttlMs : ttlSeconds * 1000)));
+}
+
+// A flight's Live Update on a phone: an ongoing notification for the flight,
+// with the terminal and gate, the landing time or the carousel in the status
+// bar, which the app draws from the flight's status and the person's booking.
+// Sent after every look while the parser watches the flight, so it moves on
+// from the gate to the landing to the bags without anything changing.
+export type LiveFlightUpdate = {
+  key: string;
+  status: FlightStatus;
+  booking: Pick<Segment, "title" | "start" | "end" | "destination">;
+  url: string;
+};
+
+export type LiveSender = (device: Device, update: LiveFlightUpdate) => Promise<"sent" | "gone">;
+
+// A look comes a minute after the last at most; one this old is stale
+// enough that the next replaces it, and one queued for a phone that was
+// off collapses into the newest.
+const liveTtlMs = 15 * 60_000;
+
+// Data, all strings: the status's fields as stored, beside the booking's
+// times (their offsets give the airports' clocks) and the trip's URL.
+export function liveMessage(device: Device, update: LiveFlightUpdate): TokenMessage {
+  const tag = `live-${update.key}`;
+  const fields: Record<string, string | undefined> = {
+    kind: "live",
+    tag,
+    key: update.key,
+    title: update.booking.title,
+    url: update.url,
+    start: update.booking.start,
+    end: update.booking.end,
+    destination: update.booking.destination?.code,
+    ...Object.fromEntries(Object.entries(update.status).map(([name, value]) => [name, value === undefined ? undefined : String(value)])),
   };
+  const data = Object.fromEntries(Object.entries(fields).filter((entry): entry is [string, string] => entry[1] !== undefined));
+  // High priority: the phone draws a notification for each, so Android lets
+  // it through Doze at once rather than with the next maintenance window.
+  return { token: device.token, data, android: { ttl: liveTtlMs, priority: "high", collapseKey: tag } };
+}
+
+const sendOrGone = async (send: () => Promise<unknown>): Promise<"sent" | "gone"> => {
+  try {
+    await send();
+    return "sent";
+  } catch (error) {
+    if (isGone(error)) return "gone";
+    throw error;
+  }
+};
+
+export function fcmLiveSender(messaging: Pick<Messaging, "send">): LiveSender {
+  return (device, update) => sendOrGone(() => messaging.send(liveMessage(device, update)));
 }

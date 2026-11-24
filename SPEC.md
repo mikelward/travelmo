@@ -729,6 +729,30 @@ a day-before reminder, which keeps the system sound. Either channel can be
 silenced or given another sound in the system settings. Browsers ignore a
 push's sound, so the web has no chime. Android fixes a channel's sound when
 the channel is made: a new chime needs a new channel id.
+On Android the flight also has a Live Update while the parser watches it,
+from two hours before departure until 45 minutes after landing: an ongoing,
+silent notification (channel "Flight progress"), which Android 16 and later
+promote to a chip in the status bar showing the most useful thing now: the
+terminal and gate before it leaves ("T3 G28", whichever is known, a value
+that names itself such as "B12" left bare, the departure time before either
+is known), the landing time in the air ("Lands 15:10"), and the carousel
+once landed ("Bags 16", else the arrival gate). Its line says the same in
+words ("Leaves 40 min late, at 09:40 · Departs from terminal 3, gate 28"),
+and a bar shows how far through the flight it is. After each scheduled or
+page-driven look in that window, news or not, the parser sends every phone
+of everyone on the flight a Cloud Messaging data message (`kind: "live"`)
+with the status and the person's own booking, high priority so Doze lets it
+through, collapsed per flight and held for a quarter of an hour, so a phone
+that was off gets only the newest; it moves on from gate to landing to bags
+without anything changing, and a failed send is not tried again, since the
+next look sends a newer one. The look that ends the watch (a
+cancellation, or a delay putting departure more than two hours off) sends
+one more, taking the Live Update down; otherwise it times out 45 minutes
+after landing. A swipe-away lasts until the flight is over, a delayed
+landing moving that later.
+The app draws it from the status (`liveFlight` in `:core`), and one swiped
+away stays away for that flight. Delays, gate changes and the rest still
+come as "Flight changes" alerts with the chime. The web has no equivalent.
 Push services hold flight news for an offline browser or phone for half
 an hour, not the day reminders get, since directions to a gate are no use
 once the flight has gone. When every browser and phone of a person failed

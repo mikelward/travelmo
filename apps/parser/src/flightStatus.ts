@@ -1,5 +1,6 @@
 import {
   flightCheckDue,
+  flightCheckInterval,
   flightRefreshDue,
   flightStatusKey,
   isCancelled,
@@ -18,7 +19,7 @@ import {
 } from "@travelmo/core";
 import type { Firestore } from "firebase-admin/firestore";
 import { lookupWindow, matchFlight, statusFromFlight, type FlightLookup } from "./aeroapi";
-import type { DeviceSender } from "./fcm";
+import type { DeviceSender, LiveSender } from "./fcm";
 import type { PushSender } from "./push";
 import type { StoredDevice, StoredSubscription } from "./reminders";
 
@@ -66,7 +67,8 @@ export type FlightIo = {
 // retry never gives a gate a later look has replaced.
 export type PendingNews = { id: string; uid: string; key: string; title: string; url: string; tag: string; attempts: number; at: string };
 
-export type FlightChannels = { push?: PushSender; fcm?: DeviceSender };
+// `live` sends phones the flight's Live Update after each look (fcm.ts).
+export type FlightChannels = { push?: PushSender; fcm?: DeviceSender; live?: LiveSender };
 
 export type FlightOptions = {
   lookup: FlightLookup;
@@ -85,6 +87,17 @@ export type FlightOptions = {
 };
 
 export type FlightRun = { flights: number; checked: number; notified: number; failed: number; capped: boolean };
+
+// Whether phones get the flight's Live Update after this look: while the
+// scheduled job watches it (from two hours before departure to 45 minutes
+// after landing), and once more when this look ends the watch (cancelled,
+// or a delay putting departure more than two hours off), so the phone
+// takes down what it shows. A look from an open trip page before the
+// watch begins sends none.
+export function liveUpdateDue(segment: Segment, before: FlightStatus | undefined, after: FlightStatus, now: string): boolean {
+  const watched = (status: FlightStatus | undefined) => Boolean(status?.found) && flightCheckInterval(segment, status, now) !== undefined;
+  return watched(after) || watched(before);
+}
 
 const current = (options: Pick<FlightOptions, "now" | "clock">): string => options.clock?.() ?? options.now;
 
@@ -155,8 +168,11 @@ export async function checkFlights(io: FlightIo, options: FlightOptions, only?: 
       run.checked += 1;
       if (!(await io.saveStatus(flight.key, before, after))) continue;
       const news = flightStatusNews(before, after, first);
-      if (!news.length) continue;
-      run.notified += await notify(io, options, flight, news, tripOf);
+      const live = Boolean(options.channels.live) && liveUpdateDue(first!, before, after, current(options));
+      if (!news.length && !live) continue;
+      const people = await recipients(io, options, flight, tripOf, news.length > 0);
+      if (news.length) run.notified += await notify(io, options, flight, news, people);
+      if (live) await sendLive(io, options, flight.key, after, people);
     } catch (error) {
       run.failed += 1;
       options.log("ERROR", "flight_status_failed", { key: flight.key, reason: (error as Error).message });
@@ -165,39 +181,47 @@ export async function checkFlights(io: FlightIo, options: FlightOptions, only?: 
   return run;
 }
 
-// The news goes to everyone whose trip holds the flight, once each: the
-// trips' owners and the people they are shared with, on every browser and
-// phone they turned notifications on for. Returns how many were reached.
-async function notify(
+// Who hears of a flight: the owners of the trips holding it and the
+// people they are shared with, once each with their own booking of it,
+// leaving out anyone who may not use the app. `logSkips` is false for a
+// look with only a Live Update to send, which comes every minute.
+async function recipients(
   io: FlightIo,
   options: FlightOptions,
   flight: Flight,
-  news: readonly string[],
   tripOf: (id: string) => Promise<Trip | undefined>,
-): Promise<number> {
-  const people = new Map<string, { segment: Segment }>();
+  logSkips: boolean,
+): Promise<Map<string, Segment>> {
+  const people = new Map<string, Segment>();
   for (const segment of flight.segments) {
     const trip = await tripOf(segment.tripId);
     if (!trip || trip.deleting) continue;
     const uids = [trip.ownerUid, ...(await Promise.all(trip.sharedWith.map((email) => io.uidForEmail(email))))];
-    for (const uid of uids) if (uid && !people.has(uid)) people.set(uid, { segment });
+    for (const uid of uids) if (uid && !people.has(uid)) people.set(uid, segment);
   }
-  let reached = 0;
-  for (const [uid, { segment }] of people) {
-    if (options.approved) {
-      let approved: boolean;
-      try {
-        approved = await options.approved(uid);
-      } catch (error) {
-        // Left out, as unapproved, rather than ending the run for the rest.
-        options.log("ERROR", "approval_check_failed", { uid, reason: (error as Error).message });
-        approved = false;
-      }
-      if (!approved) {
-        options.log("INFO", "flight_status_skipped_unapproved", { uid, key: flight.key });
-        continue;
-      }
+  if (!options.approved) return people;
+  for (const uid of [...people.keys()]) {
+    let approved: boolean;
+    try {
+      approved = await options.approved(uid);
+    } catch (error) {
+      // Left out, as unapproved, rather than ending the run for the rest.
+      options.log("ERROR", "approval_check_failed", { uid, reason: (error as Error).message });
+      approved = false;
     }
+    if (approved) continue;
+    people.delete(uid);
+    if (logSkips) options.log("INFO", "flight_status_skipped_unapproved", { uid, key: flight.key });
+  }
+  return people;
+}
+
+// The news goes to everyone whose trip holds the flight, once each, on
+// every browser and phone they turned notifications on for. Returns how
+// many were reached.
+async function notify(io: FlightIo, options: FlightOptions, flight: Flight, news: readonly string[], people: Map<string, Segment>): Promise<number> {
+  let reached = 0;
+  for (const [uid, segment] of people) {
     const notification: ReminderNotification = {
       title: segment.title,
       body: news.join("\n"),
@@ -219,6 +243,31 @@ async function notify(
     }
   }
   return reached;
+}
+
+// The Live Update goes to every phone of everyone on the flight. A failed
+// send is not tried again: the next look, a minute or a quarter of an hour
+// on, sends a newer one.
+async function sendLive(io: FlightIo, options: FlightOptions, key: string, status: FlightStatus, people: Map<string, Segment>): Promise<void> {
+  const send = options.channels.live!;
+  for (const [uid, segment] of people) {
+    const update = {
+      key,
+      status,
+      booking: { title: segment.title, start: segment.start, ...(segment.end ? { end: segment.end } : {}), ...(segment.destination ? { destination: segment.destination } : {}) },
+      url: `${options.origin}/trips/${segment.tripId}`,
+    };
+    for (const { id, device } of await io.devices(uid)) {
+      try {
+        if ((await send(device, update)) === "gone") {
+          await io.removeDevice(uid, id);
+          options.log("INFO", "push_device_gone", { uid, id });
+        }
+      } catch (error) {
+        options.log("WARNING", "flight_live_update_failed", { uid, id, key, reason: (error as Error).message });
+      }
+    }
+  }
 }
 
 const pendingId = (key: string, uid: string) => `${key}__${uid}`;

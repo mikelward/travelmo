@@ -1,6 +1,7 @@
 package app.travelmo.notify
 
 import app.travelmo.TravelmoApplication
+import app.travelmo.core.liveFlightMessage
 import app.travelmo.log.TravelmoLog
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -10,13 +11,18 @@ import kotlinx.coroutines.runBlocking
 /**
  * Cloud Messaging's callbacks. The parser sends data messages (the kind
  * Messaging queues one by one for an offline phone), so every reminder
- * arrives here, in front or not, and is drawn from its data; a refreshed
+ * arrives here, in front or not, and is drawn from its data (a flight's Live
+ * Update by [LiveFlightNotifications]); a refreshed
  * token replaces the one registered under the signed-in user, so the parser
  * keeps reaching this phone.
  */
 class ReminderMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
+        liveFlightMessage(data)?.let {
+            LiveFlightNotifications.show(this, it)
+            return
+        }
         val title = data["title"]
         val body = data["body"]
         if (title == null || body == null) {

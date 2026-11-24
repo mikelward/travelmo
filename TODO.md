@@ -304,6 +304,14 @@
 - [x] Live flight updates, second part: delays, cancellations and
       diversions on the flight's card and as notifications, from the same
       AeroAPI polling.
+- [x] Live flight updates, third part: an Android Live Update per flight,
+      from two hours before departure to 45 minutes after landing, its
+      status-bar chip the terminal and gate ("T3 G28"), the landing time or
+      the carousel, sent after every look (no extra AeroAPI calls).
+- [ ] Maybe: switch the Live Update's chip from terminal to gate by where
+      the phone is (at the airport or not). Needs background location
+      ("Allow all the time") and Play's location declaration; "T3 G28"
+      shows both meanwhile.
 - [x] Approve sign-ups by hand: a new account waits until an admin
       approves it (Firestore rules and the parser refuse its writes and
       imports meanwhile; trips shared with it stay readable), the admin is
