@@ -77,14 +77,12 @@ import app.travelmo.shared.invite_only_requested
 import app.travelmo.shared.invite_only_unverified
 import app.travelmo.shared.invited_elsewhere
 import app.travelmo.shared.loading
-import app.travelmo.shared.request_access
 import app.travelmo.shared.revoke
 import app.travelmo.shared.send_link
 import app.travelmo.shared.sign_out
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
-private const val REQUEST_TOKEN = "access/request"
 private const val LINK_TOKEN = "access/link"
 private const val INVITE_TOKEN = "access/invite"
 private const val DECIDE_TOKEN = "access/decide/"
@@ -92,8 +90,9 @@ private const val DELETE_ACCOUNT_TOKEN = "access/account/delete"
 
 /**
  * What a signed-in account sees until it is approved (SPEC "Access"), as the
- * web's RequestAccess: Request access for one that never asked, where its
- * request stands otherwise, "Invited at another address?" while it waits,
+ * web's RequestAccess: nobody may ask for access, so it says to ask someone
+ * to share a trip, or where an earlier request stands; "Invited at another
+ * address?" while it waits,
  * Sign out and Delete account (Settings, where accounts are otherwise
  * deleted, needs access). It follows the access record live, so an approval
  * opens the app here.
@@ -102,11 +101,8 @@ private const val DELETE_ACCOUNT_TOKEN = "access/account/delete"
 fun InviteOnlyScreen(account: GoogleAccount, viewModel: TripsViewModel, status: AccountAccess) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
-    val requesting = outcomes[REQUEST_TOKEN]
     val email = viewModel.verifiedEmail
     val waiting = status == AccountAccess.NONE || status == AccountAccess.REQUESTED
-    LaunchedEffect(requesting) { if (requesting is Outcome.Done) viewModel.outcomeSeen(REQUEST_TOKEN) }
     Surface(modifier = Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
             val scroll = rememberScrollState()
@@ -131,16 +127,6 @@ fun InviteOnlyScreen(account: GoogleAccount, viewModel: TripsViewModel, status: 
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(top = 8.dp),
                     )
-                    if (email != null && status == AccountAccess.NONE) {
-                        Button(
-                            onClick = { viewModel.requestAccess(REQUEST_TOKEN) },
-                            enabled = requesting !is Outcome.Busy,
-                            modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
-                        ) { Text(stringResource(Res.string.request_access)) }
-                    }
-                    (requesting as? Outcome.Failed)?.let {
-                        Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 16.dp))
-                    }
                     if (email != null && waiting && viewModel.canLinkEmails) InvitedElsewhere(viewModel)
                     TextButton(onClick = { scope.launch { account.signOut(context) } }, modifier = Modifier.padding(top = 16.dp)) {
                         Text(stringResource(Res.string.sign_out))

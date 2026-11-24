@@ -5,7 +5,6 @@ import {
   AccessRecord,
   accessDecision,
   accessInvite,
-  accessRequest,
   accessStatus,
   linkedEmails,
   paths,
@@ -119,11 +118,6 @@ export function useAccess(user: User | null | undefined): Access {
   const admins = config.value?.admins ?? [];
   const admin = admins.some((address) => address === email || linked.includes(address));
   return { state: status, admin, admins, hasProfile, ...(recordSeen.value ? { record: recordSeen.value } : {}) };
-}
-
-// Asking for access, for the signed-in address.
-export async function requestAccess(db: Firestore, email: string, uid: string, now: string): Promise<void> {
-  await setDoc(doc(db, paths.access(email)), accessRequest(email, uid, now));
 }
 
 // An account from before approvals records itself once, so it shows on the

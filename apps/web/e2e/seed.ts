@@ -210,6 +210,11 @@ export async function setAdmins(admins: string[]): Promise<void> {
   await db.doc(paths.accessConfig()).set({ admins });
 }
 
+// A request for access made before nobody could ask.
+export async function seedAccessRequest(email: string): Promise<void> {
+  await db.doc(paths.access(email)).set({ email, status: "requested", uid: `uid-${email}`, requestedAt: "2026-11-20T00:00:00Z" });
+}
+
 // The user's reminders before trips, by slot, as stored.
 export async function seedTripReminder(uid: string, slot: string, reminder: Record<string, unknown>): Promise<void> {
   await db.doc(paths.tripReminder(uid, slot)).set({ createdAt: "2026-11-01T00:00:00Z", ...reminder });

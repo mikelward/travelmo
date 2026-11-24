@@ -372,7 +372,7 @@ service cloud.firestore {
     }
 
     // Who may use the app, one record per lowercased verified email
-    // (packages/core/src/access.ts). The parser alone writes `notifiedAt`.
+    // (packages/core/src/access.ts).
     match /access/{email} {
       function isMine() {
         return signedIn() && verifiedEmail() && myEmail() == email;
@@ -390,19 +390,9 @@ service cloud.firestore {
       allow get: if isMine() || isAdmin();
       allow list: if isAdmin();
 
-      // Asking for access: one's own address, only as a request, and again
-      // only while the request waits; a decision stands.
-      allow create: if active() && isMine()
-        && request.resource.data.keys().hasOnly(['email', 'status', 'uid', 'requestedAt'])
-        && request.resource.data.email == email
-        && request.resource.data.status == 'requested'
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.requestedAt is string;
-      allow update: if active() && isMine()
-        && resource.data.get('status', '') == 'requested'
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid', 'requestedAt'])
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.requestedAt is string;
+      // Nobody asks for access: Travelmo is invite-only (an admin's invite
+      // or someone sharing with the address, below). Requests made before
+      // that stay readable and decidable, but none is made or renewed.
 
       // An account from before approvals records itself, so admins see it
       // and can revoke it.

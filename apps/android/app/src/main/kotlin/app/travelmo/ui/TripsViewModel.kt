@@ -356,15 +356,6 @@ class TripsViewModel(
     val accessLists: StateFlow<AccessLists?> = store.accessRecords().map { records -> records?.let(::accessLists) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    /** Asks for access for the verified sign-in, then has the parser tell the admins, as the web's invite-only page does. */
-    fun requestAccess(token: String) {
-        val email = verifiedEmail ?: return
-        run(token, "requestAccess", failure = "Couldn't send your request. Try again.") {
-            store.requestAccess(email, uid, clock().toString())
-            accessCheck.check()
-        }
-    }
-
     /** An admin's decision: approve, decline or revoke [address]. */
     fun decideAccess(token: String, address: String, decision: AccountAccess) =
         run(token, "decideAccess", failure = "Couldn't save that for $address. Try again.") { store.decideAccess(address, decision, uid, clock().toString()) }

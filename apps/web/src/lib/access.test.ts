@@ -4,7 +4,7 @@ import type { User } from "firebase/auth";
 import { doc, getDoc, setDoc, type Firestore } from "firebase/firestore";
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { decideAccess, recordSelf, requestAccess, shareTrip } from "./access";
+import { decideAccess, recordSelf, shareTrip } from "./access";
 import { saveTrusted } from "./travelProfile";
 
 // The Access workflows as the browser runs them, against the emulator with
@@ -56,13 +56,10 @@ beforeEach(async () => {
   });
 });
 
-describe("requestAccess", () => {
-  it("asks for the signed-in address, and the admin's approval lets the account in", async () => {
-    await requestAccess(as(newcomer), newcomer.email, newcomer.uid, now);
-    expect(await recordOf(newcomer.email)).toEqual({ email: newcomer.email, status: "requested", uid: newcomer.uid, requestedAt: now });
-    await assertFails(setDoc(doc(as(newcomer), paths.user(newcomer.uid)), { email: newcomer.email }));
-    await decideAccess(as(admin), newcomer.email, "approved", admin.uid, now);
-    expect(await recordOf(newcomer.email)).toMatchObject({ status: "approved", approvedBy: admin.uid, requestedAt: now });
+describe("a request from before invite-only", () => {
+  it("can no longer be made, but one already waiting can be approved", async () => {
+    await assertFails(setDoc(doc(as(newcomer), paths.access(newcomer.email)), { email: newcomer.email, status: "requested", uid: newcomer.uid, requestedAt: now }));
+    await setDoc(doc(as(admin), paths.access(newcomer.email)), { email: newcomer.email, status: "approved", approvedBy: admin.uid, approvedAt: now });
     await setDoc(doc(as(newcomer), paths.user(newcomer.uid)), { email: newcomer.email });
   });
 });

@@ -51,17 +51,14 @@ class AccessScreensTest {
     }
 
     @Test
-    fun `an account that never asked asks, and is told its request is sent`() {
+    fun `a new account cannot ask for access, and is told to ask someone to share a trip`() {
         val store = FakeTripStore(access = emptyMap(), hasUserDocument = false)
         showInviteOnly(newcomerModel(store))
         composeRule.onNodeWithText("Travelmo is invite-only").assertExists()
-        composeRule.onNodeWithText("You're signed in as $newcomer. Ask for access, or ask someone who uses Travelmo to share a trip with you.").assertExists()
-        composeRule.onNodeWithText("Request access").performClick()
-        composeRule.waitForIdle()
-        store.accessFields.value[newcomer] shouldBe accessRequest(newcomer, "u-new", FROZEN_NOW)
-        composeRule.onNodeWithText("Request sent. Travelmo opens here once it's approved.").assertExists()
+        composeRule.onNodeWithText("You're signed in as $newcomer. Ask someone who uses Travelmo to share a trip with you.").assertExists()
         composeRule.onNodeWithText("Request access").assertDoesNotExist()
         composeRule.onNodeWithText("Invited at another address?").performScrollTo()
+        store.accessWrites shouldBe emptyList()
     }
 
     @Test

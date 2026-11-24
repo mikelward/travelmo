@@ -738,30 +738,19 @@ describe("access", () => {
     expect(own.exists()).toBe(false);
   });
 
-  it("lets an account ask for access for its own verified address, only as a request", async () => {
+  it("lets nobody ask for access: Travelmo is invite-only", async () => {
     const db = as(newcomer);
+    await assertFails(setDoc(doc(db, record(newcomer.email)), request));
     await assertFails(setDoc(doc(db, record(newcomer.email)), { ...request, status: "approved" }));
-    await assertFails(setDoc(doc(db, record(newcomer.email)), { ...request, notifiedAt: at }));
-    await assertFails(setDoc(doc(db, record(stranger.email)), { ...request, email: stranger.email }));
-    await assertFails(setDoc(doc(db, record(newcomer.email)), { ...request, uid: stranger.uid }));
-    await assertFails(setDoc(doc(as(newcomer, false), record(newcomer.email)), request));
-    await assertSucceeds(setDoc(doc(db, record(newcomer.email)), request));
+    // A request from before stays readable to its account, but is not renewed.
+    await seedRecord(newcomer.email, { status: "requested", uid: newcomer.uid, requestedAt: at });
     await assertSucceeds(getDoc(doc(db, record(newcomer.email))));
-    // Asking again while it waits is fine; approving oneself is not.
-    await assertSucceeds(updateDoc(doc(db, record(newcomer.email)), { requestedAt: "2026-11-24T00:00:00Z" }));
+    await assertFails(updateDoc(doc(db, record(newcomer.email)), { requestedAt: "2026-11-24T00:00:00Z" }));
     await assertFails(updateDoc(doc(db, record(newcomer.email)), { status: "approved" }));
-    await assertFails(updateDoc(doc(db, record(newcomer.email)), { invitedBy: newcomer.uid, invitedAt: at }));
     // Nobody but admins reads anyone else's record or lists them.
     await assertFails(getDoc(doc(as(owner), record(newcomer.email))));
     await assertFails(getDocs(collection(as(owner), paths.accessRecords())));
-    // Still refused everything else while it waits.
     await assertFails(setDoc(doc(db, paths.user(newcomer.uid)), { email: newcomer.email }));
-  });
-
-  it("keeps a decision: a declined address cannot ask again", async () => {
-    await seedRecord(newcomer.email, { status: "declined", uid: newcomer.uid, requestedAt: at, declinedBy: admin.uid, declinedAt: at });
-    await assertFails(setDoc(doc(as(newcomer), record(newcomer.email)), request));
-    await assertFails(updateDoc(doc(as(newcomer), record(newcomer.email)), { status: "requested", requestedAt: at }));
   });
 
   it("lets an admin approve a request, after which the account may use the app", async () => {

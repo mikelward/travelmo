@@ -26,7 +26,6 @@ import app.travelmo.core.AddressHolder
 import app.travelmo.core.accessDecision
 import app.travelmo.core.accessInvite
 import app.travelmo.core.accessRecordOf
-import app.travelmo.core.accessRequest
 import app.travelmo.core.accessSelfApproval
 import app.travelmo.data.Seen
 import app.travelmo.core.FlightStatus
@@ -260,10 +259,6 @@ class FakeTripStore(
 
     /** Every access write's address, in order. */
     val accessWrites = mutableListOf<String>()
-    override suspend fun requestAccess(email: String, uid: String, now: String) {
-        accessWrites += email
-        write(email, accessRequest(email, uid, now), merge = false)
-    }
     override suspend fun recordSelf(email: String, uid: String, now: String) {
         accessWrites += email
         write(email, accessSelfApproval(email, uid, now), merge = false)
