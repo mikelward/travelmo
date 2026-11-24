@@ -99,6 +99,7 @@ export function SegmentRow({
   onNeverSender,
   moveTargets,
   onMove,
+  onMoveToNew,
   emailLinks,
   programs,
   onRate,
@@ -114,6 +115,7 @@ export function SegmentRow({
   onNeverSender?: () => void;
   moveTargets?: Trip[];
   onMove?: (tripId: string) => void;
+  onMoveToNew?: () => void;
   emailLinks?: EmailLinks;
   // The viewer's loyalty programs this booking's provider belongs to.
   programs?: readonly ProfileEntry[];
@@ -195,6 +197,7 @@ export function SegmentRow({
         {...(onDelete ? { onDelete } : {})}
         {...(moveTargets ? { moveTargets } : {})}
         {...(onMove ? { onMove } : {})}
+        {...(onMoveToNew ? { onMoveToNew } : {})}
         {...(emailLinks ? { emailLinks } : {})}
         {...(onLearnSender ? { onLearnSender } : {})}
         {...(onNeverSender ? { onNeverSender } : {})}

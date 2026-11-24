@@ -12,7 +12,7 @@ import { SegmentRow } from "@/components/SegmentRow";
 import { Dialog } from "@/components/BookingMenu";
 import { hideRideNeed } from "@/lib/rides";
 import { SignInGate } from "@/components/SignInGate";
-import { deleteSegment, deleteTrip, favoriteSegment, fitTripDates, mergeTrips, moveSegment, rateSegment, renameTrip, restoreSegment, saveSegment } from "@/lib/edits";
+import { deleteSegment, deleteTrip, favoriteSegment, fitTripDates, mergeTrips, moveSegment, moveSegmentToNewTrip, rateSegment, renameTrip, restoreSegment, saveSegment } from "@/lib/edits";
 import { shareTrip } from "@/lib/access";
 import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
@@ -384,6 +384,8 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
     .sort((a, b) => a.start.localeCompare(b.start));
   const move = (segment: Segment, toTripId: string) =>
     moveSegment(firestore(), trip.id, segment.id, toTripId).catch((e: Error) => setError(e.message));
+  const moveToNew = (segment: Segment) =>
+    moveSegmentToNewTrip(firestore(), trip.id, segment.id, user.uid).catch((e: Error) => setError(e.message));
   // Sender rules are the viewer's own, so the offer stands for the owner only:
   // the import ran against their mailbox.
   const learn = (segment: Segment) =>
@@ -459,6 +461,8 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
                             onDelete: () => remove(segment),
                             moveTargets: otherTrips,
                             onMove: (toTripId: string) => move(segment, toTripId),
+                            // Only the owner: a sharee's new trip would take the booking from the owner's sight.
+                            ...(isOwner ? { onMoveToNew: () => void moveToNew(segment) } : {}),
                           }
                         : {})}
                       {...(learn(segment) ? { onLearnSender: learn(segment) } : {})}

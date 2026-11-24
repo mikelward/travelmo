@@ -1,4 +1,4 @@
-import { Segment, Trip, bookedDateRange, displayBounds, liveBounds, paths, segmentDateRange, type ExtractedSegment } from "@travelmo/core";
+import { Segment, Trip, bookedDateRange, displayBounds, liveBounds, newTripTitle, paths, segmentDateRange, type ExtractedSegment } from "@travelmo/core";
 import {
   arrayUnion,
   collection,
@@ -6,8 +6,10 @@ import {
   deleteField,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
   runTransaction,
+  setDoc,
   updateDoc,
   writeBatch,
   type Firestore,
@@ -254,6 +256,54 @@ export async function moveSegment(db: Firestore, fromTripId: string, segmentId: 
     t.update(toRef, { ...widened(target, range, live), updatedAt: timestamp });
     t.update(fromRef, { updatedAt: timestamp });
   });
+}
+
+// Moves a booking into a trip of its own, made for it: owned by the viewer,
+// named after where the booking goes (newTripTitle), over its dates, and
+// shared as the trip it leaves when the viewer owns that one (a sharee's
+// new trip is their own). The rules check a booking against its trip as it
+// already is, so the trip is made first and then the booking moved; a move
+// that fails takes the empty trip away again. Returns the new trip's id.
+export async function moveSegmentToNewTrip(db: Firestore, fromTripId: string, segmentId: string, uid: string): Promise<string> {
+  const [from, current] = await Promise.all([getDoc(doc(db, paths.trip(fromTripId))), getDoc(doc(db, paths.segment(fromTripId, segmentId)))]);
+  if (!from.exists()) throw new Error("Trip no longer exists");
+  if (!current.exists()) throw new Error("That booking is no longer in this trip");
+  const source = Trip.parse(from.data());
+  const segment = Segment.parse(current.data());
+  const range = bookedDateRange([segment]);
+  if (!range) throw new Error("That booking has no dates");
+  const ref = doc(collection(db, paths.trips()));
+  const timestamp = now();
+  const created: Trip = {
+    id: ref.id,
+    title: newTripTitle(segment),
+    start: range.start,
+    end: range.end,
+    ownerUid: uid,
+    sharedWith: source.ownerUid === uid ? source.sharedWith : [],
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  try {
+    await setDoc(ref, created);
+    await moveSegment(db, fromTripId, segmentId, ref.id);
+  } catch (error) {
+    // A transaction can commit and still report a failure (its answer lost
+    // on the way back), so the trip goes only once the booking is known not
+    // to be in it; when that can't be told, it stays rather than orphan it.
+    try {
+      if ((await getDocFromServer(doc(db, paths.segment(ref.id, segmentId)))).exists()) {
+        console.error("Moving a booking to a new trip reported a failure, but the booking is there; keeping the trip", error);
+      } else {
+        console.error("Moving a booking to a new trip failed; removing the empty trip", error);
+        await deleteDoc(ref);
+      }
+    } catch (cleanup) {
+      console.error("Checking or removing the new trip failed; it stays", cleanup);
+    }
+    throw error;
+  }
+  return ref.id;
 }
 
 // Moves every booking of `sourceId` into `targetId` and deletes the source

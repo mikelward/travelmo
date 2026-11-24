@@ -104,6 +104,7 @@ import app.travelmo.core.formatDate
 import app.travelmo.core.formatDateRange
 import app.travelmo.core.isCancelled
 import app.travelmo.core.loyaltyLine
+import app.travelmo.core.nearbyTrips
 import app.travelmo.core.otherTrips
 import app.travelmo.core.programsFor
 import app.travelmo.core.referenceLine
@@ -143,7 +144,9 @@ import app.travelmo.shared.keep
 import app.travelmo.shared.merge_into
 import app.travelmo.shared.merge_text
 import app.travelmo.shared.merge_title
+import app.travelmo.shared.more_trips
 import app.travelmo.shared.move_booking_title
+import app.travelmo.shared.new_trip
 import app.travelmo.shared.move_to
 import app.travelmo.shared.only_you
 import app.travelmo.shared.open_in_gmail
@@ -307,7 +310,19 @@ fun TripDetailScreen(
             )
         }
         moving?.let { segment ->
-            MoveDialog(segment, targets, onDismiss = { moving = null }) { target ->
+            MoveDialog(
+                segment,
+                targets,
+                onDismiss = { moving = null },
+                onMoveToNew = if (isOwner) {
+                    {
+                        moving = null
+                        viewModel.moveSegmentToNewTrip("${prefix}segment/${segment.id}/move", tripId, segment.id)
+                    }
+                } else {
+                    null
+                },
+            ) { target ->
                 moving = null
                 viewModel.moveSegment("${prefix}segment/${segment.id}/move", tripId, segment.id, target.id)
             }
@@ -333,7 +348,8 @@ fun TripDetailScreen(
                     BookingActions(
                         onEdit = { onEditBooking(it.id) },
                         onDelete = { deleting = it },
-                        onMove = if (targets.isEmpty()) null else { segment -> moving = segment },
+                        // A new trip only for the owner: a sharee's would take the booking from the owner's sight.
+                        onMove = if (targets.isEmpty() && !isOwner) null else { segment -> moving = segment },
                         onRestore = { segment -> viewModel.restoreSegment("${prefix}segment/${segment.id}/restore", tripId, segment.id) },
                     )
                 } else {
@@ -620,17 +636,29 @@ private fun RenameDialog(current: String, onDismiss: () -> Unit, onRename: (Stri
     )
 }
 
-/** The trips a booking can move to, one tap each. */
+/** Where a booking can move, one tap each: a new trip first, then the trips around its dates, the rest behind More. */
 @Composable
-private fun MoveDialog(segment: Segment, targets: List<Trip>, onDismiss: () -> Unit, onMove: (Trip) -> Unit) {
+private fun MoveDialog(segment: Segment, targets: List<Trip>, onDismiss: () -> Unit, onMoveToNew: (() -> Unit)?, onMove: (Trip) -> Unit) {
+    var all by rememberSaveable(segment.id) { mutableStateOf(false) }
+    val shown = if (all) targets else nearbyTrips(targets, segment)
     AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(Res.string.move_booking_title, segment.title)) },
         text = {
             // A long travel history scrolls rather than running off the dialog.
             LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
-                items(targets, key = { it.id }) { t ->
+                if (onMoveToNew != null) {
+                    item(key = "new") {
+                        Text(stringResource(Res.string.new_trip), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.fillMaxWidth().clickable { onMoveToNew() }.padding(vertical = 12.dp))
+                    }
+                }
+                items(shown, key = { it.id }) { t ->
                     Text(tripChoice(t), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.fillMaxWidth().clickable { onMove(t) }.padding(vertical = 12.dp))
+                }
+                if (shown.size < targets.size) {
+                    item(key = "more") {
+                        TextButton(onClick = { all = true }, modifier = Modifier.offset(x = -TextButtonInset)) { Text(stringResource(Res.string.more_trips)) }
+                    }
                 }
             }
         },

@@ -1,15 +1,25 @@
 import { assertFails, initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
 import { paths, type ExtractedSegment, type Segment, type Trip } from "@travelmo/core";
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, type Firestore } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where, type Firestore } from "firebase/firestore";
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { deleteSegment, deleteTrip, deleteTripIfOnly, favoriteSegment, fitTripDates, mergeTrips, moveSegment, rateSegment, renameTrip, restoreSegment, saveSegment } from "./edits";
+import { deleteSegment, deleteTrip, deleteTripIfOnly, favoriteSegment, fitTripDates, mergeTrips, moveSegment, moveSegmentToNewTrip, rateSegment, renameTrip, restoreSegment, saveSegment } from "./edits";
 
 // A switch to make reading a collection fail, as when the connection drops.
 const failReads = vi.hoisted(() => ({ on: false }));
+// And one to make a transaction commit but report a failure, as when its answer is lost.
+const lostAnswer = vi.hoisted(() => ({ on: false }));
 vi.mock("firebase/firestore", async (importOriginal) => {
   const real = await importOriginal<typeof import("firebase/firestore")>();
-  return { ...real, getDocs: ((q: Parameters<typeof real.getDocs>[0]) => (failReads.on ? Promise.reject(new Error("offline")) : real.getDocs(q))) as typeof real.getDocs };
+  return {
+    ...real,
+    getDocs: ((q: Parameters<typeof real.getDocs>[0]) => (failReads.on ? Promise.reject(new Error("offline")) : real.getDocs(q))) as typeof real.getDocs,
+    runTransaction: (async (...args: Parameters<typeof real.runTransaction>) => {
+      const result = await real.runTransaction(...args);
+      if (lostAnswer.on) throw new Error("unavailable");
+      return result;
+    }) as unknown as typeof real.runTransaction,
+  };
 });
 
 // Runs inside `firebase emulators:exec` with the real rules loaded, so these
@@ -362,6 +372,44 @@ describe("moveSegment", () => {
     await seed((db) => setDoc(doc(db, paths.trip(other.id)), { ...other, sharedWith: [partner.email] }));
     await moveSegment(as(partner), trip.id, imported.id, other.id);
     expect(await segmentIds(other.id)).toEqual([imported.id]);
+  });
+});
+
+describe("moveSegmentToNewTrip", () => {
+  const ownedBy = async (uid: string, db: Firestore) =>
+    (await getDocs(query(collection(db, paths.trips()), where("ownerUid", "==", uid)))).docs.map((d) => d.data() as Trip);
+
+  it("makes a trip for the booking, named for where it goes and shared as the trip it left", async () => {
+    const id = await moveSegmentToNewTrip(asOwner(), trip.id, imported.id, owner.uid);
+    expect(await segmentIds(trip.id)).toEqual([]);
+    expect(await segmentIds(id)).toEqual([imported.id]);
+    const made = (await getDoc(doc(asOwner(), paths.trip(id)))).data();
+    expect(made).toMatchObject({ id, title: "Liverpool", start: "2026-12-12", end: "2026-12-14", ownerUid: owner.uid, sharedWith: [partner.email] });
+  });
+
+  it("gives a sharee a trip of their own", async () => {
+    const id = await moveSegmentToNewTrip(as(partner), trip.id, imported.id, partner.uid);
+    const made = (await getDoc(doc(as(partner), paths.trip(id)))).data();
+    expect(made).toMatchObject({ ownerUid: partner.uid, sharedWith: [] });
+    expect((await getDoc(doc(as(partner), paths.segment(id, imported.id)))).data()).toMatchObject({ tripId: id });
+  });
+
+  it("keeps the new trip when the move landed but reported a failure", async () => {
+    lostAnswer.on = true;
+    try {
+      await expect(moveSegmentToNewTrip(asOwner(), trip.id, imported.id, owner.uid)).rejects.toThrow(/unavailable/);
+    } finally {
+      lostAnswer.on = false;
+    }
+    const made = (await ownedBy(owner.uid, asOwner())).filter((t) => t.id !== trip.id && t.id !== other.id);
+    expect(made).toHaveLength(1);
+    expect(await segmentIds(made[0]!.id)).toEqual([imported.id]);
+  });
+
+  it("leaves no empty trip behind when the move fails", async () => {
+    await seed((db) => setDoc(doc(db, paths.trip(trip.id)), { ...trip, deleting: true }));
+    await expect(moveSegmentToNewTrip(asOwner(), trip.id, imported.id, owner.uid)).rejects.toThrow(/being deleted/);
+    expect((await ownedBy(owner.uid, asOwner())).map((t) => t.id).sort()).toEqual([trip.id, other.id]);
   });
 });
 

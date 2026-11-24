@@ -188,9 +188,28 @@ test("a booking's menu copies its reference and moves it to another trip", async
   await expect(page.getByRole("status")).toHaveText("Copied");
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("CV1234");
 
+  // New trip first, then the trips around the booking's dates, the rest behind More.
+  await seedTrip(ownerUid, "e2e-near", {}, { title: "Chester", start: "2026-12-20", end: "2026-12-21" });
   await bookingAction(page, "Move to another trip…");
-  await page.getByRole("dialog", { name: "Move to another trip" }).getByRole("button", { name: /Manchester/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Move to another trip" });
+  await expect(dialog.getByRole("button")).toHaveText(["New trip", /^Chester/, "More…", "Close"]);
+  await dialog.getByRole("button", { name: "More…" }).click();
+  await expect(dialog.getByRole("button")).toHaveText(["New trip", /^Chester/, /^Manchester/, "Close"]);
+  await dialog.getByRole("button", { name: /Manchester/ }).click();
   await expect.poll(async () => (await readSegments("e2e-other")).map((s) => s.title).sort()).toEqual(["Cove Liverpool", "Cove Liverpool"]);
+});
+
+test("a booking moved to a new trip gets a trip of its own", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  await seedTrip(ownerUid, "e2e-trip");
+  await seedFlight("e2e-trip");
+  await page.goto("/trips/e2e-trip");
+  await expect(page.getByText("Cove Liverpool", { exact: true })).toBeVisible();
+  await bookingAction(page, "Move to another trip…");
+  await page.getByRole("dialog", { name: "Move to another trip" }).getByRole("button", { name: "New trip" }).click();
+  await expect(page.getByText("Cove Liverpool", { exact: true })).toHaveCount(0);
+  await page.goto("/");
+  await expect(page.getByRole("link", { name: /^Liverpool/ })).toHaveCount(2);
 });
 
 test("never importing a sender offers to delete what it already imported", async ({ page }) => {

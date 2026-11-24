@@ -261,6 +261,30 @@ class SegmentRowTest {
     }
 
     @Test
+    fun `moving a booking offers a new trip first and the trips around its dates with the rest behind More`() {
+        val store = FakeTripStore()
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent {
+            TravelmoTheme {
+                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithContentDescription("Booking actions")[1].performClick()
+        composeRule.onNodeWithText("Move to another trip…").performClick()
+        composeRule.onNodeWithText("New trip").assertExists()
+        // Dublin ends ten days before the stay; Lisbon is months away.
+        composeRule.onNodeWithText("Dublin", substring = true).assertExists()
+        composeRule.onNodeWithText("Lisbon", substring = true).assertDoesNotExist()
+        composeRule.onNodeWithText("More…").performClick()
+        composeRule.onNodeWithText("Lisbon", substring = true).assertExists()
+        composeRule.onNodeWithText("More…").assertDoesNotExist()
+        composeRule.onNodeWithText("New trip").performClick()
+        composeRule.waitForIdle()
+        store.movedToNew shouldBe listOf(Triple("liverpool", "l-stay", OWNER))
+    }
+
+    @Test
     fun `never importing a sender from the trip page offers to delete what it already imported`() {
         // A trip of nothing but another stay from the stay's sender.
         val stay = fixtureSegments.getValue("liverpool").single { it.id == "l-stay" }

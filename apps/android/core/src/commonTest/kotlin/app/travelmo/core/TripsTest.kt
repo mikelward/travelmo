@@ -123,4 +123,28 @@ class TripsTest {
         )
         otherTrips(trips, "me").map { it.id } shouldBe listOf("a", "b")
     }
+
+    @Test
+    fun `nearby trips are those within two weeks of the booking's dates`() {
+        val stay = Segment("s", "t", SegmentType.LODGING, "Hotel Example", "2026-12-10T15:00:00+01:00", "2026-12-12T11:00:00+01:00")
+        val trips = listOf(
+            trip("weeks-before", "2026-11-01", "2026-11-20"),
+            trip("just-before", "2026-11-20", "2026-11-26"),
+            trip("overlapping", "2026-12-11", "2026-12-15"),
+            trip("just-after", "2026-12-26", "2026-12-30"),
+            trip("next-year", "2027-03-01", "2027-03-05"),
+        )
+        nearbyTrips(trips, stay).map { it.id } shouldBe listOf("just-before", "overlapping", "just-after")
+        // By when a cancelled booking was, and the dates a trip is shown with.
+        val shrunk = trip("shrunk", "2026-11-01", "2026-12-20").copy(liveStart = "2026-11-01", liveEnd = "2026-11-05")
+        nearbyTrips(listOf(shrunk, trips[2]), stay.copy(cancelledAt = "2026-11-01T00:00:00Z")).map { it.id } shouldBe listOf("overlapping")
+    }
+
+    @Test
+    fun `a new trip is named after where the booking goes else its title`() {
+        val flight = Segment("f", "t", SegmentType.FLIGHT, "EK 18 MAN to DXB", "2026-12-13T09:00:00+00:00", destination = Place("Dubai International", "DXB", "Dubai"))
+        newTripTitle(flight) shouldBe "Dubai"
+        newTripTitle(flight.copy(destination = Place("Hotel Example"))) shouldBe "Hotel Example"
+        newTripTitle(flight.copy(title = "Toy Story 5", destination = null)) shouldBe "Toy Story 5"
+    }
 }

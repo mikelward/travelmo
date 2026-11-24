@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { formatDateRange, isCancelled, segmentSources, sourceSearch, type Segment, type SourceRef, type Trip } from "@travelmo/core";
+import { formatDateRange, isCancelled, nearbyTrips, segmentSources, sourceSearch, type Segment, type SourceRef, type Trip } from "@travelmo/core";
 import { emailLinkFor, sourceKindLabels, type EmailLinks } from "@/lib/sourceLinks";
 
 const buttonClass = "rounded-lg border border-field px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-900";
@@ -125,26 +125,58 @@ function SourcesDialog({
   );
 }
 
-function MoveDialog({ targets, onMove, onClose }: { targets: Trip[]; onMove: (tripId: string) => void; onClose: () => void }) {
+// "New trip" first, then the trips around the booking's dates, the rest
+// behind "More…".
+function MoveDialog({
+  segment,
+  targets,
+  onMove,
+  onMoveToNew,
+  onClose,
+}: {
+  segment: Segment;
+  targets: Trip[];
+  onMove: (tripId: string) => void;
+  onMoveToNew?: () => void;
+  onClose: () => void;
+}) {
+  const nearby = nearbyTrips(targets, segment);
+  const [all, setAll] = useState(false);
+  const shown = all ? targets : nearby;
+  const choice = (key: string, label: ReactNode, onClick: () => void) => (
+    <li key={key}>
+      <button
+        type="button"
+        onClick={() => {
+          onClick();
+          onClose();
+        }}
+        className="w-full rounded-lg px-2 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-900"
+      >
+        {label}
+      </button>
+    </li>
+  );
   return (
     <Dialog title="Move to another trip" onClose={onClose}>
       <ul>
-        {targets.map((t) => (
-          <li key={t.id}>
-            <button
-              type="button"
-              onClick={() => {
-                onMove(t.id);
-                onClose();
-              }}
-              className="w-full rounded-lg px-2 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-900"
-            >
+        {onMoveToNew && choice("new", "New trip", onMoveToNew)}
+        {shown.map((t) =>
+          choice(
+            t.id,
+            <>
               {t.title}
               <span className="block text-xs text-muted">{formatDateRange(t.start, t.end)}</span>
-            </button>
-          </li>
-        ))}
+            </>,
+            () => onMove(t.id),
+          ),
+        )}
       </ul>
+      {!all && shown.length < targets.length && (
+        <button type="button" onClick={() => setAll(true)} className={`mt-2 ${buttonClass}`}>
+          More…
+        </button>
+      )}
     </Dialog>
   );
 }
@@ -162,6 +194,7 @@ export function BookingMenu({
   onDelete,
   moveTargets,
   onMove,
+  onMoveToNew,
   emailLinks,
   onLearnSender,
   onNeverSender,
@@ -173,6 +206,8 @@ export function BookingMenu({
   onDelete?: () => void;
   moveTargets?: Trip[];
   onMove?: (tripId: string) => void;
+  // Moves the booking into a trip made for it.
+  onMoveToNew?: () => void;
   emailLinks?: EmailLinks;
   onLearnSender?: () => void;
   onNeverSender?: () => void;
@@ -186,7 +221,7 @@ export function BookingMenu({
 
   const reference = segment.confirmation?.trim() || undefined;
   const hasSources = segmentSources(segment).length > 0 || !!segment.sender;
-  const canMove = !!onMove && !!moveTargets && moveTargets.length > 0;
+  const canMove = !!onMove && ((moveTargets?.length ?? 0) > 0 || !!onMoveToNew);
   const canRestore = !!onRestore && isCancelled(segment);
 
   const close = () => {
@@ -302,7 +337,9 @@ export function BookingMenu({
           onClose={closeDialog}
         />
       )}
-      {dialog === "move" && moveTargets && onMove && <MoveDialog targets={moveTargets} onMove={onMove} onClose={closeDialog} />}
+      {dialog === "move" && onMove && (
+        <MoveDialog segment={segment} targets={moveTargets ?? []} onMove={onMove} {...(onMoveToNew ? { onMoveToNew } : {})} onClose={closeDialog} />
+      )}
     </div>
   );
 }
