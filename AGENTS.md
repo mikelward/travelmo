@@ -118,6 +118,10 @@ Shared by every mikelward repo and the user-level agent config; canonical in mik
 
 ## Project
 
+- **Commands for the user**. Give commands, URLs and the like that work as pasted:
+  never placeholders. First find each value in the repo (production is project
+  `travelmo-13a7c`, region `us-east4`; see `apphosting.yaml`), and ask only for those
+  it lacks.
 - **Commands**. `pnpm install`, then `pnpm test`, `pnpm typecheck`, `pnpm lint`,
   `pnpm build` from the root; the rules tests start the Firestore emulator (JRE).
 - **Layout**. `apps/web` (Next.js, Firebase App Hosting), `apps/parser` (Cloud Run
