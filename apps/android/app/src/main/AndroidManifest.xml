@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Reminders as notifications, asked for by the switch in Settings. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- A flight's Live Update as a chip in the status bar (Android 16 and later). -->
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
 
     <application
         android:name=".TravelmoApplication"
@@ -50,6 +52,11 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <!-- Remembers a flight's Live Update swiped away, so later ones stay away. -->
+        <receiver
+            android:name=".notify.LiveFlightDismissedReceiver"
+            android:exported="false" />
     </application>
 
 </manifest>

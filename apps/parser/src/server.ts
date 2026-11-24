@@ -71,7 +71,7 @@ import { cachedGeocoder, defaultDailyLimit, firestoreGeocodeStore, googleGeocode
 import { firestoreBackfillScan, firestoreRetryStore, queueGeocodeBackfill, sweepGeocodeRetries } from "./geocodeSweep";
 import { smtpConfig, smtpMailer } from "./mail";
 import { isPng, sendBugReport } from "./bugReports";
-import { fcmSender } from "./fcm";
+import { fcmLiveSender, fcmSender } from "./fcm";
 import { pushConfig, webPushSender } from "./push";
 import { firestoreReminderIo, sendReminders } from "./reminders";
 import { firestoreChecklistIo, sendChecklistReminders, type ChecklistRun } from "./checklist";
@@ -1453,6 +1453,8 @@ const reminderChannels = {
   ...(vapid ? { push: webPushSender(vapid) } : {}),
   fcm: fcmSender(getMessaging(firebaseApp)),
 };
+// Flights' Live Updates, to phones only.
+const liveSender = fcmLiveSender(getMessaging(firebaseApp));
 // Reminders stop for anyone no longer approved.
 const allReminderIo = firestoreReminderIo(db, verifiedEmail, addresses);
 const reminderIo = {
@@ -1698,7 +1700,7 @@ const flightOptions = (): FlightOptions | undefined =>
     now: deps.now(),
     clock: deps.now,
     origin: webOrigin,
-    channels: { ...(reminderChannels.push ? { push: reminderChannels.push } : {}), fcm: reminderChannels.fcm },
+    channels: { ...(reminderChannels.push ? { push: reminderChannels.push } : {}), fcm: reminderChannels.fcm, live: liveSender },
     log: (level, event, fields) => log(level, event, fields),
     approved: (uid) => approvedUid(db, uid, verifiedEmail, log),
   };

@@ -153,4 +153,113 @@ class FlightStatusTest {
         shownFlightKeys(listOf(withOrigin, withOrigin.copy(id = "f2"), stay), "2026-12-12T21:00:00Z") shouldBe listOf("XX100_2026-12-13_SYD")
         shownFlightKeys(listOf(withOrigin), "2026-12-10T21:00:00Z") shouldBe emptyList<String>()
     }
+
+    // Live Updates: Android's own, not in packages/core.
+
+    @Test
+    fun liveUpdateShowsTheTerminalAndGateBeforeDeparture() {
+        val live = liveFlight(status(departureGate = "28", departureTerminal = "3"), flight, "2026-12-12T21:00:00Z")!!
+        live.chip shouldBe "T3 G28"
+        live.text shouldBe "Leaves at 09:00 · Departs from terminal 3, gate 28"
+        live.progress shouldBe 0
+        // 45 minutes after the scheduled landing.
+        live.endsAt shouldBe instantMillis("2026-12-13T08:15:00Z")
+    }
+
+    @Test
+    fun liveUpdateChipShowsWhicheverPlaceIsKnownAndAGateThatNamesItself() {
+        liveFlight(status(departureTerminal = "3"), flight, "2026-12-12T21:00:00Z")!!.chip shouldBe "T3"
+        liveFlight(status(departureGate = "B12", departureTerminal = "1"), flight, "2026-12-12T21:00:00Z")!!.chip shouldBe "T1 B12"
+        liveFlight(status(departureGate = "B12", departureTerminal = "Intl"), flight, "2026-12-12T21:00:00Z")!!.chip shouldBe "Intl B12"
+    }
+
+    @Test
+    fun liveUpdateWithNoPlaceYetShowsTheDepartureTimeAndAnyDelay() {
+        val live = liveFlight(status(estimatedOut = "2026-12-12T22:40:00Z"), flight, "2026-12-12T21:00:00Z")!!
+        live.chip shouldBe "09:40"
+        live.text shouldBe "Leaves 40 min late, at 09:40"
+    }
+
+    @Test
+    fun liveUpdateInTheAirShowsTheLandingTimeAndHowFarAlong() {
+        val live = liveFlight(
+            status(departureGate = "28", arrivalGate = "D46", actualOut = "2026-12-12T22:00:00Z", estimatedIn = "2026-12-13T07:10:00Z"),
+            flight,
+            "2026-12-13T02:35:00Z",
+        )!!
+        live.chip shouldBe "Lands 15:10"
+        live.text shouldBe "Lands 20 min early, at 15:10 · Arrives at gate D46"
+        live.progress shouldBe 50
+        live.endsAt shouldBe instantMillis("2026-12-13T07:55:00Z")
+    }
+
+    @Test
+    fun liveUpdateOnceLandedShowsTheCarousel() {
+        val landed = status(arrivalGate = "D46", actualOut = "2026-12-12T22:00:00Z", actualIn = "2026-12-13T07:20:00Z")
+        val before = liveFlight(landed, flight, "2026-12-13T07:25:00Z")!!
+        before.chip shouldBe "D46"
+        before.text shouldBe "Arrives at gate D46"
+        before.progress shouldBe 100
+        val bags = liveFlight(landed.copy(baggageClaim = "16"), flight, "2026-12-13T07:30:00Z")!!
+        bags.chip shouldBe "Bags 16"
+        bags.text shouldBe "Bags on carousel 16"
+    }
+
+    @Test
+    fun liveUpdateSaysWhereADivertedFlightLands() {
+        val live = liveFlight(
+            status(actualOut = "2026-12-12T22:00:00Z", diverted = true, divertedTo = "KUL"),
+            flight,
+            "2026-12-13T02:00:00Z",
+        )!!
+        live.text shouldBe "Diverted to KUL · Lands at 15:30"
+    }
+
+    @Test
+    fun liveUpdateIsTakenDownOutsideTheWatchOrWhenCancelled() {
+        // Three hours before departure: not yet.
+        liveFlight(status(departureGate = "28"), flight, "2026-12-12T19:00:00Z").shouldBeNull()
+        // An hour after landing.
+        liveFlight(status(actualOut = "2026-12-12T22:00:00Z", actualIn = "2026-12-13T07:20:00Z"), flight, "2026-12-13T08:20:00Z").shouldBeNull()
+        liveFlight(status(cancelled = true), flight, "2026-12-12T21:00:00Z").shouldBeNull()
+        liveFlight(status(found = false), flight, "2026-12-12T21:00:00Z").shouldBeNull()
+        liveFlight(null, flight, "2026-12-12T21:00:00Z").shouldBeNull()
+    }
+
+    @Test
+    fun readsALiveUpdateMessage() {
+        val message = liveFlightMessage(
+            mapOf(
+                "kind" to "live",
+                "tag" to "live-XX100_2026-12-13_SYD",
+                "key" to "XX100_2026-12-13_SYD",
+                "title" to "XX 100 SYD to SIN",
+                "url" to "https://travelmo.example/trips/t1",
+                "start" to "2026-12-13T09:00:00+11:00",
+                "end" to "2026-12-13T15:30:00+08:00",
+                "destination" to "SIN",
+                "ident" to "XX100",
+                "date" to "2026-12-13",
+                "origin" to "SYD",
+                "found" to "true",
+                "departureGate" to "28",
+                "departureTerminal" to "3",
+                "scheduledOut" to "2026-12-12T22:00:00Z",
+                "scheduledIn" to "2026-12-13T07:30:00Z",
+                "cancelled" to "false",
+                "checkedAt" to "2026-12-12T19:00:00Z",
+            ),
+        )!!
+        message.tag shouldBe "live-XX100_2026-12-13_SYD"
+        message.url shouldBe "https://travelmo.example/trips/t1"
+        message.status shouldBe status(departureGate = "28", departureTerminal = "3")
+        liveFlight(message.status, message.booking, "2026-12-12T21:00:00Z")!!.chip shouldBe "T3 G28"
+        message.booking.destination?.code shouldBe "SIN"
+    }
+
+    @Test
+    fun ignoresMessagesThatAreNotLiveUpdates() {
+        liveFlightMessage(mapOf("title" to "Before your trip", "body" to "Starts tomorrow", "tag" to "reminder-t1")).shouldBeNull()
+        liveFlightMessage(mapOf("kind" to "live", "tag" to "live-x")).shouldBeNull()
+    }
 }

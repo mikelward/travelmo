@@ -1,6 +1,7 @@
 import type { FlightStatus, ReminderNotification, Segment, Trip } from "@travelmo/core";
 import { describe, expect, it } from "vitest";
 import type { AeroFlight } from "./aeroapi";
+import type { LiveFlightUpdate } from "./fcm";
 import { canSeeTrip, checkFlights, flightWindow, retryPendingNews, type FlightIo, type FlightOptions, type PendingNews } from "./flightStatus";
 import type { StoredDevice, StoredSubscription } from "./reminders";
 
@@ -58,6 +59,7 @@ function setup(options: { segments?: Segment[]; trips?: Trip[]; flights?: () => 
   const queries: [string, string, string][] = [];
   const windows: [string, string][] = [];
   const pushed: [string, ReminderNotification][] = [];
+  const live: [string, LiveFlightUpdate][] = [];
   const logs: string[] = [];
   const io: FlightIo = {
     flightSegments: async (from, to) => {
@@ -115,12 +117,65 @@ function setup(options: { segments?: Segment[]; trips?: Trip[]; flights?: () => 
         pushed.push([device.token, n]);
         return device.token === "fcm-2" ? "gone" : "sent";
       },
+      live: async (device, update) => {
+        live.push([device.token, update]);
+        return "sent";
+      },
     },
     log: (_level, event) => logs.push(event),
     ...over,
   });
-  return { io, options: options_, statuses, queries, windows, pushed, logs, devices, pending };
+  return { io, options: options_, statuses, queries, windows, pushed, live, logs, devices, pending };
 }
+
+describe("Live Updates", () => {
+  it("sends every phone on the flight the status and its own booking after each look, news or not", async () => {
+    const t = setup();
+    await checkFlights(t.io, t.options("2026-12-12T21:00:00Z"));
+    // The friend's phone was gone after the news, so only the partner's is left.
+    expect(t.live.map(([to]) => to)).toEqual(["fcm-1"]);
+    expect(t.live[0]![1]).toMatchObject({
+      key,
+      status: { found: true, departureGate: "8", departureTerminal: "1" },
+      booking: { title: "XX 100 SYD to SIN", start: "2026-12-13T09:00:00+11:00", end: "2026-12-13T15:30:00+08:00" },
+      url: "https://travelmo.example/trips/t1",
+    });
+    // Nothing new a minute later: no news, but the Live Update goes again.
+    await checkFlights(t.io, t.options("2026-12-12T21:01:00Z"));
+    expect(t.pushed).toHaveLength(3);
+    expect(t.live.map(([to]) => to)).toEqual(["fcm-1", "fcm-1"]);
+  });
+
+  it("sends none for a look from an open trip page before the watch begins", async () => {
+    const t = setup();
+    await checkFlights(t.io, t.options("2026-12-12T16:30:00Z"), { tripId: "t1" });
+    expect(t.live).toEqual([]);
+  });
+
+  it("sends a cancellation once, so the phone takes it down", async () => {
+    let cancelled = false;
+    const t = setup({ flights: () => [answer({ cancelled })] });
+    await checkFlights(t.io, t.options("2026-12-12T21:00:00Z"));
+    cancelled = true;
+    await checkFlights(t.io, t.options("2026-12-12T21:01:00Z"));
+    expect(t.live.map(([, u]) => u.status.cancelled ?? false)).toEqual([false, true]);
+  });
+
+  it("sends one last update when a delay ends the watch, so the phone takes it down", async () => {
+    let out = "2026-12-12T22:00:00Z";
+    const t = setup({ flights: () => [answer({ estimated_out: out })] });
+    await checkFlights(t.io, t.options("2026-12-12T21:00:00Z"));
+    out = "2026-12-13T02:00:00Z";
+    await checkFlights(t.io, t.options("2026-12-12T21:01:00Z"));
+    expect(t.live.map(([, u]) => u.status.estimatedOut)).toEqual(["2026-12-12T22:00:00Z", "2026-12-13T02:00:00Z"]);
+  });
+
+  it("leaves out people who may not use the app", async () => {
+    const t = setup();
+    await checkFlights(t.io, t.options("2026-12-12T21:00:00Z", { approved: async (uid) => uid !== "partner" }));
+    expect(t.live).toEqual([]);
+  });
+});
 
 describe("checkFlights", () => {
   it("looks once for everyone on the flight, keeps the answer and tells each of them once", async () => {

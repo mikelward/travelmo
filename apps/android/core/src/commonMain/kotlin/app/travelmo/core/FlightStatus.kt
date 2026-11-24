@@ -158,3 +158,125 @@ fun flightStatusLines(status: FlightStatus?, booked: Segment? = null): List<Stri
         status.baggageClaim?.let { "Bags on carousel $it" },
     )
 }
+
+/**
+ * A flight's Live Update: an ongoing notification from two hours before departure until 45 minutes
+ * after landing, with the most useful thing now in the status bar's [chip] ("T3 G28" before it
+ * leaves, "Lands 15:10" in the air, "Bags 16" once landed), a one-line [text], [progress]
+ * through the flight (0 to 100) and when to take it down ([endsAt], epoch
+ * milliseconds) should no later look say so.
+ */
+data class LiveFlight(
+    val chip: String,
+    val text: String,
+    val progress: Int,
+    val endsAt: Long,
+)
+
+/** "T3" or "G28" for a short value, "Intl" or "B12" for one that names itself. */
+private fun shortPlace(letter: String, value: String): String =
+    if (value.length == 1 || value.first().isDigit()) "$letter$value" else value
+
+/** "T3 G28", "T3", "G28", or null when neither is known. */
+private fun shortWhere(gate: String?, terminal: String?): String? =
+    listOfNotNull(terminal?.let { shortPlace("T", it) }, gate?.let { shortPlace("G", it) })
+        .takeIf { it.isNotEmpty() }?.joinToString(" ")
+
+/**
+ * What the flight's Live Update shows now, for [booked] (the person's booking, whose offsets give
+ * the airports' clocks); null while the parser does not watch the flight (too early, over,
+ * cancelled, or never found), when the phone takes it down.
+ */
+fun liveFlight(status: FlightStatus?, booked: Segment, now: String): LiveFlight? {
+    if (status == null || !status.found || status.cancelled) return null
+    if (flightCheckInterval(booked, status, now) == null) return null
+    val at = instantMillis(now)
+    val to = status.divertedTo?.uppercase()
+    val diverted = when {
+        !status.diverted -> null
+        to != null && to != booked.destination?.code?.uppercase() -> "Diverted to $to"
+        else -> "Diverted"
+    }
+    val leavesAt = status.estimatedOut ?: status.scheduledOut ?: booked.start
+    val landsAt = status.actualIn ?: status.estimatedIn ?: status.scheduledIn ?: booked.end
+    val endsAt = landsAt?.let { instantMillis(it) + AFTER_ARRIVAL } ?: (instantMillis(booked.start) + GIVE_UP_AFTER)
+    val departureWhere = where(status.departureGate, status.departureTerminal)
+    val arrivalWhere = where(status.arrivalGate, status.arrivalTerminal)
+    val out = status.actualOut
+    if (out == null) {
+        val leaves = if (status.scheduledOut != null && status.estimatedOut != null) {
+            "Leaves ${timing(status.scheduledOut, status.estimatedOut, booked.start)}"
+        } else {
+            clockAt(leavesAt, booked.start)?.let { "Leaves at $it" }
+        }
+        val chip = shortWhere(status.departureGate, status.departureTerminal) ?: clockAt(leavesAt, booked.start) ?: "Soon"
+        val text = listOfNotNull(diverted, leaves, departureWhere?.let { "Departs from $it" }).joinToString(" · ")
+        return LiveFlight(chip, text, 0, endsAt)
+    }
+    if (status.actualIn == null) {
+        val lands = if (status.scheduledIn != null && status.estimatedIn != null) {
+            "Lands ${timing(status.scheduledIn, status.estimatedIn, booked.end)}"
+        } else {
+            landsAt?.let { clockAt(it, booked.end) }?.let { "Lands at $it" }
+        }
+        val chip = landsAt?.let { clockAt(it, booked.end) }?.let { "Lands $it" } ?: "In the air"
+        val text = listOfNotNull(diverted, lands, arrivalWhere?.let { "Arrives at $it" }).joinToString(" · ").ifEmpty { "In the air" }
+        val progress = landsAt?.let {
+            val from = instantMillis(out)
+            val span = instantMillis(it) - from
+            if (span <= 0) 99 else ((at - from) * 100 / span).toInt().coerceIn(0, 99)
+        } ?: 50
+        return LiveFlight(chip, text, progress, endsAt)
+    }
+    val chip = status.baggageClaim?.let { "Bags $it" } ?: shortWhere(status.arrivalGate, status.arrivalTerminal) ?: "Landed"
+    val text = listOfNotNull(
+        diverted,
+        status.baggageClaim?.let { "Bags on carousel $it" } ?: arrivalWhere?.let { "Arrives at $it" } ?: "Landed",
+    ).joinToString(" · ")
+    return LiveFlight(chip, text, 100, endsAt)
+}
+
+/** A flight's Live Update as the parser sends it (`apps/parser/src/fcm.ts`): the status, and the person's booking of it. */
+data class LiveFlightMessage(val key: String, val tag: String, val url: String, val status: FlightStatus, val booking: Segment)
+
+/** Reads a Live Update's message data (all strings); null for any other message or one missing what it needs. */
+fun liveFlightMessage(data: Map<String, String>): LiveFlightMessage? {
+    if (data["kind"] != "live") return null
+    val key = data["key"] ?: return null
+    val tag = data["tag"] ?: return null
+    val url = data["url"] ?: return null
+    val title = data["title"] ?: return null
+    val start = data["start"] ?: return null
+    val status = FlightStatus(
+        ident = data["ident"] ?: return null,
+        date = data["date"] ?: return null,
+        origin = data["origin"],
+        found = data["found"] == "true",
+        departureGate = data["departureGate"],
+        departureTerminal = data["departureTerminal"],
+        arrivalGate = data["arrivalGate"],
+        arrivalTerminal = data["arrivalTerminal"],
+        baggageClaim = data["baggageClaim"],
+        scheduledOut = data["scheduledOut"],
+        estimatedOut = data["estimatedOut"],
+        actualOut = data["actualOut"],
+        scheduledIn = data["scheduledIn"],
+        estimatedIn = data["estimatedIn"],
+        actualIn = data["actualIn"],
+        cancelled = data["cancelled"] == "true",
+        diverted = data["diverted"] == "true",
+        divertedTo = data["divertedTo"],
+        noticedOut = data["noticedOut"],
+        checkedAt = data["checkedAt"] ?: return null,
+    )
+    val booking = Segment(
+        id = key,
+        tripId = "",
+        type = SegmentType.FLIGHT,
+        title = title,
+        start = start,
+        end = data["end"],
+        destination = data["destination"]?.let { Place(name = it, code = it) },
+    )
+    return LiveFlightMessage(key, tag, url, status, booking)
+}
