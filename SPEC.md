@@ -1963,7 +1963,8 @@ and, once done, what changed (bookings updated, added, duplicates merged,
 removed, bookings edited and so left alone, emails no longer in a
 connected mailbox), in the words of `tripActions.ts` and its Kotlin twin.
 Emails that failed both times are listed, the first ten by subject and
-sender from their import records ("and 4 more" past that): each Gmail one
+sender from their import records ("and 4 more" past that; a refresh from
+before their ids were kept says "Refresh again to see which" instead): each Gmail one
 opens in Gmail; Add it yourself opens the booking form on the day the
 email was sent and files the booking into the user's own trip that takes
 in its first day (the shortest, `fittingTrip`), else a trip of its own

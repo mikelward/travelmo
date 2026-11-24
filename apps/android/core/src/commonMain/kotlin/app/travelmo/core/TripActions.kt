@@ -101,7 +101,12 @@ fun describeRefresh(progress: RefreshShown, reading: Boolean): String {
     )
     if (progress.kept > 0) lines += "${plural(progress.kept, "booking you edited was", "bookings you edited were")} left as you left ${if (progress.kept == 1) "it" else "them"}."
     if (progress.missing > 0) lines += "${plural(progress.missing, "email is", "emails are")} no longer in a connected mailbox."
-    if (progress.failed > 0) lines += "${plural(progress.failed, "email", "emails")} couldn't be read, even on a second try:"
+    // The list of them follows (failedEmailIds); a refresh from before their
+    // ids were kept has none to show, so it says how to find them.
+    if (progress.failed > 0) {
+        val which = if (progress.failedIds.isNotEmpty()) ":" else ". Refresh again to see which."
+        lines += "${plural(progress.failed, "email", "emails")} couldn't be read, even on a second try$which"
+    }
     return lines.joinToString(" ")
 }
 

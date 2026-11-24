@@ -38,7 +38,10 @@ describe("describeRefresh", () => {
   it("says what changed once done", () => {
     expect(describeRefresh({ scanned: 340, total: 340, done: true, updated: 12, added: 2, merged: 3, removed: 1, kept: 4, missing: 2, failed: 1 }, false)).toBe(
       "Refreshed 340 emails: 12 bookings updated, 2 added, 3 duplicates merged, 1 removed. 4 bookings you edited were left as you left them. " +
-        "2 emails are no longer in a connected mailbox. 1 email couldn't be read, even on a second try:",
+        "2 emails are no longer in a connected mailbox. 1 email couldn't be read, even on a second try. Refresh again to see which.",
+    );
+    expect(describeRefresh({ scanned: 340, done: true, failed: 1, failedIds: ["m1"] }, false)).toBe(
+      "Refreshed 340 emails: your bookings were already up to date. 1 email couldn't be read, even on a second try:",
     );
     expect(describeRefresh({ scanned: 1, done: true, updated: 1, merged: 1, kept: 1, missing: 1 }, false)).toBe(
       "Refreshed 1 email: 1 booking updated, 1 duplicate merged. 1 booking you edited was left as you left it. 1 email is no longer in a connected mailbox.",
