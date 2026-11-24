@@ -1,4 +1,20 @@
-import { isModelRateLimit, parseExtraction } from "./extract";
+import type { GoogleGenAI } from "@google/genai";
+import { geminiExtractor, isModelRateLimit, parseExtraction } from "./extract";
+
+describe("geminiExtractor", () => {
+  it("hands attached PDFs to the model as documents beside the email, and the email alone without", async () => {
+    const asked: unknown[] = [];
+    const client = { models: { generateContent: async (request: { contents: unknown }) => (asked.push(request.contents), { text: JSON.stringify({ isBooking: false, segments: [] }) }) } } as unknown as GoogleGenAI;
+    const extract = geminiExtractor(client, "model");
+    const message = { id: "m1", threadId: "t1", from: "SJ <noreply@sj.example>", subject: "Tickets for booking ABC", date: "Mon, 1 Nov 2026 10:00:00 +0000", listUnsubscribe: false, text: "Your tickets are attached." };
+    await extract(message, [{ name: "ticket.pdf", mimeType: "application/pdf", data: "JVBERi0=" }]);
+    await extract(message);
+    expect(asked[0]).toEqual([
+      { role: "user", parts: [{ text: expect.stringContaining("Your tickets are attached.") }, { inlineData: { mimeType: "application/pdf", data: "JVBERi0=" } }] },
+    ]);
+    expect(asked[1]).toEqual(expect.stringContaining("Your tickets are attached."));
+  });
+});
 
 describe("parseExtraction", () => {
   it("reads the loyalty numbers a booking shows", () => {

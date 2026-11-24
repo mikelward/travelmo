@@ -61,7 +61,7 @@ import { airportPlace } from "@travelmo/core/airportPlaces";
 import { cityCountry } from "@travelmo/core/cityCountries";
 import type { Extractor } from "./extract";
 import type { RetryStore } from "./geocodeSweep";
-import { isNotFound, type EmailMessage } from "./gmail";
+import { isNotFound, type Attachment, type EmailMessage } from "./gmail";
 import type { MailProvider } from "./mailSource";
 import { calendarPrefilter, isTravelStatement, prefilter, senderDomain, statementReason, type PrefilterResult, type SenderPatterns } from "./prefilter";
 import { embeddingText, similarityVerdict, type Example, type ExampleLabel, type Examples } from "./similarity";
@@ -394,9 +394,10 @@ export async function importMessage(
     }
   };
 
+  const attachments = await attachmentsOf(message, (error) => log("attachments_failed", { uid, messageId: message.id, reason: error.message }));
   let booking;
   try {
-    booking = await deps.extract(message);
+    booking = await deps.extract(message, attachments);
   } catch (error) {
     const failure = (error as Error).message;
     // A changed event's old record comes back whole, its old revision
@@ -1939,4 +1940,18 @@ export async function importCalendar(uid: string, calendar: IcsCalendar, deps: I
     if (changed && (outcome === "skipped" || outcome === "failed")) for (const id of previous.matchedSegmentIds ?? []) consumed.add(id);
   }
   return counts;
+}
+
+// An email's attached PDFs, fetched only now it is to be read, by every
+// reader of emails (an import, Refresh, a loyalty re-read), so each sees what
+// the others do: a ticket may carry the journey alone. A failure to fetch
+// them is reported and the email read without them.
+export async function attachmentsOf(message: EmailMessage, failed: (error: Error) => void): Promise<Attachment[]> {
+  if (!message.attachments) return [];
+  try {
+    return await message.attachments();
+  } catch (error) {
+    failed(error as Error);
+    return [];
+  }
 }

@@ -1258,7 +1258,14 @@ message there, and its HTML flattened to text otherwise: a plain part under
 a third the length of the HTML's text is a stub (Virgin Atlantic's
 e-tickets put only a footer there), and the HTML is read instead
 (`bodyText`, for Gmail and forwarded mail alike), at most 24,000
-characters.
+characters. A Gmail email that passes the filters also has its PDF
+attachments read (a rail ticket may carry the journey only there): up to
+three, each at most 5 MB and 10 MB in all (`pdfParts`), fetched only then
+and handed to the model as documents beside the text, by every reader of
+an email alike (an import, Refresh from email, a loyalty re-read:
+`attachmentsOf`), so a refresh never drops what only the PDF gave. Nothing in the
+parser parses a PDF, so a malformed or hostile one never runs through our
+code; one that can't be fetched is logged and the email read without it.
 
 What isn't a booking: a membership, an annual or season pass, a
 subscription, a gift card or voucher, or a donation buys no visit, so the

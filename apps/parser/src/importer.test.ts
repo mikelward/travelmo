@@ -65,6 +65,18 @@ function deps(store: TripStore, extract: ImportDeps["extract"]): ImportDeps {
   return { store, extract, now: () => "2026-11-01T12:00:00Z", log: () => {} };
 }
 
+describe("attached PDFs", () => {
+  it("reach the model with the email once it passes the filters, and a failure to fetch them doesn't stop it", async () => {
+    const seen: number[] = [];
+    const extract: ImportDeps["extract"] = async (_message, attachments = []) => (seen.push(attachments.length), lodging);
+    const store = memoryStore();
+    const ticket = { name: "ticket.pdf", mimeType: "application/pdf" as const, data: "JVBERi0=" };
+    await importMessage("u1", { ...email({ id: "m-pdf" }), attachments: async () => [ticket] }, deps(store, extract));
+    await importMessage("u1", { ...email({ id: "m-broken" }), attachments: async () => Promise.reject(new Error("quota")) }, deps(store, extract));
+    expect(seen).toEqual([1, 0]);
+  });
+});
+
 describe("importMessage", () => {
   it("creates a trip and segment from a booking email", async () => {
     const store = memoryStore();

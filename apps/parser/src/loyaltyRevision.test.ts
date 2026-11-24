@@ -69,9 +69,10 @@ async function snapshotOthers(uid: string) {
 const hotelEmail: EmailMessage = { id: "m2", threadId: "t2", from: "Sample Hotels <stay@hotels.example>", subject: "Your stay", date: "Mon, 1 Sep 2026 10:00:00 +0000", listUnsubscribe: false, text: "Member SH777, Mikel Ward" };
 const hotelBooking: ExtractedBooking = { isBooking: true, segments: [], memberships: [{ program: "Sample Hotels Rewards", number: "SH 777", holder: "MR MIKEL WARD" }] };
 
-function fakes(options: { connected?: boolean; gone?: boolean } = {}) {
+function fakes(options: { connected?: boolean; gone?: boolean; pdf?: boolean } = {}) {
   const fetched: string[] = [];
   const extracted: string[] = [];
+  const attached: number[] = [];
   const logged: unknown[] = [];
   const source: MailSource = {
     provider: "gmail",
@@ -79,27 +80,35 @@ function fakes(options: { connected?: boolean; gone?: boolean } = {}) {
     fetch: async (id) => {
       fetched.push(id);
       if (options.gone) throw Object.assign(new Error("Not Found"), { code: 404 });
-      return hotelEmail;
+      return options.pdf ? { ...hotelEmail, attachments: async () => [{ name: "folio.pdf", mimeType: "application/pdf" as const, data: "JVBERi0=" }] } : hotelEmail;
     },
     isStaleCursor: () => false,
     isNotFound: (error) => (error as { code?: number }).code === 404,
   };
   const deps: RevisionDeps = {
     db,
-    extract: async (message) => {
+    extract: async (message, attachments = []) => {
       extracted.push(message.id);
+      attached.push(attachments.length);
       return hotelBooking;
     },
     mailbox: async (_uid, messageId) => (options.connected === false ? undefined : { source, id: messageId }),
     now: () => iso,
     log: (severity, event, fields) => void logged.push({ severity, event, ...fields }),
   };
-  return { deps, fetched, extracted, logged };
+  return { deps, fetched, extracted, attached, logged };
 }
 
 const profileOf = async (uid: string) => (await db.doc(paths.travelProfile(uid)).get()).data();
 
 describe("reviseFoundLoyaltyOnce", () => {
+  it("reads an email again with its attached PDFs, as an import does", async () => {
+    await seedUser("u1");
+    const { deps, attached } = fakes({ pdf: true });
+    await reviseFoundLoyaltyOnce(deps);
+    expect(attached).toEqual([1]);
+  });
+
   it("files stored numbers as they would be read now, reading again only the email that needs it, once", async () => {
     await seedUser("u1");
     const before = await snapshotOthers("u1");
