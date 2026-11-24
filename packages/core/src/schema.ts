@@ -307,8 +307,11 @@ export type ForwardAddress = z.infer<typeof ForwardAddress>;
 // A correction the user made to where home was: home is this town from this
 // date, until the next correction's date (homeCorrections in home.ts). At
 // most fifty, on the user's own profile document.
+// The longest city name a correction keeps.
+export const maxHomeCityLength = 100;
+
 export const HomeCorrection = z.object({
-  city: z.string().trim().min(1).max(100),
+  city: z.string().trim().min(1).max(maxHomeCityLength),
   country: z.string().length(2).optional(),
   from: isoDate,
 });

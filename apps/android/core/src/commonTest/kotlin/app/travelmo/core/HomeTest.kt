@@ -236,4 +236,32 @@ class HomeTest {
         nearHub(Place("Car hire", city = "Reading", country = "GB", lat = 51.454, lon = -0.973), heathrow) shouldBe false
         nearHub(Place("Car hire", city = "Hounslow", country = "GB"), heathrow) shouldBe false
     }
+
+    // Mirrors packages/core/src/homeCorrections.test.ts.
+    @Test
+    fun `says where home has been newest first`() {
+        homeLine(listOf(HomePeriod("Boston", from = "2018-09-01", until = "2021-03-11"), HomePeriod("London", from = "2021-03-12"))) shouldBe
+            "Home: London since Mar 2021 · Boston 2018–2021"
+        homeLine(emptyList()).shouldBeNull()
+    }
+
+    @Test
+    fun `names a correction's town and date`() {
+        correctionText(HomeCorrection("London", "GB", "2021-03-12")) shouldBe "London, GB from 12 Mar 2021"
+        correctionText(HomeCorrection("London", from = "2021-03-12")) shouldBe "London from 12 Mar 2021"
+    }
+
+    @Test
+    fun `takes a city and an optional country and a date and says what is missing`() {
+        parseCorrection(" London ", "gb", "2021-03-12") shouldBe ParsedCorrection.Correction(HomeCorrection("London", "GB", "2021-03-12"))
+        parseCorrection("London", "", "2021-03-12") shouldBe ParsedCorrection.Correction(HomeCorrection("London", from = "2021-03-12"))
+        parseCorrection("London", "UK", "2021-03-12") shouldBe ParsedCorrection.Correction(HomeCorrection("London", "GB", "2021-03-12"))
+        parseCorrection("Boston", "United States", "2021-03-12") shouldBe ParsedCorrection.Correction(HomeCorrection("Boston", "US", "2021-03-12"))
+        parseCorrection("", "GB", "2021-03-12") shouldBe ParsedCorrection.Problem("Enter a city.")
+        parseCorrection("x".repeat(100), "", "2021-03-12") shouldBe ParsedCorrection.Correction(HomeCorrection("x".repeat(100), from = "2021-03-12"))
+        parseCorrection("x".repeat(101), "", "2021-03-12") shouldBe ParsedCorrection.Problem("Use a city name of at most 100 characters.")
+        parseCorrection("London", "GBR", "2021-03-12") shouldBe ParsedCorrection.Problem("Use a two-letter country code, such as GB.")
+        parseCorrection("London", "ZZ", "2021-03-12") shouldBe ParsedCorrection.Problem("Use a two-letter country code, such as GB.")
+        parseCorrection("London", "GB", "") shouldBe ParsedCorrection.Problem("Enter a date.")
+    }
 }

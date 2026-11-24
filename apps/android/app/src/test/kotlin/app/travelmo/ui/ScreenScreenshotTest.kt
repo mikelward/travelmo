@@ -1,6 +1,7 @@
 package app.travelmo.ui
 
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 
 import app.travelmo.core.BackfillShown
 import app.travelmo.data.FastmailStatus
@@ -254,6 +255,25 @@ class ScreenScreenshotTest {
     fun profile_dark() {
         val viewModel = viewModel()
         capture("profile_dark", dark = true) { ProfileScreen(viewModel = viewModel, bottomBar = { HomeNavigationBar(HomeTab.PROFILE) {} }) }
+    }
+
+    // The Profile scrolled to home: London since 2022 by a correction.
+    @Test
+    fun profile_home() = profileHome("profile_home", dark = false)
+
+    @Test
+    fun profile_home_dark() = profileHome("profile_home_dark", dark = true)
+
+    private fun profileHome(name: String, dark: Boolean) {
+        val store = FakeTripStore()
+        store.rides.value = app.travelmo.data.RideSettings(homes = listOf(app.travelmo.core.HomeCorrection("London", "GB", "2022-01-15")))
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent {
+            TravelmoTheme(darkTheme = dark) { ProfileScreen(viewModel = viewModel, bottomBar = { HomeNavigationBar(HomeTab.PROFILE) {} }) }
+        }
+        composeRule.onNode(androidx.compose.ui.test.hasScrollToNodeAction()).performScrollToNode(androidx.compose.ui.test.hasText("Set"))
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
     }
 
     @Test

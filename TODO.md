@@ -252,7 +252,7 @@
 - [x] Home, step 3: show home over time on the web's Profile, with a way to
       correct it (`homes` on the user document; imports and regrouping
       honor it).
-- [ ] Home on Android's Profile tab, as the web has it (`describeHomes`,
+- [x] Home on Android's Profile tab, as the web has it (`describeHomes`,
       `effectiveHomes` and `HomeCorrection` are already in `:core`).
 - [x] Home, step 4: regroup existing trips under the new rule ("Regroup
       trips" in Settings on the web, `POST /trips/regroup`).

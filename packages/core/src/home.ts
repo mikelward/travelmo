@@ -1,6 +1,7 @@
-import { countryCodeOf } from "./countries";
+import { countryCodeOf, isCountryCode } from "./countries";
+import { formatDate } from "./format";
 import { compareInstants } from "./instant";
-import type { ExtractedSegment, HomeCorrection, Place, SegmentType, Trip } from "./schema";
+import { HomeCorrection, maxHomeCityLength, type ExtractedSegment, type Place, type SegmentType, type Trip } from "./schema";
 import { daysBetween, findTripForRange, isUntimed, liveSegments, segmentDateRange } from "./trips";
 
 // Where someone lives, over time. Nobody types it in: it is worked out from
@@ -624,4 +625,29 @@ export function describeHomes(periods: readonly HomePeriod[]): string {
       return `${p.city} ${a === b ? a : `${a}–${b}`}`;
     })
     .join(" · ");
+}
+
+// The Profile's home line: "Home: London since Mar 2021 · Boston 2018–2021",
+// or nothing when no trip says where home is and nobody said.
+export function homeLine(periods: readonly HomePeriod[]): string | undefined {
+  const text = describeHomes(periods);
+  return text ? `Home: ${text}` : undefined;
+}
+
+// One correction as the Profile lists it: "London, GB from 12 Mar 2021".
+export function correctionText(c: HomeCorrection): string {
+  const where = c.country ? `${c.city}, ${c.country}` : c.city;
+  return `${where} from ${formatDate(c.from, "en-GB", { weekday: undefined, year: "numeric" })}`;
+}
+
+// A correction from the form's fields, or why it cannot be one.
+export function parseCorrection(city: string, country: string, from: string): HomeCorrection | string {
+  // A name or a common short form ("UK") is saved as its ISO code.
+  const code = country.trim() ? countryCode(country) : "";
+  if (!city.trim()) return "Enter a city.";
+  if (city.trim().length > maxHomeCityLength) return `Use a city name of at most ${maxHomeCityLength} characters.`;
+  if (code && !isCountryCode(code)) return "Use a two-letter country code, such as GB.";
+  const parsed = HomeCorrection.safeParse({ city: city.trim(), ...(code ? { country: code } : {}), from });
+  if (parsed.success) return parsed.data;
+  return "Enter a date.";
 }

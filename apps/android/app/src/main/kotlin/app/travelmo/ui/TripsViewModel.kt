@@ -70,6 +70,7 @@ import app.travelmo.data.FeedActions
 import app.travelmo.data.Forwarding
 import app.travelmo.data.NoForwardActions
 import app.travelmo.data.ForwardActions
+import app.travelmo.core.HomeCorrection
 import app.travelmo.core.RideCompany
 import app.travelmo.core.exportLinks
 import app.travelmo.core.ExportLinks
@@ -904,6 +905,18 @@ class TripsViewModel(
 
     /** Unlinks a confirmed address, or withdraws a pending one. */
     fun removeEmail(token: String, address: String) = run(token, "removeEmail") { emailLinks.remove(address) }
+
+    /** Sets home to [correction] from its date, replacing one on that date, as the web's Profile does. */
+    fun addHomeCorrection(token: String, correction: HomeCorrection) = run(token, "addHomeCorrection") {
+        val now = rideSettings.value?.homes ?: throw IllegalStateException("Home is still loading; try again")
+        store.setHomeCorrections(uid, now.filter { it.from != correction.from } + correction)
+    }
+
+    /** Removes the correction from [from]. */
+    fun removeHomeCorrection(token: String, from: String) = run(token, "removeHomeCorrection") {
+        val now = rideSettings.value?.homes ?: throw IllegalStateException("Home is still loading; try again")
+        store.setHomeCorrections(uid, now.filter { it.from != from })
+    }
 
     /** Who the user's travel profile is shared with; the profile is started if none has arrived yet. */
     fun saveTrusted(token: String, emails: List<String>) = run(token, "saveTrusted") {
