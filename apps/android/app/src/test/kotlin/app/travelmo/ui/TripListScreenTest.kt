@@ -1,5 +1,7 @@
 package app.travelmo.ui
 
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
@@ -35,8 +37,9 @@ class TripListScreenTest {
         )
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
         composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }
-        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Every booking cancelled"))
-        composeRule.onNodeWithText("Every booking cancelled").assertExists()
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("York"))
+        // Struck through, which a screen reader says.
+        composeRule.onNode(hasText("York") and SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Cancelled")).assertExists()
     }
 
     @Test
@@ -47,7 +50,8 @@ class TripListScreenTest {
         )
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
         composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }
-        composeRule.onNodeWithText("Trip cancelled").assertExists()
+        composeRule.onNode(hasText("Singapore") and SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Cancelled")).assertExists()
+        composeRule.onNode(hasText("Dublin") and SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Cancelled")).assertDoesNotExist()
         composeRule.onNodeWithText("XX 100 SYD to SIN").assertDoesNotExist()
     }
 

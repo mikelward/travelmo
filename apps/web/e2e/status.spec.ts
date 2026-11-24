@@ -81,6 +81,7 @@ test("an upcoming trip's card says when every booking was cancelled", async ({ p
   await page.clock.setSystemTime(new Date("2026-12-11T12:00:00Z"));
   await page.goto("/");
   const card = page.getByTestId("trip-card").filter({ hasText: "Liverpool" });
-  await expect(card.getByTestId("trip-cancelled")).toHaveText("Every booking cancelled");
+  await expect(card.getByTestId("trip-cancelled")).toHaveText("(cancelled)");
+  await expect(card.getByRole("heading", { name: "Liverpool (cancelled)" })).toHaveCSS("text-decoration-line", "line-through");
   await expect(card.getByTestId("trip-next")).toHaveCount(0);
 });

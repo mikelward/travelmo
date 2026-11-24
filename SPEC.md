@@ -1626,7 +1626,8 @@ the calendar export, reports, favorite places and working out where home
 is all leave it out. A trip whose every booking was cancelled
 (`allCancelled`) isn't happening: it gets no document warnings or
 reminders, no calendar event and no report counts, done or ahead, and
-its card says "Every booking cancelled"; a trip with no bookings yet (planned by
+its card's name and dates are struck through and greyed, as a cancelled
+booking is (a screen reader says "cancelled"); a trip with no bookings yet (planned by
 hand) still gets all of them
 (`liveSegments`). Two kinds of trip dates, kept apart:
 
@@ -1684,7 +1685,7 @@ it (`userCancelled: "trip"`); those already cancelled stay as they were. It
 isn't happening even with no bookings (`tripCancelled`): no document
 warnings or reminders, no calendar event, nothing in reports or the trips
 download (`reportBounds` has none). Its page says "Trip cancelled" with
-Restore for the owner, its card says "Trip cancelled" and nothing of what
+Restore for the owner, its card is struck through and says nothing of what
 comes next, and its bookings offer no Restore of their own: they come back
 with the trip, while one cancelled on its own, by the person or an email,
 stays cancelled. A booking filed into a cancelled trip (an import, a

@@ -27,7 +27,7 @@ test("a booking and a whole trip can be marked cancelled, and restored", async (
   await page.keyboard.press("Escape");
 
   await page.getByRole("link", { name: "← All trips" }).click();
-  await expect(page.getByTestId("trip-cancelled")).toHaveText("Trip cancelled");
+  await expect(page.getByTestId("trip-cancelled")).toHaveText("(cancelled)");
 
   await page.getByRole("link", { name: /Liverpool/ }).click();
   await page.getByTestId("trip-cancelled-banner").getByRole("button", { name: "Restore" }).click();
