@@ -283,6 +283,8 @@ class FakeTripStore(
     }
     override fun addressHolder(uid: String): Flow<AddressHolder> = flowOf(addressHolder)
     val forward = MutableStateFlow(app.travelmo.data.Forwarding(null))
+    val calendar = MutableStateFlow(app.travelmo.data.GoogleCalendarShown(null))
+    override fun googleCalendar(uid: String): Flow<app.travelmo.data.GoogleCalendarShown?> = calendar
     val export = MutableStateFlow(app.travelmo.data.CalendarExportShown(null))
     override fun calendarExport(uid: String): Flow<app.travelmo.data.CalendarExportShown?> = export
     val feedList = MutableStateFlow<List<app.travelmo.data.CalendarFeedShown>?>(emptyList())

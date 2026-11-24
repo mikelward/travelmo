@@ -133,6 +133,13 @@
     <string name="feed_not_read">Not read yet</string>
     <string name="remove_feed">Remove %1$s</string>
     <string name="feeds_on_web">Add or remove feeds from Settings on the web.</string>
+    <string name="google_calendar">Google Calendar</string>
+    <string name="google_calendar_hint">Travelmo reads the calendars you choose every day, like a calendar feed, with read-only access. Events Gmail added from your emails are skipped when Gmail is connected to the same account.</string>
+    <string name="google_calendar_on_web">Connect Google Calendar from Settings on the web.</string>
+    <string name="connect_google_calendar">Connect Google Calendar</string>
+    <string name="connected_as">Connected as %1$s.</string>
+    <string name="save_choice">Save choice</string>
+    <string name="calendars_saved_read">Saved; the newly chosen calendars were read.</string>
     <string name="calendar_export">Calendar export</string>
     <string name="calendar_export_hint">Show your trips and bookings in Google Calendar, Apple Calendar or Outlook through a link they check for changes, a few times a day. Anyone with the link can see your trips, confirmation numbers included, so keep it to yourself; replacing it stops the old one working.</string>
     <string name="create_calendar_link">Create calendar link</string>

@@ -1,5 +1,5 @@
 import type { User } from "firebase/auth";
-import { backfillStartPath, backfillStopPath, calendarExportIssuePath, calendarExportStopPath, deleteAllTripsPath, fastmailBackfillStartPath, fastmailBackfillStopPath, fastmailConnectPath, fastmailDisconnectPath, feedAddPath, feedRemovePath, forwardIssuePath, forwardStopPath, gmailConnectPath, gmailDisconnectPath, linkRefusalText, refusalOf, regroupPath, type AccountAccess, type CalendarExport, type ForwardAddress, type RegroupResult } from "@travelmo/core";
+import { backfillStartPath, backfillStopPath, calendarConnectPath, calendarDisconnectPath, calendarExportIssuePath, calendarSelectPath, calendarExportStopPath, deleteAllTripsPath, fastmailBackfillStartPath, fastmailBackfillStopPath, fastmailConnectPath, fastmailDisconnectPath, feedAddPath, feedRemovePath, forwardIssuePath, forwardStopPath, gmailConnectPath, gmailDisconnectPath, linkRefusalText, refusalOf, regroupPath, type AccountAccess, type CalendarExport, type ForwardAddress, type RegroupResult } from "@travelmo/core";
 import type { CalendarResult } from "./ics";
 import type { TripItResult } from "./tripit";
 
@@ -46,11 +46,11 @@ export const api = {
   completeGmail: (user: User, state: string) => post<{ emailAddress: string }>(user, "/gmail/complete", { state }),
   // Each of several mailboxes by its address.
   disconnectGmail: (user: User, emailAddress: string) => post<void>(user, gmailDisconnectPath, { emailAddress }),
-  connectCalendar: (user: User) => post<{ url: string }>(user, "/calendar/connect"),
+  connectCalendar: (user: User) => post<{ url: string }>(user, calendarConnectPath),
   completeCalendar: (user: User, state: string) =>
     post<{ emailAddress: string; calendars: number }>(user, "/calendar/complete", { state }),
-  selectCalendars: (user: User, ids: string[]) => post<{ read: number; failed: number }>(user, "/calendar/select", { ids }),
-  disconnectCalendar: (user: User) => post<void>(user, "/calendar/disconnect"),
+  selectCalendars: (user: User, ids: string[]) => post<{ read: number; failed: number }>(user, calendarSelectPath, { ids }),
+  disconnectCalendar: (user: User) => post<void>(user, calendarDisconnectPath),
   // A Gmail mailbox's reading, by its address.
   startBackfill: (user: User, emailAddress: string, restart = false) =>
     post<BackfillStarted>(user, backfillStartPath, restart ? { emailAddress, restart } : { emailAddress }, true),
