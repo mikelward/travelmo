@@ -378,7 +378,7 @@
       booking line, with Remove.
 - [x] Loyalty balances and status from travel programs' statement emails
       (Emerald Club, MileagePlus), only from travel companies' domains.
-- [ ] A journey that lands where the next trip leaves from opens that trip
+- [x] A journey that lands where the next trip leaves from opens that trip
       on import too, not only on Regroup (`opensTrip`): booked as it
       happens, the flight to New York stays with the trip before until a
       Regroup moves it.

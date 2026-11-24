@@ -1647,7 +1647,11 @@ away from home where the next trip's first journey leaves from (the same
 city or another of its airports or stations within 80 km, after it lands:
 `opensTrip`) opens that next trip instead: the flights from Zagreb to New
 York on 4 Apr join the week in New York that ends with the flight home
-from Newark, rather than ending the Zagreb trip. A trip left with
+from Newark, rather than ending the Zagreb trip. Imports file it the same
+way, in whichever order the emails come: the flights to New York join a
+New York trip already holding the flight home, and a flight home read
+afterwards takes the flights that lead to it from the trip before
+(unless the user edited them, or either trip is shared). A trip left with
 none of its bookings is deleted; one that never had any is left alone, and
 a TripIt trip keeps its own grouping. Bookings are moved, never changed or
 deleted, so ratings and favorites go with them, and two bookings an earlier

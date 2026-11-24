@@ -1000,6 +1000,109 @@ describe("importTripIt", () => {
     expect(store.trips.get(gmailTrip.id)).toMatchObject({ start: "2026-12-10", end: "2026-12-31" });
   });
 
+  it("starts a trip with the flight that lands where it leaves from, in whichever order the emails come", async () => {
+    const lhr = { name: "Heathrow", code: "LHR", city: "London", country: "GB" };
+    const zag = { name: "Zagreb", code: "ZAG", city: "Zagreb", country: "HR" };
+    const cdg = { name: "Paris Charles de Gaulle", code: "CDG", city: "Paris", country: "FR" };
+    const ewr = { name: "Newark", code: "EWR", city: "New York/Newark", country: "US" };
+    const bookings: Record<string, ExtractedBooking> = {
+      out: { isBooking: true, segments: [{ type: "flight", title: "LHR to ZAG", start: "2026-03-30T08:00:00+01:00", end: "2026-03-30T11:00:00+02:00", origin: lhr, destination: zag }] },
+      stay: { isBooking: true, segments: [{ type: "lodging", title: "Apartments Angel", start: "2026-03-30T15:00:00+02:00", end: "2026-04-04T11:00:00+02:00", destination: { name: "Apartments Angel", city: "Zagreb", country: "HR" } }] },
+      on: {
+        isBooking: true,
+        segments: [
+          { type: "flight", title: "A5 8362 ZAG to PAR", start: "2026-04-04T16:00:00+02:00", end: "2026-04-04T18:15:00+02:00", origin: zag, destination: cdg },
+          { type: "flight", title: "AF 8702 PAR to JFK", start: "2026-04-04T20:30:00+02:00", end: "2026-04-04T22:40:00-04:00", origin: cdg, destination: { name: "JFK", code: "JFK", city: "New York", country: "US" } },
+        ],
+      },
+      home: { isBooking: true, segments: [{ type: "flight", title: "UA122 EWR to LHR", start: "2026-04-11T09:10:00-04:00", end: "2026-04-11T21:25:00+01:00", origin: ewr, destination: lhr }] },
+    };
+    for (const order of [["out", "stay", "on", "home"], ["out", "stay", "home", "on"]]) {
+      const store = memoryStore();
+      for (const id of order) await importMessage("u1", email({ id, subject: `Booking ${id}` }), deps(store, async () => bookings[id]!));
+      const trips = [...store.trips.values()]
+        .map((t) => ({ title: t.title, segments: [...store.segments.values()].filter((s) => s.tripId === t.id).map((s) => s.title).sort() }))
+        .sort((a, b) => a.title.localeCompare(b.title));
+      expect(trips).toEqual([
+        { title: "New York", segments: ["A5 8362 ZAG to PAR", "AF 8702 PAR to JFK", "UA122 EWR to LHR"] },
+        { title: "Zagreb", segments: ["Apartments Angel", "LHR to ZAG"] },
+      ]);
+    }
+    // A first leg confirmed alone, then with its connection by a later email,
+    // comes over with it.
+    {
+      const store = memoryStore();
+      const firstLeg: ExtractedBooking = { isBooking: true, segments: [bookings.on!.segments[0]!] };
+      for (const [id, booking] of [["out", bookings.out!], ["stay", bookings.stay!], ["leg", firstLeg], ["on", bookings.on!], ["home", bookings.home!]] as const) {
+        await importMessage("u1", email({ id, subject: `Booking ${id}` }), deps(store, async () => booking));
+      }
+      const tripOf = (title: string) => [...store.segments.values()].find((s) => s.title === title)!.tripId;
+      expect(tripOf("A5 8362 ZAG to PAR")).toBe(tripOf("UA122 EWR to LHR"));
+      expect(tripOf("AF 8702 PAR to JFK")).toBe(tripOf("UA122 EWR to LHR"));
+    }
+    // A booking brought over with a cancelled leg keeps the trip's own dates
+    // covering that leg, so a later email finds it by date.
+    {
+      const store = memoryStore();
+      const jfk = { name: "JFK", code: "JFK", city: "New York", country: "US" };
+      const there: ExtractedBooking = {
+        isBooking: true,
+        segments: [
+          { type: "flight", title: "BA 1 LHR to JFK", confirmation: "BAQ1", start: "2027-01-10T08:00:00+00:00", end: "2027-01-10T11:00:00-05:00", origin: lhr, destination: jfk },
+          { type: "flight", title: "BA 2 JFK to LHR", confirmation: "BAQ1", start: "2027-04-10T18:00:00-04:00", end: "2027-04-11T06:00:00+01:00", origin: jfk, destination: lhr },
+        ],
+      };
+      await importMessage("u1", email({ id: "there", subject: "Booking there" }), deps(store, async () => there));
+      const back = [...store.segments.values()].find((s) => s.title === "BA 2 JFK to LHR")!;
+      store.segments.set(back.id, { ...back, cancelledAt: "2026-11-02T00:00:00Z", cancelledBy: "m-x" });
+      // As a cancellation leaves it: shown for what is still booked.
+      store.trips.set(back.tripId, { ...store.trips.get(back.tripId)!, liveStart: "2027-01-10", liveEnd: "2027-01-10" });
+      const early: ExtractedBooking = { isBooking: true, segments: [{ type: "flight", title: "UA 9 EWR to LHR", start: "2027-01-20T18:00:00-05:00", end: "2027-01-21T06:00:00+00:00", origin: ewr, destination: lhr }] };
+      await importMessage("u1", email({ id: "early", subject: "Booking early" }), deps(store, async () => early));
+      const trip = store.trips.get([...store.segments.values()].find((s) => s.title === "UA 9 EWR to LHR")!.tripId)!;
+      expect([...store.segments.values()].filter((s) => s.tripId === trip.id).length).toBe(3);
+      expect(trip.end >= "2027-04-11").toBe(true);
+    }
+    // A flight home cancelled before its confirmation is read brings nothing over.
+    {
+      const store = memoryStore();
+      for (const id of ["out", "stay", "on"]) await importMessage("u1", email({ id, subject: `Booking ${id}` }), deps(store, async () => bookings[id]!));
+      const cancelled: ExtractedBooking = {
+        isBooking: false,
+        segments: [],
+        cancellations: [{ type: "flight", confirmation: "UAXYZ1", start: "2026-04-11T09:10:00-04:00", place: "EWR to LHR" }],
+      };
+      await importMessage("u1", email({ id: "cancel", subject: "Your flight is cancelled", date: "Thu, 5 Nov 2026 10:00:00 +0000" }), deps(store, async () => cancelled));
+      const confirmed: ExtractedBooking = { isBooking: true, segments: [{ ...bookings.home!.segments[0]!, confirmation: "UAXYZ1" }] };
+      await importMessage("u1", email({ id: "home", subject: "Booking home" }), deps(store, async () => confirmed));
+      expect([...store.segments.values()].find((s) => s.title.startsWith("UA122"))?.cancelledAt).toBeDefined();
+      const zagreb = [...store.trips.values()].find((t) => t.title === "Zagreb")!;
+      expect([...store.segments.values()].filter((s) => s.tripId === zagreb.id).map((s) => s.title).sort()).toEqual(["A5 8362 ZAG to PAR", "AF 8702 PAR to JFK", "Apartments Angel", "LHR to ZAG"]);
+    }
+    // A flight out never skips a trip to join a later one: a January flight to
+    // Paris stays with the January stay there, not a February trip home from Paris.
+    {
+      const store = memoryStore();
+      const paris = { name: "Paris Charles de Gaulle", code: "CDG", city: "Paris", country: "FR" };
+      const items: Record<string, ExtractedBooking> = {
+        hotel: { isBooking: true, segments: [{ type: "lodging", title: "Hôtel Example", start: "2027-01-10T15:00:00+01:00", end: "2027-01-15T11:00:00+01:00", destination: { name: "Hôtel Example", city: "Paris", country: "FR" } }] },
+        back: { isBooking: true, segments: [{ type: "flight", title: "AF 1 CDG to LHR", start: "2027-02-20T10:00:00+01:00", end: "2027-02-20T10:30:00+00:00", origin: paris, destination: lhr }] },
+        jan: { isBooking: true, segments: [{ type: "flight", title: "AF 2 LHR to CDG", start: "2027-01-10T08:00:00+00:00", end: "2027-01-10T10:20:00+01:00", origin: lhr, destination: paris }] },
+      };
+      for (const id of ["hotel", "back", "jan"]) await importMessage("u1", email({ id, subject: `Booking ${id}` }), deps(store, async () => items[id]!));
+      const tripOf = (title: string) => [...store.segments.values()].find((s) => s.title === title)!.tripId;
+      expect(tripOf("AF 2 LHR to CDG")).toBe(tripOf("Hôtel Example"));
+      expect(tripOf("AF 2 LHR to CDG")).not.toBe(tripOf("AF 1 CDG to LHR"));
+    }
+    // A flight the user edited stays where they left it.
+    const store = memoryStore();
+    for (const id of ["out", "stay", "on"]) await importMessage("u1", email({ id, subject: `Booking ${id}` }), deps(store, async () => bookings[id]!));
+    for (const segment of [...store.segments.values()].filter((s) => s.title.startsWith("A"))) store.segments.set(segment.id, { ...segment, updatedAt: "2026-11-02T00:00:00Z" });
+    await importMessage("u1", email({ id: "home", subject: "Booking home" }), deps(store, async () => bookings.home!));
+    const zagreb = [...store.trips.values()].find((t) => t.title === "Zagreb")!;
+    expect([...store.segments.values()].filter((s) => s.tripId === zagreb.id).map((s) => s.title).sort()).toEqual(["A5 8362 ZAG to PAR", "AF 8702 PAR to JFK", "Apartments Angel", "LHR to ZAG"]);
+  });
+
   it("takes a flight's times from the newest email for its reference, in whichever order they are read", async () => {
     const booked: ExtractedBooking = { isBooking: true, segments: [{ ...flight.segments[0]!, confirmation: "B0ECXM" }] };
     const moved: ExtractedBooking = { isBooking: true, segments: [{ ...booked.segments[0]!, title: "FR123 MAN to DUB", start: "2026-12-15T08:20:00+00:00", end: "2026-12-15T09:20:00+00:00" }] };
