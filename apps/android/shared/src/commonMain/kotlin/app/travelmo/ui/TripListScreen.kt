@@ -115,6 +115,27 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
     // Back leaves the search before it leaves the list.
     NavigationBackHandler(rememberNavigationEventState(NavigationEventInfo.None), isBackEnabled = searching, onBackCompleted = { closeSearch() })
     val focus = LocalFocusManager.current
+    // Add a trip: the dialog while open, and the new trip's id once asked for, its write's token named by it.
+    var addingTrip by rememberSaveable { mutableStateOf(false) }
+    val newTrips = outcomes.filterKeys { it.startsWith(NEW_TRIP_TOKEN) }
+    LaunchedEffect(newTrips) {
+        for ((token, outcome) in newTrips) if (outcome is Outcome.Done) {
+            viewModel.outcomeSeen(token)
+            addingTrip = false
+            onOpenTrip(token.removePrefix(NEW_TRIP_TOKEN))
+        }
+    }
+    if (addingTrip) {
+        val saving = newTrips.values.any { it is Outcome.Busy }
+        AddTripDialog(
+            busy = saving,
+            problem = newTrips.values.firstNotNullOfOrNull { (it as? Outcome.Failed)?.message },
+            onDismiss = { if (viewModel.leaveAddTrip()) addingTrip = false },
+        ) { title, start, end ->
+            // A failed try is forgotten, so its message gives way to this one's.
+            if (viewModel.leaveAddTrip()) viewModel.addTrip(viewModel.newTripId(), title, start, end)
+        }
+    }
     Scaffold(
         topBar = {
             TripListTopBar(
@@ -125,6 +146,7 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
                 filters = filters,
                 onFilters = viewModel::setListFilters,
                 onOpenSettings = onOpenSettings,
+                onAddTrip = { addingTrip = true },
             )
         },
         bottomBar = bottomBar,

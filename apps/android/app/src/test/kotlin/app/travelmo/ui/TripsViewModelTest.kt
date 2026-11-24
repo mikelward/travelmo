@@ -58,6 +58,10 @@ class TripsViewModelTest {
     private class GatedStore(private val fail: Boolean = false) : TripStore by FakeTripStore() {
         val gate = CompletableDeferred<Unit>()
         var saves = 0
+        override suspend fun createTrip(id: String, uid: String, title: String, start: String, end: String) {
+            saves++
+            gate.await()
+        }
         override suspend fun saveSegment(tripId: String, draft: SegmentDraft, existingId: String?) {
             saves++
             gate.await()
@@ -129,6 +133,21 @@ class TripsViewModelTest {
         viewModel.outcomes.value shouldBe mapOf("form-1" to Outcome.Done)
         viewModel.outcomeSeen("form-1")
         viewModel.outcomes.value shouldBe emptyMap()
+    }
+
+    @Test
+    fun `Add a trip can't be left while its trip is being saved, and forgets its tries once it can`() = runTest {
+        val store = GatedStore()
+        val viewModel = TripsViewModel(store, OWNER, null)
+        viewModel.addTrip("t1", "Away", "2026-12-01", "2026-12-02")
+        viewModel.leaveAddTrip() shouldBe false
+        viewModel.outcomes.value shouldBe mapOf("${NEW_TRIP_TOKEN}t1" to Outcome.Busy)
+        store.gate.complete(Unit)
+        viewModel.leaveAddTrip() shouldBe true
+        viewModel.outcomes.value shouldBe emptyMap()
+        // A try that failed doesn't hold it.
+        viewModel.addTrip("t2", " ", "2026-12-01", "2026-12-02")
+        viewModel.leaveAddTrip() shouldBe true
     }
 
     @Test
@@ -270,6 +289,23 @@ class TripsViewModelTest {
         viewModel.restoreSegment("restore", "liverpool", "l-stay")
         viewModel.outcomes.value shouldBe mapOf("restore" to Outcome.Done)
         store.restored shouldBe listOf("liverpool" to "l-stay")
+    }
+
+    @Test
+    fun `adding a trip needs a name and dates in order and is the viewer's own`() = runTest {
+        val store = FakeTripStore()
+        val viewModel = TripsViewModel(store, OWNER, null)
+        viewModel.createTrip("blank", "t1", " ", "2026-12-01", "2026-12-02")
+        viewModel.createTrip("undated", "t2", "Away", null, null)
+        viewModel.createTrip("backwards", "t3", "Away", "2026-12-02", "2026-12-01")
+        viewModel.createTrip("good", "t4", " Away ", "2026-12-01", "2026-12-01")
+        viewModel.outcomes.value shouldBe mapOf(
+            "blank" to Outcome.Failed("Give the trip a name"),
+            "undated" to Outcome.Failed("Pick its dates"),
+            "backwards" to Outcome.Failed("It ends before it starts"),
+            "good" to Outcome.Done,
+        )
+        store.createdTrips shouldBe listOf(Trip("t4", "Away", "2026-12-01", "2026-12-01", OWNER))
     }
 
     @Test

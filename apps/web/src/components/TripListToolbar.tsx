@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 const searchPath =
   "M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z";
 const backPath = "M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z";
+const addPath = "M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z";
 const closePath = "M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z";
 const filterOffPath =
   "M7 6h10l-5.01 6.3L7 6zm-2.75-.39C6.27 8.2 10 13 10 13v6c0 .55.45 1 1 1h2c.55 0 1-.45 1-1v-6s3.72-4.8 5.74-7.39A.998.998 0 0 0 18.95 4H5.04c-.83 0-1.3.95-.79 1.61z";
@@ -68,11 +69,13 @@ export function TripListToolbar({
   onQuery,
   filters,
   onFilters,
+  onAddTrip,
 }: {
   query: string;
   onQuery: (next: string) => void;
   filters: ListFilters;
   onFilters: (next: ListFilters) => void;
+  onAddTrip: () => void;
 }) {
   const [searching, setSearching] = useState(query !== "");
   const close = () => {
@@ -116,6 +119,11 @@ export function TripListToolbar({
         </>
       )}
       <FilterButton filters={filters} onFilters={onFilters} />
+      {!searching && (
+        <button type="button" aria-label="Add a trip" onClick={onAddTrip} className={iconButton}>
+          <Icon path={addPath} />
+        </button>
+      )}
     </div>
   );
 }

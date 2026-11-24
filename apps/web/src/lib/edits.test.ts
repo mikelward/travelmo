@@ -3,7 +3,7 @@ import { paths, type ExtractedSegment, type Segment, type Trip } from "@travelmo
 import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where, type Firestore } from "firebase/firestore";
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { cancelSegment, cancelTrip, deleteSegment, deleteTrip, deleteTripIfOnly, favoriteSegment, fitTripDates, mergeTrips, moveSegment, moveSegmentToNewTrip, rateSegment, renameTrip, restoreSegment, restoreTrip, saveSegment } from "./edits";
+import { cancelSegment, cancelTrip, createTrip, deleteSegment, deleteTrip, deleteTripIfOnly, favoriteSegment, fitTripDates, mergeTrips, moveSegment, moveSegmentToNewTrip, rateSegment, renameTrip, restoreSegment, restoreTrip, saveSegment } from "./edits";
 
 // A switch to make reading a collection fail, as when the connection drops.
 const failReads = vi.hoisted(() => ({ on: false }));
@@ -539,5 +539,16 @@ describe("deleteTrip", () => {
 
   it("is a no-op for a trip that is already gone", async () => {
     await deleteTrip(asOwner(), "missing");
+  });
+});
+
+describe("createTrip", () => {
+  it("plans a trip of the viewer's own, shared with nobody, with no bookings", async () => {
+    const id = await createTrip(as(partner), partner.uid, " Weekend away ", "2026-12-05", "2026-12-06");
+    const created = (await getDoc(doc(as(partner), paths.trip(id)))).data() as Trip;
+    expect(created).toMatchObject({ id, title: "Weekend away", start: "2026-12-05", end: "2026-12-06", ownerUid: partner.uid, sharedWith: [] });
+    expect((await getDocs(collection(as(partner), paths.segments(id)))).size).toBe(0);
+    // Theirs alone: the owner of the other trips can't see it.
+    await assertFails(getDoc(doc(asOwner(), paths.trip(id))));
   });
 });

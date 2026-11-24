@@ -16,6 +16,8 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import io.kotest.matchers.shouldBe
@@ -80,6 +82,26 @@ class TripListScreenTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Called off").assertDoesNotExist()
         filters.read().hideCancelled shouldBe true
+    }
+
+    // The dialog itself is checked on a device: under Robolectric an AlertDialog never goes idle.
+    @Test
+    fun `the list's menu offers Add a trip`() {
+        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }
+        composeRule.onNodeWithContentDescription("More options").performClick()
+        composeRule.onNodeWithText("Add a trip").assertExists()
+    }
+
+    @Test
+    fun `a trip page's menu adds a booking, with no floating button`() {
+        var added: String? = null
+        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent { TravelmoTheme { TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = { added = it }, onEditBooking = {}, onMerged = {}) } }
+        composeRule.onAllNodesWithText("Add a booking").assertCountEquals(0)
+        composeRule.onNodeWithContentDescription("More options").performClick()
+        composeRule.onNodeWithText("Add a booking").performClick()
+        added shouldBe "2026-12-12"
     }
 
     @Test

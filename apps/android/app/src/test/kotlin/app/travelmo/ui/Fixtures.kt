@@ -474,6 +474,12 @@ class FakeTripStore(
     override suspend fun restoreSegment(tripId: String, segmentId: String) {
         restored += tripId to segmentId
     }
+    private var tripIds = 0
+    override fun newTripId(): String = "new-${++tripIds}"
+    val createdTrips = mutableListOf<Trip>()
+    override suspend fun createTrip(id: String, uid: String, title: String, start: String, end: String) {
+        createdTrips += Trip(id, title, start, end, uid)
+    }
     val cancelledSegments = mutableListOf<Pair<String, String>>()
     override suspend fun cancelSegment(tripId: String, segmentId: String) {
         cancelledSegments += tripId to segmentId

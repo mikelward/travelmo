@@ -39,7 +39,8 @@ sealed interface TopBarNavigation {
  * Every page's top bar, so they all look alike: the back arrow or X
  * ([navigation]), the logo, [title] in Fira Sans Medium as the web's header
  * has it, then the page's own [actions], the Settings gear on a tab
- * ([onOpenSettings]) and the ⋮ menu. The logo is decorative.
+ * ([onOpenSettings]) and the ⋮ menu, led by the page's own [menuItems]. The
+ * logo is decorative.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,6 +48,7 @@ fun AppTopBar(
     title: String,
     navigation: TopBarNavigation? = null,
     onOpenSettings: (() -> Unit)? = null,
+    menuItems: @Composable (close: () -> Unit) -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     TopAppBar(
@@ -70,7 +72,7 @@ fun AppTopBar(
         actions = {
             actions()
             onOpenSettings?.let { SettingsButton(onClick = it) }
-            AppMenu()
+            AppMenu(items = menuItems)
         },
     )
 }

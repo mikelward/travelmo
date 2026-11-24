@@ -43,7 +43,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Button
@@ -53,7 +52,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -260,16 +258,16 @@ fun TripDetailScreen(
     )
     Scaffold(
         topBar = {
-            AppTopBar(trip?.title ?: "", navigation = TopBarNavigation.Back(onBack))
-        },
-        floatingActionButton = {
-            current?.takeIf { canEdit }?.let { editable ->
-                ExtendedFloatingActionButton(
-                    onClick = { onAddBooking(editable.start) },
-                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                    text = { Text(stringResource(Res.string.add_booking)) },
-                )
-            }
+            AppTopBar(
+                trip?.title ?: "",
+                navigation = TopBarNavigation.Back(onBack),
+                // Adding a booking leads the trip's own menu, for those who may edit it.
+                menuItems = { close ->
+                    current?.takeIf { canEdit }?.let { editable ->
+                        DropdownMenuItem(text = { Text(stringResource(Res.string.add_booking)) }, onClick = { close(); onAddBooking(editable.start) })
+                    }
+                },
+            )
         },
     ) { padding ->
         deleting?.let { segment ->
@@ -479,7 +477,7 @@ private fun TripBody(
         )
     }
     val list = rememberLazyListState()
-    LazyColumn(modifier = modifier.fillMaxSize().scrollEdgeCue(list, scrollCueColors()), state = list, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp)) {
+    LazyColumn(modifier = modifier.fillMaxSize().scrollEdgeCue(list, scrollCueColors()), state = list, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp)) {
         item(key = "dates") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(formatDateRange(trip.shownStart, trip.shownEnd), style = MaterialTheme.typography.bodyMedium, color = muted)

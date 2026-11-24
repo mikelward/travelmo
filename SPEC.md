@@ -312,6 +312,19 @@ is the airline's, read from the flight number ("Check-in reminders"); an
 airline may change it, so the card says "usually". The clock behind these
 lines ticks once a minute.
 
+### Adding a trip
+
+Trips mostly come from imports, but one can be planned by hand: **Add a
+trip**, in the trip list's ⋮ menu on Android and as the + beside the
+funnel on the web (and offered by the empty list), takes a name and its
+dates (a day trip when only the start is given; Android picks them as a
+range) and opens the new trip, the viewer's own, shared with nobody and
+with no bookings yet (`tripDraftProblem` in `packages/core/src/trips.ts`,
+mirrored in `Model.kt`, says what is missing: a name, the dates, or an end
+before the start). On a trip's page, **Add a booking** is the first item of
+Android's ⋮ menu, for those who may edit the trip, rather than a floating
+button over the bookings; the web's stays a button under the header.
+
 ### Searching trips
 
 Search sits in the trip list's top bar, on the web and Android: a search

@@ -52,6 +52,15 @@ export function allCancelled(segments: readonly object[]): boolean {
   return segments.length > 0 && segments.every(isCancelled);
 }
 
+// What is wrong with a trip planned by hand (Add a trip), or undefined: it
+// needs a name and its dates, the end not before the start.
+export function tripDraftProblem(title: string, start: string | undefined, end: string | undefined): string | undefined {
+  if (!title.trim()) return "Give the trip a name";
+  if (!start || !end) return "Pick its dates";
+  if (end < start) return "It ends before it starts";
+  return undefined;
+}
+
 // A trip that isn't happening: its owner cancelled it, or every booking in
 // it was cancelled. One with no bookings yet still is, unless cancelled.
 // Before its bookings are read, the trip's own flag says (listFilters.ts).

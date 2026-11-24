@@ -808,6 +808,16 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         throw IllegalStateException("The trip kept changing; try again")
     }
 
+    override fun newTripId(): String = db.collection("trips").document().id
+
+    /** As the web's createTrip: owned by [uid], shared with nobody, no bookings yet. */
+    override suspend fun createTrip(id: String, uid: String, title: String, start: String, end: String) {
+        val now = Clock.System.now().toString()
+        db.collection("trips").document(id).setData(
+            mapOf("id" to id, "title" to title, "start" to start, "end" to end, "ownerUid" to uid, "sharedWith" to emptyList<String>(), "createdAt" to now, "updatedAt" to now),
+        ).await()
+    }
+
     /** As the web's cancelSegment: the person's word that a booking didn't happen. */
     override suspend fun cancelSegment(tripId: String, segmentId: String) = rewriteBookings(tripId) { _, bookings, now ->
         val data = bookings.firstOrNull { it.first == segmentId }?.second ?: throw TripGoneException("That booking is no longer in this trip")

@@ -490,6 +490,16 @@ export async function restoreTrip(db: Firestore, tripId: string): Promise<void> 
   }));
 }
 
+// Plans a trip by hand (Add a trip): the viewer's own, shared with nobody,
+// with no bookings yet. Returns its id.
+export async function createTrip(db: Firestore, uid: string, title: string, start: string, end: string): Promise<string> {
+  const ref = doc(collection(db, paths.trips()));
+  const timestamp = now();
+  const trip: Trip = { id: ref.id, title: title.trim(), start, end, ownerUid: uid, sharedWith: [], createdAt: timestamp, updatedAt: timestamp };
+  await setDoc(ref, trip);
+  return ref.id;
+}
+
 export async function renameTrip(db: Firestore, tripId: string, title: string): Promise<void> {
   await updateDoc(doc(db, paths.trip(tripId)), { title: title.trim(), updatedAt: now() });
 }

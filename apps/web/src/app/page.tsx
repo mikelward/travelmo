@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { SignInGate } from "@/components/SignInGate";
 import { TripCard } from "@/components/TripCard";
+import { AddTripForm } from "@/components/AddTripForm";
 import { TripListToolbar } from "@/components/TripListToolbar";
 import { localToday } from "@/lib/dates";
 import { usePeopleDocuments, useTripWarnings, warningText } from "@/lib/documents";
@@ -113,6 +114,7 @@ function Trips({ user }: { user: User }) {
   const query = parseTripQuery(search);
   const searching = !isEmptyQuery(query);
   const [filters, setFilters] = useListFilters();
+  const [addingTrip, setAddingTrip] = useState(false);
   const filtering = filters.hideCancelled || filters.hideLocal;
   // Every trip's bookings, read once a search starts (SPEC "Searching trips").
   const all = useAllSegments(trips && searched ? trips.map((t) => t.id) : undefined);
@@ -153,17 +155,42 @@ function Trips({ user }: { user: User }) {
   const warnings = useTripWarnings(people, trips ?? [], segmentsByTrip, today);
 
   if (!trips || !groups) return <p className="text-muted">Loading trips…</p>;
+  // The bar and Add a trip's form, first on the page whether or not there
+  // are trips yet: the first trip added fills the list before its write is
+  // confirmed, and the form must stay as it is through that.
+  const head = (
+    <>
+      <TripListToolbar
+        query={search}
+        onQuery={(next) => {
+          setSearch(next);
+          if (next.trim()) setSearched(true);
+        }}
+        filters={filters}
+        onFilters={setFilters}
+        onAddTrip={() => setAddingTrip(true)}
+      />
+      {addingTrip && <AddTripForm uid={user.uid} onCancel={() => setAddingTrip(false)} />}
+    </>
+  );
   if (trips.length === 0) {
     return (
-      <div className="mt-16 text-center text-zinc-600 dark:text-zinc-400">
-        <p>No trips yet.</p>
-        <p className="mt-2">
-          <Link href="/settings" className="underline">
-            Connect your email
-          </Link>{" "}
-          to import your bookings.
-        </p>
-      </div>
+      <>
+        {head}
+        <div className="mt-16 text-center text-zinc-600 dark:text-zinc-400">
+          <p>No trips yet.</p>
+          <p className="mt-2">
+            <Link href="/settings" className="underline">
+              Connect your email
+            </Link>{" "}
+            to import your bookings, or{" "}
+            <button type="button" onClick={() => setAddingTrip(true)} className="underline">
+              add a trip
+            </button>
+            .
+          </p>
+        </div>
+      </>
     );
   }
   // A journey a trip seems to be missing, for the cards whose bookings are
@@ -180,15 +207,7 @@ function Trips({ user }: { user: User }) {
   const listed = listWarnings(warnings, trips);
   return (
     <>
-      <TripListToolbar
-        query={search}
-        onQuery={(next) => {
-          setSearch(next);
-          if (next.trim()) setSearched(true);
-        }}
-        filters={filters}
-        onFilters={setFilters}
-      />
+      {head}
       {listed.length > 0 && (
         <ul
           className="mb-8 space-y-1 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950"

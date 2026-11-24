@@ -116,6 +116,18 @@ data class Trip(
     val localOnly: Boolean? = null,
 )
 
+/**
+ * What is wrong with a trip planned by hand (Add a trip), or null: it needs
+ * a name and its dates, the end not before the start (tripDraftProblem in
+ * packages/core).
+ */
+fun tripDraftProblem(title: String, start: String?, end: String?): String? = when {
+    title.isBlank() -> "Give the trip a name"
+    start == null || end == null -> "Pick its dates"
+    end < start -> "It ends before it starts"
+    else -> null
+}
+
 /** The dates a trip is shown with: when the person now travels, else its own (displayBounds). */
 fun displayBounds(trip: Trip): Pair<String, String> =
     if (trip.liveStart != null && trip.liveEnd != null) trip.liveStart to trip.liveEnd else trip.start to trip.end

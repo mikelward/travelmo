@@ -242,6 +242,12 @@ interface TripStore {
     /** Takes a trip's cancellation back, with the bookings cancelled with it. Owner only. */
     suspend fun restoreTrip(tripId: String)
 
+    /** A new trip's id, before it is written, so the screen can open it once it is. */
+    fun newTripId(): String
+
+    /** Plans a trip by hand (Add a trip): the viewer's own, shared with nobody, with no bookings yet. */
+    suspend fun createTrip(id: String, uid: String, title: String, start: String, end: String)
+
     /** The owner's powers over a trip, as the web's edits.ts has them. */
     suspend fun renameTrip(tripId: String, title: String)
 
