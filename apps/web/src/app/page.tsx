@@ -1,9 +1,9 @@
 "use client";
 
-import { displayTitles, groupTrips, isEmptyQuery, listWarnings, nextUpFlightKeys, parseTripQuery, tripMatches, type FlightStatus, type Segment, type Trip } from "@travelmo/core";
+import { displayTitles, groupTrips, hiddenFromList, isEmptyQuery, listWarnings, nextUpFlightKeys, noListFilters, parseTripQuery, tripMatches, type FlightStatus, type ListFilters, type Segment, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SignInGate } from "@/components/SignInGate";
 import { TripCard } from "@/components/TripCard";
 import { localToday } from "@/lib/dates";
@@ -17,6 +17,37 @@ import { useAllSegments, useNow, useSegmentsOf, useTrips } from "@/lib/trips";
 // lines, and the few coming next, so their document warnings know where
 // they go.
 const upcomingWithDetails = 3;
+
+// The list's filters, kept in this browser (SPEC "Filtering the trip list").
+const listFiltersKey = "travelmo.listFilters";
+
+function useListFilters(): [ListFilters, (next: ListFilters) => void] {
+  const [filters, setFilters] = useState<ListFilters>(noListFilters);
+  // Read after the first render, so the page the server sent matches.
+  useEffect(() => {
+    try {
+      const stored: unknown = JSON.parse(localStorage.getItem(listFiltersKey) ?? "null");
+      if (stored && typeof stored === "object") {
+        const { hideCancelled, hideLocal } = stored as Record<string, unknown>;
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- browser storage is only there after hydration
+        setFilters({ hideCancelled: hideCancelled === true, hideLocal: hideLocal === true });
+      }
+    } catch (e) {
+      // Storage may be blocked (a private window): everything shows.
+      console.debug("Reading the trip list's filters failed; showing every trip", e);
+    }
+  }, []);
+  const update = (next: ListFilters) => {
+    setFilters(next);
+    try {
+      localStorage.setItem(listFiltersKey, JSON.stringify(next));
+    } catch (e) {
+      // They still apply for this visit.
+      console.debug("Saving the trip list's filters failed; they last this visit", e);
+    }
+  };
+  return [filters, update];
+}
 
 function Section({
   title,
@@ -76,10 +107,14 @@ function Trips({ user }: { user: User }) {
   const [searched, setSearched] = useState(false);
   const query = parseTripQuery(search);
   const searching = !isEmptyQuery(query);
-  // Every trip's bookings, read once a search starts (SPEC "Searching trips").
-  const all = useAllSegments(searched && trips ? trips.map((t) => t.id) : undefined);
+  const [filters, setFilters] = useListFilters();
+  const filtering = filters.hideCancelled || filters.hideLocal;
+  // Every trip's bookings, read once a search starts (SPEC "Searching trips")
+  // or while a filter is on.
+  const all = useAllSegments((searched || filtering) && trips ? trips.map((t) => t.id) : undefined);
   const titles = displayTitles(trips ?? []);
-  const shown = trips && searching ? trips.filter((t) => tripMatches(query, t, titles.get(t.id) ?? t.title, all?.byTrip[t.id] ?? [])) : trips;
+  const kept = trips?.filter((t) => !hiddenFromList(t, all?.byTrip[t.id], filters));
+  const shown = kept && searching ? kept.filter((t) => tripMatches(query, t, titles.get(t.id) ?? t.title, all?.byTrip[t.id] ?? [])) : kept;
   // Listeners follow every trip, searched or not; the sections show what a search found.
   const everything = trips ? groupTrips(trips, today) : undefined;
   const groups = shown ? groupTrips(shown, today) : undefined;
@@ -150,11 +185,22 @@ function Trips({ user }: { user: User }) {
         }}
         placeholder="Search trips"
         aria-label="Search trips"
-        className="mb-6 w-full rounded-lg border border-field bg-background px-3 py-2"
+        className="mb-3 w-full rounded-lg border border-field bg-background px-3 py-2"
       />
+      <div className="mb-6 flex flex-wrap gap-x-5 gap-y-1 text-sm">
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={filters.hideCancelled} onChange={(e) => setFilters({ ...filters, hideCancelled: e.target.checked })} />
+          Hide cancelled
+        </label>
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={filters.hideLocal} onChange={(e) => setFilters({ ...filters, hideLocal: e.target.checked })} />
+          Hide local events
+        </label>
+      </div>
       {searching && !all && <p className="mb-4 text-sm text-muted">Searching bookings…</p>}
       {searching && all && all.failed.length > 0 && <p className="mb-4 text-sm text-danger">Some trips&apos; bookings couldn&apos;t be read, so they&apos;re searched by title and dates only.</p>}
       {searching && all && shown?.length === 0 && <p className="text-muted">No trips match.</p>}
+      {!searching && filtering && all && shown?.length === 0 && <p className="text-muted">Every trip is hidden.</p>}
       <Section title="Now" trips={groups.current} showNext {...sectionProps} />
       <Section title="Upcoming" trips={groups.upcoming} showNext={false} {...sectionProps} />
       <Section title="Past" trips={groups.past} showNext={false} {...sectionProps} />

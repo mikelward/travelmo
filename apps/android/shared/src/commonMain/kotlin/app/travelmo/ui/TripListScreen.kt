@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -56,6 +58,9 @@ import app.travelmo.core.tripNextUp
 import app.travelmo.core.tripStatus
 import app.travelmo.core.warningText
 import app.travelmo.shared.Res
+import app.travelmo.shared.all_trips_hidden
+import app.travelmo.shared.hide_cancelled
+import app.travelmo.shared.hide_local_events
 import app.travelmo.shared.badge_deleting
 import app.travelmo.shared.badge_shared
 import app.travelmo.shared.checked_in_action
@@ -83,6 +88,8 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
     val state by viewModel.state.collectAsStateWithLifecycle()
     val searchText by viewModel.searchText.collectAsStateWithLifecycle()
     val found by viewModel.searchResult.collectAsStateWithLifecycle()
+    val filters by viewModel.listFilters.collectAsStateWithLifecycle()
+    val hidden by viewModel.hiddenTrips.collectAsStateWithLifecycle()
     val crashed = crashPending()
     // The cards' "I've checked in" writes: a finished one is acknowledged, a
     // failed one says so above the trips until the next tap replaces it.
@@ -140,10 +147,32 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+                // What to leave out, kept on this phone (SPEC "Filtering the trip list").
+                item(key = "filters") {
+                    // Wrapping, so a large text size keeps each label on one line.
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = filters.hideCancelled,
+                            onClick = { viewModel.setListFilters(filters.copy(hideCancelled = !filters.hideCancelled)) },
+                            label = { Text(stringResource(Res.string.hide_cancelled)) },
+                        )
+                        FilterChip(
+                            selected = filters.hideLocal,
+                            onClick = { viewModel.setListFilters(filters.copy(hideLocal = !filters.hideLocal)) },
+                            label = { Text(stringResource(Res.string.hide_local_events)) },
+                        )
+                    }
+                }
                 val result = found
-                val shown = if (result == null) groups else groups.only(result.ids)
+                val kept = groups.without(hidden)
+                val shown = if (result == null) kept else kept.only(result.ids)
+                if (result == null && hidden.isNotEmpty() && kept.current.isEmpty() && kept.upcoming.isEmpty() && kept.past.isEmpty()) {
+                    item(key = "all-hidden") { Message(stringResource(Res.string.all_trips_hidden), Modifier) }
+                }
                 if (result != null && !result.bookingsSearched) item(key = "searching") { Message(stringResource(Res.string.searching_bookings), Modifier) }
-                if (result != null && result.bookingsSearched && result.ids.isEmpty()) item(key = "no-match") { Message(stringResource(Res.string.no_trips_match), Modifier) }
+                // Judged by what is shown: a search can find only trips the filters hide.
+                val nothingShown = shown.current.isEmpty() && shown.upcoming.isEmpty() && shown.past.isEmpty()
+                if (result != null && result.bookingsSearched && nothingShown) item(key = "no-match") { Message(stringResource(Res.string.no_trips_match), Modifier) }
                 if (checkInFailed != null) {
                     item(key = "checked-in-failed") {
                         Text(checkInFailed, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
@@ -169,6 +198,9 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
 
 /** The prefix of the cards' "I've checked in" write tokens. */
 private const val CHECKED_IN_TOKEN = "list/checked-in/"
+
+private fun TripGroups.without(ids: Set<String>) =
+    if (ids.isEmpty()) this else TripGroups(current.filter { it.id !in ids }, upcoming.filter { it.id !in ids }, past.filter { it.id !in ids })
 
 private fun TripGroups.only(ids: Set<String>) =
     TripGroups(current.filter { it.id in ids }, upcoming.filter { it.id in ids }, past.filter { it.id in ids })

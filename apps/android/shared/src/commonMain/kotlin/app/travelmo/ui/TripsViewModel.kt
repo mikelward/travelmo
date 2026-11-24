@@ -7,6 +7,8 @@ import app.travelmo.core.withHomeAirports
 import app.travelmo.core.withChosenAirports
 import app.travelmo.core.tripMatches
 import app.travelmo.core.parseTripQuery
+import app.travelmo.core.ListFilters
+import app.travelmo.core.hiddenFromList
 import app.travelmo.core.senderCleanup
 import app.travelmo.core.SenderCleanup
 import androidx.lifecycle.ViewModel
@@ -55,6 +57,8 @@ import app.travelmo.core.emailAddressOf
 import app.travelmo.core.isAdmin
 import app.travelmo.core.linkedEmails
 import app.travelmo.data.Seen
+import app.travelmo.data.InMemoryListFilterStore
+import app.travelmo.data.ListFilterStore
 import app.travelmo.core.LinkCheck
 import app.travelmo.core.checkNewLink
 import app.travelmo.core.myAddresses
@@ -236,6 +240,8 @@ class TripsViewModel(
     private val forwardOffered: Boolean = false,
     /** Whether Google verified [email]: only a verified address has an access record. */
     emailVerified: Boolean = true,
+    /** Where the trip list's filters are kept; in memory by default. */
+    private val listFilterStore: ListFilterStore = InMemoryListFilterStore(),
 ) : ViewModel() {
     /** The verified sign-in address, normalized, as access is decided on it; null when unverified. */
     val verifiedEmail: String? = emailAddressOf(email)?.takeIf { emailVerified }
@@ -471,6 +477,34 @@ class TripsViewModel(
         val ids = trips.filter { tripMatches(query, it, titles[it.id] ?: it.title, segments?.get(it.id).orEmpty()) }.map { it.id }.toSet()
         TripSearchResult(ids, bookingsSearched = segments != null)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    private val _listFilters = MutableStateFlow(listFilterStore.read())
+
+    /** What the trip list leaves out, as set on this phone (SPEC "Filtering the trip list"). */
+    val listFilters: StateFlow<ListFilters> = _listFilters
+
+    fun setListFilters(filters: ListFilters) {
+        _listFilters.value = filters
+        try {
+            listFilterStore.write(filters)
+        } catch (e: Exception) {
+            // They still apply while the app runs.
+            SharedLog.error(e, "Saving the trip list's filters failed")
+        }
+    }
+
+    /**
+     * The trips the filters leave out. Every trip's bookings are listened to
+     * while a filter is on; until they answer, only a trip its owner
+     * cancelled is hidden.
+     */
+    val hiddenTrips: StateFlow<Set<String>> = _listFilters.flatMapLatest { filters ->
+        if (!filters.any) flowOf(emptySet())
+        else combine(trips, allSegments()) { trips, all ->
+            val segments = all?.associate { it.trip.id to it.segments }
+            trips.orEmpty().filter { hiddenFromList(it, segments?.get(it.id), filters) }.map { it.id }.toSet()
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
     // Every trip's bookings, by trip, null until each has answered.
     private fun allSegments(): Flow<List<TripWithSegments>?> = trips.flatMapLatest { list ->

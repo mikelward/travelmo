@@ -490,7 +490,7 @@ const goes = (s: Grouped) => journeyTypes.has(s.type) || isTransfer(s);
 
 // An outing: a ticket, an event or a car hired and returned in one place;
 // nothing that travels or stays.
-const isOuting = (s: Grouped) => (s.type === "activity" || s.type === "other" || s.type === "car_rental") && !goes(s);
+export const isOuting = (s: Grouped) => (s.type === "activity" || s.type === "other" || s.type === "car_rental") && !goes(s);
 const allOutings = (segments: readonly Grouped[]) => segments.length > 0 && segments.every(isOuting);
 
 const millis = (instant: string) => Date.parse(instant);
