@@ -1,6 +1,10 @@
 package app.travelmo.ui
 
 import app.travelmo.core.displayTitles
+import app.travelmo.core.homeTownKey
+import app.travelmo.core.ChosenHomeAirports
+import app.travelmo.core.withHomeAirports
+import app.travelmo.core.withChosenAirports
 import app.travelmo.core.tripMatches
 import app.travelmo.core.parseTripQuery
 import app.travelmo.core.senderCleanup
@@ -655,7 +659,13 @@ class TripsViewModel(
      * Profile and the web's reports page work it out; null until both answer.
      */
     val reportHomes: StateFlow<List<HomePeriod>?> = combine(reportTrips, rideSettings) { trips, settings ->
-        if (trips == null || settings == null) null else effectiveHomes(homeTimeline(trips.filter { it.trip.ownerUid == uid }.flatMap { it.segments }), settings.homes)
+        if (trips == null || settings == null) {
+            null
+        } else {
+            // Each with its airports: those chosen on Profile, else those its round trips leave from.
+            val segments = trips.filter { it.trip.ownerUid == uid }.flatMap { it.segments }
+            withChosenAirports(withHomeAirports(effectiveHomes(homeTimeline(segments), settings.homes), segments), settings.homeAirports)
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /**
@@ -1113,6 +1123,12 @@ class TripsViewModel(
     }
 
     /** Removes the correction from [from]. */
+    /** Chooses [codes] as the airports of the home in [city], in place of those worked out, as the web's Profile does. */
+    fun setHomeAirports(token: String, city: String, country: String?, codes: List<String>) = run(token, "setHomeAirports") {
+        val now = rideSettings.value?.homeAirports ?: throw IllegalStateException("Home is still loading; try again")
+        store.setHomeAirports(uid, now.filter { homeTownKey(it.city, it.country) != homeTownKey(city, country) } + ChosenHomeAirports(city, country, codes))
+    }
+
     fun removeHomeCorrection(token: String, from: String) = run(token, "removeHomeCorrection") {
         val now = rideSettings.value?.homes ?: throw IllegalStateException("Home is still loading; try again")
         store.setHomeCorrections(uid, now.filter { it.from != from })

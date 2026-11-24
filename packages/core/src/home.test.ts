@@ -21,6 +21,11 @@ import {
   outingRuns,
   transferTitle,
   withHomeAirports,
+  withChosenAirports,
+  homesWithAirports,
+  airportCodes,
+  parseAirportCodes,
+  homeTownKey,
 } from "./home";
 import type { ExtractedSegment, Place, Trip } from "./schema";
 
@@ -927,5 +932,41 @@ describe("home airports", () => {
     expect(findTripForBooking([trip("boston", "2021-11-22", "2021-12-01")], () => boston, [seattle[0]!], [], overrides)).toBeUndefined();
     // As it was before: with no home airports, it joins.
     expect(findTripForBooking([trip("boston", "2021-11-22", "2021-12-01")], () => boston, [seattle[0]!], [], corrected)?.id).toBe("boston");
+  });
+});
+
+describe("chosen home airports", () => {
+  const sfo: Place = { name: "San Francisco International", code: "SFO", city: "San Francisco", country: "US" };
+  const sea: Place = { name: "Seattle-Tacoma", code: "SEA", city: "Seattle", country: "US" };
+  const sjc: Place = { name: "San Jose", code: "SJC", city: "San Jose", country: "US" };
+  const leg = (start: string, origin: Place, destination: Place): ExtractedSegment => ({ type: "flight", title: "flight", start, origin, destination });
+  const trips = [leg("2021-01-01T08:00:00-08:00", sfo, sea), leg("2021-01-05T08:00:00-08:00", sea, sfo), leg("2021-02-01T08:00:00-08:00", sfo, sea), leg("2021-02-05T08:00:00-08:00", sea, sfo)];
+  const corrections = homeCorrections([{ city: "Mountain View", country: "US", from: "2011-01-01" }]);
+
+  it("replace the worked-out ones for that home, as worked out or corrected", () => {
+    const { overrides } = homesWithAirports(trips, corrections, [{ city: "mountain view", country: "US", airports: ["SJC", "SFO"] }]);
+    expect(airportCodes(overrides[0]!)).toEqual(["SJC", "SFO"]);
+    expect(journeyHome(sjc, "2021-03-01", [], overrides)).toBe(true);
+    // None chosen: the worked-out ones stand.
+    expect(airportCodes(homesWithAirports(trips, corrections).overrides[0]!)).toEqual(["SFO"]);
+    // Chosen empty: none.
+    expect(airportCodes(homesWithAirports(trips, corrections, [{ city: "Mountain View", airports: [] }]).overrides[0]!)).toEqual([]);
+    // Another home's choice leaves this one alone.
+    expect(airportCodes(withChosenAirports(homesWithAirports(trips, corrections).overrides, [{ city: "London", airports: ["LHR"] }])[0]!)).toEqual(["SFO"]);
+  });
+
+  it("are kept per home town, two Londons apart", () => {
+    expect(homeTownKey("London", "GB")).toBe(homeTownKey(" london ", "UK"));
+    expect(homeTownKey("London", "GB")).not.toBe(homeTownKey("London", "CA"));
+    // One city by either name: one row, and the choice saved for it is the one used.
+    expect(homeTownKey("München", "DE")).toBe(homeTownKey("Munich", "DE"));
+    const munich = homeCorrections([{ city: "München", country: "DE", from: "2020-01-01" }]);
+    expect(airportCodes(withChosenAirports(munich, [{ city: "Munich", country: "DE", airports: ["MUC"] }])[0]!)).toEqual(["MUC"]);
+  });
+
+  it("are typed as codes, any case, apart by commas or spaces", () => {
+    expect(parseAirportCodes(" sfo, SJC  oak sfo")).toEqual({ codes: ["SFO", "SJC", "OAK"] });
+    expect(parseAirportCodes("")).toEqual({ codes: [] });
+    expect(parseAirportCodes("San Francisco")).toEqual({ error: '"Francisco" isn\'t an airport or station code.' });
   });
 });

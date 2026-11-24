@@ -194,6 +194,46 @@ fun withHomeAirports(periods: List<HomePeriod>, segments: List<Segment>): List<H
     }
 }
 
+/** The airports and stations chosen for a home on Profile, by its town, as schema.ts's ChosenHomeAirports. */
+data class ChosenHomeAirports(val city: String, val country: String? = null, val airports: List<String>)
+
+/** Codes a home's airports may have at most, as schema.ts's maxHomeAirports. */
+const val MAX_HOME_AIRPORTS = 10
+
+private val homeAirportCode = Regex("^[A-Za-z0-9]{3,5}$")
+
+/** The airports chosen for each home, by its town, in place of those worked out, as home.ts's withChosenAirports. */
+fun withChosenAirports(periods: List<HomePeriod>, chosen: List<ChosenHomeAirports>): List<HomePeriod> = periods.map { period ->
+    // Its own town's choice (München and Munich are one), else one saved without a country for its city.
+    val choice = chosen.firstOrNull { homeTownKey(it.city, it.country) == homeTownKey(period.city, period.country) }
+        ?: chosen.firstOrNull { sameCity(it.city, period.city) && (it.country == null || period.country == null) }
+        ?: return@map period
+    period.copy(airports = choice.airports.map { Place(it, code = it) })
+}
+
+/** One home town, as Profile lists its airports and as its choice is stored: by city and country, as two Londons are two homes. */
+fun homeTownKey(city: String, country: String?): String = "${foldCity(city)}|${country?.let(::countryCode).orEmpty()}"
+
+/** A home's airports as Profile lists them: their codes, else their names. */
+fun airportCodes(period: HomePeriod): List<String> = period.airports.map { it.code ?: it.name }
+
+sealed interface ParsedAirports {
+    data class Codes(val codes: List<String>) : ParsedAirports
+    data class Problem(val text: String) : ParsedAirports
+}
+
+/** Airport or station codes as typed ("SFO, sjc"), or why they can't be, as home.ts's parseAirportCodes. */
+fun parseAirportCodes(text: String): ParsedAirports {
+    val codes = mutableListOf<String>()
+    for (word in text.split(Regex("[\\s,;]+")).filter { it.isNotEmpty() }) {
+        if (!homeAirportCode.matches(word)) return ParsedAirports.Problem("\"$word\" isn't an airport or station code.")
+        val code = word.uppercase()
+        if (code !in codes) codes += code
+    }
+    if (codes.size > MAX_HOME_AIRPORTS) return ParsedAirports.Problem("Up to $MAX_HOME_AIRPORTS airports.")
+    return ParsedAirports.Codes(codes)
+}
+
 /**
  * Whether a journey's end ([place], on [date]) is home: in the home of its day, or one of that home's airports or
  * stations, as home.ts's journeyHome. Only for journeys: a hotel by the airport is not at home.

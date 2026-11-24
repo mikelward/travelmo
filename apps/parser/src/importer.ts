@@ -23,7 +23,8 @@ import {
   normalizeReference,
   type ExtractedCancellation,
   homeTimeline,
-  withHomeAirports,
+  homesWithAirports,
+  type ChosenHomeAirports,
   type HomePeriod,
   icsEventText,
   isTravelCalendar,
@@ -228,6 +229,8 @@ export type ImportDeps = {
   // Corrections the user made to where home was (none are stored yet):
   // they win over the home worked out from journeys for their dates.
   homeOverrides?: (uid: string) => Promise<readonly HomePeriod[]>;
+  // The airports the user chose for their homes (Profile), over those worked out.
+  chosenHomeAirports?: (uid: string) => Promise<readonly ChosenHomeAirports[]>;
   now: () => string;
   // At INFO unless said otherwise.
   log: (event: string, fields: Record<string, unknown>, severity?: "WARNING") => void;
@@ -908,6 +911,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
   if (!range) throw new Error(`booking ${booking.sourceId} has no segments`);
   const timestamp = deps.now();
   const corrections = (await deps.homeOverrides?.(uid)) ?? [];
+  const chosen = (await deps.chosenHomeAirports?.(uid)) ?? [];
   const result = await store.withUserLock(uid, async (lockTx) => {
     const tx = settlingTripDates(lockTx, timestamp);
     if (booking.generation !== undefined && tx.generation !== booking.generation) throw new ImportSupersededError();
@@ -921,7 +925,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     const segmentsOf = (tripId: string) => segmentsByTrip.get(tripId) ?? [];
     // Home as worked out and as corrected, each with the airports its round
     // trips leave from (withHomeAirports).
-    const homes = (segments: readonly ExtractedSegment[]) => ({ periods: withHomeAirports(homeTimeline(segments), segments), overrides: withHomeAirports(corrections, segments) });
+    const homes = (segments: readonly ExtractedSegment[]) => homesWithAirports(segments, corrections, chosen);
     let { periods, overrides } = homes([...[...segmentsByTrip.values()].flat(), ...booking.segments]);
     // Cancellations read before this booking was (the mailbox is read newest
     // first); read here, before any write, as a transaction requires.

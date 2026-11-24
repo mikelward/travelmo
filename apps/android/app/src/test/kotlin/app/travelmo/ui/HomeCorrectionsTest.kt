@@ -13,7 +13,9 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.travelmo.core.ChosenHomeAirports
 import app.travelmo.core.HomeCorrection
 import app.travelmo.data.RideSettings
 import app.travelmo.ui.theme.TravelmoTheme
@@ -80,5 +82,19 @@ class HomeCorrectionsTest {
         item("Set").performClick()
         item("Use a two-letter country code, such as GB.")
         store.rides.value.homes shouldBe listOf(london)
+    }
+
+    @Test
+    fun `lists each home's airports and chooses them by code`() {
+        val store = show()
+        store.rides.value = store.rides.value.copy(homeAirports = listOf(ChosenHomeAirports("London", "GB", listOf("LHR"))))
+        item("London airports: LHR")
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription("Edit London airports"))
+        composeRule.onNodeWithContentDescription("Edit London airports").performClick()
+        item("London airports").performTextReplacement("LHR, lgw")
+        item("Save").performClick()
+        composeRule.waitForIdle()
+        store.rides.value.homeAirports shouldBe listOf(ChosenHomeAirports("London", "GB", listOf("LHR", "LGW")))
+        item("London airports: LHR, LGW")
     }
 }

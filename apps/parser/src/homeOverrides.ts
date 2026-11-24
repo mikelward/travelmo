@@ -1,4 +1,4 @@
-import { HomeCorrection, homeCorrections, maxHomeCorrections, paths, type HomePeriod } from "@travelmo/core";
+import { ChosenHomeAirports, HomeCorrection, homeCorrections, maxHomeCorrections, paths, type HomePeriod } from "@travelmo/core";
 import type { Firestore } from "firebase-admin/firestore";
 import { z } from "zod";
 
@@ -21,4 +21,23 @@ export async function loadHomeOverrides(
     return [];
   }
   return homeCorrections(parsed.data);
+}
+
+const StoredAirports = z.array(ChosenHomeAirports).max(maxHomeCorrections);
+
+// The airports a user chose for their homes (Profile). A list that does not
+// parse is logged and ignored: grouping goes on with the worked-out ones.
+export async function loadChosenHomeAirports(
+  db: Firestore,
+  uid: string,
+  log: (event: string, fields: Record<string, unknown>) => void,
+): Promise<ChosenHomeAirports[]> {
+  const chosen: unknown = (await db.doc(paths.user(uid)).get()).get("homeAirports");
+  if (chosen === undefined) return [];
+  const parsed = StoredAirports.safeParse(chosen);
+  if (!parsed.success) {
+    log("home_airports_malformed", { uid, issues: parsed.error.issues.length });
+    return [];
+  }
+  return parsed.data;
 }

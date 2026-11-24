@@ -37,6 +37,17 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.semantics.contentDescription
+import app.travelmo.shared.edit
+import app.travelmo.shared.edit_home_airports
+import app.travelmo.shared.home_airports_none
+import app.travelmo.shared.home_airports_label
+import app.travelmo.shared.home_airports
+import app.travelmo.core.parseAirportCodes
+import app.travelmo.core.airportCodes
+import app.travelmo.core.homeTownKey
+import app.travelmo.core.ParsedAirports
+import app.travelmo.core.HomePeriod
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -444,6 +455,7 @@ private fun HomeSection(viewModel: TripsViewModel) {
         (problem ?: (outcome as? Outcome.Failed)?.message)?.let {
             Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
         }
+        HomeAirports(viewModel, periods)
     }
     if (picking) {
         // Opens on the date chosen, else today.
@@ -530,3 +542,70 @@ private fun LoyaltyTable(entries: List<ProfileEntry>, onWhose: ((program: String
         }
     }
 }
+
+private const val HOME_AIRPORTS_TOKEN = "profile/home-airports"
+
+/**
+ * Each home's airports and stations, as the web's Profile lists them: a
+ * journey back into one ends a trip. Worked out from the trips that leave
+ * from them unless chosen here; Edit takes their codes.
+ */
+@Composable
+private fun HomeAirports(viewModel: TripsViewModel, periods: List<HomePeriod>) {
+    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val outcome = outcomes[HOME_AIRPORTS_TOKEN]
+    val busy = outcome is Outcome.Busy
+    var editing by rememberSaveable { mutableStateOf<String?>(null) }
+    var codes by rememberSaveable { mutableStateOf("") }
+    var problem by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(outcome) {
+        if (outcome is Outcome.Done) {
+            editing = null
+            viewModel.outcomeSeen(HOME_AIRPORTS_TOKEN)
+        }
+    }
+    // One row per home town, its latest period's airports.
+    val towns = periods.associateBy { homeTownKey(it.city, it.country) }
+    for ((key, period) in towns) {
+        val shown = airportCodes(period)
+        if (editing == key) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                OutlinedTextField(
+                    value = codes,
+                    onValueChange = { codes = it; problem = null },
+                    label = { Text(stringResource(Res.string.home_airports_label, period.city)) },
+                    placeholder = { Text("SFO, SJC") },
+                    singleLine = true,
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f),
+                )
+                Button(
+                    onClick = {
+                        when (val parsed = parseAirportCodes(codes)) {
+                            is ParsedAirports.Problem -> problem = parsed.text
+                            is ParsedAirports.Codes -> viewModel.setHomeAirports(HOME_AIRPORTS_TOKEN, period.city, period.country, parsed.codes)
+                        }
+                    },
+                    enabled = !busy,
+                ) { Text(stringResource(Res.string.save)) }
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Text(
+                    stringResource(Res.string.home_airports, period.city, if (shown.isEmpty()) stringResource(Res.string.home_airports_none) else shown.joinToString(", ")),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                val editLabel = stringResource(Res.string.edit_home_airports, period.city)
+                TextButton(
+                    onClick = { editing = key; codes = shown.joinToString(", "); problem = null },
+                    modifier = Modifier.semantics { contentDescription = editLabel },
+                ) { Text(stringResource(Res.string.edit)) }
+            }
+        }
+    }
+    (problem ?: (outcome as? Outcome.Failed)?.message)?.let {
+        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+    }
+}
+

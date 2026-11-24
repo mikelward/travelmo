@@ -336,4 +336,17 @@ class HomeTest {
         // Landing home at SFO opens nothing: the next trip is its own.
         opensTrip(boston[1], seattle[0], emptyList(), withAirports) shouldBe false
     }
+
+    @Test
+    fun `chosen home airports replace those worked out and are typed as codes`() {
+        val periods = listOf(HomePeriod("Mountain View", "US", from = "2011-01-01", airports = listOf(Place("SFO", code = "SFO"))))
+        withChosenAirports(periods, listOf(ChosenHomeAirports("mountain view", "US", listOf("SJC", "SFO")))).single().let { airportCodes(it) } shouldBe listOf("SJC", "SFO")
+        withChosenAirports(periods, listOf(ChosenHomeAirports("London", null, listOf("LHR")))).single().let { airportCodes(it) } shouldBe listOf("SFO")
+        parseAirportCodes(" sfo, SJC  oak sfo") shouldBe ParsedAirports.Codes(listOf("SFO", "SJC", "OAK"))
+        homeTownKey(" london ", "UK") shouldBe homeTownKey("London", "GB")
+        (homeTownKey("London", "GB") == homeTownKey("London", "CA")) shouldBe false
+        homeTownKey("München", "DE") shouldBe homeTownKey("Munich", "DE")
+        withChosenAirports(listOf(HomePeriod("München", "DE")), listOf(ChosenHomeAirports("Munich", "DE", listOf("MUC")))).single().let { airportCodes(it) } shouldBe listOf("MUC")
+        parseAirportCodes("Manchester Airport") shouldBe ParsedAirports.Problem("\"Manchester\" isn't an airport or station code.")
+    }
 }

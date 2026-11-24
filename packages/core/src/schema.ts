@@ -367,6 +367,20 @@ export const HomeCorrection = z.object({
   from: isoDate,
 });
 export type HomeCorrection = z.infer<typeof HomeCorrection>;
+
+// The airports and stations a person chose for a home (Profile), by its
+// town: in place of those worked out from their round trips
+// (withHomeAirports), for home as worked out or as corrected alike. At most
+// fifty homes, each with at most ten codes (IATA's three letters, or a
+// station's code).
+export const maxHomeAirports = 10;
+export const HomeAirportCode = z.string().trim().regex(/^[A-Za-z0-9]{3,5}$/).transform((code) => code.toUpperCase());
+export const ChosenHomeAirports = z.object({
+  city: z.string().trim().min(1).max(maxHomeCityLength),
+  country: z.string().length(2).optional(),
+  airports: z.array(HomeAirportCode).max(maxHomeAirports),
+});
+export type ChosenHomeAirports = z.infer<typeof ChosenHomeAirports>;
 export const maxHomeCorrections = 50;
 
 // A company the traveler books cars or rides with, added in Settings: a
@@ -463,6 +477,7 @@ export const UserProfile = z.object({
   reminders: ReminderSettings.optional(),
   forward: ForwardAddress.optional(),
   homes: z.array(HomeCorrection).max(maxHomeCorrections).optional(),
+  homeAirports: z.array(ChosenHomeAirports).max(maxHomeCorrections).optional(),
   // An entry that does not parse (a link that is not https://) is left out,
   // not the whole profile.
   rideCompanies: z
