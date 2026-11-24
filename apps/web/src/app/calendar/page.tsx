@@ -1,6 +1,6 @@
 "use client";
 
-import { addMonths, displayTitles, monthLabel, monthOf, monthWeeks, weekBars, type Trip, type TripBar } from "@travelmo/core";
+import { addMonths, displayBounds, displayTitles, formatDateRange, monthLabel, monthOf, monthWeeks, weekBars, type Trip, type TripBar } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
 import { useState } from "react";
@@ -15,7 +15,8 @@ const buttonClass =
 const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 // A trip's bar across one week: its title where it starts (or at the
-// week's edge when it carried over), the whole bar a link to the trip.
+// week's edge when it carried over), the whole bar a link to the trip,
+// named with its dates for a screen reader, which hears no columns.
 function Bar({ bar, title, uid }: { bar: TripBar; title: string; uid: string }) {
   const shared = bar.trip.ownerUid !== uid;
   const rounded = `${bar.continuesBefore ? "" : "rounded-l-md"} ${bar.continuesAfter ? "" : "rounded-r-md"}`;
@@ -25,6 +26,7 @@ function Bar({ bar, title, uid }: { bar: TripBar; title: string; uid: string }) 
       data-trip={bar.trip.id}
       data-days={`${bar.from}-${bar.to}`}
       title={title}
+      aria-label={`${title}, ${formatDateRange(displayBounds(bar.trip).start, displayBounds(bar.trip).end)}`}
       style={{ gridColumn: `${bar.from + 1} / ${bar.to + 2}`, gridRow: bar.lane + 2 }}
       className={`${rounded} mx-px truncate px-1.5 py-0.5 text-xs text-white hover:opacity-90 ${
         shared ? "bg-violet-600 dark:bg-violet-500" : "bg-sky-600 dark:bg-sky-500"
@@ -111,8 +113,10 @@ function Calendar({ user }: { user: User }) {
           </button>
         </div>
       </div>
-      <div className="mt-4 rounded-xl border border-zinc-200 dark:border-zinc-800" role="grid" aria-label={`Trips in ${monthLabel(month)}`}>
-        <div className="grid text-center text-xs font-medium uppercase tracking-wide text-muted" style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}>
+      {/* A picture of the month, not an interactive grid: the trips are its
+          links, each named with its dates; the weekday row is drawn only. */}
+      <section className="mt-4 rounded-xl border border-zinc-200 dark:border-zinc-800" aria-label={`Trips in ${monthLabel(month)}`}>
+        <div aria-hidden className="grid text-center text-xs font-medium uppercase tracking-wide text-muted" style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}>
           {weekdays.map((d) => (
             <div key={d} className="py-1">
               {d}
@@ -122,7 +126,7 @@ function Calendar({ user }: { user: User }) {
         {weeks.map((week) => (
           <Week key={week[0]} week={week} trips={inMonth} titles={titles} month={month} today={today} uid={user.uid} />
         ))}
-      </div>
+      </section>
       {inMonth.length === 0 && (
         <p className="mt-4 text-sm text-muted" data-testid="no-trips">
           No trips in {monthLabel(month)}.
