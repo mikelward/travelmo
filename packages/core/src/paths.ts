@@ -113,4 +113,9 @@ export const paths = {
   // and reminder (`<uid>__<tripId>__<reminderId>`); the parser's alone.
   checklistReminders: () => "checklistReminders",
   checklistReminder: (id: string) => `checklistReminders/${id}`,
+  // Server-only: a copy of each bug report a user sent (bugReports.ts),
+  // without its screenshot, and how many they sent today.
+  bugReports: () => "bugReports",
+  bugReport: (id: string) => `bugReports/${id}`,
+  bugReportBudget: (uid: string) => `users/${uid}/private/bugReportBudget`,
 } as const;

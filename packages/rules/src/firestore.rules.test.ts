@@ -467,6 +467,20 @@ describe("server-only collections", () => {
     await assertFails(getDoc(doc(as(owner), paths.deletedAccount(owner.uid))));
     await assertFails(setDoc(doc(as(owner), paths.deletedAccount(owner.uid)), { uid: owner.uid }));
   });
+
+  it("keep bug reports and their daily count from every client, the reporter's own included", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), paths.bugReport("r1")), { id: "r1", uid: owner.uid, at: "2026-11-24T10:00:00Z", app: "web", text: "Hi", logChars: 0, hasScreenshot: false });
+      await setDoc(doc(ctx.firestore(), paths.bugReportBudget(owner.uid)), { day: "2026-11-24", count: 1 });
+    });
+    await assertFails(getDoc(doc(as(owner), paths.bugReport("r1"))));
+    await assertFails(getDocs(collection(as(owner), paths.bugReports())));
+    await assertFails(setDoc(doc(as(owner), paths.bugReport("r2")), { id: "r2", uid: owner.uid }));
+    await assertFails(updateDoc(doc(as(owner), paths.bugReport("r1")), { text: "Changed" }));
+    await assertFails(deleteDoc(doc(as(owner), paths.bugReport("r1"))));
+    await assertFails(getDoc(doc(as(owner), paths.bugReportBudget(owner.uid))));
+    await assertFails(setDoc(doc(as(owner), paths.bugReportBudget(owner.uid)), { day: "2026-11-24", count: 0 }));
+  });
 });
 
 describe("flight status", () => {

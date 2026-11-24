@@ -9,8 +9,8 @@ import type { Firestore, Transaction } from "firebase-admin/firestore";
 // a TripIt profile (travelProfile.ts), calendar feeds (feeds.ts), upload
 // leases (leases.ts), a sign-in's OAuth state (connections.ts), and
 // background bookkeeping: calendar event aliases (connections.ts), reminder
-// logs (reminders.ts), reminder markers (checklist.ts), geocode retries (geocodeSweep.ts) and the forwarding
-// budget (inbound.ts). Disconnecting updates the user document only while it
+// logs (reminders.ts), reminder markers (checklist.ts), geocode retries (geocodeSweep.ts), the forwarding
+// budget (inbound.ts) and bug reports with their budget (bugReports.ts). Disconnecting updates the user document only while it
 // exists, so it cannot bring it back. Writes that only change a document that must already
 // exist (a feed's result, a connection's watch) need no check: deletion
 // removed the document, so they find nothing to change.

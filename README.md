@@ -364,7 +364,23 @@ One Google Cloud project holds everything.
    account already has, and the links that confirm a linked email address
    (SPEC "Linked email addresses"); without `SMTP_HOST` the switch in
    Settings does nothing and adding an address answers that email is not
-   set up. `VAPID_PRIVATE_KEY` (from Secret Manager), `VAPID_PUBLIC_KEY`
+   set up. `BUG_REPORT_TO`, with SMTP, is where bug reports sent from the
+   apps go (SPEC "Bug reports"); without it, or without SMTP, Report a bug
+   on the web answers that sending reports isn't set up, and Android's
+   offers the share sheet instead. To use an address on the app's own
+   domain, such as `bug@travelmo.app`, give it a mailbox first: Cloudflare
+   Email Routing only receives mail, and with the domain's catch-all sending
+   everything to the forwarding Worker (step 8), a report would land on the
+   parser as an unknown forwarding address and bounce. In Cloudflare, under
+   the domain's Email → Email Routing → Routing rules, add a custom address
+   (`bug`) with the action "Send to an email" and your own inbox (Cloudflare
+   mails that inbox once to verify it); custom addresses win over the
+   catch-all. Then set it on the parser alone, keeping its other settings:
+   `gcloud run services update parser --project=travelmo-13a7c --region=us-east4 --update-env-vars=BUG_REPORT_TO=bug@travelmo.app`.
+   Each report's Reply-To is the reporter's address, so replying from that
+   inbox answers them directly, from your own address (Email Routing cannot
+   send; replying as `bug@` needs a "send as" alias through an SMTP
+   service). `VAPID_PRIVATE_KEY` (from Secret Manager), `VAPID_PUBLIC_KEY`
    and `VAPID_SUBJECT` (a `mailto:` or `https:` URL the push services may
    contact) turn on reminders as browser notifications; make the pair once
    with `pnpm --filter @travelmo/parser exec web-push generate-vapid-keys`

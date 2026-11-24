@@ -1,11 +1,15 @@
 import nodemailer from "nodemailer";
 
-// Outgoing mail over SMTP, for reminders. Without SMTP_HOST the mailer is
+// Outgoing mail over SMTP, for reminders, address confirmations and bug
+// reports. Without SMTP_HOST the mailer is
 // off and Settings' switch has no effect, which the README says. The
 // address and subject hold user data (a trip title), so they are collapsed
 // to one line before they become headers.
 
-export type Mail = { to: string; subject: string; text: string };
+// Files that go with a mail (a bug report's screenshot and bookings), and
+// where a reply goes when it isn't the sender.
+export type Attachment = { filename: string; contentType: string; content: Uint8Array };
+export type Mail = { to: string; subject: string; text: string; replyTo?: string; attachments?: Attachment[] };
 export type Mailer = (mail: Mail) => Promise<void>;
 
 export type SmtpConfig = { host: string; port: number; secure: boolean; user?: string; pass?: string; from: string };
@@ -41,7 +45,16 @@ export function smtpConfig(env: Env): SmtpConfig | undefined {
   };
 }
 
-export type Transport = { sendMail(mail: { from: string; to: string; subject: string; text: string }): Promise<unknown> };
+export type Transport = {
+  sendMail(mail: {
+    from: string;
+    to: string;
+    subject: string;
+    text: string;
+    replyTo?: string;
+    attachments?: { filename: string; contentType: string; content: Buffer }[];
+  }): Promise<unknown>;
+};
 
 export function smtpTransport(config: SmtpConfig): Transport {
   return nodemailer.createTransport({
@@ -59,6 +72,17 @@ export function smtpTransport(config: SmtpConfig): Transport {
 
 export function smtpMailer(config: SmtpConfig, transport: Transport = smtpTransport(config)): Mailer {
   return async (mail) => {
-    await transport.sendMail({ from: config.from, to: oneLine(mail.to), subject: oneLine(mail.subject), text: mail.text });
+    await transport.sendMail({
+      from: config.from,
+      to: oneLine(mail.to),
+      subject: oneLine(mail.subject),
+      text: mail.text,
+      ...(mail.replyTo ? { replyTo: oneLine(mail.replyTo) } : {}),
+      ...(mail.attachments?.length
+        ? {
+            attachments: mail.attachments.map((a) => ({ filename: oneLine(a.filename), contentType: a.contentType, content: Buffer.from(a.content) })),
+          }
+        : {}),
+    });
   };
 }

@@ -500,6 +500,11 @@ service cloud.firestore {
     match /checklistReminders/{id} {
       allow read, write: if false;
     }
+    // Copies of the bug reports users sent: the parser's alone, never even
+    // the reporter's.
+    match /bugReports/{id} {
+      allow read, write: if false;
+    }
     // The geocoder's cache and daily budget: the parser's alone.
     match /geocodes/{key} {
       allow read, write: if false;

@@ -37,4 +37,28 @@ describe("smtpMailer", () => {
     expect(sent).toEqual([{ from: "Travelmo <no-reply@example>", to: "traveler@example", subject: "Before your trip to Liverpool Bcc: x@example", text: "Hi\nthere" }]);
     expect(oneLine(" a \u0000b\n\nc ")).toBe("a b c");
   });
+
+  it("sets a one-line reply address and sends attachments as they are", async () => {
+    const sent: unknown[] = [];
+    const transport: Transport = { sendMail: async (m) => void sent.push(m) };
+    const mail = smtpMailer({ host: "smtp.example", port: 465, secure: true, from: "no-reply@example" }, transport);
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    await mail({
+      to: "maintainer@example",
+      subject: "Report",
+      text: "Body",
+      replyTo: "traveler@example\r\nBcc: x@example",
+      attachments: [{ filename: "screenshot.png", contentType: "image/png", content: png }],
+    });
+    expect(sent).toEqual([
+      {
+        from: "no-reply@example",
+        to: "maintainer@example",
+        subject: "Report",
+        text: "Body",
+        replyTo: "traveler@example Bcc: x@example",
+        attachments: [{ filename: "screenshot.png", contentType: "image/png", content: Buffer.from(png) }],
+      },
+    ]);
+  });
 });

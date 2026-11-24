@@ -105,6 +105,7 @@ async function seedUser(uid: string, email: string) {
     paths.parsedMessage(uid, "m1"),
     paths.examples(uid),
     paths.forwardBudget(uid),
+    paths.bugReportBudget(uid),
     paths.importLock(uid),
     paths.reminderLog(uid, "t"),
     paths.emailLinks(uid),
@@ -117,7 +118,11 @@ async function seedUser(uid: string, email: string) {
   // Whether one of those reminders went to them.
   const sent = `${uid}__t__r1`;
   await db.doc(paths.checklistReminder(sent)).set({ id: sent, uid, tripId: "t", reminderId: "r1", ends: "2026-12-19", attempts: 0, done: true, at: iso });
+  // A bug report they sent.
+  const report = unique("report");
+  await db.doc(paths.bugReport(report)).set({ id: report, uid, at: iso, app: "web", text: "The map is blank", logChars: 0, hasScreenshot: false });
   const lookups = [
+    paths.bugReport(report),
     paths.checklistReminder(sent),
     paths.gmailAccount(mailbox),
     paths.gmailAccount(second),
