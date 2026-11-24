@@ -251,6 +251,18 @@ export function newTripTitle(segment: Pick<ExtractedSegment, "title" | "destinat
   return (place?.city || place?.name || segment.title).trim() || "Trip";
 }
 
+// The trip a booking added by hand with no trip in view goes into: one of
+// the user's own whose dates take in its first day, the shortest if several
+// do; undefined when none does, and a trip of its own is made
+// (newTripTitle, its dates). Trips being deleted or cancelled are passed by.
+export function fittingTrip<T extends Pick<Trip, "ownerUid" | "start" | "end" | "deleting" | "cancelledAt">>(trips: readonly T[], uid: string, start: string): T | undefined {
+  const day = start.slice(0, 10);
+  const span = (t: T) => Date.parse(t.end) - Date.parse(t.start);
+  return trips
+    .filter((t) => t.ownerUid === uid && !t.deleting && !t.cancelledAt && t.start <= day && day <= t.end)
+    .sort((a, b) => span(a) - span(b) || a.start.localeCompare(b.start))[0];
+}
+
 // An activity with no time of its own: the extractor's convention for a
 // dated thing with no stated time is local midnight and no end. It is shown
 // without a time.

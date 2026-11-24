@@ -1941,8 +1941,12 @@ removed, bookings edited and so left alone, emails no longer in a
 connected mailbox), in the words of `tripActions.ts` and its Kotlin twin.
 Emails that failed both times are listed, the first ten by subject and
 sender from their import records ("and 4 more" past that): each Gmail one
-opens in Gmail, Try again reads only those emails again (`retryFailed:
-true`), and Report a problem opens Report a bug with their ids written in. Progress saved under an
+opens in Gmail; Add it yourself opens the booking form on the day the
+email was sent and files the booking into the user's own trip that takes
+in its first day (the shortest, `fittingTrip`), else a trip of its own
+named for where it goes, then shows that trip; Try again reads only those
+emails again (`retryFailed: true`), and Report a problem opens Report a
+bug with their ids written in. Progress saved under an
 older reset generation counts as none, so "Delete all trips" stops a
 refresh, and drops its progress from Settings.
 

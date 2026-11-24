@@ -529,6 +529,12 @@ class FakeTripStore(
         movedToNew += Triple(fromTripId, segmentId, uid)
         return "new-trip"
     }
+    /** Bookings added in a trip of their own. */
+    val addedToNew = mutableListOf<SegmentDraft>()
+    override suspend fun addSegmentToNewTrip(draft: SegmentDraft, uid: String): String {
+        addedToNew += draft
+        return "new-trip"
+    }
     override suspend fun mergeTrips(sourceId: String, targetId: String): Int {
         merged += sourceId to targetId
         return segments[sourceId].orEmpty().size

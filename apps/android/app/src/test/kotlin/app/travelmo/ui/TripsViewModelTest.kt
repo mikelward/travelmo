@@ -131,6 +131,22 @@ class TripsViewModelTest {
     }
 
     @Test
+    fun `a booking added with no trip in view goes into the trip it falls in, else a new one`() = runTest {
+        val store = FakeTripStore()
+        val viewModel = TripsViewModel(store, OWNER, null)
+        // Liverpool runs 12 to 14 December.
+        viewModel.addBooking("in-liverpool", draft)
+        viewModel.outcomes.value["in-liverpool"] shouldBe Outcome.Done
+        viewModel.addedTo("in-liverpool") shouldBe "liverpool"
+        store.saved shouldBe listOf(Triple("liverpool", draft, null))
+
+        val later = draft.copy(start = "2027-03-01T10:00:00Z")
+        viewModel.addBooking("new", later)
+        viewModel.addedTo("new") shouldBe "new-trip"
+        store.addedToNew shouldBe listOf(later)
+    }
+
+    @Test
     fun `one form's pending save does not swallow another form's`() = runTest {
         val store = GatedStore()
         val viewModel = TripsViewModel(store, OWNER, null)

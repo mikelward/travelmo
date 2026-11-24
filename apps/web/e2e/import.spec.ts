@@ -436,7 +436,7 @@ test("a refresh lists the emails it couldn't read, with what can be done about t
   const refresh = page.getByTestId("refresh");
   await expect(refresh.getByTestId("refresh-progress")).toHaveText("Refreshed 90 emails: your bookings were already up to date. 3 emails couldn't be read, even on a second try:");
   const failed = refresh.getByTestId("refresh-failed");
-  await expect(failed.getByRole("listitem")).toHaveText(["Your flight · Example Air · Open in Gmail", "Your hotel"]);
+  await expect(failed.getByRole("listitem")).toHaveText(["Your flight · Example Air · Open in Gmail · Add it yourself", "Your hotel · Add it yourself"]);
   await expect(failed.getByRole("link", { name: "Open in Gmail" })).toHaveAttribute("href", "https://mail.google.com/mail/u/?authuser=traveler%40example.com#all/g1");
   await expect(failed.getByText("and 1 more")).toBeVisible();
 
@@ -446,4 +446,16 @@ test("a refresh lists the emails it couldn't read, with what can be done about t
 
   await failed.getByRole("button", { name: "Try again" }).click();
   await expect.poll(() => sent).toEqual([{ retryFailed: true }]);
+
+  // The hotel's booking, added by hand: no trip takes in its day, so one is made for it.
+  await failed.getByRole("listitem").filter({ hasText: "Your hotel" }).getByRole("button", { name: "Add it yourself" }).click();
+  await failed.getByRole("combobox", { name: "Type" }).selectOption("activity");
+  await failed.getByPlaceholder("BA 117 LHR to JFK").fill("Example walking tour");
+  await failed.locator('input[type="date"]').first().fill("2030-05-02");
+  await failed.getByRole("button", { name: "Add", exact: true }).click();
+  const added = failed.getByRole("link", { name: "Example walking tour" });
+  await expect(added).toBeVisible();
+  await added.click();
+  await expect(page.getByText("Example walking tour", { exact: true }).first()).toBeVisible();
+  await expect(page.getByTestId("trip-dates")).toHaveText("2 May 2030");
 });

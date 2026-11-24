@@ -1,6 +1,7 @@
 package app.travelmo.ui
 
 import app.travelmo.shared.try_again
+import app.travelmo.shared.add_it_yourself
 import app.travelmo.shared.open_in_gmail
 import app.travelmo.core.ParsedRecord
 import androidx.compose.runtime.produceState
@@ -269,7 +270,14 @@ private const val REMOVE_COMPANY_TOKEN = "settings/rides/remove"
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(account: SignedInAccount, user: SignedIn, viewModel: TripsViewModel, onBack: () -> Unit, onOpenReview: () -> Unit = {}) {
+fun SettingsScreen(
+    account: SignedInAccount,
+    user: SignedIn,
+    viewModel: TripsViewModel,
+    onBack: () -> Unit,
+    onOpenReview: () -> Unit = {},
+    onAddBooking: (defaultDate: String) -> Unit = {},
+) {
     val chrome = LocalAppChrome.current
     val scope = rememberCoroutineScope()
     val stored by viewModel.reminderEmail.collectAsStateWithLifecycle()
@@ -309,7 +317,7 @@ fun SettingsScreen(account: SignedInAccount, user: SignedIn, viewModel: TripsVie
             GmailSection(viewModel)
             FastmailSection(viewModel)
             ImapSection(viewModel)
-            TripsSection(viewModel)
+            TripsSection(viewModel, onAddBooking)
             FeedsSection(viewModel)
             GoogleCalendarSection(viewModel)
             CalendarExportSection(viewModel)
@@ -1190,7 +1198,7 @@ private fun MailboxRow(
  * again. A build with no parser address says to use the web.
  */
 @Composable
-private fun TripsSection(viewModel: TripsViewModel) {
+private fun TripsSection(viewModel: TripsViewModel, onAddBooking: (defaultDate: String) -> Unit) {
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
     val notice by viewModel.tripNotice.collectAsStateWithLifecycle()
     val own by viewModel.ownTripCount.collectAsStateWithLifecycle()
@@ -1225,7 +1233,7 @@ private fun TripsSection(viewModel: TripsViewModel) {
     listOf(regrouping, deleting).filterIsInstance<Outcome.Failed>().lastOrNull()?.let {
         Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
     }
-    RefreshFromEmail(viewModel)
+    RefreshFromEmail(viewModel, onAddBooking)
     if (confirming) {
         AppAlertDialog(
             onDismissRequest = { confirming = false },
@@ -1250,11 +1258,20 @@ private fun TripsSection(viewModel: TripsViewModel) {
 
 /**
  * The emails a refresh couldn't read, by subject and sender, as on the web:
- * a Gmail one opens in Gmail, to check it or add its booking by hand; Try
- * again reads them alone again, and Report a problem sends us their ids.
+ * a Gmail one opens in Gmail, to check it; Add it yourself takes its booking
+ * by hand into the trip it falls in, or a new one; Try again reads them
+ * alone again, and Report a problem sends us their ids.
  */
 @Composable
-private fun FailedEmails(viewModel: TripsViewModel, ids: List<String>, more: String?, report: String, busy: Boolean, onTryAgain: () -> Unit) {
+private fun FailedEmails(
+    viewModel: TripsViewModel,
+    ids: List<String>,
+    more: String?,
+    report: String,
+    busy: Boolean,
+    onAddBooking: (defaultDate: String) -> Unit,
+    onTryAgain: () -> Unit,
+) {
     val chrome = LocalAppChrome.current
     val mailboxes by viewModel.gmailMailboxes.collectAsStateWithLifecycle()
     val records by produceState(emptyMap<String, ParsedRecord>(), ids) { value = viewModel.failedEmailRecords(ids) }
@@ -1263,9 +1280,14 @@ private fun FailedEmails(viewModel: TripsViewModel, ids: List<String>, more: Str
             val record = records[id]
             val gmail = record != null && (record.source ?: "gmail") == "gmail"
             Text("• ${failedEmailLine(record)}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
-            if (gmail) {
-                TextButton(onClick = { chrome.openLink(gmailSourceLink(id, mailboxes), "an email a refresh couldn't read") }) {
-                    Text(stringResource(Res.string.open_in_gmail))
+            Row {
+                if (gmail) {
+                    TextButton(onClick = { chrome.openLink(gmailSourceLink(id, mailboxes), "an email a refresh couldn't read") }) {
+                        Text(stringResource(Res.string.open_in_gmail))
+                    }
+                }
+                TextButton(onClick = { onAddBooking(record?.sentAt?.take(10) ?: viewModel.today()) }) {
+                    Text(stringResource(Res.string.add_it_yourself))
                 }
             }
         }
@@ -1284,7 +1306,7 @@ private fun FailedEmails(viewModel: TripsViewModel, ids: List<String>, more: Str
  * goes, so it carries on with the app closed.
  */
 @Composable
-private fun RefreshFromEmail(viewModel: TripsViewModel) {
+private fun RefreshFromEmail(viewModel: TripsViewModel, onAddBooking: (defaultDate: String) -> Unit) {
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
     val state by viewModel.refresh.collectAsStateWithLifecycle()
     val starting = outcomes[REFRESH_TOKEN]
@@ -1319,6 +1341,7 @@ private fun RefreshFromEmail(viewModel: TripsViewModel) {
             more = moreFailedEmails(progress),
             report = failedEmailsReport(progress),
             busy = busy,
+            onAddBooking = onAddBooking,
             onTryAgain = {
                 listOf(REFRESH_TOKEN, REFRESH_STOP_TOKEN).forEach(viewModel::outcomeSeen)
                 viewModel.startRefresh(REFRESH_TOKEN, restart = false, retryFailed = true)

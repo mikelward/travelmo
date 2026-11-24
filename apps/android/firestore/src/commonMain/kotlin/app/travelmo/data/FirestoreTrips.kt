@@ -926,6 +926,39 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
      * As the web's moveSegmentToNewTrip: the rules check a booking against its trip as it already is, so the
      * trip is made first and the booking then moved; a move that fails takes the empty trip away again.
      */
+    /** As the web's addSegmentToFittingTrip, when no trip fits: the trip first, then the booking in it. */
+    override suspend fun addSegmentToNewTrip(draft: SegmentDraft, uid: String): String {
+        val range = listOfNotNull(draft.start, draft.end).map { localDate(it) }
+        val ref = db.collection("trips").document()
+        val now = Clock.System.now().toString()
+        ref.setData(
+            mapOf(
+                "id" to ref.id,
+                "title" to newTripTitle(draft),
+                "start" to range.min(),
+                "end" to range.max(),
+                "ownerUid" to uid,
+                "sharedWith" to emptyList<String>(),
+                "createdAt" to now,
+                "updatedAt" to now,
+            ),
+        ).await()
+        try {
+            saveSegment(ref.id, draft, null)
+        } catch (e: Exception) {
+            withContext(NonCancellable) {
+                try {
+                    SharedLog.error(e, "Adding a booking to a new trip failed; removing the empty trip")
+                    ref.delete().await()
+                } catch (cleanup: Exception) {
+                    SharedLog.error(cleanup, "Removing the empty trip failed; it stays")
+                }
+            }
+            throw e
+        }
+        return ref.id
+    }
+
     override suspend fun moveSegmentToNewTrip(fromTripId: String, segmentId: String, uid: String): String {
         val fromRef = db.collection("trips").document(fromTripId)
         val from = fromRef.get().await()

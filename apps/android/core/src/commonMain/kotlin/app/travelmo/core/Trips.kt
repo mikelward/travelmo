@@ -179,3 +179,22 @@ fun newTripTitle(segment: Segment): String {
     val place = segment.destination ?: segment.origin
     return listOf(place?.city, place?.name, segment.title).firstOrNull { !it.isNullOrBlank() }?.trim() ?: "Trip"
 }
+
+/** As [newTripTitle], for a booking the form is adding: where it goes, else its title. */
+fun newTripTitle(draft: SegmentDraft): String {
+    val place = draft.destination ?: draft.origin
+    return listOf(place?.name, draft.title).firstOrNull { !it.isNullOrBlank() }?.trim() ?: "Trip"
+}
+
+/**
+ * The trip a booking added by hand with no trip in view goes into: one of the user's own whose dates take in its
+ * first day ([start], a date or date-time), the shortest if several do; null when none does, and a trip of its own
+ * is made ([newTripTitle], its dates). Trips being deleted or cancelled are passed by. As packages/core's trips.ts.
+ */
+fun fittingTrip(trips: List<Trip>, uid: String, start: String): Trip? {
+    val day = start.take(10)
+    return trips
+        .filter { it.ownerUid == uid && !it.deleting && it.cancelledAt == null && it.start <= day && day <= it.end }
+        .sortedWith(compareBy({ daysBetween(it.start, it.end) }, { it.start }))
+        .firstOrNull()
+}
