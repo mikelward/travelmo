@@ -404,6 +404,17 @@ describe("importMessage", () => {
     expect(store.segments.get("m2-0")?.tripId).not.toBe(dying.id);
   });
 
+  it("tells a report what went to the model and what it said, or why it failed", async () => {
+    const debug = {};
+    await importMessage("u1", email(), deps(memoryStore(), async () => ({ isBooking: false, segments: [] })), { debug });
+    expect(debug).toEqual({ attachments: 0, extraction: { isBooking: false, segments: [] } });
+    const failed = {};
+    await importMessage("u1", email(), deps(memoryStore(), async () => {
+      throw new Error("Gemini returned no text");
+    }), { debug: failed });
+    expect(failed).toEqual({ attachments: 0, error: "Gemini returned no text" });
+  });
+
   it("records not_booking when the model says so, with the reader that said it", async () => {
     const store = memoryStore();
     const outcome = await importMessage("u1", email(), deps(store, async () => ({ isBooking: false, segments: [] })));

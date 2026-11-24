@@ -1,4 +1,4 @@
-import { emailText, htmlToText, tidy } from "./text";
+import { bodyChoice, emailText, htmlToText, maxEmailChars, tidy } from "./text";
 
 const b64 = (s: string) => Buffer.from(s, "utf8").toString("base64url");
 
@@ -25,6 +25,14 @@ describe("emailText", () => {
       ],
     });
     expect(text).toContain("XX 11 Boston to London Heathrow");
+  });
+
+  it("says which part it read, how long each was, and whether it was cut", () => {
+    expect(bodyChoice("Footer only.", `<p>${"XX 11 Boston to London Heathrow. ".repeat(5)}</p>`).choice).toEqual({ from: "html", plainChars: 12, htmlChars: 164, truncated: false });
+    expect(bodyChoice("Your flight XX 11 leaves at 06:00.", "<p>Your flight XX 11 leaves at 06:00.</p>").choice.from).toBe("plain");
+    const long = bodyChoice("x".repeat(maxEmailChars + 1), "");
+    expect(long.choice).toEqual({ from: "plain", plainChars: maxEmailChars + 1, htmlChars: 0, truncated: true });
+    expect(long.text).toHaveLength(maxEmailChars);
   });
 
   it("flattens HTML when no plain part exists, dropping links and images", () => {

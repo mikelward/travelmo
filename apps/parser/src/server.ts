@@ -97,7 +97,8 @@ import {
   type OAuthConfig,
   recordedAs,
 } from "./gmail";
-import { importCalendar, importMessage, importMessages, importTripIt, type ImportDeps, type ImportOptions } from "./importer";
+import { importCalendar, importMessage, importMessages, importTripIt, type ImportDebug, type ImportDeps, type ImportOptions } from "./importer";
+import { importReport } from "./debugReport";
 import { regroupTrips } from "./regroup";
 import { resetTrips } from "./tripsReset";
 import { loadChosenHomeAirports, loadHomeOverrides } from "./homeOverrides";
@@ -914,12 +915,16 @@ app.post("/gmail/reimport", async (c) => {
   } finally {
     await source.close?.();
   }
-  const outcome = await importMessage(uid, message, deps, { force: true, reclaim: true, source: source.provider });
+  const debug: ImportDebug = {};
+  const outcome = await importMessage(uid, message, deps, { force: true, reclaim: true, source: source.provider, debug });
   log("INFO", "reimport", { uid, messageId: message.id, outcome });
   if (outcome === "skipped") {
     throw new HTTPException(409, { message: "That email is already imported or being imported right now" });
   }
-  return c.json({ outcome });
+  // What was read and what the model said, for the person to paste where
+  // the reader is tuned; theirs alone, never stored or logged.
+  const report = importReport(message, await deps.store.getParsed(uid, message.id), debug);
+  return c.json({ outcome, report });
 });
 
 // "Refresh from email" (refresh.ts): the emails the user's bookings came

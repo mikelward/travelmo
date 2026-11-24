@@ -1,5 +1,5 @@
 import { google, type gmail_v1 } from "googleapis";
-import { emailText } from "./text";
+import { emailTextChoice, type TextChoice } from "./text";
 
 export type Gmail = gmail_v1.Gmail;
 
@@ -33,6 +33,9 @@ export type EmailMessage = {
   date: string;
   listUnsubscribe: boolean;
   text: string;
+  // Which body `text` came from, where the mailbox said (text.ts), for
+  // "Import anyway"'s report.
+  textChoice?: TextChoice;
   // Its PDF attachments, fetched only when asked for: once an email has
   // passed the filters and is about to be read (importer.ts).
   attachments?: () => Promise<Attachment[]>;
@@ -97,7 +100,7 @@ export function toEmailMessage(message: gmail_v1.Schema$Message): EmailMessage {
     subject: header(headers, "Subject") ?? "",
     date: header(headers, "Date") ?? internal ?? "",
     listUnsubscribe: header(headers, "List-Unsubscribe") !== undefined,
-    text: message.payload ? emailText(message.payload) : "",
+    ...(message.payload ? (({ text, choice }) => ({ text, textChoice: choice }))(emailTextChoice(message.payload)) : { text: "" }),
   };
 }
 

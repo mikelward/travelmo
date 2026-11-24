@@ -14,6 +14,8 @@ class ReviewTest {
         val records = listOf(record("a", subject = "Summer sale"), record("b", "imported", "Summer stay"), record("c", "processing", "Summer stay"), record("d", "failed", "Winter sale"))
         toReview(records, "").map { it.messageId } shouldBe listOf("a", "d")
         toReview(records, "summer").map { it.messageId } shouldBe listOf("a")
+        // One whose Import anyway report is still to copy stays, even once imported.
+        toReview(records, "", kept = setOf("b")).map { it.messageId } shouldBe listOf("a", "b", "d")
     }
 
     @Test

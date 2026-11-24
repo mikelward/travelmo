@@ -71,6 +71,15 @@ class ImportReviewScreenTest {
     }
 
     @Test
+    fun `import anyway offers its report to copy`() {
+        show(FakeTripStore(), FakeImportReview())
+        composeRule.onAllNodesWithText("Import anyway")[2].performScrollTo().performClick()
+        composeRule.onNodeWithText("Copy report").performScrollTo().performClick()
+        val clip = composeRule.activity.getSystemService(android.content.ClipboardManager::class.java).primaryClip!!
+        clip.getItemAt(0).text.toString() shouldBe "Travelmo import report\nEmail: fm-ferry"
+    }
+
+    @Test
     fun `an action that works replaces what a failed one said on that row`() {
         val store = FakeTripStore()
         show(store, FailingReview())
@@ -85,6 +94,6 @@ class ImportReviewScreenTest {
 
     private class FailingReview : app.travelmo.data.ImportReview {
         override val available = true
-        override suspend fun reimport(messageId: String): String = throw app.travelmo.data.TripActionFailed("Couldn't reach Travelmo. Check your connection and try again.")
+        override suspend fun reimport(messageId: String): app.travelmo.data.Reimported = throw app.travelmo.data.TripActionFailed("Couldn't reach Travelmo. Check your connection and try again.")
     }
 }

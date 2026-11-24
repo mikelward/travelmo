@@ -635,9 +635,9 @@ val fixtureParsed = listOf(
 class FakeImportReview : ImportReview {
     val asked = mutableListOf<String>()
     override val available = true
-    override suspend fun reimport(messageId: String): String {
+    override suspend fun reimport(messageId: String): app.travelmo.data.Reimported {
         asked += messageId
-        return "Imported"
+        return app.travelmo.data.Reimported("Read, not a booking", "Travelmo import report\nEmail: $messageId")
     }
 }
 

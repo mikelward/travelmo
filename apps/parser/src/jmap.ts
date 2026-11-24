@@ -3,7 +3,7 @@ import { isPdf, withinAttachmentLimits, type EmailMessage, type MessagePage } fr
 import type { MailSource } from "./mailSource";
 import type { ChangesResult } from "./newMailPoll";
 import { travelLoyaltyDomains } from "./prefilter";
-import { bodyText } from "./text";
+import { bodyChoice } from "./text";
 
 // Fastmail over JMAP (RFC 8620, RFC 8621), with an API token the user made
 // read-only in Fastmail's settings. The token is sent only to Fastmail's
@@ -262,7 +262,7 @@ export async function fetchEmail(jmap: Jmap, emailId: string): Promise<EmailMess
     subject: email.subject ?? "",
     date: email.sentAt ?? email.receivedAt ?? "",
     listUnsubscribe: Boolean(email["header:List-Unsubscribe:asText"]),
-    text: bodyText(partsText(email.textBody, email.bodyValues), partsText(email.htmlBody, email.bodyValues)),
+    ...(({ text, choice }) => ({ text, textChoice: choice }))(bodyChoice(partsText(email.textBody, email.bodyValues), partsText(email.htmlBody, email.bodyValues))),
     ...pdfsOf(jmap, email),
   };
 }

@@ -40,7 +40,19 @@ function ReviewList({ user }: { user: User }) {
   const patterns = useSenderPatterns(user.uid);
   const [busy, setBusy] = useState<string>();
   const [notice, setNotice] = useState<Record<string, string>>({});
-  const shown = records ? toReview(records, search.keyword, dayRange(search.from, search.to)) : [];
+  // After Import anyway, what was read and what the model said, to copy.
+  const [reports, setReports] = useState<Record<string, string>>({});
+  const copyReport = async (messageId: string, report: string) => {
+    try {
+      await navigator.clipboard.writeText(report);
+      setNotice((n) => ({ ...n, [messageId]: "Report copied" }));
+    } catch (e) {
+      console.error("Copying an import report failed", e);
+      setNotice((n) => ({ ...n, [messageId]: "Couldn't copy the report" }));
+    }
+  };
+  // A row keeps its report to copy once Import anyway made a booking of it.
+  const shown = records ? toReview(records, search.keyword, dayRange(search.from, search.to), new Set(Object.keys(reports))) : [];
 
   const act = async (record: ParsedMessage, action: () => Promise<string>) => {
     setBusy(record.messageId);
@@ -107,7 +119,13 @@ function ReviewList({ user }: { user: User }) {
                     type="button"
                     disabled={busy === record.messageId}
                     className={buttonClass}
-                    onClick={() => act(record, async () => (await api.reimport(user, record.messageId)).outcome)}
+                    onClick={() =>
+                      act(record, async () => {
+                        const { outcome, report } = await api.reimport(user, record.messageId);
+                        if (report) setReports((r) => ({ ...r, [record.messageId]: report }));
+                        return outcome;
+                      })
+                    }
                   >
                     Import anyway
                   </button>
@@ -130,6 +148,11 @@ function ReviewList({ user }: { user: User }) {
                     onClick={() => act(record, async () => (await learnSender(firestore(), user.uid, domain, "deny"), `Never importing ${domain}`))}
                   >
                     Never import {domain}
+                  </button>
+                )}
+                {reports[record.messageId] && (
+                  <button type="button" className={buttonClass} onClick={() => copyReport(record.messageId, reports[record.messageId]!)}>
+                    Copy report
                   </button>
                 )}
                 {notice[record.messageId] && <span className="self-center text-muted">{notice[record.messageId]}</span>}

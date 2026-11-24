@@ -77,3 +77,18 @@ test("a search finds an email whatever it was read among, by name or by when it 
   await expect(page.getByText("Example Air e-Ticket XY12AB")).toBeVisible();
   await expect(page.getByText("Newsletter 1", { exact: true })).toBeHidden();
 });
+
+test("Import anyway offers its report to copy when the email still isn't a booking", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const uid = await signIn(page, owner);
+  await seedParsedMessage({ uid, segmentIds: [], processedAt: "2026-11-23T10:00:00Z", messageId: "ticket", source: "gmail", outcome: "not_booking", from: "Example Air <tickets@air.example>", subject: "Example Air e-Ticket XY12AB" });
+  const report = "Travelmo import report\nEmail: Example Air e-Ticket XY12AB";
+  await page.route("http://localhost:8080/gmail/reimport", (route) => route.fulfill({ json: { outcome: "not_booking", report } }));
+  await page.goto("/settings/review");
+  const row = page.getByRole("listitem").filter({ hasText: "Example Air e-Ticket XY12AB" });
+  await expect(row.getByRole("button", { name: "Copy report" })).toHaveCount(0);
+  await row.getByRole("button", { name: "Import anyway" }).click();
+  await row.getByRole("button", { name: "Copy report" }).click();
+  await expect(row).toContainText("Report copied");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(report);
+});

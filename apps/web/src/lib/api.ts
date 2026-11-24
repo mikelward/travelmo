@@ -110,7 +110,8 @@ export const api = {
   startImapBackfill: (user: User, emailAddress: string, restart = false) =>
     post<BackfillStarted>(user, imapBackfillStartPath, restart ? { emailAddress, restart } : { emailAddress }, true),
   stopImapBackfill: (user: User, emailAddress: string) => post<void>(user, imapBackfillStopPath, { emailAddress }),
-  reimport: (user: User, messageId: string) => post<{ outcome: string }>(user, "/gmail/reimport", { messageId }),
+  // `report`: what was read and what the model said, to copy (debugReport.ts).
+  reimport: (user: User, messageId: string) => post<{ outcome: string; report?: string }>(user, "/gmail/reimport", { messageId }),
   importTripIt: (user: User, exported: unknown) => post<TripItResult>(user, "/import/tripit", { export: exported }),
   importIcs: (user: User, text: string) => post<CalendarResult>(user, "/import/ics", { text }),
   addFeed: (user: User, url: string, label?: string) =>
