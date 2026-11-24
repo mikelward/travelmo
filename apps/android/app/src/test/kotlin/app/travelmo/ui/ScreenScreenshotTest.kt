@@ -147,6 +147,15 @@ class ScreenScreenshotTest {
         }
     }
 
+    // A trip under way with a flight in three hours: its gate on the card.
+    @Test
+    fun trip_list_flight() {
+        val viewModel = TripsViewModel(flightTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        capture("trip_list_flight") {
+            TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.TRIPS) {} })
+        }
+    }
+
     // After a crash in an earlier run: the banner at the top of the list.
     @Test
     fun trip_list_crash_banner() {

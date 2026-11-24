@@ -737,4 +737,11 @@ class TripsViewModelTest {
         viewModel.flightLines(flight, statuses) shouldBe listOf("Departs from gate 8", "Bags on carousel 16")
         flightModel("2026-12-10T21:00:00Z", emptyMap(), mutableListOf()).flightLines(flight, statuses) shouldBe emptyList()
     }
+
+    @Test
+    fun `the list reads the status of each trip under way's next flight`() = runTest {
+        val viewModel = TripsViewModel(flightTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        val state = viewModel.state.first { it.groups != null && "sydney" in it.segmentsByTrip && it.flightStatuses.isNotEmpty() }
+        state.flightStatuses shouldBe mapOf("XX100_2026-11-02_SYD" to fixtureNextFlightStatus)
+    }
 }

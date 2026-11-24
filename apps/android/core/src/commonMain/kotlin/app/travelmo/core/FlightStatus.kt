@@ -131,6 +131,54 @@ private fun timing(scheduled: String, estimated: String, place: String?): String
 private fun offSchedule(scheduled: String?, estimated: String?): Boolean =
     scheduled != null && estimated != null && kotlin.math.abs(instantMillis(estimated) - instantMillis(scheduled)) >= DELAY_SHOWN
 
+/** Whether a departure time is worth saying: not left and off schedule, or news of a delay went out. */
+private fun leavesLate(status: FlightStatus): Boolean =
+    status.actualOut == null && status.estimatedOut != null &&
+        (offSchedule(status.scheduledOut, status.estimatedOut) || status.noticedOut != null)
+
+private fun divertedLine(status: FlightStatus, booked: Segment?): String {
+    val to = status.divertedTo?.uppercase()
+    return if (to != null && to != booked?.destination?.code?.uppercase()) "Diverted to $to" else "Diverted"
+}
+
+/**
+ * Whether the flight has taken off as of [at]: the service says it left, or the time it is
+ * expected to leave (else the one scheduled, else the booking's) has passed. A cancelled flight
+ * goes by its booking's time.
+ */
+fun flightDeparted(booked: Segment, status: FlightStatus?, at: String): Boolean {
+    if (status != null && status.found && !status.cancelled) {
+        if (status.actualOut != null) return true
+        val out = status.estimatedOut ?: status.scheduledOut
+        if (out != null) return instantMillis(at) >= instantMillis(out)
+    }
+    return instantMillis(at) >= instantMillis(booked.start)
+}
+
+/** "Terminal 3 · Gate 12", "Terminal E · Bags on carousel 7": what is known; null when nothing is. */
+private fun listed(vararg parts: String?): String? = parts.filterNotNull().takeIf { it.isNotEmpty() }?.joinToString(" · ")
+
+/**
+ * The next thing to do for a flight, for a trip card's last line: before takeoff, how late it
+ * leaves when it is late, else the terminal and gate it leaves from; after, the terminal and gate
+ * it arrives at and where the bags come out. A cancelled or diverted flight says that instead.
+ * Null when nothing is known.
+ */
+fun flightNextStep(status: FlightStatus?, booked: Segment, now: String): String? {
+    if (status == null || !status.found) return null
+    if (status.cancelled) return "Flight cancelled"
+    if (!flightDeparted(booked, status, now)) {
+        if (leavesLate(status)) return "Leaves ${timing(status.scheduledOut!!, status.estimatedOut!!, booked.start)}"
+        return listed(status.departureTerminal?.let { "Terminal $it" }, status.departureGate?.let { "Gate $it" })
+    }
+    if (status.diverted) return divertedLine(status, booked)
+    return listed(
+        status.arrivalTerminal?.let { "Terminal $it" },
+        status.arrivalGate?.let { "Gate $it" },
+        status.baggageClaim?.let { "Bags on carousel $it" },
+    )
+}
+
 /**
  * What the flight's card says: whether it is cancelled or diverted, how late it leaves and lands,
  * where it leaves from and arrives at, and where the bags come out. Times read as the airports'
@@ -140,14 +188,8 @@ private fun offSchedule(scheduled: String?, estimated: String?): Boolean =
 fun flightStatusLines(status: FlightStatus?, booked: Segment? = null): List<String> {
     if (status == null || !status.found) return emptyList()
     if (status.cancelled) return listOf("Flight cancelled")
-    val to = status.divertedTo?.uppercase()
-    val diverted = when {
-        !status.diverted -> null
-        to != null && to != booked?.destination?.code?.uppercase() -> "Diverted to $to"
-        else -> "Diverted"
-    }
-    val leaves = status.actualOut == null && status.estimatedOut != null &&
-        (offSchedule(status.scheduledOut, status.estimatedOut) || status.noticedOut != null)
+    val diverted = if (status.diverted) divertedLine(status, booked) else null
+    val leaves = leavesLate(status)
     val lands = status.actualIn == null && offSchedule(status.scheduledIn, status.estimatedIn)
     return listOfNotNull(
         diverted,

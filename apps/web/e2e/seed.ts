@@ -1,4 +1,4 @@
-import { paths, type CalendarFeed, type GmailConnection, type ImapConnection, type GoogleCalendarConnection, type ParsedMessage, type TravelProfile, type Segment, type Trip, type UserProfile } from "@travelmo/core";
+import { paths, type CalendarFeed, type FlightStatus, type GmailConnection, type ImapConnection, type GoogleCalendarConnection, type ParsedMessage, type TravelProfile, type Segment, type Trip, type UserProfile } from "@travelmo/core";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { FieldPath, FieldValue, getFirestore } from "firebase-admin/firestore";
 
@@ -69,6 +69,22 @@ export async function seedFlight(tripId: string, extra: Partial<Segment> = {}): 
   };
   await db.doc(paths.segment(tripId, flight.id)).set(flight);
   return flight;
+}
+
+// A flight's live status as the parser keeps it (`flightStatus/{key}`), for
+// the invented XX 100 leaving Manchester at 04:00Z on 13 December.
+export async function seedFlightStatus(key: string, fields: Partial<FlightStatus> = {}): Promise<void> {
+  const status: FlightStatus = {
+    ident: "XX100",
+    date: "2026-12-13",
+    origin: "MAN",
+    found: true,
+    scheduledOut: "2026-12-13T04:00:00Z",
+    scheduledIn: "2026-12-13T15:00:00Z",
+    checkedAt: "2026-12-12T19:00:00Z",
+    ...fields,
+  };
+  await db.doc(paths.flightStatus(key)).set(status);
 }
 
 // An invented past week in Lisbon: flights known only by their airport
@@ -208,6 +224,7 @@ export async function clearData(): Promise<void> {
   await db.recursiveDelete(db.collection("users"));
   await db.recursiveDelete(db.collection(paths.accessRecords()));
   await db.recursiveDelete(db.collection("config"));
+  await db.recursiveDelete(db.collection("flightStatus"));
 }
 
 // Lets an address use the app, as an admin's approval does (SPEC "Access").

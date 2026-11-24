@@ -34,4 +34,13 @@ class TripListScreenTest {
         composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Every booking cancelled"))
         composeRule.onNodeWithText("Every booking cancelled").assertExists()
     }
+
+    @Test
+    fun `a trip under way's card names the next booking then when then the flight's gate`() {
+        val viewModel = TripsViewModel(flightTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }
+        composeRule.onNodeWithText("XX 100 SYD to SIN").assertExists()
+        composeRule.onNodeWithText("Departs in 3 h · Mon 2 Nov 02:00").assertExists()
+        composeRule.onNodeWithText("Terminal 1 · Gate 8").assertExists()
+    }
 }

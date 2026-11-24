@@ -268,9 +268,26 @@ named them (`displayTitles` in `packages/core/src/format.ts`). The stored
 title is unchanged, and a trip's own page shows it plain, its dates being
 right under it; the pickers that move a booking or merge a trip already
 show every trip's dates.
-The same card says how soon that is when it is within a week ("in 25 min",
-"in 3 h 20 min", "tomorrow", "on Sun"), counted in the place's own offset;
-names the stay under way and when it ends; and, for the next flight, when
+What comes next takes up to three lines (`tripNextUp` in
+`packages/core/src/nextUp.ts`, mirrored in the Android app's core): the
+booking's title; then, muted, the verb, how soon when it is within a week
+("in 25 min", "in 3 h 20 min", "tomorrow"; a weekday is left to the date),
+counted in the place's own offset, and the date and time as booked
+("Departs in 2 h 1 min · Tue 24 Nov 17:20"; "Departs Tue 24 Nov 17:20"
+further off); then, for a flight with live status ("Live flight status"),
+the next step. Before takeoff that is how late it leaves, when it is late
+("Leaves 35 min late, at 17:55"), else the terminal and gate it leaves
+from ("Terminal 3 · Gate 12", or whichever is known); after takeoff (the
+service says it left, or its estimated, else scheduled, departure has
+passed) the card turns to the arrival ("Arrives in 6 h 10 min · Tue 24 Nov
+20:30", counted to the landing estimate) and the step is where it arrives
+and where the bags come out ("Terminal E · Gate B5 · Bags on carousel 7").
+A cancelled or diverted flight says so instead, and nothing known means no
+third line. A flight late leaving stays the next event past its booked
+time, counted to its estimate. The list reads the status of each card
+under way's next flight only, one listener each, while a trip page would
+show it.
+The same card names the stay under way and when it ends; and, for the next flight, when
 online check-in opens from a day before that, then that it is open, with
 the booking reference at hand (`packages/core/src/status.ts`). The window
 is the airline's, read from the flight number ("Check-in reminders"); an

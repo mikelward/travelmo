@@ -88,6 +88,26 @@ val fixtureTrips = listOf(
     trip("paris", "Paris", "2026-03-20", "2026-03-22"),
 )
 
+// A trip under way with a flight leaving in three hours (15:00Z), and the
+// parser's word on its gates.
+val fixtureFlightTrip = Trip("sydney", "Singapore", "2026-11-01", "2026-11-06", OWNER)
+val fixtureNextFlight = Segment(
+    "s-flight", "sydney", SegmentType.FLIGHT, "XX 100 SYD to SIN", "2026-11-02T02:00:00+11:00", "2026-11-02T08:30:00+08:00",
+    provider = "Example Air", confirmation = "XX7Q2P", origin = Place("Sydney", code = "SYD"), destination = Place("Singapore", code = "SIN"),
+)
+val fixtureNextFlightStatus = FlightStatus(
+    ident = "XX100", date = "2026-11-02", origin = "SYD", found = true,
+    departureGate = "8", departureTerminal = "1", arrivalGate = "D46", arrivalTerminal = "1",
+    scheduledOut = "2026-11-01T15:00:00Z", scheduledIn = "2026-11-02T00:30:00Z", checkedAt = "2026-11-01T11:59:00Z",
+)
+
+/** The fixtures with [fixtureFlightTrip] under way, its flight's status known. */
+fun flightTripStore() = FakeTripStore(
+    trips = fixtureTrips + fixtureFlightTrip,
+    segments = fixtureSegments + ("sydney" to listOf(fixtureNextFlight)),
+    flightStatuses = mapOf("XX100_2026-11-02_SYD" to fixtureNextFlightStatus),
+)
+
 // A day out the email gave only a date for: shown with no time, not 00:00.
 val fixtureUntimedActivity = Segment(
     "l-gallery", "liverpool", SegmentType.ACTIVITY, "Walker Art Gallery", "2026-12-14T00:00:00+00:00",

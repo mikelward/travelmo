@@ -1,12 +1,13 @@
 "use client";
 
-import { displayTitles, groupTrips, listWarnings, type Segment, type Trip } from "@travelmo/core";
+import { displayTitles, groupTrips, listWarnings, nextUpFlightKeys, type FlightStatus, type Segment, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
 import { SignInGate } from "@/components/SignInGate";
 import { TripCard } from "@/components/TripCard";
 import { localToday } from "@/lib/dates";
 import { usePeopleDocuments, useTripWarnings, warningText } from "@/lib/documents";
+import { useFlightStatusesOf } from "@/lib/flightStatus";
 import { useSaveForOffline } from "@/lib/offline";
 import { useNow, useSegmentsOf, useTrips } from "@/lib/trips";
 
@@ -22,6 +23,7 @@ function Section({
   uid,
   segmentsByTrip,
   now,
+  flightStatuses,
   showNext,
 }: {
   title: string;
@@ -30,6 +32,8 @@ function Section({
   uid: string;
   segmentsByTrip: Record<string, Segment[]>;
   now: string;
+  // The live status of the cards' next flights, by key.
+  flightStatuses: Record<string, FlightStatus>;
   // Whether the cards say what comes next: only a trip under way does. A
   // card whose bookings are loaded says they were all cancelled either way.
   showNext: boolean;
@@ -46,7 +50,7 @@ function Section({
             title={titles.get(trip.id) ?? trip.title}
             shared={trip.ownerUid !== uid}
             {...(segmentsByTrip[trip.id] ? { segments: segmentsByTrip[trip.id] } : {})}
-            {...(showNext ? { now } : {})}
+            {...(showNext ? { now, flightStatuses } : {})}
           />
         ))}
       </div>
@@ -62,6 +66,13 @@ function Trips({ user }: { user: User }) {
   const detailed = groups ? [...groups.current, ...groups.upcoming.slice(0, upcomingWithDetails)].map((t) => t.id) : [];
   const segmentsByTrip = useSegmentsOf(detailed);
   const now = useNow();
+  // A card under way reads the live status of its next flight, one listener each.
+  const flightStatuses = useFlightStatusesOf(
+    (groups?.current ?? []).flatMap((trip) => {
+      const segments = segmentsByTrip[trip.id];
+      return segments ? nextUpFlightKeys(segments, now) : [];
+    }),
+  );
   const people = usePeopleDocuments(user);
   const warnings = useTripWarnings(people, trips ?? [], segmentsByTrip, today);
 
@@ -79,7 +90,7 @@ function Trips({ user }: { user: User }) {
       </div>
     );
   }
-  const sectionProps = { uid: user.uid, titles: displayTitles(trips), segmentsByTrip, now };
+  const sectionProps = { uid: user.uid, titles: displayTitles(trips), segmentsByTrip, now, flightStatuses };
   // Document warnings once, at the top, each for the earliest trip it bears
   // on and linking to it, rather than repeated on every card.
   const listed = listWarnings(warnings, trips);

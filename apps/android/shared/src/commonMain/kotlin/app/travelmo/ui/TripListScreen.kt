@@ -28,29 +28,26 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.core.ListWarning
+import app.travelmo.core.FlightStatus
 import app.travelmo.core.Segment
 import app.travelmo.core.Trip
 import app.travelmo.core.WarningWhen
 import app.travelmo.core.allCancelled
 import app.travelmo.core.checkInLine
 import app.travelmo.core.displayTitles
-import app.travelmo.core.eventVerb
 import app.travelmo.core.formatDate
 import app.travelmo.core.formatDateRange
 import app.travelmo.core.localDate
 import app.travelmo.core.localTime
-import app.travelmo.core.relativeTime
 import app.travelmo.core.shownEnd
 import app.travelmo.core.shownStart
+import app.travelmo.core.tripNextUp
 import app.travelmo.core.tripStatus
 import app.travelmo.core.warningText
 import app.travelmo.shared.Res
@@ -146,16 +143,26 @@ private fun androidx.compose.foundation.lazy.LazyListScope.section(title: String
         )
     }
     items(trips, key = { it.id }) { trip ->
-        TripCard(trip = trip, title = titles[trip.id] ?: trip.title, shared = trip.ownerUid != uid, segments = state.segmentsByTrip[trip.id], now = state.now, showNext = showNext, onClick = { onOpenTrip(trip.id) })
+        TripCard(trip = trip, title = titles[trip.id] ?: trip.title, shared = trip.ownerUid != uid, segments = state.segmentsByTrip[trip.id], now = state.now, showNext = showNext, flightStatuses = state.flightStatuses, onClick = { onOpenTrip(trip.id) })
     }
 }
 
 /**
  * One trip: the title (as [displayTitles] shows it among the list), its dates, whether every booking was
- * cancelled when its [segments] are loaded, and with [showNext] (a trip under way) what comes next.
+ * cancelled when its [segments] are loaded, and with [showNext] (a trip under way) what comes next, with the live
+ * status of its next flight from [flightStatuses].
  */
 @Composable
-fun TripCard(trip: Trip, title: String = trip.title, shared: Boolean, segments: List<Segment>?, now: String, showNext: Boolean = true, onClick: () -> Unit) {
+fun TripCard(
+    trip: Trip,
+    title: String = trip.title,
+    shared: Boolean,
+    segments: List<Segment>?,
+    now: String,
+    showNext: Boolean = true,
+    flightStatuses: Map<String, FlightStatus> = emptyMap(),
+    onClick: () -> Unit,
+) {
     val badge = when {
         trip.deleting -> stringResource(Res.string.badge_deleting) to MaterialTheme.colorScheme.onSurfaceVariant
         shared -> stringResource(Res.string.badge_shared) to TravelmoTheme.colors.shared
@@ -180,13 +187,16 @@ fun TripCard(trip: Trip, title: String = trip.title, shared: Boolean, segments: 
             badge?.let { (text, color) -> Text(text.uppercase(), style = MaterialTheme.typography.labelMedium, color = color) }
         }
         Text(formatDateRange(trip.shownStart, trip.shownEnd), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
-        if (segments != null) StatusLines(segments, now, showNext)
+        if (segments != null) StatusLines(segments, now, showNext, flightStatuses)
     }
 }
 
-/** Whether every booking was cancelled, then with [showNext] the stay under way, the next event with how soon, and the flight's check-in window. */
+/**
+ * Whether every booking was cancelled, then with [showNext] the stay under way, what comes next ([tripNextUp], with the
+ * live status of its flight from [flightStatuses]), and the flight's check-in window.
+ */
 @Composable
-private fun StatusLines(segments: List<Segment>, now: String, showNext: Boolean) {
+private fun StatusLines(segments: List<Segment>, now: String, showNext: Boolean, flightStatuses: Map<String, FlightStatus>) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     if (allCancelled(segments)) {
         Text(stringResource(Res.string.trip_all_cancelled), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
@@ -197,21 +207,18 @@ private fun StatusLines(segments: List<Segment>, now: String, showNext: Boolean)
         val until = stay.end?.let { " · until ${formatDate(localDate(it))} ${localTime(it)}" } ?: ""
         Text(stringResource(Res.string.staying_at, stay.title) + until, style = MaterialTheme.typography.bodyLarge, color = muted, modifier = Modifier.padding(top = 8.dp))
     }
-    status.next?.let { event ->
-        val soon = relativeTime(now, event.at)?.let { " · $it" } ?: ""
-        // One text, so a long line wraps as prose: the verb in the surface
-        // color and weight, the rest muted.
+    tripNextUp(segments, now, flightStatuses)?.let { next ->
+        // The booking, then when (muted), then a flight's next step.
         Text(
-            buildAnnotatedString {
-                withStyle(SpanStyle(fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)) { append(eventVerb(event)) }
-                append(" ${event.segment.title}")
-                withStyle(SpanStyle(color = muted)) { append(" · ${formatDate(localDate(event.at))} ${localTime(event.at)}$soon") }
-            },
+            next.title,
             style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 8.dp),
         )
+        Text(next.`when`, style = MaterialTheme.typography.bodyLarge, color = muted)
+        next.step?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
     }
     status.checkIn?.let { checkIn ->
         Text(
