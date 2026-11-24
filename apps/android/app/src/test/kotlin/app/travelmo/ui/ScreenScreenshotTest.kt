@@ -156,6 +156,15 @@ class ScreenScreenshotTest {
         }
     }
 
+    // The same flight landed 12 minutes ago: its gate and carousel, then the car booked for its landing.
+    @Test
+    fun trip_list_landed() {
+        val viewModel = TripsViewModel(landedTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(LANDED_NOW) })
+        capture("trip_list_landed") {
+            TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.TRIPS) {} })
+        }
+    }
+
     // After a crash in an earlier run: the banner at the top of the list.
     @Test
     fun trip_list_crash_banner() {

@@ -101,6 +101,25 @@ val fixtureNextFlightStatus = FlightStatus(
     scheduledOut = "2026-11-01T15:00:00Z", scheduledIn = "2026-11-02T00:30:00Z", checkedAt = "2026-11-01T11:59:00Z",
 )
 
+// The same flight landed, and a car booked for its scheduled landing: 12
+// minutes after it, the card keeps the flight's gate and carousel and says
+// the car comes next.
+const val LANDED_NOW = "2026-11-02T00:42:00Z"
+val fixtureLandingCar = Segment(
+    "s-car", "sydney", SegmentType.CAR_RENTAL, "Example Cars at Changi", "2026-11-02T08:15:00+08:00", "2026-11-05T10:00:00+08:00",
+    provider = "Example Cars", confirmation = "EC-4410",
+)
+val fixtureLandedFlightStatus = fixtureNextFlightStatus.copy(
+    actualOut = "2026-11-01T15:05:00Z", actualIn = "2026-11-02T00:30:00Z", baggageClaim = "42", checkedAt = "2026-11-02T00:41:00Z",
+)
+
+/** The fixtures with [fixtureFlightTrip]'s flight landed and a car waiting on it. */
+fun landedTripStore() = FakeTripStore(
+    trips = fixtureTrips + fixtureFlightTrip,
+    segments = fixtureSegments + ("sydney" to listOf(fixtureNextFlight, fixtureLandingCar)),
+    flightStatuses = mapOf("XX100_2026-11-02_SYD" to fixtureLandedFlightStatus),
+)
+
 /** The fixtures with [fixtureFlightTrip] under way, its flight's status known. */
 fun flightTripStore() = FakeTripStore(
     trips = fixtureTrips + fixtureFlightTrip,
