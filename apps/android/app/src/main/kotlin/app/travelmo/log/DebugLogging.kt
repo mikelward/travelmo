@@ -3,10 +3,13 @@ package app.travelmo.log
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import androidx.core.content.FileProvider
 import app.travelmo.BuildConfig
+import app.travelmo.core.BUG_REPORT_SCREENSHOT_MAX_BYTES
 import com.mikelward.androidlog.android.CollectedReport
 import com.mikelward.androidlog.android.DebugFileSink
 import com.mikelward.androidlog.android.DebugReport
@@ -21,6 +24,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.Executors
 
@@ -139,6 +143,84 @@ object DebugLogging {
         }
     }
 
+    /**
+     * The report Report a bug sends to Travelmo (SPEC "Bug reports"): the
+     * same text [share] hands the share sheet, and the screen [context]'s
+     * activity shows as PNG bytes small enough for the parser, or none when
+     * the capture fails or can't be made small enough. The screenshot is
+     * taken first, while the screen is the one the report was asked from (the
+     * dialog is a window of its own, which the capture leaves out), and its
+     * file is deleted once read.
+     */
+    suspend fun collectForSending(
+        context: Context,
+        signedIn: Boolean,
+        /** The screenshot's file; a test hands in its own, as there is no window to copy. */
+        capture: suspend (Activity) -> File? = ::captureScreenshotFile,
+    ): ReportForSending {
+        val activity = context.findActivity()
+        val file = when {
+            activity == null -> null.also { TravelmoLog.warning("No activity to take the report's screenshot from; sending text alone") }
+            else -> try {
+                capture(activity)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                TravelmoLog.failure(e, "Taking the report's screenshot failed; sending text alone")
+                null
+            }
+        }
+        return withContext(Dispatchers.IO) {
+            val screenshot = file?.let { readScreenshot(it) }
+            val report = runCatching {
+                DebugReport.collect(TravelmoLog, sink) { payload(signedIn) }
+            }.getOrElse { failure ->
+                TravelmoLog.failure(failure, "Building the debug report failed; sending a minimal one")
+                DebugReport.collect(TravelmoLog, null) { payload(signedIn) }
+            }
+            ReportForSending(report.text, screenshot)
+        }
+    }
+
+    /** The PNG's bytes, made small enough to send, then the file deleted; null when it can't be read or shrunk. */
+    private fun readScreenshot(file: File): ByteArray? = try {
+        fitScreenshot(file.readBytes(), BUG_REPORT_SCREENSHOT_MAX_BYTES, ::halveScreenshot)
+            .also { if (it == null) TravelmoLog.warning("The report's screenshot is too large even shrunk; sending text alone") }
+    } catch (e: Exception) {
+        TravelmoLog.failure(e, "Reading the report's screenshot failed; sending text alone")
+        null
+    } finally {
+        if (!file.delete()) TravelmoLog.warning("Couldn't delete the sent screenshot; the age-based prune will")
+    }
+
+    /**
+     * [png] as it is when it fits in [maxBytes], else shrunk by [shrink] up
+     * to three times until it does; null when it never does or a shrink fails.
+     */
+    internal fun fitScreenshot(png: ByteArray, maxBytes: Int, shrink: (ByteArray) -> ByteArray?): ByteArray? {
+        var bytes = png
+        repeat(3) {
+            if (bytes.size <= maxBytes) return bytes
+            bytes = shrink(bytes) ?: return null
+        }
+        return bytes.takeIf { it.size <= maxBytes }
+    }
+
+    /** The picture at half its width and height, as PNG; null when it can't be decoded or encoded. */
+    private fun halveScreenshot(png: ByteArray): ByteArray? {
+        val bitmap = BitmapFactory.decodeByteArray(png, 0, png.size, BitmapFactory.Options().apply { inSampleSize = 2 }) ?: return null
+        return try {
+            val out = ByteArrayOutputStream()
+            if (bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) out.toByteArray() else null
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    private suspend fun captureScreenshotFile(activity: Activity): File? = withContext(Dispatchers.IO) {
+        ReportScreenshot.capture(activity, File(activity.cacheDir, SCREENSHOT_DIR), TravelmoLog)
+    }
+
     /** The screenshot's URI, or null (and why, in the log) for a report that goes as text alone. */
     private suspend fun screenshotOf(context: Context, capture: suspend (Activity) -> Uri?): Uri? {
         val activity = context.findActivity()
@@ -205,6 +287,9 @@ object DebugLogging {
 
     private fun prefs(context: Context) = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 }
+
+/** What Report a bug sends: the debug report's text and, when one was taken, the screenshot as PNG. */
+class ReportForSending(val log: String, val screenshot: ByteArray?)
 
 /** The activity behind a composition's context, through any wrappers; null for one with none. */
 private fun Context.findActivity(): Activity? {

@@ -14,6 +14,9 @@ import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
 import app.travelmo.auth.SignedIn
+import app.travelmo.core.TripWithSegments
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 
 // The pages, as Navigation 3 keys: the back stack is a list the app owns.
@@ -46,6 +49,29 @@ data class BookingForm(val tripId: String, val segmentId: String?, val defaultDa
  */
 val LocalOpenAccess = compositionLocalOf<(() -> Unit)?> { null }
 
+/**
+ * The screen a report is sent from (SPEC "Bug reports"): its name, and on a
+ * trip's screens the trip with its bookings, which always go with the
+ * report. Navigation provides one per page; elsewhere it is unknown.
+ */
+class ReportScreen(val page: String, val trip: (suspend () -> TripWithSegments?)? = null)
+
+val LocalReportScreen = compositionLocalOf { ReportScreen("Unknown") }
+
+/** A trip's screen for a report sent from it, which always carries the trip and every booking on it. */
+private fun tripReportScreen(page: String, viewModel: TripsViewModel, tripId: String) = ReportScreen(page) {
+    viewModel.trips.filterNotNull().first().firstOrNull { it.id == tripId }?.let { trip -> TripWithSegments(trip, viewModel.segments(tripId).first()) }
+}
+
+/** A Home tab's name in a report. */
+private val HomeTab.reportPage: String
+    get() = when (this) {
+        HomeTab.TRIPS -> "Trips"
+        HomeTab.CALENDAR -> "Calendar"
+        HomeTab.REPORTS -> "Reports"
+        HomeTab.PROFILE -> "Profile"
+    }
+
 @Composable
 fun SignedInNavigation(user: SignedIn, viewModel: TripsViewModel, backStack: NavBackStack<NavKey>, account: SignedInAccount) {
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
@@ -62,6 +88,7 @@ fun SignedInNavigation(user: SignedIn, viewModel: TripsViewModel, backStack: Nav
                 // visit to Trips and back lands on the month left, not on today.
                 var month by rememberSaveable { mutableStateOf<String?>(null) }
                 val bar: @Composable () -> Unit = { HomeNavigationBar(selected = tab, onSelect = { tab = it }) }
+                CompositionLocalProvider(LocalReportScreen provides ReportScreen(tab.reportPage)) {
                 when (tab) {
                     HomeTab.TRIPS -> TripListScreen(
                         viewModel = viewModel,
@@ -81,8 +108,10 @@ fun SignedInNavigation(user: SignedIn, viewModel: TripsViewModel, backStack: Nav
                         bottomBar = bar,
                     )
                 }
+                }
             }
             entry<TripDetail> { key ->
+                CompositionLocalProvider(LocalReportScreen provides tripReportScreen("Trip", viewModel, key.tripId)) {
                 TripDetailScreen(
                     viewModel = viewModel,
                     tripId = key.tripId,
@@ -96,19 +125,26 @@ fun SignedInNavigation(user: SignedIn, viewModel: TripsViewModel, backStack: Nav
                         backStack.add(TripDetail(targetId))
                     },
                 )
+                }
             }
             entry<BookingForm> { key ->
-                BookingFormScreen(viewModel = viewModel, tripId = key.tripId, segmentId = key.segmentId, defaultDate = key.defaultDate, onDone = { backStack.removeLastOrNull() })
+                CompositionLocalProvider(LocalReportScreen provides tripReportScreen("Booking form", viewModel, key.tripId)) {
+                    BookingFormScreen(viewModel = viewModel, tripId = key.tripId, segmentId = key.segmentId, defaultDate = key.defaultDate, onDone = { backStack.removeLastOrNull() })
+                }
             }
             entry<Settings> {
-                SettingsScreen(account = account, user = user, viewModel = viewModel, onBack = { backStack.removeLastOrNull() }, onOpenReview = { backStack.add(ImportReview) })
+                CompositionLocalProvider(LocalReportScreen provides ReportScreen("Settings")) {
+                    SettingsScreen(account = account, user = user, viewModel = viewModel, onBack = { backStack.removeLastOrNull() }, onOpenReview = { backStack.add(ImportReview) })
+                }
             }
             entry<ImportReview> {
-                ImportReviewScreen(viewModel = viewModel, onBack = { backStack.removeLastOrNull() })
+                CompositionLocalProvider(LocalReportScreen provides ReportScreen("Import review")) {
+                    ImportReviewScreen(viewModel = viewModel, onBack = { backStack.removeLastOrNull() })
+                }
             }
             entry<AccessPage> {
                 // Not offered again from its own menu.
-                CompositionLocalProvider(LocalOpenAccess provides null) {
+                CompositionLocalProvider(LocalOpenAccess provides null, LocalReportScreen provides ReportScreen("Access")) {
                     AccessScreen(viewModel = viewModel, onBack = { backStack.removeLastOrNull() })
                 }
             }

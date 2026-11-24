@@ -10,6 +10,8 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
+import app.travelmo.data.TripActionFailed
 import androidx.core.net.toUri
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.travelmo.BuildConfig
@@ -190,5 +192,83 @@ class AppMenuTest {
         composeRule.onNodeWithText("Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})").assertExists()
         composeRule.onNodeWithText("OK").performClick()
         composeRule.onNodeWithText("Version", substring = true).assertDoesNotExist()
+    }
+
+    // Signed in with a parser: sent to Travelmo.
+
+    private val sentTexts = mutableListOf<Pair<String, String>>()
+
+    private fun showSending(screen: ReportScreen = ReportScreen("Trips"), refuse: String? = null) {
+        val sender = BugReportSender { _, text, from ->
+            sentTexts += text to from.page
+            refuse?.let { throw TripActionFailed(it) }
+        }
+        composeRule.setContent {
+            TravelmoTheme {
+                CompositionLocalProvider(LocalReportBug provides { reports++; ShareOutcome.SHARED }, LocalBugReportSender provides sender, LocalReportScreen provides screen) { AppMenu() }
+            }
+        }
+        composeRule.onNodeWithContentDescription("More options").performClick()
+        composeRule.waitForIdle()
+        tap("Report a bug")
+    }
+
+    private val disclosure = "We'll see the app's log and a screenshot of this screen. We use them only to fix the problem."
+    private val tripDisclosure =
+        "We'll see this trip's bookings, including addresses, confirmation numbers and names, plus the app's log and a screenshot of this screen. We use them only to fix the problem."
+
+    @Test
+    fun `signed in a report says what goes and sends what was written`() {
+        showSending()
+        composeRule.onNodeWithText(disclosure).assertExists()
+        composeRule.onNodeWithText(consent, substring = true).assertDoesNotExist()
+        composeRule.onNodeWithText("What went wrong?").performTextInput("The map is blank")
+        tap("Send")
+        composeRule.onNodeWithText("Sent. We'll reply by email.").assertExists()
+        sentTexts shouldBe listOf("The map is blank" to "Trips")
+        reports shouldBe 0
+        tap("Close")
+        composeRule.onNodeWithText("Sent. We'll reply by email.").assertDoesNotExist()
+    }
+
+    @Test
+    fun `nothing written still sends`() {
+        showSending()
+        tap("Send")
+        sentTexts shouldBe listOf("" to "Trips")
+    }
+
+    @Test
+    fun `from a trip's screens it says the trip's bookings go`() {
+        showSending(ReportScreen("Trip") { null })
+        composeRule.onNodeWithText(tripDisclosure).assertExists()
+        composeRule.onNodeWithText(disclosure).assertDoesNotExist()
+    }
+
+    @Test
+    fun `a failure says why and keeps the dialog to try again`() {
+        showSending(refuse = "You've sent the most reports for today. Try again tomorrow.")
+        tap("Send")
+        composeRule.onNodeWithText("Couldn't send the report. You've sent the most reports for today. Try again tomorrow.").assertExists()
+        composeRule.onNodeWithText("Send").assertExists()
+    }
+
+    @Test
+    fun `share instead offers the share sheet as before`() {
+        DebugLogging.skipReportConsent(composeRule.activity)
+        showSending()
+        tap("Share instead")
+        reports shouldBe 1
+        sentTexts shouldBe emptyList()
+        composeRule.onNodeWithText(disclosure).assertDoesNotExist()
+    }
+
+    @Test
+    fun `cancel sends nothing`() {
+        showSending()
+        tap("Cancel")
+        sentTexts shouldBe emptyList()
+        reports shouldBe 0
+        composeRule.onNodeWithText(disclosure).assertDoesNotExist()
     }
 }

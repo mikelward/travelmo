@@ -199,6 +199,43 @@ class ScreenScreenshotTest {
         captureScreenRoboImage(filePath = "$outputDir/$name.png")
     }
 
+    // Report a bug, signed in: sent to Travelmo, from a trip's page, saying
+    // its bookings go too; and from the trip list, where they don't.
+    @Test
+    fun report_send_trip() = reportSend("report_send_trip", dark = false, onTrip = true)
+
+    @Test
+    fun report_send_trip_dark() = reportSend("report_send_trip_dark", dark = true, onTrip = true)
+
+    @Test
+    fun report_send() = reportSend("report_send", dark = false, onTrip = false)
+
+    private fun reportSend(name: String, dark: Boolean, onTrip: Boolean) {
+        val viewModel = viewModel()
+        val fontSize = FontSizeState(FontSizeSettings(scale = 1f), onScaleSettled = {}, onPinchEnabledChange = {})
+        val sender = BugReportSender { _, _, _ -> }
+        val screen = if (onTrip) ReportScreen("Trip") { null } else ReportScreen("Trips")
+        composeRule.setContent {
+            TravelmoTheme(darkTheme = dark, fontSize = fontSize) {
+                CompositionLocalProvider(LocalBugReportSender provides sender, LocalReportScreen provides screen) {
+                    if (onTrip) {
+                        TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
+                    } else {
+                        TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.TRIPS) {} })
+                    }
+                }
+            }
+        }
+        composeRule.onNodeWithContentDescription("More options").performClick()
+        composeRule.waitForIdle()
+        // The dialog's text field never lets Compose call itself idle here,
+        // so the clock is stepped by hand to let it settle.
+        composeRule.mainClock.autoAdvance = false
+        composeRule.onNodeWithText("Report a bug").performClick()
+        composeRule.mainClock.advanceTimeBy(1_000)
+        captureScreenRoboImage(filePath = "$outputDir/$name.png")
+    }
+
     // The same camp in two school holidays: each card's title carries its
     // dates, while a title no other trip has reads as it is.
     @Test

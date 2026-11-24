@@ -463,6 +463,14 @@
     <string name="report_consent_body">To help fix the problem, this shares:\n\n• a diagnostic log (what the app did, never your bookings or addresses)\n• a screenshot of this screen, which can show trips and names\n\nOn Continue, the report is copied to the clipboard and offered to an app you pick.</string>
     <string name="report_consent_continue">Continue</string>
     <string name="dont_show_again">Don't show again</string>
+    <string name="report_what_went_wrong">What went wrong?</string>
+    <string name="report_disclosure">We'll see the app's log and a screenshot of this screen. We use them only to fix the problem.</string>
+    <string name="report_disclosure_trip">We'll see this trip's bookings, including addresses, confirmation numbers and names, plus the app's log and a screenshot of this screen. We use them only to fix the problem.</string>
+    <string name="report_send">Send</string>
+    <string name="report_sending">Sending…</string>
+    <string name="report_sent">Sent. We'll reply by email.</string>
+    <string name="report_send_failed">Couldn't send the report. %1$s</string>
+    <string name="report_share_instead">Share instead</string>
     <string name="crash_banner_title">Travelmo crashed</string>
     <string name="crash_banner_body">Share the debug log to help fix it? Nothing is sent until you choose where.</string>
     <string name="crash_banner_share">Share</string>

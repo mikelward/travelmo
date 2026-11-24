@@ -20,6 +20,7 @@ import app.travelmo.data.ParserAccountDeletion
 import app.travelmo.data.ParserFlightRefresh
 import app.travelmo.data.NoTripActions
 import app.travelmo.data.ParserClient
+import app.travelmo.data.ParserBugReports
 import app.travelmo.data.ParserTripActions
 import app.travelmo.data.ImportReview
 import app.travelmo.data.NoImportReview
@@ -121,6 +122,9 @@ class TravelmoApplication : Application() {
 
     /** Issuing and turning off the forwarding address through the parser; nothing without Firebase or a parser address. */
     val forwardActions: ForwardActions by lazy { if (firebaseReady) ParserForwardActions(ParserClient(BuildConfig.PARSER_URL)) else NoForwardActions }
+
+    /** Sending bug reports to Travelmo through the parser; null without Firebase or a parser address. */
+    val bugReports: ParserBugReports? by lazy { if (firebaseReady) ParserBugReports(ParserClient(BuildConfig.PARSER_URL)).takeIf { it.available } else null }
 
     /** Settling the account's access with the parser; nothing without Firebase or a parser address. */
     val accessCheck: AccessCheck by lazy { if (firebaseReady) ParserAccessCheck(BuildConfig.PARSER_URL) else NoAccessCheck }
