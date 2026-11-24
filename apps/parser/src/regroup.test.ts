@@ -708,3 +708,42 @@ describe("regroupTrips placing bookings", () => {
     expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0, placed: 0 });
   });
 });
+
+describe("a flight that lands where the next trip leaves from", () => {
+  const lhr = { name: "Heathrow", code: "LHR", city: "London", country: "GB" };
+  const zag = { name: "Zagreb", code: "ZAG", city: "Zagreb", country: "HR" };
+  const cdg = { name: "Paris Charles de Gaulle", code: "CDG", city: "Paris", country: "FR" };
+  const jfk = { name: "JFK", code: "JFK", city: "New York", country: "US" };
+  const ewr = { name: "Newark", code: "EWR", city: "New York/Newark", country: "US" };
+
+  it("opens the trip there, named for where it goes, not its connection", async () => {
+    const store = memoryStore();
+    store.trips.set("zagreb", trip("zagreb", "Zagreb", "2026-03-30", "2026-04-04"));
+    store.trips.set("newark", trip("newark", "New York/Newark", "2026-04-11", "2026-04-11"));
+    const put = (s: Segment) => store.segments.set(s.id, s);
+    put(segment("zagreb", "out", "m1", { type: "flight", title: "LHR to ZAG", start: "2026-03-30T08:00:00+01:00", end: "2026-03-30T11:00:00+02:00", origin: lhr, destination: zag }));
+    put(segment("zagreb", "stay", "m2", { type: "lodging", title: "Apartments Angel", start: "2026-03-30T15:00:00+02:00", end: "2026-04-04T11:00:00+02:00", destination: { name: "Apartments Angel", city: "Zagreb", country: "HR" } }));
+    put(segment("zagreb", "leg1", "m3", { type: "flight", title: "A5 8362 ZAG to PAR", start: "2026-04-04T16:00:00+02:00", end: "2026-04-04T18:15:00+02:00", origin: zag, destination: cdg }));
+    put(segment("zagreb", "leg2", "m3", { type: "flight", title: "AF 8702 PAR to JFK", start: "2026-04-04T20:30:00+02:00", end: "2026-04-04T22:40:00-04:00", origin: cdg, destination: jfk }));
+    put(segment("newark", "home", "m4", { type: "flight", title: "UA122 EWR to LHR", start: "2026-04-11T09:10:00-04:00", end: "2026-04-11T21:25:00+01:00", origin: ewr, destination: lhr }));
+    await regroupTrips("u1", deps(store));
+    expect(summary(store).map(({ title, start, end, segments }) => ({ title, start, end, segments }))).toEqual([
+      { title: "Zagreb", start: "2026-03-30", end: "2026-04-04", segments: ["out", "stay"] },
+      { title: "New York", start: "2026-04-04", end: "2026-04-11", segments: ["home", "leg1", "leg2"] },
+    ]);
+  });
+
+  it("stays put when its leg to there was cancelled", async () => {
+    const store = memoryStore();
+    store.trips.set("zagreb", trip("zagreb", "Zagreb", "2026-03-30", "2026-04-04"));
+    store.trips.set("newark", trip("newark", "New York/Newark", "2026-04-11", "2026-04-11"));
+    const put = (s: Segment) => store.segments.set(s.id, s);
+    put(segment("zagreb", "out", "m1", { type: "flight", title: "LHR to ZAG", start: "2026-03-30T08:00:00+01:00", end: "2026-03-30T11:00:00+02:00", origin: lhr, destination: zag }));
+    put(segment("zagreb", "stay", "m2", { type: "lodging", title: "Apartments Angel", start: "2026-03-30T15:00:00+02:00", end: "2026-04-04T11:00:00+02:00", destination: { name: "Apartments Angel", city: "Zagreb", country: "HR" } }));
+    put(segment("zagreb", "leg1", "m3", { type: "flight", title: "A5 8362 ZAG to PAR", start: "2026-04-04T16:00:00+02:00", end: "2026-04-04T18:15:00+02:00", origin: zag, destination: cdg }));
+    put(segment("zagreb", "leg2", "m3", { type: "flight", title: "AF 8702 PAR to JFK", start: "2026-04-04T20:30:00+02:00", end: "2026-04-04T22:40:00-04:00", origin: cdg, destination: jfk }, { cancelledAt: at, cancelledBy: "m5" }));
+    put(segment("newark", "home", "m4", { type: "flight", title: "UA122 EWR to LHR", start: "2026-04-11T09:10:00-04:00", end: "2026-04-11T21:25:00+01:00", origin: ewr, destination: lhr }));
+    await regroupTrips("u1", deps(store));
+    expect(summary(store).map((t) => t.segments)).toEqual([["leg1", "leg2", "out", "stay"], ["home"]]);
+  });
+});

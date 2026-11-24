@@ -1,3 +1,4 @@
+import { airportPlace } from "./airportPlaces";
 import { countryCodeOf, isCountryCode } from "./countries";
 import { formatDate } from "./format";
 import { compareInstants } from "./instant";
@@ -503,6 +504,59 @@ function homeBetween(
   if (!inHomeTown(last.destination, localDate(back), periods, overrides)) return false;
   if (inHomeTown(last.origin, localDate(last.start), periods, overrides)) return false;
   return later.every((s) => compareInstants(s.start, back) > 0);
+}
+
+// How far apart one city's airports or stations can be: JFK and Newark,
+// Heathrow and Gatwick, Narita and Haneda.
+export const areaKm = 80;
+
+// A place's town with its point, the airport table's when it was given only
+// a code, so JFK and Newark can be told apart by distance.
+function located_(place: Place | undefined): Town | undefined {
+  const t = town(place);
+  if (!t || located(t) || !place?.code) return t;
+  const airport = airportPlace(place.code);
+  return airport ? { ...t, lat: airport.lat, lon: airport.lon } : t;
+}
+
+// Whether two places are one city's, as far as its airports and stations
+// go: the same town, or within areaKm in one country.
+function sameArea(a: Place | undefined, b: Place | undefined): boolean {
+  const [x, y] = [located_(a), located_(b)];
+  if (!x || !y) return false;
+  if (sameTown(x, y)) return true;
+  if (x.country && y.country && countryCode(x.country) !== countryCode(y.country)) return false;
+  return located(x) && located(y) && distanceKm(x, y) <= areaKm;
+}
+
+// Whether `next` is the onward journey of a connection at `landing`'s
+// destination: it leaves from there (or another of that city's airports)
+// within twelve hours of landing. Paris between Zagreb and New York is a
+// stop on the way, not where the trip goes.
+export function isConnection(
+  landing: Pick<ExtractedSegment, "type" | "start" | "end" | "destination">,
+  next: Pick<ExtractedSegment, "type" | "start" | "origin">,
+): boolean {
+  if (!journeyTypes.has(landing.type) || !journeyTypes.has(next.type)) return false;
+  const gap = millis(next.start) - millis(arrives({ ...landing, title: "" }));
+  return gap > 0 && gap <= 12 * 3_600_000 && sameArea(landing.destination, next.origin);
+}
+
+// Whether a journey that lands away from home opens the trip that follows:
+// that trip's first booking is a journey leaving the same city, or another
+// of its airports or stations, after it lands. A flight from Zagreb to New
+// York belongs with the week in New York it starts, not with Zagreb, when
+// nothing is booked there but the flight home from Newark.
+export function opensTrip(
+  landing: Pick<ExtractedSegment, "type" | "start" | "end" | "origin" | "destination">,
+  next: Pick<ExtractedSegment, "type" | "start" | "end" | "origin" | "destination">,
+  periods: readonly HomePeriod[],
+  overrides: readonly HomePeriod[] = [],
+): boolean {
+  if (!journeyTypes.has(landing.type) || !journeyTypes.has(next.type)) return false;
+  const landed = arrives({ ...landing, title: "" });
+  if (inHomeTown(landing.destination, localDate(landed), periods, overrides)) return false;
+  return compareInstants(next.start, landed) > 0 && sameArea(landing.destination, next.origin);
 }
 
 // The trip a new booking joins by its dates, knowing where home is if it

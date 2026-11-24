@@ -296,6 +296,53 @@ fun nearHub(place: Place?, hub: Place?): Boolean {
     return sameTown(a, b)
 }
 
+/** How far apart one city's airports or stations can be, in kilometers, as home.ts: JFK and Newark, Heathrow and Gatwick. */
+const val AREA_KM = 80.0
+
+// A place's town with its point, the airport table's when it was given only a code.
+private fun locatedTown(place: Place?): Town? {
+    val t = town(place) ?: return null
+    if (t.lat != null || place?.code == null) return t
+    val airport = airportPlace(place.code) ?: return t
+    return t.copy(lat = airport.lat, lon = airport.lon)
+}
+
+// Whether two places are one city's, as far as its airports and stations go: the same town, or within AREA_KM in one country.
+private fun sameArea(a: Place?, b: Place?): Boolean {
+    val x = locatedTown(a) ?: return false
+    val y = locatedTown(b) ?: return false
+    if (sameTown(x, y)) return true
+    if (x.country != null && y.country != null && countryCode(x.country) != countryCode(y.country)) return false
+    return x.lat != null && x.lon != null && y.lat != null && y.lon != null && distanceKm(x.lat, x.lon, y.lat, y.lon) <= AREA_KM
+}
+
+// When a journey arrives: its end, unless that is more than eight days after it leaves, as home.ts's arrives.
+private fun arrives(s: Segment): String {
+    val end = s.end ?: return s.start
+    return if (instantMillis(end) - instantMillis(s.start) <= 8 * 86_400_000L) end else s.start
+}
+
+/**
+ * Whether [next] is the onward journey of a connection at [landing]'s destination, as home.ts: it leaves from there (or
+ * another of that city's airports) within twelve hours of landing.
+ */
+fun isConnection(landing: Segment, next: Segment): Boolean {
+    if (landing.type !in journeyTypes || next.type !in journeyTypes) return false
+    val gap = instantMillis(next.start) - instantMillis(arrives(landing))
+    return gap > 0 && gap <= 12 * 3_600_000L && sameArea(landing.destination, next.origin)
+}
+
+/**
+ * Whether a journey that lands away from home opens the trip whose first booking is [next], as home.ts: a journey
+ * leaving the same city, or another of its airports or stations, after it lands.
+ */
+fun opensTrip(landing: Segment, next: Segment, periods: List<HomePeriod>, overrides: List<HomePeriod> = emptyList()): Boolean {
+    if (landing.type !in journeyTypes || next.type !in journeyTypes) return false
+    val landed = arrives(landing)
+    if (inHomeTown(landing.destination, landed.take(10), periods, overrides)) return false
+    return compareInstants(next.start, landed) > 0 && sameArea(landing.destination, next.origin)
+}
+
 /** The Profile's home line, as home.ts: "Home: London since Mar 2021 · Boston 2018–2021"; null when nothing is known. */
 fun homeLine(periods: List<HomePeriod>): String? = describeHomes(periods).takeIf { it.isNotEmpty() }?.let { "Home: $it" }
 

@@ -1,6 +1,7 @@
 import {
   compareInstants,
   findTripForBooking,
+  opensTrip,
   homeTimeline,
   isCancelled,
   liveSegments,
@@ -119,7 +120,7 @@ export function planRegroup(
     .sort((a, b) => compareInstants(first(a), first(b)) || a.key.localeCompare(b.key));
 
   // File the bookings into trips that exist only here.
-  type Group = { trip: Trip; share: string; sharedWith: string[]; segments: Segment[] };
+  type Group = { trip: Trip; share: string; sharedWith: string[]; segments: Segment[]; units: Segment[][] };
   const groups: Group[] = [];
   const shareOf = new Map(eligible.map((trip) => [trip.id, trip.sharedWith]));
   for (const unit of ordered) {
@@ -147,6 +148,7 @@ export function planRegroup(
     const group = groups.find((g) => g.trip.id === target?.id);
     if (group) {
       group.segments.push(...unit.segments);
+      group.units.push(unit.segments);
       // Its bounds are its live bookings' span once it has any: a cancelled
       // stay that seeded it by its booked dates no longer stretches it to
       // catch what's live weeks later. Booked dates only while all cancelled.
@@ -162,9 +164,44 @@ export function planRegroup(
         share: unit.share,
         sharedWith: [...(shareOf.get(unit.segments[0]!.tripId) ?? [])],
         segments: [...unit.segments],
+        units: [unit.segments],
       });
     }
   }
+
+  // A booking of nothing but journeys that ends a trip by landing where the
+  // next trip's first journey leaves from opens that trip instead
+  // (opensTrip): Zagreb to New York goes with the week in New York that
+  // ends in the flight home from Newark, not with the Zagreb trip before it.
+  const journey = (s: Segment) => ["flight", "train", "bus", "ferry"].includes(s.type);
+  const earliest = (segments: readonly Segment[]) => segments.reduce((a, b) => (compareInstants(b.start, a.start) < 0 ? b : a));
+  const latest = (segments: readonly Segment[]) => segments.reduce((a, b) => (compareInstants(b.start, a.start) > 0 ? b : a));
+  for (const share of new Set(groups.map((g) => g.share))) {
+    const mine = groups.filter((g) => g.share === share && g.segments.length > 0).sort((a, b) => compareInstants(earliest(a.segments).start, earliest(b.segments).start));
+    for (let i = 0; i + 1 < mine.length; i++) {
+      const [before, after] = [mine[i]!, mine[i + 1]!];
+      const last = before.units.reduce((a, b) => (compareInstants(earliest(b).start, earliest(a).start) > 0 ? b : a));
+      if (!last.every(journey)) continue;
+      // Where it still goes and where the next trip still leaves from: a
+      // cancelled leg to New York takes nobody there.
+      const [going, next] = [liveSegments(last), liveSegments(after.segments)];
+      if (going.length === 0 || next.length === 0) continue;
+      const landing = latest(going);
+      // Nothing else in the trip starts after it leaves.
+      if (before.segments.some((s) => !last.includes(s) && compareInstants(s.start, earliest(last).start) > 0)) continue;
+      if (!opensTrip(landing, earliest(next), periods, overrides)) continue;
+      before.segments = before.segments.filter((s) => !last.includes(s));
+      before.units = before.units.filter((u) => u !== last);
+      after.segments.push(...last);
+      after.units.push(last);
+      for (const group of [before, after]) {
+        const span = segmentDateRange(group.segments);
+        if (span) group.trip = { ...group.trip, start: span.start, end: span.end };
+      }
+    }
+  }
+  // A trip that was nothing but that booking has joined the next.
+  for (let k = groups.length - 1; k >= 0; k--) if (groups[k]!.segments.length === 0) groups.splice(k, 1);
 
   // Each group keeps the existing trip holding most of its bookings, the
   // largest shares first; ties go to the older trip, then the earlier group.

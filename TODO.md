@@ -378,6 +378,10 @@
       booking line, with Remove.
 - [x] Loyalty balances and status from travel programs' statement emails
       (Emerald Club, MileagePlus), only from travel companies' domains.
+- [ ] A journey that lands where the next trip leaves from opens that trip
+      on import too, not only on Regroup (`opensTrip`): booked as it
+      happens, the flight to New York stays with the trip before until a
+      Regroup moves it.
 - [x] "Never import this sender" on an imported booking (web and
       Android), beside "Always import this sender": stops future imports
       from it and offers to remove what it already imported (a weekly kids'
