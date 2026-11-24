@@ -9,11 +9,18 @@ import {
   isEmptyProfile,
   parseIcs,
   parseTripItExport,
+  imapRedirect,
+  imapServerFor,
   mailboxKey,
   maxGmailMailboxes,
+  maxImapMailboxes,
+  parseImapRecordId,
+  imapRecordKey,
+  parseImapServer,
   paths,
   sourceMailbox,
   type GmailState,
+  type ImapState,
   type GoogleCalendarChoice,
   type ImportedProfile,
   type LinkRefusal,
@@ -92,7 +99,7 @@ import { errorFields, errorKind, log } from "./log";
 import { BadPushEnvelope, parseGmailPush, processNotification, type GmailNotification } from "./pubsub";
 import { firestoreStore } from "./store";
 import { FeedLimitReached, addFeed, feedFailure, firestoreFeeds, pollAllFeeds, type FeedIo } from "./feeds";
-import { fetchFeed } from "./safefetch";
+import { FeedUrlRefused, fetchFeed } from "./safefetch";
 import { runBackfillBatch } from "./backfill";
 import { gmailSource, type MailSource, type Pace } from "./mailSource";
 import {
@@ -118,7 +125,33 @@ import {
   saveFastmailConnection,
   updateFastmailLive,
 } from "./fastmailConnection";
-import { pollFastmail } from "./fastmailPoll";
+import { pollNewMail } from "./newMailPoll";
+import {
+  TooManyImapMailboxes,
+  changeImapBackfill,
+  imapMailboxesToPoll,
+  loadImapMailbox,
+  loadImapMailboxes,
+  markImapLoginFailed,
+  removeImapConnection,
+  saveImapConnection,
+  updateImapLive,
+} from "./imapConnection";
+import {
+  ImapLoginPaused,
+  ImapServerRefused,
+  connectMailbox,
+  inLoginBackoff,
+  currentMailboxState,
+  imapFlowClient,
+  imapRecordPrefix,
+  imapSource,
+  isImapAuthFailure,
+  newSince,
+  openInbox,
+  closeInbox,
+  type ImapSource,
+} from "./imap";
 import { continueBackfill, parseContinuePush, startBackfill, stopBackfill, type ChainIo, type ContinueMessage } from "./backfillChain";
 import { pubsubPublisher } from "./publish";
 import { sealStoredCredentials } from "./sealStored";
@@ -231,6 +264,7 @@ const app = new Hono<Env>();
 
 app.use("/gmail/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/fastmail/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
+app.use("/imap/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/import/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/calendar/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/feeds/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
@@ -509,6 +543,112 @@ app.post("/fastmail/disconnect", async (c) => {
   return c.body(null, 204);
 });
 
+// What the user should hear when an IMAP server would not let Travelmo read.
+function imapRefusal(error: unknown): HTTPException | undefined {
+  if (isImapAuthFailure(error)) {
+    return new HTTPException(400, { message: "The server didn't accept that address and app password. Check them, or make a new app password." });
+  }
+  if (error instanceof ImapLoginPaused) {
+    return new HTTPException(409, { message: "The server turned down the app password. Connect this mailbox again with a new one." });
+  }
+  if (error instanceof ImapServerRefused || error instanceof FeedUrlRefused) {
+    return new HTTPException(400, { message: "Travelmo can't connect to that server." });
+  }
+  // A name that does not resolve, a refused or timed out connection, a
+  // failed TLS handshake (a server without implicit TLS): all codes.
+  const { code, tlsFailed } = (error ?? {}) as { code?: unknown; tlsFailed?: unknown };
+  if (tlsFailed === true || (typeof code === "string" && /^(E[A-Z]+|CONNECT_TIMEOUT|GREETING_TIMEOUT|ClosedAfterConnect\w*|ERR_SSL\w*|ERR_TLS\w*|\w*CERT\w*|DEPTH_ZERO_SELF_SIGNED_CERT)$/.test(code))) {
+    return new HTTPException(400, { message: "Couldn't reach that server securely. Check its name, and that it takes TLS connections (usually port 993)." });
+  }
+  return undefined;
+}
+
+// A connection to a mailbox's server with its stored password, refused
+// passwords recorded (imap.ts's connectMailbox).
+function imapMailSource(uid: string, state: ImapState, background = false): ImapSource {
+  const key = mailboxKey(state.emailAddress);
+  const onError = (error: unknown) => log("WARNING", "imap_connection_error", { uid, mailbox: key, ...errorKind(error) });
+  return imapSource(imapRecordKey(state.emailAddress, state.host, state.port), () =>
+    connectMailbox({
+      loginFailedAt: state.loginFailedAt,
+      background,
+      nowMs: Date.now(),
+      open: () => openInbox(imapFlowClient({ host: state.host, port: state.port, user: state.emailAddress, password: state.password }, onError)),
+      loginFailed: async () => {
+        // Never the password: the mailbox by key, and the server.
+        log("WARNING", "imap_login_failed", { uid, mailbox: key, host: state.host });
+        try {
+          await markImapLoginFailed(db, uid, state, new Date().toISOString());
+        } catch (error) {
+          log("ERROR", "imap_login_failed_not_recorded", { uid, mailbox: key, ...errorKind(error) });
+        }
+      },
+    }),
+  );
+}
+
+// Connects a mailbox over IMAP with an app password the user made with
+// their provider: the server is filled in for known providers, otherwise
+// the user's (`server`, host or host:port). Implicit TLS only. The login is
+// tried, the inbox opened read-only, and only then is the password stored.
+app.post("/imap/connect", async (c) => {
+  const uid = await requireUser(c);
+  const body = (await c.req.json().catch(() => ({}))) as { emailAddress?: unknown; password?: unknown; server?: unknown };
+  const emailAddress = typeof body.emailAddress === "string" ? body.emailAddress.trim() : "";
+  // App passwords are often shown in groups with spaces; spaces never belong.
+  const password = typeof body.password === "string" ? body.password.replace(/\s+/g, "") : "";
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailAddress)) throw new HTTPException(400, { message: "Enter your email address" });
+  const redirect = imapRedirect(emailAddress);
+  if (redirect) throw new HTTPException(400, { message: redirect });
+  if (!password) throw new HTTPException(400, { message: "Enter an app password" });
+  const choice = imapServerFor(emailAddress);
+  const server = choice.kind === "known" ? { host: choice.provider.host, port: choice.provider.port } : parseImapServer(typeof body.server === "string" ? body.server : "");
+  if (!server) throw new HTTPException(400, { message: "Enter your mail server, such as imap.example.com" });
+  const connected = await loadImapMailboxes(db, uid);
+  const again = connected.some((m) => m.emailAddress.toLowerCase() === emailAddress.toLowerCase());
+  if (!again && connected.length >= maxImapMailboxes) throw new HTTPException(409, { message: new TooManyImapMailboxes().message });
+  const key = mailboxKey(emailAddress);
+  let mailboxState: string;
+  try {
+    const onError = (error: unknown) => log("WARNING", "imap_connection_error", { uid, mailbox: key, ...errorKind(error) });
+    const inbox = await openInbox(imapFlowClient({ ...server, user: emailAddress, password }, onError));
+    mailboxState = currentMailboxState(inbox);
+    await closeInbox(inbox.client);
+  } catch (error) {
+    const refusal = imapRefusal(error);
+    log(refusal ? "INFO" : "ERROR", isImapAuthFailure(error) ? "imap_login_failed" : "imap_connect_failed", { uid, mailbox: key, host: server.host, ...errorKind(error) });
+    throw refusal ?? error;
+  }
+  try {
+    await saveImapConnection(db, uid, { emailAddress, password, ...server, connectedAt: new Date().toISOString(), mailboxState });
+  } catch (error) {
+    if (error instanceof TooManyImapMailboxes) throw new HTTPException(409, { message: error.message });
+    if (error instanceof AccountDeletedError) throw new HTTPException(410, { message: "This account was deleted" });
+    throw error;
+  }
+  log("INFO", "imap_connected", { uid, mailbox: key, provider: choice.kind === "known" ? choice.provider.name : "other", mailboxes: again ? connected.length : connected.length + 1 });
+  return c.json({ emailAddress });
+});
+
+// The IMAP mailbox a Settings request names (`emailAddress`).
+async function requestedImapMailbox(uid: string, body: { emailAddress?: unknown }): Promise<ImapState | undefined> {
+  if (typeof body.emailAddress !== "string" || !body.emailAddress) throw new HTTPException(400, { message: "Say which mailbox" });
+  return loadImapMailbox(db, uid, { emailAddress: body.emailAddress });
+}
+
+// Forgets the password; deleting it with the provider revokes it.
+app.post("/imap/disconnect", async (c) => {
+  const uid = await requireUser(c);
+  const body = (await c.req.json().catch(() => ({}))) as { emailAddress?: unknown };
+  const state = await requestedImapMailbox(uid, body);
+  if (state) {
+    await stopBackfill(backfillIo(uid, { provider: "imap", emailAddress: state.emailAddress }));
+    await removeImapConnection(db, uid, state.emailAddress);
+  }
+  log("INFO", "imap_disconnected", { uid, found: state !== undefined, ...(state ? { mailbox: mailboxKey(state.emailAddress) } : {}) });
+  return c.body(null, 204);
+});
+
 // Imports new mail by id, waiting out Gmail's rate limit for up to a minute.
 function importIds(uid: string, source: MailSource, ids: readonly string[], options: ImportOptions = {}) {
   const deadline = Date.now() + notificationRateLimitWaitMs;
@@ -537,8 +677,8 @@ function fastmailMailSource(state: { token: string }, jmap?: () => Promise<Jmap>
 // batch carries on from where the last stopped, records how far it got on
 // the connection, where Settings shows it, and queues the next on Pub/Sub.
 // One reading per mailbox, each on its own: a Gmail mailbox by its address,
-// or the user's Fastmail mailbox.
-type BackfillTarget = { emailAddress: string } | { provider: "fastmail" };
+// the user's Fastmail mailbox, or an IMAP mailbox by its address.
+type BackfillTarget = { emailAddress: string } | { provider: "fastmail" } | { provider: "imap"; emailAddress: string };
 
 function backfillIo(uid: string, target: BackfillTarget): ChainIo<MailSource> {
   // Stop importing well before Cloud Run's request limit, leaving time to
@@ -547,6 +687,10 @@ function backfillIo(uid: string, target: BackfillTarget): ChainIo<MailSource> {
   const deadline = Date.now() + backfillBudgetMs;
   return {
     change: async (fn) => {
+      if ("provider" in target && target.provider === "imap") {
+        const changed = await changeImapBackfill(db, uid, target.emailAddress, fn);
+        return changed && { ...changed, state: imapMailSource(uid, changed.state, true) };
+      }
       if ("provider" in target) {
         const changed = await changeFastmailBackfill(db, uid, fn);
         return changed && { ...changed, state: fastmailMailSource(changed.state) };
@@ -555,19 +699,12 @@ function backfillIo(uid: string, target: BackfillTarget): ChainIo<MailSource> {
       const pace = gmailPacer(backfillUnitsPerMinute, { nowMs: Date.now, sleep });
       return changed && { ...changed, state: gmailMailSource(changed.state, pace) };
     },
-    runBatch: (source, from, generation) => {
-      return runBackfillBatch(from, false, {
-        timeLeftMs: () => deadline - Date.now(),
-        sleep,
-        page: source.searchPage,
-        // An email whose import failed (the model was down, say) is read
-        // again when the reading passes it again, as after starting over.
-        // Gmail's rate limit is waited out by the batch, within its time.
-        importIds: (ids) => importMessages(uid, ids, source.fetch, deps, { retryFailed: true, generation, source: source.provider }),
-        isStaleCursor: source.isStaleCursor,
-        now: () => new Date().toISOString(),
-        log: (event, fields) => log("WARNING", event, { uid, ...fields }),
-      });
+    runBatch: async (source, from, generation) => {
+      try {
+        return await readBatch(source, from, generation);
+      } finally {
+        await source.close?.();
+      }
     },
     publish: (message: ContinueMessage) => publishBackfill("provider" in target ? { ...message, provider: target.provider } : message),
     now: () => new Date().toISOString(),
@@ -579,6 +716,21 @@ function backfillIo(uid: string, target: BackfillTarget): ChainIo<MailSource> {
       log("INFO", "backfill_regrouped", { uid, ...result });
     },
   };
+
+  function readBatch(source: MailSource, from: Parameters<ChainIo<MailSource>["runBatch"]>[1], generation: number) {
+    return runBackfillBatch(from, false, {
+      timeLeftMs: () => deadline - Date.now(),
+      sleep,
+      page: source.searchPage,
+      // An email whose import failed (the model was down, say) is read
+      // again when the reading passes it again, as after starting over.
+      // Gmail's rate limit is waited out by the batch, within its time.
+      importIds: (ids) => importMessages(uid, ids, source.fetch, deps, { retryFailed: true, generation, source: source.provider }),
+      isStaleCursor: source.isStaleCursor,
+      now: () => new Date().toISOString(),
+      log: (event, fields) => log("WARNING", event, { uid, ...fields }),
+    });
+  }
 }
 
 // Starts reading the whole mailbox (`restart: true` from the beginning) and
@@ -633,6 +785,31 @@ app.post("/fastmail/backfill/stop", async (c) => {
   return c.body(null, 204);
 });
 
+// An IMAP mailbox's reading, as Gmail's: the mailbox by `emailAddress`.
+app.post("/imap/backfill", async (c) => {
+  const uid = await requireUser(c);
+  const body = (await c.req.json().catch(() => ({}))) as { restart?: unknown; emailAddress?: unknown };
+  const restart = body.restart === true;
+  const mailbox = await requestedImapMailbox(uid, body);
+  if (!mailbox) throw new HTTPException(409, { message: "That mailbox isn't connected" });
+  const key = mailboxKey(mailbox.emailAddress);
+  const result = await startBackfill(uid, randomBytes(12).toString("base64url"), restart, backfillIo(uid, { provider: "imap", emailAddress: mailbox.emailAddress }), key);
+  if (result.kind === "disconnected") throw new HTTPException(409, { message: "That mailbox isn't connected" });
+  if (result.kind === "busy") throw new HTTPException(409, { message: "A batch is still being read. Try again in a few minutes." });
+  log("INFO", "backfill_started", { uid, provider: "imap", mailbox: key, restart, joined: result.kind === "joined", run: result.progress.run });
+  const { cursor: _cursor, after: _after, ...progress } = result.progress;
+  return c.json({ progress });
+});
+
+app.post("/imap/backfill/stop", async (c) => {
+  const uid = await requireUser(c);
+  const body = (await c.req.json().catch(() => ({}))) as { emailAddress?: unknown };
+  const mailbox = await requestedImapMailbox(uid, body);
+  const stopped = mailbox ? await stopBackfill(backfillIo(uid, { provider: "imap", emailAddress: mailbox.emailAddress })) : false;
+  log("INFO", "backfill_stopped", { uid, provider: "imap", ...(mailbox ? { mailbox: mailboxKey(mailbox.emailAddress) } : {}), stopped });
+  return c.body(null, 204);
+});
+
 // Rebuilds the signed-in user's trips from their bookings with the grouping
 // imports use now, keeping days out at home apart from trips away.
 app.post("/trips/regroup", async (c) => {
@@ -659,13 +836,21 @@ app.post("/gmail/reimport", async (c) => {
   const uid = await requireUser(c);
   const body = (await c.req.json().catch(() => ({}))) as { messageId?: string };
   if (!body.messageId) throw new HTTPException(400, { message: "Missing messageId" });
-  // The record's id says which mailbox the email is in: Fastmail's carry
-  // its prefix, Gmail's name their mailbox (gmail.ts's sourceMailbox).
+  // The record's id says which mailbox the email is in: Fastmail's and
+  // IMAP ones carry their prefix (an IMAP one its mailbox's key too),
+  // Gmail's name their mailbox (gmail.ts's sourceMailbox).
   const fastmail = body.messageId.startsWith(fastmailRecordPrefix);
-  const name = fastmail ? "Fastmail" : "Gmail";
+  const imap = body.messageId.startsWith(imapRecordPrefix);
+  const name = fastmail ? "Fastmail" : imap ? "that mailbox" : "Gmail";
   let source: MailSource;
   let id = body.messageId;
-  if (fastmail) {
+  if (imap) {
+    // By its record key: the address on the server it was read from.
+    const parsed = parseImapRecordId(body.messageId);
+    const state = parsed && (await loadImapMailboxes(db, uid)).find((m) => imapRecordKey(m.emailAddress, m.host, m.port) === parsed.key);
+    if (!state) throw new HTTPException(409, { message: "The mailbox this email is in isn't connected" });
+    source = imapMailSource(uid, state);
+  } else if (fastmail) {
     const state = await loadFastmailState(db, uid);
     if (!state) throw new HTTPException(409, { message: "Fastmail not connected" });
     source = fastmailMailSource(state);
@@ -680,7 +865,9 @@ app.post("/gmail/reimport", async (c) => {
     message = await source.fetch(id);
   } catch (error) {
     if (source.isNotFound(error)) throw new HTTPException(404, { message: `That email is no longer in ${name}` });
-    throw (fastmail ? fastmailRefusal(error) : undefined) ?? error;
+    throw (fastmail ? fastmailRefusal(error) : imap ? imapRefusal(error) : undefined) ?? error;
+  } finally {
+    await source.close?.();
   }
   const outcome = await importMessage(uid, message, deps, { force: true, reclaim: true, source: source.provider });
   log("INFO", "reimport", { uid, messageId: message.id, outcome });
@@ -1481,6 +1668,13 @@ app.post("/internal/backfill", async (c) => {
     let target: BackfillTarget;
     if (provider === "fastmail") {
       target = { provider };
+    } else if (provider === "imap") {
+      const state = mailbox ? await loadImapMailbox(db, uid, { key: mailbox }) : undefined;
+      if (!state) {
+        log("WARNING", "backfill_for_disconnected_user", fields);
+        return c.body(null, 204);
+      }
+      target = { provider, emailAddress: state.emailAddress };
     } else {
       // A Gmail batch queued before there could be several mailboxes names
       // none: it reads the user's first.
@@ -1535,18 +1729,30 @@ app.post("/internal/backfill", async (c) => {
   }
 });
 
-// New Fastmail mail, every few minutes (deploy/scheduler.sh): one user's
-// failure is logged and the rest carry on; their next poll reads it again.
-app.post("/internal/poll-fastmail", async (c) => {
+// New mail in polled mailboxes, every five minutes (deploy/scheduler.sh):
+// Fastmail's and those connected over IMAP. One mailbox's failure is logged
+// and the rest carry on; its next poll reads it again.
+// `/internal/poll-fastmail` is the path the job called before IMAP.
+async function pollMail(c: Context<Env>) {
   await requireInternalCaller(c);
   const isApproved = (uid: string) => approvedUid(db, uid, verifiedEmail, log);
+  const fastmail = await pollFastmailUsers(isApproved);
+  const imap = await pollImapMailboxes(isApproved);
+  log("INFO", "fastmail_polled", fastmail);
+  log("INFO", "imap_polled", imap);
+  return c.json({ fastmail, imap });
+}
+app.post("/internal/poll-mail", pollMail);
+app.post("/internal/poll-fastmail", pollMail);
+
+async function pollFastmailUsers(isApproved: (uid: string) => Promise<boolean>) {
   const uids = (await onlyApproved((await fastmailUsers(db)).map((uid) => ({ uid })), isApproved, log)).map(({ uid }) => uid);
   const totals = { users: uids.length, messages: 0, failed: 0 };
   for (const uid of uids) {
     try {
       let jmap: Jmap | undefined;
       const client = async (state: { token: string }) => (jmap ??= await fastmailJmap(state));
-      const result = await pollFastmail({
+      const result = await pollNewMail({
         resetGeneration: () => deps.store.resetGeneration(uid),
         loadState: async () => loadFastmailState(db, uid),
         stateOf: (state) => state.emailState,
@@ -1572,9 +1778,61 @@ app.post("/internal/poll-fastmail", async (c) => {
       log(rejected ? "WARNING" : "ERROR", rejected ? "fastmail_token_rejected" : "fastmail_poll_failed", { uid, ...errorFields(error) });
     }
   }
-  log("INFO", "fastmail_polled", totals);
-  return c.json(totals);
-});
+  return totals;
+}
+
+// Each IMAP mailbox on one connection: the inbox opened read-only, the
+// UIDs above the last one read imported, and the place moved on. A
+// mailbox whose password the server refused within the hour is skipped,
+// so the provider sees no stream of failed logins.
+async function pollImapMailboxes(isApproved: (uid: string) => Promise<boolean>) {
+  const mailboxes = await onlyApproved(await imapMailboxesToPoll(db), isApproved, log);
+  const totals = { mailboxes: mailboxes.length, messages: 0, failed: 0, paused: 0 };
+  for (const { uid, emailAddress } of mailboxes) {
+    const key = mailboxKey(emailAddress);
+    let source: ImapSource | undefined;
+    try {
+      const stored = await loadImapMailbox(db, uid, { emailAddress });
+      if (!stored) continue;
+      if (inLoginBackoff(stored, Date.now())) {
+        totals.paused += 1;
+        continue;
+      }
+      const opened = imapMailSource(uid, stored, true);
+      source = opened;
+      const result = await pollNewMail({
+        resetGeneration: () => deps.store.resetGeneration(uid),
+        loadState: async () => stored,
+        stateOf: (state) => state.mailboxState,
+        currentState: async () => currentMailboxState(await opened.inbox()),
+        createdSince: async (_state, since) => opened.newSince(since),
+        importIds: async (_state, ids, generation) => importIds(uid, opened, ids, { generation }),
+        saveState: (state, mailboxState, generation) =>
+          updateImapLive(
+            db,
+            uid,
+            state,
+            { mailboxState, lastPolledAt: new Date().toISOString(), ...(state.loginFailedAt ? { loginFailedAt: null } : {}) },
+            generation,
+          ),
+      });
+      if (result.kind === "processed" || result.kind === "superseded") {
+        totals.messages += result.messages;
+        if (result.messages > 0 || result.kind === "superseded") log("INFO", `imap_poll_${result.kind}`, { uid, mailbox: key, messages: result.messages, ...result.counts });
+      } else if (result.kind === "expired") {
+        // UIDVALIDITY changed: the old UIDs name nothing now.
+        log("WARNING", "imap_uidvalidity_changed", { uid, mailbox: key });
+      }
+    } catch (error) {
+      totals.failed += 1;
+      // A refused password was logged (imap_login_failed) where it happened.
+      if (!isImapAuthFailure(error)) log("ERROR", "imap_poll_failed", { uid, mailbox: key, ...errorKind(error) });
+    } finally {
+      await source?.close();
+    }
+  }
+  return totals;
+}
 
 // Gmail watches last seven days; Cloud Scheduler calls this daily.
 app.post("/internal/renew-watches", async (c) => {

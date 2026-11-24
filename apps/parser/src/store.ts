@@ -16,6 +16,15 @@ export function mailboxesQuery(db: Firestore, uid: string) {
     .where(FieldPath.documentId(), "<", "gmail.");
 }
 
+// Every `private/imap-<key>` document of the user, one per mailbox
+// connected over IMAP (imapConnection.ts).
+export function imapMailboxesQuery(db: Firestore, uid: string) {
+  return db
+    .collection(`${paths.user(uid)}/private`)
+    .where(FieldPath.documentId(), ">=", "imap-")
+    .where(FieldPath.documentId(), "<", "imap.");
+}
+
 export function generationOf(snap: DocumentSnapshot): number {
   const value: unknown = snap.get("generation");
   return typeof value === "number" ? value : 0;
@@ -135,15 +144,19 @@ export function firestoreStore(db: Firestore): TripStore {
             next = generation + 1;
           },
           async connectedMailboxes() {
-            const [snap, legacy, fastmail] = await Promise.all([
+            const [snap, legacy, fastmail, imaps] = await Promise.all([
               t.get(mailboxesQuery(db, uid)),
               t.get(db.doc(paths.gmailState(uid))),
               t.get(db.doc(paths.fastmailState(uid))),
+              t.get(imapMailboxesQuery(db, uid)),
             ]);
             mailboxes = snap.docs.map((d) => ({ ref: d.ref, field: new FieldPath("gmails", String(d.get("emailAddress")).trim().toLowerCase(), "backfill") }));
             // One connected before there could be several, not moved yet.
             if (legacy.exists) mailboxes.push({ ref: legacy.ref, field: new FieldPath("gmail", "backfill") });
             if (fastmail.exists) mailboxes.push({ ref: fastmail.ref, field: new FieldPath("fastmail", "backfill") });
+            for (const d of imaps.docs) {
+              mailboxes.push({ ref: d.ref, field: new FieldPath("imaps", String(d.get("emailAddress")).trim().toLowerCase(), "backfill") });
+            }
             return mailboxes.length;
           },
           clearBackfill() {

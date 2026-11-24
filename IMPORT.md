@@ -18,6 +18,7 @@ is the roadmap in `TODO.md`. Every method ends in the same place: an
 | Any `.ics` file or feed | Built | Calendar events | Whatever the calendar holds | One-off (file) or polled (URL) | Export or subscription URL from any calendar app | The `.ics` importer |
 | Google Calendar | Built | Events from chosen calendars | Unlimited | Read when chosen, then daily | One OAuth consent, calendar picker | The `calendar.readonly` scope on the consent screen (a sensitive scope: verification for public use) |
 | Fastmail | Built | Each new inbox email that passes the pre-filter, and past emails matching the booking-like search, read by the model | The whole mailbox, as Gmail's backfill | Within five minutes (polled) | Paste a read-only API token made in Fastmail's settings | The `poll-fastmail` scheduler job; Fastmail offers no third-party OAuth for mail, so no one-tap connect yet |
+| Other email over IMAP (iCloud, Yahoo, Infomaniak, …) | Built | Each new inbox email that passes the pre-filter, and past inbox emails matching the booking-like search, read by the model | The whole inbox (other folders are not read) | Within five minutes (polled) | Email address and an app password made with the provider; the server too for providers Travelmo doesn't know | The same scheduler job; providers with no OAuth for mail (iCloud, Infomaniak) need an app password, and iCloud needs two-factor authentication for one |
 | Forward-to-import address | Built | Emails the user forwards, read by the model as the original sender's | Anything the user still has | As forwarded (within a minute) | Create the address in Settings, forward a confirmation to it | A domain on Cloudflare with Email Routing, the `apps/inbound` Worker relaying to the parser, `FORWARD_DOMAIN` and `INBOUND_SECRET` on the parser |
 
 ## What each source gives per booking
@@ -26,7 +27,7 @@ Our segment fields against what each source carries. "Model" means the text is
 run through extraction, so the field is as good as the email or event text; "Yes"
 means the source has it as data.
 
-| Field | Gmail (push, backfill, forward), Fastmail | TripIt JSON | TripIt feed / `.ics` | Google Calendar | By hand |
+| Field | Gmail (push, backfill, forward), Fastmail, IMAP | TripIt JSON | TripIt feed / `.ics` | Google Calendar | By hand |
 |---|---|---|---|---|---|
 | Type (flight, train, stay, …) | Model | Implied by the object's fields: `Segment[]` with airline codes is air, `train_number` is rail, `room_type` lodging, `car_type` car, `cuisine` restaurant, `DateTime` plus `detail_type_code` activity | Model, from the summary | Model | Chosen |
 | Title | Model | `display_name` | `SUMMARY` | `summary` | Typed |
@@ -38,7 +39,7 @@ means the source has it as data.
 | Notes | Model | `notes`, `restrictions`, `text` | `DESCRIPTION` | `description` | Typed |
 | Travelers and guests | No | `Traveler[]`, `Guest[]`, `Driver`, `ReservationHolder` | Sometimes in the description | Attendees | No |
 | Trip grouping | By dates, two-day gap | TripIt's own trips: `TripData` with name, start and end | By dates | By dates | Chosen |
-| Idempotency key | Gmail message id, `fm-` and the Fastmail email id | None in the file: derived from trip name, dates and leg details | `UID` | Event id | Segment id |
+| Idempotency key | Gmail message id, `fm-` and the Fastmail email id, `imap-`, the mailbox key, UIDVALIDITY and UID | None in the file: derived from trip name, dates and leg details | `UID` | Event id | Segment id |
 | Extra data | | `LoyaltyPrograms` (balances, status), `TravelerProfile` (documents): seeds for the loyalty and passport features | | | |
 
 ## Notes per source

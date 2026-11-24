@@ -3,16 +3,16 @@ import { errorKind } from "./log";
 import { credentialContext, credentialSealer, sealedPrefix } from "./sealing";
 
 // Seals every credential stored before sealing (sealing.ts), as the parser
-// starts with a key: Gmail and Calendar refresh tokens and Fastmail tokens
-// in `users/{uid}/private`, and tokens parked in `pendingConnections`.
+// starts with a key: Gmail and Calendar refresh tokens, Fastmail tokens and
+// IMAP app passwords in `users/{uid}/private`, and tokens parked in `pendingConnections`.
 // Until then each is read as it is, so this runs alongside serving.
 // Idempotent: it finds only values without the sealed prefix, so once all
 // are sealed each start costs a few empty queries. A document that fails is
 // logged and left for the next start; one whose credential changed while it
 // was being sealed is left as the new one was written.
 
-type Kind = "gmail" | "calendar" | "fastmail" | "pending";
-type Field = "refreshToken" | "token";
+type Kind = "gmail" | "calendar" | "fastmail" | "imap" | "pending";
+type Field = "refreshToken" | "token" | "password";
 type Found = { kind: Kind; ref: DocumentReference; field: Field; plain: unknown; uid?: string; context: string };
 
 // The values of `field` that sort outside the range of sealed ones
@@ -37,19 +37,26 @@ function privateCredential(doc: QueryDocumentSnapshot, field: Field): Found | un
   }
   if (field === "refreshToken" && id === "googleCalendar") return { kind: "calendar", ref: doc.ref, field, plain: doc.get(field), uid, context: credentialContext.calendar(uid) };
   if (field === "token" && id === "fastmail") return { kind: "fastmail", ref: doc.ref, field, plain: doc.get(field), uid, context: credentialContext.fastmail(uid) };
+  if (field === "password" && id.startsWith("imap-")) {
+    const emailAddress: unknown = doc.get("emailAddress");
+    if (typeof emailAddress !== "string") return undefined;
+    return { kind: "imap", ref: doc.ref, field, plain: doc.get(field), uid, context: credentialContext.imap(uid, emailAddress) };
+  }
   return undefined;
 }
 
 async function findUnsealed(db: Firestore): Promise<Found[]> {
   const privates = db.collectionGroup("private");
-  const [refreshTokens, tokens, pending] = await Promise.all([
+  const [refreshTokens, tokens, passwords, pending] = await Promise.all([
     unsealed(privates, "refreshToken"),
     unsealed(privates, "token"),
+    unsealed(privates, "password"),
     unsealed(db.collection("pendingConnections"), "refreshToken"),
   ]);
   return [
     ...refreshTokens.map((d) => privateCredential(d, "refreshToken")),
     ...tokens.map((d) => privateCredential(d, "token")),
+    ...passwords.map((d) => privateCredential(d, "password")),
     // Not logged by id: a pending connection's id is the code that redeems it.
     ...pending.map((d): Found => ({ kind: "pending", ref: d.ref, field: "refreshToken", plain: d.get("refreshToken"), context: credentialContext.pending(d.id) })),
   ].filter((f): f is Found => f !== undefined);

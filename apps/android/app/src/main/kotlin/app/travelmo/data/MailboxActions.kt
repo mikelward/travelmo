@@ -8,6 +8,10 @@ import app.travelmo.core.FASTMAIL_CONNECT_PATH
 import app.travelmo.core.FASTMAIL_DISCONNECT_PATH
 import app.travelmo.core.GMAIL_CONNECT_PATH
 import app.travelmo.core.GMAIL_DISCONNECT_PATH
+import app.travelmo.core.IMAP_BACKFILL_START_PATH
+import app.travelmo.core.IMAP_BACKFILL_STOP_PATH
+import app.travelmo.core.IMAP_CONNECT_PATH
+import app.travelmo.core.IMAP_DISCONNECT_PATH
 import app.travelmo.core.tripActionFailure
 import app.travelmo.log.TravelmoLog
 import com.mikelward.androidlog.safe
@@ -52,12 +56,41 @@ interface FastmailActions {
     suspend fun disconnect()
 }
 
+/** Settings' IMAP section: connecting a mailbox with an app password, and reading each; the parser in the app, a fake in tests. */
+interface ImapActions {
+    /** False on a build with no parser address, where Settings sends the user to the web. */
+    val available: Boolean
+
+    /**
+     * Connects the mailbox at [emailAddress] with an app password made with its provider; [server] only for a
+     * provider Travelmo does not know. Throws [TripActionFailed] with the parser's words when the server refuses.
+     */
+    suspend fun connect(emailAddress: String, password: String, server: String?)
+
+    /** Starts or continues reading the past emails of the mailbox at [emailAddress]; from the start with [restart]. Throws [TripActionFailed]. */
+    suspend fun start(emailAddress: String, restart: Boolean)
+
+    /** Stops that mailbox's reading where it got to. Throws [TripActionFailed]. */
+    suspend fun stop(emailAddress: String)
+
+    /** Disconnects that mailbox. Throws [TripActionFailed]. */
+    suspend fun disconnect(emailAddress: String)
+}
+
 /** A build with no parser address: every action is for Settings on the web. */
 private fun onWeb(): Nothing = throw TripActionFailed("Use Settings on the web for this.")
 
 object NoGmailActions : GmailActions {
     override val available = false
     override suspend fun connectUrl(): String = onWeb()
+    override suspend fun start(emailAddress: String, restart: Boolean) = onWeb()
+    override suspend fun stop(emailAddress: String) = onWeb()
+    override suspend fun disconnect(emailAddress: String) = onWeb()
+}
+
+object NoImapActions : ImapActions {
+    override val available = false
+    override suspend fun connect(emailAddress: String, password: String, server: String?) = onWeb()
     override suspend fun start(emailAddress: String, restart: Boolean) = onWeb()
     override suspend fun stop(emailAddress: String) = onWeb()
     override suspend fun disconnect(emailAddress: String) = onWeb()
@@ -165,4 +198,29 @@ class ParserFastmailActions(client: ParserClient) : FastmailActions {
     override suspend fun start(restart: Boolean) = mailbox.start(restart)
     override suspend fun stop() = mailbox.stop()
     override suspend fun disconnect() = mailbox.disconnect()
+}
+
+/**
+ * The parser's IMAP routes, each naming its mailbox by address. Its
+ * refusals (400: the server refused the address and app password, could not
+ * be reached securely, or the address is Gmail's or Fastmail's; 409: five
+ * are connected already) are worded for the user, so they are shown as sent.
+ */
+class ParserImapActions(client: ParserClient) : ImapActions {
+    private val mailbox = ParserMailbox(client, "IMAP", IMAP_BACKFILL_START_PATH, IMAP_BACKFILL_STOP_PATH, IMAP_DISCONNECT_PATH, explained = setOf(400, 409))
+
+    override val available: Boolean
+        get() = mailbox.available
+
+    override suspend fun connect(emailAddress: String, password: String, server: String?) {
+        val body = JSONObject().put("emailAddress", emailAddress.trim()).put("password", password)
+        if (!server.isNullOrBlank()) body.put("server", server.trim())
+        mailbox.call(IMAP_CONNECT_PATH, body.toString(), "Connecting a mailbox over IMAP")
+    }
+
+    private fun named(emailAddress: String) = JSONObject().put("emailAddress", emailAddress)
+
+    override suspend fun start(emailAddress: String, restart: Boolean) = mailbox.start(restart, named(emailAddress))
+    override suspend fun stop(emailAddress: String) = mailbox.stop(named(emailAddress))
+    override suspend fun disconnect(emailAddress: String) = mailbox.disconnect(named(emailAddress))
 }

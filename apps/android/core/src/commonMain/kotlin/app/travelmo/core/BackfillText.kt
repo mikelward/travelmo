@@ -17,8 +17,12 @@ const val FORWARD_STOP_PATH = "/forward/stop"
 const val FASTMAIL_DISCONNECT_PATH = "/fastmail/disconnect"
 const val FASTMAIL_BACKFILL_START_PATH = "/fastmail/backfill"
 const val FASTMAIL_BACKFILL_STOP_PATH = "/fastmail/backfill/stop"
+const val IMAP_CONNECT_PATH = "/imap/connect"
+const val IMAP_DISCONNECT_PATH = "/imap/disconnect"
+const val IMAP_BACKFILL_START_PATH = "/imap/backfill"
+const val IMAP_BACKFILL_STOP_PATH = "/imap/backfill/stop"
 
-/** How far the last reading of the mailbox got (`gmail.backfill` or `fastmail.backfill` on the user document). */
+/** How far the last reading of the mailbox got (`gmail.backfill`, `fastmail.backfill` or an `imaps` entry's on the user document). */
 data class BackfillShown(
     val scanned: Int,
     val imported: Int,

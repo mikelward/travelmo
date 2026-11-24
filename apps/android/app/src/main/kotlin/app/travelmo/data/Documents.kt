@@ -7,6 +7,8 @@ import app.travelmo.core.FoundLoyalty
 import app.travelmo.core.BackfillShown
 import app.travelmo.core.GmailMailbox
 import app.travelmo.core.gmailMailboxes
+import app.travelmo.core.ImapMailbox
+import app.travelmo.core.imapMailboxes
 import app.travelmo.core.ParsedRecord
 import app.travelmo.core.SenderPatterns
 import app.travelmo.core.LoyaltyPerson
@@ -302,6 +304,18 @@ internal fun fastmailStatusOf(data: Map<String, Any?>?): FastmailStatus? {
     val address = connectedAddressOf(fastmail) ?: return null
     return FastmailStatus(address, backfillOf(fastmail))
 }
+
+/**
+ * The user document's mailboxes connected over IMAP (`imaps`), oldest first.
+ * A malformed entry reads as none, a malformed progress as no progress.
+ */
+internal fun imapStatusesOf(data: Map<String, Any?>?): List<ImapMailbox> = imapMailboxes(
+    (data?.get("imaps") as? Map<*, *>).orEmpty().values.mapNotNull { entry ->
+        val imap = entry as? Map<*, *> ?: return@mapNotNull null
+        val address = connectedAddressOf(imap) ?: return@mapNotNull null
+        ImapMailbox(address, imap["connectedAt"] as? String ?: "", backfillOf(imap), imap["loginFailedAt"] as? String)
+    },
+)
 
 /** A mailbox connection's address; null when blank or missing. */
 private fun connectedAddressOf(connection: Map<*, *>): String? = (connection["emailAddress"] as? String)?.takeIf { it.isNotBlank() }

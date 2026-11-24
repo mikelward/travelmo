@@ -95,9 +95,11 @@ describe("resetTrips", () => {
     await db.doc(paths.user(uid)).set({
       gmail: { emailAddress: "owner@example.com", connectedAt: at, backfill },
       fastmail: { emailAddress: "owner@fastmail.com", connectedAt: at, backfill },
+      imaps: { "owner@icloud.com": { emailAddress: "Owner@icloud.com", connectedAt: at, backfill } },
     });
     await db.doc(paths.gmailState(uid)).set({ emailAddress: "owner@example.com", refreshToken: "token", backfill });
     await db.doc(paths.fastmailState(uid)).set({ emailAddress: "owner@fastmail.com", connectedAt: at, token: "fmu1", accountId: "u1", backfill });
+    await db.doc(paths.imapMailbox(uid, "k1")).set({ emailAddress: "Owner@icloud.com", connectedAt: at, password: "pw", host: "imap.mail.me.com", port: 993, backfill });
     await put(trip("reset-mailboxes-1", uid), [segment("reset-mailboxes-1", "m1-0")]);
 
     await resetTrips(db, uid, quiet);
@@ -107,6 +109,9 @@ describe("resetTrips", () => {
     expect(user?.fastmail).toEqual({ emailAddress: "owner@fastmail.com", connectedAt: at });
     expect((await db.doc(paths.fastmailState(uid)).get()).get("backfill")).toBeUndefined();
     expect((await db.doc(paths.fastmailState(uid)).get()).get("token")).toBe("fmu1");
+    expect(user?.imaps).toEqual({ "owner@icloud.com": { emailAddress: "Owner@icloud.com", connectedAt: at } });
+    expect((await db.doc(paths.imapMailbox(uid, "k1")).get()).get("backfill")).toBeUndefined();
+    expect((await db.doc(paths.imapMailbox(uid, "k1")).get()).get("password")).toBe("pw");
   });
 
   it("files the same email again afterwards", async () => {

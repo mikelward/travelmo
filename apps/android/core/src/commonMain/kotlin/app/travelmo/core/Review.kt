@@ -85,12 +85,13 @@ fun outcomeLabel(outcome: String): String = when (outcome) {
  * forwarded emails, TripIt items and calendar events have neither. As
  * apps/web/src/lib/sourceLinks.ts.
  */
-fun isFromMailbox(record: ParsedRecord): Boolean = (record.source ?: "gmail").let { it == "gmail" || it == "fastmail" }
+fun isFromMailbox(record: ParsedRecord): Boolean = (record.source ?: "gmail").let { it == "gmail" || it == "fastmail" || it == "imap" }
 
 /** Where a record came from, as Import review says it on the web. */
 fun recordSourceLabel(source: String?): String = when (source ?: "gmail") {
     "gmail" -> "Gmail"
     "fastmail" -> "Fastmail"
+    "imap" -> "Other email"
     "tripit" -> "TripIt"
     "ics" -> "Calendar"
     "forward" -> "Forwarded email"
@@ -103,5 +104,5 @@ const val REVIEW_RECENT = 100
 /** The most records a search reads, as on the web. */
 const val REVIEW_SEARCH_CAP = 20_000
 
-/** The parser's path for reading one message again, Gmail or Fastmail (`fm-` ids). */
+/** The parser's path for reading one message again, Gmail, Fastmail (`fm-` ids) or IMAP (`imap-` ids). */
 const val REIMPORT_PATH = "/gmail/reimport"

@@ -1,6 +1,7 @@
 import { backfillBatch, backfillSubjects, statementDays, statementSubjects } from "./backfill";
 import type { EmailMessage, MessagePage } from "./gmail";
 import type { MailSource } from "./mailSource";
+import type { ChangesResult } from "./newMailPoll";
 import { travelLoyaltyDomains } from "./prefilter";
 import { bodyText } from "./text";
 
@@ -242,7 +243,6 @@ export async function fetchEmail(jmap: Jmap, emailId: string): Promise<EmailMess
   };
 }
 
-export type ChangesResult = { created: string[]; state: string };
 
 // Emails created since `sinceState` that are in the inbox, as Gmail's watch
 // covers only the inbox; "expired" when the server can no longer say.

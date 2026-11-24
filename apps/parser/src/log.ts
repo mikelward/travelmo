@@ -1,4 +1,4 @@
-type Severity = "INFO" | "WARNING" | "ERROR";
+type Severity = "DEBUG" | "INFO" | "WARNING" | "ERROR";
 
 // One JSON object per line is what Cloud Logging parses into structured entries.
 export function log(severity: Severity, event: string, fields: Record<string, unknown> = {}): void {

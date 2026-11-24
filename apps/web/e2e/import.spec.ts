@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { owner, signIn } from "./helpers";
 import { gmailIdPrefix } from "@travelmo/core";
-import { clearData, seedFeed, seedGmail, seedGoogleCalendar, seedLegacyGmail } from "./seed";
+import { clearData, seedFeed, seedGmail, seedGoogleCalendar, seedImap, seedLegacyGmail } from "./seed";
 
 test.beforeEach(async () => {
   await clearData();
@@ -238,6 +238,103 @@ test("a batch with failed imports pauses the reading and says why", async ({ pag
   await expect(page.getByText("Reading paused: 3 emails in the last batch could not be imported.", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Continue reading past emails" })).toBeVisible();
+});
+
+test("another mailbox connects over IMAP with an app password, the server filled in for known providers", async ({ page }) => {
+  const uid = await signIn(page, owner);
+  const sent: unknown[] = [];
+  await page.route("http://localhost:8080/imap/connect", async (route) => {
+    const body = route.request().postDataJSON() as { emailAddress: string };
+    sent.push(body);
+    await seedImap(uid, { emailAddress: body.emailAddress, connectedAt: "2026-11-01T00:00:00Z" });
+    await route.fulfill({ json: { emailAddress: body.emailAddress } });
+  });
+  await page.goto("/settings");
+  const form = page.getByTestId("imap-connect");
+  await expect(form.getByRole("link", { name: "iCloud" })).toHaveAttribute("href", "https://support.apple.com/en-us/102654");
+  await form.getByLabel("Email address").fill("traveler@icloud.com");
+  await expect(form.getByLabel("Server")).toHaveCount(0);
+  await form.getByLabel("App password").fill("abcd-efgh-ijkl-mnop");
+  await expect(form.getByLabel("App password")).toHaveAttribute("type", "password");
+  await form.getByRole("button", { name: "Connect" }).click();
+  await expect.poll(() => sent).toEqual([{ emailAddress: "traveler@icloud.com", password: "abcd-efgh-ijkl-mnop" }]);
+  await expect(page.getByText("Connected traveler@icloud.com. Import your past bookings below.")).toBeVisible();
+  await expect(page.getByTestId("imap-mailbox")).toHaveText(/traveler@icloud\.com/);
+  await expect(form.getByLabel("App password")).toHaveValue("");
+
+  // Another provider's server is the user's to name.
+  await form.getByLabel("Email address").fill("me@example.org");
+  await form.getByLabel("App password").fill("secret");
+  await expect(form.getByRole("button", { name: "Connect" })).toBeDisabled();
+  await form.getByLabel("Server").fill("imap.example.org");
+  await form.getByRole("button", { name: "Connect" }).click();
+  await expect.poll(() => sent.length).toBe(2);
+  expect(sent[1]).toEqual({ emailAddress: "me@example.org", password: "secret", server: "imap.example.org" });
+});
+
+test("at the limit, a connected IMAP mailbox can still be given a new app password", async ({ page }) => {
+  const uid = await signIn(page, owner);
+  for (let i = 1; i <= 5; i++) await seedImap(uid, { emailAddress: `me${i}@icloud.com`, connectedAt: `2026-11-0${i}T00:00:00Z`, loginFailedAt: "2026-11-20T00:00:00Z" });
+  const sent: unknown[] = [];
+  await page.route("http://localhost:8080/imap/connect", async (route) => {
+    sent.push(route.request().postDataJSON());
+    await route.fulfill({ json: { emailAddress: "me1@icloud.com" } });
+  });
+  await page.goto("/settings");
+  await expect(page.getByTestId("imap-mailbox")).toHaveCount(5);
+  await expect(page.getByText("You can connect up to 5 mailboxes this way.", { exact: false })).toBeVisible();
+  const form = page.getByTestId("imap-connect");
+  await form.getByLabel("Email address").fill("me1@icloud.com");
+  await form.getByLabel("App password").fill("new-app-password");
+  await form.getByRole("button", { name: "Connect" }).click();
+  await expect.poll(() => sent).toEqual([{ emailAddress: "me1@icloud.com", password: "new-app-password" }]);
+});
+
+test("Gmail and Fastmail addresses are sent to their own sections", async ({ page }) => {
+  await signIn(page, owner);
+  await page.goto("/settings");
+  const form = page.getByTestId("imap-connect");
+  await form.getByLabel("Email address").fill("me@gmail.com");
+  await expect(form.getByText("For a Gmail address, use Connect Gmail above.")).toBeVisible();
+  await form.getByLabel("App password").fill("secret");
+  await expect(form.getByRole("button", { name: "Connect" })).toBeDisabled();
+  await form.getByLabel("Email address").fill("me@fastmail.com");
+  await expect(form.getByText("For a Fastmail address, use the Fastmail section above.")).toBeVisible();
+});
+
+test("each IMAP mailbox imports past bookings and disconnects on its own", async ({ page }) => {
+  const uid = await signIn(page, owner);
+  await seedImap(uid, {
+    emailAddress: "traveler@icloud.com",
+    connectedAt: "2026-11-01T00:00:00Z",
+    backfill: { scanned: 40, imported: 2, done: true, updatedAt: "2026-11-01T00:00:00Z" },
+  });
+  await seedImap(uid, { emailAddress: "trips@yahoo.com", connectedAt: "2026-11-02T00:00:00Z", loginFailedAt: "2026-11-03T00:00:00Z" });
+  const sent: { path: string; body: unknown }[] = [];
+  for (const path of ["/imap/backfill", "/imap/disconnect"]) {
+    await page.route(`http://localhost:8080${path}`, async (route) => {
+      sent.push({ path, body: route.request().postDataJSON() });
+      await route.fulfill(
+        path === "/imap/disconnect"
+          ? { status: 204 }
+          : { json: { progress: { scanned: 0, imported: 0, done: false, running: true, updatedAt: new Date().toISOString() } } },
+      );
+    });
+  }
+  await page.goto("/settings");
+  const mailboxes = page.getByTestId("imap-mailbox");
+  await expect(mailboxes).toHaveCount(2);
+  const first = mailboxes.filter({ hasText: "traveler@icloud.com" });
+  const second = mailboxes.filter({ hasText: "trips@yahoo.com" });
+  await expect(first.getByTestId("imap-backfill-progress")).toHaveText("Whole mailbox read: 40 booking-like emails read, 2 bookings imported.");
+  await expect(second.getByText("The server turned down the app password. Connect again with a new one.")).toBeVisible();
+  await expect(first.getByText("turned down")).toHaveCount(0);
+  await second.getByRole("button", { name: "Import past bookings" }).click();
+  await expect.poll(() => sent).toEqual([{ path: "/imap/backfill", body: { emailAddress: "trips@yahoo.com" } }]);
+  await first.getByRole("button", { name: "Disconnect" }).click();
+  await expect.poll(() => sent.length).toBe(2);
+  expect(sent[1]).toEqual({ path: "/imap/disconnect", body: { emailAddress: "traveler@icloud.com" } });
+  await expect(page.getByText("Disconnected. Delete the app password with your email provider too.")).toBeVisible();
 });
 
 test("Google Calendar finishes connecting on return from Google, apart from Gmail", async ({ page }) => {

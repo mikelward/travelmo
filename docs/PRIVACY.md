@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated 23 November 2026
+Last updated 24 November 2026
 
 Travelmo keeps your trips in one place, on the web and in the Android app. This page says what it stores, why, who else handles it, and how to remove it. Travelmo has no ads and never sells your data.
 
@@ -11,7 +11,7 @@ Travelmo keeps your trips in one place, on the web and in the Android app. This 
 - **Your trips and bookings:** titles, dates, times, places, providers, confirmation numbers, notes, ratings, and where each booking came from.
 - **Your travel profile,** if you import a TripIt export: travelers, documents such as passports and visas with their numbers and expiry dates, and loyalty programs.
 - **Your reminders before trips:** what each says and when it is due, which you ticked off on each trip, and which were sent to you.
-- **Connections you turn on:** access to read your Gmail accounts, Fastmail or Google Calendar, calendar feed addresses, your forwarding address, your calendar export link, and the devices and browsers you asked to notify.
+- **Connections you turn on:** access to read your Gmail accounts, Fastmail, other email accounts or Google Calendar, calendar feed addresses, your forwarding address, your calendar export link, and the devices and browsers you asked to notify.
 - **A record of each email or calendar event it looked at:** the sender, the subject, and whether it became a booking, so the same message is never read twice and you can review what was skipped.
 
 ## Gmail and Google Calendar
@@ -27,6 +27,12 @@ Travelmo keeps this access encrypted on its servers. You can disconnect each Gma
 When you connect Fastmail, you give Travelmo a read-only API token you made in Fastmail's settings, and Travelmo keeps it encrypted on its servers. It uses the token only to read new email every few minutes, and past email when you import it, handling each email as it does with Gmail: only ones that look like bookings go to Gemini, and it never sends, changes or deletes email.
 
 Disconnecting Fastmail in Settings deletes the token from Travelmo. Travelmo can't revoke a Fastmail token, so delete it in Fastmail too.
+
+## Other email accounts
+
+When you connect another email account, such as iCloud or Yahoo, you give Travelmo its address and an app password you made with your email provider, and Travelmo keeps the password encrypted on its servers. It uses the password only to read your inbox: new email every few minutes, and past email when you import it, handling each email as it does with Gmail. It never sends, changes or deletes email.
+
+Disconnecting the account in Settings deletes the app password from Travelmo. Deleting the app password with your email provider revokes it, so Travelmo can no longer read that account.
 
 ## Who else handles your data
 
@@ -53,7 +59,7 @@ Travelmo doesn't collect analytics yet. The plan is to count, on its own servers
 
 ## Keeping and deleting your data
 
-Your data stays until you delete it. Deleting a trip or booking removes it; disconnecting Gmail or Google Calendar removes Travelmo's access, and disconnecting Fastmail deletes its API token. Deleting your account in Settings removes your trips, bookings, travel profile, reminders, connections and access record, and takes you off trips others shared with you; bookings you added to someone else's trip stay with that trip. Service logs are kept for 30 days.
+Your data stays until you delete it. Deleting a trip or booking removes it; disconnecting Gmail or Google Calendar removes Travelmo's access, and disconnecting Fastmail or another email account deletes its token or app password. Deleting your account in Settings removes your trips, bookings, travel profile, reminders, connections and access record, and takes you off trips others shared with you; bookings you added to someone else's trip stay with that trip. Service logs are kept for 30 days.
 
 To ask about your data or have it deleted without signing in, email [play@mikelward.com](mailto:play@mikelward.com).
 

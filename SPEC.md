@@ -36,27 +36,33 @@ viewer's zone. Trip bounds are calendar dates.
   sender` (the booking email's domain), `rating` (one to five) and
   `favorite`, the traveler's own verdict. `source` is `gmail`, `manual`,
   `tripit`, `ics`, `forward` (an email forwarded to the user's forwarding
-  address) or `fastmail` (read from a connected Fastmail mailbox): where the
-  booking first came from. `sources` lists every
+  address), `fastmail` (read from a connected Fastmail mailbox) or `imap`
+  (read from a mailbox connected over IMAP): where the booking first came
+  from. `sources` lists every
   email, TripIt item or calendar event it was read from (`kind, id, label,
   uid, at`), including later ones dropped as duplicates of it; the trip page
   shows them all, each email linking into Gmail for the user who imported
   it (`uid`; the trip's owner for sources recorded without one), in the
   mailbox it came from, wherever the booking has since moved. Fastmail
-  emails do not link.
+  and IMAP emails do not link.
   Imported segments use the id `<source id>-<index>` (for an email, its
   Gmail message id, behind its mailbox's `idPrefix`: see "Several
-  mailboxes"; `fm-<JMAP email id>` for Fastmail; `tripit-<key>` for a
+  mailboxes"; `fm-<JMAP email id>` for Fastmail; `imap-<record key>-<uidvalidity>-<uid>` for
+  an IMAP mailbox, the record key a hash of the address with its server and
+  port, so the same address reconnected to another server keeps its emails
+  apart; `tripit-<key>` for a
   TripIt trip) so a re-import overwrites rather than duplicates.
 - `users/{uid}` — `email, displayName, photoURL, gmails {<lowercased
   address>: {emailAddress, connectedAt, watchExpiration, historyId,
   idPrefix, backfill}}` (one entry per connected Gmail mailbox; `gmail`,
   the same for one connected before there could be several, stays until
   that mailbox is disconnected, frozen, for rules and apps from before),
-  `fastmail {emailAddress, connectedAt, backfill}`, `googleCalendar
+  `fastmail {emailAddress, connectedAt, backfill}`, `imaps {<lowercased
+  address>: {emailAddress, connectedAt, backfill, loginFailedAt}}` (one
+  entry per mailbox connected over IMAP), `googleCalendar
   {emailAddress, connectedAt, calendars[]}, reminders {email, push}, forward
   {address, createdAt}, emails[], pendingEmails[{email, sentAt,
-  expiresAt}]`. `gmail`, `gmails`, `fastmail`, `googleCalendar`, `forward`, `emails` (a copy,
+  expiresAt}]`. `gmail`, `gmails`, `fastmail`, `imaps`, `googleCalendar`, `forward`, `emails` (a copy,
   for the apps, of the addresses the user confirmed besides their sign-in,
   lowercase; never trusted, see below) and `pendingEmails` (those whose
   confirmation link is still out) are server-written ("Linked email addresses"); `reminders` is the owner's choice; `backfill` is how far a reading of the whole mailbox has
@@ -125,7 +131,7 @@ viewer's zone. Trip bounds are calendar dates.
 - `users/{uid}/parsedMessages/{sourceId}` (for an email, its source id:
   see "Several mailboxes") — `outcome` (processing,
   filtered, not_booking, imported, failed, cancellation), `source` (absent for Gmail,
-  `tripit`, `ics`, `forward` or `fastmail` otherwise), `reason, from, subject, segmentIds[],
+  `tripit`, `ics`, `forward`, `fastmail` or `imap` otherwise), `reason, from, subject, segmentIds[],
   processedAt`, one per Gmail or Fastmail message, forwarded email, TripIt
   trip, unfiled TripIt item or calendar event. Claimed atomically as `processing` before any
   work, so a message delivered twice is imported once; a `processing` claim
@@ -141,10 +147,15 @@ viewer's zone. Trip bounds are calendar dates.
   `users/{uid}/private/fastmail` — the Fastmail API token, the JMAP account
   id, the mailbox state new mail is read from (`emailState`), when it was
   last polled, and the backfill progress;
+  `users/{uid}/private/imap-<key>` — one IMAP mailbox's app password, server
+  (`host`, `port`), the inbox's UIDVALIDITY and last UID read
+  (`mailboxState`, `<uidvalidity>:<uid>`), when it was last polled, when its
+  server last refused the password (`loginFailedAt`) and the backfill
+  progress;
   `users/{uid}/private/googleCalendar` — the Calendar refresh token and the
   calendar list, `googleCalendarAliases-<hash>` per calendar the event ids
   of deleted events still need. Server only. The refresh tokens and the
-  Fastmail token are `kms1:<ciphertext>` (see "Stored credentials" below). `users/{uid}/private/import` is read and written by every import
+  Fastmail token and IMAP app passwords are `kms1:<ciphertext>` (see "Stored credentials" below). `users/{uid}/private/import` is read and written by every import
   transaction, serializing trip assignment per user.
   `users/{uid}/private/examples` — `bookings[], others[]` of `{subject,
   vector}`, the embeddings the similarity pre-filter compares against.
@@ -170,13 +181,15 @@ Schemas live in `packages/core/src/schema.ts`; paths in `paths.ts`.
 ### Stored credentials
 
 Every mail credential the parser keeps (Gmail and Calendar refresh tokens,
-tokens parked in `pendingConnections`, the Fastmail API token) is encrypted
+tokens parked in `pendingConnections`, the Fastmail API token, IMAP app
+passwords) is encrypted
 with a Cloud KMS key (`CREDENTIALS_KMS_KEY`, made by `deploy/kms.sh`)
 before it is written, and stored as `kms1:<base64 ciphertext>`, so a leak
 or export of Firestore reveals nothing usable: only the parser's service
 account may decrypt with the key (`apps/parser/src/sealing.ts`). Each is
 encrypted with the document and field it belongs in as additional
-authenticated data (a Gmail mailbox's by `private/gmail-<key>`, also while
+authenticated data (a Gmail mailbox's by `private/gmail-<key>`, an IMAP
+one's by `private/imap-<key>#password`, also while
 it is still in `private/gmail`), so a ciphertext copied into another
 user's document does not decrypt. The storage functions encrypt on write
 and decrypt on read, outside Firestore transactions, which may run more
@@ -189,8 +202,7 @@ on `private` for values outside the `kms1:` range, and on
 which the next start tries again. Without a key (local runs) credentials
 are stored as they are and the parser logs a warning as it starts. The
 key rotates every 90 days; old versions are kept, since they still
-decrypt what they sealed. A future IMAP connector seals its passwords the
-same way.
+decrypt what they sealed.
 
 ## Testing
 
@@ -2015,7 +2027,7 @@ API URL that session names, which must be on fastmail.com. Disconnecting
 stops any reading and deletes the token; Fastmail has no API to revoke it,
 so Settings asks the user to delete it there.
 
-New mail: Cloud Scheduler calls `/internal/poll-fastmail` every five
+New mail: Cloud Scheduler calls `/internal/poll-mail` every five
 minutes, which for each approved user asks `Email/changes` what was created
 since the stored state, keeps what is in the inbox (Gmail's watch covers
 only the inbox too), and imports it as pushed Gmail mail is, with
@@ -2046,6 +2058,81 @@ link to make the token, a password field for it, and once connected, the
 same Import past bookings controls and Disconnect, with a reminder to
 delete the token in Fastmail. The token is not kept in Android's saved
 screen state.
+
+### Connected IMAP mailboxes
+
+Any other mailbox (iCloud, Yahoo, Infomaniak and the like, whose providers
+offer apps like this one no OAuth for mail) is read over IMAP with an app
+password the user makes with their provider (iCloud requires two-factor
+authentication for one), through `MailSource` as Gmail's and Fastmail's
+are (`apps/parser/src/imap.ts`, on the `imapflow` library). Like Gmail, an
+account may connect up to five (`maxImapMailboxes` in
+`packages/core/src/imap.ts`, mirrored in Android's `Imap.kt`), each in
+`users/{uid}/private/imap-<key>` with its entry in the user document's
+`imaps`; as with Fastmail, two users may connect the same mailbox, and a
+connected IMAP address does not count as a confirmed one.
+
+Connecting: `POST /imap/connect` takes the address, the app password and,
+for a provider Travelmo does not know, the server (`host` or
+`host:port`, 993 by default). Known providers' servers are filled in by
+the address's domain: iCloud (`icloud.com`, `me.com`, `mac.com`:
+`imap.mail.me.com`), Yahoo (`yahoo.*`, `ymail.com`, `rocketmail.com`:
+`imap.mail.yahoo.com`), Infomaniak (`ik.me`, `ikmail.com`, `etik.com`:
+`mail.infomaniak.com`), all on 993; the username is the address. A Gmail
+or Fastmail address is refused with a pointer to its own section. The
+parser connects with implicit TLS only, whatever the port (no STARTTLS,
+no plaintext), certificates checked, only to public addresses (checked
+where the connection is made, as calendar feeds are), signs in, opens the
+inbox read-only (EXAMINE), and only then stores the password, sealed,
+with the inbox's UIDVALIDITY and last UID as where new mail starts.
+Nothing the parser does can change a mailbox: its client type
+has no command that writes, flags or sends. Connecting a mailbox again
+takes the new password and keeps its place and reading. Disconnecting
+stops any reading and deletes the password; deleting the app password with
+the provider revokes it.
+
+New mail: the five-minute job (`/internal/poll-mail`, which the
+`poll-fastmail` scheduler job calls; `/internal/poll-fastmail` still
+answers) polls Fastmail and then each IMAP mailbox of each approved user
+over one connection: the UIDs above the last one read are imported, oldest
+first, up to 200 a poll, with `source: "imap"`, and the place moves on as
+Fastmail's does (`newMailPoll.ts`, shared). A changed UIDVALIDITY means
+the old UIDs name nothing, so reading starts from now (logged
+`imap_uidvalidity_changed`); the backfill finds what was missed.
+
+A refused password is logged as `imap_login_failed` (by mailbox key and
+server, never the password) and recorded as `loginFailedAt`, which
+Settings shows ("The server turned down the app password. Connect again
+with a new one."); the poll and backfill batches leave that mailbox alone
+for an hour (`imapLoginBackoffMs`) so the provider does not lock the
+account after a stream of failed logins, while reads the user asks for
+("Import anyway") still try. The next login that works clears it.
+
+Past mail: the shared backfill chain, its Pub/Sub message `provider:
+"imap"` with the mailbox's key. The search is IMAP SEARCH over the inbox
+alone: any of `backfill.ts`'s subjects (IMAP matches substrings, so a
+little more than Gmail's word search), or a statement-like subject in the
+last 60 days (not narrowed to travel programs' senders, as one SEARCH
+cannot AND two ORs without repeating one per term; the pre-filter does
+it). Only the inbox is searched: other folders' UIDs would need their
+own ids and cursor, and Trash and Junk are left out without knowing
+each provider's names for them. Pages go down by UID, newest first, 300
+at a time, the cursor `<uidvalidity>:<lowest uid read>`; a cursor whose
+UIDVALIDITY is no longer current starts the reading over, claims skipping
+what was read. Each message is downloaded whole up to 2 MB (a large
+attachment past that is cut off) and reduced as a forwarded one is
+(`inbound.ts`'s `parseInbound`). "Import anyway" routes `imap-` ids to
+their mailbox by key; "Delete all trips" forgets every IMAP mailbox's
+reading position; deleting the account removes every IMAP connection with
+the rest of `users/{uid}`.
+
+Settings on the web and Android has "Other email (IMAP)" under Fastmail:
+each connected mailbox as a Gmail one is shown (address, Import past
+bookings, Disconnect, progress, and a refused password), then the
+address, the app password (a password field, not kept in Android's saved
+screen state), the server only for an unknown provider, one line on app
+passwords with links to iCloud's and Yahoo's instructions, and Connect.
+Sources read "Other email" and do not link.
 
 ## Connecting Gmail
 
@@ -2181,6 +2268,10 @@ build without one points to the web instead.
 | `POST /gmail/backfill/stop` | Firebase ID token | Stops that mailbox's reading after the batch under way |
 | `POST /gmail/reimport` | Firebase ID token | Imports one message again from the mailbox its record id names, skipping the pre-filter; returns its outcome |
 | `POST /gmail/disconnect` | Firebase ID token | Stops the watch of the mailbox `emailAddress` names, revokes its token (unless another connection rests on the grant), deletes its connection |
+| `POST /imap/connect` | Firebase ID token | Signs in to an IMAP mailbox with an app password (`emailAddress`, `password`, `server` for an unknown provider), implicit TLS only, opens the inbox read-only, and stores the sealed password; 400 for a refused login, an unreachable server or a Gmail or Fastmail address, 409 past five |
+| `POST /imap/disconnect` | Firebase ID token | Stops that mailbox's reading and deletes its password |
+| `POST /imap/backfill` | Firebase ID token | As `/gmail/backfill`, for the IMAP mailbox `emailAddress` names |
+| `POST /imap/backfill/stop` | Firebase ID token | Stops that mailbox's reading after the batch under way |
 | `POST /trips/regroup` | Firebase ID token | Rebuilds the user's trips from their bookings with the current grouping ("Home"); returns how many trips changed and how many were merged away |
 | `POST /trips/delete-all` | Firebase ID token | Deletes every trip the user owns with its bookings, their import records, places waiting for a geocode on those bookings, and how far the last mailbox reading got; returns how many trips went. Trips shared with them, their profile and connections stay |
 | `POST /feeds/add` | Firebase ID token | Subscribes to a calendar feed after checking its address and reading it once; returns counts as for `/import/ics` |
@@ -2194,6 +2285,7 @@ build without one points to the web instead.
 | `POST /import/tripit` | Firebase ID token | Imports a TripIt JSON export (up to 20 MB); returns counts of trips, bookings, duplicates, items imported before, failures and items not importable; 409 while another TripIt upload of the same user runs |
 | `POST /internal/pubsub/gmail` | OIDC from `INTERNAL_CALLERS` | Pub/Sub push target |
 | `POST /internal/backfill` | OIDC from `INTERNAL_CALLERS` | Pub/Sub push target for the mailbox reading's next batch |
+| `POST /internal/poll-mail` | OIDC from `INTERNAL_CALLERS` | Cloud Scheduler target, every five minutes: new mail in Fastmail and IMAP mailboxes (`/internal/poll-fastmail` is the same) |
 | `POST /internal/renew-watches` | OIDC from `INTERNAL_CALLERS` | Cloud Scheduler target |
 | `POST /internal/flight-status` | OIDC from `INTERNAL_CALLERS` | Cloud Scheduler target, every minute: sends the check-in reminders due ("Check-in reminders"), then looks at the flights due a look and sends their news ("Live flight status"); `{enabled: false}` without `AEROAPI_KEY`, though check-in reminders still go |
 | `POST /flights/refresh` | Firebase ID token | Looks at the flights of a trip the caller can see (`tripId`) that are due a refresh; 404 for a trip they cannot see |
@@ -2256,7 +2348,10 @@ inbound) and one Email Worker (free plan: 100,000 requests a day), with
 the model cost of a Gmail import per forwarded email. Cloud KMS costs about $0.06 a month per key version (four
 a year with rotation, all kept) and about $0.03 per 10,000 calls: one
 decryption per Gmail notification, Fastmail poll, Calendar read and batch
-of a mailbox reading, one encryption per connection. A Fastmail mailbox,
+of a mailbox reading, one encryption per connection. An IMAP mailbox is
+polled as often as a Fastmail one and costs the same. IMAP itself costs
+nothing beyond Cloud Run time: a poll is a few seconds of a connection per
+mailbox. A Fastmail mailbox,
 polled every five minutes, is about 8,600 decryptions a month, under three
 cents; a Gmail mailbox's follow its mail; a hundred users is a dollar or
 two a month. The rules tests and CI run

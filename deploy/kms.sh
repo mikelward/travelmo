@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Creates the Cloud KMS key the parser seals stored mail credentials with
-# (Gmail and Calendar refresh tokens, Fastmail API tokens; SPEC "Stored
-# credentials"): a key ring and a symmetric key in the parser's region,
+# (Gmail and Calendar refresh tokens, Fastmail API tokens, IMAP app
+# passwords; SPEC "Stored credentials"): a key ring and a symmetric key in the parser's region,
 # rotated every 90 days, which only the parser's service account may
 # encrypt and decrypt with. Idempotent: rerun after changing a value.
 #

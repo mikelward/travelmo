@@ -74,7 +74,13 @@ import app.travelmo.R
 import app.travelmo.auth.GoogleAccount
 import app.travelmo.auth.SignedIn
 import app.travelmo.core.EmailRowKind
+import app.travelmo.core.ICLOUD_IMAP
+import app.travelmo.core.ImapServerChoice
 import app.travelmo.core.MAX_GMAIL_MAILBOXES
+import app.travelmo.core.MAX_IMAP_MAILBOXES
+import app.travelmo.core.YAHOO_IMAP
+import app.travelmo.core.imapRedirect
+import app.travelmo.core.imapServerFor
 import app.travelmo.core.MAX_RIDE_COMPANIES
 import app.travelmo.core.ParsedCountries
 import app.travelmo.core.RideNear
@@ -101,6 +107,9 @@ private const val DELETE_ACCOUNT_TOKEN = "settings/account/delete"
 private const val GMAIL_TOKEN = "settings/gmail"
 private const val FASTMAIL_TOKEN = "settings/fastmail"
 private const val FASTMAIL_DISCONNECT_TOKEN = "settings/fastmail/disconnect"
+private const val IMAP_TOKEN = "settings/imap"
+private const val IMAP_CONNECT_TOKEN = "settings/imap/connect"
+private const val IMAP_DISCONNECT_TOKEN = "settings/imap/disconnect"
 
 /** Where Fastmail users make (and later delete) the API token Travelmo reads with. */
 private const val FASTMAIL_TOKENS_URL = "https://app.fastmail.com/settings/security/tokens"
@@ -164,6 +173,7 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
             }
             GmailSection(viewModel)
             FastmailSection(viewModel)
+            ImapSection(viewModel)
             TripsSection(viewModel)
             FeedsSection(viewModel)
             GoogleCalendarSection(viewModel)
@@ -918,7 +928,140 @@ private fun FastmailSection(viewModel: TripsViewModel) {
 }
 
 /**
- * One connected mailbox, Gmail or Fastmail: its address, Import past
+ * Settings' "Other email (IMAP)", as on the web: any other inbox, read with
+ * an app password the user makes with their provider, the server filled in
+ * for providers Travelmo knows and asked for otherwise; a Gmail or Fastmail
+ * address is sent to its own section. Each connected mailbox is a
+ * [MailboxRow], with a line when its server turned the password down.
+ */
+@Composable
+private fun ImapSection(viewModel: TripsViewModel) {
+    val context = LocalContext.current
+    val imap by viewModel.imap.collectAsStateWithLifecycle()
+    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val connecting = outcomes[IMAP_CONNECT_TOKEN]
+    val reading = outcomes[IMAP_TOKEN]
+    val disconnecting = outcomes[IMAP_DISCONNECT_TOKEN]
+    val busy = listOf(connecting, reading, disconnecting).any { it is Outcome.Busy }
+    var address by rememberSaveable { mutableStateOf("") }
+    // Not saveable: the password stays out of the saved instance state, and
+    // is cleared once the parser has it.
+    var password by remember { mutableStateOf("") }
+    var server by rememberSaveable { mutableStateOf("") }
+    var disconnected by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(connecting) {
+        if (connecting is Outcome.Done) {
+            address = ""
+            password = ""
+            server = ""
+            viewModel.outcomeSeen(IMAP_CONNECT_TOKEN)
+        }
+    }
+    LaunchedEffect(reading) { if (reading is Outcome.Done) viewModel.outcomeSeen(IMAP_TOKEN) }
+    LaunchedEffect(disconnecting) {
+        if (disconnecting is Outcome.Done) {
+            disconnected = true
+            viewModel.outcomeSeen(IMAP_DISCONNECT_TOKEN)
+        }
+    }
+    Text(stringResource(R.string.imap), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    if (!viewModel.canUseImap) {
+        Text(stringResource(R.string.imap_on_web), style = MaterialTheme.typography.bodyMedium)
+        return
+    }
+    when (val state = imap) {
+        TripsViewModel.ImapState.Loading -> Text(stringResource(R.string.loading), style = MaterialTheme.typography.bodyMedium)
+        is TripsViewModel.ImapState.Loaded -> {
+            for (shown in state.mailboxes) {
+                val mailboxAddress = shown.mailbox.emailAddress
+                MailboxRow(
+                    shown.mailbox,
+                    busy = busy,
+                    warning = if (shown.loginFailed) stringResource(R.string.imap_login_failed) else null,
+                    onStart = { restart -> viewModel.startImapReading(IMAP_TOKEN, mailboxAddress, restart) },
+                    onStop = { viewModel.stopImapReading(IMAP_TOKEN, mailboxAddress) },
+                    onDisconnect = {
+                        disconnected = false
+                        viewModel.disconnectImap(IMAP_DISCONNECT_TOKEN, mailboxAddress)
+                    },
+                )
+            }
+            if (disconnected) Text(stringResource(R.string.imap_disconnected), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+            // At the limit, the form still gives a connected mailbox a new
+            // app password; the parser refuses only a new address.
+            if (!state.canConnectMore) {
+                Text(
+                    pluralStringResource(R.plurals.imap_limit, MAX_IMAP_MAILBOXES, MAX_IMAP_MAILBOXES),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 16.dp),
+                )
+            }
+            run {
+                val typed = address.trim()
+                val redirect = if (typed.contains('@')) imapRedirect(typed) else null
+                val needsServer = typed.contains('@') && imapServerFor(typed) == ImapServerChoice.Other
+                Text(
+                    stringResource(R.string.imap_connect_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = if (state.mailboxes.isEmpty()) 0.dp else 16.dp),
+                )
+                Row {
+                    ICLOUD_IMAP.appPasswordUrl?.let { url -> TextButton(onClick = { openLink(context, url, "iCloud app passwords") }) { Text(stringResource(R.string.imap_icloud_passwords)) } }
+                    YAHOO_IMAP.appPasswordUrl?.let { url -> TextButton(onClick = { openLink(context, url, "Yahoo app passwords") }) { Text(stringResource(R.string.imap_yahoo_passwords)) } }
+                }
+                OutlinedTextField(
+                    value = address,
+                    onValueChange = { address = it },
+                    label = { Text(stringResource(R.string.imap_address)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, autoCorrectEnabled = false),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                redirect?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp)) }
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text(stringResource(R.string.imap_password)) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+                if (needsServer) {
+                    OutlinedTextField(
+                        value = server,
+                        onValueChange = { server = it },
+                        label = { Text(stringResource(R.string.imap_server)) },
+                        placeholder = { Text(stringResource(R.string.imap_server_example)) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false),
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    )
+                }
+                Button(
+                    onClick = {
+                        disconnected = false
+                        viewModel.connectImap(IMAP_CONNECT_TOKEN, typed, password, server)
+                    },
+                    enabled = !busy && redirect == null && typed.isNotEmpty() && password.isNotBlank() && (!needsServer || server.isNotBlank()),
+                    modifier = Modifier.padding(top = 8.dp),
+                ) {
+                    Text(stringResource(R.string.connect_imap))
+                }
+            }
+        }
+    }
+    for (o in listOf(connecting, reading, disconnecting)) {
+        (o as? Outcome.Failed)?.let {
+            Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+        }
+    }
+}
+
+/**
+ * One connected mailbox, Gmail, Fastmail or IMAP: its address, Import past
  * bookings (Continue, or Read again from the start once done) or Stop while
  * it reads, Disconnect, and how far its reading got, which the parser
  * records as it goes.
@@ -931,9 +1074,11 @@ private fun MailboxRow(
     onStart: (restart: Boolean) -> Unit,
     onStop: () -> Unit,
     onDisconnect: () -> Unit,
+    warning: String? = null,
 ) {
     val progress = mailbox.progress
     Text(mailbox.emailAddress, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 16.dp))
+    warning?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp)) }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
         if (mailbox.reading) {
             OutlinedButton(onClick = onStop, enabled = !busy) { Text(stringResource(R.string.stop)) }

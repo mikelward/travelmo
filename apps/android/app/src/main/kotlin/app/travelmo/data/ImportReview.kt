@@ -15,7 +15,7 @@ interface ImportReview {
     /** False on a build with no parser address. */
     val available: Boolean
 
-    /** Reads one Gmail or Fastmail message again with the pre-filter skipped (the parser tells them apart by id); what came of it, in words. Throws [TripActionFailed]. */
+    /** Reads one Gmail, Fastmail or IMAP message again with the pre-filter skipped (the parser tells them apart by id); what came of it, in words. Throws [TripActionFailed]. */
     suspend fun reimport(messageId: String): String
 }
 

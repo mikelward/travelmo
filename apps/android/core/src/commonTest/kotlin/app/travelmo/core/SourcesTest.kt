@@ -56,4 +56,11 @@ class SourcesTest {
         segmentSources(listOf(email, email.copy(kind = SourceKind.GMAIL)), gmailMessageIds = listOf("fm-1"), createdAt = "2030-01-01T00:00:00Z")
             .map { it.kind } shouldBe listOf(SourceKind.FASTMAIL, SourceKind.GMAIL)
     }
+
+    @Test
+    fun `an email read over IMAP is a source of its own and links nowhere`() {
+        SourceKind.fromWire("imap") shouldBe SourceKind.IMAP
+        val email = SourceRef(SourceKind.IMAP, "imap-k1-1700000000-5", uid = "me", at = "2030-01-01T00:00:00Z")
+        emailLinkFor(email, "me", ownsTrip = true).shouldBeNull()
+    }
 }

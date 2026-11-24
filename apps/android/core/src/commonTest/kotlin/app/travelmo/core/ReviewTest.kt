@@ -42,9 +42,10 @@ class ReviewTest {
         isFromMailbox(gmail) shouldBe true
         isFromMailbox(gmail.copy(source = "gmail")) shouldBe true
         isFromMailbox(gmail.copy(source = "fastmail")) shouldBe true
+        isFromMailbox(gmail.copy(source = "imap")) shouldBe true
         for (other in listOf("tripit", "ics", "forward")) isFromMailbox(gmail.copy(source = other)) shouldBe false
-        listOf(null, "gmail", "fastmail", "tripit", "ics", "forward").map(::recordSourceLabel) shouldBe
-            listOf("Gmail", "Gmail", "Fastmail", "TripIt", "Calendar", "Forwarded email")
+        listOf(null, "gmail", "fastmail", "imap", "tripit", "ics", "forward").map(::recordSourceLabel) shouldBe
+            listOf("Gmail", "Gmail", "Fastmail", "Other email", "TripIt", "Calendar", "Forwarded email")
     }
 
     @Test

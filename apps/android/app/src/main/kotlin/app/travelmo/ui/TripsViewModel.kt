@@ -3,6 +3,11 @@ package app.travelmo.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.travelmo.core.FlightStatus
+import app.travelmo.core.ImapServerChoice
+import app.travelmo.core.MAX_IMAP_MAILBOXES
+import app.travelmo.core.imapRedirect
+import app.travelmo.core.imapServerFor
+import app.travelmo.core.parseImapServer
 import app.travelmo.core.FoundLoyalty
 import app.travelmo.core.RideNeed
 import app.travelmo.core.HomePeriod
@@ -76,6 +81,8 @@ import app.travelmo.core.exportLinks
 import app.travelmo.core.ExportLinks
 import app.travelmo.data.FastmailActions
 import app.travelmo.data.NoFastmailActions
+import app.travelmo.data.ImapActions
+import app.travelmo.data.NoImapActions
 import app.travelmo.core.SenderPatterns
 import app.travelmo.core.cleanSenderList
 import app.travelmo.core.SenderList
@@ -193,6 +200,8 @@ class TripsViewModel(
     private val gmailActions: GmailActions = NoGmailActions,
     /** The parser's Fastmail connection and mailbox reading; none by default. */
     private val fastmailActions: FastmailActions = NoFastmailActions,
+    /** The parser's IMAP connections and mailbox readings; none by default. */
+    private val imapActions: ImapActions = NoImapActions,
     /** The parser's Google Calendar connection; none by default. */
     private val googleCalendarActions: GoogleCalendarActions = NoGoogleCalendarActions,
     /** The parser's calendar export link; none by default. */
@@ -585,6 +594,18 @@ class TripsViewModel(
         data class Connected(val mailbox: MailboxShown) : FastmailState
     }
 
+    /** One mailbox connected over IMAP as Settings shows it; [loginFailed]: its server turned the app password down. */
+    data class ImapShown(val mailbox: MailboxShown, val loginFailed: Boolean)
+
+    /** Mailboxes connected over IMAP as Settings shows them: loading, or each one, oldest first. */
+    sealed interface ImapState {
+        data object Loading : ImapState
+        data class Loaded(val mailboxes: List<ImapShown>) : ImapState {
+            /** Whether another mailbox may be connected ([MAX_IMAP_MAILBOXES]). */
+            val canConnectMore: Boolean get() = mailboxes.size < MAX_IMAP_MAILBOXES
+        }
+    }
+
     /** The Gmail mailboxes, judged against the clock each minute so a stalled reading shows as stopped. */
     val gmail: StateFlow<GmailState> = combine(accessSettled.flatMapLatest { store.gmailStatuses(uid) }, now) { statuses, at ->
         val millis = Instant.parse(at).toEpochMilli()
@@ -597,6 +618,12 @@ class TripsViewModel(
         status?.let { FastmailState.Connected(MailboxShown(it.emailAddress, it.progress, isReading(it.progress, Instant.parse(at).toEpochMilli()))) }
             ?: FastmailState.NotConnected
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FastmailState.Loading)
+
+    /** The mailboxes connected over IMAP, judged against the clock the same way. */
+    val imap: StateFlow<ImapState> = combine(accessSettled.flatMapLatest { store.imapStatuses(uid) }, now) { statuses, at ->
+        val millis = Instant.parse(at).toEpochMilli()
+        ImapState.Loaded(statuses.map { ImapShown(MailboxShown(it.emailAddress, it.backfill, isReading(it.backfill, millis)), it.loginFailedAt != null) })
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ImapState.Loading)
 
     /** Whether this build can connect Gmail and read the mailboxes here. */
     val canUseGmail: Boolean
@@ -635,6 +662,32 @@ class TripsViewModel(
     fun stopFastmailReading(token: String) = run(token, "stopFastmailReading") { fastmailActions.stop() }
 
     fun disconnectFastmail(token: String) = run(token, "disconnectFastmail") { fastmailActions.disconnect() }
+
+    /** Whether this build can connect mailboxes over IMAP and read them here. */
+    val canUseImap: Boolean
+        get() = imapActions.available
+
+    /**
+     * Connects a mailbox over IMAP with an app password; [server] only counts for an address whose provider
+     * Travelmo does not know. A Gmail or Fastmail address is sent to its own section; the parser says why it
+     * refuses anything else.
+     */
+    fun connectImap(token: String, emailAddress: String, password: String, server: String) = run(token, "connectImap") {
+        val address = emailAddress.trim()
+        imapRedirect(address)?.let { throw IllegalArgumentException(it) }
+        if (!address.contains('@')) throw IllegalArgumentException("Enter your email address.")
+        if (password.isBlank()) throw IllegalArgumentException("Enter an app password.")
+        val needsServer = imapServerFor(address) == ImapServerChoice.Other
+        if (needsServer && parseImapServer(server) == null) throw IllegalArgumentException("Enter your mail server, such as imap.example.com.")
+        imapActions.connect(address, password, server.trim().takeIf { needsServer })
+    }
+
+    /** Starts or continues reading an IMAP mailbox's past emails; from the start once the last reading finished. */
+    fun startImapReading(token: String, emailAddress: String, restart: Boolean) = run(token, "startImapReading") { imapActions.start(emailAddress, restart) }
+
+    fun stopImapReading(token: String, emailAddress: String) = run(token, "stopImapReading") { imapActions.stop(emailAddress) }
+
+    fun disconnectImap(token: String, emailAddress: String) = run(token, "disconnectImap") { imapActions.disconnect(emailAddress) }
 
     /** Import review's latest records, live; null while they load. */
     val reviewLatest: StateFlow<List<ParsedRecord>?> = accessSettled.flatMapLatest { store.latestParsed(uid) }

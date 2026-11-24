@@ -9,7 +9,7 @@ export const metadata = { title: "Privacy" };
 // docs/PRIVACY.md (the same text for GitHub Pages and repository readers)
 // with it: e2e/privacy.spec.ts fails when the two say different things.
 const CONTACT = "play@mikelward.com";
-const UPDATED = "23 November 2026";
+const UPDATED = "24 November 2026";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -53,7 +53,7 @@ export default function PrivacyPage() {
             trip, and which were sent to you.
           </li>
           <li>
-            <strong>Connections you turn on:</strong> access to read your Gmail accounts, Fastmail or Google Calendar,
+            <strong>Connections you turn on:</strong> access to read your Gmail accounts, Fastmail, other email accounts or Google Calendar,
             calendar feed addresses,
             your forwarding address, your calendar export link, and the devices and browsers you asked to notify.
           </li>
@@ -100,6 +100,19 @@ export default function PrivacyPage() {
         <p>
           Disconnecting Fastmail in Settings deletes the token from Travelmo. Travelmo can&apos;t revoke a Fastmail
           token, so delete it in Fastmail too.
+        </p>
+      </Section>
+
+      <Section title="Other email accounts">
+        <p>
+          When you connect another email account, such as iCloud or Yahoo, you give Travelmo its address and an app password
+          you made with your email provider, and Travelmo keeps the password encrypted on its servers. It uses the password
+          only to read your inbox: new email every few minutes, and past email when you import it, handling each email as it
+          does with Gmail. It never sends, changes or deletes email.
+        </p>
+        <p>
+          Disconnecting the account in Settings deletes the app password from Travelmo. Deleting the app password with your
+          email provider revokes it, so Travelmo can no longer read that account.
         </p>
       </Section>
 
@@ -162,7 +175,7 @@ export default function PrivacyPage() {
       <Section title="Keeping and deleting your data">
         <p>
           Your data stays until you delete it. Deleting a trip or booking removes it; disconnecting Gmail or Google Calendar
-          removes Travelmo&apos;s access, and disconnecting Fastmail deletes its API token. Deleting your account in Settings removes your trips, bookings, travel profile,
+          removes Travelmo&apos;s access, and disconnecting Fastmail or another email account deletes its token or app password. Deleting your account in Settings removes your trips, bookings, travel profile,
           reminders, connections and access record, and takes you off trips others shared with you; bookings you added to someone else&apos;s trip stay
           with that trip. Service logs are kept for 30 days.
         </p>

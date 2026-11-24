@@ -98,7 +98,7 @@ export type TripTx = {
   // can tell and give up rather than recreate what the reset removed.
   generation: number;
   bumpGeneration(): void;
-  // How many mailboxes (Gmail's and Fastmail's) the user connected, whose
+  // How many mailboxes (Gmail's, Fastmail's and IMAP ones) the user connected, whose
   // reading positions a reset clears (a read), and clearing those it found
   // (two writes each), so a reset forgets the places in the same
   // transaction that moves the generation on.
@@ -253,8 +253,8 @@ export type ImportOptions = {
 };
 
 // Where a message read like an email came from: a mailbox (Gmail,
-// Fastmail), the forwarding address, or a calendar event.
-export type EmailSource = "gmail" | "fastmail" | "ics" | "forward";
+// Fastmail, IMAP), the forwarding address, or a calendar event.
+export type EmailSource = "gmail" | "fastmail" | "imap" | "ics" | "forward";
 
 export async function importMessage(
   uid: string,

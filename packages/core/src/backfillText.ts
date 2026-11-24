@@ -12,6 +12,10 @@ export const fastmailConnectPath = "/fastmail/connect";
 export const fastmailDisconnectPath = "/fastmail/disconnect";
 export const fastmailBackfillStartPath = "/fastmail/backfill";
 export const fastmailBackfillStopPath = "/fastmail/backfill/stop";
+export const imapConnectPath = "/imap/connect";
+export const imapDisconnectPath = "/imap/disconnect";
+export const imapBackfillStartPath = "/imap/backfill";
+export const imapBackfillStopPath = "/imap/backfill/stop";
 
 // The parser reads the mailbox batch after batch on its own once started,
 // recording its progress on the connection. A reading that has saved

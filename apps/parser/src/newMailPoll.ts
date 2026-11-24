@@ -1,8 +1,10 @@
-import type { ChangesResult } from "./jmap";
+// What reached the inbox since a mailbox state, and the state to read on
+// from.
+export type ChangesResult = { created: string[]; state: string };
 
-// New Fastmail mail, read every few minutes (Cloud Scheduler): the emails
-// that reached the inbox since the stored mailbox state, imported as Gmail's
-// pushed ones are. The state moves on only once they are, and only while
+// New mail in a polled mailbox (Fastmail's, and those connected over IMAP),
+// read every few minutes (Cloud Scheduler): the emails that reached the
+// inbox since the stored mailbox state, imported as Gmail's pushed ones are. The state moves on only once they are, and only while
 // the user's trips have not been reset meanwhile, so nothing is skipped:
 // a poll that fails or is superseded is read again by the next.
 
@@ -27,7 +29,7 @@ export type PollResult<C> =
   | { kind: "processed"; messages: number; counts: C }
   | { kind: "superseded"; messages: number; counts: C };
 
-export async function pollFastmail<S, C>(io: PollIo<S, C>): Promise<PollResult<C>> {
+export async function pollNewMail<S, C>(io: PollIo<S, C>): Promise<PollResult<C>> {
   const generation = await io.resetGeneration();
   const state = await io.loadState();
   if (!state) return { kind: "disconnected" };

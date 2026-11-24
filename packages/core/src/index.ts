@@ -31,6 +31,7 @@ export * from "./access";
 export * from "./rides";
 export * from "./emails";
 export * from "./gmail";
+export * from "./imap";
 export * from "./tripActions";
 export * from "./senders";
 export * from "./backfillText";
