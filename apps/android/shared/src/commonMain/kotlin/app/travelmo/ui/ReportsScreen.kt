@@ -1,6 +1,5 @@
 package app.travelmo.ui
 
-import app.travelmo.ui.theme.AppBarTitle
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -30,7 +29,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -133,10 +131,7 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
     val report = remember(input, today, year) { if (year == null) whole else input?.let { travelReport(it, today, year) } }
     val titles = remember(input) { displayTitles(input.orEmpty().map { it.trip }) }
     val favorites = remember(input) { input?.let { trips -> favoritePlaces(trips.map { TripWithBookings(it.trip, it.segments) }) }.orEmpty() }
-    Scaffold(topBar = { TopAppBar(title = { AppBarTitle(stringResource(Res.string.reports_title)) }, actions = {
-        SettingsButton(onClick = onOpenSettings)
-        AppMenu()
-    }) }, bottomBar = bottomBar) { padding ->
+    Scaffold(topBar = { AppTopBar(stringResource(Res.string.reports_title), onOpenSettings = onOpenSettings) }, bottomBar = bottomBar) { padding ->
         if (whole == null || report == null) {
             Text(stringResource(Res.string.reports_loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp))
             return@Scaffold

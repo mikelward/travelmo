@@ -1,6 +1,5 @@
 package app.travelmo.ui
 
-import app.travelmo.ui.theme.AppBarTitle
 import app.travelmo.core.today
 import org.jetbrains.compose.resources.StringResource
 import androidx.compose.foundation.border
@@ -35,7 +34,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.semantics.contentDescription
@@ -156,10 +154,7 @@ fun ProfileScreen(viewModel: TripsViewModel, onOpenSettings: () -> Unit, bottomB
             onDismiss = { editing = null },
         )
     }
-    Scaffold(topBar = { TopAppBar(title = { AppBarTitle(stringResource(Res.string.profile)) }, actions = {
-        SettingsButton(onClick = onOpenSettings)
-        AppMenu()
-    }) }, bottomBar = bottomBar) { padding ->
+    Scaffold(topBar = { AppTopBar(stringResource(Res.string.profile), onOpenSettings = onOpenSettings) }, bottomBar = bottomBar) { padding ->
         val list = rememberLazyListState()
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).scrollEdgeCue(list, scrollCueColors()), state = list, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
             val own = profile

@@ -5,7 +5,6 @@ import app.travelmo.shared.add_it_yourself
 import app.travelmo.shared.open_in_gmail
 import app.travelmo.core.ParsedRecord
 import androidx.compose.runtime.produceState
-import app.travelmo.ui.theme.AppBarTitle
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,7 +23,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
@@ -43,7 +41,6 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -296,15 +293,7 @@ fun SettingsScreen(
     LaunchedEffect(stored) { if (stored == chosen) chosen = null }
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { AppBarTitle(stringResource(Res.string.settings)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(Res.string.back))
-                    }
-                },
-                actions = { AppMenu() },
-            )
+            AppTopBar(stringResource(Res.string.settings), navigation = TopBarNavigation.Back(onBack))
         },
     ) { padding ->
         // Scrolls, so a short window with large text still reaches every control.

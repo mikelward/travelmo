@@ -1,6 +1,5 @@
 package app.travelmo.ui
 
-import app.travelmo.ui.theme.AppBarTitle
 import kotlinx.datetime.TimeZone
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,21 +12,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -53,7 +47,6 @@ import app.travelmo.core.toReview
 import app.travelmo.core.withLatest
 import app.travelmo.shared.Res
 import app.travelmo.shared.always_import
-import app.travelmo.shared.back
 import app.travelmo.shared.cancel
 import app.travelmo.shared.clear
 import app.travelmo.shared.import_anyway
@@ -105,13 +98,7 @@ fun ImportReviewScreen(viewModel: TripsViewModel, onBack: () -> Unit, zone: Stri
     val searchDone = !searching || all?.done == true
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { AppBarTitle(stringResource(Res.string.import_review)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(Res.string.back)) }
-                },
-                actions = { AppMenu() },
-            )
+            AppTopBar(stringResource(Res.string.import_review), navigation = TopBarNavigation.Back(onBack))
         },
     ) { padding ->
         val list = rememberLazyListState()

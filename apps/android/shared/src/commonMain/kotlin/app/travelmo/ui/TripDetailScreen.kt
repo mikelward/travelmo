@@ -1,6 +1,5 @@
 package app.travelmo.ui
 
-import app.travelmo.ui.theme.AppBarTitle
 import app.travelmo.shared.ic_segment_train
 import app.travelmo.shared.ic_segment_other
 import app.travelmo.shared.ic_segment_lodging
@@ -44,7 +43,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
@@ -64,7 +62,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -263,15 +260,7 @@ fun TripDetailScreen(
     )
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { AppBarTitle(trip?.title ?: "") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(Res.string.back))
-                    }
-                },
-                actions = { AppMenu() },
-            )
+            AppTopBar(trip?.title ?: "", navigation = TopBarNavigation.Back(onBack))
         },
         floatingActionButton = {
             current?.takeIf { canEdit }?.let { editable ->
