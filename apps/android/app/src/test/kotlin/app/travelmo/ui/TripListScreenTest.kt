@@ -40,6 +40,18 @@ class TripListScreenTest {
     }
 
     @Test
+    fun `a trip under way's card says it was cancelled, and nothing of what comes next`() {
+        val store = FakeTripStore(
+            trips = fixtureTrips + fixtureFlightTrip.copy(cancelledAt = "2026-10-28T09:00:00Z"),
+            segments = fixtureSegments + ("sydney" to listOf(fixtureNextFlight)),
+        )
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }
+        composeRule.onNodeWithText("Trip cancelled").assertExists()
+        composeRule.onNodeWithText("XX 100 SYD to SIN").assertDoesNotExist()
+    }
+
+    @Test
     fun `a trip under way's card names the next booking then when then the flight's gate`() {
         val viewModel = TripsViewModel(flightTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
         composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }

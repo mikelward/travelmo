@@ -95,6 +95,35 @@ class CancellationTest {
         travelReport(listOf(TripWithSegments(trip, emptyList())), "2026-07-01").trips shouldBe 1
     }
 
+    @Test
+    fun `a trip its owner marked cancelled isn't happening with bookings or without`() {
+        val trip = Trip("t", "Stockholm", "2026-06-10", "2026-06-13", "u", cancelledAt = "2026-05-02T09:00:00Z")
+        tripCancelled(trip) shouldBe true
+        tripCancelled(trip, emptyList()) shouldBe true
+        tripCancelled(trip.copy(cancelledAt = null), emptyList()) shouldBe false
+        tripCancelled(trip.copy(cancelledAt = null), listOf(cancelled)) shouldBe true
+        travelReport(listOf(TripWithSegments(trip, emptyList())), "2026-07-01").trips shouldBe 0
+        travelReport(listOf(TripWithSegments(trip, emptyList())), "2026-05-01").upcoming shouldBe 0
+        reportBounds(trip, listOf(flight)).shouldBeNull()
+    }
+
+    @Test
+    fun `a booking filed into a cancelled trip is cancelled with it and one cancelled only with its trip is live elsewhere`() {
+        val now = "2026-05-03T09:00:00Z"
+        val filed = inTrip(flight, "2026-05-02T09:00:00Z", now)
+        filed.cancelledAt shouldBe now
+        filed.userCancelled shouldBe "trip"
+        val live = inTrip(filed, null, now)
+        live.isCancelled shouldBe false
+        live.userCancelled.shouldBeNull()
+        // One cancelled on its own stays as it was, wherever it goes.
+        val byHand = flight.copy(cancelledAt = now, userCancelled = "booking")
+        inTrip(byHand, null, now) shouldBe byHand
+        inTrip(byHand, "2026-05-02T09:00:00Z", now) shouldBe byHand
+        inTrip(cancelled, null, now) shouldBe cancelled
+        inTrip(flight, null, now) shouldBe flight
+    }
+
     // London 1-3 June still booked; the Paris stay that ran to 20 June cancelled.
     private val narrowed = Trip("t", "London and Paris", "2026-06-01", "2026-06-20", "u", liveStart = "2026-06-01", liveEnd = "2026-06-03")
 

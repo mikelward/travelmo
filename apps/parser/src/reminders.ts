@@ -1,6 +1,6 @@
 import {
+  tripCancelled,
   Device,
-  allCancelled,
   dueForReminders,
   newLines,
   paths,
@@ -93,8 +93,8 @@ export async function sendReminders(io: ReminderIo, channels: ReminderChannels, 
       const reminders: TripReminder[] = [];
       for (const trip of dueForReminders(trips, today)) {
         const [segments, sent] = await Promise.all([io.segments(trip.id), io.sentLines(uid, trip.id)]);
-        // A trip whose every booking was cancelled isn't happening.
-        if (allCancelled(segments)) continue;
+        // A trip cancelled, or whose every booking was, isn't happening.
+        if (tripCancelled(trip, segments)) continue;
         const lines = newLines(reminderLines(people, trip, segments, today, options.lookups), sent);
         if (lines.length) reminders.push({ trip, lines });
       }

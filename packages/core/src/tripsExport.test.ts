@@ -61,6 +61,10 @@ describe("what counts", () => {
     expect(placeRows([liverpool, later, cancelled], { periods, until }).map((r) => r.trip)).toEqual(["Liverpool"]);
     // A later day takes in a planned trip; a cancelled one stays out.
     expect(tripRows([liverpool, later, cancelled], { periods, until: "2027-12-31" }).map((r) => r.trip)).toEqual(["Liverpool", "Later"]);
+    // So does one its owner marked cancelled, whatever its bookings say.
+    const marked: SummaryTrip = { ...liverpool, trip: { ...liverpool.trip, id: "marked", title: "Marked", cancelledAt: "2026-05-01T00:00:00Z" } };
+    expect(tripRows([liverpool, marked], { periods, until }).map((r) => r.trip)).toEqual(["Liverpool"]);
+    expect(placeRows([liverpool, marked], { periods, until }).map((r) => r.trip)).toEqual(["Liverpool"]);
   });
 
   it("judges each place against the home of its own day", () => {

@@ -3,7 +3,7 @@ import { countryCode, homeAt, inHomeTown, sameCity, type HomePeriod } from "./ho
 import { compareInstants } from "./instant";
 import { placeCountry, type PlaceLookup } from "./reports";
 import type { ExtractedSegment, Place, SegmentType, Trip } from "./schema";
-import { allCancelled, displayBounds, liveSegments, localDate, withoutValidityEnds } from "./trips";
+import { displayBounds, tripCancelled, liveSegments, localDate, withoutValidityEnds } from "./trips";
 
 // A summary of where the user has been, to download from Reports as CSV for
 // visa and settlement forms: one row per trip, or one per place stayed in,
@@ -11,7 +11,7 @@ import { allCancelled, displayBounds, liveSegments, localDate, withoutValidityEn
 // nothing about where someone slept).
 
 export type SummaryTrip = {
-  trip: Pick<Trip, "id" | "title" | "start" | "end"> & { liveStart?: string | undefined; liveEnd?: string | undefined };
+  trip: Pick<Trip, "id" | "title" | "start" | "end" | "cancelledAt"> & { liveStart?: string | undefined; liveEnd?: string | undefined };
   segments: readonly ExtractedSegment[];
 };
 
@@ -80,7 +80,7 @@ const unique = (values: readonly string[]) => [...new Set(values.filter(Boolean)
 
 // The trips to list: begun by `until` and not wholly cancelled.
 const taken = (trips: readonly SummaryTrip[], until: string) =>
-  trips.filter(({ trip, segments }) => displayBounds(trip).start <= until && !(segments.length > 0 && allCancelled(segments)));
+  trips.filter(({ trip, segments }) => displayBounds(trip).start <= until && !tripCancelled(trip, segments));
 
 // One town, not two of a name in different countries.
 const sameStop = (a: { place: Place; country?: string }, b: { place: Place; country?: string }) =>

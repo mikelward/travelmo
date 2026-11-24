@@ -16,6 +16,7 @@ import {
   unwrapForwarded,
   pendingCancellationExpired,
   stillWaiting,
+  inTrip,
   isCancelled,
   liveBounds,
   bookedDateRange,
@@ -650,11 +651,14 @@ function standingCancellation(
 
 // The booking as `standingCancellation` leaves it: cancelled by the one that
 // stands (from `timestamp`, unless it already was by that one), else live.
-function settled<S extends ExtractedSegment & Pick<Partial<Segment>, "cancelledAt" | "cancelledBy" | "cancelledSentAt">>(
+function settled<S extends ExtractedSegment & Pick<Partial<Segment>, "cancelledAt" | "cancelledBy" | "cancelledSentAt" | "userCancelled">>(
   segment: S,
   by: Standing | undefined,
   timestamp: string,
 ): S {
+  // The person's own word that it didn't happen outlasts every email; only
+  // Restore takes it back.
+  if (segment.userCancelled) return segment;
   if (by) {
     // Its date kept with it (filled in for one recorded before the field).
     if (segment.cancelledBy === by.messageId) return by.sentAt && !segment.cancelledSentAt ? { ...segment, cancelledSentAt: by.sentAt } : segment;
@@ -1420,11 +1424,12 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
         createdAt: timestamp,
         updatedAt: timestamp,
       };
-    });
+    }).map((segment) => (target ? inTrip(segment, target, timestamp) : segment));
     for (const segment of written) tx.putSegment(segment);
     // Moved as they are, revision and all, as Regroup moves bookings; a trip
     // left with none of its bookings goes.
-    const moved = adopted.map((segment) => ({ ...segment, tripId }));
+    // Cancelled with the trip they join, or live again leaving a cancelled one.
+    const moved = adopted.map((segment) => inTrip({ ...segment, tripId }, target ?? {}, timestamp));
     for (const segment of adopted) tx.deleteSegment(segment.tripId, segment.id);
     for (const segment of moved) tx.putSegment(segment);
     for (const from of new Set(adopted.map((segment) => segment.tripId))) {

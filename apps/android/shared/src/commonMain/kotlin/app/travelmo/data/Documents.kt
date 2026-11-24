@@ -65,6 +65,7 @@ fun tripFromDocument(id: String, data: Map<String, Any?>): Trip? {
         deleting = data["deleting"] == true,
         liveStart = data.text("liveStart"),
         liveEnd = data.text("liveEnd"),
+        cancelledAt = data.text("cancelledAt"),
     )
 }
 
@@ -100,6 +101,7 @@ fun segmentFromDocument(id: String, tripId: String, data: Map<String, Any?>): Se
         sources = segmentSources(data.sourceRefs(), data.strings("gmailMessageIds"), data.text("createdAt") ?: ""),
         cancelledAt = data.text("cancelledAt"),
         cancelledBy = data.text("cancelledBy"),
+        userCancelled = data.text("userCancelled")?.takeIf { it == "booking" || it == "trip" },
     )
 }
 
@@ -179,6 +181,17 @@ fun draftToDocument(draft: SegmentDraft, stored: Map<String, Any?>?, id: String,
     doc["editedAt"] = now
     doc["updatedAt"] = now
     return doc
+}
+
+/**
+ * A booking document as it stands in a trip cancelled at [tripCancelledAt]
+ * (null for one that isn't), for a write that puts it there: cancelled with a
+ * cancelled trip, or live again leaving one (inTrip in :core).
+ */
+fun inTripDocument(data: Map<String, Any?>, tripCancelledAt: String?, now: String): Map<String, Any?> = when {
+    tripCancelledAt != null && data["cancelledAt"] !is String -> data + mapOf("cancelledAt" to now, "userCancelled" to "trip")
+    tripCancelledAt == null && data["userCancelled"] == "trip" -> data - "cancelledAt" - "userCancelled"
+    else -> data
 }
 
 @Suppress("UNCHECKED_CAST")

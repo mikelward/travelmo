@@ -1,4 +1,4 @@
-import { Segment, Trip, bookedDateRange, displayBounds, liveBounds, newTripTitle, paths, segmentDateRange, type ExtractedSegment } from "@travelmo/core";
+import { Segment, Trip, bookedDateRange, displayBounds, inTrip, isCancelled, liveBounds, newTripTitle, paths, segmentDateRange, type ExtractedSegment } from "@travelmo/core";
 import {
   arrayUnion,
   collection,
@@ -85,6 +85,10 @@ export async function saveSegment(db: Firestore, tripId: string, extracted: Extr
       if (current.data.cancelledSentAt) saved.cancelledSentAt = current.data.cancelledSentAt;
       if (current.data.restoredFrom) saved.restoredFrom = current.data.restoredFrom;
       if (current.data.restoredAt) saved.restoredAt = current.data.restoredAt;
+      if (current.data.userCancelled) saved.userCancelled = current.data.userCancelled;
+    } else {
+      // A booking added to a cancelled trip is cancelled with it.
+      saved = inTrip(saved, trip, timestamp);
     }
     t.set(segmentRef, saved);
     // A cancelled booking widens only the trip's own dates.
@@ -127,8 +131,16 @@ export async function restoreSegment(db: Firestore, tripId: string, segmentId: s
     if (trip.deleting) throw new Error("This trip is being deleted");
     // The booking's span as it will be once restored.
     const stored = Segment.parse(segmentSnap.data());
+    if (trip.cancelledAt && stored.userCancelled === "trip") throw new Error("Restore the trip first");
     const restored: Segment = { ...stored, cancelledAt: undefined };
     const range = bookedDateRange([restored]);
+    // The person's own cancellation is simply taken off: no email was
+    // overruled, so none sent before now is kept from cancelling it later.
+    if (stored.userCancelled) {
+      t.update(segmentRef, { cancelledAt: deleteField(), userCancelled: deleteField(), updatedAt: timestamp });
+      t.update(tripRef, { ...widened(trip, range, range), updatedAt: timestamp });
+      return;
+    }
     // The cancellation is remembered as taken back, and when: reading the
     // booking's confirmation again, or any cancellation sent before now,
     // doesn't cancel it again.
@@ -247,11 +259,14 @@ export async function moveSegment(db: Firestore, fromTripId: string, segmentId: 
     const target = Trip.parse(to.data());
     if (Trip.parse(from.data()).deleting || target.deleting) throw new Error("This trip is being deleted");
     const segment = Segment.parse(current.data());
-    // A cancelled booking moves as it is, still cancelled, and has no dates
-    // that count, so the target widens only for a live one.
+    // A cancelled booking moves as it is, still cancelled (unless only its
+    // trip was), and has no dates that count, so the target widens only for
+    // a live one.
     const range = bookedDateRange([segment]);
-    const live = segmentDateRange([segment]);
-    t.set(doc(db, paths.segment(toTripId, segmentId)), { ...segment, tripId: toTripId, updatedAt: timestamp });
+    const live = segmentDateRange([inTrip(segment, target, timestamp)]);
+    // Cancelled with a cancelled trip it joins, live again leaving one.
+    const moved = inTrip({ ...segment, tripId: toTripId, updatedAt: timestamp }, target, timestamp);
+    t.set(doc(db, paths.segment(toTripId, segmentId)), moved);
     t.delete(segmentRef);
     t.update(toRef, { ...widened(target, range, live), updatedAt: timestamp });
     t.update(fromRef, { updatedAt: timestamp });
@@ -328,7 +343,6 @@ export async function mergeTrips(
     const segments = (await getDocs(collection(db, paths.segments(sourceId)))).docs.map((d) => Segment.parse(d.data()));
     await hooks.afterRead?.();
     const range = bookedDateRange(segments);
-    const live = segmentDateRange(segments);
     const timestamp = now();
     const applied = await runTransaction(db, async (t) => {
       const [s, g] = await Promise.all([t.get(sourceRef), t.get(targetRef)]);
@@ -337,8 +351,11 @@ export async function mergeTrips(
       const target = Trip.parse(g.data());
       if (source.deleting || target.deleting) throw new Error("This trip is being deleted");
       if (source.updatedAt !== seen.updatedAt) return false;
-      for (const segment of segments) {
-        t.set(doc(db, paths.segment(targetId, segment.id)), { ...segment, tripId: targetId, updatedAt: timestamp });
+      // As they stand in the target: cancelled with it, or live again.
+      const moved = segments.map((segment) => inTrip({ ...segment, tripId: targetId, updatedAt: timestamp }, target, timestamp));
+      const live = segmentDateRange(moved);
+      for (const segment of moved) {
+        t.set(doc(db, paths.segment(targetId, segment.id)), segment);
         t.delete(doc(db, paths.segment(sourceId, segment.id)));
       }
       t.update(targetRef, { ...widened(target, range, live), updatedAt: timestamp });
@@ -348,6 +365,86 @@ export async function mergeTrips(
     if (applied) return segments.length;
   }
   throw new Error("The trip kept changing; try again");
+}
+
+// Rewrites some of a trip's bookings (`change` returns those it changed,
+// and any fields for the trip) and settles when the person now travels from
+// all of them (liveBounds); the trip's own dates only widen. A client
+// transaction cannot read the segment collection, so the bookings are read
+// outside it and the trip's `updatedAt` stands in as their revision, as in
+// fitTripDates.
+async function rewriteBookings(
+  db: Firestore,
+  tripId: string,
+  change: (trip: Trip, segments: readonly Segment[], timestamp: string) => { segments: Segment[]; trip?: Record<string, unknown> },
+): Promise<void> {
+  const tripRef = doc(db, paths.trip(tripId));
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const before = await getDoc(tripRef);
+    if (!before.exists()) throw new Error("Trip no longer exists");
+    const seen = Trip.parse(before.data());
+    if (seen.deleting) throw new Error("This trip is being deleted");
+    const bookings = (await getDocs(collection(db, paths.segments(tripId)))).docs.map((d) => Segment.parse(d.data()));
+    const timestamp = now();
+    const applied = await runTransaction(db, async (t) => {
+      const snap = await t.get(tripRef);
+      if (!snap.exists()) throw new Error("Trip no longer exists");
+      const trip = Trip.parse(snap.data());
+      if (trip.deleting) throw new Error("This trip is being deleted");
+      if (trip.updatedAt !== seen.updatedAt) return false;
+      const changed = change(trip, bookings, timestamp);
+      const after = bookings.map((s) => changed.segments.find((c) => c.id === s.id) ?? s);
+      const booked = bookedDateRange(after);
+      const own = booked ? { start: min(trip.start, booked.start), end: max(trip.end, booked.end) } : { start: trip.start, end: trip.end };
+      const live = liveBounds(own, after);
+      for (const segment of changed.segments) {
+        // Written whole, so a field taken off (a restore) is gone.
+        t.set(doc(db, paths.segment(tripId, segment.id)), { ...segment, updatedAt: timestamp });
+      }
+      t.update(tripRef, {
+        ...own,
+        liveStart: live ? live.start : deleteField(),
+        liveEnd: live ? live.end : deleteField(),
+        ...changed.trip,
+        updatedAt: timestamp,
+      });
+      return true;
+    });
+    if (applied) return;
+  }
+  throw new Error("The trip kept changing; try again");
+}
+
+// The person's word that a booking didn't happen: it stays on the trip,
+// struck through, until Restore. When the trip is shown moves in if this
+// booking was at its end.
+export async function cancelSegment(db: Firestore, tripId: string, segmentId: string): Promise<void> {
+  await rewriteBookings(db, tripId, (_trip, segments, timestamp) => {
+    const segment = segments.find((s) => s.id === segmentId);
+    if (!segment) throw new Error("Booking no longer exists");
+    if (isCancelled(segment)) return { segments: [] };
+    return { segments: [{ ...segment, cancelledAt: timestamp, userCancelled: "booking" }] };
+  });
+}
+
+// The owner's word that the whole trip didn't happen: every booking still
+// booked is cancelled with it, and those added later are too, until
+// restoreTrip. Bookings already cancelled stay as they were.
+export async function cancelTrip(db: Firestore, tripId: string): Promise<void> {
+  await rewriteBookings(db, tripId, (_trip, segments, timestamp) => ({
+    segments: segments.filter((s) => !isCancelled(s)).map((s) => ({ ...s, cancelledAt: timestamp, userCancelled: "trip" as const })),
+    trip: { cancelledAt: timestamp },
+  }));
+}
+
+// Takes a trip's cancellation back: the bookings cancelled with it are
+// booked again; those cancelled on their own, by the person or an email,
+// stay cancelled.
+export async function restoreTrip(db: Firestore, tripId: string): Promise<void> {
+  await rewriteBookings(db, tripId, (trip, segments, timestamp) => ({
+    segments: segments.map((s) => inTrip(s, { ...trip, cancelledAt: undefined }, timestamp)).filter((s, i) => s !== segments[i]),
+    trip: { cancelledAt: deleteField() },
+  }));
 }
 
 export async function renameTrip(db: Firestore, tripId: string, title: string): Promise<void> {

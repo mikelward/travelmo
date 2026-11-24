@@ -7,7 +7,7 @@ import { displayTitles } from "./format";
 import { travelReport, tripDays, tripPlaces } from "./reports";
 import type { ExtractedCancellation, ExtractedSegment } from "./schema";
 import { currentStay, flightCheckIn, tripStatus } from "./status";
-import { allCancelled, bookedDateRange, cancels, displayBounds, findTripForRange, servicesConflict, groupTrips, liveBounds, isCancelled, liveSegments, nextEvent, pendingCancellationExpired, segmentDateRange, stillWaiting } from "./trips";
+import { allCancelled, bookedDateRange, inTrip, tripCancelled, cancels, displayBounds, findTripForRange, servicesConflict, groupTrips, liveBounds, isCancelled, liveSegments, nextEvent, pendingCancellationExpired, segmentDateRange, stillWaiting } from "./trips";
 
 // An invented Stockholm stay booked through a booking site, and the email
 // cancelling it.
@@ -540,6 +540,47 @@ describe("a trip whose every booking was cancelled", () => {
     expect(travelReport([{ trip, segments: [cancelled] }], "2026-05-01").upcoming).toBe(0);
     expect(travelReport([{ trip, segments: [] }], "2026-05-01").upcoming).toBe(1);
     expect(travelReport([{ trip, segments: [] }], "2026-07-01").trips).toBe(1);
+  });
+});
+
+describe("a trip its owner marked cancelled", () => {
+  const trip = { id: "t", title: "Stockholm", start: "2026-06-10", end: "2026-06-13", updatedAt: "2026-05-01T09:00:00Z", cancelledAt: "2026-05-02T09:00:00Z" };
+  const withTrip = { ...stay, cancelledAt: "2026-05-02T09:00:00Z", userCancelled: "trip" as const };
+
+  it("isn't happening, bookings or not", () => {
+    expect(tripCancelled(trip)).toBe(true);
+    expect(tripCancelled(trip, [])).toBe(true);
+    expect(tripCancelled({ ...trip, cancelledAt: undefined }, [])).toBe(false);
+    expect(tripCancelled({ ...trip, cancelledAt: undefined }, [cancelled])).toBe(true);
+    expect(tripCancelled({ ...trip, cancelledAt: undefined })).toBe(false);
+  });
+
+  it("gets no calendar event, even with no bookings", () => {
+    const options = { stamp: "2026-05-01T09:00:00Z", tripUrl: (id: string) => `https://example.test/trips/${id}` };
+    expect(exportCalendar([{ trip, segments: [] }], options)).not.toContain("UID:trip-t");
+    expect(exportCalendar([{ trip, segments: [{ ...withTrip, id: "s1" }] }], options)).not.toContain("UID:trip-t");
+  });
+
+  it("isn't counted in the reports, even with no bookings", () => {
+    expect(travelReport([{ trip, segments: [] }], "2026-07-01").trips).toBe(0);
+    expect(travelReport([{ trip, segments: [] }], "2026-05-01").upcoming).toBe(0);
+    expect(tripDays(trip, [], "2026-07-01").size).toBe(0);
+  });
+
+  it("cancels a booking filed into it, and lets one cancelled only with it go live elsewhere", () => {
+    const filed = inTrip(stay, trip, "2026-05-03T09:00:00Z");
+    expect(filed).toMatchObject({ cancelledAt: "2026-05-03T09:00:00Z", userCancelled: "trip" });
+    const live = inTrip(withTrip, { cancelledAt: undefined }, "2026-05-03T09:00:00Z");
+    expect(isCancelled(live)).toBe(false);
+    expect(live).not.toHaveProperty("userCancelled");
+  });
+
+  it("leaves a booking cancelled on its own as it was, wherever it goes", () => {
+    const byHand = { ...stay, cancelledAt: "2026-05-01T09:00:00Z", userCancelled: "booking" as const };
+    expect(inTrip(byHand, {}, "2026-05-03T09:00:00Z")).toBe(byHand);
+    expect(inTrip(byHand, trip, "2026-05-03T09:00:00Z")).toBe(byHand);
+    expect(inTrip(cancelled, {}, "2026-05-03T09:00:00Z")).toBe(cancelled);
+    expect(inTrip(stay, {}, "2026-05-03T09:00:00Z")).toBe(stay);
   });
 });
 

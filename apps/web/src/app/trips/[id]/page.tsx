@@ -12,7 +12,7 @@ import { SegmentRow } from "@/components/SegmentRow";
 import { Dialog } from "@/components/BookingMenu";
 import { hideRideNeed } from "@/lib/rides";
 import { SignInGate } from "@/components/SignInGate";
-import { deleteSegment, deleteTrip, favoriteSegment, fitTripDates, mergeTrips, moveSegment, moveSegmentToNewTrip, rateSegment, renameTrip, restoreSegment, saveSegment } from "@/lib/edits";
+import { cancelSegment, cancelTrip, deleteSegment, deleteTrip, favoriteSegment, fitTripDates, mergeTrips, moveSegment, moveSegmentToNewTrip, rateSegment, renameTrip, restoreSegment, restoreTrip, saveSegment } from "@/lib/edits";
 import { shareTrip } from "@/lib/access";
 import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
@@ -279,6 +279,45 @@ function DangerZone({ trip }: { trip: Trip }) {
   );
 }
 
+// A cancelled trip says so under its dates, with Restore for the owner; one
+// still on offers the owner "Mark trip cancelled" at the foot of the page.
+function TripCancelled({ trip, canManage }: { trip: Trip; canManage: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const run = (action: (db: ReturnType<typeof firestore>, tripId: string) => Promise<void>, what: string) => {
+    setBusy(true);
+    setError(undefined);
+    action(firestore(), trip.id)
+      .catch((e: Error) => {
+        console.error(`${what} failed`, e);
+        setError(e.message);
+      })
+      .finally(() => setBusy(false));
+  };
+  if (trip.cancelledAt) {
+    return (
+      <section className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-zinc-300 p-3 text-sm dark:border-zinc-700" data-testid="trip-cancelled-banner">
+        <span className="font-medium text-danger">Trip cancelled</span>
+        {canManage && (
+          <button type="button" disabled={busy} onClick={() => run(restoreTrip, "Restoring a trip")} className={buttonClass}>
+            Restore
+          </button>
+        )}
+        {error && <span className="text-danger">{error}</span>}
+      </section>
+    );
+  }
+  if (!canManage) return null;
+  return (
+    <section className="mt-10 border-t border-zinc-200 pt-6 text-sm dark:border-zinc-800">
+      <button type="button" disabled={busy} onClick={() => run(cancelTrip, "Cancelling a trip")} className="hover:underline disabled:opacity-50">
+        Mark trip cancelled
+      </button>
+      {error && <p className="mt-2 text-danger">{error}</p>}
+    </section>
+  );
+}
+
 type Editing = { kind: "add" } | { kind: "edit"; segment: Segment } | undefined;
 
 function TripDetail({ tripId, user }: { tripId: string; user: User }) {
@@ -419,6 +458,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
         {canManage && segments && <FitDates trip={trip} segments={segments} />}
       </p>
       {isOwner && trip.deleting && <DangerZone trip={trip} />}
+      {trip.cancelledAt && <TripCancelled trip={trip} canManage={canManage} />}
       <DocumentWarnings warnings={warnings} today={today} />
       {entries && <EntryRequirements entries={entries.entries} fetched={entries.fetched} />}
       {checklist && !trip.deleting && <BeforeYouGo uid={user.uid} tripId={trip.id} entries={checklist.entries} added={checklist.added} today={today} />}
@@ -479,11 +519,21 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
                         ? {
                             onRate: (rating: number | null) => rateSegment(firestore(), trip.id, segment.id, rating).catch((e: Error) => setError(e.message)),
                             onFavorite: (favorite: boolean) => favoriteSegment(firestore(), trip.id, segment.id, favorite).catch((e: Error) => setError(e.message)),
-                            onRestore: () =>
-                              restoreSegment(firestore(), trip.id, segment.id).catch((e: Error) => {
-                                console.error("Restoring a cancelled booking failed", e);
+                            onMarkCancelled: () =>
+                              cancelSegment(firestore(), trip.id, segment.id).catch((e: Error) => {
+                                console.error("Marking a booking cancelled failed", e);
                                 setError(e.message);
                               }),
+                            // One cancelled with its trip comes back with the trip.
+                            ...(trip.cancelledAt && segment.userCancelled === "trip"
+                              ? {}
+                              : {
+                                  onRestore: () =>
+                                    restoreSegment(firestore(), trip.id, segment.id).catch((e: Error) => {
+                                      console.error("Restoring a cancelled booking failed", e);
+                                      setError(e.message);
+                                    }),
+                                }),
                           }
                         : {})}
                     />
@@ -512,6 +562,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
 
       {canManage && <Sharing trip={trip} user={user} />}
       {canManage && <MergeInto trip={trip} targets={otherTrips} titles={displayTitles(allTrips ?? [])} />}
+      {canManage && !trip.cancelledAt && <TripCancelled trip={trip} canManage={canManage} />}
       {canManage && <DangerZone trip={trip} />}
     </>
   );

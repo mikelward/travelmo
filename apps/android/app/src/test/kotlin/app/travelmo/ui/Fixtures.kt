@@ -466,6 +466,18 @@ class FakeTripStore(
     override suspend fun restoreSegment(tripId: String, segmentId: String) {
         restored += tripId to segmentId
     }
+    val cancelledSegments = mutableListOf<Pair<String, String>>()
+    override suspend fun cancelSegment(tripId: String, segmentId: String) {
+        cancelledSegments += tripId to segmentId
+    }
+    val cancelledTrips = mutableListOf<String>()
+    override suspend fun cancelTrip(tripId: String) {
+        cancelledTrips += tripId
+    }
+    val restoredTrips = mutableListOf<String>()
+    override suspend fun restoreTrip(tripId: String) {
+        restoredTrips += tripId
+    }
     val trusted = mutableListOf<Triple<String, Boolean, List<String>>>()
     /** The list each save replaced, whose addresses are not invited again. */
     val trustedBefore = mutableListOf<List<String>>()

@@ -52,6 +52,28 @@ export function allCancelled(segments: readonly object[]): boolean {
   return segments.length > 0 && segments.every(isCancelled);
 }
 
+// A trip that isn't happening: its owner cancelled it, or every booking in
+// it was cancelled. One with no bookings yet still is, unless cancelled.
+export function tripCancelled(trip: Pick<Trip, "cancelledAt">, segments?: readonly object[]): boolean {
+  return trip.cancelledAt !== undefined || (segments !== undefined && allCancelled(segments));
+}
+
+type Cancellable = { cancelledAt?: string | undefined; userCancelled?: "booking" | "trip" | undefined };
+
+// A booking as it stands in `trip`, for a write that puts it there (a new
+// one, a move, a merge, an import): a live booking in a cancelled trip is
+// cancelled with it; one cancelled only with its trip is live again in a
+// trip that isn't. Anything else is as it was.
+export function inTrip<S extends object>(segment: S, trip: Pick<Trip, "cancelledAt">, timestamp: string): S {
+  const marked = segment as S & Cancellable;
+  if (trip.cancelledAt !== undefined && !isCancelled(segment)) return { ...segment, cancelledAt: timestamp, userCancelled: "trip" };
+  if (trip.cancelledAt === undefined && marked.userCancelled === "trip") {
+    const { cancelledAt: _at, userCancelled: _user, ...live } = marked;
+    return live as S;
+  }
+  return segment;
+}
+
 // Every booking's dates, cancelled ones too: what a trip's own dates must
 // always cover, so an import finds each of its bookings again by date.
 export function bookedDateRange(segments: readonly ExtractedSegment[]): { start: string; end: string } | undefined {

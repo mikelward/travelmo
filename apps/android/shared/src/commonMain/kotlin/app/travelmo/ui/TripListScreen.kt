@@ -67,6 +67,7 @@ import app.travelmo.shared.section_past
 import app.travelmo.shared.section_upcoming
 import app.travelmo.shared.staying_at
 import app.travelmo.shared.trip_all_cancelled
+import app.travelmo.shared.trip_cancelled
 import app.travelmo.shared.trips_empty
 import app.travelmo.shared.trips_empty_hint
 import app.travelmo.shared.trips_loading
@@ -247,7 +248,10 @@ fun TripCard(
             badge?.let { (text, color) -> Text(text.uppercase(), style = MaterialTheme.typography.labelMedium, color = color) }
         }
         Text(formatDateRange(trip.shownStart, trip.shownEnd), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
-        if (segments != null) StatusLines(segments, now, showNext, flightStatuses, checkedIn, onCheckedIn)
+        if (trip.cancelledAt != null) {
+            // A cancelled trip has nothing coming.
+            Text(stringResource(Res.string.trip_cancelled), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
+        } else if (segments != null) StatusLines(segments, now, showNext, flightStatuses, checkedIn, onCheckedIn)
     }
 }
 
@@ -267,6 +271,7 @@ private fun StatusLines(
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     if (allCancelled(segments)) {
         Text(stringResource(Res.string.trip_all_cancelled), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
+        return
     }
     if (!showNext) return
     val status = tripStatus(segments, now)

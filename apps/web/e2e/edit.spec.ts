@@ -18,7 +18,7 @@ test("editing an imported booking keeps its offsets although its airports have z
   await page.getByRole("button", { name: "Add a booking" }).click();
   await page.getByPlaceholder("LHR", { exact: true }).fill("MAN");
   await expect(page.getByTitle("Time zone").first()).toHaveValue("Europe/London");
-  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
 
   await bookingAction(page, "Edit", 1);
   const zone = page.getByTitle("Time zone");
@@ -43,7 +43,7 @@ test("a place's country can be chosen, but is never asked for, and a flight show
   // An imported stay shows the country it came with.
   await bookingAction(page, "Edit");
   await expect(page.getByRole("combobox", { name: "Country" })).toHaveValue("GB");
-  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
 
   await page.getByRole("button", { name: "Add a booking" }).click();
   // A flight's airport codes say where it is.

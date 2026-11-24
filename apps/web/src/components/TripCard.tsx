@@ -1,4 +1,4 @@
-import { allCancelled, checkInLine, displayBounds, formatDate, formatDateRange, localDate, localTime, tripNextUp, tripStatus, type FlightStatus, type Segment, type Trip } from "@travelmo/core";
+import { allCancelled, tripCancelled, checkInLine, displayBounds, formatDate, formatDateRange, localDate, localTime, tripNextUp, tripStatus, type FlightStatus, type Segment, type Trip } from "@travelmo/core";
 import Link from "next/link";
 
 // A trip's card: the title (as displayTitles shows it among the list), its
@@ -27,8 +27,10 @@ export function TripCard({
   onCheckedIn?: (segmentId: string) => void;
 }) {
   const badge = trip.deleting ? "Deleting" : shared ? "Shared" : undefined;
-  const { stay, checkIn } = segments && now ? tripStatus(segments, now) : {};
-  const next = segments && now ? tripNextUp(segments, now, flightStatuses) : undefined;
+  // A cancelled trip has nothing coming.
+  const going = segments && now && !tripCancelled(trip, segments);
+  const { stay, checkIn } = going ? tripStatus(segments, now) : {};
+  const next = going ? tripNextUp(segments, now, flightStatuses) : undefined;
   const showCheckIn = checkIn && !checkedIn?.has(checkIn.segment.id);
   return (
     // The check-in button sits outside the link: a button can't be inside one.
@@ -42,7 +44,11 @@ export function TripCard({
           {badge && <span className="shrink-0 text-xs uppercase tracking-wide text-muted">{badge}</span>}
         </div>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{formatDateRange(displayBounds(trip).start, displayBounds(trip).end)}</p>
-        {segments && allCancelled(segments) && (
+        {trip.cancelledAt ? (
+          <p className="mt-2 text-sm text-danger" data-testid="trip-cancelled">
+            Trip cancelled
+          </p>
+        ) : segments && allCancelled(segments) && (
           <p className="mt-2 text-sm text-danger" data-testid="trip-cancelled">
             Every booking cancelled
           </p>

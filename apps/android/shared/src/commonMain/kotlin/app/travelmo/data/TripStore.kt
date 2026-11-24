@@ -224,8 +224,17 @@ interface TripStore {
 
     suspend fun deleteSegment(tripId: String, segmentId: String)
 
-    /** Takes back a cancellation an email set, widening the trip to hold the booking again. */
+    /** Takes back a cancellation, an email's or the person's, widening the trip to hold the booking again. */
     suspend fun restoreSegment(tripId: String, segmentId: String)
+
+    /** Says a booking didn't happen; the trip is then shown by what is still booked. */
+    suspend fun cancelSegment(tripId: String, segmentId: String)
+
+    /** Says the whole trip didn't happen, cancelling every booking still booked with it. Owner only. */
+    suspend fun cancelTrip(tripId: String)
+
+    /** Takes a trip's cancellation back, with the bookings cancelled with it. Owner only. */
+    suspend fun restoreTrip(tripId: String)
 
     /** The owner's powers over a trip, as the web's edits.ts has them. */
     suspend fun renameTrip(tripId: String, title: String)

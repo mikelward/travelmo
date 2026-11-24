@@ -575,6 +575,12 @@ class TripsViewModel(
 
     fun restoreSegment(token: String, tripId: String, segmentId: String) = run(token, "restoreSegment") { store.restoreSegment(tripId, segmentId) }
 
+    fun cancelSegment(token: String, tripId: String, segmentId: String) = run(token, "cancelSegment") { store.cancelSegment(tripId, segmentId) }
+
+    fun cancelTrip(token: String, tripId: String) = run(token, "cancelTrip") { store.cancelTrip(tripId) }
+
+    fun restoreTrip(token: String, tripId: String) = run(token, "restoreTrip") { store.restoreTrip(tripId) }
+
     fun moveSegment(token: String, fromTripId: String, segmentId: String, toTripId: String) = run(token, "moveSegment") { store.moveSegment(fromTripId, segmentId, toTripId) }
     fun moveSegmentToNewTrip(token: String, fromTripId: String, segmentId: String) = run(token, "moveSegmentToNewTrip") { store.moveSegmentToNewTrip(fromTripId, segmentId, uid) }
 

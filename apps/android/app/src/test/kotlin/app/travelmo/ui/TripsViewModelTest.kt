@@ -242,6 +242,19 @@ class TripsViewModelTest {
     }
 
     @Test
+    fun `marking a booking or a trip cancelled, and restoring the trip, go to the store`() = runTest {
+        val store = FakeTripStore()
+        val viewModel = TripsViewModel(store, OWNER, null)
+        viewModel.cancelSegment("cancel-booking", "liverpool", "l-stay")
+        viewModel.cancelTrip("cancel-trip", "liverpool")
+        viewModel.restoreTrip("restore-trip", "liverpool")
+        viewModel.outcomes.value shouldBe mapOf("cancel-booking" to Outcome.Done, "cancel-trip" to Outcome.Done, "restore-trip" to Outcome.Done)
+        store.cancelledSegments shouldBe listOf("liverpool" to "l-stay")
+        store.cancelledTrips shouldBe listOf("liverpool")
+        store.restoredTrips shouldBe listOf("liverpool")
+    }
+
+    @Test
     fun `sharing the profile says whether it exists yet, and waits until that is known`() = runTest {
         val store = FakeTripStore(profile = null)
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL)
