@@ -36,6 +36,7 @@ import {
   compareMatchRanks,
   matchRank,
   notBookings,
+  oneBookingPerEvent,
   withoutValidityEnds,
   type IcsCalendar,
   type IcsEvent,
@@ -415,7 +416,7 @@ export async function importMessage(
 
   // A membership, pass or voucher the model took for a dated visit is no
   // trip; what else the email books still is.
-  booking = { ...booking, segments: withoutValidityEnds(booking.segments) };
+  booking = { ...booking, segments: oneBookingPerEvent(withoutValidityEnds(booking.segments)) };
   const bought = notBookings(booking.segments);
   if (bought.length) {
     booking = { ...booking, segments: booking.segments.filter((segment) => !bought.includes(segment)) };

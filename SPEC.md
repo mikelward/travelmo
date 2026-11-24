@@ -1435,7 +1435,13 @@ returns as an untimed activity (below), recording the email as not a
 booking when nothing else is left. A ticket is a booking only for a
 specific date, and has a time only when the event has one: an activity
 the email gives only a date for is extracted at local 00:00 with no end
-(`isUntimed`), and the trip page shows it with no time. A journey's end is
+(`isUntimed`), and the trip page shows it with no time. Told again with a
+time (an e-ticket after the order), under the same reference on the same
+day, it is the same booking and takes that time (`sameBooking`,
+`mergeDetails`). The ticket lines one email lists for one event, under one
+reference at one time (seats 6, then seats 7-8), are one booking, their
+details merged (`oneBookingPerEvent`); rooms and journeys an email lists
+alike stay apart. A journey's end is
 its arrival, never a ticket's validity: an end at 23:59 on a later day, or
 more than a week on, is dropped (`withoutValidityEnds`). A payment receipt
 for something already booked is the same booking: an untimed activity

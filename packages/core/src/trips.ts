@@ -429,7 +429,7 @@ export function sameBooking(a: ExtractedSegment, b: ExtractedSegment): boolean {
   const wall = (instant: string) => instant.slice(0, 16);
   if ((isPaymentReceipt(a) || isPaymentReceipt(b)) && wall(a.start) !== wall(b.start)) return sameUntimed(a, b);
   if (timedTypes.has(a.type)) {
-    if (wall(a.start) !== wall(b.start) && !retimed(a, b)) return false;
+    if (wall(a.start) !== wall(b.start) && !retimed(a, b) && !timeLearned(a, b)) return false;
   } else {
     if (localDate(a.start) !== localDate(b.start)) return false;
     if (a.end && b.end && localDate(a.end) !== localDate(b.end)) return false;
@@ -474,6 +474,46 @@ function retimed(a: ExtractedSegment, b: ExtractedSegment): boolean {
   if (Math.abs(Date.parse(a.start) - Date.parse(b.start)) > 6 * 3_600_000) return false;
   const [x, y] = [serviceNumbers(a.title, true), serviceNumbers(b.title, true)];
   return [...x].some((n) => [...y].some((m) => sameService(n, m)));
+}
+
+// One event told with a time and without: a ticket email that gives only
+// the day, and another (the reminder, the e-ticket) that gives the time.
+// Only under one reference, on the same day, and the same event: one
+// order may hold two (a museum and an aquarium) on one day.
+function timeLearned(a: ExtractedSegment, b: ExtractedSegment): boolean {
+  if (isUntimed(a) === isUntimed(b) || !a.confirmation || !b.confirmation) return false;
+  return normalizeReference(a.confirmation) === normalizeReference(b.confirmation) && localDate(a.start) === localDate(b.start) && sameTicketedEvent(a, b);
+}
+
+// Two lines of one order are one event when their event names and venues
+// agree (eventIdentities): seats 6 and seats 7-8 of one show, not the
+// museum and the aquarium bought together.
+function sameTicketedEvent(a: ExtractedSegment, b: ExtractedSegment): boolean {
+  const [ours, theirs] = eventIdentities(a, b);
+  return ours.event.size > 0 && theirs.event.size > 0 && !identitiesConflict(ours, theirs);
+}
+
+// The tickets one email lists for one event, under one reference and at
+// one time (seats 6, then seats 7-8), are one booking, their details
+// merged; two events of one order, two rooms or two flights stay two.
+export function oneBookingPerEvent<S extends ExtractedSegment>(segments: readonly S[]): S[] {
+  const out: S[] = [];
+  for (const segment of segments) {
+    const event = segment.type === "activity" || segment.type === "other";
+    const i = event && segment.confirmation
+      ? out.findIndex(
+          (o) =>
+            o.type === segment.type &&
+            !!o.confirmation &&
+            normalizeReference(o.confirmation) === normalizeReference(segment.confirmation!) &&
+            o.start.slice(0, 16) === segment.start.slice(0, 16) &&
+            sameTicketedEvent(o, segment),
+        )
+      : -1;
+    if (i < 0) out.push(segment);
+    else out[i] = mergeDetails(out[i]!, segment);
+  }
+  return out;
 }
 
 // A name as compared: compatibility forms folded, accents dropped, case
@@ -621,6 +661,11 @@ export function mergeDetails<S extends ExtractedSegment>(existing: S, found: Ext
     merged.start = found.start;
     if (found.end !== undefined) merged.end = found.end;
     else if (existing.end !== undefined) merged.end = shifted(existing.end, moved);
+  }
+  // An event first known by its day alone takes the time it was then told.
+  if (!edited && isUntimed(existing) && !isUntimed(found) && found.type === existing.type && localDate(found.start) === localDate(existing.start)) {
+    merged.start = found.start;
+    if (found.end !== undefined) merged.end = found.end;
   }
   if (!edited && betterPlace(existing, found)) merged.destination = fillPlace(found.destination!, existing.destination!);
   if (merged.provider === undefined && found.provider !== undefined) merged.provider = found.provider;

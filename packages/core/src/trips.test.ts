@@ -1,4 +1,4 @@
-import { daysBetween, eventVerb, findTripForRange, fittingTrip, nearbyTrips, newTripTitle, groupTrips, compareMatchRanks, isUntimed, matchRank, mergeDetails, mergePlace, nextEvent, notBookings, overlappingTrips, sameBooking, sameEvent, segmentDateRange, withoutValidityEnds } from "./trips";
+import { daysBetween, eventVerb, oneBookingPerEvent, findTripForRange, fittingTrip, nearbyTrips, newTripTitle, groupTrips, compareMatchRanks, isUntimed, matchRank, mergeDetails, mergePlace, nextEvent, notBookings, overlappingTrips, sameBooking, sameEvent, segmentDateRange, withoutValidityEnds } from "./trips";
 
 describe("nextEvent", () => {
   const stay = { type: "lodging" as const, title: "Cove Liverpool", start: "2026-12-12T15:00:00+00:00", end: "2026-12-14T11:00:00+00:00" };
@@ -594,5 +594,56 @@ describe("fittingTrip", () => {
     expect(fittingTrip([trip("a", "2026-11-01", "2026-11-30", { ownerUid: "u2" })], "u1", "2026-11-05")).toBeUndefined();
     expect(fittingTrip([trip("a", "2026-11-01", "2026-11-30", { deleting: true })], "u1", "2026-11-05")).toBeUndefined();
     expect(fittingTrip([trip("a", "2026-11-01", "2026-11-30", { cancelledAt: "2026-10-01T00:00:00Z" })], "u1", "2026-11-05")).toBeUndefined();
+  });
+});
+
+describe("one event told with and without its time", () => {
+  const untimed = {
+    type: "activity" as const,
+    title: "OVO London",
+    start: "2026-01-24T00:00:00+00:00",
+    provider: "Cirque du Soleil",
+    confirmation: "002-1716 5714",
+    notes: "Section Loggia 23 / Row 2 / Seats 6",
+  };
+  const timed = { ...untimed, start: "2026-01-24T11:30:00+00:00", notes: "Section Loggia 23 / Row 2 / Seats 6, 7-8" };
+
+  it("is one booking under one reference on one day", () => {
+    expect(sameBooking(untimed, timed)).toBe(true);
+    expect(sameBooking(timed, untimed)).toBe(true);
+    expect(sameBooking(untimed, { ...timed, confirmation: "999" })).toBe(false);
+    expect(sameBooking(untimed, { ...timed, start: "2026-01-25T11:30:00+00:00" })).toBe(false);
+    const { confirmation: _a, ...noRef } = untimed;
+    const { confirmation: _b, ...timedNoRef } = timed;
+    expect(sameBooking(noRef, timedNoRef)).toBe(false);
+    // Another event of the same order that day.
+    expect(sameBooking(untimed, { ...timed, title: "Example Aquarium" })).toBe(false);
+  });
+
+  it("takes the time it was told", () => {
+    expect(mergeDetails(untimed, timed).start).toBe("2026-01-24T11:30:00+00:00");
+    expect(mergeDetails(untimed, timed, { edited: true }).start).toBe(untimed.start);
+    expect(mergeDetails(timed, untimed).start).toBe(timed.start);
+  });
+});
+
+describe("oneBookingPerEvent", () => {
+  const ticket = { type: "activity" as const, title: "OVO London", start: "2026-01-24T00:00:00+00:00", confirmation: "002-1716 5714", notes: "Seats 6" };
+
+  it("folds one email's tickets for one event into one booking", () => {
+    const folded = oneBookingPerEvent([ticket, { ...ticket, notes: "Seats 7-8" }]);
+    expect(folded).toHaveLength(1);
+    expect(folded[0]!.notes).toBe("Seats 6\nSeats 7-8");
+  });
+
+  it("keeps apart other times, references and kinds of booking", () => {
+    expect(oneBookingPerEvent([ticket, { ...ticket, start: "2026-01-24T19:30:00+00:00" }])).toHaveLength(2);
+    expect(oneBookingPerEvent([ticket, { ...ticket, confirmation: "X" }])).toHaveLength(2);
+    // Two admissions bought together.
+    const museum = { ...ticket, title: "Example Museum admission", destination: { name: "Example Museum" } };
+    const aquarium = { ...ticket, title: "Example Aquarium admission", destination: { name: "Example Aquarium" } };
+    expect(oneBookingPerEvent([museum, aquarium])).toHaveLength(2);
+    const room = { type: "lodging" as const, title: "Hotel", start: "2026-01-24T15:00:00+00:00", end: "2026-01-25T11:00:00+00:00", confirmation: "H1" };
+    expect(oneBookingPerEvent([room, room])).toHaveLength(2);
   });
 });
