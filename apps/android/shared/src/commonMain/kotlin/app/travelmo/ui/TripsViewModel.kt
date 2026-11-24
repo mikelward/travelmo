@@ -447,7 +447,7 @@ class TripsViewModel(
     /** What a flight's row says of its delays, gates and carousel now. */
     fun flightLines(segment: Segment, statuses: Map<String, FlightStatus>): List<String> {
         if (!flightStatusShown(segment, clock().toString())) return emptyList()
-        return flightStatusKey(segment)?.let { flightStatusLines(statuses[it], segment) }.orEmpty()
+        return flightStatusKey(segment)?.let { flightStatusLines(statuses[it], segment, clock().toString()) }.orEmpty()
     }
 
     /**

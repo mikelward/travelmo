@@ -31,9 +31,10 @@ describe("shownFlightKeys", () => {
 });
 
 describe("flightLinesFor", () => {
-  it("gives a flight's gates and carousel while they are shown", () => {
+  it("gives a flight's gate before takeoff and carousel after, while they are shown", () => {
     const statuses = { "XX100_2026-12-13_SYD": status };
-    expect(flightLinesFor(flight, statuses, "2026-12-12T21:00:00Z")).toEqual(["Departs from gate 8", "Bags on carousel 16"]);
+    expect(flightLinesFor(flight, statuses, "2026-12-12T21:00:00Z")).toEqual(["Departs from gate 8"]);
+    expect(flightLinesFor(flight, statuses, "2026-12-12T23:00:00Z")).toEqual(["Bags on carousel 16"]);
     expect(flightLinesFor(flight, statuses, "2026-12-15T21:00:00Z")).toBeUndefined();
     expect(flightLinesFor(flight, {}, "2026-12-12T21:00:00Z")).toBeUndefined();
     expect(flightLinesFor(stay, statuses, "2026-12-12T21:00:00Z")).toBeUndefined();

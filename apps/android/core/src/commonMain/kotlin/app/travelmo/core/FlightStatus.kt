@@ -179,25 +179,39 @@ fun flightNextStep(status: FlightStatus?, booked: Segment, now: String): String?
     )
 }
 
+/** Whether the flight had taken off as of [at] ([flightDeparted]), going by the status alone without the booking. */
+private fun departedAt(status: FlightStatus, booked: Segment?, at: String): Boolean {
+    if (booked != null) return flightDeparted(booked, status, at)
+    if (status.cancelled) return false
+    if (status.actualOut != null) return true
+    val out = status.estimatedOut ?: status.scheduledOut ?: return false
+    return instantMillis(at) >= instantMillis(out)
+}
+
 /**
- * What the flight's card says: whether it is cancelled or diverted, how late it leaves and lands,
- * where it leaves from and arrives at, and where the bags come out. Times read as the airports'
- * clocks do when the booking is given; a cancelled flight says only that. A departure back on time
- * after news of a delay still says so (it has a noticedOut).
+ * What the flight's card says, by its stage as of [now] (the look's own time when null): whether it
+ * is cancelled or diverted; before takeoff, how late it leaves, where it leaves from and the arrival
+ * terminal (no arrival gate or carousel); after, when it lands, where it arrives and where the bags
+ * come out (not where it left from). Times read as the airports' clocks do when the booking is
+ * given; a cancelled flight says only that. A departure back on time after news of a delay still
+ * says so (it has a noticedOut).
  */
-fun flightStatusLines(status: FlightStatus?, booked: Segment? = null): List<String> {
+fun flightStatusLines(status: FlightStatus?, booked: Segment? = null, now: String? = null): List<String> {
     if (status == null || !status.found) return emptyList()
     if (status.cancelled) return listOf("Flight cancelled")
+    val departed = departedAt(status, booked, now ?: status.checkedAt)
     val diverted = if (status.diverted) divertedLine(status, booked) else null
-    val leaves = leavesLate(status)
-    val lands = status.actualIn == null && offSchedule(status.scheduledIn, status.estimatedIn)
+    val leaves = !departed && leavesLate(status)
+    val scheduledIn = status.scheduledIn
+    val estimatedIn = status.estimatedIn
+    val lands = if (departed && status.actualIn == null && scheduledIn != null && estimatedIn != null) "Lands ${timing(scheduledIn, estimatedIn, booked?.end)}" else null
     return listOfNotNull(
         diverted,
         if (leaves) "Leaves ${timing(status.scheduledOut!!, status.estimatedOut!!, booked?.start)}" else null,
-        where(status.departureGate, status.departureTerminal)?.let { "Departs from $it" },
-        if (lands) "Lands ${timing(status.scheduledIn!!, status.estimatedIn!!, booked?.end)}" else null,
-        where(status.arrivalGate, status.arrivalTerminal)?.let { "Arrives at $it" },
-        status.baggageClaim?.let { "Bags on carousel $it" },
+        if (departed) null else where(status.departureGate, status.departureTerminal)?.let { "Departs from $it" },
+        lands,
+        where(if (departed) status.arrivalGate else null, status.arrivalTerminal)?.let { "Arrives at $it" },
+        if (departed) status.baggageClaim?.let { "Bags on carousel $it" } else null,
     )
 }
 

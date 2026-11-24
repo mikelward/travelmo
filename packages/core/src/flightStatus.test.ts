@@ -135,17 +135,28 @@ describe("flightStatusShown", () => {
 });
 
 describe("flightStatusLines", () => {
-  it("says where the flight leaves from, arrives at and where the bags come out", () => {
-    const known = status({ departureGate: "8", departureTerminal: "1", arrivalGate: "D46", baggageClaim: "16" });
-    expect(flightStatusLines(known)).toEqual(["Departs from terminal 1, gate 8", "Arrives at gate D46", "Bags on carousel 16"]);
+  it("says before takeoff where the flight leaves from and the arrival terminal, but no arrival gate or carousel", () => {
+    const known = status({ departureGate: "8", departureTerminal: "1", arrivalGate: "D46", arrivalTerminal: "3", baggageClaim: "16" });
+    expect(flightStatusLines(known)).toEqual(["Departs from terminal 1, gate 8", "Arrives at terminal 3"]);
+    expect(flightStatusLines(known, flight, "2026-12-12T21:59:00Z")).toEqual(["Departs from terminal 1, gate 8", "Arrives at terminal 3"]);
     expect(flightStatusLines(status({ arrivalTerminal: "3" }))).toEqual(["Arrives at terminal 3"]);
     expect(flightStatusLines(undefined)).toEqual([]);
     expect(flightStatusLines(status({ found: false, departureGate: "8" }))).toEqual([]);
   });
 
-  it("says how late the flight leaves and lands, by the airports' clocks", () => {
+  it("says after takeoff when it lands, where it arrives and the carousel, but not where it left from", () => {
+    const flying = status({ actualOut: "2026-12-12T22:05:00Z", estimatedIn: "2026-12-13T07:10:00Z", departureGate: "8", arrivalGate: "D46", arrivalTerminal: "3", baggageClaim: "16" });
+    expect(flightStatusLines(flying, flight, "2026-12-13T01:00:00Z")).toEqual(["Lands 20 min early, at 15:10", "Arrives at terminal 3, gate D46", "Bags on carousel 16"]);
+    // The landing time is said on time too, and once it has landed not at all.
+    expect(flightStatusLines(status({ actualOut: "2026-12-12T22:05:00Z", estimatedIn: "2026-12-13T07:32:00Z" }), flight, "2026-12-13T01:00:00Z")).toEqual(["Lands on time, at 15:32"]);
+    expect(flightStatusLines(status({ actualOut: "2026-12-12T22:05:00Z", estimatedIn: "2026-12-13T07:10:00Z", actualIn: "2026-12-13T07:10:00Z" }), flight, "2026-12-13T08:00:00Z")).toEqual([]);
+    // Its expected departure passed with no word: taken off.
+    expect(flightStatusLines(status({ departureGate: "8", baggageClaim: "16" }), flight, "2026-12-12T22:01:00Z")).toEqual(["Bags on carousel 16"]);
+  });
+
+  it("says how late the flight leaves, by the airport's clock", () => {
     const late = status({ estimatedOut: "2026-12-12T22:40:00Z", estimatedIn: "2026-12-13T07:10:00Z", departureGate: "8" });
-    expect(flightStatusLines(late, flight)).toEqual(["Leaves 40 min late, at 09:40", "Departs from gate 8", "Lands 20 min early, at 15:10"]);
+    expect(flightStatusLines(late, flight, "2026-12-12T21:00:00Z")).toEqual(["Leaves 40 min late, at 09:40", "Departs from gate 8"]);
     // Without the booking there is no place to read the clock at.
     expect(flightStatusLines(status({ estimatedOut: "2026-12-13T00:05:00Z" }))).toEqual(["Leaves 2 h 5 min late"]);
     // A few minutes either way is on time, and a flight that left or landed has no estimate to give.
@@ -202,9 +213,10 @@ describe("flightStatusNews", () => {
     expect(flightStatusNews(gate, moved)).toEqual(["Now departs from terminal 1, gate 9 (was terminal 1, gate 8)"]);
     expect(flightStatusNews(moved, moved)).toEqual([]);
     expect(flightStatusNews(first, status({ departureTerminal: "2" }))).toEqual(["Now departs from terminal 2 (was terminal 1)"]);
-    const arrival = status({ arrivalGate: "D46", baggageClaim: "16" });
+    const flying = { actualOut: "2026-12-12T22:00:00Z", checkedAt: "2026-12-12T23:00:00Z" };
+    const arrival = status({ ...flying, arrivalGate: "D46", baggageClaim: "16" });
     expect(flightStatusNews(undefined, arrival)).toEqual(["Arrives at gate D46", "Bags on carousel 16"]);
-    expect(flightStatusNews(arrival, status({ arrivalGate: "D47", baggageClaim: "17" }))).toEqual([
+    expect(flightStatusNews(arrival, status({ ...flying, arrivalGate: "D47", baggageClaim: "17" }))).toEqual([
       "Now arrives at gate D47 (was gate D46)",
       "Bags now on carousel 17 (was 16)",
     ]);
@@ -219,6 +231,16 @@ describe("flightStatusNews", () => {
     // A gate given where only the terminal was known is news, not a change.
     expect(flightStatusNews(status({ departureTerminal: "1" }), status({ departureTerminal: "1", departureGate: "8" }))).toEqual(["Departs from terminal 1, gate 8"]);
     expect(flightStatusNews(undefined, status({ departureGate: "8", actualOut: "2026-12-12T22:00:00Z" }))).toEqual([]);
+  });
+
+  it("tells of the arrival gate and carousel only once the flight has taken off", () => {
+    const waiting = status({ departureGate: "8", arrivalTerminal: "3", arrivalGate: "D46", baggageClaim: "16" });
+    expect(flightStatusNews(undefined, waiting, flight)).toEqual(["Departs from gate 8", "Arrives at terminal 3"]);
+    expect(flightStatusNews(waiting, status({ departureGate: "8", arrivalTerminal: "3", arrivalGate: "D46", baggageClaim: "17" }), flight)).toEqual([]);
+    // The first look after takeoff tells of what was held back.
+    const flying = status({ departureGate: "8", arrivalTerminal: "3", arrivalGate: "D46", baggageClaim: "16", actualOut: "2026-12-12T22:05:00Z", checkedAt: "2026-12-12T22:06:00Z" });
+    expect(flightStatusNews(waiting, flying, flight)).toEqual(["Arrives at terminal 3, gate D46", "Bags on carousel 16"]);
+    expect(flightStatusNews(flying, flying, flight)).toEqual([]);
   });
 
   it("tells of a cancellation once, and nothing else about a cancelled flight", () => {
