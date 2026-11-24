@@ -43,11 +43,13 @@ function SourcesDialog({
   segment,
   emailLinks,
   onLearnSender,
+  onNeverSender,
   onClose,
 }: {
   segment: Segment;
   emailLinks?: EmailLinks;
   onLearnSender?: () => void;
+  onNeverSender?: () => void;
   onClose: () => void;
 }) {
   const sources = segmentSources(segment);
@@ -87,6 +89,21 @@ function SourcesDialog({
                 className="underline"
               >
                 Always import this sender
+              </button>
+            </>
+          )}
+          {onNeverSender && (
+            <>
+              {" · "}
+              <button
+                type="button"
+                onClick={() => {
+                  onNeverSender();
+                  onClose();
+                }}
+                className="underline"
+              >
+                Never import this sender
               </button>
             </>
           )}
@@ -135,6 +152,7 @@ export function BookingMenu({
   onMove,
   emailLinks,
   onLearnSender,
+  onNeverSender,
 }: {
   segment: Segment;
   onEdit?: () => void;
@@ -145,6 +163,7 @@ export function BookingMenu({
   onMove?: (tripId: string) => void;
   emailLinks?: EmailLinks;
   onLearnSender?: () => void;
+  onNeverSender?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<"sources" | "move">();
@@ -267,6 +286,7 @@ export function BookingMenu({
           segment={segment}
           {...(emailLinks ? { emailLinks } : {})}
           {...(onLearnSender ? { onLearnSender } : {})}
+          {...(onNeverSender ? { onNeverSender } : {})}
           onClose={closeDialog}
         />
       )}

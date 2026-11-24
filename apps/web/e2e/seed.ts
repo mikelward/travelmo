@@ -189,6 +189,15 @@ export async function updateSegment(tripId: string, segmentId: string, data: Par
 }
 
 // A trip's bookings as stored, for what the page does not show.
+// The trip document alone, its bookings left, as a deletion interrupted elsewhere leaves it.
+export async function deleteTripDoc(tripId: string): Promise<void> {
+  await db.doc(paths.trip(tripId)).delete();
+}
+
+export async function readSenderPatterns(uid: string): Promise<{ allow?: string[]; deny?: string[] } | undefined> {
+  return (await db.doc(paths.senderPatterns(uid)).get()).data();
+}
+
 export async function readSegments(tripId: string): Promise<Segment[]> {
   const snap = await db.collection(paths.segments(tripId)).orderBy("start").get();
   return snap.docs.map((d) => d.data() as Segment);

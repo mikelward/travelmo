@@ -13,6 +13,8 @@ import app.travelmo.core.emailAddressOf
 import app.travelmo.core.FlightStatus
 import app.travelmo.core.FoundLoyalty
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.flow
 import app.travelmo.core.withLearned
 import app.travelmo.core.SenderPatterns
@@ -56,6 +58,7 @@ import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.QuerySnapshot
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.Source
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -95,6 +98,20 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
                 segmentFromDocument(doc.id, tripId, doc.data ?: emptyMap()).also {
                     if (it == null) TravelmoLog.warning("Malformed segment %s", sensitive(doc.reference.path))
                 }
+            }
+        }
+
+    override suspend fun serverSegments(tripId: String): List<Segment> =
+        db.collection("trips").document(tripId).collection("segments").get(Source.SERVER).await().documents.mapNotNull { doc ->
+            segmentFromDocument(doc.id, tripId, doc.data ?: emptyMap()).also {
+                if (it == null) TravelmoLog.warning("Malformed segment %s", sensitive(doc.reference.path))
+            }
+        }
+
+    override suspend fun serverOwnTrips(uid: String): List<Trip> =
+        db.collection("trips").whereEqualTo("ownerUid", uid).get(Source.SERVER).await().documents.mapNotNull { doc ->
+            tripFromDocument(doc.id, doc.data ?: emptyMap()).also {
+                if (it == null) TravelmoLog.warning("Malformed trip %s", sensitive(doc.reference.path))
             }
         }
 
@@ -678,6 +695,41 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     override suspend fun unshareTrip(tripId: String, email: String) {
         db.collection("trips").document(tripId)
             .update(mapOf("sharedWith" to FieldValue.arrayRemove(email), "updatedAt" to Instant.now().toString())).await()
+    }
+
+    // Marked deleting first, which stops every other writer, then read: if anything else arrived, the mark comes off.
+    // A failed read takes off a mark this call made, so the trip isn't left locked unchecked.
+    override suspend fun deleteTripIfOnly(tripId: String, expected: Set<String>): Boolean {
+        val tripRef = db.collection("trips").document(tripId)
+        val mark = db.runTransaction { t ->
+            val snap = t.get(tripRef)
+            when {
+                !snap.exists() -> "gone"
+                snap.getBoolean("deleting") == true -> "already"
+                else -> {
+                    t.update(tripRef, mapOf("deleting" to true, "updatedAt" to Instant.now().toString()))
+                    "marked"
+                }
+            }
+        }.await()
+        if (mark == "gone") return true
+        suspend fun release() {
+            tripRef.update(mapOf("deleting" to false, "updatedAt" to Instant.now().toString())).await()
+        }
+        val ids = try {
+            tripRef.collection("segments").get().await().documents.map { it.id }
+        } catch (e: Exception) {
+            if (e !is CancellationException) TravelmoLog.error(e, "Reading a trip's bookings before deleting it failed")
+            // Even when cancelled: the mark must not outlive the check.
+            if (mark == "marked") withContext(NonCancellable) { release() }
+            throw e
+        }
+        if (ids.any { it !in expected }) {
+            release()
+            return false
+        }
+        deleteTrip(tripId)
+        return true
     }
 
     /**

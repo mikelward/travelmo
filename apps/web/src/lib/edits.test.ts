@@ -2,8 +2,15 @@ import { assertFails, initializeTestEnvironment, type RulesTestEnvironment } fro
 import { paths, type ExtractedSegment, type Segment, type Trip } from "@travelmo/core";
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, type Firestore } from "firebase/firestore";
 import { readFileSync } from "node:fs";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { deleteSegment, deleteTrip, fitTripDates, mergeTrips, moveSegment, renameTrip, restoreSegment, saveSegment } from "./edits";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { deleteSegment, deleteTrip, deleteTripIfOnly, fitTripDates, mergeTrips, moveSegment, renameTrip, restoreSegment, saveSegment } from "./edits";
+
+// A switch to make reading a collection fail, as when the connection drops.
+const failReads = vi.hoisted(() => ({ on: false }));
+vi.mock("firebase/firestore", async (importOriginal) => {
+  const real = await importOriginal<typeof import("firebase/firestore")>();
+  return { ...real, getDocs: ((q: Parameters<typeof real.getDocs>[0]) => (failReads.on ? Promise.reject(new Error("offline")) : real.getDocs(q))) as typeof real.getDocs };
+});
 
 // Runs inside `firebase emulators:exec` with the real rules loaded, so these
 // workflows are exercised the way the browser runs them.
@@ -228,6 +235,31 @@ describe("deleteSegment", () => {
     await deleteSegment(asOwner(), trip.id, imported.id);
     expect((await getDoc(doc(asOwner(), paths.segment(trip.id, imported.id)))).exists()).toBe(false);
     expect(await readTrip()).toMatchObject({ start: "2026-12-12", end: "2026-12-14" });
+  });
+});
+
+describe("deleteTripIfOnly", () => {
+  it("deletes the trip when its bookings are still just the ones expected", async () => {
+    expect(await deleteTripIfOnly(asOwner(), trip.id, [imported.id])).toBe(true);
+    expect(await readTrip()).toBeUndefined();
+  });
+
+  it("keeps the trip, unlocked, when another booking arrived", async () => {
+    await saveSegment(asOwner(), trip.id, flight("2026-12-13"));
+    expect(await deleteTripIfOnly(asOwner(), trip.id, [imported.id])).toBe(false);
+    expect(await readTrip()).toMatchObject({ deleting: false });
+    expect((await segmentIds(trip.id)).length).toBe(2);
+  });
+
+  it("unlocks the trip when its bookings can't be read", async () => {
+    failReads.on = true;
+    try {
+      await expect(deleteTripIfOnly(asOwner(), trip.id, [imported.id])).rejects.toThrow("offline");
+    } finally {
+      failReads.on = false;
+    }
+    expect(await readTrip()).toMatchObject({ deleting: false });
+    expect(await segmentIds(trip.id)).toEqual([imported.id]);
   });
 });
 

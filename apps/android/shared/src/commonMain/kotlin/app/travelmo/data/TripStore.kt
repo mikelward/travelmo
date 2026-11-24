@@ -44,6 +44,12 @@ interface TripStore {
     /** One trip's bookings, live; empty while it loads. */
     fun segments(tripId: String): Flow<List<Segment>>
 
+    /** A trip's bookings as the server has them now, never the cache: for a decision that must see them all. */
+    suspend fun serverSegments(tripId: String): List<Segment>
+
+    /** The user's own trips as the server has them now, never the cache, as [serverSegments]. */
+    suspend fun serverOwnTrips(uid: String): List<Trip>
+
     /** A flight's live gates and carousel by its key (flightStatusKey); null until the parser has looked. */
     fun flightStatus(key: String): Flow<FlightStatus?>
 
@@ -221,6 +227,12 @@ interface TripStore {
 
     /** Marks the trip deleting, removes its bookings, then the trip; safe to call again if interrupted. Owner only. */
     suspend fun deleteTrip(tripId: String)
+
+    /**
+     * As [deleteTrip], only if the trip's bookings are still just [expected] (as read for "Never import this
+     * sender"); otherwise deletes nothing and returns false. As the web's deleteTripIfOnly.
+     */
+    suspend fun deleteTripIfOnly(tripId: String, expected: Set<String>): Boolean
 
     /** Moves a booking to another trip the viewer can edit, keeping its id; the target widens to hold it. */
     suspend fun moveSegment(fromTripId: String, segmentId: String, toTripId: String)

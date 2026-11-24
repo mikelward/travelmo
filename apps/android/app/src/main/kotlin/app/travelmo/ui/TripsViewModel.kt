@@ -1,5 +1,7 @@
 package app.travelmo.ui
 
+import app.travelmo.core.senderCleanup
+import app.travelmo.core.SenderCleanup
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.travelmo.core.FlightStatus
@@ -499,6 +501,53 @@ class TripsViewModel(
     fun deleteTrip(token: String, tripId: String) = run(token, "deleteTrip") { store.deleteTrip(tripId) }
 
     fun mergeTrips(token: String, sourceId: String, targetId: String) = run(token, "mergeTrips") { store.mergeTrips(sourceId, targetId) }
+
+    private val _senderCleanup = MutableStateFlow<Pair<String, SenderCleanup>?>(null)
+
+    /** After "Never import this sender": the domain and what it already imported, offered for deletion; null when nothing. */
+    val senderCleanup: StateFlow<Pair<String, SenderCleanup>?> = _senderCleanup.asStateFlow()
+
+    /** From a booking's Sources: always import mail from [domain], as Import review teaches it. */
+    fun alwaysImportSender(token: String, domain: String) = run(token, "alwaysImportSender") { store.learnSender(uid, domain, SenderList.ALLOW) }
+
+    /**
+     * Reads the owner's trips (a rare action, so a read of each is fine) for what [domain] already imported, then
+     * never imports its mail again, and [senderCleanup] offers to delete what it found.
+     */
+    fun neverImportSender(token: String, domain: String) = run(token, "neverImportSender") {
+        // Read first: if that fails, nothing is saved and Never stays on offer to try again.
+        val own = store.serverOwnTrips(uid).filter { !it.deleting }
+        // From the server, not the cache: a trip whose bookings aren't cached would look empty.
+        val plan = senderCleanup(own.map { TripWithSegments(it, store.serverSegments(it.id)) }, uid, domain)
+        store.learnSender(uid, domain, SenderList.DENY)
+        if (plan.trips.isNotEmpty() || plan.segments.isNotEmpty()) _senderCleanup.value = domain to plan
+    }
+
+    fun keepSenderBookings() {
+        _senderCleanup.value = null
+    }
+
+    /**
+     * Deletes what [senderCleanup] offered: the trips whole, unless a booking arrived there since they were read
+     * (then only the sender's go), then the bookings in trips that keep others.
+     */
+    fun removeSenderBookings(token: String) = run(token, "removeSenderBookings") {
+        val offer = _senderCleanup.value ?: return@run
+        val plan = offer.second
+        _senderCleanup.value = null
+        try {
+            val segments = plan.segments.toMutableList()
+            for (trip in plan.trips) {
+                if (!store.deleteTripIfOnly(trip.id, trip.segments.toSet())) trip.segments.mapTo(segments) { trip.id to it }
+            }
+            for ((tripId, segmentId) in segments) store.deleteSegment(tripId, segmentId)
+        } catch (e: Exception) {
+            // Offered again to retry: the sender is denied now, so Never isn't. What was already deleted is
+            // skipped or harmless the second time.
+            if (e !is CancellationException) _senderCleanup.value = offer
+            throw e
+        }
+    }
 
     /** The Gmail mailboxes the user connected, for source links; empty when none. */
     val gmailMailboxes: StateFlow<List<GmailMailbox>> = store.gmailStatuses(uid).map { all -> all.map { it.mailbox } }
