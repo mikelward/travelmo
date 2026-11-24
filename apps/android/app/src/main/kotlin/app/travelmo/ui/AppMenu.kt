@@ -26,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -104,6 +105,9 @@ fun AndroidAppMenu(modifier: Modifier = Modifier, items: @Composable (close: () 
     var showAbout by rememberSaveable { mutableStateOf(false) }
     var sharing by remember { mutableStateOf(false) }
     var showConsent by rememberSaveable { mutableStateOf(false) }
+    val sender = LocalBugReportSender.current
+    val screen = LocalReportScreen.current
+    var showSend by rememberSaveable { mutableStateOf(false) }
     val shareReport = {
         sharing = true
         scope.launch {
@@ -155,8 +159,13 @@ fun AndroidAppMenu(modifier: Modifier = Modifier, items: @Composable (close: () 
                 enabled = !sharing,
                 onClick = {
                     expanded = false
-                    // What goes, said once before it first does, as in the sibling apps.
-                    if (DebugLogging.reportConsentNeeded(context)) showConsent = true else shareReport()
+                    when {
+                        // Signed in with a parser: sent to Travelmo, the dialog saying what goes each time.
+                        sender != null -> showSend = true
+                        // What goes, said once before it first does, as in the sibling apps.
+                        DebugLogging.reportConsentNeeded(context) -> showConsent = true
+                        else -> shareReport()
+                    }
                 },
             )
             DropdownMenuItem(
@@ -177,6 +186,24 @@ fun AndroidAppMenu(modifier: Modifier = Modifier, items: @Composable (close: () 
                 )
             }
         }
+    }
+    if (showSend && sender != null) {
+        // Made afresh each time the dialog opens, so a new report starts empty.
+        val form = remember { BugReportForm { text -> sender.send(context, text, screen) } }
+        val state by form.state.collectAsState()
+        var text by rememberSaveable { mutableStateOf("") }
+        SendReportDialog(
+            onTrip = screen.trip != null,
+            state = state,
+            text = text,
+            onTextChange = { text = it },
+            onSend = { scope.launch { form.send(text) } },
+            onShareInstead = {
+                showSend = false
+                if (DebugLogging.reportConsentNeeded(context)) showConsent = true else shareReport()
+            },
+            onDismiss = { showSend = false },
+        )
     }
     if (showConsent) {
         ReportConsentDialog(

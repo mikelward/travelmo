@@ -32,6 +32,7 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import app.travelmo.auth.SignedIn
 import app.travelmo.core.AccountAccess
+import app.travelmo.core.TripWithSegments
 import app.travelmo.core.tripIdFromReminderUrl
 import app.travelmo.log.DebugLogging
 import app.travelmo.notify.ReminderNotifications
@@ -47,6 +48,8 @@ import app.travelmo.ui.HomeTab
 import app.travelmo.ui.CrashReport
 import app.travelmo.ui.LicensesHost
 import app.travelmo.ui.LocalCrashReport
+import app.travelmo.ui.CollectingBugReportSender
+import app.travelmo.ui.LocalBugReportSender
 import app.travelmo.ui.LocalReportBug
 import app.travelmo.ui.pageCloses
 import app.travelmo.ui.pageOpens
@@ -190,7 +193,18 @@ private fun SignedInApp(
     }
     val admin = (access as? AccessState.Known)?.admin == true
     val openAccess: (() -> Unit)? = if (admin) ({ if (backStack.lastOrNull() != AccessPage) backStack.add(AccessPage) }) else null
-    CompositionLocalProvider(LocalOpenAccess provides openAccess) {
+    // Report a bug sends to Travelmo from here on, for an account that may
+    // use the app; signed out, or without a parser, it shares as before.
+    val bugReportSender = remember(user.uid) {
+        app.bugReports?.let { reports ->
+            CollectingBugReportSender(
+                version = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                collect = { DebugLogging.collectForSending(it, signedIn = true) },
+                deliver = reports::send,
+            )
+        }
+    }
+    CompositionLocalProvider(LocalOpenAccess provides openAccess, LocalBugReportSender provides bugReportSender) {
         SignedInNavigation(user, viewModel, backStack, rememberSignedInAccount(app.account))
     }
 }

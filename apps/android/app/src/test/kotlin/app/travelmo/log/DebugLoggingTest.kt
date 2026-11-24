@@ -209,4 +209,40 @@ class DebugLoggingTest {
         (send.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0).shouldBeTrue()
         send.getStringExtra(Intent.EXTRA_TEXT).shouldNotBeNull() shouldContain "Signed in: true"
     }
+
+    // Sending to Travelmo (SPEC "Bug reports"): the same text, and the screenshot's bytes.
+
+    @Test
+    fun `a report to send carries the log and the screenshot's bytes and deletes the file`() = runBlocking<Unit> {
+        TravelmoLog.event("send test marker %s", 7)
+        val file = File(context.cacheDir, "bug-reports").apply { mkdirs() }.resolve("screenshot-1.png").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+        val activity = activity()
+        var capturedFrom: Any? = null
+        val report = DebugLogging.collectForSending(activity, signedIn = true) { capturedFrom = it; file }
+        capturedFrom shouldBe activity
+        report.log shouldContain "Signed in: true"
+        report.log shouldContain "send test marker 7"
+        report.screenshot!!.toList() shouldBe listOf<Byte>(1, 2, 3)
+        file.exists().shouldBeFalse()
+    }
+
+    @Test
+    fun `a capture that fails or no activity sends the text alone`() = runBlocking<Unit> {
+        DebugLogging.collectForSending(activity(), signedIn = true) { throw IllegalStateException("no window") }.screenshot.shouldBeNull()
+        DebugLogging.collectForSending(activity(), signedIn = true) { null }.screenshot.shouldBeNull()
+        var captures = 0
+        val report = DebugLogging.collectForSending(context, signedIn = true) { captures++; null }
+        captures shouldBe 0
+        report.screenshot.shouldBeNull()
+        report.log shouldContain "Travelmo ${BuildConfig.VERSION_NAME}"
+    }
+
+    @Test
+    fun `a screenshot too large is shrunk until it fits or left out`() {
+        val halve: (ByteArray) -> ByteArray? = { it.copyOf(it.size / 2) }
+        DebugLogging.fitScreenshot(ByteArray(10), 10, halve)!!.size shouldBe 10
+        DebugLogging.fitScreenshot(ByteArray(40), 10, halve)!!.size shouldBe 10
+        DebugLogging.fitScreenshot(ByteArray(100), 10, halve).shouldBeNull()
+        DebugLogging.fitScreenshot(ByteArray(40), 10) { null }.shouldBeNull()
+    }
 }
