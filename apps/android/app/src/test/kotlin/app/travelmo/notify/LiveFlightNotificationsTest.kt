@@ -78,15 +78,16 @@ class LiveFlightNotificationsTest {
     }
 
     @Test
-    fun `in the air the chip counts down to landing, which the phone runs offline`() {
+    fun `in the air the chip shows the time left until landing, which Android keeps current offline`() {
         val flying = message("actualOut" to "2026-12-12T22:00:00Z", "estimatedIn" to "2026-12-13T07:10:00Z")
         LiveFlightNotifications.show(context, flying, at("2026-12-13T02:35:00Z"))
 
         val posted = shadowOf(manager).allNotifications.single()
         NotificationCompat.getShortCriticalText(posted).shouldBeNull()
         posted.`when` shouldBe at("2026-12-13T07:10:00Z")
-        posted.extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER) shouldBe true
-        posted.extras.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN) shouldBe true
+        // The time left, as Android words it, not a stopwatch.
+        posted.extras.getBoolean(Notification.EXTRA_SHOW_WHEN) shouldBe true
+        posted.extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER) shouldBe false
     }
 
     @Test

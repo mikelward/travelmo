@@ -127,11 +127,13 @@ object LiveFlightNotifications {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-        // In the air, the chip is a countdown to landing that the phone runs itself, so it keeps
-        // going in flight mode; otherwise it is the chip's text.
+        // In the air, the chip is the time left until landing, which Android works out and keeps
+        // current itself ("3h 30m" rather than a stopwatch's "3:30:00"), so it keeps going in
+        // flight mode; otherwise it is the chip's text. In the last two minutes Android shows the
+        // icon alone, until the redraw at the estimate says "Landing".
         val landsAt = live.landsAt
         if (landsAt != null) {
-            builder.setWhen(landsAt).setShowWhen(true).setUsesChronometer(true).setChronometerCountDown(true)
+            builder.setWhen(landsAt).setShowWhen(true)
         } else {
             builder.setShortCriticalText(live.chip)
         }
