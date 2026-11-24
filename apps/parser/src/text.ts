@@ -46,16 +46,34 @@ export function tidy(text: string): string {
 // as plain text: a plain part under a third the length of the HTML's text
 // is such a stub.
 export function emailText(payload: MimePart): string {
+  return emailTextChoice(payload).text;
+}
+
+// The same, with which part it took and how long each was (TextChoice).
+export function emailTextChoice(payload: MimePart): { text: string; choice: TextChoice } {
   const out = { plain: [] as string[], html: [] as string[] };
   collect(payload, out);
-  return bodyText(out.plain.join("\n\n"), out.html.join("\n"));
+  return bodyChoice(out.plain.join("\n\n"), out.html.join("\n"));
 }
+
+// Which body an import read and how long each was, for "Import anyway"'s
+// report (debugReport.ts): the plain part or the HTML flattened, their
+// lengths as text, and whether the one read was cut at maxEmailChars.
+export type TextChoice = { from: "plain" | "html"; plainChars: number; htmlChars: number; truncated: boolean };
 
 // The text an import reads from a message's plain and HTML bodies (either
 // may be empty), as emailText chooses.
 export function bodyText(plainBody: string, htmlBody: string): string {
+  return bodyChoice(plainBody, htmlBody).text;
+}
+
+export function bodyChoice(plainBody: string, htmlBody: string): { text: string; choice: TextChoice } {
   const plain = tidy(plainBody);
   const html = htmlBody.trim() ? tidy(htmlToText(htmlBody)) : "";
-  const text = plain && plain.length * 3 >= html.length ? plain : html || plain;
-  return text.slice(0, maxEmailChars);
+  const fromPlain = !!plain && (plain.length * 3 >= html.length || !html);
+  const text = fromPlain ? plain : html;
+  return {
+    text: text.slice(0, maxEmailChars),
+    choice: { from: fromPlain ? "plain" : "html", plainChars: plain.length, htmlChars: html.length, truncated: text.length > maxEmailChars },
+  };
 }

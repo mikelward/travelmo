@@ -47,6 +47,7 @@ import app.travelmo.core.toReview
 import app.travelmo.core.withLatest
 import app.travelmo.shared.Res
 import app.travelmo.shared.always_import
+import app.travelmo.shared.copy_report
 import app.travelmo.shared.cancel
 import app.travelmo.shared.clear
 import app.travelmo.shared.import_anyway
@@ -91,10 +92,12 @@ fun ImportReviewScreen(viewModel: TripsViewModel, onBack: () -> Unit, zone: Stri
     val all by viewModel.reviewAll.collectAsStateWithLifecycle()
     val patterns by viewModel.senderPatterns.collectAsStateWithLifecycle()
     val notices by viewModel.reviewNotices.collectAsStateWithLifecycle()
+    val reports by viewModel.reviewReports.collectAsStateWithLifecycle()
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
     // A search's records are read once; the live latest show any read again since.
     val records = if (searching) all?.let { withLatest(it.records, latest.orEmpty()) } else latest
-    val shown = records?.let { toReview(it, keyword, dayRange(from, to, zone)) }.orEmpty()
+    // A row keeps its report to copy once Import anyway made a booking of it.
+    val shown = records?.let { toReview(it, keyword, dayRange(from, to, zone), reports.keys) }.orEmpty()
     val searchDone = !searching || all?.done == true
     Scaffold(
         topBar = {
@@ -149,6 +152,7 @@ fun ImportReviewScreen(viewModel: TripsViewModel, onBack: () -> Unit, zone: Stri
                     busy = mine.any { it is Outcome.Busy },
                     canReimport = viewModel.canReimport,
                     notice = mine.filterIsInstance<Outcome.Failed>().lastOrNull()?.message ?: notices[record.messageId],
+                    report = reports[record.messageId],
                     // Each action replaces what the row said about the last one.
                     onReimport = {
                         forgetRow(viewModel, record.messageId)
@@ -209,9 +213,12 @@ private fun ReviewRow(
     busy: Boolean,
     canReimport: Boolean,
     notice: String?,
+    /** Import anyway's report, to copy where the reader is tuned. */
+    report: String?,
     onReimport: () -> Unit,
     onLearn: (String, SenderList) -> Unit,
 ) {
+    val chrome = LocalAppChrome.current
     // Records from other sources have no sender to teach and no email to read again.
     val fromMailbox = isFromMailbox(record)
     val domain = if (fromMailbox) record.from?.let(::domainOf) else null
@@ -229,6 +236,7 @@ private fun ReviewRow(
             if (domain != null && decision != SenderList.DENY) {
                 OutlinedButton(onClick = { onLearn(domain, SenderList.DENY) }, enabled = !busy) { Text(stringResource(Res.string.never_import, domain)) }
             }
+            report?.let { OutlinedButton(onClick = { chrome.copyToClipboard("Import report", it) }) { Text(stringResource(Res.string.copy_report)) } }
         }
         notice?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp)) }
     }

@@ -61,8 +61,9 @@ export function withLatest(searched: readonly ParsedMessage[], latest: readonly 
 
 /**
  * The records worth reviewing: those that did not become bookings and are
- * not still being read, matching the keyword and the days.
+ * not still being read, matching the keyword and the days, and those whose
+ * Import anyway report is still to copy (`kept`), whatever came of them.
  */
-export function toReview(records: readonly ParsedMessage[], keyword: string, range: { start?: string; end?: string } = {}): ParsedMessage[] {
-  return records.filter((r) => r.outcome !== "imported" && r.outcome !== "processing" && matchesKeyword(r, keyword) && inRange(r, range));
+export function toReview(records: readonly ParsedMessage[], keyword: string, range: { start?: string; end?: string } = {}, kept: ReadonlySet<string> = new Set()): ParsedMessage[] {
+  return records.filter((r) => kept.has(r.messageId) || (r.outcome !== "imported" && r.outcome !== "processing" && matchesKeyword(r, keyword) && inRange(r, range)));
 }

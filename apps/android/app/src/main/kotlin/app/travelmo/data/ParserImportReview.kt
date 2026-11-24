@@ -15,7 +15,7 @@ class ParserImportReview(private val client: ParserClient) : ImportReview {
     override val available: Boolean
         get() = client.available
 
-    override suspend fun reimport(messageId: String): String {
+    override suspend fun reimport(messageId: String): Reimported {
         val reply = try {
             client.post(REIMPORT_PATH, JSONObject().put("messageId", messageId).toString()) ?: throw TripActionFailed(tripActionFailure(401))
         } catch (e: CancellationException) {
@@ -32,14 +32,16 @@ class ParserImportReview(private val client: ParserClient) : ImportReview {
             val reason = reply.body.trim().takeIf { reply.status in setOf(400, 404, 409) && it.isNotEmpty() && it.length < 200 }
             throw TripActionFailed(reason?.let { if (it.endsWith(".")) it else "$it." } ?: tripActionFailure(reply.status))
         }
-        val outcome = try {
-            JSONObject(reply.body).optString("outcome")
+        val json = try {
+            JSONObject(reply.body)
         } catch (e: JSONException) {
             // It went through; only what came of it is unknown, and the list
             // shows that once the record changes.
             TravelmoLog.failure(e, "Reading a message again: the parser's reply did not parse")
-            ""
+            null
         }
-        return outcomeLabel(outcome.ifBlank { "processing" })
+        val outcome = json?.optString("outcome").orEmpty()
+        val report = json?.optString("report")?.takeIf { it.isNotBlank() }
+        return Reimported(outcomeLabel(outcome.ifBlank { "processing" }), report)
     }
 }

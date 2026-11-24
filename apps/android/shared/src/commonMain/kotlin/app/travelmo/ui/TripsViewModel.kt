@@ -1055,9 +1055,15 @@ class TripsViewModel(
     /** What the last action on each reviewed message did, by message id. */
     val reviewNotices: StateFlow<Map<String, String>> = _reviewNotices
 
-    /** Forgets what the last action on a reviewed message said. */
+    private val _reviewReports = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    /** Import anyway's report of each message read again (what was read, what the model said), to copy, by message id. */
+    val reviewReports: StateFlow<Map<String, String>> = _reviewReports
+
+    /** Forgets what the last action on a reviewed message said, and its report. */
     fun reviewNoticeSeen(messageId: String) {
         _reviewNotices.update { it - messageId }
+        _reviewReports.update { it - messageId }
     }
 
     /** Whether this build can read a message again here. */
@@ -1066,8 +1072,9 @@ class TripsViewModel(
 
     /** Reads one message again, skipping the pre-filter, and says what came of it. */
     fun reimport(token: String, messageId: String) = run(token, "reimport") {
-        val said = importReview.reimport(messageId)
-        _reviewNotices.update { it + (messageId to said) }
+        val done = importReview.reimport(messageId)
+        _reviewNotices.update { it + (messageId to done.said) }
+        done.report?.let { report -> _reviewReports.update { it + (messageId to report) } }
     }
 
     /** Saves the sender rules as typed, one domain a line ([cleanSenderList]). */

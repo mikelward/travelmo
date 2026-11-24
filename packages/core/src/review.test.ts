@@ -43,6 +43,8 @@ describe("toReview", () => {
     ];
     expect(toReview(records, "").map((r) => r.messageId)).toEqual(["a", "d"]);
     expect(toReview(records, "summer").map((r) => r.messageId)).toEqual(["a"]);
+    // One whose Import anyway report is still to copy stays, even once imported.
+    expect(toReview(records, "", {}, new Set(["b"])).map((r) => r.messageId)).toEqual(["a", "b", "d"]);
   });
 
   it("narrows to days by when the email was sent, or when it was read if that is unknown", () => {

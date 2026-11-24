@@ -24,6 +24,7 @@ import {
   bookedDateRange,
   displayBounds,
   normalizeReference,
+  type ExtractedBooking,
   type ExtractedCancellation,
   homeTimeline,
   homesWithAirports,
@@ -262,7 +263,14 @@ export type ImportDeps = {
 
 export type ImportOutcome = Exclude<ParsedMessage["outcome"], "processing"> | "skipped";
 
+// What an import found on its way, filled in for "Import anyway"'s report
+// (debugReport.ts): how many PDFs went to the model, what the model
+// answered, or why it failed. Never stored or logged: the person reads it.
+export type ImportDebug = { attachments?: number; extraction?: ExtractedBooking; error?: string };
+
 export type ImportOptions = {
+  // Filled in as the import goes, for a report of it (ImportDebug).
+  debug?: ImportDebug;
   // The reset generation, when the caller read it before state of its own
   // that the import depends on (a calendar's records, a batch's place);
   // otherwise importMessage reads it first thing.
@@ -423,11 +431,14 @@ export async function importMessage(
   };
 
   const attachments = await attachmentsOf(message, (error) => log("attachments_failed", { uid, messageId: message.id, reason: error.message }));
+  if (options.debug) options.debug.attachments = attachments.length;
   let booking;
   try {
     booking = await deps.extract(message, attachments);
+    if (options.debug) options.debug.extraction = booking;
   } catch (error) {
     const failure = (error as Error).message;
+    if (options.debug) options.debug.error = failure;
     // A changed event's old record comes back whole, its old revision
     // included, so the change is tried again next time.
     await save(replacing ?? record("failed", { reason: failure }));

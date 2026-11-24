@@ -482,7 +482,10 @@ class TripsViewModelTest {
         review.asked shouldBe listOf("ticket")
         viewModel.learnSender("learn", "news", "news.example", SenderList.ALLOW)
         store.patterns.value shouldBe SenderPatterns(allow = listOf("news.example"))
-        viewModel.reviewNotices.value shouldBe mapOf("ticket" to "Imported", "news" to "Always importing news.example")
+        viewModel.reviewNotices.value shouldBe mapOf("ticket" to "Read, not a booking", "news" to "Always importing news.example")
+        viewModel.reviewReports.value shouldBe mapOf("ticket" to "Travelmo import report\nEmail: ticket")
+        viewModel.reviewNoticeSeen("ticket")
+        viewModel.reviewReports.value shouldBe emptyMap()
     }
 
     @Test

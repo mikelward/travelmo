@@ -1435,7 +1435,15 @@ when the email's date is unknown), the sender and the outcome. It offers three a
 import it, or import this one anyway (`POST /gmail/reimport`, which reclaims
 the record of a message that did not become a booking — never an imported
 one, whose bookings are edited on the trip page, nor one whose import is
-live — and runs the import with the pre-filter skipped). Teaching a sender also
+live — and runs the import with the pre-filter skipped). Import anyway also
+answers with a report (`importReport`) the row offers to copy (Copy report,
+web and Android), for pasting where the email reader is tuned: the email's
+subject, sender and date, what came of it, the reader's version, which body
+was read (plain text or HTML, each one's length, and whether it was cut
+short), how many PDFs went with it, the model's answer as JSON (or why it
+failed), and the first 4,000 characters of the text it read. It quotes the
+person's own email, so it goes to them alone and is never stored or
+logged. Teaching a sender also
 drops any pattern on the other list that covers it, so the newest decision
 is the one the parser follows. A booking's Sources dialog on the trip page
 offers "Always import this sender" and "Never import this sender" on

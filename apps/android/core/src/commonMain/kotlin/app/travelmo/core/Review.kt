@@ -51,9 +51,9 @@ fun inRange(record: ParsedRecord, range: DayRange): Boolean {
     return (range.start == null || at >= range.start) && (range.end == null || at < range.end)
 }
 
-/** The records worth reviewing: not imported, not still being read, matching the keyword and the days. */
-fun toReview(records: List<ParsedRecord>, keyword: String, range: DayRange = DayRange()): List<ParsedRecord> =
-    records.filter { it.outcome != "imported" && it.outcome != "processing" && matchesKeyword(it, keyword) && inRange(it, range) }
+/** The records worth reviewing: not imported, not still being read, matching the keyword and the days, and those whose Import anyway report is still to copy ([kept]), whatever came of them. */
+fun toReview(records: List<ParsedRecord>, keyword: String, range: DayRange = DayRange(), kept: Set<String> = emptySet()): List<ParsedRecord> =
+    records.filter { it.messageId in kept || (it.outcome != "imported" && it.outcome != "processing" && matchesKeyword(it, keyword) && inRange(it, range)) }
 
 /** Records read once for a search, brought up to date by the live latest: newer copies win, new ones join. Newest first. */
 fun withLatest(searched: List<ParsedRecord>, latest: List<ParsedRecord>): List<ParsedRecord> {
