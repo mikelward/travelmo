@@ -809,7 +809,9 @@ terminal or carousel the answer lacks is kept from the last one: the source
 losing a field for a look and finding it again is news neither way, and
 the card keeps saying where to go. A gate and its terminal go together: one
 is kept only while the other is unchanged, so a new terminal never shows
-with the old one's gate. The news
+with the old one's gate. An answer that misses a flight the last one found
+keeps the last status, stamped with the new look: the source stumbling
+should not blank the card or take down the phone's Live Update. The news
 goes to the owner of every trip holding the flight and the people it is
 shared with (by verified address), each once, on every browser and phone
 they turned notifications on for, through the same channels as reminders,

@@ -197,8 +197,11 @@ describe("keepKnownPlaces", () => {
     expect(keepKnownPlaces(full, status({ departureGate: "9" }))).not.toHaveProperty("departureTerminal");
     expect(keepKnownPlaces(full, status({ departureTerminal: "1", departureGate: "9" }))).toMatchObject({ departureGate: "9", departureTerminal: "1" });
     expect(keepKnownPlaces(full, status({ departureGate: "8" }))).toMatchObject({ departureGate: "8", departureTerminal: "1" });
-    // A flight no longer found keeps nothing: there is no flight to place.
-    expect(keepKnownPlaces(full, status({ found: false }))).not.toHaveProperty("departureGate");
+    // A look that misses a flight found before keeps the last status: the
+    // service stumbled, and the card and Live Update should not go blank.
+    expect(keepKnownPlaces(full, status({ found: false, checkedAt: "2026-12-12T19:02:00Z" }))).toEqual({ ...full, checkedAt: "2026-12-12T19:02:00Z" });
+    // Never found at all: not found it is.
+    expect(keepKnownPlaces(undefined, status({ found: false })).found).toBe(false);
     expect(keepKnownPlaces(undefined, status())).toEqual(status());
   });
 });
