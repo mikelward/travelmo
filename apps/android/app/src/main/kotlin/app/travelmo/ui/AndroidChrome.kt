@@ -81,4 +81,7 @@ class AndroidChrome(private val context: Context) : AppChrome {
         TextSizeSection()
         DebugLogSection(signedIn = true)
     }
+
+    @Composable
+    override fun ReportProblemButton(text: String) = app.travelmo.ui.ReportProblemButton(text)
 }

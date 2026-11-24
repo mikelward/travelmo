@@ -129,7 +129,9 @@ export const api = {
   deleteAllTrips: (user: User) => post<{ trips: number }>(user, deleteAllTripsPath),
   // "Refresh from email" (`restart` from the first email again), run on the
   // server; its progress shows on the profile.
-  refreshFromEmail: (user: User, restart = false) => post<BackfillStarted>(user, refreshPath, restart ? { restart } : {}, true),
+  // `retryFailed`: only the emails the last refresh couldn't read.
+  refreshFromEmail: (user: User, restart = false, retryFailed = false) =>
+    post<BackfillStarted>(user, refreshPath, restart ? { restart } : retryFailed ? { retryFailed } : {}, true),
   stopRefresh: (user: User) => post<void>(user, refreshStopPath),
   sendBugReport,
   refreshFlights: (user: User, tripId: string) => post<{ enabled: boolean; checked?: number }>(user, "/flights/refresh", { tripId }),

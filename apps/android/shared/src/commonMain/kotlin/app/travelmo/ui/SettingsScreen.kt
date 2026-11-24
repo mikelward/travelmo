@@ -1,5 +1,9 @@
 package app.travelmo.ui
 
+import app.travelmo.shared.try_again
+import app.travelmo.shared.open_in_gmail
+import app.travelmo.core.ParsedRecord
+import androidx.compose.runtime.produceState
 import app.travelmo.ui.theme.AppBarTitle
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -79,7 +83,11 @@ import app.travelmo.core.imapServerFor
 import app.travelmo.core.parseCountries
 import app.travelmo.core.pausedReason
 import app.travelmo.core.refreshButton
-import app.travelmo.core.refreshPausedReason
+import app.travelmo.core.failedEmailIds
+import app.travelmo.core.failedEmailLine
+import app.travelmo.core.failedEmailsReport
+import app.travelmo.core.gmailSourceLink
+import app.travelmo.core.moreFailedEmails
 import app.travelmo.core.rideCompanyOrNull
 import app.travelmo.shared.Res
 import app.travelmo.shared.add
@@ -1241,6 +1249,35 @@ private fun TripsSection(viewModel: TripsViewModel) {
 }
 
 /**
+ * The emails a refresh couldn't read, by subject and sender, as on the web:
+ * a Gmail one opens in Gmail, to check it or add its booking by hand; Try
+ * again reads them alone again, and Report a problem sends us their ids.
+ */
+@Composable
+private fun FailedEmails(viewModel: TripsViewModel, ids: List<String>, more: String?, report: String, busy: Boolean, onTryAgain: () -> Unit) {
+    val chrome = LocalAppChrome.current
+    val mailboxes by viewModel.gmailMailboxes.collectAsStateWithLifecycle()
+    val records by produceState(emptyMap<String, ParsedRecord>(), ids) { value = viewModel.failedEmailRecords(ids) }
+    Column(Modifier.padding(top = 4.dp)) {
+        for (id in ids) {
+            val record = records[id]
+            val gmail = record != null && (record.source ?: "gmail") == "gmail"
+            Text("• ${failedEmailLine(record)}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
+            if (gmail) {
+                TextButton(onClick = { chrome.openLink(gmailSourceLink(id, mailboxes), "an email a refresh couldn't read") }) {
+                    Text(stringResource(Res.string.open_in_gmail))
+                }
+            }
+        }
+        more?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp)) }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+            OutlinedButton(onClick = onTryAgain, enabled = !busy) { Text(stringResource(Res.string.try_again)) }
+            chrome.ReportProblemButton(report)
+        }
+    }
+}
+
+/**
  * "Refresh from email", as on the web: start it (Continue after it stopped
  * part way, from the first email again once done) or Stop it while it runs,
  * and how far it got, which the parser records on the user document as it
@@ -1274,8 +1311,19 @@ private fun RefreshFromEmail(viewModel: TripsViewModel) {
     progress?.let {
         Text(describeRefresh(it, state.reading), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
     }
-    refreshPausedReason(progress, state.reading)?.let {
-        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
+    val failedIds = if (state.reading) emptyList() else failedEmailIds(progress)
+    if (progress != null && failedIds.isNotEmpty()) {
+        FailedEmails(
+            viewModel = viewModel,
+            ids = failedIds,
+            more = moreFailedEmails(progress),
+            report = failedEmailsReport(progress),
+            busy = busy,
+            onTryAgain = {
+                listOf(REFRESH_TOKEN, REFRESH_STOP_TOKEN).forEach(viewModel::outcomeSeen)
+                viewModel.startRefresh(REFRESH_TOKEN, restart = false, retryFailed = true)
+            },
+        )
     }
     listOf(starting, stopping).filterIsInstance<Outcome.Failed>().lastOrNull()?.let {
         Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))

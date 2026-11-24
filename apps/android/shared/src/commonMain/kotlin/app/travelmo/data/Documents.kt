@@ -359,7 +359,8 @@ fun refreshOf(data: Map<String, Any?>?): RefreshShown? {
         failed = count("failed") ?: 0,
         running = p["running"] == true,
         leaseUntil = p["leaseUntil"] as? String,
-        lastFailed = count("lastFailed") ?: 0,
+        failedIds = (p["failedIds"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+        retrying = (p["retrying"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
     )
 }
 

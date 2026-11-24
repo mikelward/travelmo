@@ -487,6 +487,23 @@ class ScreenScreenshotTest {
         composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
     }
 
+    // Settings' Refresh from email, done with emails it couldn't read.
+    @Test
+    fun settings_refresh_failed() {
+        val done = app.travelmo.core.RefreshShown(scanned = 340, done = true, updatedAt = FROZEN_NOW, total = 340, updated = 12, failed = 2, failedIds = listOf("booked", "fastmail-h1"))
+        val hotel = app.travelmo.core.ParsedRecord("fastmail-h1", "imported", FROZEN_NOW, source = "fastmail", subject = "Your hotel in Paris", from = "Hôtel du Marais")
+        val store = FakeTripStore(refreshProgress = done, parsed = fixtureParsed + hotel, gmailStatuses = listOf(GmailStatus("owner@example.com", connectedAt = "2026-10-01T00:00:00Z")))
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, tripActions = FakeTripActions())
+        composeRule.setContent {
+            TravelmoTheme(fontSize = FontSizeState(FontSizeSettings(scale = 1f), onScaleSettled = {}, onPinchEnabledChange = {})) {
+                SettingsScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = user, viewModel = viewModel, onBack = {})
+            }
+        }
+        composeRule.onNodeWithText("Try again").performScrollTo()
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage(filePath = "$outputDir/settings_refresh_failed.png")
+    }
+
     @Test
     fun trip_manage() {
         val viewModel = viewModel()

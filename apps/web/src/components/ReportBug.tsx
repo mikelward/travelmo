@@ -45,12 +45,14 @@ type Sending = { state: "idle" } | { state: "sending" } | { state: "sent" } | { 
 const buttonClass = "rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700";
 const primaryClass = "rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900";
 
-function ReportDialog({ onClose }: { onClose: () => void }) {
+// The dialog, from the footer's link or a page's own "Report a problem"
+// (`initialText`: what the page knows went wrong, which the user can add to).
+export function ReportDialog({ onClose, initialText = "" }: { onClose: () => void; initialText?: string }) {
   const { user } = useAuth();
   const onTrip = useContext(ReportTripContext)?.current;
   const page = usePathname();
   const ref = useRef<HTMLDialogElement>(null);
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialText);
   const [sending, setSending] = useState<Sending>({ state: "idle" });
   useEffect(() => {
     const dialog = ref.current;

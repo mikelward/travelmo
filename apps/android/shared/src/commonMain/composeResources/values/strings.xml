@@ -57,6 +57,8 @@
     <string name="source_fastmail">Fastmail email</string>
     <string name="source_imap">Other email</string>
     <string name="open_in_gmail">Open in Gmail</string>
+    <string name="try_again">Try again</string>
+    <string name="report_a_problem">Report a problem</string>
     <string name="from_sender">From %1$s</string>
     <string name="always_import_sender">Always import this sender</string>
     <string name="never_import_sender">Never import this sender</string>

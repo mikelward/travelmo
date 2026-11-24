@@ -1,5 +1,7 @@
 package app.travelmo.ui
 
+import app.travelmo.shared.report_a_problem
+import androidx.compose.material3.OutlinedButton
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -318,4 +320,61 @@ fun AboutDialog(onOpenLicenses: (() -> Unit)?, onDismiss: () -> Unit) {
         },
         dismissButton = onOpenLicenses?.let { { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.ok)) } } },
     )
+}
+
+/**
+ * A screen's "Report a problem" (AppChrome.ReportProblemButton): Report a
+ * bug's send dialog with [text] already written for the user to add to, or,
+ * shared instead, the same report as the menu shares. Nothing without a
+ * parser to send it to.
+ */
+@Composable
+fun ReportProblemButton(text: String) {
+    val sender = LocalBugReportSender.current ?: return
+    val context = LocalContext.current
+    val reportBug = LocalReportBug.current
+    val screen = LocalReportScreen.current
+    val scope = rememberCoroutineScope()
+    var open by rememberSaveable { mutableStateOf(false) }
+    var showConsent by rememberSaveable { mutableStateOf(false) }
+    var written by rememberSaveable(text) { mutableStateOf(text) }
+    val share = {
+        scope.launch {
+            val note = when (reportBug(context, sharedReportPreamble(written, null, null))) {
+                ShareOutcome.SHARED -> null
+                ShareOutcome.COPIED_ONLY -> R.string.debug_log_copied_only
+                ShareOutcome.FAILED -> R.string.debug_log_share_failed
+            }
+            note?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+        }
+        Unit
+    }
+    OutlinedButton(onClick = { open = true }) { Text(stringResource(Res.string.report_a_problem)) }
+    if (open) {
+        // Made afresh each time the dialog opens.
+        val form = remember { BugReportForm { report -> sender.send(context, report, screen) } }
+        val state by form.state.collectAsState()
+        SendReportDialog(
+            onTrip = false,
+            state = state,
+            text = written,
+            onTextChange = { written = it },
+            onSend = { scope.launch { form.send(written) } },
+            onShareInstead = {
+                open = false
+                if (DebugLogging.reportConsentNeeded(context)) showConsent = true else share()
+            },
+            onDismiss = { open = false },
+        )
+    }
+    if (showConsent) {
+        ReportConsentDialog(
+            onContinue = { dontShowAgain ->
+                showConsent = false
+                if (dontShowAgain) DebugLogging.skipReportConsent(context)
+                share()
+            },
+            onCancel = { showConsent = false },
+        )
+    }
 }

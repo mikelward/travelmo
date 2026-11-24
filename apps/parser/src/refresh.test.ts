@@ -507,6 +507,7 @@ function batchIo(records: ParsedMessage[], outcomes: Map<string, RecordOutcome> 
   let clock = Date.parse(now);
   const io: RefreshBatchIo = {
     records: (after, limit) => memory.importedRecords(uid, after, limit),
+    record: (id) => memory.getParsed(uid, id),
     snapshot: async () => [],
     refresh: async (r) => {
       refreshed.push(r.messageId);
@@ -564,7 +565,7 @@ describe("runRefreshBatch", () => {
     expect(batch.progress).toMatchObject({ scanned: 1, cursor: "m1", done: false, retryAfter: "2027-02-01T12:01:00.000Z" });
   });
 
-  it("stops at the model's rate limit, keeping the email to read again", async () => {
+  it("waits out the model's rate limit, slowing the next batch, and reads the email again", async () => {
     const { io } = batchIo([record("m1"), record("m2")], new Map([["m1", { kind: "rateLimited", by: "model" }]]));
     const batch = await runRefreshBatch(fresh(), io);
     expect(batch.counts.failed).toBe(1);
@@ -572,12 +573,36 @@ describe("runRefreshBatch", () => {
     expect(batch.progress).toMatchObject({ scanned: 0, failed: 0, done: false });
   });
 
-  it("passes an email the model failed on and stops there", async () => {
-    const { io, refreshed } = batchIo([record("m1"), record("m2"), record("m3")], new Map([["m1", { kind: "missing" }], ["m2", { kind: "failed" }]]));
+  it("passes an email the model failed on, reads on, then reads it again before it is done", async () => {
+    const outcomes = new Map<string, RecordOutcome>([["m1", { kind: "missing" }], ["m2", { kind: "failed" }]]);
+    const { io, refreshed } = batchIo([record("m1"), record("m2"), record("m3")], outcomes);
     const batch = await runRefreshBatch(fresh(), io);
-    expect(refreshed).toEqual(["m1", "m2"]);
+    expect(refreshed).toEqual(["m1", "m2", "m3"]);
     expect(batch.counts.failed).toBe(1);
-    expect(batch.progress).toMatchObject({ scanned: 2, missing: 1, failed: 1, cursor: "m2", done: false });
+    expect(batch.progress).toMatchObject({ scanned: 3, missing: 1, failed: 1, updated: 1, done: false, retrying: ["m2"] });
+
+    const again = await runRefreshBatch(batch.progress as RefreshProgress, io);
+    expect(refreshed).toEqual(["m1", "m2", "m3", "m2"]);
+    expect(again.progress).toMatchObject({ scanned: 3, failed: 1, done: true, failedIds: ["m2"] });
+    expect(again.progress.retrying).toBeUndefined();
+  });
+
+  it("no longer counts an email as failed once it is read on the second try", async () => {
+    const outcomes = new Map<string, RecordOutcome>([["m1", { kind: "failed" }]]);
+    const { io } = batchIo([record("m1"), record("m2")], outcomes);
+    const batch = await runRefreshBatch(fresh(), io);
+    outcomes.delete("m1");
+    const again = await runRefreshBatch(batch.progress as RefreshProgress, io);
+    expect(again.progress).toMatchObject({ scanned: 2, failed: 0, updated: 2, done: true });
+    expect(again.progress.failedIds).toBeUndefined();
+  });
+
+  it("drops a failed email whose record is gone by the second try", async () => {
+    const { io } = batchIo([record("m1")]);
+    const from: RefreshProgress = { ...fresh(), scanned: 2, failed: 1, total: 2, retrying: ["gone"] };
+    const again = await runRefreshBatch(from, io);
+    expect(again.progress).toMatchObject({ failed: 0, done: true });
+    expect(again.progress.failedIds).toBeUndefined();
   });
 });
 
@@ -606,22 +631,37 @@ describe("a refresh on the batch chain", () => {
     return { io, queued, refreshed, progress: () => stored as RefreshProgress | undefined, regrouped: () => regrouped };
   }
 
-  it("stops at the model's rate limit for Continue, and carries on from that email", async () => {
+  it("carries on past the model's rate limit by itself, reading that email again", async () => {
     const outcomes = new Map<string, RecordOutcome>([["m2", { kind: "rateLimited", by: "model" }]]);
     const c = chain([record("m1"), record("m2"), record("m3")], outcomes);
     await startBackfill(uid, "run1", false, c.io);
     expect(await continueBackfill(c.queued.shift()!, c.io)).toMatchObject({ kind: "ran" });
-    expect(c.progress()).toMatchObject({ running: false, lastFailed: 1, scanned: 1, cursor: "m1", done: false });
-    expect(c.queued).toEqual([]);
+    expect(c.progress()).toMatchObject({ running: true, scanned: 1, cursor: "m1", done: false });
+    expect(c.progress()?.lastFailed).toBeUndefined();
 
-    // Continue, once the model is free again.
+    // The model is free again by the time the next batch runs.
     outcomes.delete("m2");
-    await startBackfill(uid, "run2", false, c.io);
-    const next = c.queued.shift()!;
-    expect(next).toMatchObject({ kind: "refresh", run: "run2" });
-    await continueBackfill(next, c.io);
+    expect(c.queued[0]).toMatchObject({ kind: "refresh", run: "run1" });
+    while (c.queued.length) await continueBackfill(c.queued.shift()!, c.io);
     expect(c.refreshed).toEqual(["m1", "m2", "m2", "m3"]);
     expect(c.progress()).toMatchObject({ done: true, scanned: 3, total: 3, updated: 3 });
     expect(c.regrouped()).toBe(1);
+  });
+
+  it("reads through an email that keeps failing, lists it, and tries only it again on Try again", async () => {
+    const outcomes = new Map<string, RecordOutcome>([["m2", { kind: "failed" }]]);
+    const c = chain([record("m1"), record("m2"), record("m3")], outcomes);
+    await startBackfill(uid, "run1", false, c.io);
+    while (c.queued.length) await continueBackfill(c.queued.shift()!, c.io);
+    expect(c.refreshed).toEqual(["m1", "m2", "m3", "m2"]);
+    expect(c.progress()).toMatchObject({ done: true, scanned: 3, failed: 1, failedIds: ["m2"] });
+
+    outcomes.delete("m2");
+    await startBackfill(uid, "run2", false, c.io, undefined, true);
+    expect(c.progress()).toMatchObject({ done: false, retrying: ["m2"] });
+    while (c.queued.length) await continueBackfill(c.queued.shift()!, c.io);
+    expect(c.refreshed).toEqual(["m1", "m2", "m3", "m2", "m2"]);
+    expect(c.progress()).toMatchObject({ done: true, scanned: 3, failed: 0, updated: 3 });
+    expect(c.progress()?.failedIds).toBeUndefined();
   });
 });

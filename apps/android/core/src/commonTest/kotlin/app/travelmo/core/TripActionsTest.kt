@@ -41,21 +41,42 @@ class TripActionsTest {
         val at = "2027-02-01T12:00:00Z"
         describeRefresh(RefreshShown(340, true, at, total = 340, updated = 12, added = 2, merged = 3, removed = 1, kept = 4, missing = 2, failed = 1), false) shouldBe
             "Refreshed 340 emails: 12 bookings updated, 2 added, 3 duplicates merged, 1 removed. 4 bookings you edited were left as you left them. " +
-            "2 emails are no longer in a connected mailbox. 1 email couldn't be read; refresh again to try it."
+            "2 emails are no longer in a connected mailbox. 1 email couldn't be read, even on a second try:"
         describeRefresh(RefreshShown(1, true, at, updated = 1, merged = 1, kept = 1, missing = 1), false) shouldBe
             "Refreshed 1 email: 1 booking updated, 1 duplicate merged. 1 booking you edited was left as you left it. 1 email is no longer in a connected mailbox."
         describeRefresh(RefreshShown(2400, true, at), false) shouldBe "Refreshed 2,400 emails: your bookings were already up to date."
     }
 
     @Test
-    fun `offers to start or continue a refresh and says why one paused`() {
-        val stopped = RefreshShown(3, false, "2027-02-01T12:00:00Z", lastFailed = 1)
+    fun `offers to start or continue a refresh`() {
+        val stopped = RefreshShown(3, false, "2027-02-01T12:00:00Z")
         refreshButton(null) shouldBe "Refresh from email"
         refreshButton(stopped.copy(done = true)) shouldBe "Refresh from email"
         refreshButton(stopped) shouldBe "Continue refreshing"
-        refreshPausedReason(stopped, false) shouldBe "Refresh paused: an email couldn't be read right now. Continue when ready."
-        refreshPausedReason(stopped, true) shouldBe null
-        refreshPausedReason(stopped.copy(lastFailed = 0), false) shouldBe null
+    }
+
+    @Test
+    fun `says it is trying the failed emails again`() {
+        val at = "2027-02-01T12:00:00Z"
+        describeRefresh(RefreshShown(340, false, at, total = 340, retrying = listOf("a", "b")), true) shouldBe
+            "Refreshing your bookings… trying 2 emails that couldn't be read again. You can close this page."
+        describeRefresh(RefreshShown(340, false, at, total = 340, retrying = listOf("a")), false) shouldBe
+            "Stopped part way: 1 email that couldn't be read still to try again. Continue to try it."
+    }
+
+    @Test
+    fun `lists the emails a finished refresh could not read and counts the rest`() {
+        val ids = List(12) { "m$it" }
+        val done = RefreshShown(340, true, "2027-02-01T12:00:00Z", failed = 14, failedIds = ids)
+        failedEmailIds(done) shouldBe ids.take(FAILED_EMAILS_SHOWN)
+        moreFailedEmails(done) shouldBe "and 4 more"
+        failedEmailIds(done.copy(done = false)) shouldBe emptyList()
+        moreFailedEmails(done.copy(failed = 1, failedIds = listOf("m0"))) shouldBe null
+        failedEmailLine(ParsedRecord("m0", "imported", "2027-02-01T12:00:00Z", subject = "Your booking", from = "Example Air <hi@example.com>")) shouldBe
+            "Your booking · Example Air <hi@example.com>"
+        failedEmailLine(ParsedRecord("m0", "imported", "2027-02-01T12:00:00Z", subject = "  ")) shouldBe "(no subject)"
+        failedEmailLine(null) shouldBe "(no subject)"
+        failedEmailsReport(done.copy(failed = 2, failedIds = listOf("m1", "m2"))) shouldBe "\"Refresh from email\" couldn't read 2 emails: m1, m2"
     }
 
     @Test

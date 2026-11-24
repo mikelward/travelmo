@@ -1,13 +1,14 @@
 "use client";
 
-import { RideCompany, cleanSenderList, imapMailboxes, imapRedirect, imapServerFor, maxImapMailboxes, parseCountries, describeBackfill, describeDeletedTrips, gmailMailboxes, isReading, maxGmailMailboxes, pausedReason, describeRegroup, describeRefresh, groupSkips, refreshBlurb, refreshButton, refreshPausedReason, type RefreshProgress, maxRideCompanies, paths, type BackfillProgress, type GmailConnection, type ImapConnection, type SenderPatterns, type SkipGroup } from "@travelmo/core";
+import { RideCompany, cleanSenderList, imapMailboxes, imapRedirect, imapServerFor, maxImapMailboxes, parseCountries, describeBackfill, describeDeletedTrips, gmailMailboxes, isReading, maxGmailMailboxes, pausedReason, describeRegroup, describeRefresh, groupSkips, refreshBlurb, refreshButton, failedEmailIds, failedEmailLine, failedEmailsReport, gmailSourceLink, moreFailedEmails, ParsedMessage, type RefreshProgress, maxRideCompanies, paths, type BackfillProgress, type GmailConnection, type ImapConnection, type SenderPatterns, type SkipGroup } from "@travelmo/core";
 import type { User } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { AccountDeleted, DeleteAccountSection, useAccountDeletion } from "@/components/DeleteAccount";
 import { EmailAddressesSection } from "@/components/EmailAddresses";
+import { ReportDialog } from "@/components/ReportBug";
 import { TripRemindersSection } from "@/components/Checklist";
 import { SignInGate } from "@/components/SignInGate";
 import { api } from "@/lib/api";
@@ -19,6 +20,7 @@ import { useSaveForOffline } from "@/lib/offline";
 import { subscribePush, unsubscribePush, usePushState } from "@/lib/push";
 import { describeCalendarResult, previewIcs } from "@/lib/ics";
 import { describeTripItResult, previewTripIt } from "@/lib/tripit";
+import { isFromMailbox } from "@/lib/sourceLinks";
 import { useFeeds, useProfile, useSenderPatterns, useTrips } from "@/lib/trips";
 import { countryName } from "@/lib/countries";
 import { addRideCompany, removeRideCompany } from "@/lib/rides";
@@ -574,7 +576,7 @@ function RegroupSection({ user }: { user: User }) {
       )}
       {result && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{result}</p>}
       {error && <p className="mt-3 text-sm text-danger">{error}</p>}
-      <RefreshFromEmail user={user} progress={profile?.refresh} />
+      <RefreshFromEmail user={user} progress={profile?.refresh} mailboxes={profile ? gmailMailboxes(profile) : []} />
     </section>
   );
 }
@@ -582,7 +584,7 @@ function RegroupSection({ user }: { user: User }) {
 // "Refresh from email": the emails the user's bookings came from read again
 // and those bookings updated, on the server, batch after batch; the line
 // below follows its progress on the profile, as Import past bookings does.
-function RefreshFromEmail({ user, progress }: { user: User; progress: RefreshProgress | undefined }) {
+function RefreshFromEmail({ user, progress, mailboxes }: { user: User; progress: RefreshProgress | undefined; mailboxes: GmailConnection[] }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   // The clock a stalled refresh is judged by; a minute is fine enough.
@@ -592,7 +594,6 @@ function RefreshFromEmail({ user, progress }: { user: User; progress: RefreshPro
     return () => clearInterval(timer);
   }, []);
   const reading = isReading(progress, now);
-  const paused = refreshPausedReason(progress, reading);
   const run = async (action: () => Promise<unknown>, what: string) => {
     setBusy(true);
     setError(undefined);
@@ -629,8 +630,79 @@ function RefreshFromEmail({ user, progress }: { user: User; progress: RefreshPro
           {describeRefresh(progress, reading)}
         </p>
       )}
-      {paused && <p className="mt-3 text-sm text-danger">{paused}</p>}
+      {progress && !reading && failedEmailIds(progress).length > 0 && (
+        <FailedEmails
+          uid={user.uid}
+          progress={progress}
+          mailboxes={mailboxes}
+          busy={busy}
+          onTryAgain={() => void run(() => api.refreshFromEmail(user, false, true), "Trying the failed emails again")}
+        />
+      )}
       {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+    </div>
+  );
+}
+
+// The emails a refresh couldn't read, by subject and sender: each Gmail one
+// opens in Gmail, to check it or add its booking by hand; Try again reads
+// them alone again, and Report a problem sends us their ids.
+function FailedEmails(props: { uid: string; progress: RefreshProgress; mailboxes: GmailConnection[]; busy: boolean; onTryAgain: () => void }) {
+  const ids = failedEmailIds(props.progress);
+  const key = ids.join(",");
+  const [records, setRecords] = useState<Map<string, ParsedMessage>>(new Map());
+  const [reporting, setReporting] = useState(false);
+  useEffect(() => {
+    let live = true;
+    Promise.all(
+      key.split(",").map(async (id) => {
+        try {
+          const snap = await getDoc(doc(firestore(), paths.parsedMessage(props.uid, id)));
+          const parsed = ParsedMessage.safeParse(snap.data());
+          return parsed.success ? ([id, parsed.data] as const) : undefined;
+        } catch (e) {
+          // Listed by id alone, as if the record were gone.
+          console.warn("Reading a failed email's import record failed", e);
+          return undefined;
+        }
+      }),
+    ).then((found) => live && setRecords(new Map(found.filter((f) => f !== undefined))));
+    return () => {
+      live = false;
+    };
+  }, [props.uid, key]);
+  const more = moreFailedEmails(props.progress);
+  return (
+    <div className="mt-2" data-testid="refresh-failed">
+      <ul className="list-disc pl-5 text-sm">
+        {ids.map((id) => {
+          const record = records.get(id);
+          const gmail = record && isFromMailbox(record) && (record.source ?? "gmail") === "gmail";
+          return (
+            <li key={id} className="py-0.5">
+              {failedEmailLine(record)}
+              {gmail && (
+                <>
+                  {" · "}
+                  <a href={gmailSourceLink(id, props.mailboxes)} target="_blank" rel="noreferrer" className="underline hover:no-underline">
+                    Open in Gmail
+                  </a>
+                </>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {more && <p className="mt-1 text-sm text-muted">{more}</p>}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button type="button" disabled={props.busy} className={buttonClass} onClick={props.onTryAgain}>
+          Try again
+        </button>
+        <button type="button" className={buttonClass} onClick={() => setReporting(true)}>
+          Report a problem
+        </button>
+      </div>
+      {reporting && <ReportDialog initialText={failedEmailsReport(props.progress)} onClose={() => setReporting(false)} />}
     </div>
   );
 }

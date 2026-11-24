@@ -24,7 +24,7 @@ import {
   type SourceRef,
   type Trip,
 } from "@travelmo/core";
-import type { BackfillBatch } from "./backfill";
+import { maxFailedIds, type BackfillBatch } from "./backfill";
 import { isModelRateLimit } from "./extract";
 import { GmailRateLimited, type EmailMessage } from "./gmail";
 import {
@@ -38,6 +38,7 @@ import {
   sourceTripPrefix,
   tripTitle,
   withWaitingCancellations,
+  type ImportCounts,
   type ImportDeps,
 } from "./importer";
 import { senderDomain } from "./prefilter";
@@ -529,6 +530,8 @@ export const refreshPauseMs = 60 * 1000;
 
 export type RefreshBatchIo = {
   records: (after: string | undefined, limit: number) => Promise<ParsedMessage[]>;
+  // One import record by id, for reading failed emails again.
+  record: (messageId: string) => Promise<ParsedMessage | undefined>;
   // The user's bookings, read once a batch (refreshEmail's `snapshot`).
   snapshot: () => Promise<Segment[]>;
   refresh: (record: ParsedMessage, snapshot: readonly Segment[]) => Promise<RecordOutcome>;
@@ -552,27 +555,21 @@ async function countEmails(io: RefreshBatchIo): Promise<number> {
 
 // One batch of a refresh: the import records after `from.cursor`, an
 // email at a time while time allows (backfillChain.ts runs batch after
-// batch). An email the model failed on is passed and counted, and the
-// refresh stops there, for Settings to offer Continue. One that Gmail or
-// the model rate limited is read again by the next batch, a minute on:
-// after Gmail's limit the refresh goes on by itself, after the model's it
-// stops for Continue, since the model's quota is the whole project's.
+// batch). An email the model failed on is passed, counted and remembered
+// (`failedIds`), and the refresh reads on; once every record is read, the
+// ones that failed are read again by id (`retrying`), and those that fail
+// again are what Settings lists. One that Gmail or the model rate limited
+// is read again by the next batch, which waits out the limit: a minute for
+// Gmail's, longer for the model's (`counts.failed` slows the chain).
 export async function runRefreshBatch(from: RefreshProgress, io: RefreshBatchIo): Promise<BackfillBatch> {
+  if (from.retrying?.length) return retryRefresh(from, io);
   const total = from.total ?? (await countEmails(io));
-  const tally = {
-    scanned: from.scanned,
-    failed: from.failed ?? 0,
-    updated: from.updated ?? 0,
-    added: from.added ?? 0,
-    removed: from.removed ?? 0,
-    merged: from.merged ?? 0,
-    kept: from.kept ?? 0,
-    missing: from.missing ?? 0,
-  };
+  const tally = tallyOf(from);
   let cursor = from.cursor;
   const page = await io.records(cursor, refreshPage);
   const snapshot = page.some(isMailboxRecord) ? await io.snapshot() : [];
   const counts = emptyCounts();
+  const failedIds: string[] = [];
   let retryAfter: string | undefined;
   let rateLimited = false;
   let read = 0;
@@ -585,42 +582,120 @@ export async function runRefreshBatch(from: RefreshProgress, io: RefreshBatchIo)
     const outcome = await io.refresh(record, snapshot);
     if (outcome.kind === "superseded") break;
     if (outcome.kind === "rateLimited") {
-      io.log("refresh_rate_limited", { by: outcome.by });
-      retryAfter = new Date(Date.parse(io.now()) + refreshPauseMs).toISOString();
-      rateLimited = true;
-      if (outcome.by === "model") counts.failed = 1;
+      ({ retryAfter, rateLimited } = limited(outcome.by, counts, io));
       break;
     }
     read += 1;
     tally.scanned += 1;
     cursor = record.messageId;
-    if (outcome.kind === "missing") tally.missing += 1;
     if (outcome.kind === "failed") {
       tally.failed += 1;
-      counts.failed = 1;
-      break;
+      counts.failed += 1;
+      failedIds.push(record.messageId);
     }
-    if (outcome.kind === "refreshed") {
-      for (const key of ["updated", "added", "removed", "merged", "kept"] as const) tally[key] += outcome.counts[key];
-      if (outcome.counts.updated + outcome.counts.added + outcome.counts.removed + outcome.counts.merged > 0) counts.imported += 1;
-    }
+    tallyOutcome(outcome, tally, counts);
   }
   const allRead = page.length === 0 || cursor === page[page.length - 1]!.messageId;
+  const remembered = [...(from.failedIds ?? []), ...failedIds].slice(0, maxFailedIds);
+  const readThrough = allRead && page.length < refreshPage;
   const progress: RefreshProgress = {
     ...(cursor !== undefined ? { cursor } : {}),
-    scanned: tally.scanned,
-    imported: tally.updated + tally.added + tally.removed + tally.merged,
-    failed: tally.failed,
-    done: allRead && page.length < refreshPage,
+    ...totalsOf(tally),
+    // Read through with failures: not done yet, the failed emails are read
+    // again by id first.
+    done: readThrough && remembered.length === 0,
+    ...(readThrough && remembered.length ? { retrying: remembered } : remembered.length ? { failedIds: remembered } : {}),
     updatedAt: io.now(),
     total,
-    updated: tally.updated,
-    added: tally.added,
-    removed: tally.removed,
-    merged: tally.merged,
-    kept: tally.kept,
-    missing: tally.missing,
     ...(retryAfter ? { retryAfter } : {}),
   };
   return { counts, candidates: page.length, progress, ...(rateLimited ? { rateLimited: true } : {}) };
+}
+
+// The emails that failed during the refresh (or, after "Try again", the
+// ones that failed last time), read again by id as time allows. Each that
+// fails again is kept in `failedIds` for Settings to list; one no longer
+// imported (deleted meanwhile) is dropped. Done once each has been tried.
+async function retryRefresh(from: RefreshProgress, io: RefreshBatchIo): Promise<BackfillBatch> {
+  const ids = from.retrying ?? [];
+  const tally = tallyOf(from);
+  const stillFailed = [...(from.failedIds ?? [])];
+  const snapshot = ids.length ? await io.snapshot() : [];
+  const counts = emptyCounts();
+  let retryAfter: string | undefined;
+  let rateLimited = false;
+  let read = 0;
+  for (const id of ids) {
+    if (read > 0 && io.timeLeftMs() <= 0) break;
+    const record = await io.record(id);
+    if (!record || record.outcome !== "imported" || !isMailboxRecord(record)) {
+      read += 1;
+      tally.failed = Math.max(0, tally.failed - 1);
+      continue;
+    }
+    const outcome = await io.refresh(record, snapshot);
+    if (outcome.kind === "superseded") break;
+    if (outcome.kind === "rateLimited") {
+      ({ retryAfter, rateLimited } = limited(outcome.by, counts, io));
+      break;
+    }
+    read += 1;
+    if (outcome.kind === "failed") {
+      counts.failed += 1;
+      stillFailed.push(id);
+      continue;
+    }
+    tally.failed = Math.max(0, tally.failed - 1);
+    tallyOutcome(outcome, tally, counts);
+  }
+  const left = ids.slice(read);
+  // The place and totals alone: the chain's own fields (run, lease) are
+  // the chain's to set.
+  const progress: RefreshProgress = {
+    ...(from.cursor !== undefined ? { cursor: from.cursor } : {}),
+    ...(from.total !== undefined ? { total: from.total } : {}),
+    ...totalsOf(tally),
+    done: left.length === 0,
+    ...(left.length ? { retrying: left } : {}),
+    ...(stillFailed.length ? { failedIds: stillFailed } : {}),
+    updatedAt: io.now(),
+    ...(retryAfter ? { retryAfter } : {}),
+  };
+  return { counts, candidates: read, progress, ...(rateLimited ? { rateLimited: true } : {}) };
+}
+
+type Tally = { scanned: number; failed: number; updated: number; added: number; removed: number; merged: number; kept: number; missing: number };
+
+function tallyOf(from: RefreshProgress): Tally {
+  return {
+    scanned: from.scanned,
+    failed: from.failed ?? 0,
+    updated: from.updated ?? 0,
+    added: from.added ?? 0,
+    removed: from.removed ?? 0,
+    merged: from.merged ?? 0,
+    kept: from.kept ?? 0,
+    missing: from.missing ?? 0,
+  };
+}
+
+function totalsOf(tally: Tally) {
+  return { ...tally, imported: tally.updated + tally.added + tally.removed + tally.merged };
+}
+
+function tallyOutcome(outcome: RecordOutcome, tally: Tally, counts: ImportCounts): void {
+  if (outcome.kind === "missing") tally.missing += 1;
+  if (outcome.kind === "refreshed") {
+    for (const key of ["updated", "added", "removed", "merged", "kept"] as const) tally[key] += outcome.counts[key];
+    if (outcome.counts.updated + outcome.counts.added + outcome.counts.removed + outcome.counts.merged > 0) counts.imported += 1;
+  }
+}
+
+// A rate limit ends the batch, the email kept to read again a minute on;
+// the model's also counts as a failure, which holds the next batch off
+// longer (slowedPauseMs), since its quota is the whole project's.
+function limited(by: "gmail" | "model", counts: ImportCounts, io: RefreshBatchIo): { retryAfter: string; rateLimited: true } {
+  io.log("refresh_rate_limited", { by });
+  if (by === "model") counts.failed = 1;
+  return { retryAfter: new Date(Date.parse(io.now()) + refreshPauseMs).toISOString(), rateLimited: true };
 }

@@ -56,6 +56,13 @@ interface AppChrome {
     /** Settings' sections for this device, before deleting the account (Android: text size and the debug log). */
     @Composable
     fun DeviceSettings()
+
+    /**
+     * A "Report a problem" button that opens Report a bug with [text] (what the screen knows went wrong) already
+     * written, for the user to add to; nothing where reports can't be sent.
+     */
+    @Composable
+    fun ReportProblemButton(text: String) {}
 }
 
 /** No menu, no crash reports, and links, copies and saves that go nowhere: what a preview shows. */

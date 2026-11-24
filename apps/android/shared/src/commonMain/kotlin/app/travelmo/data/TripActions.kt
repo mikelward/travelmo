@@ -14,10 +14,11 @@ interface TripActions {
     suspend fun deleteAll(): String
 
     /**
-     * Starts Refresh from email on the parser, from the first email again with [restart]; it runs there, and its
-     * progress shows on the user document. Throws [TripActionFailed].
+     * Starts Refresh from email on the parser, from the first email again with [restart], or only the emails the
+     * last one couldn't read with [retryFailed]; it runs there, and its progress shows on the user document. Throws
+     * [TripActionFailed].
      */
-    suspend fun refresh(restart: Boolean)
+    suspend fun refresh(restart: Boolean, retryFailed: Boolean = false)
 
     /** Stops the refresh under way; the batch reading saves its place. Throws [TripActionFailed]. */
     suspend fun stopRefresh()
@@ -31,7 +32,7 @@ object NoTripActions : TripActions {
     override val available = false
     override suspend fun regroup(): String = throw TripActionFailed(ON_WEB)
     override suspend fun deleteAll(): String = throw TripActionFailed(ON_WEB)
-    override suspend fun refresh(restart: Boolean): Unit = throw TripActionFailed(ON_WEB)
+    override suspend fun refresh(restart: Boolean, retryFailed: Boolean): Unit = throw TripActionFailed(ON_WEB)
     override suspend fun stopRefresh(): Unit = throw TripActionFailed(ON_WEB)
 }
 

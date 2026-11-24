@@ -264,6 +264,9 @@ class DocumentsTest {
         refreshOf(mapOf("refresh" to progress)) shouldBe RefreshShown(
             scanned = 120, done = false, updatedAt = "2027-02-01T12:00:00Z", total = 340, updated = 4, merged = 1, kept = 2, running = true, leaseUntil = "2027-02-01T12:16:00Z",
         )
+        refreshOf(mapOf("refresh" to progress + mapOf("done" to true, "failed" to 2L, "failedIds" to listOf("m1", "m2"), "retrying" to listOf("m3"))))?.let {
+            Triple(it.failed, it.failedIds, it.retrying)
+        } shouldBe Triple(2, listOf("m1", "m2"), listOf("m3"))
         refreshOf(mapOf("refresh" to mapOf("scanned" to 3L))).shouldBeNull()
         refreshOf(mapOf("refresh" to "junk")).shouldBeNull()
         refreshOf(mapOf("email" to "owner@example.com")).shouldBeNull()

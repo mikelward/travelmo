@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { owner, signIn } from "./helpers";
 import { gmailIdPrefix, refreshBlurb } from "@travelmo/core";
-import { clearData, seedFeed, seedGmail, seedGoogleCalendar, seedImap, seedLegacyGmail, updateUser } from "./seed";
+import { clearData, seedFeed, seedGmail, seedGoogleCalendar, seedImap, seedLegacyGmail, seedParsedMessage, updateUser } from "./seed";
 
 test.beforeEach(async () => {
   await clearData();
@@ -418,13 +418,32 @@ test("Refresh from email runs on the server, shows how far it got, and stops and
   expect(sent[2]).toEqual({ restart: true });
 });
 
-test("a refresh the model's rate limit stopped says so and offers to continue", async ({ page }) => {
+test("a refresh lists the emails it couldn't read, with what can be done about them", async ({ page }) => {
   const uid = await signIn(page, owner);
+  await seedGmail(uid, { emailAddress: "traveler@example.com", connectedAt: "2026-11-01T00:00:00Z" });
+  const processedAt = "2026-11-01T00:00:00Z";
+  await seedParsedMessage({ messageId: "g1", uid, outcome: "imported", subject: "Your flight", from: "Example Air", segmentIds: [], processedAt });
+  await seedParsedMessage({ messageId: "fastmail-f1", source: "fastmail", uid, outcome: "imported", subject: "Your hotel", segmentIds: [], processedAt });
   await updateUser(uid, {
-    refresh: { scanned: 40, imported: 2, done: false, running: false, lastFailed: 1, total: 90, updatedAt: new Date().toISOString() },
+    refresh: { scanned: 90, imported: 2, done: true, failed: 3, failedIds: ["g1", "fastmail-f1"], total: 90, updatedAt: new Date().toISOString() },
+  });
+  const sent: unknown[] = [];
+  await page.route("http://localhost:8080/trips/refresh", async (route) => {
+    sent.push(route.request().postDataJSON());
+    await route.fulfill({ json: { progress: { scanned: 90, imported: 2, done: false, running: true, updatedAt: new Date().toISOString() } } });
   });
   await page.goto("/settings");
   const refresh = page.getByTestId("refresh");
-  await expect(refresh.getByText("Refresh paused: an email couldn't be read right now. Continue when ready.")).toBeVisible();
-  await expect(refresh.getByRole("button", { name: "Continue refreshing" })).toBeVisible();
+  await expect(refresh.getByTestId("refresh-progress")).toHaveText("Refreshed 90 emails: your bookings were already up to date. 3 emails couldn't be read, even on a second try:");
+  const failed = refresh.getByTestId("refresh-failed");
+  await expect(failed.getByRole("listitem")).toHaveText(["Your flight · Example Air · Open in Gmail", "Your hotel"]);
+  await expect(failed.getByRole("link", { name: "Open in Gmail" })).toHaveAttribute("href", "https://mail.google.com/mail/u/?authuser=traveler%40example.com#all/g1");
+  await expect(failed.getByText("and 1 more")).toBeVisible();
+
+  await failed.getByRole("button", { name: "Report a problem" }).click();
+  await expect(page.getByRole("dialog", { name: "Report a bug" }).getByRole("textbox")).toHaveValue('"Refresh from email" couldn\'t read 3 emails: g1, fastmail-f1');
+  await page.getByRole("dialog", { name: "Report a bug" }).getByRole("button", { name: "Cancel" }).click();
+
+  await failed.getByRole("button", { name: "Try again" }).click();
+  await expect.poll(() => sent).toEqual([{ retryFailed: true }]);
 });
