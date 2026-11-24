@@ -5,17 +5,20 @@ import {
   isCalendarDate,
   residenceReport,
   residenceRuleSets,
+  spanText,
+  type Stretch,
   type HomePeriod,
   type PlaceLookup,
   type RuleResult,
   type TripWithSegments,
 } from "@travelmo/core";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { countryName } from "@/lib/countries";
 
 const days = (n: number) => `${n.toLocaleString("en-US")} ${n === 1 ? "day" : "days"}`;
 const range = (r: { start: string; end: string }) => formatDateRange(r.start, r.end);
+const day = (date: string) => formatDateRange(date, date);
 
 // How the result stands, in words that fit what the rule measures.
 export function statusText(result: RuleResult): string {
@@ -50,6 +53,34 @@ export function countText(result: RuleResult): string {
 
 const tone = { ok: "", near: "text-amber-700 dark:text-amber-400", over: "text-danger" } as const;
 
+// Runs of days, latest first, each with its countries and trips.
+function Stretches({ label, items, titles, children }: { label: string; items: readonly Stretch[]; titles: Map<string, string>; children?: ReactNode }) {
+  return (
+    <details className="mt-1 text-sm">
+      <summary className="cursor-pointer text-muted">
+        {label} ({items.length.toLocaleString("en-US")})
+      </summary>
+      <ul className="mt-1 space-y-1" aria-label={label}>
+        {children}
+        {[...items].reverse().map((s) => (
+          <li key={s.start}>
+            {range(s)} · {days(s.days)}
+            {s.countries.length > 0 && ` · ${s.countries.map(countryName).join(", ")}`}
+            {s.tripIds.map((id) => (
+              <span key={id}>
+                {" · "}
+                <Link href={`/trips/${id}`} className="hover:underline">
+                  {titles.get(id) ?? "Trip"}
+                </Link>
+              </span>
+            ))}
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 function Result({ result, titles }: { result: RuleResult; titles: Map<string, string> }) {
   const { rule } = result;
   const stays = rule.kind === "maxPresent" || rule.kind === "substantialPresence";
@@ -61,10 +92,17 @@ function Result({ result, titles }: { result: RuleResult; titles: Map<string, st
       <p className={`text-sm ${tone[result.status]}`} data-status={result.status}>
         {statusText(result)}
       </p>
-      {rule.kind !== "longestAbsence" && (
+      {result.period && (
         <p className="text-sm text-muted">
-          {rolling ? `Worst stretch: ${range(result.window)}` : range(result.window)}
-          {result.current && rolling && result.current.window.start !== result.window.start && ` · ${days(result.current.used)} in the one ending ${formatDateRange(result.current.window.end, result.current.window.end)}`}
+          {result.period.moved && rule.areaName
+            ? `Since you moved to ${rule.areaName} on ${day(result.period.start)}`
+            : `Counted over ${range(result.period)}`}
+        </p>
+      )}
+      {rule.kind !== "longestAbsence" && !(result.period && result.window.start === result.period.start && result.window.end === result.period.end) && (
+        <p className="text-sm text-muted">
+          {rolling ? `Worst ${spanText(rule.window)}: ${range(result.window)}` : range(result.window)}
+          {result.current && rolling && result.current.window.start !== result.window.start && ` · Last ${spanText(rule.window)}: ${days(result.current.used)}`}
         </p>
       )}
       {result.unknownDays > 0 && (
@@ -72,29 +110,14 @@ function Result({ result, titles }: { result: RuleResult; titles: Map<string, st
           Includes {days(result.unknownDays)} we can&rsquo;t place in a country, counted {stays ? "as inside" : "as away"} to be safe.
         </p>
       )}
-      {result.stretches.length > 0 && (
-        <details className="mt-1 text-sm">
-          <summary className="cursor-pointer text-muted">
-            {stays ? "Stays" : "Time away"} ({result.stretches.length.toLocaleString("en-US")})
-          </summary>
-          <ul className="mt-1 space-y-1" aria-label={stays ? "Stays" : "Time away"}>
-            {[...result.stretches].reverse().map((s) => (
-              <li key={s.start}>
-                {range(s)} · {days(s.days)}
-                {s.countries.length > 0 && ` · ${s.countries.map(countryName).join(", ")}`}
-                {s.tripIds.map((id) => (
-                  <span key={id}>
-                    {" · "}
-                    <Link href={`/trips/${id}`} className="hover:underline">
-                      {titles.get(id) ?? "Trip"}
-                    </Link>
-                  </span>
-                ))}
-              </li>
-            ))}
-          </ul>
-        </details>
+      {result.unplaced.length > 0 && (
+        <Stretches label="Days we can't place" items={result.unplaced} titles={titles}>
+          <li className="text-muted">
+            Give these trips&rsquo; bookings a place, or set home on your <Link href="/profile" className="underline">Profile</Link>.
+          </li>
+        </Stretches>
       )}
+      {result.stretches.length > 0 && <Stretches label={stays ? "Stays" : "Time away"} items={result.stretches} titles={titles} />}
       <a href={rule.source} className="text-sm text-muted underline" target="_blank" rel="noreferrer">
         Official guidance
       </a>

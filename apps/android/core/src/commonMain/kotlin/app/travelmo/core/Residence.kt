@@ -110,7 +110,9 @@ sealed interface RuleKind {
      * long before the date. With [qualifying], [rolling] is a qualifying
      * period whose days alone count: every window lies wholly inside it (UK
      * settlement's five years), where otherwise a window may start before it
-     * (Schengen's 180 days ending in the last year).
+     * (Schengen's 180 days ending in the last year). A qualifying period
+     * starts no earlier than the move to the area: the first day of the run
+     * of homes there that reaches the date.
      */
     data class Limit(val type: LimitType, val limit: Int, val window: DateShift, val rolling: DateShift? = null, val qualifying: Boolean = false) : RuleKind
 
@@ -121,7 +123,8 @@ sealed interface RuleKind {
     data object SubstantialPresence : RuleKind
 }
 
-data class ResidenceRule(val id: String, val label: String, val area: List<String>, val counting: Counting, val kind: RuleKind, val source: String)
+/** [areaName] is the area as a sentence names it ("the UK"), for a qualifying period that starts when the person moved there. */
+data class ResidenceRule(val id: String, val label: String, val area: List<String>, val counting: Counting, val kind: RuleKind, val source: String, val areaName: String? = null)
 
 /** A set of rules to check together; [application] says the date is when the person applies. */
 data class ResidenceRuleSet(val id: String, val label: String, val application: Boolean, val rules: List<ResidenceRule>)
@@ -152,7 +155,7 @@ val residenceRuleSets: List<ResidenceRuleSet> = listOf(
         listOf(
             // No more than 180 days outside the UK in any 12 months of the
             // qualifying period, in whole days.
-            ResidenceRule("uk-settlement-absences", "Days outside the UK in any 12 months", listOf("GB"), Counting.WHOLE_DAYS, RuleKind.Limit(LimitType.MAX_ABSENT, 180, DateShift(months = 12), rolling = DateShift(years = 5), qualifying = true), ILR),
+            ResidenceRule("uk-settlement-absences", "Days outside the UK in any 12 months", listOf("GB"), Counting.WHOLE_DAYS, RuleKind.Limit(LimitType.MAX_ABSENT, 180, DateShift(months = 12), rolling = DateShift(years = 5), qualifying = true), ILR, areaName = "the UK"),
         ),
     ),
     ResidenceRuleSet(
@@ -254,6 +257,9 @@ enum class ResidenceStatus { OK, NEAR, OVER }
 
 data class CurrentWindow(val used: Int, val window: DateRange)
 
+/** A qualifying period's days, and whether it starts with the move to the area rather than the full period before the date. */
+data class QualifyingPeriod(val start: String, val end: String, val moved: Boolean)
+
 data class RuleResult(
     val rule: ResidenceRule,
     /** Days counted in the worst window; the weighted total for the substantial presence test; the longest absence in days. */
@@ -268,8 +274,12 @@ data class RuleResult(
     val current: CurrentWindow? = null,
     /** Days in the window nothing places, counted against the traveler. */
     val unknownDays: Int,
-    /** The absences, or the stays in the area, in the window. */
+    /** The absences, or the stays in the area, in the window (the whole qualifying period, for one). */
     val stretches: List<Stretch>,
+    /** The runs of days nothing places, in the window, with the trips that have them. */
+    val unplaced: List<Stretch> = emptyList(),
+    /** For a qualifying period, the days it covers. */
+    val period: QualifyingPeriod? = null,
 )
 
 private fun isUnknown(d: DayPresence?) = d == null || (d.countries.isEmpty() && !d.inTransit)
@@ -328,11 +338,12 @@ private fun statusOf(type: LimitType, used: Int, limit: Int): ResidenceStatus = 
 }
 
 /** How a rule stands on [date] from a timeline covering everything it looks at (eight years before the date is enough). */
-fun evaluateRule(rule: ResidenceRule, timeline: Map<String, DayPresence>, date: String): RuleResult {
+fun evaluateRule(rule: ResidenceRule, timeline: Map<String, DayPresence>, date: String, homes: List<HomePeriod> = emptyList()): RuleResult {
     val counted = counter(rule)
     val area = rule.area.toSet()
     fun countIn(range: DateRange) = dates(range.start, range.end).count { counted(timeline[it]) }
     fun unknownIn(range: DateRange) = dates(range.start, range.end).count { isUnknown(timeline[it]) }
+    fun unplacedIn(range: DateRange) = stretches(timeline, range, ::isUnknown, area, absence = false)
 
     when (val kind = rule.kind) {
         is RuleKind.SubstantialPresence -> {
@@ -350,7 +361,7 @@ fun evaluateRule(rule: ResidenceRule, timeline: Map<String, DayPresence>, date: 
                 sixths * 10 >= 9 * 6 * 183 -> ResidenceStatus.NEAR
                 else -> ResidenceStatus.OK
             }
-            return RuleResult(rule, used, 183, 183 - used, status, window, CurrentWindow(thisYear, DateRange("$year-01-01", date)), unknownIn(window), stretches(timeline, window, counted, area, absence = false))
+            return RuleResult(rule, used, 183, 183 - used, status, window, CurrentWindow(thisYear, DateRange("$year-01-01", date)), unknownIn(window), stretches(timeline, window, counted, area, absence = false), unplacedIn(window))
         }
         is RuleKind.LongestAbsence -> {
             val window = DateRange(spanStart(date, kind.window), date)
@@ -380,55 +391,91 @@ fun evaluateRule(rule: ResidenceRule, timeline: Map<String, DayPresence>, date: 
             return RuleResult(
                 rule, used.toDouble(), limit, (limit - used).toDouble(), worst?.third ?: ResidenceStatus.OK, worst?.first ?: window,
                 unknownDays = unknownIn(window),
+                unplaced = unplacedIn(window),
                 stretches = absences.map { if (it.start < window.start) it.copy(start = window.start, days = it.days - daysBetween(it.start, window.start).toInt()) else it },
             )
         }
         is RuleKind.Limit -> {
             fun windowEnding(end: String) = DateRange(spanStart(end, kind.window), end)
-            val latest = windowEnding(date)
+            var latest = windowEnding(date)
             var window = latest
             var used = countIn(latest)
-            val current = if (kind.rolling != null) CurrentWindow(used, latest) else null
+            var period: QualifyingPeriod? = null
             if (kind.rolling != null) {
                 // Every window ending within the rolling period, kept as a
                 // running count: the latest of the worst is the one shown.
                 // For a qualifying period, only windows wholly inside it, as
                 // days before it do not count.
-                val period = spanStart(date, kind.rolling)
-                var firstEnd = period
+                val full = spanStart(date, kind.rolling)
+                val moved = if (kind.qualifying) movedTo(homes, area, date, full) else null
+                val start = moved ?: full
+                if (kind.qualifying) period = QualifyingPeriod(start, date, moved != null)
+                var firstEnd = start
                 // Moved on a day at a time, as month arithmetic is not
                 // reversible (a period starting on 29 February); a window's
                 // length bounds it.
                 if (kind.qualifying) {
-                    while (firstEnd < date && windowEnding(firstEnd).start < period) firstEnd = shiftDate(firstEnd, DateShift(days = 1))
+                    while (firstEnd < date && windowEnding(firstEnd).start < start) firstEnd = shiftDate(firstEnd, DateShift(days = 1))
                 }
-                val ends = dates(if (firstEnd < date) firstEnd else date, date).toList()
-                val first = windowEnding(ends.first())
-                var count = countIn(first)
-                var start = first.start
-                used = count
-                window = first
-                for (end in ends.drop(1)) {
-                    val next = windowEnding(end)
-                    count -= dates(start, shiftDate(next.start, DateShift(days = -1))).count { counted(timeline[it]) }
-                    if (counted(timeline[next.end])) count += 1
-                    start = next.start
-                    val better = if (kind.type == LimitType.MIN_PRESENT) count <= used else count >= used
-                    if (better) {
-                        used = count
-                        window = next
+                if (kind.qualifying && windowEnding(firstEnd).start < start) {
+                    // A period shorter than one window: its days alone.
+                    latest = DateRange(start, date)
+                    window = latest
+                    used = countIn(latest)
+                } else {
+                    val ends = dates(if (firstEnd < date) firstEnd else date, date).toList()
+                    val first = windowEnding(ends.first())
+                    var count = countIn(first)
+                    var from = first.start
+                    used = count
+                    window = first
+                    for (end in ends.drop(1)) {
+                        val next = windowEnding(end)
+                        count -= dates(from, shiftDate(next.start, DateShift(days = -1))).count { counted(timeline[it]) }
+                        if (counted(timeline[next.end])) count += 1
+                        from = next.start
+                        val better = if (kind.type == LimitType.MIN_PRESENT) count <= used else count >= used
+                        if (better) {
+                            used = count
+                            window = next
+                        }
                     }
                 }
             }
+            val current = if (kind.rolling != null) CurrentWindow(countIn(latest), latest) else null
+            val listed = period?.let { DateRange(it.start, it.end) } ?: window
             // For a minimum of days in, the absences that took from it.
             val runs = if (kind.type == LimitType.MIN_PRESENT) {
-                stretches(timeline, window, { !counted(it) }, area, absence = true)
+                stretches(timeline, listed, { !counted(it) }, area, absence = true)
             } else {
-                stretches(timeline, window, counted, area, absence = kind.type == LimitType.MAX_ABSENT)
+                stretches(timeline, listed, counted, area, absence = kind.type == LimitType.MAX_ABSENT)
             }
-            return RuleResult(rule, used.toDouble(), kind.limit, (kind.limit - used).toDouble(), statusOf(kind.type, used, kind.limit), window, current, unknownIn(window), runs)
+            return RuleResult(rule, used.toDouble(), kind.limit, (kind.limit - used).toDouble(), statusOf(kind.type, used, kind.limit), window, current, unknownIn(window), runs, unplacedIn(window), period)
         }
     }
+}
+
+/**
+ * The day the person moved to the area: the first day of the unbroken run of
+ * homes in it that reaches the date, if that run starts after [since]. None
+ * when home on the date is elsewhere, or not known.
+ */
+private fun movedTo(homes: List<HomePeriod>, area: Set<String>, date: String, since: String): String? {
+    fun inArea(day: String) = homeAt(homes, day)?.country?.let(::countryCode)?.let { it in area } ?: false
+    if (!inArea(date)) return null
+    var day = date
+    while (day > since) {
+        val before = shiftDate(day, DateShift(days = -1))
+        if (!inArea(before)) return day
+        day = before
+    }
+    return null
+}
+
+/** A span as the report names it: "12 months", "180 days", "5 years". */
+fun spanText(span: DateShift): String {
+    fun part(n: Int, unit: String) = if (n != 0) listOf("$n $unit${if (n == 1) "" else "s"}") else emptyList()
+    return (part(span.years, "year") + part(span.months, "month") + part(span.days, "day")).joinToString(" ")
 }
 
 /** Every rule of a set on [date], and whether home, for the days with no trip, has a country. */
@@ -441,5 +488,5 @@ data class ResidenceReport(val results: List<RuleResult>, val homeCountryKnown: 
  */
 fun residenceReport(all: List<TripWithSegments>, homes: List<HomePeriod>, set: ResidenceRuleSet, date: String, lookup: (String) -> AirportPlace? = ::airportPlace): ResidenceReport {
     val timeline = presenceTimeline(all, homes, shiftDate(date, DateShift(years = -8)), date, lookup)
-    return ResidenceReport(set.rules.map { evaluateRule(it, timeline, date) }, homes.any { it.country != null })
+    return ResidenceReport(set.rules.map { evaluateRule(it, timeline, date, homes) }, homes.any { it.country != null })
 }

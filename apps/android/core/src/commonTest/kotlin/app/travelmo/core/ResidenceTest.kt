@@ -29,7 +29,7 @@ class ResidenceTest {
     private fun rule(setId: String, ruleId: String) = residenceRuleSets.first { it.id == setId }.rules.first { it.id == ruleId }
 
     private fun evaluate(r: ResidenceRule, trips: List<TripWithSegments>, homes: List<HomePeriod>, date: String) =
-        evaluateRule(r, presenceTimeline(trips, homes, shiftDate(date, DateShift(years = -8)), date), date)
+        evaluateRule(r, presenceTimeline(trips, homes, shiftDate(date, DateShift(years = -8)), date), date, homes)
 
     private fun countries(timeline: Map<String, DayPresence>, from: String, to: String) =
         timeline.filterKeys { it in from..to }.mapValues { it.value.countries.sorted() }
@@ -161,6 +161,7 @@ class ResidenceTest {
         val result = evaluate(rule("uk-settlement", "uk-settlement-absences"), listOf(lost), london, "2026-11-23")
         result.used shouldBe 5.0
         result.unknownDays shouldBe 5
+        result.unplaced shouldBe listOf(Stretch("2026-04-01", "2026-04-05", 5, emptyList(), listOf("lost")))
         evaluate(rule("schengen", "schengen-90-180"), listOf(lost.copy(trip = lost.trip.copy(start = "2026-11-01", end = "2026-11-03"), segments = lost.segments.map { it.copy(start = "2026-11-01T09:00:00+00:00", end = "2026-11-01T12:00:00+00:00") })), london, "2026-11-23").used shouldBe 3.0
     }
 
@@ -256,12 +257,46 @@ class ResidenceTest {
 
     @Test
     fun `UK settlement keeps the first window inside five years that start on 29 February`() {
-        // 180 days in France from the period's first day, then the UK.
-        val homes = listOf(HomePeriod("Paris", "FR", from = "2024-02-29", until = "2024-08-26"), HomePeriod("London", "GB", from = "2024-08-27"))
-        val result = evaluate(rule("uk-settlement", "uk-settlement-absences"), emptyList(), homes, "2029-02-28")
+        // 180 days away from the period's first day, then the UK.
+        val away = roundTrip("away", "2024-02-28", "2024-08-27", "LHR", "JFK")
+        val result = evaluate(rule("uk-settlement", "uk-settlement-absences"), listOf(away), london, "2029-02-28")
+        result.period shouldBe QualifyingPeriod("2024-02-29", "2029-02-28", moved = false)
         result.used shouldBe 180.0
         result.unknownDays shouldBe 0
         (result.window.start >= "2024-02-29") shouldBe true
+    }
+
+    @Test
+    fun `UK settlement starts the five years when the person moved to the UK and lists every absence since`() {
+        val homes = listOf(HomePeriod("Sydney", "AU", until = "2023-03-02"), HomePeriod("London", "UK", from = "2023-03-03"))
+        // Away before the move counts for nothing; both trips since are listed.
+        val trips = listOf(roundTrip("before", "2022-06-01", "2022-12-01", "SYD", "JFK"), roundTrip("one", "2024-01-01", "2024-01-10"), roundTrip("two", "2026-01-01", "2026-01-10"))
+        val result = evaluate(rule("uk-settlement", "uk-settlement-absences"), trips, homes, "2026-11-23")
+        result.period shouldBe QualifyingPeriod("2023-03-03", "2026-11-23", moved = true)
+        result.used shouldBe 8.0
+        result.unknownDays shouldBe 0
+        result.stretches.map { it.tripIds } shouldBe listOf(listOf("one"), listOf("two"))
+    }
+
+    @Test
+    fun `UK settlement counts a period shorter than 12 months on its own days`() {
+        val homes = listOf(HomePeriod("Sydney", "AU", until = "2026-05-31"), HomePeriod("London", "GB", from = "2026-06-01"))
+        val result = evaluate(rule("uk-settlement", "uk-settlement-absences"), listOf(roundTrip("paris", "2026-07-01", "2026-07-10")), homes, "2026-11-23")
+        result.window shouldBe DateRange("2026-06-01", "2026-11-23")
+        result.current shouldBe CurrentWindow(8, DateRange("2026-06-01", "2026-11-23"))
+        result.used shouldBe 8.0
+    }
+
+    @Test
+    fun `UK settlement keeps the full five years when home has always been the UK`() {
+        evaluate(rule("uk-settlement", "uk-settlement-absences"), emptyList(), london, "2026-11-23").period shouldBe QualifyingPeriod("2021-11-24", "2026-11-23", moved = false)
+    }
+
+    @Test
+    fun `names a window the way the report shows it`() {
+        spanText(DateShift(months = 12)) shouldBe "12 months"
+        spanText(DateShift(days = 180)) shouldBe "180 days"
+        spanText(DateShift(years = 1)) shouldBe "1 year"
     }
 
     @Test

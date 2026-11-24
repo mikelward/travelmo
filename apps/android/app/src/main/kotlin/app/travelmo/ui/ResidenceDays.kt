@@ -30,18 +30,19 @@ import app.travelmo.core.LimitType
 import app.travelmo.core.ResidenceStatus
 import app.travelmo.core.RuleKind
 import app.travelmo.core.RuleResult
+import app.travelmo.core.Stretch
 import app.travelmo.core.TripWithSegments
 import app.travelmo.core.countryName
 import app.travelmo.core.formatDateRange
 import app.travelmo.core.residenceReport
 import app.travelmo.core.residenceRuleSets
+import app.travelmo.core.spanText
 import app.travelmo.shared.Res
 import app.travelmo.shared.residence_applying_today
 import app.travelmo.shared.residence_as_of_today
 import app.travelmo.shared.residence_close
 import app.travelmo.shared.residence_close_to_test
 import app.travelmo.shared.residence_days
-import app.travelmo.shared.residence_days_ending
 import app.travelmo.shared.residence_enough
 import app.travelmo.shared.residence_estimate
 import app.travelmo.shared.residence_just_enough
@@ -70,7 +71,12 @@ import app.travelmo.shared.residence_unknown_away
 import app.travelmo.shared.residence_unknown_in
 import app.travelmo.shared.residence_weighted
 import app.travelmo.shared.residence_within
-import app.travelmo.shared.residence_worst_stretch
+import app.travelmo.shared.residence_worst
+import app.travelmo.shared.residence_last
+import app.travelmo.shared.residence_since_moved
+import app.travelmo.shared.residence_counted_over
+import app.travelmo.shared.residence_cant_place
+import app.travelmo.shared.residence_cant_place_hint
 import com.mikelward.androidzoom.compose.pinchFontSizeHost
 import java.util.Locale
 import org.jetbrains.compose.resources.pluralStringResource
@@ -135,12 +141,27 @@ private fun Result(result: RuleResult, titles: Map<String, String>, onOpenTrip: 
         Text(rule.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
         Text(countText(result), style = MaterialTheme.typography.bodyLarge)
         Text(statusText(result), style = MaterialTheme.typography.bodyMedium, color = statusColor(result.status))
-        if (kind !is RuleKind.LongestAbsence) {
+        result.period?.let { period ->
+            val moved = rule.areaName?.takeIf { period.moved }
+            Text(
+                if (moved != null) {
+                    stringResource(Res.string.residence_since_moved, moved, formatDateRange(period.start, period.start))
+                } else {
+                    stringResource(Res.string.residence_counted_over, formatDateRange(period.start, period.end))
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = muted,
+            )
+        }
+        // A period shorter than one window is its own window, already said.
+        val wholePeriod = result.period?.let { it.start == result.window.start && it.end == result.window.end } ?: false
+        if (kind !is RuleKind.LongestAbsence && !wholePeriod) {
             val window = formatDateRange(result.window.start, result.window.end)
-            val line = if (rolling) stringResource(Res.string.residence_worst_stretch, window) else window
+            val span = (kind as? RuleKind.Limit)?.window?.let(::spanText).orEmpty()
+            val line = if (rolling) stringResource(Res.string.residence_worst, span, window) else window
             // The window ending today, when it is not the worst one.
-            val current = result.current?.takeIf { rolling && it.window != result.window }?.let {
-                " · " + pluralStringResource(Res.plurals.residence_days_ending, it.used, it.used, formatDateRange(it.window.end, it.window.end))
+            val current = result.current?.takeIf { rolling && it.window.start != result.window.start }?.let {
+                " · " + pluralStringResource(Res.plurals.residence_last, it.used, it.used, span)
             }.orEmpty()
             Text(line + current, style = MaterialTheme.typography.bodyMedium, color = muted)
         }
@@ -151,20 +172,12 @@ private fun Result(result: RuleResult, titles: Map<String, String>, onOpenTrip: 
                 color = muted,
             )
         }
+        if (result.unplaced.isNotEmpty()) {
+            Stretches(stringResource(Res.string.residence_cant_place), result.unplaced, titles, onOpenTrip)
+            Text(stringResource(Res.string.residence_cant_place_hint), style = MaterialTheme.typography.bodyMedium, color = muted)
+        }
         if (result.stretches.isNotEmpty()) {
-            Text(stringResource(if (stays) Res.string.residence_stays else Res.string.residence_time_away), style = MaterialTheme.typography.labelLarge, color = muted, modifier = Modifier.padding(top = 4.dp))
-            for (s in result.stretches.reversed().take(SHOWN_STRETCHES)) {
-                val where = s.countries.joinToString(", ") { countryName(it) }
-                val text = listOf(formatDateRange(s.start, s.end), pluralStringResource(Res.plurals.residence_days, s.days, s.days), where).filter { it.isNotEmpty() }.joinToString(" · ")
-                val trip = s.tripIds.firstOrNull()
-                Text(
-                    if (trip != null) "$text · ${titles[trip] ?: trip}" else text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = if (trip != null) Modifier.clickable { onOpenTrip(trip) }.padding(vertical = 2.dp) else Modifier.padding(vertical = 2.dp),
-                )
-            }
-            val more = result.stretches.size - SHOWN_STRETCHES
-            if (more > 0) Text(pluralStringResource(Res.plurals.residence_more, more, more), style = MaterialTheme.typography.bodyMedium, color = muted)
+            Stretches(stringResource(if (stays) Res.string.residence_stays else Res.string.residence_time_away), result.stretches, titles, onOpenTrip)
         }
         Text(
             stringResource(Res.string.residence_official_guidance),
@@ -173,6 +186,25 @@ private fun Result(result: RuleResult, titles: Map<String, String>, onOpenTrip: 
             modifier = Modifier.clickable { uri.openUri(rule.source) }.padding(vertical = 4.dp),
         )
     }
+}
+
+/** Runs of days under a heading, latest first, each opening its trip. */
+@Composable
+private fun Stretches(label: String, items: List<Stretch>, titles: Map<String, String>, onOpenTrip: (String) -> Unit) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Text(label, style = MaterialTheme.typography.labelLarge, color = muted, modifier = Modifier.padding(top = 4.dp))
+    for (s in items.reversed().take(SHOWN_STRETCHES)) {
+        val where = s.countries.joinToString(", ") { countryName(it) }
+        val text = listOf(formatDateRange(s.start, s.end), pluralStringResource(Res.plurals.residence_days, s.days, s.days), where).filter { it.isNotEmpty() }.joinToString(" · ")
+        val trip = s.tripIds.firstOrNull()
+        Text(
+            if (trip != null) "$text · ${titles[trip] ?: trip}" else text,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = if (trip != null) Modifier.clickable { onOpenTrip(trip) }.padding(vertical = 2.dp) else Modifier.padding(vertical = 2.dp),
+        )
+    }
+    val more = items.size - SHOWN_STRETCHES
+    if (more > 0) Text(pluralStringResource(Res.plurals.residence_more, more, more), style = MaterialTheme.typography.bodyMedium, color = muted)
 }
 
 @Composable

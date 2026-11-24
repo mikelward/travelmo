@@ -121,6 +121,9 @@ export type ResidenceRule = {
   counting: Counting;
   // The page the rule comes from.
   source: string;
+  // The area as a sentence names it ("the UK"), for a qualifying period
+  // that starts when the person moved there.
+  areaName?: string;
 } & (
   | {
       // At most `limit` days away (maxAbsent), at least `limit` days in
@@ -130,6 +133,8 @@ export type ResidenceRule = {
       // qualifying period whose days alone count: every window lies wholly
       // inside it (UK settlement's five years), where otherwise a window
       // may start before it (Schengen's 180 days ending in the last year).
+      // A qualifying period starts no earlier than the move to the area:
+      // the first day of the run of homes there that reaches the date.
       kind: "maxAbsent" | "minPresent" | "maxPresent";
       limit: number;
       window: DateShift;
@@ -185,6 +190,7 @@ export const residenceRuleSets: readonly ResidenceRuleSet[] = [
         window: { months: 12 },
         rolling: { years: 5 },
         qualifying: true,
+        areaName: "the UK",
         source: "https://www.gov.uk/government/publications/indefinite-leave-to-remain-calculating-continuous-period-in-uk",
       },
     ],
@@ -465,11 +471,18 @@ export type RuleResult = {
   // For a rolling rule, the window ending on the date; for the substantial
   // presence test, this year's days.
   current?: { used: number; window: DateRange };
+  // For a qualifying period, the days it covers, and whether it starts
+  // with the move to the area rather than the full period before the date.
+  period?: DateRange & { moved: boolean };
   // Days in the window nothing places: counted against the traveler (away
   // for a limit on absences or a minimum, in for a limit on days in).
   unknownDays: number;
-  // The absences, or the stays in the area, in the window.
+  // The absences, or the stays in the area, in the window (the whole
+  // qualifying period, for one).
   stretches: Stretch[];
+  // The runs of days nothing places, in the window, with the trips that
+  // have them: the bookings to give a place.
+  unplaced: Stretch[];
 };
 
 const isUnknown = (d: DayPresence | undefined) => !d || (!d.countries.size && !d.inTransit);
@@ -517,7 +530,7 @@ function statusOf(kind: "maxAbsent" | "minPresent" | "maxPresent", used: number,
 // How a rule stands on `date` from a timeline covering everything it looks
 // at (`presenceTimeline` from eight years before the date is enough for
 // every rule here).
-export function evaluateRule(rule: ResidenceRule, timeline: Map<string, DayPresence>, date: string): RuleResult {
+export function evaluateRule(rule: ResidenceRule, timeline: Map<string, DayPresence>, date: string, homes: readonly HomePeriod[] = []): RuleResult {
   const counted = counter(rule);
   const area = new Set(rule.area);
   const countIn = (range: DateRange) => {
@@ -530,6 +543,7 @@ export function evaluateRule(rule: ResidenceRule, timeline: Map<string, DayPrese
     for (const day of dates(range.start, range.end)) if (isUnknown(timeline.get(day))) n += 1;
     return n;
   };
+  const unplacedIn = (range: DateRange) => stretches(timeline, range, isUnknown, area, false);
 
   if (rule.kind === "substantialPresence") {
     const year = Number(date.slice(0, 4));
@@ -552,6 +566,7 @@ export function evaluateRule(rule: ResidenceRule, timeline: Map<string, DayPrese
       current: { used: thisYear, window: { start: `${year}-01-01`, end: date } },
       unknownDays: unknownIn(window),
       stretches: stretches(timeline, window, counted, area, false),
+      unplaced: unplacedIn(window),
     };
   }
 
@@ -580,42 +595,55 @@ export function evaluateRule(rule: ResidenceRule, timeline: Map<string, DayPrese
       status: worst?.status ?? "ok",
       window: worst?.range ?? window,
       unknownDays: unknownIn(window),
+      unplaced: unplacedIn(window),
       stretches: absences.map((s) => (s.start < window.start ? { ...s, start: window.start, days: s.days - daysBetween(s.start, window.start) } : s)),
     };
   }
 
   const windowEnding = (end: string): DateRange => ({ start: spanStart(end, rule.window), end });
-  const latest = windowEnding(date);
+  let latest = windowEnding(date);
   let window = latest;
   let used = countIn(latest);
-  const current = rule.rolling ? { used, window: latest } : undefined;
+  let period: RuleResult["period"];
   if (rule.rolling) {
     // Every window ending within the rolling period, kept as a running
     // count: the latest of the worst is the one shown. For a qualifying
     // period, only windows wholly inside it, as days before it do not count.
-    const period = spanStart(date, rule.rolling);
-    let firstEnd = period;
+    const full = spanStart(date, rule.rolling);
+    const moved = rule.qualifying ? movedTo(homes, area, date, full) : undefined;
+    const start = moved ?? full;
+    if (rule.qualifying) period = { start, end: date, moved: Boolean(moved) };
+    let firstEnd = start;
     // Moved on a day at a time, as month arithmetic is not reversible (a
     // period starting on 29 February); a window's length bounds it.
-    if (rule.qualifying) while (firstEnd < date && windowEnding(firstEnd).start < period) firstEnd = shiftDate(firstEnd, { days: 1 });
-    const ends = [...dates(firstEnd < date ? firstEnd : date, date)];
-    const first = windowEnding(ends[0]!);
-    let count = countIn(first);
-    let start = first.start;
-    const better = (n: number) => (rule.kind === "minPresent" ? n <= used : n >= used);
-    used = count;
-    window = first;
-    for (let i = 1; i < ends.length; i++) {
-      const next = windowEnding(ends[i]!);
-      for (const day of dates(start, shiftDate(next.start, { days: -1 }))) if (counted(timeline.get(day))) count -= 1;
-      if (counted(timeline.get(next.end))) count += 1;
-      start = next.start;
-      if (better(count)) {
-        used = count;
-        window = next;
+    if (rule.qualifying) while (firstEnd < date && windowEnding(firstEnd).start < start) firstEnd = shiftDate(firstEnd, { days: 1 });
+    if (rule.qualifying && windowEnding(firstEnd).start < start) {
+      // A period shorter than one window: its days alone.
+      latest = { start, end: date };
+      window = latest;
+      used = countIn(latest);
+    } else {
+      const ends = [...dates(firstEnd < date ? firstEnd : date, date)];
+      const first = windowEnding(ends[0]!);
+      let count = countIn(first);
+      let from = first.start;
+      const better = (n: number) => (rule.kind === "minPresent" ? n <= used : n >= used);
+      used = count;
+      window = first;
+      for (let i = 1; i < ends.length; i++) {
+        const next = windowEnding(ends[i]!);
+        for (const day of dates(from, shiftDate(next.start, { days: -1 }))) if (counted(timeline.get(day))) count -= 1;
+        if (counted(timeline.get(next.end))) count += 1;
+        from = next.start;
+        if (better(count)) {
+          used = count;
+          window = next;
+        }
       }
     }
   }
+  const current = rule.rolling ? { used: countIn(latest), window: latest } : undefined;
+  const listed = period ?? window;
   return {
     rule,
     used,
@@ -624,12 +652,37 @@ export function evaluateRule(rule: ResidenceRule, timeline: Map<string, DayPrese
     status: statusOf(rule.kind, used, rule.limit),
     window,
     ...(current ? { current } : {}),
+    ...(period ? { period } : {}),
     unknownDays: unknownIn(window),
     // For a minimum of days in, the absences that took from it.
-    stretches: rule.kind === "minPresent" ? stretches(timeline, window, (d) => !counted(d), area, true) : stretches(timeline, window, counted, area, rule.kind === "maxAbsent"),
+    stretches: rule.kind === "minPresent" ? stretches(timeline, listed, (d) => !counted(d), area, true) : stretches(timeline, listed, counted, area, rule.kind === "maxAbsent"),
+    unplaced: unplacedIn(window),
   };
 }
 
+// The day the person moved to the area: the first day of the unbroken run
+// of homes in it that reaches the date, if that run starts after `since`.
+// None when home on the date is elsewhere, or not known.
+function movedTo(homes: readonly HomePeriod[], area: ReadonlySet<string>, date: string, since: string): string | undefined {
+  const inArea = (day: string) => {
+    const country = homeAt(homes, day)?.country;
+    return Boolean(country && area.has(countryCode(country) ?? ""));
+  };
+  if (!inArea(date)) return undefined;
+  let day = date;
+  while (day > since) {
+    const before = shiftDate(day, { days: -1 });
+    if (!inArea(before)) return day;
+    day = before;
+  }
+  return undefined;
+}
+
+// A span as the report names it: "12 months", "180 days", "5 years".
+export function spanText(span: DateShift): string {
+  const part = (n: number | undefined, unit: string) => (n ? [`${n} ${unit}${n === 1 ? "" : "s"}`] : []);
+  return [...part(span.years, "year"), ...part(span.months, "month"), ...part(span.days, "day")].join(" ");
+}
 
 export type ResidenceReport = {
   results: RuleResult[];
@@ -650,7 +703,7 @@ export function residenceReport(
 ): ResidenceReport {
   const timeline = presenceTimeline(all, homes, shiftDate(date, { years: -8 }), date, lookup);
   return {
-    results: set.rules.map((rule) => evaluateRule(rule, timeline, date)),
+    results: set.rules.map((rule) => evaluateRule(rule, timeline, date, homes)),
     homeCountryKnown: homes.some((h) => Boolean(h.country)),
   };
 }

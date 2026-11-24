@@ -9,6 +9,7 @@ import {
   residenceRuleSets,
   schengenCountries,
   shiftDate,
+  spanText,
   type ResidenceRule,
 } from "./residence";
 import type { ExtractedSegment } from "./schema";
@@ -59,10 +60,18 @@ const rule = (setId: string, ruleId: string): ResidenceRule => {
 };
 
 const evaluate = (r: ResidenceRule, trips: TripWithSegments[], homes: HomePeriod[], date: string) =>
-  evaluateRule(r, presenceTimeline(trips, homes, shiftDate(date, { years: -8 }), date, airportPlace), date);
+  evaluateRule(r, presenceTimeline(trips, homes, shiftDate(date, { years: -8 }), date, airportPlace), date, homes);
 
 const countries = (timeline: ReturnType<typeof presenceTimeline>, from: string, to: string) =>
   Object.fromEntries([...timeline].filter(([d]) => d >= from && d <= to).map(([d, p]) => [d, [...p.countries].sort()]));
+
+describe("spanText", () => {
+  it("names a window the way the report shows it", () => {
+    expect(spanText({ months: 12 })).toBe("12 months");
+    expect(spanText({ days: 180 })).toBe("180 days");
+    expect(spanText({ years: 1 })).toBe("1 year");
+  });
+});
 
 describe("shiftDate", () => {
   it("moves by years, months and days, keeping to the end of a shorter month", () => {
@@ -183,15 +192,42 @@ describe("UK settlement", () => {
   });
 
   it("keeps the first window inside five years that start on 29 February", () => {
-    // 180 days in France from the period's first day, then the UK.
-    const homes = [
-      { city: "Paris", country: "FR", from: "2024-02-29", until: "2024-08-26" },
-      { city: "London", country: "GB", from: "2024-08-27" },
-    ];
-    const result = evaluate(ilr, [], homes, "2029-02-28");
+    // 180 days away from the period's first day, then the UK.
+    const away = roundTrip("away", "2024-02-28", "2024-08-27", "LHR", "JFK");
+    const result = evaluate(ilr, [away], london, "2029-02-28");
+    expect(result.period).toEqual({ start: "2024-02-29", end: "2029-02-28", moved: false });
     expect(result.used).toBe(180);
     expect(result.unknownDays).toBe(0);
     expect(result.window.start >= "2024-02-29").toBe(true);
+  });
+
+  it("starts the five years when the person moved to the UK, and lists every absence since", () => {
+    const homes = [
+      { city: "Sydney", country: "AU", until: "2023-03-02" },
+      { city: "London", country: "UK", from: "2023-03-03" },
+    ];
+    // Away before the move counts for nothing; both trips since are listed.
+    const trips = [roundTrip("before", "2022-06-01", "2022-12-01", "SYD", "JFK"), roundTrip("one", "2024-01-01", "2024-01-10"), roundTrip("two", "2026-01-01", "2026-01-10")];
+    const result = evaluate(ilr, trips, homes, "2026-11-23");
+    expect(result.period).toEqual({ start: "2023-03-03", end: "2026-11-23", moved: true });
+    expect(result.used).toBe(8);
+    expect(result.unknownDays).toBe(0);
+    expect(result.stretches.map((s) => s.tripIds)).toEqual([["one"], ["two"]]);
+  });
+
+  it("counts a period shorter than 12 months on its own days", () => {
+    const homes = [
+      { city: "Sydney", country: "AU", until: "2026-05-31" },
+      { city: "London", country: "GB", from: "2026-06-01" },
+    ];
+    const result = evaluate(ilr, [roundTrip("paris", "2026-07-01", "2026-07-10")], homes, "2026-11-23");
+    expect(result.window).toEqual({ start: "2026-06-01", end: "2026-11-23" });
+    expect(result.current).toEqual({ used: 8, window: { start: "2026-06-01", end: "2026-11-23" } });
+    expect(result.used).toBe(8);
+  });
+
+  it("keeps the full five years when home has always been the UK", () => {
+    expect(evaluate(ilr, [], london, "2026-11-23").period).toEqual({ start: "2021-11-24", end: "2026-11-23", moved: false });
   });
 
   it("is near the limit within a tenth of it", () => {
@@ -207,6 +243,7 @@ describe("UK settlement", () => {
     const result = evaluate(ilr, [lost], london, "2026-11-23");
     expect(result.used).toBe(5);
     expect(result.unknownDays).toBe(5);
+    expect(result.unplaced).toEqual([{ start: "2026-04-01", end: "2026-04-05", days: 5, countries: [], tripIds: ["lost"] }]);
   });
 });
 
