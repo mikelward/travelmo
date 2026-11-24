@@ -2874,9 +2874,10 @@ tapping through to its version, authors and a link to its license text,
 from an export committed with the app so the list needs no network) and
 deletes the account
 through the parser ("Deleting an account"), the app's one call to it,
-while the import settings stay on the web; a navigation bar switches between Trips,
-the Calendar (the month view of `/calendar`, with the same weeks, bars and
-lanes from `:core`), Reports and Profile. Reports counts what `/reports`
+while the import settings stay on the web; a navigation bar, its selected
+tab's icon white on the logo's orange, switches between Trips, the Calendar
+(the month view of `/calendar`, with the same weeks, bars and lanes from
+`:core`), Reports and Profile. Reports counts what `/reports`
 does, from `:core`'s port of the same logic with the same tests: the trips
 begun, days away and days in each country, on the web's world map
 (`worldMap.json` read as a resource, spots placed by the same Equal Earth

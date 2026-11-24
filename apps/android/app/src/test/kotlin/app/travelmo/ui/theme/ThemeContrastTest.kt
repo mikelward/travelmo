@@ -56,6 +56,7 @@ class ThemeContrastTest {
             Check("primary on surface, as a fill", primary, surface, UI),
             Check("error on surface, as a fill", error, surface, UI),
             Check("visited on land", extra.visited, extra.land, UI),
+            Check("onNavIndicator on navIndicator", extra.onNavIndicator, extra.navIndicator, UI),
         )
     }
 

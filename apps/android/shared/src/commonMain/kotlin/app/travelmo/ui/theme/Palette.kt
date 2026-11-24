@@ -107,7 +107,9 @@ val DarkScheme = darkColorScheme(
  * The colors Material has no role for. [shared] is the SHARED label's text;
  * a shared trip's calendar bar is [sharedContainer] with [onSharedContainer]
  * text. On the Reports map, [land] fills a country and [visited] one the
- * user has been to.
+ * user has been to. The navigation bar's selected tab is a
+ * [navIndicator] pill around an [onNavIndicator] icon: the logo's orange,
+ * so the selected tab doesn't look like a warning.
  */
 @Immutable
 data class TravelmoColors(
@@ -116,17 +118,22 @@ data class TravelmoColors(
     val onSharedContainer: Color,
     val land: Color,
     val visited: Color,
+    val navIndicator: Color,
+    val onNavIndicator: Color,
 )
 
 // The web's violet-600 and sky-600 by day. By night the label is violet-400,
 // since violet-600 text is 3.5:1 on the dark background, and the map sky-400
-// on zinc-700 land, which stands out from the page.
+// on zinc-700 land, which stands out from the page. The selected tab's pill
+// is the logo's orange (#F26B1D) with a white icon in both themes.
 val LightExtraColors = TravelmoColors(
     shared = Color(0xFF7C3AED),
     sharedContainer = Color(0xFF7C3AED),
     onSharedContainer = Color(0xFFFFFFFF),
     land = Color(0xFFE4E4E7),
     visited = Color(0xFF0284C7),
+    navIndicator = Color(0xFFF26B1D),
+    onNavIndicator = Color(0xFFFFFFFF),
 )
 
 val DarkExtraColors = TravelmoColors(
@@ -135,6 +142,8 @@ val DarkExtraColors = TravelmoColors(
     onSharedContainer = Color(0xFFFFFFFF),
     land = Color(0xFF3F3F46),
     visited = Color(0xFF38BDF8),
+    navIndicator = Color(0xFFF26B1D),
+    onNavIndicator = Color(0xFFFFFFFF),
 )
 
 val LocalTravelmoColors = staticCompositionLocalOf { LightExtraColors }
