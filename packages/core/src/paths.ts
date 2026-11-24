@@ -76,6 +76,8 @@ export const paths = {
   device: (uid: string, id: string) => `users/${uid}/devices/${id}`,
   // Bookings a spent budget left with a place to ask about another day.
   geocodeRetries: () => "geocodeRetries",
+  // How far the backfill of bookings imported before geocoding has got.
+  geocodeBackfill: () => "geocodeBackfill/state",
   geocodeRetry: (tripId: string, segmentId: string) => `geocodeRetries/${tripId}__${segmentId}`,
   trips: () => "trips",
   trip: (tripId: string) => `trips/${tripId}`,

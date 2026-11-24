@@ -1,6 +1,6 @@
-import { enrichSegments, fillAirports, needsGeocoding, paths, type Segment } from "@travelmo/core";
+import { enrichSegments, fillAirports, needsGeocoding, paths, type Segment, type Trip } from "@travelmo/core";
 import { airportPlace } from "@travelmo/core/airportPlaces";
-import type { Firestore } from "firebase-admin/firestore";
+import { FieldPath, type Firestore } from "firebase-admin/firestore";
 import { refuseIfDeleted } from "./deleted";
 import type { ImportDeps } from "./importer";
 import { generationOf } from "./store";
@@ -147,4 +147,104 @@ export async function sweepGeocodeRetries(deps: ImportDeps, limit = defaultSweep
     await drop();
   }
   return result;
+}
+
+// Bookings imported before geocoding began never asked about their places:
+// a walk through every trip, a page a day in id order, queues the ones
+// still missing a country or a spot, and the sweep asks about them within
+// the day's budget like any put-off import. It stops for good at the end.
+// A hand-entered booking is left as its author wrote it, as at import.
+
+export type BackfillTrip = { trip: Pick<Trip, "id" | "ownerUid">; segments: Segment[] };
+
+export type BackfillScan = {
+  // Where the walk got to: the last trip id read, "done", or nothing yet.
+  cursor(): Promise<string | undefined>;
+  save(cursor: string): Promise<void>;
+  // Up to `limit` trips after `after`, in id order, with their bookings.
+  page(after: string | undefined, limit: number): Promise<BackfillTrip[]>;
+};
+
+export const backfillDone = "done";
+export const defaultBackfillTrips = 100;
+
+export type BackfillResult = { trips: number; queued: number; done: boolean };
+
+// Queues no more than the sweep can take in a day: a trip's bookings go in
+// only while the queue has room for them (a trip larger than all the room
+// goes in alone), and the walk resumes after the last trip queued, so no
+// booking waits long enough in the queue to expire unasked.
+export async function queueGeocodeBackfill(scan: BackfillScan, retries: RetryStore, now: string, limit = defaultBackfillTrips, room = defaultSweepLimit): Promise<BackfillResult> {
+  const result: BackfillResult = { trips: 0, queued: 0, done: false };
+  const cursor = await scan.cursor();
+  if (cursor === backfillDone) return { ...result, done: true };
+  const free = room - (await retries.list(room)).length;
+  if (free <= 0) return result;
+  const trips = await scan.page(cursor, limit);
+  let last: string | undefined;
+  let stopped = false;
+  for (const { trip, segments } of trips) {
+    const due = segments.filter((s) => s.source !== "manual" && needsGeocoding(fillAirports(s, airportPlace)));
+    if (result.queued > 0 && result.queued + due.length > free) {
+      stopped = true;
+      break;
+    }
+    for (const segment of due) await retries.put({ uid: trip.ownerUid, tripId: trip.id, segmentId: segment.id, at: now });
+    result.queued += due.length;
+    result.trips += 1;
+    last = trip.id;
+    if (result.queued >= free) {
+      stopped = result.trips < trips.length;
+      break;
+    }
+  }
+  result.done = !stopped && trips.length < limit;
+  if (result.done) await scan.save(backfillDone);
+  else if (last) await scan.save(last);
+  return result;
+}
+
+export function firestoreBackfillScan(db: Firestore): BackfillScan {
+  const state = db.doc(paths.geocodeBackfill());
+  return {
+    async cursor() {
+      const snap = await state.get();
+      const value = snap.get("cursor");
+      return typeof value === "string" ? value : undefined;
+    },
+    async save(cursor) {
+      await state.set({ cursor });
+    },
+    async page(after, limit) {
+      let query = db.collection(paths.trips()).orderBy(FieldPath.documentId()).limit(limit);
+      if (after) query = query.startAfter(after);
+      const snap = await query.get();
+      return Promise.all(
+        snap.docs.map(async (d) => {
+          const segments = await db.collection(paths.segments(d.id)).get();
+          return {
+            trip: { id: d.id, ownerUid: d.get("ownerUid") as string },
+            segments: segments.docs.map((s) => ({ ...(s.data() as Segment), id: s.id })),
+          };
+        }),
+      );
+    },
+  };
+}
+
+export function memoryBackfillScan(trips: BackfillTrip[]): BackfillScan & { state: { cursor?: string } } {
+  const state: { cursor?: string } = {};
+  const sorted = [...trips].sort((a, b) => a.trip.id.localeCompare(b.trip.id));
+  return {
+    state,
+    async cursor() {
+      return state.cursor;
+    },
+    async save(cursor) {
+      state.cursor = cursor;
+    },
+    async page(after, limit) {
+      return sorted.filter((t) => after === undefined || t.trip.id > after).slice(0, limit);
+    },
+  };
 }

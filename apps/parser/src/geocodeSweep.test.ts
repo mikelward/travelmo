@@ -1,6 +1,6 @@
 import type { GeocodeResult, Segment, Trip } from "@travelmo/core";
 import { describe, expect, it } from "vitest";
-import { maxRetryAgeDays, memoryRetryStore, sweepGeocodeRetries } from "./geocodeSweep";
+import { maxRetryAgeDays, memoryBackfillScan, memoryRetryStore, queueGeocodeBackfill, sweepGeocodeRetries } from "./geocodeSweep";
 import type { ImportDeps } from "./importer";
 import { memoryStore, type Memory } from "./testStore";
 
@@ -157,5 +157,57 @@ describe("sweepGeocodeRetries", () => {
     const { geocodeRetries: _retries, ...withoutQueue } = deps;
     expect(await sweepGeocodeRetries(withoutGeocoder)).toEqual({ seen: 0, placed: 0, dropped: 0, deferred: 0, failed: 0 });
     expect(await sweepGeocodeRetries(withoutQueue)).toEqual({ seen: 0, placed: 0, dropped: 0, deferred: 0, failed: 0 });
+  });
+});
+
+describe("queueGeocodeBackfill", () => {
+  const placed = stay("placed", { destination: { name: "Hotel Placed", country: "FR", lat: 48.5, lon: 2.25 } });
+  const entries = (retries: ReturnType<typeof memoryRetryStore>) => [...retries.entries.values()].map((e) => `${e.tripId}/${e.segmentId}`).sort();
+
+  it("queues older bookings still missing a place, a page of trips at a time, then stops", async () => {
+    const scan = memoryBackfillScan([
+      { trip: { id: "t1", ownerUid: "u1" }, segments: [stay("s1"), placed, stay("typed", { source: "manual" })] },
+      { trip: { id: "t2", ownerUid: "u2" }, segments: [stay("s2", { tripId: "t2" })] },
+      { trip: { id: "t3", ownerUid: "u1" }, segments: [stay("s3", { tripId: "t3" })] },
+    ]);
+    const retries = memoryRetryStore();
+    expect(await queueGeocodeBackfill(scan, retries, now, 2)).toEqual({ trips: 2, queued: 2, done: false });
+    expect(entries(retries)).toEqual(["t1/s1", "t2/s2"]);
+    expect(retries.entries.get("t2/s2")).toEqual({ uid: "u2", tripId: "t2", segmentId: "s2", at: now });
+    expect(await queueGeocodeBackfill(scan, retries, now, 2)).toEqual({ trips: 1, queued: 1, done: true });
+    expect(entries(retries)).toEqual(["t1/s1", "t2/s2", "t3/s3"]);
+    expect(await queueGeocodeBackfill(scan, retries, now, 2)).toEqual({ trips: 0, queued: 0, done: true });
+  });
+
+  it("queues no more than the sweep can take, resuming after the last trip queued", async () => {
+    const scan = memoryBackfillScan([
+      { trip: { id: "t1", ownerUid: "u1" }, segments: [stay("a"), stay("b")] },
+      { trip: { id: "t2", ownerUid: "u1" }, segments: [stay("c", { tripId: "t2" }), stay("d", { tripId: "t2" })] },
+      { trip: { id: "t3", ownerUid: "u1" }, segments: [stay("e", { tripId: "t3" })] },
+    ]);
+    const retries = memoryRetryStore();
+    // Room for three: the second trip's two would overflow it, so it waits.
+    expect(await queueGeocodeBackfill(scan, retries, now, 10, 3)).toEqual({ trips: 1, queued: 2, done: false });
+    expect(scan.state.cursor).toBe("t1");
+    // A full queue takes nothing more.
+    await retries.put({ uid: "u1", tripId: "x", segmentId: "y", at: now });
+    expect(await queueGeocodeBackfill(scan, retries, now, 10, 3)).toEqual({ trips: 0, queued: 0, done: false });
+    retries.entries.clear();
+    // Room again: the other two trips fit, and the walk ends.
+    expect(await queueGeocodeBackfill(scan, retries, now, 10, 3)).toEqual({ trips: 2, queued: 3, done: true });
+    expect(scan.state.cursor).toBe("done");
+    expect([...retries.entries.keys()].sort()).toEqual(["t2/c", "t2/d", "t3/e"]);
+  });
+
+  it("queues a trip larger than all the room on its own", async () => {
+    const scan = memoryBackfillScan([{ trip: { id: "t1", ownerUid: "u1" }, segments: [stay("a"), stay("b"), stay("c")] }]);
+    expect(await queueGeocodeBackfill(scan, memoryRetryStore(), now, 10, 2)).toEqual({ trips: 1, queued: 3, done: true });
+  });
+
+  it("hands what it queues to the sweep, which fills in the country", async () => {
+    const { store, retries, deps } = setup({ "Hotel Example, Exampleville": spot }, stay("s1"));
+    await queueGeocodeBackfill(memoryBackfillScan([{ trip, segments: [stay("s1")] }]), retries, now);
+    expect(await sweepGeocodeRetries(deps)).toMatchObject({ placed: 1 });
+    expect(store.segments.get("s1")?.destination).toMatchObject({ country: "FR" });
   });
 });

@@ -110,7 +110,9 @@ viewer's zone. Trip bounds are calendar dates.
   `geocodeBudget/{day}` — `calls`, the day's count against
   `GEOCODE_DAILY_LIMIT`; `geocodeRetries/{tripId__segmentId}` — `uid,
   tripId, segmentId, at`, a booking a spent budget left with a place to ask
-  about another day. All three are the parser's alone.
+  about another day; `geocodeBackfill/state` — `cursor`, the last trip id
+  the backfill of older bookings has read, or `done`. All four are the
+  parser's alone.
 - `flightStatus/{key}` — `ident, date, origin, found, departureGate,
   departureTerminal, arrivalGate, arrivalTerminal, baggageClaim,
   scheduledOut, estimatedOut, actualOut, scheduledIn, estimatedIn,
@@ -310,6 +312,14 @@ first, up to 200 a day, writing what it learns under the user's import lock
 only if the booking has not been edited since, dropping an entry once it is
 answered (a "none" included), its booking is gone, or it is thirty days old,
 and stopping for the day when the budget runs out again.
+Bookings imported before geocoding began (7 November 2026) join the queue
+too: each sweep first reads the next 100 trips in id order (where it got to
+is kept in `geocodeBackfill/state`) and queues every booking, hand-entered
+ones aside, that still lacks a country or a spot, until it has read them
+all. It queues only while the queue has room for a day's sweep (200), a
+whole trip at a time, and resumes after the last trip it queued, so no
+booking can wait out the thirty days unasked. A booking with no country makes a day of its trip one the residence
+report can't place.
 Station and ferry codes are never read as airport codes. Changing planes
 is no visit: a flight that lands where the next one leaves from (the same
 airport code) within a day, with no stay booked in between, places the
