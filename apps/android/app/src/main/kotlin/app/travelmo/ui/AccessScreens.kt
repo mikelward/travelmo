@@ -1,5 +1,7 @@
 package app.travelmo.ui
 
+import app.travelmo.shared.logo
+import org.jetbrains.compose.resources.painterResource
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -41,7 +43,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
@@ -104,7 +105,7 @@ fun InviteOnlyScreen(account: GoogleAccount, viewModel: TripsViewModel, status: 
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Column(modifier = Modifier.widthIn(max = 480.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Image(painterResource(R.drawable.logo), contentDescription = null, modifier = Modifier.size(72.dp).padding(bottom = 16.dp))
+                    Image(painterResource(Res.drawable.logo), contentDescription = null, modifier = Modifier.size(72.dp).padding(bottom = 16.dp))
                     Text(stringResource(Res.string.invite_only), style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
                     val said = when {
                         email == null -> stringResource(Res.string.invite_only_unverified)

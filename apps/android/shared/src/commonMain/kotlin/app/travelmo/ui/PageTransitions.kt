@@ -15,8 +15,8 @@ import androidx.compose.animation.togetherWith
  * 3's default is a 700 ms fade, long enough to feel like waiting. Closing is
  * also what the predictive back gesture draws as the finger moves.
  */
-internal const val PAGE_OPEN_MILLIS = 250
-internal const val PAGE_CLOSE_MILLIS = 200
+const val PAGE_OPEN_MILLIS = 250
+const val PAGE_CLOSE_MILLIS = 200
 private const val PAGE_SLIDE_PARTS = 8
 
 /** A page opening: it slides in from the end side as the page under it slides away toward the start. */

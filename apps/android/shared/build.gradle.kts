@@ -32,6 +32,15 @@ kotlin {
             api(libs.lifecycle.viewmodel.mp)
             api(libs.compose.mp.runtime)
             api(libs.compose.mp.resources)
+            api(libs.compose.mp.foundation)
+            api(libs.compose.mp.ui)
+            api(libs.compose.mp.material3)
+            api(libs.compose.mp.material.icons.core)
+            api(libs.lifecycle.runtime.compose.mp)
+        }
+        androidMain.dependencies {
+            // The fleet's shared text size: Android's screens zoom with a pinch (SPEC "Text size").
+            implementation(libs.androidzoom.compose)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

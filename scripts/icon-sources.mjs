@@ -172,7 +172,7 @@ ${[strokePath(polygon(pl), "#FFFFFF", pl.sw, true), strokePath(foldLine(pl), "#F
 </vector>
 `;
 }
-writeFileSync(join(res, "drawable/logo.xml"), logoVector(ART.launcher, fitCircle(ART.launcher, 256, 196)));
+writeFileSync(join(repo, "apps/android/shared/src/commonMain/composeResources/drawable/logo.xml"), logoVector(ART.launcher, fitCircle(ART.launcher, 256, 196)));
 
 // The web app's inline logo, the same mark as app/icon.svg.
 function logo(art, f) {

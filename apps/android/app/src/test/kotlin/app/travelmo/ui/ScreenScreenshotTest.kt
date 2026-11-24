@@ -548,7 +548,7 @@ class ScreenScreenshotTest {
     private fun importReview(name: String, dark: Boolean) {
         val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, importReview = FakeImportReview())
         capture(name, dark = dark) {
-            ImportReviewScreen(viewModel = viewModel, onBack = {}, zone = java.time.ZoneId.of("Europe/London"))
+            ImportReviewScreen(viewModel = viewModel, onBack = {}, zone = "Europe/London")
         }
     }
 

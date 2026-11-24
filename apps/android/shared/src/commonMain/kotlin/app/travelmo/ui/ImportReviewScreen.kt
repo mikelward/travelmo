@@ -1,5 +1,6 @@
 package app.travelmo.ui
 
+import kotlinx.datetime.TimeZone
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -71,10 +72,6 @@ import app.travelmo.shared.review_to_date
 import app.travelmo.shared.search
 import app.travelmo.shared.searching
 import app.travelmo.shared.unknown_sender
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
-import java.time.ZoneOffset
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -89,7 +86,7 @@ private const val REVIEW_PREFIX = "review/"
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun ImportReviewScreen(viewModel: TripsViewModel, onBack: () -> Unit, zone: ZoneId = ZoneId.systemDefault()) {
+fun ImportReviewScreen(viewModel: TripsViewModel, onBack: () -> Unit, zone: String = TimeZone.currentSystemDefault().id) {
     var keyword by rememberSaveable { mutableStateOf("") }
     var from by rememberSaveable { mutableStateOf<String?>(null) }
     var to by rememberSaveable { mutableStateOf<String?>(null) }
@@ -103,7 +100,7 @@ fun ImportReviewScreen(viewModel: TripsViewModel, onBack: () -> Unit, zone: Zone
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
     // A search's records are read once; the live latest show any read again since.
     val records = if (searching) all?.let { withLatest(it.records, latest.orEmpty()) } else latest
-    val shown = records?.let { toReview(it, keyword, dayRange(from, to, zone.id)) }.orEmpty()
+    val shown = records?.let { toReview(it, keyword, dayRange(from, to, zone)) }.orEmpty()
     val searchDone = !searching || all?.done == true
     Scaffold(
         topBar = {
@@ -186,14 +183,14 @@ fun ImportReviewScreen(viewModel: TripsViewModel, onBack: () -> Unit, zone: Zone
         }
     }
     picking?.let { which ->
-        val initial = (if (which == "from") from else to)?.let { LocalDate.parse(it).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }
+        val initial = (if (which == "from") from else to)?.let { pickerMillis(it) }
         val state = rememberDatePickerState(initialSelectedDateMillis = initial)
         DatePickerDialog(
             onDismissRequest = { picking = null },
             confirmButton = {
                 TextButton(onClick = {
                     // The picker answers in UTC midnights.
-                    val day = state.selectedDateMillis?.let { Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toString() }
+                    val day = state.selectedDateMillis?.let { pickerDate(it) }
                     if (which == "from") from = day else to = day
                     picking = null
                 }) { Text(stringResource(Res.string.ok)) }
@@ -219,7 +216,7 @@ private fun forgetRow(viewModel: TripsViewModel, messageId: String) {
 @Composable
 private fun ReviewRow(
     record: ParsedRecord,
-    zone: ZoneId,
+    zone: String,
     decision: SenderList?,
     busy: Boolean,
     canReimport: Boolean,
@@ -233,7 +230,7 @@ private fun ReviewRow(
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(bottom = 12.dp))
         Text(record.subject?.takeIf { it.isNotBlank() } ?: stringResource(Res.string.no_subject), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-        val line = listOf(reviewDate(record, zone.id), record.from ?: stringResource(Res.string.unknown_sender), recordSourceLabel(record.source), outcomeLabel(record.outcome)).joinToString(" · ") +
+        val line = listOf(reviewDate(record, zone), record.from ?: stringResource(Res.string.unknown_sender), recordSourceLabel(record.source), outcomeLabel(record.outcome)).joinToString(" · ") +
             (record.reason?.let { " ($it)" } ?: "")
         Text(line, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {

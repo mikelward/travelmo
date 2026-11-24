@@ -16,6 +16,15 @@ class TextTest {
     }
 
     @Test
+    fun `writes a number to any number of decimals with its thousands grouped`() {
+        fixed(0.05, 1) shouldBe "0.1"
+        fixed(182.96, 1) shouldBe "183.0"
+        groupedDecimal(1234.56, 1) shouldBe "1,234.6"
+        groupedDecimal(183.0, 1) shouldBe "183.0"
+        groupedDecimal(-1234567.25, 2) shouldBe "-1,234,567.25"
+    }
+
+    @Test
     fun `groups thousands as en-US does`() {
         groupThousands(0) shouldBe "0"
         groupThousands(999) shouldBe "999"

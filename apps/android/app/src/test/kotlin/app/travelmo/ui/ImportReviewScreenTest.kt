@@ -11,7 +11,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.travelmo.core.SenderPatterns
 import app.travelmo.ui.theme.TravelmoTheme
 import io.kotest.matchers.shouldBe
-import java.time.ZoneId
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -26,7 +25,7 @@ class ImportReviewScreenTest {
 
     private fun show(store: FakeTripStore, review: app.travelmo.data.ImportReview = FakeImportReview()) {
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, importReview = review)
-        composeRule.setContent { TravelmoTheme { ImportReviewScreen(viewModel = viewModel, onBack = {}, zone = ZoneId.of("Europe/London")) } }
+        composeRule.setContent { TravelmoTheme { ImportReviewScreen(viewModel = viewModel, onBack = {}, zone = "Europe/London") } }
     }
 
     @Test

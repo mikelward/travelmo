@@ -1,5 +1,7 @@
 package app.travelmo.ui
 
+import app.travelmo.shared.logo
+import org.jetbrains.compose.resources.painterResource
 import androidx.compose.ui.res.stringResource
 import org.jetbrains.compose.resources.StringResource
 import android.content.Context
@@ -30,7 +32,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -97,7 +98,7 @@ fun SignInScreen(
                         modifier = Modifier.padding(bottom = 24.dp),
                     )
                 }
-                Image(painterResource(R.drawable.logo), contentDescription = null, modifier = Modifier.size(96.dp).padding(bottom = 16.dp))
+                Image(painterResource(Res.drawable.logo), contentDescription = null, modifier = Modifier.size(96.dp).padding(bottom = 16.dp))
                 Text(stringResource(Res.string.app_name), style = MaterialTheme.typography.headlineMedium, fontFamily = Wordmark)
                 Text(
                     stringResource(Res.string.sign_in_tagline),

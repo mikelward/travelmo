@@ -87,12 +87,8 @@ import app.travelmo.shared.save
 import app.travelmo.shared.search_zones
 import app.travelmo.shared.start_local
 import app.travelmo.shared.to_country
-import com.mikelward.androidzoom.compose.FontSizeWindow
-import com.mikelward.androidzoom.compose.pinchFontSizeHost
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneOffset
-import java.util.UUID
+
+
 import org.jetbrains.compose.resources.stringResource
 
 private val typeLabels = mapOf(
@@ -119,7 +115,7 @@ fun BookingFormScreen(viewModel: TripsViewModel, tripId: String, segmentId: Stri
     // The form's token survives a rotation with it, so the save it started
     // in the ViewModel still answers to it, and a save another form started
     // does not.
-    val token = rememberSaveable { UUID.randomUUID().toString() }
+    val token = rememberSaveable { kotlin.uuid.Uuid.random().toString() }
     val saves by viewModel.outcomes.collectAsStateWithLifecycle()
     val mine = saves[token]
     LaunchedEffect(mine) {
@@ -319,7 +315,7 @@ private fun WhenFields(
     }
     when (picking) {
         "date" -> {
-            val initial = date.takeIf { it.isNotEmpty() }?.let { LocalDate.parse(it).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli() }
+            val initial = date.takeIf { it.isNotEmpty() }?.let { pickerMillis(it) }
             val state = rememberDatePickerState(initialSelectedDateMillis = initial)
             // A window of its own, so it re-applies the text size and hosts the pinch.
             DatePickerDialog(
@@ -328,7 +324,7 @@ private fun WhenFields(
                 confirmButton = {
                     FontSizeWindow {
                         TextButton(onClick = {
-                            state.selectedDateMillis?.let { onDate(Instant.ofEpochMilli(it).atOffset(ZoneOffset.UTC).toLocalDate().toString()) }
+                            state.selectedDateMillis?.let { onDate(pickerDate(it)) }
                             picking = null
                         }) { Text(stringResource(Res.string.ok)) }
                     }
@@ -343,7 +339,7 @@ private fun WhenFields(
                 onDismissRequest = { picking = null },
                 confirmButton = {
                     TextButton(onClick = {
-                        onTime(String.format(java.util.Locale.ROOT, "%02d:%02d", state.hour, state.minute))
+                        onTime("${state.hour.toString().padStart(2, '0')}:${state.minute.toString().padStart(2, '0')}")
                         picking = null
                     }) { Text(stringResource(Res.string.ok)) }
                 },
@@ -358,7 +354,7 @@ private fun WhenFields(
 
 /** A read-only field that opens a picker on tap. */
 @Composable
-internal fun PickerField(value: String, label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun PickerField(value: String, label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(modifier = modifier) {
         OutlinedTextField(value = value, onValueChange = {}, readOnly = true, label = { Text(label) }, singleLine = true, modifier = Modifier.fillMaxWidth())
         // A transparent layer takes the tap: a read-only field would open the keyboard's cursor instead.

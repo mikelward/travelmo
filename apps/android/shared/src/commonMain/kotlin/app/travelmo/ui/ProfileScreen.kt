@@ -1,5 +1,6 @@
 package app.travelmo.ui
 
+import app.travelmo.core.today
 import org.jetbrains.compose.resources.StringResource
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -105,9 +106,6 @@ import app.travelmo.shared.someone_who_trusts_you
 import app.travelmo.shared.stop_sharing_with
 import app.travelmo.shared.travelers
 import app.travelmo.shared.whose_is
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneOffset
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -449,14 +447,14 @@ private fun HomeSection(viewModel: TripsViewModel) {
     }
     if (picking) {
         // Opens on the date chosen, else today.
-        val initial = (from?.let(LocalDate::parse) ?: LocalDate.now()).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        val initial = pickerMillis(from ?: today())
         val state = rememberDatePickerState(initialSelectedDateMillis = initial)
         DatePickerDialog(
             onDismissRequest = { picking = false },
             confirmButton = {
                 TextButton(onClick = {
                     // The picker answers in UTC midnights.
-                    from = state.selectedDateMillis?.let { Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toString() } ?: from
+                    from = state.selectedDateMillis?.let { pickerDate(it) } ?: from
                     problem = null
                     picking = false
                 }) { Text(stringResource(Res.string.ok)) }

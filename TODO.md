@@ -430,7 +430,9 @@ Kotlin Multiplatform, sharing the Android app's Kotlin (SPEC "iOS app").
   - [x] their text (`apps/android/shared`, `Res.string.*`);
   - [x] logging and data access behind interfaces;
   - [x] the view model (`TripsViewModel`), which every screen takes;
-  - [ ] the theme, the screens and navigation.
+  - [x] the palette, the brand and most screens (trip list, calendar,
+        profile, booking form, checklist, import review, residence days);
+  - [ ] the trip page, Settings, Reports, Access, sign-in and navigation.
 - [ ] The iOS app: Firebase Auth and Firestore, Google sign-in, Sign in
       with Apple (how Apple's private relay addresses meet sharing and
       Gmail import is the user's call), notifications.

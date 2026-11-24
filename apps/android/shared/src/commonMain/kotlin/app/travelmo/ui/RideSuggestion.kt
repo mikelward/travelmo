@@ -14,7 +14,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.travelmo.core.RideCompany
@@ -53,7 +52,7 @@ private fun rideQuestion(kind: RideNeedKind, flight: Segment): String {
 fun RideSuggestion(kind: RideNeedKind, flight: Segment, companies: List<RideCompany>, onHide: () -> Unit, modifier: Modifier = Modifier) {
     val offers = rideCompaniesFor(kind, companies, rideCountry(kind, flight))
     if (offers.isEmpty()) return
-    val context = LocalContext.current
+    val chrome = LocalAppChrome.current
     OutlinedCard(modifier = modifier.fillMaxWidth().padding(start = 40.dp, bottom = 12.dp)) {
         Column(modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -62,7 +61,7 @@ fun RideSuggestion(kind: RideNeedKind, flight: Segment, companies: List<RideComp
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
                 for (offer in offers) {
-                    TextButton(onClick = { openLink(context, offer.url, "a car or ride company") }) { Text(offer.name) }
+                    TextButton(onClick = { chrome.openLink(offer.url, "a car or ride company") }) { Text(offer.name) }
                 }
             }
         }

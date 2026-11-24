@@ -1,5 +1,7 @@
 package app.travelmo.ui
 
+import app.travelmo.core.groupedDecimal
+import app.travelmo.core.groupThousands
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -79,8 +81,7 @@ import app.travelmo.shared.residence_since_moved
 import app.travelmo.shared.residence_counted_over
 import app.travelmo.shared.residence_cant_place
 import app.travelmo.shared.residence_cant_place_hint
-import com.mikelward.androidzoom.compose.pinchFontSizeHost
-import java.util.Locale
+
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -258,7 +259,7 @@ private fun statusText(result: RuleResult): String = when (val kind = result.rul
     }
 }
 
-private fun grouped(n: Int) = String.format(Locale.US, "%,d", n)
+private fun grouped(n: Int) = groupThousands(n.toLong())
 
 /** The count against the rule: "45 of 180 days · 135 days left". */
 @Composable
@@ -283,7 +284,7 @@ private fun countText(result: RuleResult): String {
         }
         RuleKind.SubstantialPresence -> {
             val thisYear = result.current?.used ?: 0
-            stringResource(Res.string.residence_weighted, String.format(Locale.US, "%,.1f", result.used).removeSuffix(".0"), grouped(result.limit), pluralStringResource(Res.plurals.residence_this_year, thisYear, thisYear))
+            stringResource(Res.string.residence_weighted, groupedDecimal(result.used, 1).removeSuffix(".0"), grouped(result.limit), pluralStringResource(Res.plurals.residence_this_year, thisYear, thisYear))
         }
     }
 }

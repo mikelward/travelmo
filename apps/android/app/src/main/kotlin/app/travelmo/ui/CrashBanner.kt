@@ -69,7 +69,7 @@ val LocalCrashReport = staticCompositionLocalOf { CrashReport.None }
  * so an absent banner takes no room in its layout.
  */
 @Composable
-fun crashPending(): Boolean {
+fun androidCrashPending(): Boolean {
     val report = LocalCrashReport.current
     val crashed by report.crashed.collectAsStateWithLifecycle()
     LifecycleResumeEffect(report) {
@@ -87,7 +87,7 @@ fun crashPending(): Boolean {
  * screen showing now says nothing about it.
  */
 @Composable
-fun LastCrashBanner(modifier: Modifier = Modifier) {
+fun AndroidLastCrashBanner(modifier: Modifier = Modifier) {
     val report = LocalCrashReport.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
