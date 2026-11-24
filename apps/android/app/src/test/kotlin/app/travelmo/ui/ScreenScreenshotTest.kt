@@ -147,6 +147,32 @@ class ScreenScreenshotTest {
         }
     }
 
+    // Searching: the field in the wordmark's place, with Back and Clear.
+    @Test
+    fun trip_list_search() {
+        val viewModel = viewModel()
+        viewModel.searchTrips("dublin")
+        capture("trip_list_search") {
+            TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.TRIPS) {} })
+        }
+    }
+
+    // The funnel's menu, one filter on. A menu is a window of its own, so the whole screen is captured.
+    @Test
+    fun trip_list_filters() {
+        val viewModel = viewModel()
+        viewModel.setListFilters(app.travelmo.core.ListFilters(hideCancelled = true))
+        val fontSize = FontSizeState(FontSizeSettings(scale = 1f), onScaleSettled = {}, onPinchEnabledChange = {})
+        composeRule.setContent {
+            TravelmoTheme(fontSize = fontSize) {
+                TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.TRIPS) {} })
+            }
+        }
+        composeRule.onNodeWithContentDescription("Filters").performClick()
+        composeRule.waitForIdle()
+        captureScreenRoboImage(filePath = "$outputDir/trip_list_filters.png")
+    }
+
     // A trip under way with a flight in three hours: its gate on the card.
     @Test
     fun trip_list_flight() {

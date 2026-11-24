@@ -15,6 +15,7 @@ test("the trip list hides cancelled trips and local events when asked, and remem
   const cards = page.getByTestId("trip-card");
   await expect(cards).toHaveCount(3);
 
+  await page.getByRole("button", { name: "Filters" }).click();
   await page.getByRole("checkbox", { name: "Hide cancelled" }).check();
   await expect(cards).toHaveCount(2);
   await expect(page.getByText("Called off")).toHaveCount(0);
@@ -22,7 +23,12 @@ test("the trip list hides cancelled trips and local events when asked, and remem
   await expect(cards).toHaveCount(1);
   await expect(cards.first()).toContainText("Liverpool");
 
+  // A click elsewhere closes the menu; the choice stays.
+  await page.getByRole("heading", { name: "Trips" }).click();
+  await expect(page.getByRole("checkbox", { name: "Hide cancelled" })).toHaveCount(0);
+
   await page.reload();
+  await page.getByRole("button", { name: "Filters" }).click();
   await expect(page.getByRole("checkbox", { name: "Hide local events" })).toBeChecked();
   await expect(cards).toHaveCount(1);
   await page.getByRole("checkbox", { name: "Hide cancelled" }).uncheck();
@@ -41,6 +47,7 @@ test("the filters go by a trip's own flags without reading its bookings", async 
   await seedTrip(ownerUid, "e2e-flagged", {}, { title: "Flagged off", allCancelled: true, localOnly: false });
   const cards = page.getByTestId("trip-card");
   await expect(cards).toHaveCount(2);
+  await page.getByRole("button", { name: "Filters" }).click();
   await page.getByRole("checkbox", { name: "Hide cancelled" }).check();
   await expect(cards).toHaveCount(1);
   await expect(page.getByText("Flagged off")).toHaveCount(0);
@@ -52,10 +59,40 @@ test("a trip whose flags are taken off while the list is open is read and filter
   // Its booking is cancelled, but its flags, as yet, say otherwise.
   await seedTrip(ownerUid, "e2e-off", { cancelledAt: "2026-11-01T00:00:00Z" }, { title: "Called off", allCancelled: false, localOnly: false });
   const cards = page.getByTestId("trip-card");
+  await page.getByRole("button", { name: "Filters" }).click();
   await page.getByRole("checkbox", { name: "Hide cancelled" }).check();
   await expect(cards).toHaveCount(2);
   await forgetTripFlags("e2e-off");
   await expect(cards).toHaveCount(1);
   await expect(page.getByText("Called off")).toHaveCount(0);
   await expect.poll(async () => (await readTrip("e2e-off"))?.allCancelled).toBe(true);
+});
+
+test("search opens in place of the title, and closes with Back, Escape, or a click away when empty", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  await seedTrip(ownerUid, "e2e-away");
+  const title = page.getByRole("heading", { name: "Trips" });
+  const search = page.getByRole("searchbox", { name: "Search trips" });
+  await page.getByRole("button", { name: "Search trips" }).click();
+  await expect(search).toBeFocused();
+  await expect(title).toHaveCount(0);
+
+  // A click away leaves a search as it is, unfocused.
+  await search.fill("liverpool");
+  await page.locator("main").click({ position: { x: 1, y: 1 } });
+  await expect(search).not.toBeFocused();
+  await expect(search).toHaveValue("liverpool");
+
+  // Back clears it.
+  await page.getByRole("button", { name: "Close search" }).click();
+  await expect(title).toBeVisible();
+  await page.getByRole("button", { name: "Search trips" }).click();
+  await expect(search).toHaveValue("");
+
+  // Escape, too; and an empty search closes once the focus leaves it.
+  await search.press("Escape");
+  await expect(title).toBeVisible();
+  await page.getByRole("button", { name: "Search trips" }).click();
+  await page.locator("main").click({ position: { x: 1, y: 1 } });
+  await expect(title).toBeVisible();
 });

@@ -10,7 +10,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,12 +20,19 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -62,14 +68,10 @@ import app.travelmo.core.tripStatus
 import app.travelmo.core.warningText
 import app.travelmo.shared.Res
 import app.travelmo.shared.all_trips_hidden
-import app.travelmo.shared.hide_cancelled
-import app.travelmo.shared.hide_local_events
-import app.travelmo.shared.app_name
 import app.travelmo.shared.badge_deleting
 import app.travelmo.shared.badge_shared
 import app.travelmo.shared.checked_in_action
 import app.travelmo.shared.no_trips_match
-import app.travelmo.shared.search_trips
 import app.travelmo.shared.searching_bookings
 import app.travelmo.shared.section_now
 import app.travelmo.shared.section_past
@@ -104,14 +106,35 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
     LaunchedEffect(checkIns) {
         for ((token, outcome) in checkIns) if (outcome is Outcome.Done) viewModel.outcomeSeen(token)
     }
+    // Search opens in the top bar, over the wordmark; it stays open while it holds a search.
+    var searching by rememberSaveable { mutableStateOf(searchText.isNotEmpty()) }
+    val closeSearch = {
+        viewModel.searchTrips("")
+        searching = false
+    }
+    // Back leaves the search before it leaves the list.
+    NavigationBackHandler(rememberNavigationEventState(NavigationEventInfo.None), isBackEnabled = searching, onBackCompleted = { closeSearch() })
+    val focus = LocalFocusManager.current
     Scaffold(
         topBar = {
-            AppTopBar(stringResource(Res.string.app_name), onOpenSettings = onOpenSettings)
+            TripListTopBar(
+                searching = searching,
+                onSearching = { open -> if (open) searching = true else closeSearch() },
+                query = searchText,
+                onQuery = viewModel::searchTrips,
+                filters = filters,
+                onFilters = viewModel::setListFilters,
+                onOpenSettings = onOpenSettings,
+            )
         },
         bottomBar = bottomBar,
+        // A tap anywhere outside the search field takes the focus (and the keyboard) away from it.
+        modifier = Modifier.pointerInput(Unit) { detectTapGestures(onTap = { focus.clearFocus() }) },
     ) { padding ->
         val groups = state.groups
         val list = rememberLazyListState()
+        // So does scrolling the list.
+        LaunchedEffect(list.isScrollInProgress) { if (list.isScrollInProgress) focus.clearFocus() }
         when {
             groups == null -> Column(Modifier.padding(padding)) {
                 // The crash banner first, at the top of whatever the list shows.
@@ -135,33 +158,6 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
                 val titles = displayTitles(groups.current + groups.upcoming + groups.past)
                 // In the list, so it scrolls away with it rather than taking room from the trips.
                 if (crashed) item(key = "crash") { LastCrashBanner() }
-                // Searching every trip's bookings too (SPEC "Searching trips").
-                item(key = "search") {
-                    OutlinedTextField(
-                        value = searchText,
-                        onValueChange = viewModel::searchTrips,
-                        label = { Text(stringResource(Res.string.search_trips)) },
-                        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                // What to leave out, kept on this phone (SPEC "Filtering the trip list").
-                item(key = "filters") {
-                    // Wrapping, so a large text size keeps each label on one line.
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = filters.hideCancelled,
-                            onClick = { viewModel.setListFilters(filters.copy(hideCancelled = !filters.hideCancelled)) },
-                            label = { Text(stringResource(Res.string.hide_cancelled)) },
-                        )
-                        FilterChip(
-                            selected = filters.hideLocal,
-                            onClick = { viewModel.setListFilters(filters.copy(hideLocal = !filters.hideLocal)) },
-                            label = { Text(stringResource(Res.string.hide_local_events)) },
-                        )
-                    }
-                }
                 val result = found
                 val kept = groups.without(hidden)
                 val shown = if (result == null) kept else kept.only(result.ids)
