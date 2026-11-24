@@ -146,6 +146,38 @@ export async function deleteSegment(db: Firestore, tripId: string, segmentId: st
   await batch.commit();
 }
 
+// Deletes a trip whole only if its bookings are still just `expected` (as
+// read for "Never import this sender"): it is first marked `deleting`, which
+// stops every other writer, then read. If anything else arrived, the mark
+// comes off and false says so; nothing is deleted. A failed read takes off
+// a mark this call made, so the trip isn't left locked unchecked.
+export async function deleteTripIfOnly(db: Firestore, tripId: string, expected: readonly string[]): Promise<boolean> {
+  const tripRef = doc(db, paths.trip(tripId));
+  const mark = await runTransaction(db, async (t) => {
+    const snap = await t.get(tripRef);
+    if (!snap.exists()) return "gone";
+    if (Trip.parse(snap.data()).deleting) return "already";
+    t.update(tripRef, { deleting: true, updatedAt: now() });
+    return "marked";
+  });
+  if (mark === "gone") return true;
+  const release = () => updateDoc(tripRef, { deleting: false, updatedAt: now() });
+  let ids: string[];
+  try {
+    ids = (await getDocs(collection(db, paths.segments(tripId)))).docs.map((d) => d.id);
+  } catch (e) {
+    console.error("Reading a trip's bookings before deleting it failed", e);
+    if (mark === "marked") await release();
+    throw e;
+  }
+  if (ids.some((id) => !expected.includes(id))) {
+    await release();
+    return false;
+  }
+  await deleteTrip(db, tripId);
+  return true;
+}
+
 // Bounds only ever widen on save, so after deletions a trip can outgrow its
 // bookings; this snaps them back. Owner only: the rules let a sharee widen
 // but never narrow. Returns false when there is nothing to fit to.

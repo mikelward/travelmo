@@ -377,12 +377,25 @@ class FakeTripStore(
     val saved = mutableListOf<Triple<String, SegmentDraft, String?>>()
     val deleted = mutableListOf<Pair<String, String>>()
     override fun trips(uid: String, addresses: List<String>): Flow<List<Trip>> = flowOf(trips)
+    /** Makes reading bookings fail, as offline. */
+    var failSegments = false
     override fun segments(tripId: String): Flow<List<Segment>> = flowOf(segments[tripId].orEmpty())
+    override suspend fun serverOwnTrips(uid: String): List<Trip> {
+        if (failSegments) throw IllegalStateException("offline")
+        return trips.filter { it.ownerUid == uid }
+    }
+    override suspend fun serverSegments(tripId: String): List<Segment> {
+        if (failSegments) throw IllegalStateException("offline")
+        return segments[tripId].orEmpty()
+    }
     override fun flightStatus(key: String): Flow<FlightStatus?> = flowOf(flightStatuses[key])
     override suspend fun saveSegment(tripId: String, draft: SegmentDraft, existingId: String?) {
         saved += Triple(tripId, draft, existingId)
     }
+    /** Makes deleting a booking fail, as offline. */
+    var failDeleteSegment = false
     override suspend fun deleteSegment(tripId: String, segmentId: String) {
+        if (failDeleteSegment) throw IllegalStateException("offline")
         deleted += tripId to segmentId
     }
     val restored = mutableListOf<Pair<String, String>>()
@@ -419,6 +432,15 @@ class FakeTripStore(
     }
     override suspend fun deleteTrip(tripId: String) {
         deletedTrips += tripId
+    }
+
+    /** Bookings that land in a trip after it was read, by trip, for deleteTripIfOnly. */
+    val arrived = mutableMapOf<String, List<String>>()
+    override suspend fun deleteTripIfOnly(tripId: String, expected: Set<String>): Boolean {
+        val ids = segments[tripId].orEmpty().map { it.id } + arrived[tripId].orEmpty()
+        if (ids.any { it !in expected }) return false
+        deleteTrip(tripId)
+        return true
     }
     override suspend fun moveSegment(fromTripId: String, segmentId: String, toTripId: String) {
         moved += Triple(fromTripId, segmentId, toTripId)

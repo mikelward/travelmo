@@ -716,7 +716,8 @@ Each booking has a ⋮ menu, the same as the Android app's: "Copy reference"
 everyone who sees the trip, then Edit, "Move to another trip…" and Delete for
 those who may edit. Sources opens a dialog listing each source's label and
 kind (an email the viewer imported links to Gmail), then "From" the sender
-with "Always import this sender"; Move to another trip… opens a dialog of the
+with "Always import this sender" and "Never import this sender" for the owner
+(each where it isn't already the rule); Move to another trip… opens a dialog of the
 viewer's other trips. The row itself shows only the booking.
 The same people can rate a booking one to five stars and mark it a favorite
 (`rating`, `favorite` on the segment; tapping the current star clears the
@@ -1179,7 +1180,12 @@ one, whose bookings are edited on the trip page, nor one whose import is
 live — and runs the import with the pre-filter skipped). Teaching a sender also
 drops any pattern on the other list that covers it, so the newest decision
 is the one the parser follows. A booking's Sources dialog on the trip page
-offers "Always import this sender" on imported bookings. Settings on the
+offers "Always import this sender" and "Never import this sender" on
+imported bookings, to the trip's owner. Never also reads the owner's own
+trips (`senderCleanup`) and offers to delete what the sender, or a subdomain
+of it, already imported: each such booking, and whole the trips with
+nothing else (a weekly class imported as a trip a week); shared trips are
+left to their owners. Settings on the
 web and Android also edits both lists directly ("Sender rules", one domain
 a line, saved together; `cleanSenderList` trims, lowercases and drops blank
 lines and repeats).

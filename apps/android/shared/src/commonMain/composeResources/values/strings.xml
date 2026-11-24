@@ -55,6 +55,15 @@
     <string name="source_imap">Other email</string>
     <string name="open_in_gmail">Open in Gmail</string>
     <string name="from_sender">From %1$s</string>
+    <string name="always_import_sender">Always import this sender</string>
+    <string name="never_import_sender">Never import this sender</string>
+    <string name="sender_cleanup_title">Delete what it imported?</string>
+    <string name="sender_cleanup_text">Mail from %1$s won't be imported again. Delete %2$s already imported from it?</string>
+    <string name="this_and_that">%1$s and %2$s</string>
+    <plurals name="bookings_count">
+        <item quantity="one">%1$d booking</item>
+        <item quantity="other">%1$d bookings</item>
+    </plurals>
     <string name="close">Close</string>
     <string name="the_airport">the airport</string>
     <string name="ride_to_airport">Need a ride to %1$s?</string>

@@ -1,5 +1,15 @@
 package app.travelmo.ui
 
+import org.jetbrains.compose.resources.pluralStringResource
+import app.travelmo.shared.never_import_sender
+import app.travelmo.shared.always_import_sender
+import app.travelmo.shared.sender_cleanup_text
+import app.travelmo.shared.sender_cleanup_title
+import app.travelmo.shared.this_and_that
+import app.travelmo.shared.bookings_count
+import app.travelmo.shared.trips_count
+import app.travelmo.core.effectiveDecision
+import app.travelmo.core.SenderList
 import org.jetbrains.compose.resources.StringResource
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -197,6 +207,8 @@ fun TripDetailScreen(
     val myChecklist by myChecklistFlow.collectAsStateWithLifecycle(initialValue = null)
     val addresses by viewModel.addresses.collectAsStateWithLifecycle()
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val patterns by viewModel.senderPatterns.collectAsStateWithLifecycle()
+    val cleanup by viewModel.senderCleanup.collectAsStateWithLifecycle()
     var deleting by remember { mutableStateOf<Segment?>(null) }
     var moving by remember { mutableStateOf<Segment?>(null) }
     val current = trip
@@ -217,7 +229,7 @@ fun TripDetailScreen(
             viewModel.outcomeSeen(token)
             val action = token.removePrefix(prefix)
             when {
-                action == "delete" -> onBack()
+                action == "delete" || action == "sender-cleanup/leave" -> onBack()
                 action.startsWith("merge/") -> onMerged(action.removePrefix("merge/"))
             }
         }
@@ -266,6 +278,24 @@ fun TripDetailScreen(
                 dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(Res.string.keep)) } },
             )
         }
+        cleanup?.let { (domain, plan) ->
+            // "2 trips and 1 booking": trips go whole.
+            val trips = plan.trips.size.takeIf { it > 0 }?.let { pluralStringResource(Res.plurals.trips_count, it, it) }
+            val bookings = plan.segments.size.takeIf { it > 0 }?.let { pluralStringResource(Res.plurals.bookings_count, it, it) }
+            val what = if (trips != null && bookings != null) stringResource(Res.string.this_and_that, trips, bookings) else trips ?: bookings.orEmpty()
+            AppAlertDialog(
+                onDismissRequest = { viewModel.keepSenderBookings() },
+                title = { Text(stringResource(Res.string.sender_cleanup_title)) },
+                text = { Text(stringResource(Res.string.sender_cleanup_text, domain, what)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val leave = if (plan.trips.any { it.id == tripId }) "leave" else "stay"
+                        viewModel.removeSenderBookings("${prefix}sender-cleanup/$leave")
+                    }) { Text(stringResource(Res.string.delete)) }
+                },
+                dismissButton = { TextButton(onClick = { viewModel.keepSenderBookings() }) { Text(stringResource(Res.string.keep)) } },
+            )
+        }
         moving?.let { segment ->
             MoveDialog(segment, targets, onDismiss = { moving = null }) { target ->
                 moving = null
@@ -295,6 +325,16 @@ fun TripDetailScreen(
                     null
                 },
                 tripActions = if (isOwner) actions else null,
+                // Sender rules are the viewer's own, so the offers stand for the owner only: the import ran against their mailbox.
+                senderOffers = { segment ->
+                    segment.sender?.takeIf { isOwner }?.let { domain ->
+                        val decision = effectiveDecision(patterns, domain)
+                        SenderOffers(
+                            always = if (decision != SenderList.ALLOW) { { viewModel.alwaysImportSender("${prefix}sender/always", domain) } } else null,
+                            never = if (decision != SenderList.DENY) { { viewModel.neverImportSender("${prefix}sender/never", domain) } } else null,
+                        )
+                    }
+                },
                 // The viewer's own reminders before the trip, theirs alone, shared trip or not.
                 checklist = viewModel.checklistFor(current, segments, standingReminders, myChecklist, rideSettings)?.let { entries ->
                     Checklist(
@@ -331,6 +371,9 @@ class BookingActions(
     val onRestore: ((Segment) -> Unit)? = null,
 )
 
+/** The owner's sender rules, offered from a booking's Sources; each null where it already stands. */
+class SenderOffers(val always: (() -> Unit)?, val never: (() -> Unit)?)
+
 /** What the owner can do to the trip. */
 class TripActions(
     val rename: (String) -> Unit,
@@ -358,6 +401,7 @@ private fun TripBody(
     emailLink: (SourceRef) -> String?,
     rides: RideSuggestions,
     tripActions: TripActions?,
+    senderOffers: (Segment) -> SenderOffers?,
     checklist: Checklist?,
     canManage: Boolean,
     targets: List<Trip>,
@@ -434,7 +478,7 @@ private fun TripBody(
                 Text(formatDate(date), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 20.dp, bottom = 4.dp))
             }
             items(items, key = { it.id }) { segment ->
-                SegmentRow(segment, bookingActions, programs = programsFor(segment.provider), emailLink = emailLink, flightLines = flightLines(segment))
+                SegmentRow(segment, bookingActions, programs = programsFor(segment.provider), emailLink = emailLink, flightLines = flightLines(segment), senderOffers = senderOffers(segment))
                 for (need in rides.needs[segment.id].orEmpty()) {
                     RideSuggestion(need.kind, segment, rides.companies, onHide = { rides.onHide(need) })
                 }
@@ -591,6 +635,7 @@ fun SegmentRow(
     programs: List<ProfileEntry> = emptyList(),
     emailLink: (SourceRef) -> String? = { null },
     flightLines: List<String> = emptyList(),
+    senderOffers: SenderOffers? = null,
 ) {
     val context = LocalContext.current
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -599,7 +644,7 @@ fun SegmentRow(
     val hasSources = segment.sources.isNotEmpty() || segment.sender != null
     val reference = segment.confirmation?.trim()?.takeIf { it.isNotEmpty() }
     if (showingSources && hasSources) {
-        SourcesDialog(segment, emailLink, onDismiss = { showingSources = false })
+        SourcesDialog(segment, emailLink, senderOffers, onDismiss = { showingSources = false })
     }
     Row(modifier = Modifier.padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Icon(
@@ -673,7 +718,7 @@ fun SegmentRow(
  * and Fastmail and IMAP mailboxes have no link to a message.
  */
 @Composable
-private fun SourcesDialog(segment: Segment, emailLink: (SourceRef) -> String?, onDismiss: () -> Unit) {
+private fun SourcesDialog(segment: Segment, emailLink: (SourceRef) -> String?, senderOffers: SenderOffers?, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val openLabel = stringResource(Res.string.open_in_gmail)
@@ -702,6 +747,12 @@ private fun SourcesDialog(segment: Segment, emailLink: (SourceRef) -> String?, o
                 }
                 segment.sender?.let {
                     Text(stringResource(Res.string.from_sender, it), style = MaterialTheme.typography.bodyMedium, color = muted, modifier = Modifier.padding(vertical = 8.dp))
+                    senderOffers?.always?.let { always ->
+                        TextButton(onClick = { always(); onDismiss() }) { Text(stringResource(Res.string.always_import_sender)) }
+                    }
+                    senderOffers?.never?.let { never ->
+                        TextButton(onClick = { never(); onDismiss() }) { Text(stringResource(Res.string.never_import_sender)) }
+                    }
                 }
             }
         },

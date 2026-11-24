@@ -16,6 +16,8 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.travelmo.core.SegmentType
 import app.travelmo.core.emailLinkFor
@@ -221,5 +223,104 @@ class SegmentRowTest {
         composeRule.onNodeWithText("Booking confirmed: Cove Liverpool").performClick()
         shadowOf(composeRule.activity).nextStartedActivity.dataString shouldBe
             "https://mail.google.com/mail/u/?authuser=owner%40example.com#all/m-cove"
+    }
+
+    @Test
+    fun `never importing a sender from the trip page offers to delete what it already imported`() {
+        // A trip of nothing but another stay from the stay's sender.
+        val stay = fixtureSegments.getValue("liverpool").single { it.id == "l-stay" }
+        val store = FakeTripStore(
+            trips = fixtureTrips + fixtureTrips.single { it.id == "dublin" }.copy(id = "class", title = "Class"),
+            segments = fixtureSegments + ("class" to listOf(stay.copy(id = "c-stay", tripId = "class"))),
+        )
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent {
+            TravelmoTheme {
+                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithContentDescription("Booking actions")[1].performClick()
+        composeRule.onNodeWithText("Sources").performClick()
+        composeRule.onNodeWithText("Never import this sender").performScrollTo().performClick()
+        composeRule.onNodeWithText("Mail from cove.example won't be imported again. Delete 1 trip and 1 booking already imported from it?").assertExists()
+        store.patterns.value.deny.contains("cove.example") shouldBe true
+        composeRule.onNodeWithText("Delete").performClick()
+        composeRule.waitForIdle()
+        store.deletedTrips shouldBe listOf("class")
+        store.deleted shouldBe listOf("liverpool" to "l-stay")
+    }
+
+    @Test
+    fun `a booking that arrives while the offer is open keeps its trip`() {
+        val stay = fixtureSegments.getValue("liverpool").single { it.id == "l-stay" }
+        val store = FakeTripStore(
+            trips = fixtureTrips + fixtureTrips.single { it.id == "dublin" }.copy(id = "class", title = "Class"),
+            segments = fixtureSegments + ("class" to listOf(stay.copy(id = "c-stay", tripId = "class"))),
+        )
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent {
+            TravelmoTheme {
+                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithContentDescription("Booking actions")[1].performClick()
+        composeRule.onNodeWithText("Sources").performClick()
+        composeRule.onNodeWithText("Never import this sender").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        // Another sender's booking lands in the class trip before the answer.
+        store.arrived["class"] = listOf("c-flight")
+        composeRule.onNodeWithText("Delete").performClick()
+        composeRule.waitForIdle()
+        store.deletedTrips shouldBe emptyList()
+        store.deleted shouldBe listOf("liverpool" to "l-stay", "class" to "c-stay")
+    }
+
+    @Test
+    fun `a failed cleanup is offered again to retry`() {
+        val store = FakeTripStore()
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent {
+            TravelmoTheme {
+                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithContentDescription("Booking actions")[1].performClick()
+        composeRule.onNodeWithText("Sources").performClick()
+        composeRule.onNodeWithText("Never import this sender").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        val offered = { composeRule.onAllNodesWithText("Delete what it imported?").fetchSemanticsNodes().isNotEmpty() }
+        composeRule.waitUntil(5_000, offered)
+        store.failDeleteSegment = true
+        composeRule.onNodeWithText("Delete").performClick()
+        // The failure brings the offer back.
+        composeRule.waitUntil(5_000, offered)
+        store.failDeleteSegment = false
+        composeRule.onNodeWithText("Delete").performClick()
+        composeRule.waitForIdle()
+        store.deleted shouldBe listOf("liverpool" to "l-stay")
+    }
+
+    @Test
+    fun `a failed scan saves nothing and keeps never on offer`() {
+        val store = FakeTripStore()
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent {
+            TravelmoTheme {
+                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
+            }
+        }
+        composeRule.waitForIdle()
+        store.failSegments = true
+        composeRule.onAllNodesWithContentDescription("Booking actions")[1].performClick()
+        composeRule.onNodeWithText("Sources").performClick()
+        composeRule.onNodeWithText("Never import this sender").performScrollTo().performClick()
+        composeRule.waitUntil(5_000) { viewModel.outcomes.value.values.any { it is Outcome.Failed } }
+        store.patterns.value.deny shouldBe listOf("news.example")
+        composeRule.onAllNodesWithContentDescription("Booking actions")[1].performClick()
+        composeRule.onNodeWithText("Sources").performClick()
+        composeRule.onNodeWithText("Never import this sender").assertExists()
     }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanSenderList, domainOf, effectiveDecision, isListed, withLearned } from "./senders";
+import { cleanSenderList, domainOf, effectiveDecision, isListed, senderCleanup, withLearned } from "./senders";
 
 describe("cleanSenderList", () => {
   it("reads a typed list of senders as one domain a line", () => {
@@ -31,5 +31,21 @@ describe("effectiveDecision", () => {
     expect(effectiveDecision(patterns, "air.example")).toBe("allow");
     expect(effectiveDecision(patterns, "other.example")).toBeUndefined();
     expect(isListed(patterns, "x.air.example", "allow")).toBe(true);
+  });
+});
+
+describe("senderCleanup", () => {
+  it("removes the sender's bookings from the owner's trips, and trips with nothing else whole", () => {
+    const trips = [
+      // A class every week, each its own trip.
+      { trip: { id: "w1", ownerUid: "me" }, segments: [{ id: "a", sender: "classes.example" }] },
+      { trip: { id: "w2", ownerUid: "me" }, segments: [{ id: "b", sender: "mail.classes.example" }] },
+      // A real trip with one of the class emails in it.
+      { trip: { id: "rome", ownerUid: "me" }, segments: [{ id: "c", sender: "air.example" }, { id: "d", sender: "classes.example" }, { id: "e" }] },
+      // Someone else's trip shared with me.
+      { trip: { id: "theirs", ownerUid: "them" }, segments: [{ id: "f", sender: "classes.example" }] },
+      { trip: { id: "other", ownerUid: "me" }, segments: [{ id: "g", sender: "otherclasses.example" }] },
+    ];
+    expect(senderCleanup(trips, "me", "classes.example")).toEqual({ trips: [{ id: "w1", segments: ["a"] }, { id: "w2", segments: ["b"] }], segments: [{ tripId: "rome", segmentId: "d" }] });
   });
 });

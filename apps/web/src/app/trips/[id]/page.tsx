@@ -1,6 +1,6 @@
 "use client";
 
-import { allLoyalty, bookedDateRange, displayBounds, effectiveHomes, homeTimeline, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, gmailMailboxes, localDate, normalizeEmail, paths, programsFor, sharedWithAny, type Segment, type Trip } from "@travelmo/core";
+import { allLoyalty, bookedDateRange, displayBounds, effectiveHomes, homeTimeline, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, gmailMailboxes, localDate, normalizeEmail, paths, programsFor, sharedWithAny, type Segment, type SenderCleanup, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { arrayRemove, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -9,13 +9,14 @@ import { Fragment, Suspense, use, useMemo, useState, type FormEvent } from "reac
 import { SegmentForm } from "@/components/SegmentForm";
 import { RideSuggestion } from "@/components/RideSuggestion";
 import { SegmentRow } from "@/components/SegmentRow";
+import { Dialog } from "@/components/BookingMenu";
 import { hideRideNeed } from "@/lib/rides";
 import { SignInGate } from "@/components/SignInGate";
 import { deleteSegment, deleteTrip, favoriteSegment, fitTripDates, mergeTrips, moveSegment, rateSegment, renameTrip, restoreSegment, saveSegment } from "@/lib/edits";
 import { shareTrip } from "@/lib/access";
 import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
-import { effectiveDecision, learnSender } from "@/lib/patterns";
+import { effectiveDecision, learnSender, removeSenderBookings, senderBookings } from "@/lib/patterns";
 import { DocumentWarnings } from "@/components/DocumentWarnings";
 import { EntryRequirements } from "@/components/EntryRequirements";
 import { useEntryRequirements } from "@/lib/visas";
@@ -215,6 +216,14 @@ function MergeInto({ trip, targets, titles }: { trip: Trip; targets: Trip[]; tit
   );
 }
 
+const count = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+
+// "2 trips and 1 booking": what a sender cleanup deletes, trips whole.
+function imported(plan: SenderCleanup): string {
+  const parts = [plan.trips.length && count(plan.trips.length, "trip"), plan.segments.length && count(plan.segments.length, "booking")].filter(Boolean);
+  return parts.join(" and ");
+}
+
 function DangerZone({ trip }: { trip: Trip }) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
@@ -303,8 +312,44 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   const checklist = useTripChecklist(user.uid, tripId, trip, segments, profile ? (profile.homes ?? []) : undefined, today);
   const [editing, setEditing] = useState<Editing>();
   const [error, setError] = useState<string>();
+  // After "Never import this sender": what it already imported, offered for deletion.
+  const [cleanup, setCleanup] = useState<{ domain: string; plan: SenderCleanup }>();
+  const router = useRouter();
+  const clean = async () => {
+    if (!cleanup) return;
+    const { plan } = cleanup;
+    setCleanup(undefined);
+    try {
+      if ((await removeSenderBookings(firestore(), plan)).includes(tripId)) router.replace("/");
+    } catch (e) {
+      console.error("Removing a sender's bookings failed", e);
+      setError((e as Error).message);
+      // Offered again to retry: the sender is denied now, so Never isn't.
+      // What was already deleted is skipped or harmless the second time.
+      setCleanup(cleanup);
+    }
+  };
+  // The offer and its error stand outside the trip's own page: a cleanup
+  // that deleted this trip and then failed is still there to retry.
+  const cleanupOffer = cleanup && (
+    <Dialog title="Delete what it imported?" onClose={() => setCleanup(undefined)}>
+      <p className="text-sm">
+        Mail from {cleanup.domain} won&rsquo;t be imported again. Delete {imported(cleanup.plan)} already imported from it?
+      </p>
+      <button type="button" onClick={() => void clean()} className="mt-3 rounded-lg border border-field px-3 py-2 text-sm text-danger hover:bg-zinc-100 dark:hover:bg-zinc-900">
+        Delete
+      </button>
+    </Dialog>
+  );
   if (trip === undefined) return <p className="text-muted">Loading…</p>;
-  if (trip === null) return <p className="text-muted">This trip does not exist or is not shared with you.</p>;
+  if (trip === null)
+    return (
+      <>
+        <p className="text-muted">This trip does not exist or is not shared with you.</p>
+        {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+        {cleanupOffer}
+      </>
+    );
   const isOwner = trip.ownerUid === user.uid;
   const isSharee = sharedWithAny(trip.sharedWith, addresses);
   // Sharees edit bookings; only the owner renames, shares or deletes the trip.
@@ -329,6 +374,21 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   const learn = (segment: Segment) =>
     isOwner && segment.sender && effectiveDecision(patterns, segment.sender) !== "allow"
       ? () => learnSender(firestore(), user.uid, segment.sender!, "allow").catch((e: Error) => setError(e.message))
+      : undefined;
+  const never = (segment: Segment) =>
+    isOwner && segment.sender && effectiveDecision(patterns, segment.sender) !== "deny"
+      ? async () => {
+          const domain = segment.sender!;
+          try {
+            // Read first: if that fails, nothing is saved and Never stays on offer to try again.
+            const plan = await senderBookings(firestore(), user.uid, domain);
+            await learnSender(firestore(), user.uid, domain, "deny");
+            if (plan.trips.length || plan.segments.length) setCleanup({ domain, plan });
+          } catch (e) {
+            console.error("Never importing a sender failed", e);
+            setError((e as Error).message);
+          }
+        }
       : undefined;
 
   return (
@@ -355,6 +415,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
         <SegmentForm defaultDate={trip.start} onSave={save} onCancel={() => setEditing(undefined)} />
       )}
       {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      {cleanupOffer}
 
       {!segments && <p className="mt-8 text-muted">Loading…</p>}
       {segments && segments.length === 0 && <p className="mt-8 text-muted">No bookings in this trip yet.</p>}
@@ -386,6 +447,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
                           }
                         : {})}
                       {...(learn(segment) ? { onLearnSender: learn(segment) } : {})}
+                      {...(never(segment) ? { onNeverSender: never(segment) } : {})}
                       // Each email links for whoever imported it, from their mailbox.
                       emailLinks={{ uid: user.uid, mailboxes: gmailMailboxes(profile), ownsTrip: isOwner }}
                       programs={programsFor(segment.provider, loyalty)}

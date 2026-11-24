@@ -47,3 +47,27 @@ export function withLearned(current: SenderPatterns, domain: string, list: "allo
     [other]: current[other].filter((pattern) => !covers(pattern, domain)),
   } as SenderPatterns;
 }
+
+// Whole trips carry the bookings they were read with, so a deletion can
+// check nothing else arrived since.
+export type SenderCleanup = { trips: { id: string; segments: string[] }[]; segments: { tripId: string; segmentId: string }[] };
+
+// What "Never import this sender" offers to remove from the owner's own
+// trips: each booking the domain or a subdomain of it sent, and whole the
+// trips left with nothing else (a weekly class imported as a trip a week).
+// Shared trips are someone else's to clear.
+export function senderCleanup(
+  trips: readonly { trip: { id: string; ownerUid: string }; segments: readonly { id: string; sender?: string | undefined }[] }[],
+  uid: string,
+  domain: string,
+): SenderCleanup {
+  const cleanup: SenderCleanup = { trips: [], segments: [] };
+  for (const { trip, segments } of trips) {
+    if (trip.ownerUid !== uid) continue;
+    const sent = segments.filter((s) => s.sender && covers(domain, s.sender.toLowerCase()));
+    if (sent.length === 0) continue;
+    if (sent.length === segments.length) cleanup.trips.push({ id: trip.id, segments: sent.map((s) => s.id) });
+    else cleanup.segments.push(...sent.map((s) => ({ tripId: trip.id, segmentId: s.id })));
+  }
+  return cleanup;
+}

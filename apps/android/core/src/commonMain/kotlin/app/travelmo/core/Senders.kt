@@ -41,3 +41,25 @@ fun withLearned(current: SenderPatterns, domain: String, which: SenderList): Sen
     val other = (if (which == SenderList.ALLOW) current.deny else current.allow).filterNot { covers(it, domain) }
     return if (which == SenderList.ALLOW) SenderPatterns(allow = added, deny = other) else SenderPatterns(allow = other, deny = added)
 }
+
+/** A trip to delete whole, with the bookings it was read with, so a deletion can check nothing else arrived since. */
+data class WholeTrip(val id: String, val segments: List<String>)
+
+/** What "Never import this sender" offers to remove, as senders.ts's senderCleanup. */
+data class SenderCleanup(val trips: List<WholeTrip> = emptyList(), val segments: List<Pair<String, String>> = emptyList())
+
+/**
+ * From the owner's own trips: each booking the domain or a subdomain of it sent, as (trip id, segment id), and whole
+ * the trips left with nothing else (a weekly class imported as a trip a week). Shared trips are someone else's to clear.
+ */
+fun senderCleanup(trips: List<TripWithSegments>, uid: String, domain: String): SenderCleanup {
+    val whole = mutableListOf<WholeTrip>()
+    val some = mutableListOf<Pair<String, String>>()
+    for ((trip, segments) in trips) {
+        if (trip.ownerUid != uid) continue
+        val sent = segments.filter { s -> s.sender?.let { covers(domain, it.lowercase()) } == true }
+        if (sent.isEmpty()) continue
+        if (sent.size == segments.size) whole += WholeTrip(trip.id, sent.map { it.id }) else sent.mapTo(some) { trip.id to it.id }
+    }
+    return SenderCleanup(whole, some)
+}
