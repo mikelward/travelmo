@@ -14,28 +14,24 @@ import androidx.core.net.toUri
 import app.travelmo.MainActivity
 import app.travelmo.R
 import app.travelmo.core.externalReminderUrl
-import app.travelmo.core.opensAccessPage
 import app.travelmo.log.TravelmoLog
 import com.mikelward.androidlog.safe
 
 /**
  * The reminder channel and how a reminder from the parser is shown. A tap
  * opens the trip, or an admin's access request the Access page
- * ([MainActivity] reads [EXTRA_URL] and [EXTRA_TAG]), or a check-in
+ * ([MainActivity] reads [EXTRA_URL]), or a check-in
  * reminder's airline site in the browser. Access requests have a channel
  * of their own.
  */
 object ReminderNotifications {
     const val CHANNEL_ID = "reminders"
 
-    /** Admins' "Access request" notifications (SPEC "Access"), in a channel of their own so they can be muted apart from trips. */
-    const val ACCESS_CHANNEL_ID = "access_requests"
+    /** The channel admins' access requests had, before nobody could ask; removed where an older version made it. */
+    private const val OLD_ACCESS_CHANNEL_ID = "access_requests"
 
     /** The reminder's web URL, on the intent a tap sends to [MainActivity]. */
     const val EXTRA_URL = "app.travelmo.reminder_url"
-
-    /** The reminder's tag, beside [EXTRA_URL]: an access request is told by both ([opensAccessPage]). */
-    const val EXTRA_TAG = "app.travelmo.reminder_tag"
 
     /** Makes the channels if they are new; a channel's importance is the user's once it exists. */
     fun ensureChannel(context: Context) {
@@ -43,9 +39,7 @@ object ReminderNotifications {
         val channel = NotificationChannel(CHANNEL_ID, context.getString(R.string.reminders_channel), NotificationManager.IMPORTANCE_DEFAULT)
         channel.description = context.getString(R.string.reminders_channel_description)
         manager.createNotificationChannel(channel)
-        val access = NotificationChannel(ACCESS_CHANNEL_ID, context.getString(R.string.access_channel), NotificationManager.IMPORTANCE_DEFAULT)
-        access.description = context.getString(R.string.access_channel_description)
-        manager.createNotificationChannel(access)
+        manager.deleteNotificationChannel(OLD_ACCESS_CHANNEL_ID)
     }
 
     /** Whether the app may post notifications at all: the permission, and the app not blocked in the system settings. */
@@ -65,8 +59,7 @@ object ReminderNotifications {
         }
         ensureChannel(context)
         val tap = PendingIntent.getActivity(context, tag.hashCode(), tapIntent(context, url, tag), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val channel = if (opensAccessPage(url, tag)) ACCESS_CHANNEL_ID else CHANNEL_ID
-        val notification = NotificationCompat.Builder(context, channel)
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(body.lineSequence().firstOrNull().orEmpty())
@@ -87,10 +80,9 @@ object ReminderNotifications {
      * trip, or an admin's access request (the Access page), in the app.
      */
     internal fun tapIntent(context: Context, url: String?, tag: String): Intent =
-        externalReminderUrl(url, tag)?.let { Intent(Intent.ACTION_VIEW, it.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+        externalReminderUrl(url)?.let { Intent(Intent.ACTION_VIEW, it.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
             ?: Intent(context, MainActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 putExtra(EXTRA_URL, url)
-                putExtra(EXTRA_TAG, tag)
             }
 }

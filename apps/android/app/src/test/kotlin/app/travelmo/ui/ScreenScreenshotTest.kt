@@ -36,7 +36,6 @@ import app.travelmo.core.Trip
 import app.travelmo.core.TripWithSegments
 import app.travelmo.core.accessDecision
 import app.travelmo.core.accessInvite
-import app.travelmo.core.accessRequest
 import app.travelmo.core.displayTitles
 import app.travelmo.data.FastmailStatus
 import app.travelmo.data.GmailStatus
@@ -780,7 +779,7 @@ class ScreenScreenshotTest {
         composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
     }
 
-    // An admin's Access page: two requests waiting, and those let in, the
+    // An admin's Access page: those let in, the
     // admin's own address with no Revoke.
     @Test
     fun access() = access("access", dark = false)
@@ -791,8 +790,8 @@ class ScreenScreenshotTest {
     private fun access(name: String, dark: Boolean) {
         val records = mapOf(
             OWNER_EMAIL to mapOf("email" to OWNER_EMAIL) + accessDecision(AccountAccess.APPROVED, "admin", FROZEN_NOW),
-            "sam.example@example.com" to accessRequest("sam.example@example.com", "u-sam", "2026-10-30T09:00:00Z"),
-            "alex@example.org" to accessRequest("alex@example.org", "u-alex", "2026-10-31T18:00:00Z"),
+            "sam.example@example.com" to waitingRecord("sam.example@example.com", "u-sam"),
+            "alex@example.org" to waitingRecord("alex@example.org", "u-alex"),
             "partner@example.com" to accessInvite("partner@example.com", OWNER, FROZEN_NOW),
             "friend@example.com" to mapOf("email" to "friend@example.com") + accessDecision(AccountAccess.APPROVED, OWNER, FROZEN_NOW),
         )

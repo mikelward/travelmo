@@ -703,7 +703,7 @@ describe("linked email addresses", () => {
 
 describe("access", () => {
   const at = "2026-11-23T00:00:00Z";
-  const request = { email: newcomer.email, status: "requested", uid: newcomer.uid, requestedAt: at };
+  const request = { email: newcomer.email, status: "approved", uid: newcomer.uid, approvedBy: newcomer.uid, approvedAt: at };
   const record = (email: string) => paths.access(email);
   const seedRecord = async (email: string, data: Record<string, unknown>) => {
     await env.withSecurityRulesDisabled(async (ctx) => {
@@ -738,24 +738,19 @@ describe("access", () => {
     expect(own.exists()).toBe(false);
   });
 
-  it("lets nobody ask for access: Travelmo is invite-only", async () => {
+  it("lets nobody write their own access record: Travelmo is invite-only", async () => {
     const db = as(newcomer);
     await assertFails(setDoc(doc(db, record(newcomer.email)), request));
-    await assertFails(setDoc(doc(db, record(newcomer.email)), { ...request, status: "approved" }));
-    // A request from before stays readable to its account, but is not renewed.
-    await seedRecord(newcomer.email, { status: "requested", uid: newcomer.uid, requestedAt: at });
-    await assertSucceeds(getDoc(doc(db, record(newcomer.email))));
-    await assertFails(updateDoc(doc(db, record(newcomer.email)), { requestedAt: "2026-11-24T00:00:00Z" }));
-    await assertFails(updateDoc(doc(db, record(newcomer.email)), { status: "approved" }));
+    await assertFails(setDoc(doc(db, record(newcomer.email)), { email: newcomer.email, uid: newcomer.uid }));
     // Nobody but admins reads anyone else's record or lists them.
     await assertFails(getDoc(doc(as(owner), record(newcomer.email))));
     await assertFails(getDocs(collection(as(owner), paths.accessRecords())));
     await assertFails(setDoc(doc(db, paths.user(newcomer.uid)), { email: newcomer.email }));
   });
 
-  it("lets an admin approve a request, after which the account may use the app", async () => {
+  it("lets an admin approve an address, after which the account may use the app", async () => {
     await shareWithNewcomer();
-    await seedRecord(newcomer.email, { status: "requested", uid: newcomer.uid, requestedAt: at });
+    await seedRecord(newcomer.email, { uid: newcomer.uid });
     await assertSucceeds(getDocs(collection(as(admin), paths.accessRecords())));
     await assertFails(updateDoc(doc(as(admin), record(newcomer.email)), { status: "approved", approvedBy: owner.uid, approvedAt: at }));
     await assertSucceeds(updateDoc(doc(as(admin), record(newcomer.email)), { status: "approved", approvedBy: admin.uid, approvedAt: at }));
@@ -763,12 +758,12 @@ describe("access", () => {
     await assertSucceeds(setDoc(doc(as(newcomer), paths.user(newcomer.uid)), { email: newcomer.email }));
   });
 
-  it("lets an admin decline a request and invite an address that never asked", async () => {
-    await seedRecord(newcomer.email, { status: "requested", uid: newcomer.uid, requestedAt: at });
+  it("lets an admin decline an address and invite another", async () => {
+    await seedRecord(newcomer.email, { uid: newcomer.uid });
     await assertSucceeds(updateDoc(doc(as(admin), record(newcomer.email)), { status: "declined", declinedBy: admin.uid, declinedAt: at }));
     await assertFails(setDoc(doc(as(newcomer), paths.user(newcomer.uid)), { email: newcomer.email }));
     const invited = "invited@example.com";
-    await assertFails(setDoc(doc(as(admin), record(invited)), { email: invited, status: "approved", approvedBy: admin.uid, approvedAt: at, notifiedAt: at }));
+    await assertFails(setDoc(doc(as(admin), record(invited)), { email: invited, status: "approved", approvedBy: admin.uid, approvedAt: at, uid: "someone" }));
     await assertSucceeds(setDoc(doc(as(admin), record(invited)), { email: invited, status: "approved", approvedBy: admin.uid, approvedAt: at }));
     await assertSucceeds(getDoc(doc(as({ uid: "invited", email: invited }), paths.trip("nope"))));
   });
@@ -784,7 +779,7 @@ describe("access", () => {
   });
 
   it("lets nobody but an admin decide", async () => {
-    await seedRecord(newcomer.email, { status: "requested", uid: newcomer.uid, requestedAt: at });
+    await seedRecord(newcomer.email, { uid: newcomer.uid });
     await assertFails(updateDoc(doc(as(owner), record(newcomer.email)), { status: "approved", approvedBy: owner.uid, approvedAt: at }));
     await assertFails(setDoc(doc(as(owner), record(stranger.email)), { email: stranger.email, status: "declined", declinedBy: owner.uid, declinedAt: at }));
     await assertFails(deleteDoc(doc(as(admin), record(newcomer.email))));
@@ -800,8 +795,8 @@ describe("access", () => {
     await assertSucceeds(setDoc(doc(as(newcomer), paths.user(newcomer.uid)), { email: newcomer.email }));
   });
 
-  it("lets an invite approve a waiting request, but not undo an admin's decline", async () => {
-    await seedRecord(newcomer.email, { status: "requested", uid: newcomer.uid, requestedAt: at });
+  it("lets an invite approve an address, but not undo an admin's decline", async () => {
+    await seedRecord(newcomer.email, { uid: newcomer.uid });
     const invite = { email: newcomer.email, invitedBy: partner.uid, invitedAt: at };
     await assertSucceeds(setDoc(doc(as(partner), record(newcomer.email)), invite, { merge: true }));
     await assertSucceeds(setDoc(doc(as(newcomer), paths.user(newcomer.uid)), { email: newcomer.email }));

@@ -42,7 +42,9 @@ function AccessAdmin({ user, config }: { user: User; config: AccessConfig }) {
   };
 
   if (!records) return <p className="text-muted">Loading…</p>;
-  const { pending, approved } = accessLists(records);
+  // Nobody asks any more (invite-only): requests made before are not
+  // listed, and those accounts stay out.
+  const { approved } = accessLists(records);
   return (
     <>
       <form onSubmit={invite} className="flex flex-wrap gap-2">
@@ -59,29 +61,6 @@ function AccessAdmin({ user, config }: { user: User; config: AccessConfig }) {
         </button>
       </form>
       {error && <p className="mt-2 text-sm text-danger">{error}</p>}
-
-      <section className="mt-10">
-        <h2 className="text-lg font-medium">Requests</h2>
-        {pending.length === 0 && <p className="mt-2 text-sm text-muted">No requests.</p>}
-        <ul className="mt-2 divide-y divide-zinc-200 dark:divide-zinc-800">
-          {pending.map((r) => (
-            <li key={r.email} className="flex flex-wrap items-center justify-between gap-3 py-2 text-sm">
-              <span className="break-all">
-                {r.email}
-                {r.requestedAt && <span className="text-muted"> · {formatDate(r.requestedAt.slice(0, 10))}</span>}
-              </span>
-              <span className="flex gap-2">
-                <button type="button" disabled={busy === r.email} className={buttonClass} onClick={() => void decide(r.email, "approved")}>
-                  Approve
-                </button>
-                <button type="button" disabled={busy === r.email} className={buttonClass} onClick={() => void decide(r.email, "declined")}>
-                  Decline
-                </button>
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
 
       <section className="mt-10">
         <h2 className="text-lg font-medium">Approved</h2>

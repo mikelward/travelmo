@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { owner, signIn, signOut } from "./helpers";
-import { clearData, seedAccessRequest, seedLinkedEmails, seedTrip, setAdmins } from "./seed";
+import { clearData, seedLinkedEmails, seedTrip, setAdmins } from "./seed";
 
 const admin = "admin@example.com";
 const newcomer = "newcomer@example.com";
@@ -10,8 +10,7 @@ test.beforeEach(async () => {
   await setAdmins([admin]);
 });
 
-// The parser is stubbed: what it settles and whom it tells are its own
-// tests' concern. Returns the calls it got.
+// The parser is stubbed: what it settles is its own tests' concern. Returns the calls it got.
 async function stubCheck(page: Page): Promise<string[]> {
   const calls: string[] = [];
   await page.route("http://localhost:8080/access/check", async (route) => {
@@ -26,39 +25,28 @@ async function signOutWaiting(page: Page): Promise<void> {
   await expect(page.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
 }
 
-test("a new account can't ask for access; an admin approves one from before", async ({ page }) => {
+test("a new account can't ask for access, and the Access page lists no requests", async ({ page }) => {
   const calls = await stubCheck(page);
   await signIn(page, newcomer, { approved: false });
   await expect(page.getByRole("heading", { name: "Travelmo is invite-only" })).toBeVisible();
-  await expect(page.getByText(`You're signed in as ${newcomer}.`, { exact: false })).toBeVisible();
+  await expect(page.getByText(`You're signed in as ${newcomer}. Ask someone who uses Travelmo to share a trip with you.`)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Request access" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Trips" })).toHaveCount(0);
   await page.goto("/settings");
   await expect(page.getByRole("heading", { name: "Travelmo is invite-only" })).toBeVisible();
-
-  await expect(page.getByRole("button", { name: "Request access" })).toHaveCount(0);
   // Checked on opening, so an account someone shared with is let in.
   await expect.poll(() => calls.length).toBeGreaterThanOrEqual(1);
   expect(calls.every((c) => c.startsWith("Bearer "))).toBe(true);
-  // A request from before still waits for an admin.
-  await seedAccessRequest(newcomer);
   await signOutWaiting(page);
 
   await signIn(page, admin, { approved: false });
   await page.getByRole("link", { name: "Access" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Access" })).toBeVisible();
-  const request = page.getByRole("listitem").filter({ hasText: newcomer });
-  await expect(request).toBeVisible();
-  await request.getByRole("button", { name: "Approve" }).click();
-  await expect(page.getByText("No requests.")).toBeVisible();
-  const approved = page.getByRole("listitem").filter({ hasText: newcomer });
-  await expect(approved.getByRole("button", { name: "Revoke" })).toBeVisible();
-  // The admin is listed too, and cannot revoke themself.
+  await expect(page.getByRole("heading", { name: "Requests" })).toHaveCount(0);
+  // The admin is listed, and cannot revoke themself.
   await expect(page.getByRole("listitem").filter({ hasText: admin })).toBeVisible();
   await expect(page.getByRole("listitem").filter({ hasText: admin }).getByRole("button", { name: "Revoke" })).toHaveCount(0);
   await signOut(page);
-
-  await signIn(page, newcomer, { approved: false });
-  await expect(page.getByText("No trips yet.")).toBeVisible();
 });
 
 test("an admin invites an address, and revoking it shuts the app again", async ({ page }) => {

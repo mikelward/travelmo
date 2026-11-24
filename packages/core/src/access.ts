@@ -6,28 +6,26 @@ import { z } from "zod";
 // shared a trip or a travel profile with. `firestore.rules` and the
 // parser's `requireUser` make the same decision as `accessStatus` here.
 
-export const accessStatuses = ["requested", "approved", "declined"] as const;
+export const accessStatuses = ["approved", "declined"] as const;
 export const AccessStatus = z.enum(accessStatuses);
 export type AccessStatus = z.infer<typeof AccessStatus>;
 
-// `access/{email}`, the id the lowercased address. `status` is the request
-// and the admins' decision; `invitedBy` is the last approved user who shared
-// something with the address, which approves it unless an admin declined it.
-// `notifiedAt` is the parser's: when admins were told of the request.
+// `access/{email}`, the id the lowercased address. `status` is the admins'
+// decision; `invitedBy` is the last approved user who shared something with
+// the address, which approves it unless an admin declined it.
 // `grandfathered` marks an account the parser approved because it used the
 // app before approvals did (`grandfatheredAccess`).
 export const AccessRecord = z.object({
   email: z.string(),
-  status: AccessStatus.optional(),
+  // Anything else (a status this version does not know) counts as none.
+  status: AccessStatus.optional().catch(undefined),
   uid: z.string().optional(),
-  requestedAt: z.string().optional(),
   invitedBy: z.string().optional(),
   invitedAt: z.string().optional(),
   approvedBy: z.string().optional(),
   approvedAt: z.string().optional(),
   declinedBy: z.string().optional(),
   declinedAt: z.string().optional(),
-  notifiedAt: z.string().optional(),
   grandfathered: z.boolean().optional(),
 });
 export type AccessRecord = z.infer<typeof AccessRecord>;
@@ -37,8 +35,9 @@ export type AccessRecord = z.infer<typeof AccessRecord>;
 export const AccessConfig = z.object({ admins: z.array(z.string()).default([]) });
 export type AccessConfig = z.infer<typeof AccessConfig>;
 
-// Where an account stands: "none" has never asked.
-export type AccountAccess = "approved" | "requested" | "declined" | "none";
+// Where an account stands: "none" is not let in yet (Travelmo is
+// invite-only: an invite or a share lets it in).
+export type AccountAccess = "approved" | "declined" | "none";
 
 // An address as sharing and the rules compare it: trimmed and lowercased.
 // Undefined for anything that is not one address, or that could not be a
@@ -86,16 +85,10 @@ export function accessStatus({ email, hasProfile, record, config, linked = [], l
   if (own?.status === "declined") return "declined";
   if (own?.status === "approved" || own?.invitedBy || hasProfile) return "approved";
   if (linkedRecords.some((r) => linked.includes(r.email) && lets(r))) return "approved";
-  if (own?.status === "requested") return "requested";
   return "none";
 }
 
 export const isApproved = (inputs: AccessInputs): boolean => accessStatus(inputs) === "approved";
-
-// What the account asks for itself.
-export function accessRequest(email: string, uid: string, now: string): AccessRecord {
-  return { email, status: "requested", uid, requestedAt: now };
-}
 
 // What an approved user sharing with the address merges into its record.
 export function accessInvite(email: string, inviterUid: string, now: string): Pick<AccessRecord, "email" | "invitedBy" | "invitedAt"> {
@@ -115,7 +108,7 @@ export function grandfatheredAccess(email: string, now: string, uid?: string): A
 
 // Whether that record is still needed: not for an account already let in,
 // and never over a decline, which an admin's revoking wrote.
-export const needsGrandfathering = (status: AccountAccess): boolean => status === "none" || status === "requested";
+export const needsGrandfathering = (status: AccountAccess): boolean => status === "none";
 
 // The fields an admin's decision changes: approving (also inviting an
 // address that never asked) or declining (also revoking).
@@ -135,25 +128,12 @@ export function canRevoke(email: string, adminEmail: string | undefined, config:
   return email !== adminEmail && !isAdminEmail(email, config);
 }
 
-// How the Access page sorts records: requests waiting, oldest first, and
-// everyone approved by a record, by address. Declined records are listed
-// nowhere; inviting the address again approves it.
-export function accessLists(records: readonly AccessRecord[]): { pending: AccessRecord[]; approved: AccessRecord[] } {
-  const pending = records
-    .filter((r) => r.status === "requested" && !r.invitedBy)
-    .sort((a, b) => (a.requestedAt ?? "").localeCompare(b.requestedAt ?? ""));
+// Who the Access page lists: everyone approved by a record, by address.
+// Declined records are listed nowhere; inviting the address again approves
+// it.
+export function accessLists(records: readonly AccessRecord[]): { approved: AccessRecord[] } {
   const approved = records
     .filter((r) => r.status === "approved" || (r.status !== "declined" && r.invitedBy))
     .sort((a, b) => a.email.localeCompare(b.email));
-  return { pending, approved };
-}
-
-// The notification and email admins get for a new request.
-export function accessRequestMessage(email: string, origin: string): { subject: string; text: string; url: string } {
-  const url = `${origin}/access`;
-  return {
-    subject: "Travelmo access request",
-    text: `${email} asked to use Travelmo.\n\nApprove or decline: ${url}\n`,
-    url,
-  };
+  return { approved };
 }

@@ -5,6 +5,8 @@ export const paths = {
   accessRecords: () => "access",
   access: (email: string) => `access/${email}`,
   accessConfig: () => "config/access",
+  // When the requests for access left from before invite-only were removed.
+  accessRequestsDropped: () => "config/accessRequestsDropped",
   // Server-only: when the parser last recorded the accounts from before
   // approvals (apps/parser/src/access.ts's grandfatherAccounts).
   accessGrandfathered: () => "config/accessGrandfathered",

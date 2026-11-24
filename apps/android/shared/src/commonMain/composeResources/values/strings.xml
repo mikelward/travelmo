@@ -470,7 +470,6 @@
     <string name="invite_only">Travelmo is invite-only</string>
     <string name="invite_only_unverified">Sign in with an account whose email address Google has verified.</string>
     <string name="invite_only_none">You're signed in as %1$s. Ask someone who uses Travelmo to share a trip with you.</string>
-    <string name="invite_only_requested">Request sent. Travelmo opens here once it's approved.</string>
     <string name="invite_only_declined">Your request for %1$s wasn't approved.</string>
     <string name="invited_elsewhere">Invited at another address?</string>
     <string name="send_link">Send link</string>
@@ -479,15 +478,10 @@
     <string name="access_admins_only">Only admins can see this page.</string>
     <string name="invite">Invite</string>
     <string name="access_invite_label">Email address to invite</string>
-    <string name="access_requests">Requests</string>
-    <string name="access_no_requests">No requests.</string>
     <string name="access_approved">Approved</string>
     <string name="access_approved_hint">Everyone with an account from before approvals is in too, listed once they next sign in.</string>
-    <string name="approve">Approve</string>
-    <string name="decline">Decline</string>
     <string name="revoke">Revoke</string>
     <!-- An address and the day it asked, as on the web: "new@example.com · Sun 22 Nov". -->
-    <string name="access_requested_on">%1$s · %2$s</string>
     <string name="download_trips">Download trips</string>
     <string name="download_trips_hint">A spreadsheet of where you went and when, for visa and residence forms. Events, tickets and cancelled trips are left out.</string>
     <string name="trips_up_to">Trips starting up to %1$s</string>

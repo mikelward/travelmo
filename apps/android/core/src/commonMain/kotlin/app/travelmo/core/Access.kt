@@ -2,11 +2,11 @@ package app.travelmo.core
 
 /**
  * Where an account stands (SPEC "Access"), as packages/core/src/access.ts's
- * `AccountAccess` names it: [NONE] has never asked.
+ * `AccountAccess` names it: [NONE] is not let in yet (Travelmo is
+ * invite-only).
  */
 enum class AccountAccess(val wire: String) {
     APPROVED("approved"),
-    REQUESTED("requested"),
     DECLINED("declined"),
     NONE("none"),
     ;
@@ -39,7 +39,6 @@ data class AccessRecord(
     val email: String,
     val status: AccountAccess? = null,
     val uid: String? = null,
-    val requestedAt: String? = null,
     val invitedBy: String? = null,
     val invitedAt: String? = null,
     val approvedBy: String? = null,
@@ -56,7 +55,6 @@ fun accessRecordOf(data: Map<String, Any?>): AccessRecord? {
         email = email,
         status = AccountAccess.fromWire(text("status"))?.takeIf { it != AccountAccess.NONE },
         uid = text("uid"),
-        requestedAt = text("requestedAt"),
         invitedBy = text("invitedBy"),
         invitedAt = text("invitedAt"),
         approvedBy = text("approvedBy"),
@@ -106,13 +104,8 @@ fun accessStatus(
     if (own?.status == AccountAccess.DECLINED) return AccountAccess.DECLINED
     if (own?.status == AccountAccess.APPROVED || own?.invitedBy != null || hasProfile) return AccountAccess.APPROVED
     if (linkedRecords.any { it.email in linked && lets(it) }) return AccountAccess.APPROVED
-    if (own?.status == AccountAccess.REQUESTED) return AccountAccess.REQUESTED
     return AccountAccess.NONE
 }
-
-/** What the account writes to ask for itself: the whole record. */
-fun accessRequest(email: String, uid: String, now: String): Map<String, String> =
-    mapOf("email" to email, "status" to AccountAccess.REQUESTED.wire, "uid" to uid, "requestedAt" to now)
 
 /** What an approved user sharing with the address merges into its record. */
 fun accessInvite(email: String, inviterUid: String, now: String): Map<String, String> =
@@ -139,11 +132,10 @@ fun accessSelfApproval(email: String, uid: String, now: String): Map<String, Str
 /** Admins and the admin acting are never revoked, so no one locks out an admin; the rules refuse it too. */
 fun canRevoke(email: String, adminEmail: String?, config: AccessConfig?): Boolean = email != adminEmail && !isAdminEmail(email, config)
 
-/** The Access page's lists: requests waiting, oldest first, and everyone approved by a record, by address. */
-data class AccessLists(val pending: List<AccessRecord>, val approved: List<AccessRecord>)
+/** Who the Access page lists: everyone approved by a record, by address. */
+data class AccessLists(val approved: List<AccessRecord>)
 
-/** Declined records are listed nowhere; inviting the address again approves it. */
+/** Declined records and old requests are listed nowhere; inviting the address again approves it. */
 fun accessLists(records: List<AccessRecord>): AccessLists = AccessLists(
-    pending = records.filter { it.status == AccountAccess.REQUESTED && it.invitedBy == null }.sortedBy { it.requestedAt.orEmpty() },
     approved = records.filter { it.status == AccountAccess.APPROVED || (it.status != AccountAccess.DECLINED && it.invitedBy != null) }.sortedBy { it.email },
 )

@@ -10,6 +10,4 @@
     <string name="reminders_channel_description">Passports or visas that run out too soon, what each country asks of your passport, and your own reminders, before a trip.</string>
     <string name="debug_log_copied_only">No app would take the report, so it is on the clipboard instead.</string>
     <string name="debug_log_share_failed">Couldn\'t share the debug log.</string>
-    <string name="access_channel">Access requests</string>
-    <string name="access_channel_description">Someone asking to use Travelmo.</string>
 </resources>

@@ -22,7 +22,7 @@ class AccessTest {
 
     @Test
     fun `names the statuses as packages core does`() {
-        AccountAccess.entries.map { it.wire } shouldBe listOf("approved", "requested", "declined", "none")
+        AccountAccess.entries.map { it.wire } shouldBe listOf("approved", "declined", "none")
         AccountAccess.fromWire("declined") shouldBe AccountAccess.DECLINED
         AccountAccess.fromWire("maybe").shouldBeNull()
         AccountAccess.fromWire(null).shouldBeNull()
@@ -31,7 +31,7 @@ class AccessTest {
     @Test
     fun `reads the status from the access check's answer`() {
         accessCheckAnswer("""{"status":"approved"}""") shouldBe AccountAccess.APPROVED
-        accessCheckAnswer("""{ "status" : "requested" }""") shouldBe AccountAccess.REQUESTED
+        accessCheckAnswer("""{ "status" : "declined" }""") shouldBe AccountAccess.DECLINED
         accessCheckAnswer("""{"status":"unknown"}""").shouldBeNull()
         accessCheckAnswer("Internal error").shouldBeNull()
     }
@@ -43,8 +43,8 @@ class AccessTest {
 
     @Test
     fun `reads a record as stored and none without its address`() {
-        accessRecordOf(mapOf("email" to "new@example.com", "status" to "requested", "uid" to "u1", "requestedAt" to now, "notifiedAt" to now)) shouldBe
-            AccessRecord("new@example.com", AccountAccess.REQUESTED, uid = "u1", requestedAt = now)
+        accessRecordOf(mapOf("email" to "new@example.com", "status" to "approved", "uid" to "u1", "approvedAt" to now)) shouldBe
+            AccessRecord("new@example.com", AccountAccess.APPROVED, uid = "u1", approvedAt = now)
         accessRecordOf(mapOf("email" to "new@example.com", "status" to "none")) shouldBe AccessRecord("new@example.com")
         accessRecordOf(mapOf("email" to "new@example.com", "status" to 3)) shouldBe AccessRecord("new@example.com")
         accessRecordOf(mapOf("status" to "approved")).shouldBeNull()
@@ -59,12 +59,12 @@ class AccessTest {
     @Test
     fun `keeps out a new account until it is approved`() {
         status() shouldBe AccountAccess.NONE
-        status(record = record(accessRequest("new@example.com", "u1", now))) shouldBe AccountAccess.REQUESTED
+        status(record = record(bare("new@example.com", "u1"))) shouldBe AccountAccess.NONE
     }
 
     @Test
     fun `lets in an address an admin approved or someone shared with`() {
-        val requested = accessRequest("new@example.com", "u1", now)
+        val requested = bare("new@example.com", "u1")
         status(record = record(requested, accessDecision(AccountAccess.APPROVED, "admin", now))) shouldBe AccountAccess.APPROVED
         status(record = record(accessInvite("new@example.com", "friend", now))) shouldBe AccountAccess.APPROVED
         status(record = record(requested, accessInvite("new@example.com", "friend", now))) shouldBe AccountAccess.APPROVED
@@ -96,7 +96,7 @@ class AccessTest {
         status(linked = linked, linkedRecords = listOf(AccessRecord("work@company.example", invitedBy = "u1"))) shouldBe AccountAccess.APPROVED
         // Not a declined one, a request, or the record of an address not linked.
         status(linked = linked, linkedRecords = listOf(AccessRecord("work@company.example", AccountAccess.DECLINED, invitedBy = "u1"))) shouldBe AccountAccess.NONE
-        status(linked = linked, linkedRecords = listOf(AccessRecord("work@company.example", AccountAccess.REQUESTED))) shouldBe AccountAccess.NONE
+        status(linked = linked, linkedRecords = listOf(AccessRecord("work@company.example"))) shouldBe AccountAccess.NONE
         status(linked = linked, linkedRecords = listOf(AccessRecord("other@example.com", AccountAccess.APPROVED))) shouldBe AccountAccess.NONE
         // The sign-in's decline still wins over a linked address's approval.
         status(
@@ -114,7 +114,7 @@ class AccessTest {
         letsIn("work@example.com", AccessRecord("work@example.com", AccountAccess.APPROVED), null) shouldBe true
         // Not one that only asked, was declined, or has no record.
         letsIn("work@example.com", null, config) shouldBe false
-        letsIn("work@example.com", AccessRecord("work@example.com", AccountAccess.REQUESTED), config) shouldBe false
+        letsIn("work@example.com", AccessRecord("work@example.com"), config) shouldBe false
         letsIn("work@example.com", invited.copy(status = AccountAccess.DECLINED), config) shouldBe false
         // A record speaks only for its own address.
         letsIn("other@example.com", invited, config) shouldBe false
@@ -122,11 +122,10 @@ class AccessTest {
 
     @Test
     fun `writes what the web writes`() {
-        accessRequest("new@example.com", "u1", now) shouldBe mapOf("email" to "new@example.com", "status" to "requested", "uid" to "u1", "requestedAt" to now)
         accessInvite("new@example.com", "friend", now) shouldBe mapOf("email" to "new@example.com", "invitedBy" to "friend", "invitedAt" to now)
         accessDecision(AccountAccess.APPROVED, "admin", now) shouldBe mapOf("status" to "approved", "approvedBy" to "admin", "approvedAt" to now)
         accessDecision(AccountAccess.DECLINED, "admin", now) shouldBe mapOf("status" to "declined", "declinedBy" to "admin", "declinedAt" to now)
-        assertFailsWith<IllegalArgumentException> { accessDecision(AccountAccess.REQUESTED, "admin", now) }
+        assertFailsWith<IllegalArgumentException> { accessDecision(AccountAccess.NONE, "admin", now) }
         accessSelfApproval("old@example.com", "u1", now) shouldBe
             mapOf("email" to "old@example.com", "status" to "approved", "uid" to "u1", "approvedBy" to "u1", "approvedAt" to now)
     }
@@ -148,17 +147,18 @@ class AccessTest {
     }
 
     @Test
-    fun `lists requests oldest first and approved addresses by name and no declined ones`() {
+    fun `lists approved addresses by name and no declined ones`() {
         val records = listOf(
-            record(accessRequest("late@example.com", "u2", "2026-11-23T12:00:00Z")),
-            record(accessRequest("early@example.com", "u1", "2026-11-22T12:00:00Z")),
+            record(bare("late@example.com", "u2")),
             record(mapOf("email" to "zed@example.com"), accessDecision(AccountAccess.APPROVED, "admin", now)),
             record(accessInvite("amy@example.com", "friend", now)),
-            record(accessRequest("both@example.com", "u3", now), accessInvite("both@example.com", "friend", now)),
+            record(bare("both@example.com", "u3"), accessInvite("both@example.com", "friend", now)),
             record(mapOf("email" to "gone@example.com"), accessDecision(AccountAccess.DECLINED, "admin", now), mapOf("invitedBy" to "friend")),
         )
         val lists = accessLists(records)
-        lists.pending.map { it.email } shouldBe listOf("early@example.com", "late@example.com")
         lists.approved.map { it.email } shouldBe listOf("amy@example.com", "both@example.com", "zed@example.com")
     }
+
+    /** A record that approves nothing yet. */
+    private fun bare(email: String, uid: String) = mapOf("email" to email, "uid" to uid)
 }

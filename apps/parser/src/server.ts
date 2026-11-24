@@ -156,6 +156,7 @@ import { continueBackfill, parseContinuePush, startBackfill, stopBackfill, type 
 import { pubsubPublisher } from "./publish";
 import { sealStoredCredentials } from "./sealStored";
 import { reviseFoundLoyaltyOnce } from "./loyaltyRevision";
+import { dropAccessRequests } from "./dropAccessRequests";
 import { googleKmsClient, kmsSealer, useSealer } from "./sealing";
 
 // How long one backfill request may spend waiting its turn and importing.
@@ -1473,10 +1474,9 @@ app.post("/emails/remove", async (c) => {
 });
 
 // The one endpoint an account not yet approved may call (SPEC "Access"):
-// the app calls it when it finds the account not approved, and again after
-// asking for access. It lets in an account from before approvals or one
-// someone already shared with, and otherwise tells the admins of a new
-// request, once per address; it answers where the account stands.
+// the app calls it when it finds the account not approved. It lets in an
+// account from before approvals or one someone already shared with, and
+// answers where the account stands.
 app.post("/access/check", async (c) => {
   const token = await requireIdToken(c);
   if ((await db.doc(paths.deletedAccount(token.uid)).get()).exists) {
@@ -1486,11 +1486,8 @@ app.post("/access/check", async (c) => {
     {
       db,
       now: deps.now,
-      origin: webOrigin,
       log,
-      channels: reminderChannels,
       verifiedEmail,
-      uidForEmail,
     },
     token,
   );
@@ -1920,6 +1917,15 @@ void moveLegacyMailboxes(db, log)
       if (result) log("INFO", "found_loyalty_revised", result);
     } catch (error) {
       log("ERROR", "found_loyalty_revision_failed", errorKind(error));
+    }
+  })
+  // Then, once, the requests for access left from before invite-only go
+  // (dropAccessRequests.ts).
+  .then(async () => {
+    try {
+      await dropAccessRequests(db, log);
+    } catch (error) {
+      log("ERROR", "access_requests_drop_failed", errorKind(error));
     }
   });
 

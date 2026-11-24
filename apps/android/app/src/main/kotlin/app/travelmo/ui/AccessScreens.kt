@@ -54,26 +54,19 @@ import app.travelmo.core.AccessConfig
 import app.travelmo.core.AccessRecord
 import app.travelmo.core.AccountAccess
 import app.travelmo.core.canRevoke
-import app.travelmo.core.formatDate
 import app.travelmo.shared.Res
 import app.travelmo.shared.access
 import app.travelmo.shared.access_admins_only
 import app.travelmo.shared.access_approved
 import app.travelmo.shared.access_approved_hint
 import app.travelmo.shared.access_invite_label
-import app.travelmo.shared.access_no_requests
-import app.travelmo.shared.access_requested_on
-import app.travelmo.shared.access_requests
-import app.travelmo.shared.approve
 import app.travelmo.shared.back
-import app.travelmo.shared.decline
 import app.travelmo.shared.email_address
 import app.travelmo.shared.email_link_sent
 import app.travelmo.shared.invite
 import app.travelmo.shared.invite_only
 import app.travelmo.shared.invite_only_declined
 import app.travelmo.shared.invite_only_none
-import app.travelmo.shared.invite_only_requested
 import app.travelmo.shared.invite_only_unverified
 import app.travelmo.shared.invited_elsewhere
 import app.travelmo.shared.loading
@@ -90,9 +83,8 @@ private const val DELETE_ACCOUNT_TOKEN = "access/account/delete"
 
 /**
  * What a signed-in account sees until it is approved (SPEC "Access"), as the
- * web's RequestAccess: nobody may ask for access, so it says to ask someone
- * to share a trip, or where an earlier request stands; "Invited at another
- * address?" while it waits,
+ * web's InviteOnly: nobody may ask for access, so it says to ask someone
+ * to share a trip; "Invited at another address?" while it waits,
  * Sign out and Delete account (Settings, where accounts are otherwise
  * deleted, needs access). It follows the access record live, so an approval
  * opens the app here.
@@ -102,7 +94,7 @@ fun InviteOnlyScreen(account: GoogleAccount, viewModel: TripsViewModel, status: 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val email = viewModel.verifiedEmail
-    val waiting = status == AccountAccess.NONE || status == AccountAccess.REQUESTED
+    val waiting = status == AccountAccess.NONE
     Surface(modifier = Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
             val scroll = rememberScrollState()
@@ -116,7 +108,6 @@ fun InviteOnlyScreen(account: GoogleAccount, viewModel: TripsViewModel, status: 
                     Text(stringResource(Res.string.invite_only), style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
                     val said = when {
                         email == null -> stringResource(Res.string.invite_only_unverified)
-                        status == AccountAccess.REQUESTED -> stringResource(Res.string.invite_only_requested)
                         status == AccountAccess.DECLINED -> stringResource(Res.string.invite_only_declined, email)
                         else -> stringResource(Res.string.invite_only_none, email)
                     }
@@ -268,21 +259,6 @@ private fun AccessAdmin(viewModel: TripsViewModel, config: AccessConfig) {
         Text(stringResource(Res.string.loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 24.dp))
         return
     }
-    Text(stringResource(Res.string.access_requests), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 32.dp, bottom = 4.dp))
-    if (current.pending.isEmpty()) {
-        Text(stringResource(Res.string.access_no_requests), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-    current.pending.forEachIndexed { index, record ->
-        if (index > 0) HorizontalDivider()
-        RequestRow(record) {
-            OutlinedButton(onClick = { act(DECIDE_TOKEN + record.email) { viewModel.decideAccess(DECIDE_TOKEN + record.email, record.email, AccountAccess.APPROVED) } }, enabled = !busy(record.email)) {
-                Text(stringResource(Res.string.approve))
-            }
-            OutlinedButton(onClick = { act(DECIDE_TOKEN + record.email) { viewModel.decideAccess(DECIDE_TOKEN + record.email, record.email, AccountAccess.DECLINED) } }, enabled = !busy(record.email)) {
-                Text(stringResource(Res.string.decline))
-            }
-        }
-    }
     Text(stringResource(Res.string.access_approved), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 32.dp, bottom = 4.dp))
     Text(stringResource(Res.string.access_approved_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     current.approved.forEachIndexed { index, record ->
@@ -294,19 +270,6 @@ private fun AccessAdmin(viewModel: TripsViewModel, config: AccessConfig) {
                 }
             }
         }
-    }
-}
-
-/** A request: its address and the day it asked, with Approve and Decline below, so a long address keeps its line. */
-@Composable
-private fun RequestRow(record: AccessRecord, buttons: @Composable () -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-        val asked = record.requestedAt?.takeIf { it.length >= 10 }?.let { formatDate(it.take(10)) }
-        Text(
-            if (asked != null) stringResource(Res.string.access_requested_on, record.email, asked) else record.email,
-            style = MaterialTheme.typography.bodyLarge,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) { buttons() }
     }
 }
 

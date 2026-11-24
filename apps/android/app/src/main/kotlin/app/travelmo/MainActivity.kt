@@ -27,7 +27,6 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import app.travelmo.auth.SignedIn
 import app.travelmo.core.AccountAccess
-import app.travelmo.core.opensAccessPage
 import app.travelmo.core.tripIdFromReminderUrl
 import app.travelmo.log.DebugLogging
 import app.travelmo.notify.ReminderNotifications
@@ -85,10 +84,6 @@ class MainActivity : ComponentActivity() {
     // it; kept across a recreation (a rotation on the sign-in screen, say).
     private var requestedTrip by mutableStateOf<String?>(null)
 
-    // Whether a tapped access request asks for the Access page, until the
-    // signed-in app has opened it; kept across a recreation.
-    private var requestedAccess by mutableStateOf(false)
-
     // Whether the Licenses screen is up in place of the app (LicensesHost);
     // kept across a recreation.
     private var licensesOpen by mutableStateOf(false)
@@ -102,7 +97,6 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         requestedTrip = if (savedInstanceState == null) tripFrom(intent) else savedInstanceState.getString(STATE_REQUESTED_TRIP)
-        requestedAccess = if (savedInstanceState == null) accessFrom(intent) else savedInstanceState.getBoolean(STATE_REQUESTED_ACCESS)
         licensesOpen = savedInstanceState?.getBoolean(STATE_LICENSES_OPEN) ?: false
         val app = application as TravelmoApplication
         setContent {
@@ -134,8 +128,6 @@ class MainActivity : ComponentActivity() {
                                 signedIn,
                                 requestedTrip,
                                 onTripOpened = { requestedTrip = null },
-                                requestedAccess = requestedAccess,
-                                onAccessOpened = { requestedAccess = false },
                             )
                         }
                     }
@@ -159,30 +151,20 @@ class MainActivity : ComponentActivity() {
             // The trip, not the licenses, is what the tap asked for.
             licensesOpen = false
         }
-        if (accessFrom(intent)) {
-            requestedAccess = true
-            licensesOpen = false
-        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putString(STATE_REQUESTED_TRIP, requestedTrip)
         outState.putBoolean(STATE_LICENSES_OPEN, licensesOpen)
-        outState.putBoolean(STATE_REQUESTED_ACCESS, requestedAccess)
     }
 
     // A tapped reminder carries the trip's URL (ReminderNotifications.show).
     private fun tripFrom(intent: Intent?): String? = tripIdFromReminderUrl(intent?.getStringExtra(ReminderNotifications.EXTRA_URL))
 
-    // A tapped access request, an admin's, carries the web's Access page.
-    private fun accessFrom(intent: Intent?): Boolean =
-        opensAccessPage(intent?.getStringExtra(ReminderNotifications.EXTRA_URL), intent?.getStringExtra(ReminderNotifications.EXTRA_TAG))
-
     private companion object {
         const val STATE_REQUESTED_TRIP = "requestedTrip"
         const val STATE_LICENSES_OPEN = "licensesOpen"
-        const val STATE_REQUESTED_ACCESS = "requestedAccess"
     }
 }
 
@@ -192,8 +174,6 @@ private fun SignedInApp(
     user: SignedIn,
     requestedTrip: String?,
     onTripOpened: () -> Unit,
-    requestedAccess: Boolean,
-    onAccessOpened: () -> Unit,
 ) {
     // One view model per signed-in user: its queries carry the uid.
     val factory = remember(user.uid) {
@@ -217,12 +197,6 @@ private fun SignedInApp(
         if (requestedTrip != null) {
             backStack.add(TripDetail(requestedTrip))
             onTripOpened()
-        }
-    }
-    LaunchedEffect(requestedAccess) {
-        if (requestedAccess) {
-            if (backStack.lastOrNull() != AccessPage) backStack.add(AccessPage)
-            onAccessOpened()
         }
     }
     val admin = (access as? AccessState.Known)?.admin == true
