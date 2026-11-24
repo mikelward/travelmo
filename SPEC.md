@@ -2638,8 +2638,15 @@ Linux compiles the iOS targets but cannot run them. The screens' text is
 in `apps/android/shared`, a Compose Multiplatform module both apps build
 (`Res.string.*`), except what only Android shows outside the screens: the
 launcher label, notification channels, toasts and the debug log's notes.
-Next, in order: the logging and data access go behind interfaces, the
-screens and their view model move to `:shared`, then the iOS app itself
+The data the screens read and the actions they take are interfaces in
+`:shared` (`TripStore`, `TripActions`, the mailbox and calendar actions,
+`PushDevice` and the rest), with the documents' readers and the no-op
+versions beside them; Android implements them with Firestore, Cloud
+Messaging and the parser (`FirestoreTrips`, `Parser*`), and iOS will
+implement the same ones. Shared code logs through `SharedLog`, each value
+marked safe or sensitive as androidlog asks, and the Android app records
+those lines in its own debug log. Next, in order: the screens and their
+view model move to `:shared`, then the iOS app itself
 (Firebase Auth and Firestore, Google sign-in and Sign in with Apple, which
 App Store review asks of an app offering Google's, notifications through
 Cloud Messaging), then a TestFlight build from CI.

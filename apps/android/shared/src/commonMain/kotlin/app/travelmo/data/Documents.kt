@@ -212,7 +212,7 @@ fun profileFromDocument(data: Map<String, Any?>): TravelProfile? {
 }
 
 /** Loyalty numbers read from booking emails; an entry missing its program, number, email or time, or whose number is a balance, is left out, as on the web. */
-internal fun foundLoyaltyOf(value: Any?): List<FoundLoyalty> = (value as? List<*>).orEmpty().mapNotNull { item ->
+fun foundLoyaltyOf(value: Any?): List<FoundLoyalty> = (value as? List<*>).orEmpty().mapNotNull { item ->
     @Suppress("UNCHECKED_CAST")
     val map = item as? Map<String, Any?> ?: return@mapNotNull null
     FoundLoyalty(
@@ -232,7 +232,7 @@ internal fun foundLoyaltyOf(value: Any?): List<FoundLoyalty> = (value as? List<*
 }
 
 /** Whose each membership is, as the owner said; an entry missing its program or number is left out. */
-internal fun loyaltyPeopleOf(value: Any?): List<LoyaltyPerson> = (value as? List<*>).orEmpty().mapNotNull { item ->
+fun loyaltyPeopleOf(value: Any?): List<LoyaltyPerson> = (value as? List<*>).orEmpty().mapNotNull { item ->
     val map = item as? Map<*, *> ?: return@mapNotNull null
     LoyaltyPerson(
         program = (map["program"] as? String)?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null,
@@ -242,7 +242,7 @@ internal fun loyaltyPeopleOf(value: Any?): List<LoyaltyPerson> = (value as? List
 }
 
 /** An import record, as the review list reads it; one missing its outcome or time is left out. */
-internal fun parsedRecordOf(id: String, data: Map<String, Any?>?): ParsedRecord? {
+fun parsedRecordOf(id: String, data: Map<String, Any?>?): ParsedRecord? {
     val map = data ?: return null
     return ParsedRecord(
         messageId = map.text("messageId") ?: id,
@@ -257,7 +257,7 @@ internal fun parsedRecordOf(id: String, data: Map<String, Any?>?): ParsedRecord?
 }
 
 /** The user's sender rules; anything that isn't a list of names reads as none. */
-internal fun senderPatternsOf(data: Map<String, Any?>?): SenderPatterns =
+fun senderPatternsOf(data: Map<String, Any?>?): SenderPatterns =
     SenderPatterns(allow = data.orEmpty().strings("allow"), deny = data.orEmpty().strings("deny"))
 
 /**
@@ -282,7 +282,7 @@ data class FastmailStatus(val emailAddress: String, val progress: BackfillShown?
  * connected before there could be several), oldest first. A malformed
  * entry reads as none, a malformed progress as no progress.
  */
-internal fun gmailStatusesOf(data: Map<String, Any?>?): List<GmailStatus> {
+fun gmailStatusesOf(data: Map<String, Any?>?): List<GmailStatus> {
     val all = (data?.get("gmails") as? Map<*, *>).orEmpty().values.mapNotNull(::gmailStatusOf)
     val legacy = gmailStatusOf(data?.get("gmail"))
     val ordered = gmailMailboxes(all.map { it.mailbox }, legacy?.mailbox)
@@ -299,7 +299,7 @@ private fun gmailStatusOf(entry: Any?): GmailStatus? {
 }
 
 /** The user document's Fastmail connection (`fastmail`); null when none. A malformed progress reads as none. */
-internal fun fastmailStatusOf(data: Map<String, Any?>?): FastmailStatus? {
+fun fastmailStatusOf(data: Map<String, Any?>?): FastmailStatus? {
     val fastmail = data?.get("fastmail") as? Map<*, *> ?: return null
     val address = connectedAddressOf(fastmail) ?: return null
     return FastmailStatus(address, backfillOf(fastmail))
@@ -309,7 +309,7 @@ internal fun fastmailStatusOf(data: Map<String, Any?>?): FastmailStatus? {
  * The user document's mailboxes connected over IMAP (`imaps`), oldest first.
  * A malformed entry reads as none, a malformed progress as no progress.
  */
-internal fun imapStatusesOf(data: Map<String, Any?>?): List<ImapMailbox> = imapMailboxes(
+fun imapStatusesOf(data: Map<String, Any?>?): List<ImapMailbox> = imapMailboxes(
     (data?.get("imaps") as? Map<*, *>).orEmpty().values.mapNotNull { entry ->
         val imap = entry as? Map<*, *> ?: return@mapNotNull null
         val address = connectedAddressOf(imap) ?: return@mapNotNull null

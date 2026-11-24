@@ -15,17 +15,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
-/** Settles the signed-in account's access with the parser (SPEC "Access"); a fake in tests. */
-interface AccessCheck {
-    /** Where the account stands once settled; null when that could not be told (offline, no parser). */
-    suspend fun check(): AccountAccess?
-}
-
-/** A build with no parser behind it: nothing to settle. */
-object NoAccessCheck : AccessCheck {
-    override suspend fun check(): AccountAccess? = null
-}
-
 /**
  * `POST /access/check` on the parser, with the user's Firebase ID token as
  * [ParserAccountDeletion] sends it. It lets in an account from before

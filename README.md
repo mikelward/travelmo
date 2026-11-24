@@ -76,9 +76,12 @@ builds only, so `next dev` runs without it.
 ### Android
 
 `apps/android` is a Gradle build of its own (JDK 21; the wrapper fetches
-Gradle). `:shared` holds the screens' text as Compose Multiplatform
-resources, for the iOS app to come (its `strings.xml` takes an apostrophe
-or a percent sign as written, not escaped). `:core` is Kotlin Multiplatform (the JVM and iOS) with the models and the logic the web's
+Gradle). `:shared` holds, for the iOS app to come, the screens' text as
+Compose Multiplatform resources, the interfaces the screens read data and
+take actions through (each with a no-op version for tests and previews;
+`:app` implements them with Firebase and the parser) and the log shared
+code writes to, which `:app` sends to its debug log. Its `strings.xml`
+takes an apostrophe or a percent sign as written, not escaped. `:core` is Kotlin Multiplatform (the JVM and iOS) with the models and the logic the web's
 `packages/core` has (grouping, what comes next, the status lines, date
 formatting), tested without an SDK and kept free of Android by
 `:core:verifyNoAndroid`; `:app` is the Compose app: sign-in, the trip list,
@@ -102,7 +105,7 @@ same way.
 ```sh
 cd apps/android
 ./gradlew :core:verifyNoAndroid :core:test            # no SDK needed; on a Mac, also on the iOS Simulator
-./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+./gradlew :shared:testAndroidHostTest :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
 Every screen is rendered under Robolectric to `apps/android/app/snapshots/`

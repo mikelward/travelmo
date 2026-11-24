@@ -424,7 +424,7 @@ Kotlin Multiplatform, sharing the Android app's Kotlin (SPEC "iOS app").
 - [ ] Move the Compose screens to a module both apps build (Compose
       Multiplatform):
   - [x] their text (`apps/android/shared`, `Res.string.*`);
-  - [ ] logging and data access behind interfaces;
+  - [x] logging and data access behind interfaces;
   - [ ] the theme and the screens;
   - [ ] the view model and navigation.
 - [ ] The iOS app: Firebase Auth and Firestore, Google sign-in, Sign in
