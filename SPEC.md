@@ -287,7 +287,8 @@ passed) the card turns to the arrival ("Arrives in 6 h 10 min · Tue 24 Nov
 20:30", counted to the landing estimate) and the step is where it arrives
 and where the bags come out ("Terminal E · Gate B5 · Bags on carousel 7").
 A cancelled or diverted flight says so instead, and nothing known means no
-third line. A flight late leaving stays the next event past its booked
+third line. The when, the step and what follows share one muted style under
+the booking's name. A flight late leaving stays the next event past its booked
 time, counted to its estimate, and a flight in the air stays the card's
 until it lands (the service's landing, else its estimate, else as booked),
 whatever was booked before then: a car booked for the scheduled landing
