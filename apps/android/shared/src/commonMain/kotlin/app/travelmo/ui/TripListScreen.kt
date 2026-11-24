@@ -275,7 +275,7 @@ private fun StatusLines(
         Text(stringResource(Res.string.staying_at, stay.title) + until, style = MaterialTheme.typography.bodyLarge, color = muted, modifier = Modifier.padding(top = 8.dp))
     }
     tripNextUp(segments, now, flightStatuses)?.let { next ->
-        // The booking, then when (muted), then a flight's next step, then (muted) what follows a landing.
+        // The booking, then in one muted style: when, a flight's next step, and what follows a landing.
         Text(
             next.title,
             style = MaterialTheme.typography.bodyLarge,
@@ -285,7 +285,7 @@ private fun StatusLines(
             modifier = Modifier.padding(top = 8.dp),
         )
         Text(next.`when`, style = MaterialTheme.typography.bodyLarge, color = muted)
-        next.step?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
+        next.step?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = muted) }
         next.then?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = muted) }
     }
     // Until the user says they checked in, which only an open window offers.
