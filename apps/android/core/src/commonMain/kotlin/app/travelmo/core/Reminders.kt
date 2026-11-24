@@ -27,17 +27,6 @@ private val httpsUrl = Regex("""^https://[^/\s]+(/\S*)?$""")
  * check-in reminder carries the airline's site rather than a trip. Null for
  * a trip's URL, which the app opens itself, and for anything not https.
  */
-fun externalReminderUrl(url: String?, tag: String? = null): String? =
-    url?.takeIf { tripIdFromReminderUrl(it) == null && !opensAccessPage(it, tag) && httpsUrl.matches(it) }
+fun externalReminderUrl(url: String?): String? =
+    url?.takeIf { tripIdFromReminderUrl(it) == null && httpsUrl.matches(it) }
 
-private val accessUrl = Regex("""^https?://[^/\s]+/access/?(?:[?#]\S*)?$""")
-
-/**
- * Whether a notification is the parser's "Access request" to an admin
- * (apps/parser/src/access.ts's notifyAdmins: tagged `access-<address>`,
- * carrying the web's Access page), which the app opens on its own Access
- * page. Both are checked, so an airline's page that happens to be called
- * /access still opens in the browser.
- */
-fun opensAccessPage(url: String?, tag: String?): Boolean =
-    url != null && tag?.startsWith("access-") == true && accessUrl.matches(url)

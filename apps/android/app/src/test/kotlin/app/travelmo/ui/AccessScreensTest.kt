@@ -17,7 +17,6 @@ import app.travelmo.core.AccessConfig
 import app.travelmo.core.AccountAccess
 import app.travelmo.core.accessDecision
 import app.travelmo.core.accessRecordOf
-import app.travelmo.core.accessRequest
 import app.travelmo.ui.theme.TravelmoTheme
 import io.kotest.matchers.shouldBe
 import java.time.Instant
@@ -63,7 +62,7 @@ class AccessScreensTest {
 
     @Test
     fun `an approval takes the invite-only screen away`() {
-        val store = FakeTripStore(access = mapOf(newcomer to accessRequest(newcomer, "u-new", FROZEN_NOW)), hasUserDocument = false)
+        val store = FakeTripStore(access = mapOf(newcomer to waitingRecord(newcomer, "u-new")), hasUserDocument = false)
         showInviteOnly(newcomerModel(store))
         composeRule.onNodeWithText("Travelmo is invite-only").assertExists()
         store.accessFields.value += newcomer to store.accessFields.value.getValue(newcomer) + accessDecision(AccountAccess.APPROVED, "admin", FROZEN_NOW)
@@ -97,7 +96,7 @@ class AccessScreensTest {
         accessConfig = AccessConfig(listOf(OWNER_EMAIL)),
         access = mapOf(
             OWNER_EMAIL to mapOf("email" to OWNER_EMAIL) + accessDecision(AccountAccess.APPROVED, "admin", FROZEN_NOW),
-            newcomer to accessRequest(newcomer, "u-new", "2026-10-30T09:00:00Z"),
+            newcomer to waitingRecord(newcomer, "u-new"),
             "friend@example.com" to mapOf("email" to "friend@example.com") + accessDecision(AccountAccess.APPROVED, "admin", FROZEN_NOW),
         ),
     )
@@ -108,22 +107,18 @@ class AccessScreensTest {
     }
 
     @Test
-    fun `an admin approves a request, and it moves to the approved`() {
-        val store = adminStore()
-        showAccess(store)
-        composeRule.onNodeWithText("$newcomer · Fri 30 Oct").assertExists()
-        composeRule.onNodeWithText("Approve").performClick()
-        composeRule.waitForIdle()
-        accessRecordOf(store.accessFields.value.getValue(newcomer))?.status shouldBe AccountAccess.APPROVED
-        composeRule.onNodeWithText("No requests.").assertExists()
-        composeRule.onNodeWithText(newcomer).assertExists()
+    fun `an admin's Access page lists no requests, only who is approved`() {
+        showAccess(adminStore())
+        composeRule.onNodeWithText("Requests").assertDoesNotExist()
+        composeRule.onNodeWithText(newcomer).assertDoesNotExist()
+        composeRule.onNodeWithText("friend@example.com").assertExists()
     }
 
     @Test
     fun `an admin revokes anyone but an admin`() {
         val store = adminStore()
         showAccess(store)
-        // The request's Decline, and one Revoke: not the admin's own address.
+        // One Revoke: not the admin's own address.
         composeRule.onAllNodesWithText("Revoke").fetchSemanticsNodes().size shouldBe 1
         composeRule.onNodeWithText("Revoke").performScrollTo().performClick()
         composeRule.waitForIdle()

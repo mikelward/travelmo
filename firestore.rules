@@ -391,8 +391,7 @@ service cloud.firestore {
       allow list: if isAdmin();
 
       // Nobody asks for access: Travelmo is invite-only (an admin's invite
-      // or someone sharing with the address, below). Requests made before
-      // that stay readable and decidable, but none is made or renewed.
+      // or someone sharing with the address, below).
 
       // An account from before approvals records itself, so admins see it
       // and can revoke it.

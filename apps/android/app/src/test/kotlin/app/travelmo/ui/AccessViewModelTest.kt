@@ -7,7 +7,6 @@ import app.travelmo.core.Trip
 import app.travelmo.core.accessDecision
 import app.travelmo.core.accessInvite
 import app.travelmo.core.accessRecordOf
-import app.travelmo.core.accessRequest
 import app.travelmo.data.AccessCheck
 import app.travelmo.data.TripStore
 import io.kotest.matchers.shouldBe
@@ -112,7 +111,7 @@ class AccessViewModelTest {
 
     @Test
     fun `an approval lets the account in at once, and its queries are asked again`() = runTest {
-        val base = newcomerStore(mapOf(newcomer to accessRequest(newcomer, "u-new", now)))
+        val base = newcomerStore(mapOf(newcomer to waitingRecord(newcomer, "u-new")))
         var asked = 0
         val store = object : TripStore by base {
             override fun trips(uid: String, addresses: List<String>): Flow<List<Trip>> {
@@ -123,7 +122,7 @@ class AccessViewModelTest {
         val viewModel = viewModel(store)
         val watching = launch { viewModel.trips.collect {} }
         runCurrent()
-        viewModel.access.value.shouldBeInstanceOf<AccessState.Known>().status shouldBe AccountAccess.REQUESTED
+        viewModel.access.value.shouldBeInstanceOf<AccessState.Known>().status shouldBe AccountAccess.NONE
         asked shouldBe 1
         // An admin approves elsewhere; the record changes live.
         base.accessFields.update { it + (newcomer to it.getValue(newcomer) + accessDecision(AccountAccess.APPROVED, "admin", now)) }
@@ -134,19 +133,19 @@ class AccessViewModelTest {
     }
 
     @Test
-    fun `an admin approves and declines requests, invites an address and revokes one`() = runTest {
+    fun `an admin approves and declines addresses, invites one and revokes one`() = runTest {
         val store = FakeTripStore(
             accessConfig = admins,
             access = mapOf(
-                "late@example.com" to accessRequest("late@example.com", "u2", "2026-11-23T09:00:00Z"),
-                "early@example.com" to accessRequest("early@example.com", "u1", "2026-11-22T09:00:00Z"),
+                "late@example.com" to waitingRecord("late@example.com", "u2"),
+                "early@example.com" to waitingRecord("early@example.com", "u1"),
                 "friend@example.com" to mapOf("email" to "friend@example.com") + accessDecision(AccountAccess.APPROVED, "admin", now),
             ),
         )
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(now) })
         val watching = launch { viewModel.accessLists.collect {} }
         runCurrent()
-        viewModel.accessLists.value?.pending?.map { it.email } shouldBe listOf("early@example.com", "late@example.com")
+        viewModel.accessLists.value?.approved?.map { it.email } shouldBe listOf("friend@example.com", OWNER_EMAIL)
 
         viewModel.decideAccess("a", "early@example.com", AccountAccess.APPROVED)
         viewModel.decideAccess("d", "late@example.com", AccountAccess.DECLINED)
@@ -155,11 +154,10 @@ class AccessViewModelTest {
         viewModel.outcomes.value shouldBe mapOf("a" to Outcome.Done, "d" to Outcome.Done, "i" to Outcome.Done, "r" to Outcome.Done)
 
         val records = store.accessFields.value
-        records["early@example.com"] shouldBe accessRequest("early@example.com", "u1", "2026-11-22T09:00:00Z") + accessDecision(AccountAccess.APPROVED, OWNER, now)
-        records["late@example.com"] shouldBe accessRequest("late@example.com", "u2", "2026-11-23T09:00:00Z") + accessDecision(AccountAccess.DECLINED, OWNER, now)
+        records["early@example.com"] shouldBe waitingRecord("early@example.com", "u1") + accessDecision(AccountAccess.APPROVED, OWNER, now)
+        records["late@example.com"] shouldBe waitingRecord("late@example.com", "u2") + accessDecision(AccountAccess.DECLINED, OWNER, now)
         records["guest@example.com"] shouldBe mapOf("email" to "guest@example.com") + accessDecision(AccountAccess.APPROVED, OWNER, now)
         accessRecordOf(records.getValue("friend@example.com"))?.status shouldBe AccountAccess.DECLINED
-        viewModel.accessLists.value?.pending shouldBe emptyList()
         viewModel.accessLists.value?.approved?.map { it.email } shouldBe listOf("early@example.com", "guest@example.com", OWNER_EMAIL)
         watching.cancel()
     }

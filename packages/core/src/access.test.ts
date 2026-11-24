@@ -2,8 +2,6 @@ import {
   accessDecision,
   accessInvite,
   accessLists,
-  accessRequest,
-  accessRequestMessage,
   accessStatus,
   canRevoke,
   grandfatheredAccess,
@@ -11,7 +9,7 @@ import {
   letsIn,
   needsGrandfathering,
   normalizeEmail,
-  type AccessRecord,
+  AccessRecord,
 } from "./access";
 
 const now = "2026-11-23T10:00:00Z";
@@ -38,11 +36,13 @@ describe("accessStatus", () => {
   it("keeps out a new account until it is approved", () => {
     expect(accessStatus(base)).toBe("none");
     expect(isApproved(base)).toBe(false);
-    expect(accessStatus({ ...base, record: accessRequest("new@example.com", "u1", now) })).toBe("requested");
+    expect(accessStatus({ ...base, record: { email: "new@example.com", uid: "u1" } })).toBe("none");
+    // A status this version does not know lets nobody in.
+    expect(AccessRecord.parse({ email: "new@example.com", status: "maybe" }).status).toBeUndefined();
   });
 
   it("lets in an address an admin approved or someone shared with", () => {
-    const requested = accessRequest("new@example.com", "u1", now);
+    const requested: AccessRecord = { email: "new@example.com", uid: "u1" };
     expect(accessStatus({ ...base, record: { ...requested, ...accessDecision("approved", "admin", now) } })).toBe("approved");
     expect(accessStatus({ ...base, record: accessInvite("new@example.com", "friend", now) })).toBe("approved");
     expect(accessStatus({ ...base, record: { ...requested, ...accessInvite("new@example.com", "friend", now) } })).toBe("approved");
@@ -73,7 +73,7 @@ describe("accessStatus", () => {
     expect(accessStatus({ ...base, linked, linkedRecords: [{ email: "work@company.example", invitedBy: "u1" }] })).toBe("approved");
     // Not a declined one, a request, or the record of an address not linked.
     expect(accessStatus({ ...base, linked, linkedRecords: [{ email: "work@company.example", status: "declined", invitedBy: "u1" }] })).toBe("none");
-    expect(accessStatus({ ...base, linked, linkedRecords: [{ email: "work@company.example", status: "requested" }] })).toBe("none");
+    expect(accessStatus({ ...base, linked, linkedRecords: [{ email: "work@company.example" }] })).toBe("none");
     expect(accessStatus({ ...base, linked, linkedRecords: [{ email: "other@example.com", status: "approved" }] })).toBe("none");
     // The sign-in's decline still wins over a linked address's approval.
     expect(
@@ -96,7 +96,7 @@ describe("letsIn", () => {
   });
   it("is not one that only asked, was declined, or has no record", () => {
     expect(letsIn("work@example.com", undefined, config)).toBe(false);
-    expect(letsIn("work@example.com", { email: "work@example.com", status: "requested" }, config)).toBe(false);
+    expect(letsIn("work@example.com", { email: "work@example.com" }, config)).toBe(false);
     expect(letsIn("work@example.com", { ...invited, status: "declined" }, config)).toBe(false);
   });
   it("reads a record only for its own address", () => {
@@ -114,7 +114,6 @@ describe("grandfatheredAccess", () => {
 
   it("is needed only by an account nothing else lets in, and never over a decline", () => {
     expect(needsGrandfathering("none")).toBe(true);
-    expect(needsGrandfathering("requested")).toBe(true);
     expect(needsGrandfathering("approved")).toBe(false);
     expect(needsGrandfathering("declined")).toBe(false);
   });
@@ -134,26 +133,16 @@ describe("canRevoke", () => {
 });
 
 describe("accessLists", () => {
-  it("lists requests oldest first and approved addresses by name, and no declined ones", () => {
+  it("lists approved addresses by name, and no declined ones", () => {
     const records: AccessRecord[] = [
-      accessRequest("late@example.com", "u2", "2026-11-23T12:00:00Z"),
-      accessRequest("early@example.com", "u1", "2026-11-22T12:00:00Z"),
+      { email: "late@example.com", uid: "u2" },
       { email: "zed@example.com", ...accessDecision("approved", "admin", now) },
       accessInvite("amy@example.com", "friend", now),
-      { ...accessRequest("both@example.com", "u3", now), ...accessInvite("both@example.com", "friend", now) },
+      { uid: "u3", ...accessInvite("both@example.com", "friend", now) },
       { email: "gone@example.com", ...accessDecision("declined", "admin", now), invitedBy: "friend" },
     ];
-    const { pending, approved } = accessLists(records);
-    expect(pending.map((r) => r.email)).toEqual(["early@example.com", "late@example.com"]);
+    const { approved } = accessLists(records);
     expect(approved.map((r) => r.email)).toEqual(["amy@example.com", "both@example.com", "zed@example.com"]);
   });
 });
 
-describe("accessRequestMessage", () => {
-  it("names the address and links to the Access page", () => {
-    const message = accessRequestMessage("new@example.com", "https://travelmo.example");
-    expect(message.subject).toBe("Travelmo access request");
-    expect(message.text).toBe("new@example.com asked to use Travelmo.\n\nApprove or decline: https://travelmo.example/access\n");
-    expect(message.url).toBe("https://travelmo.example/access");
-  });
-});

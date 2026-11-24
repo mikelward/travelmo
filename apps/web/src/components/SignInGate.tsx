@@ -4,7 +4,7 @@ import type { User } from "firebase/auth";
 import { useState, type ReactNode } from "react";
 import { AccountDeleted, useAccountDeletion } from "@/components/DeleteAccount";
 import { Logo } from "@/components/Logo";
-import { RequestAccess } from "@/components/RequestAccess";
+import { InviteOnly } from "@/components/InviteOnly";
 import { useAuth } from "@/lib/auth";
 
 // `whileWaiting` opens the page to an account not approved yet that has not
@@ -42,9 +42,9 @@ export function SignInGate({ children, whileWaiting = false }: { children: (user
     );
   }
   if (access.state === "loading") return <p className="text-muted">Loading…</p>;
-  const waiting = access.state === "none" || access.state === "requested";
+  const waiting = access.state === "none";
   if (access.state !== "approved" && !(whileWaiting && waiting)) {
-    return <RequestAccess user={user} status={access.state} onDeleted={onDeleted} />;
+    return <InviteOnly user={user} status={access.state} onDeleted={onDeleted} />;
   }
   return <>{children(user)}</>;
 }

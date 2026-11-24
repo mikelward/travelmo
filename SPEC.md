@@ -69,9 +69,8 @@ viewer's zone. Trip bounds are calendar dates.
   got (`cursor, after, scanned, imported, failed, done, updatedAt`, and the
   reading under way: `run, step, running, queued, leaseUntil, retryAfter, wake, handoff, failures, lastFailed`); each calendar
   is `{id, summary, primary, selected, lastReadAt, lastResult, lastError}`.
-- `access/{email}` — `email, status (requested | approved | declined), uid,
-  requestedAt, invitedBy, invitedAt, approvedBy, approvedAt, declinedBy,
-  declinedAt, notifiedAt`: who may use the app, one per lowercased verified
+- `access/{email}` — `email, status (approved | declined), uid, invitedBy,
+  invitedAt, approvedBy, approvedAt, declinedBy, declinedAt`: who may use the app, one per lowercased verified
   address ("Access"). `config/access` — `admins[]`, lowercase addresses,
   written by hand in the console.
 - `users/{uid}/tripReminders/{slot}` — `id, text, amount, unit
@@ -916,28 +915,20 @@ offline like any write, and need no new endpoint; a parser endpoint would
 have checked that a share exists, which a user can make for any address
 anyway.
 
-Asking. An account that is not approved sees "Travelmo is invite-only" on
+Not approved. An account that is not approved sees "Travelmo is invite-only" on
 every page but a confirmation link's (below) instead of the app, with "Ask
 someone who uses Travelmo to share a trip with you.", "Sign out" and
-"Delete account" (as in Settings, which it cannot open). Nobody may ask for
-access any more: the rules refuse writing a request, since bots filled the
-list. A request made before (`access/{email}` as `requested` with its uid
-and the time) still waits for an admin. The page calls the
-parser's `POST /access/check` on opening, which:
-
-1. lets in an account the rules cannot tell is old: one that owns a trip
-   (new accounts cannot make one; an Android-only account never wrote a
-   user document) as approved by itself, or one someone approved shared a
-   trip or a profile with before invites existed, or from an app that writes
-   no invite, as invited by them;
-2. otherwise, for a request admins have not heard of, claims `notifiedAt` in
-   a transaction and sends each admin one plain email ("<address> asked to
-   use Travelmo." and a link to the Access page, through the reminders'
-   SMTP mailer) and a notification ("Access request", opening the Access
-   page) to each of their browsers and phones, as reminders go. So an
-   address is announced once, however often the endpoint is called; if
-   nothing reached any admin (a channel failed, or there is no admin or no
-   channel yet), the claim is given back for the next call.
+"Delete account" (as in Settings, which it cannot open). Nobody can ask for
+access: an admin's invite or someone sharing with the address lets an
+account in. (Accounts once could ask; bots filled the list, so asking was
+removed, and the parser deletes what it left once, on start:
+`apps/parser/src/dropAccessRequests.ts`, marked done in
+`config/accessRequestsDropped`.) The page calls the parser's
+`POST /access/check` on opening, which lets in an account the rules cannot
+tell is old: one that owns a trip (new accounts cannot make one; an
+Android-only account never wrote a user document) as approved by itself, or
+one someone approved shared a trip or a profile with before invites
+existed, or from an app that writes no invite, as invited by them.
 
 It answers where the account stands. The page follows the record live, so
 an approval opens the app at once.
@@ -961,8 +952,8 @@ rest of Settings is not); confirming checks the address still lets it in
 it and writes the user document, which lets the account in: the app follows
 that document live, so it opens without a reload.
 
-Admins see Access in the menu (web and Android): requests waiting, oldest first, each with
-Approve and Decline; everyone approved by a record, each with Revoke (never
+Admins see Access in the menu (web and Android): everyone approved by a
+record, each with Revoke (never
 an admin's own address or another admin's, which the rules refuse too); and
 Invite, which approves an address that never asked. An account from before
 approvals records itself as approved the next time it opens either app, so
@@ -974,7 +965,7 @@ Enforced in three places:
 
 - The rules: every read and write of app data needs an approved account.
   An account not approved may read its own user document (to tell it is
-  missing) and its own access record, and ask; `config/access` is readable
+  missing) and its own access record; `config/access` is readable
   by admins alone (so the app can tell who is one) and writable by nobody.
 - The parser: `requireUser`, which every user endpoint passes through,
   answers 403 for an account not approved (`gateUser` in
@@ -1007,15 +998,13 @@ request; when that answers approved while the trip list is empty (a refused
 query loads empty), or the account is approved while the app is open, it
 asks again for the trips, the travel profile and the profiles shared with
 it. An account the server says is not approved sees the web's invite-only
-page in place of the app: Request access (then `/access/check`), where its
-request stands, "Invited at another address?" while it waits (the link
+page in place of the app: "Ask someone who uses Travelmo to share a trip
+with you.", "Invited at another address?" while it waits (the link
 opens on the web, whose confirming writes the user document the app
 follows), Sign out and Delete account. Sharing a trip or trusting an
 address with the travel profile writes the invite in the same batch, as
 the web does. An admin's ⋮ menu, on every screen, starts its own items
-with Access, the web's Access page; the "Access request" notification
-(tag `access-<address>`, the web's `/access`) opens it, in a channel of
-its own ("Access requests"). An account from before approvals records
+with Access, the web's Access page. An account from before approvals records
 itself as the web does, so Android-only ones are listed too.
 
 ## Linked email addresses

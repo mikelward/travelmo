@@ -621,7 +621,7 @@ class TripsViewModelTest {
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, accessCheck = check)
         val watching = launch { viewModel.trips.collect {} }
         val people = launch { viewModel.people.collect {} }
-        check.answer.complete(AccountAccess.REQUESTED)
+        check.answer.complete(AccountAccess.NONE)
         runCurrent()
         check.calls shouldBe 1
         store.asked shouldBe 1

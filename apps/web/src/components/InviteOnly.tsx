@@ -9,7 +9,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 // What a signed-in account sees until it is approved (SPEC "Access").
-export function RequestAccess({
+export function InviteOnly({
   user,
   status,
   onDeleted,
@@ -24,7 +24,7 @@ export function RequestAccess({
   // Nobody asks for access (Travelmo is invite-only). The parser lets in an
   // account from before approvals, or one someone already shared with; the
   // page follows the record it writes.
-  const waiting = status === "none" || status === "requested";
+  const waiting = status === "none";
   useEffect(() => {
     if (email && waiting) api.checkAccess(user).catch((e: Error) => console.error("Checking access failed", e));
   }, [user, email, waiting]);

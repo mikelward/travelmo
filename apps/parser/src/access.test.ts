@@ -1,4 +1,4 @@
-import { paths, type Device, type PushSubscription, type ReminderNotification, type Trip } from "@travelmo/core";
+import { paths, type Trip } from "@travelmo/core";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { approvedUid, gateLinking, gateUser, onlyApproved, settleAccess, type SettleDeps } from "./access";
@@ -36,28 +36,14 @@ type Logged = { severity: string; event: string; fields: Record<string, unknown>
 
 function fakeDeps(overrides: Partial<SettleDeps> = {}, emails: Record<string, string> = {}) {
   const logged: Logged[] = [];
-  const sent = { mail: [] as Mail[], push: [] as [PushSubscription, ReminderNotification][], fcm: [] as [Device, ReminderNotification][] };
   const deps: SettleDeps = {
     db,
     now: () => iso,
-    origin: "https://travelmo.example",
     log: (severity, event, fields) => void logged.push({ severity, event, fields }),
-    channels: {
-      mail: async (mail) => void sent.mail.push(mail),
-      push: async (subscription, notification) => {
-        sent.push.push([subscription, notification]);
-        return "sent";
-      },
-      fcm: async (device, notification) => {
-        sent.fcm.push([device, notification]);
-        return device.token === "gone-token" ? "gone" : "sent";
-      },
-    },
     verifiedEmail: async (uid) => emails[uid],
-    uidForEmail: async (email) => (email === adminEmail ? adminUid : undefined),
     ...overrides,
   };
-  return { deps, logged, sent };
+  return { deps, logged };
 }
 
 // The linking routes (SPEC "Linked email addresses") take an account not
@@ -225,11 +211,10 @@ describe("settleAccess", () => {
   it("lets in an account that owns a trip, made before approvals with no user document", async () => {
     const owner = person("owner");
     await seedTrip(owner.uid);
-    const { deps, sent } = fakeDeps();
+    const { deps } = fakeDeps();
     expect(await settleAccess(deps, owner)).toBe("approved");
     expect((await db.doc(paths.access(owner.email)).get()).data()).toMatchObject({ status: "approved", approvedBy: owner.uid, uid: owner.uid });
     expect(await gateUser(db, owner)).toBe("ok");
-    expect(sent.mail).toEqual([]);
   });
 
   it("lets in someone an approved user shared with before invites, naming the sharer", async () => {
@@ -271,87 +256,12 @@ describe("settleAccess", () => {
     expect((await db.doc(paths.access(owner.email)).get()).get("status")).toBe("declined");
   });
 
-  it("tells nobody about an account that has not asked", async () => {
-    const { deps, sent } = fakeDeps();
+  it("lets nobody in by an old request, and tells nobody", async () => {
+    const asker = person("asker");
+    await db.doc(paths.access(asker.email)).set({ email: asker.email, status: "requested", uid: asker.uid, requestedAt: iso });
+    const { deps } = fakeDeps();
+    expect(await settleAccess(deps, asker)).toBe("none");
+    expect((await db.doc(paths.access(asker.email)).get()).get("notifiedAt")).toBeUndefined();
     expect(await settleAccess(deps, person("quiet"))).toBe("none");
-    expect(sent.mail).toEqual([]);
-  });
-
-  it("tells each admin of a request once, by email and on their browsers and phones", async () => {
-    const asker = person("asker");
-    await db.doc(paths.access(asker.email)).set({ email: asker.email, status: "requested", uid: asker.uid, requestedAt: iso });
-    const subscription = { endpoint: "https://push.example/s/1", keys: { p256dh: "p", auth: "a" }, createdAt: iso };
-    await db.doc(paths.pushSubscription(adminUid, "s1")).set(subscription);
-    await db.doc(paths.device(adminUid, "d1")).set({ token: "phone-token", platform: "android", createdAt: iso });
-    await db.doc(paths.device(adminUid, "d2")).set({ token: "gone-token", platform: "android", createdAt: iso });
-    const { deps, sent, logged } = fakeDeps();
-
-    expect(await settleAccess(deps, asker)).toBe("requested");
-    expect(sent.mail).toEqual([
-      {
-        to: adminEmail,
-        subject: "Travelmo access request",
-        text: `${asker.email} asked to use Travelmo.\n\nApprove or decline: https://travelmo.example/access\n`,
-      },
-    ]);
-    const notification = { title: "Access request", body: `${asker.email} asked to use Travelmo.`, url: "https://travelmo.example/access", tag: `access-${asker.email}` };
-    expect(sent.push).toEqual([[subscription, notification]]);
-    expect(sent.fcm.map(([device]) => device.token).sort()).toEqual(["gone-token", "phone-token"]);
-    expect((await db.doc(paths.device(adminUid, "d2")).get()).exists).toBe(false);
-    expect((await db.doc(paths.access(asker.email)).get()).get("notifiedAt")).toBe(iso);
-    // No address in the logs: the requester by uid, admins by position.
-    expect(JSON.stringify(logged)).not.toContain("@");
-
-    expect(await settleAccess(deps, asker)).toBe("requested");
-    expect(sent.mail).toHaveLength(1);
-    expect(sent.push).toHaveLength(1);
-  });
-
-  it("tries again later when there is no admin to tell yet", async () => {
-    const asker = person("asker");
-    await db.doc(paths.access(asker.email)).set({ email: asker.email, status: "requested", uid: asker.uid, requestedAt: iso });
-    await db.doc(paths.accessConfig()).delete();
-    const none = fakeDeps();
-    expect(await settleAccess(none.deps, asker)).toBe("requested");
-    expect(none.logged.map((l) => l.event)).toContain("access_request_no_admins");
-    expect((await db.doc(paths.access(asker.email)).get()).get("notifiedAt")).toBeUndefined();
-
-    await db.doc(paths.accessConfig()).set({ admins: [adminEmail] });
-    const working = fakeDeps();
-    await settleAccess(working.deps, asker);
-    expect(working.sent.mail).toHaveLength(1);
-    expect((await db.doc(paths.access(asker.email)).get()).get("notifiedAt")).toBe(iso);
-  });
-
-  it("tries again later when there is no way to reach the admins yet", async () => {
-    const asker = person("asker");
-    await db.doc(paths.access(asker.email)).set({ email: asker.email, status: "requested", uid: asker.uid, requestedAt: iso });
-    const silent = fakeDeps({ channels: {} });
-    expect(await settleAccess(silent.deps, asker)).toBe("requested");
-    expect(silent.logged.find((l) => l.event === "access_request_notified")?.fields).toMatchObject({ admins: 1, delivered: 0, failed: 0 });
-    expect((await db.doc(paths.access(asker.email)).get()).get("notifiedAt")).toBeUndefined();
-
-    const working = fakeDeps();
-    await settleAccess(working.deps, asker);
-    expect(working.sent.mail).toHaveLength(1);
-  });
-
-  it("tries again later when nothing reached any admin", async () => {
-    const asker = person("asker");
-    await db.doc(paths.access(asker.email)).set({ email: asker.email, status: "requested", uid: asker.uid, requestedAt: iso });
-    const broken = fakeDeps({
-      channels: {
-        mail: async () => {
-          throw new Error("SMTP refused");
-        },
-      },
-    });
-    expect(await settleAccess(broken.deps, asker)).toBe("requested");
-    expect(broken.logged.map((l) => l.event)).toContain("access_notify_mail_failed");
-    expect((await db.doc(paths.access(asker.email)).get()).get("notifiedAt")).toBeUndefined();
-
-    const working = fakeDeps();
-    await settleAccess(working.deps, asker);
-    expect(working.sent.mail).toHaveLength(1);
   });
 });

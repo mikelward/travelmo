@@ -562,3 +562,6 @@ class FakeGmailActions : GmailActions {
         calls += "disconnect $emailAddress"
     }
 }
+
+/** An access record that lets nobody in yet. */
+fun waitingRecord(email: String, uid: String): Map<String, String> = mapOf("email" to email, "uid" to uid)

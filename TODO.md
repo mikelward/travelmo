@@ -444,6 +444,9 @@ Guesses made on autopilot; change any of them freely.
   every five minutes (about ten cents a month for the scheduler job).
 - IMAP: up to five mailboxes per account, as Gmail's; like Fastmail, two
   users may connect the same mailbox (the password is proof of access).
+- Access: nobody can ask for access any more (bots filled the requests);
+  only invites and shares let people in. To bring asking back, revert the
+  commit "Remove asking for access" and add a bot check before reopening it.
 - Loyalty revision: when reading an email again finds no numbers at all,
   the numbers kept from it stay as they were rather than being removed.
 - IMAP: only the inbox is read, new mail and backfill alike; archive

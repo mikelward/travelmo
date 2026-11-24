@@ -1,9 +1,6 @@
 import {
   AccessConfig,
   AccessRecord,
-  Device,
-  PushSubscription,
-  accessRequestMessage,
   accessStatus,
   grandfatheredAccess,
   linkedEmails,
@@ -11,13 +8,9 @@ import {
   normalizeEmail,
   paths,
   type AccountAccess,
-  type ReminderNotification,
 } from "@travelmo/core";
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
 import { readLinks, trustedHolder } from "./emails";
-import type { DeviceSender } from "./fcm";
-import type { Mailer } from "./mail";
-import type { PushSender } from "./push";
 
 // Who may use the app, on the server (SPEC "Access"; packages/core/src/
 // access.ts decides, as firestore.rules does). `gateUser` is the choke
@@ -73,7 +66,7 @@ export async function loadAccess(db: Firestore, uid: string, email: string | und
   const linked = linkedEmails(trustedHolder(user.data(), readLinks(links.data()))).filter((address) => address !== email);
   const inputs = { email, hasProfile: user.exists, record: parsed, config, linked };
   let status = accessStatus(inputs);
-  if ((status === "none" || status === "requested") && linked.length) {
+  if (status === "none" && linked.length) {
     const records = await Promise.all(linked.map(async (address) => parseRecord((await db.doc(paths.access(address)).get()).data(), log)));
     status = accessStatus({ ...inputs, linkedRecords: records.filter((r): r is AccessRecord => !!r) });
   }
@@ -141,17 +134,11 @@ export async function onlyApproved<T extends { uid: string }>(
   return kept;
 }
 
-export type NotifyChannels = { mail?: Mailer; push?: PushSender; fcm?: DeviceSender };
-
 export type SettleDeps = {
   db: Firestore;
   now: () => string;
-  origin: string;
   log: AccessLog;
-  channels: NotifyChannels;
   verifiedEmail: (uid: string) => Promise<string | undefined>;
-  // The account signed in with an admin's address, if any.
-  uidForEmail: (email: string) => Promise<string | undefined>;
 };
 
 // Why an account that predates approvals, or that someone shared with
@@ -186,8 +173,8 @@ async function evidenceFor(deps: SettleDeps, uid: string, email: string): Promis
 
 // Settles the caller's access and says where it stands: lets in an account
 // from before approvals, or one someone shared with (an old app's share
-// writes no invite), and tells the admins of a request they have not heard
-// of, once per address.
+// writes no invite). Nobody asks for access (Travelmo is invite-only), so
+// admins are told of nobody.
 export async function settleAccess(deps: SettleDeps, token: TokenFacts): Promise<AccountAccess> {
   const { db, log } = deps;
   const email = verifiedEmailOf(token);
@@ -214,112 +201,7 @@ export async function settleAccess(deps: SettleDeps, token: TokenFacts): Promise
     return approved ? "approved" : "declined";
   }
 
-  if (state.status === "requested" && !state.record?.notifiedAt) await notifyOnce(deps, token.uid, email);
   return state.status;
-}
-
-// Claims the request's notification before sending, so two calls tell the
-// admins once; gives the claim back when nothing reached anyone (a failure,
-// or no admin or channel to reach), so a later call tries again.
-async function notifyOnce(deps: SettleDeps, uid: string, email: string): Promise<void> {
-  const { db, log } = deps;
-  const ref = db.doc(paths.access(email));
-  const now = deps.now();
-  const claimed = await db.runTransaction(async (t) => {
-    const current = parseRecord((await t.get(ref)).data(), log);
-    if (current?.status !== "requested" || current.notifiedAt) return false;
-    t.update(ref, { notifiedAt: now });
-    return true;
-  });
-  if (!claimed) return;
-  let result: NotifyResult;
-  try {
-    result = await notifyAdmins(deps, email);
-  } catch (error) {
-    result = { admins: 0, delivered: 0, failed: 1 };
-    log("ERROR", "access_notify_failed", { uid, error: (error as Error).message });
-  }
-  log("INFO", "access_request_notified", { uid, ...result });
-  // Nothing reached anyone (a channel failed, or there is no admin or no
-  // channel yet): the request is announced by a later call instead.
-  if (result.delivered === 0) {
-    await ref.update({ notifiedAt: FieldValue.delete() });
-  }
-}
-
-export type NotifyResult = { admins: number; delivered: number; failed: number };
-
-// One plain email to each admin and a notification to each of their
-// browsers and phones, as reminders go. Each failure is logged and the rest
-// carry on.
-export async function notifyAdmins(deps: SettleDeps, requester: string): Promise<NotifyResult> {
-  const { db, log, channels } = deps;
-  const config = await loadAccessConfig(db, log);
-  const admins = config?.admins ?? [];
-  const result: NotifyResult = { admins: admins.length, delivered: 0, failed: 0 };
-  if (!admins.length) {
-    log("WARNING", "access_request_no_admins", {});
-    return result;
-  }
-  const message = accessRequestMessage(requester, deps.origin);
-  const notification: ReminderNotification = {
-    title: "Access request",
-    body: `${requester} asked to use Travelmo.`,
-    url: message.url,
-    tag: `access-${requester}`,
-  };
-  for (const [index, admin] of admins.entries()) {
-    if (channels.mail) {
-      try {
-        await channels.mail({ to: admin, subject: message.subject, text: message.text });
-        result.delivered += 1;
-      } catch (error) {
-        result.failed += 1;
-        log("ERROR", "access_notify_mail_failed", { admin: index, error: (error as Error).message });
-      }
-    }
-    if (!channels.push && !channels.fcm) continue;
-    let adminUid: string | undefined;
-    try {
-      adminUid = await deps.uidForEmail(admin);
-    } catch (error) {
-      result.failed += 1;
-      log("ERROR", "access_notify_lookup_failed", { admin: index, error: (error as Error).message });
-      continue;
-    }
-    if (!adminUid) continue;
-    if (channels.push) {
-      for (const d of (await db.collection(paths.pushSubscriptions(adminUid)).get()).docs) {
-        const parsed = PushSubscription.safeParse(d.data());
-        if (!parsed.success) continue;
-        try {
-          if ((await channels.push(parsed.data, notification)) === "gone") {
-            await d.ref.delete();
-            log("INFO", "push_subscription_gone", { uid: adminUid, id: d.id });
-          } else result.delivered += 1;
-        } catch (error) {
-          result.failed += 1;
-          log("ERROR", "access_notify_push_failed", { uid: adminUid, id: d.id, error: (error as Error).message });
-        }
-      }
-    }
-    if (channels.fcm) {
-      for (const d of (await db.collection(paths.devices(adminUid)).get()).docs) {
-        const parsed = Device.safeParse(d.data());
-        if (!parsed.success) continue;
-        try {
-          if ((await channels.fcm(parsed.data, notification)) === "gone") {
-            await d.ref.delete();
-            log("INFO", "push_device_gone", { uid: adminUid, id: d.id });
-          } else result.delivered += 1;
-        } catch (error) {
-          result.failed += 1;
-          log("ERROR", "access_notify_device_failed", { uid: adminUid, id: d.id, error: (error as Error).message });
-        }
-      }
-    }
-  }
-  return result;
 }
 
 export type GrandfatherDeps = {
