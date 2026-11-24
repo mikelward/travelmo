@@ -1,5 +1,7 @@
 package app.travelmo
 
+import app.travelmo.log.SharedLogSink
+import app.travelmo.logging.SharedLog
 import android.annotation.SuppressLint
 import android.app.Application
 import app.travelmo.auth.GoogleAccount
@@ -63,6 +65,8 @@ class TravelmoApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         DebugLogging.install(this)
+        // Code shared with the iOS app logs to the same debug log.
+        SharedLog.sink = SharedLogSink
         // Off the main thread, so the first frame is normally at the chosen size.
         TextSizeSetting.warm(this)
         // The channel exists before any message arrives, so the first one is

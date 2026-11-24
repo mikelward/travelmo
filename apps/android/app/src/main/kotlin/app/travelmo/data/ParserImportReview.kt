@@ -10,20 +10,6 @@ import kotlinx.coroutines.CancellationException
 import org.json.JSONException
 import org.json.JSONObject
 
-/** Import review's "Import anyway"; the parser in the app, a fake in tests. */
-interface ImportReview {
-    /** False on a build with no parser address. */
-    val available: Boolean
-
-    /** Reads one Gmail, Fastmail or IMAP message again with the pre-filter skipped (the parser tells them apart by id); what came of it, in words. Throws [TripActionFailed]. */
-    suspend fun reimport(messageId: String): String
-}
-
-object NoImportReview : ImportReview {
-    override val available = false
-    override suspend fun reimport(messageId: String): String = throw TripActionFailed("Use Import review on the web for this.")
-}
-
 /** `POST /gmail/reimport` on the parser, as the web's api.ts sends it. */
 class ParserImportReview(private val client: ParserClient) : ImportReview {
     override val available: Boolean

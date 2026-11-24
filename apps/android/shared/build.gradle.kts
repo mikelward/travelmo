@@ -5,10 +5,12 @@ plugins {
     alias(libs.plugins.compose.multiplatform)
 }
 
-// What the Android app shares with the iOS app beyond `:core`: so far the
-// text of its screens, as Compose Multiplatform resources (`Res.string.*`,
-// `Res.plurals.*` in app.travelmo.shared), read the same way on both. The
-// screens themselves follow (SPEC "iOS app").
+// What the Android app shares with the iOS app beyond `:core`: the text of
+// its screens, as Compose Multiplatform resources (`Res.string.*`,
+// `Res.plurals.*` in app.travelmo.shared); the data the screens read and
+// the actions they take, as interfaces (app.travelmo.data) each app
+// implements, Android with Firebase and the parser; and the log they write
+// to (app.travelmo.logging). The screens themselves follow (SPEC "iOS app").
 kotlin {
     jvmToolchain(21)
     android {
@@ -17,14 +19,22 @@ kotlin {
         minSdk = 34
         // The resources reach the app's assets, and Robolectric's, from here.
         androidResources { enable = true }
+        // The common tests run on the JVM here too, as `:shared:testAndroidHostTest`.
+        withHostTest {}
     }
     iosArm64()
     iosSimulatorArm64()
 
     sourceSets {
         commonMain.dependencies {
+            api(project(":core"))
+            api(libs.kotlinx.coroutines.core)
             api(libs.compose.mp.runtime)
             api(libs.compose.mp.resources)
+        }
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.kotest.assertions.core)
         }
     }
 }

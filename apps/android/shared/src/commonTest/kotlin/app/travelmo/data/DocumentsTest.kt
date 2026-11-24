@@ -17,11 +17,11 @@ import app.travelmo.core.isCancelled
 import app.travelmo.core.liveSegments
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
-import org.junit.jupiter.api.Test
+import kotlin.test.Test
 
 class DocumentsTest {
     @Test
-    fun `reads a flight's status as the parser writes it, and drops one missing what it needs`() {
+    fun `reads a flight's status as the parser writes it and drops one missing what it needs`() {
         val status = flightStatusFromDocument(
             mapOf(
                 "ident" to "XX100", "date" to "2026-12-13", "origin" to "SYD", "found" to true,
@@ -49,7 +49,7 @@ class DocumentsTest {
     }
 
     @Test
-    fun `reads a segment with its places, verdict and sources, and drops one it cannot place`() {
+    fun `reads a segment with its places verdict and sources and drops one it cannot place`() {
         val segment = segmentFromDocument(
             "s1",
             "t1",
@@ -170,7 +170,7 @@ class DocumentsTest {
     }
 
     @Test
-    fun `reads every connected Gmail mailbox, oldest first, one from before there could be several included`() {
+    fun `reads every connected Gmail mailbox oldest first one from before there could be several included`() {
         val reading = mapOf("scanned" to 300L, "imported" to 2L, "done" to false, "updatedAt" to "2026-11-02T00:00:00Z", "running" to true)
         val data = mapOf(
             "gmails" to mapOf(
@@ -193,7 +193,7 @@ class DocumentsTest {
     }
 
     @Test
-    fun `shows a moved mailbox's live progress, not the frozen copy kept for older apps`() {
+    fun `shows a moved mailbox's live progress not the frozen copy kept for older apps`() {
         val connected = mapOf("emailAddress" to "owner@example.com", "connectedAt" to "2026-10-01T00:00:00Z")
         val data = mapOf(
             "gmail" to connected,
@@ -208,7 +208,7 @@ class DocumentsTest {
     }
 
     @Test
-    fun `reads the Fastmail connection and how far its reading got, a malformed progress as none`() {
+    fun `reads the Fastmail connection and how far its reading got a malformed progress as none`() {
         val progress = mapOf("scanned" to 1200L, "imported" to 14L, "done" to false, "updatedAt" to "2026-11-01T12:00:00Z", "running" to true, "failed" to 2L)
         val doc = mapOf(
             "gmail" to mapOf("emailAddress" to "owner@example.com", "connectedAt" to "2026-11-01T00:00:00Z"),
@@ -227,7 +227,7 @@ class DocumentsTest {
     }
 
     @Test
-    fun `reads the IMAP mailboxes oldest first, with their progress and refused logins, a malformed entry as none`() {
+    fun `reads the IMAP mailboxes oldest first with their progress and refused logins a malformed entry as none`() {
         val progress = mapOf("scanned" to 40L, "imported" to 2L, "done" to true, "updatedAt" to "2026-11-01T12:00:00Z")
         val doc = mapOf(
             "imaps" to mapOf(

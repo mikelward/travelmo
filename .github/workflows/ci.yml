@@ -114,7 +114,7 @@ jobs:
             exit 1
           fi
       - name: Unit tests, lint and a debug build
-        run: ./gradlew -PtravelmoFixedVersion :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
+        run: ./gradlew -PtravelmoFixedVersion :shared:testAndroidHostTest :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
       # The open-source licenses list (app/src/main/res/raw/aboutlibraries.json)
       # is committed and only regenerated on demand, so a dependency change
       # could otherwise ship a stale list that no build step catches.
@@ -157,8 +157,8 @@ jobs:
               exit 1
             fi
           done
-  # The shared Kotlin (apps/android/core) on the iOS Simulator: the same
-  # tests as the JVM's, run where the iOS app will use them. Linux compiles
+  # The shared Kotlin (apps/android/core and shared) on the iOS Simulator:
+  # the same tests as the JVM's, run where the iOS app will use them. Linux compiles
   # the iOS targets but cannot run them; macOS runners cost nothing on a
   # public repository.
   ios-core:
@@ -178,8 +178,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c  # v5.0.2
         with:
           cache-read-only: ${{ github.event_name != 'push' }}
-      - name: Core tests on the iOS Simulator
-        run: ./gradlew :core:iosSimulatorArm64Test
+      - name: Shared tests on the iOS Simulator
+        run: ./gradlew :core:iosSimulatorArm64Test :shared:iosSimulatorArm64Test
   # The app's instrumented tests (app/src/androidTest): FirestoreTrips'
   # writes against the Firestore emulator with the real rules, on an Android
   # emulator the runner boots with hardware acceleration. Its own job, so the

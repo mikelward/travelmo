@@ -6,11 +6,11 @@ import app.travelmo.core.MAX_RIDE_COMPANIES
 import app.travelmo.core.RideCompany
 import app.travelmo.core.RideNear
 import io.kotest.matchers.shouldBe
-import org.junit.jupiter.api.Test
+import kotlin.test.Test
 
 class RideSettingsTest {
     @Test
-    fun `reads the user document's ride fields, leaving out what does not parse`() {
+    fun `reads the user document's ride fields leaving out what does not parse`() {
         val data = mapOf(
             "rideCompanies" to listOf(
                 mapOf("name" to "Example Cars", "url" to "https://cars.example.com/book", "near" to "home"),
@@ -56,7 +56,7 @@ class RideSettingsTest {
     fun `counts entries it cannot read towards the limit`() {
         val fromWeb = mapOf("name" to "Web Cars", "url" to "https://cars.example/book?pickup=London Heathrow", "near" to "anywhere")
         val stored = listOf(fromWeb) + (1 until MAX_RIDE_COMPANIES).map { mapOf("name" to "Cabs $it", "url" to "https://cabs.example/", "near" to "home") }
-        org.junit.jupiter.api.assertThrows<IllegalStateException> { rideCompaniesAdding(stored, RideCompany("Island Cars", "https://cars.example/", RideNear.ANYWHERE)) }.message shouldBe "At most 20."
+        kotlin.test.assertFailsWith<IllegalStateException> { rideCompaniesAdding(stored, RideCompany("Island Cars", "https://cars.example/", RideNear.ANYWHERE)) }.message shouldBe "At most 20."
     }
 
     @Test

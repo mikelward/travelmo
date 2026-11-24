@@ -65,7 +65,7 @@ jobs:
       # than only by the PR's CI. -PtravelmoFixedVersion for the same reason
       # CI sets it: a per-commit version would miss the build cache.
       checks: |
-        cd apps/android && ./gradlew -PtravelmoFixedVersion :core:verifyNoAndroid :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+        cd apps/android && ./gradlew -PtravelmoFixedVersion :core:verifyNoAndroid :core:test :shared:testAndroidHostTest :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
         cd apps/android && ./gradlew -PtravelmoFixedVersion -Proborazzi.test.verify :app:testDebugUnitTest --tests app.travelmo.ui.ScreenScreenshotTest
       # No dispatch: ci.yml carries no workflow_dispatch with a `pr` input,
       # and a batch PR opened with the `gradle-update` environment's PAT

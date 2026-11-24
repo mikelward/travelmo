@@ -5,13 +5,13 @@ import app.travelmo.core.LeadUnit
 import app.travelmo.core.Reminder
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
-import org.junit.jupiter.api.Test
+import kotlin.test.Test
 
 // The reminders' documents as Firestore hands them over and as the rules
 // check them (firestore.rules' validReminder).
 class ChecklistFieldsTest {
     @Test
-    fun `reads a reminder's document, numbers as Firestore gives them, and leaves out one that does not parse`() {
+    fun `reads a reminder's document numbers as Firestore gives them and leaves out one that does not parse`() {
         reminderOf("s0", mapOf("id" to "visa", "text" to "Apply for a visa", "amount" to 30L, "unit" to "days", "createdAt" to "x"), dated = false) shouldBe
             Reminder("s0", "visa", "Apply for a visa", Lead(30, LeadUnit.DAYS))
         reminderOf("a1", mapOf("id" to "x1", "text" to "Pack", "date" to "2026-12-10"), dated = true) shouldBe Reminder("a1", "x1", "Pack", date = "2026-12-10")
@@ -29,7 +29,7 @@ class ChecklistFieldsTest {
     }
 
     @Test
-    fun `reads the ticked ids, leaving out what is not one`() {
+    fun `reads the ticked ids leaving out what is not one`() {
         doneOf(mapOf("done" to listOf("visa", 3L, "a/b"))) shouldBe listOf("visa")
         doneOf(null) shouldBe emptyList()
     }
