@@ -2835,9 +2835,21 @@ Android (13 and later, all the app runs on) confirms a copy itself; a long
 press on the reference line does the same (TalkBack offers it as the
 long-click action). Sources opens a dialog listing them as the web's does (each source's label and kind, then "From" the sender), the same
 `segmentSources` in `:core`; an email the viewer imported, by the source's
-`uid` or as the trip's owner for one without, opens in Gmail at that
-message, in the Gmail mailbox it came from (`gmailSourceLink`, as the
-web's links), else the phone's default account. CI builds it beside the web app
+`uid` or as the trip's owner for one without, opens in Gmail. The Gmail
+app takes no link to a message, and a browser sends one to Gmail's
+mobile site, which drops the message id; so with the Gmail app installed
+the tap puts a search for the email on the clipboard (`sourceSearch`:
+`subject:"…"`; `from:` the booking's sender only when this is its one
+email, as a merged booking keeps the first email's sender; and
+`after:`/`before:` the days around when it was sent, when that is known;
+a forward, `Fwd: …`, by its subject alone, as it keeps its original's
+sender and date),
+says "Search copied. Paste it in Gmail's
+search." and opens Gmail. Without the app it opens the message's link, in
+the Gmail mailbox it came from (`gmailSourceLink`, as the web's links),
+else the phone's default account. On the web the link opens the message
+in Gmail; on a touch screen the tap also copies the same search and says
+so, for Gmail's mobile site. CI builds it beside the web app
 (`ci / android`). An account not approved sees the web's invite-only page in place of
 the app, and admins have the Access page, from the ⋮ menu or an "Access
 request" notification ("Access").

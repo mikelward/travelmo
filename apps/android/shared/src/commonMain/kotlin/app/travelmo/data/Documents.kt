@@ -47,7 +47,7 @@ private fun Map<String, Any?>.sourceRefs(): List<SourceRef> =
         val kind = SourceKind.fromWire(ref.text("kind")) ?: return@mapNotNull null
         val id = ref.text("id") ?: return@mapNotNull null
         // The schema requires `at`; one without it takes the booking's creation rather than being dropped.
-        SourceRef(kind, id, label = ref.text("label"), uid = ref.text("uid"), at = ref.text("at") ?: text("createdAt") ?: "")
+        SourceRef(kind, id, label = ref.text("label"), uid = ref.text("uid"), at = ref.text("at") ?: text("createdAt") ?: "", sentAt = ref.text("sentAt"))
     }
 
 fun tripFromDocument(id: String, data: Map<String, Any?>): Trip? {

@@ -28,6 +28,12 @@ interface AppChrome {
     /** Opens [url] in whatever app takes it, saying so when none does; [what] names it in the log, never the address. */
     fun openLink(url: String, what: String)
 
+    /**
+     * Opens an email found by a Gmail [search] where a link can't open it
+     * (Android: the Gmail app, the search on the clipboard); else [url].
+     */
+    fun openGmailSearch(search: String, url: String) = openLink(url, "a booking's email")
+
     /** Puts [text] alone on the clipboard, labeled [label]; the platform confirms the copy itself. */
     fun copyToClipboard(label: String, text: String)
 

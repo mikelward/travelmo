@@ -8,6 +8,11 @@
     <!-- A flight's Live Update as a chip in the status bar (Android 16 and later). -->
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
 
+    <!-- Whether Gmail is installed, to open a booking's email there (Links.kt). -->
+    <queries>
+        <package android:name="com.google.android.gm" />
+    </queries>
+
     <application
         android:name=".TravelmoApplication"
         android:allowBackup="false"

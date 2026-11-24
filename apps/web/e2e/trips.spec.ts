@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { devices, expect, test } from "@playwright/test";
 import { bookingAction, owner, partner, signIn, signOut } from "./helpers";
 import { gmailIdPrefix } from "@travelmo/core";
 import { clearData, deleteTripDoc, readSegments, readSenderPatterns, seedFlight, seedGmail, seedTrip } from "./seed";
@@ -30,6 +30,28 @@ test("an imported email opens in the Gmail account it came from", async ({ page 
     "href",
     "https://mail.google.com/mail/u/?authuser=owner%40work.example#all/m7",
   );
+});
+
+test.describe("on a phone", () => {
+  // The device but not its browser type, which a describe block can't set.
+  const { viewport, userAgent, deviceScaleFactor, isMobile, hasTouch } = devices["Pixel 7"];
+  test.use({ viewport, userAgent, deviceScaleFactor, isMobile, hasTouch, permissions: ["clipboard-read", "clipboard-write"] });
+
+  // Gmail's mobile site drops the link's message id, so a search goes too.
+  test("tapping an imported email also copies a search for it", async ({ page, context }) => {
+    await context.route("https://mail.google.com/**", (route) => route.fulfill({ body: "" }));
+    const ownerUid = await signIn(page, owner);
+    await seedTrip(ownerUid, "e2e-trip", {
+      sender: "cove.example",
+      sources: [{ kind: "gmail", id: "m1", label: "Your stay at Cove", uid: ownerUid, at: "2026-11-01T09:00:00Z", sentAt: "2026-10-31T23:00:00Z" }],
+    });
+    await page.goto("/trips/e2e-trip");
+    await bookingAction(page, "Sources");
+    const sources = page.getByRole("dialog", { name: "Sources" });
+    await sources.getByRole("link", { name: "Your stay at Cove" }).click();
+    await expect(sources.getByText("Search copied. Paste it in Gmail's search.")).toBeVisible();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('from:cove.example subject:"Your stay at Cove" after:2026/10/30 before:2026/11/02');
+  });
 });
 
 test("the owner sees an imported trip, shares it, and the partner can add a booking", async ({ page }) => {
