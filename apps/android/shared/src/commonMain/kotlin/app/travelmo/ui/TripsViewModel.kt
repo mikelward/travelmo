@@ -1,5 +1,8 @@
 package app.travelmo.ui
 
+import app.travelmo.core.displayTitles
+import app.travelmo.core.tripMatches
+import app.travelmo.core.parseTripQuery
 import app.travelmo.core.senderCleanup
 import app.travelmo.core.SenderCleanup
 import androidx.lifecycle.ViewModel
@@ -133,6 +136,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** The trip list as the screen draws it; null groups while the first answer is on its way. */
+/** The trips a search found, by id; [bookingsSearched] once their bookings were searched too, not only titles and dates. */
+data class TripSearchResult(val ids: Set<String>, val bookingsSearched: Boolean)
+
 data class TripListState(
     val groups: TripGroups?,
     val segmentsByTrip: Map<String, List<Segment>>,
@@ -428,13 +434,48 @@ class TripsViewModel(
      * listener per trip, as the web's reports page keeps; null until the
      * trips and each one's bookings have answered.
      */
-    val reportTrips: StateFlow<List<TripWithSegments>?> = trips.flatMapLatest { list ->
+    val reportTrips: StateFlow<List<TripWithSegments>?> = allSegments().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    private val _searchText = MutableStateFlow("")
+
+    /** What the trips list's search box holds. */
+    val searchText: StateFlow<String> = _searchText
+
+    // Once searched, kept while the view model lives, so clearing the box
+    // and searching again waits for nothing more.
+    private val searchStarted = MutableStateFlow(false)
+
+    fun searchTrips(text: String) {
+        _searchText.value = text
+        if (text.isNotBlank()) searchStarted.value = true
+    }
+
+    /**
+     * The trips a search finds (SPEC "Searching trips"), null while the box
+     * is empty. Every trip's bookings are listened to once a search starts;
+     * until they answer, trips are matched by title and dates.
+     */
+    val searchResult: StateFlow<TripSearchResult?> = combine(
+        _searchText,
+        trips,
+        searchStarted.flatMapLatest { started -> if (started) allSegments() else flowOf(null) },
+    ) { text, trips, all ->
+        val query = parseTripQuery(text)
+        if (query.isEmpty || trips == null) return@combine null
+        val titles = displayTitles(trips)
+        val segments = all?.associate { it.trip.id to it.segments }
+        val ids = trips.filter { tripMatches(query, it, titles[it.id] ?: it.title, segments?.get(it.id).orEmpty()) }.map { it.id }.toSet()
+        TripSearchResult(ids, bookingsSearched = segments != null)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    // Every trip's bookings, by trip, null until each has answered.
+    private fun allSegments(): Flow<List<TripWithSegments>?> = trips.flatMapLatest { list ->
         when {
             list == null -> flowOf(null)
             list.isEmpty() -> flowOf(emptyList())
             else -> combine(list.map { trip -> store.segments(trip.id).map { TripWithSegments(trip, it) } }) { it.toList() }
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    }
 
     /** One trip, or null once the list has answered without it. */
     fun trip(id: String): Flow<Trip?> = trips.map { trips -> trips?.firstOrNull { it.id == id } }

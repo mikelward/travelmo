@@ -1,6 +1,6 @@
 "use client";
 
-import { displayTitles, groupTrips, listWarnings, nextUpFlightKeys, type FlightStatus, type Segment, type Trip } from "@travelmo/core";
+import { displayTitles, groupTrips, isEmptyQuery, listWarnings, nextUpFlightKeys, parseTripQuery, tripMatches, type FlightStatus, type Segment, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
 import { useState } from "react";
@@ -11,7 +11,7 @@ import { usePeopleDocuments, useTripWarnings, warningText } from "@/lib/document
 import { setCheckedIn, useCheckedIn } from "@/lib/checkedIn";
 import { useFlightStatusesOf } from "@/lib/flightStatus";
 import { useSaveForOffline } from "@/lib/offline";
-import { useNow, useSegmentsOf, useTrips } from "@/lib/trips";
+import { useAllSegments, useNow, useSegmentsOf, useTrips } from "@/lib/trips";
 
 // Trips worth a listener each: everything under way, for the "next up"
 // lines, and the few coming next, so their document warnings know where
@@ -70,19 +70,31 @@ function Trips({ user }: { user: User }) {
   useSaveForOffline();
   const trips = useTrips(user);
   const today = localToday();
-  const groups = trips ? groupTrips(trips, today) : undefined;
-  const detailed = groups ? [...groups.current, ...groups.upcoming.slice(0, upcomingWithDetails)].map((t) => t.id) : [];
+  const [search, setSearch] = useState("");
+  // Once searched, kept for the visit, so clearing the box and searching
+  // again reads nothing more.
+  const [searched, setSearched] = useState(false);
+  const query = parseTripQuery(search);
+  const searching = !isEmptyQuery(query);
+  // Every trip's bookings, read once a search starts (SPEC "Searching trips").
+  const all = useAllSegments(searched && trips ? trips.map((t) => t.id) : undefined);
+  const titles = displayTitles(trips ?? []);
+  const shown = trips && searching ? trips.filter((t) => tripMatches(query, t, titles.get(t.id) ?? t.title, all?.byTrip[t.id] ?? [])) : trips;
+  // Listeners follow every trip, searched or not; the sections show what a search found.
+  const everything = trips ? groupTrips(trips, today) : undefined;
+  const groups = shown ? groupTrips(shown, today) : undefined;
+  const detailed = everything ? [...everything.current, ...everything.upcoming.slice(0, upcomingWithDetails)].map((t) => t.id) : [];
   const segmentsByTrip = useSegmentsOf(detailed);
   const now = useNow();
   // A card under way reads the live status of its next flight, one listener each.
   const flightStatuses = useFlightStatusesOf(
-    (groups?.current ?? []).flatMap((trip) => {
+    (everything?.current ?? []).flatMap((trip) => {
       const segments = segmentsByTrip[trip.id];
       return segments ? nextUpFlightKeys(segments, now) : [];
     }),
   );
   // The viewer's own "I've checked in" marks on the trips under way.
-  const checkedIn = useCheckedIn(user.uid, (groups?.current ?? []).map((trip) => trip.id));
+  const checkedIn = useCheckedIn(user.uid, (everything?.current ?? []).map((trip) => trip.id));
   const [error, setError] = useState<string>();
   const onCheckedIn = (tripId: string, segmentId: string) => {
     setError(undefined);
@@ -108,7 +120,7 @@ function Trips({ user }: { user: User }) {
       </div>
     );
   }
-  const sectionProps = { uid: user.uid, titles: displayTitles(trips), segmentsByTrip, now, flightStatuses, checkedIn, onCheckedIn };
+  const sectionProps = { uid: user.uid, titles, segmentsByTrip, now, flightStatuses, checkedIn, onCheckedIn };
   // Document warnings once, at the top, each for the earliest trip it bears
   // on and linking to it, rather than repeated on every card.
   const listed = listWarnings(warnings, trips);
@@ -129,6 +141,20 @@ function Trips({ user }: { user: User }) {
         </ul>
       )}
       {error && <p className="mb-4 text-sm text-danger">{error}</p>}
+      <input
+        type="search"
+        value={search}
+        onChange={(e) => {
+          setSearch(e.target.value);
+          if (e.target.value.trim()) setSearched(true);
+        }}
+        placeholder="Search trips"
+        aria-label="Search trips"
+        className="mb-6 w-full rounded-lg border border-field bg-background px-3 py-2"
+      />
+      {searching && !all && <p className="mb-4 text-sm text-muted">Searching bookings…</p>}
+      {searching && all && all.failed.length > 0 && <p className="mb-4 text-sm text-danger">Some trips&apos; bookings couldn&apos;t be read, so they&apos;re searched by title and dates only.</p>}
+      {searching && all && shown?.length === 0 && <p className="text-muted">No trips match.</p>}
       <Section title="Now" trips={groups.current} showNext {...sectionProps} />
       <Section title="Upcoming" trips={groups.upcoming} showNext={false} {...sectionProps} />
       <Section title="Past" trips={groups.past} showNext={false} {...sectionProps} />
