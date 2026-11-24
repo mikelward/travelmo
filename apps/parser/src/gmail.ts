@@ -21,6 +21,10 @@ export function gmailFor(config: OAuthConfig, refreshToken: string): Gmail {
   return google.gmail({ version: "v1", auth });
 }
 
+// A document attached to an email, as the model reads it: never parsed
+// here, only passed on (extract.ts).
+export type Attachment = { name: string; mimeType: "application/pdf"; data: string };
+
 export type EmailMessage = {
   id: string;
   threadId: string;
@@ -29,7 +33,42 @@ export type EmailMessage = {
   date: string;
   listUnsubscribe: boolean;
   text: string;
+  // Its PDF attachments, fetched only when asked for: once an email has
+  // passed the filters and is about to be read (importer.ts).
+  attachments?: () => Promise<Attachment[]>;
 };
+
+// What attached PDFs the model is shown: tickets and confirmations are a
+// few hundred kilobytes, and Gemini takes at most 20 MB a request, which
+// these keep well within once base64 adds a third.
+export const maxAttachments = 3;
+export const maxAttachmentBytes = 5 * 1024 * 1024;
+export const maxAttachmentsBytes = 10 * 1024 * 1024;
+
+type AttachedPart = { filename?: string | null; mimeType?: string | null; body?: { attachmentId?: string | null; data?: string | null; size?: number | null } | null; parts?: AttachedPart[] | null };
+
+// The PDFs among a message's parts, within the limits above, in order.
+export function pdfParts(payload: AttachedPart | undefined): { name: string; attachmentId?: string; data?: string; size: number }[] {
+  const found: { name: string; attachmentId?: string; data?: string; size: number }[] = [];
+  const walk = (part: AttachedPart) => {
+    const name = part.filename ?? "";
+    const pdf = part.mimeType === "application/pdf" || (part.mimeType === "application/octet-stream" && /\.pdf$/i.test(name));
+    const size = part.body?.size ?? 0;
+    if (pdf && size > 0 && size <= maxAttachmentBytes && (part.body?.attachmentId || part.body?.data)) {
+      found.push({ name, size, ...(part.body?.attachmentId ? { attachmentId: part.body.attachmentId } : {}), ...(part.body?.data ? { data: part.body.data } : {}) });
+    }
+    for (const child of part.parts ?? []) walk(child);
+  };
+  if (payload) walk(payload);
+  const kept: typeof found = [];
+  let total = 0;
+  for (const part of found) {
+    if (kept.length >= maxAttachments || total + part.size > maxAttachmentsBytes) break;
+    kept.push(part);
+    total += part.size;
+  }
+  return kept;
+}
 
 function header(headers: gmail_v1.Schema$MessagePartHeader[] | undefined, name: string): string | undefined {
   return headers?.find((h) => h.name?.toLowerCase() === name.toLowerCase())?.value ?? undefined;
@@ -81,7 +120,21 @@ const noQuickRetryOn429 = {
 
 export async function fetchMessage(gmail: Gmail, id: string): Promise<EmailMessage> {
   const { data } = await gmail.users.messages.get({ userId: "me", id, format: "full" }, noQuickRetryOn429);
-  return toEmailMessage(data);
+  const message = toEmailMessage(data);
+  const parts = pdfParts(data.payload ?? undefined);
+  if (parts.length === 0) return message;
+  return {
+    ...message,
+    attachments: async () =>
+      Promise.all(
+        parts.map(async (part) => {
+          const body = part.data ?? (await gmail.users.messages.attachments.get({ userId: "me", messageId: id, id: part.attachmentId! }, noQuickRetryOn429)).data.data;
+          if (!body) throw new Error("Gmail returned an attachment without data");
+          // Gmail's base64url, as the model takes standard base64.
+          return { name: part.name, mimeType: "application/pdf" as const, data: Buffer.from(body, "base64url").toString("base64") };
+        }),
+      ),
+  };
 }
 
 export type MessagePage = { ids: string[]; nextPageToken?: string };

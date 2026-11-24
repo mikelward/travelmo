@@ -1,11 +1,11 @@
 import { GoogleGenAI } from "@google/genai";
 import { ExtractedBooking } from "@travelmo/core";
 import { z } from "zod";
-import type { EmailMessage } from "./gmail";
+import type { Attachment, EmailMessage } from "./gmail";
 import type { Embedder } from "./importer";
 import { embeddingDimensions } from "./similarity";
 
-export type Extractor = (message: EmailMessage) => Promise<ExtractedBooking>;
+export type Extractor = (message: EmailMessage, attachments?: readonly Attachment[]) => Promise<ExtractedBooking>;
 
 // The model's answer when the project's quota or rate is used up (429,
 // RESOURCE_EXHAUSTED): the email is fine, and is read again once it frees up.
@@ -35,10 +35,11 @@ Rules:
 - memberships: each loyalty program number the email shows for a traveler (a frequent flyer, hotel rewards or rental club number): program as named (when the email gives only a generic label such as "Frequent flyer", the airline or company whose program it is, e.g. "United MileagePlus" for a number written "UA-…" or on a United booking), number exactly as written, holder (the member's name as written; when the email lists travelers one after another, each with their own details, the name of the traveler whose details the number is listed with), status (tier) and balance (the points, miles or credits as written, e.g. "12,400 points") when given. Never a booking reference, ticket number, card number or payment detail. Leave memberships out when there are none.
 - A travel loyalty program's statement or account summary (an airline, hotel, car rental, rail or cruise program) is not a booking: set isBooking=false with no segments, and list its membership with the balance and status it gives.
 - memberships are travel programs only (airline, hotel, car rental, rail, cruise): never a shop's, supermarket's, restaurant's, coffee chain's, bank's or credit card's, and never a medical, health insurance, political, union, religious, club, gym or any other membership.
+- PDFs attached to the email are part of it: a ticket or confirmation may give the journey, times, seats or booking reference only there. Read them as you read the email.
 - Do not invent details that are not in the email.`;
 
 export function geminiExtractor(client: GoogleGenAI, model: string): Extractor {
-  return async (message) => {
+  return async (message, attachments = []) => {
     const prompt = [
       `From: ${message.from}`,
       `Subject: ${message.subject}`,
@@ -48,7 +49,8 @@ export function geminiExtractor(client: GoogleGenAI, model: string): Extractor {
     ].join("\n");
     const response = await client.models.generateContent({
       model,
-      contents: prompt,
+      // Attached PDFs go to the model as documents: nothing here parses them.
+      contents: attachments.length === 0 ? prompt : [{ role: "user", parts: [{ text: prompt }, ...attachments.map((a) => ({ inlineData: { mimeType: a.mimeType, data: a.data } }))] }],
       config: {
         systemInstruction: instructions,
         responseMimeType: "application/json",

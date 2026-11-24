@@ -140,6 +140,15 @@ describe("handEdited", () => {
 });
 
 describe("refreshEmail", () => {
+  it("reads the email's attached PDFs, as an import does", async () => {
+    const { memory, deps } = world();
+    const seen: number[] = [];
+    const r = record("m1");
+    const message = { ...email("m1"), attachments: async () => [{ name: "ticket.pdf", mimeType: "application/pdf" as const, data: "JVBERi0=" }] };
+    await refreshEmail(uid, r, message, deps(async (_m, attachments = []) => (seen.push(attachments.length), { isBooking: false, segments: [] })), { generation: 0, snapshot: await memory.listUserSegments(uid) });
+    expect(seen).toEqual([1]);
+  });
+
   it("updates an unedited booking in place, keeping its id, trip, rating and favorite mark", async () => {
     const w = world();
     // An older reading got the check-in time and the provider wrong.

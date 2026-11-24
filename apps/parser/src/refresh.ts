@@ -26,6 +26,7 @@ import { isModelRateLimit } from "./extract";
 import { GmailRateLimited, type EmailMessage } from "./gmail";
 import {
   ImportSupersededError,
+  attachmentsOf,
   emptyCounts,
   originalSentAt,
   placeSegments,
@@ -183,7 +184,7 @@ export async function refreshEmail(
 ): Promise<EmailRefresh> {
   let booking;
   try {
-    booking = await deps.extract(message);
+    booking = await deps.extract(message, await attachmentsOf(message, (error) => deps.log("attachments_failed", { uid, messageId: record.messageId, reason: error.message })));
   } catch (error) {
     throw new ExtractionFailed(error);
   }

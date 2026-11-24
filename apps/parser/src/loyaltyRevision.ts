@@ -15,7 +15,7 @@ import type { Firestore } from "firebase-admin/firestore";
 import { wasDeleted } from "./deleted";
 import type { Extractor } from "./extract";
 import type { EmailMessage } from "./gmail";
-import { originalSentAt } from "./importer";
+import { attachmentsOf, originalSentAt } from "./importer";
 import { errorKind } from "./log";
 import type { MailSource } from "./mailSource";
 
@@ -223,7 +223,7 @@ async function reread(
   }
   let booking;
   try {
-    booking = await deps.extract(message);
+    booking = await deps.extract(message, await attachmentsOf(message, (error) => deps.log("WARNING", "found_loyalty_reread_attachments_failed", { uid, ...errorKind(error) })));
   } catch (error) {
     return fail("extract", error);
   }

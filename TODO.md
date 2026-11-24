@@ -323,9 +323,13 @@
       `access/{email}` and calling `/access/check`, as the web does),
       invites written with shares, and the Access page for admins, opened
       by the "Access request" notification.
-- [ ] Read PDF attachments (tickets, booking confirmations) when an email
+- [x] Read PDF attachments (tickets, booking confirmations) when an email
       passes the filter: an SJ "Tickets for booking …" email was read as
       not a booking, most likely because the journey is only in the PDF.
+      Gmail's, handed to the model as documents, never parsed here.
+- [ ] Read PDF attachments of Fastmail, IMAP and forwarded emails too, as
+      Gmail's are: each source's fetch offers them (`attachments`); the
+      forwarding Worker's size limit cuts large attachments off.
 - [x] File a car or taxi from the airport with the flight it meets, not as
       a trip of its own named after home (`isTransfer`, `connects`).
 - [ ] Maybe later: a `transfer` booking type from extraction, shown as
