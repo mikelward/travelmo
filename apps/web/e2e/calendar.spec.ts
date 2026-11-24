@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { owner, signIn } from "./helpers";
 import { clearData, seedLisbonTrip, seedTrip } from "./seed";
@@ -52,4 +53,16 @@ test.describe("on a phone", () => {
     expect(overflow).toBe(0);
     for (const name of ["Trips", "Calendar", "Reports", "Profile", "Settings"]) await expect(page.getByRole("link", { name })).toBeInViewport();
   });
+});
+
+test("the calendar's structure reads correctly to a screen reader, each trip by its name and dates", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  await seedTrip(ownerUid, "e2e-liverpool");
+  await page.goto("/calendar");
+  await page.getByRole("button", { name: "Next month" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "December 2026" })).toBeVisible();
+  const { violations } = await new AxeBuilder({ page }).disableRules(["color-contrast"]).analyze();
+  expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
+  // Split over two weeks, each part says which trip and when.
+  await expect(page.getByRole("link", { name: "Liverpool, 12–14 Dec 2026" })).toHaveCount(2);
 });
