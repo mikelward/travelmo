@@ -15,6 +15,10 @@ export type HomePeriod = {
   country?: string;
   from?: string;
   until?: string;
+  // The airports and stations the person travels from while living here
+  // (withHomeAirports), however far away: a journey back into one is a
+  // journey home (journeyHome). Mountain View's is SFO, in another town.
+  airports?: Place[];
 };
 
 type Town = { city: string; country?: string; lat?: number; lon?: number };
@@ -125,6 +129,10 @@ function dayBefore(date: string): string {
 // is really the way back from one visit and the way out on the next.
 const stayDays = 60;
 
+// A round trip: the town it leaves from and when, and the airport or
+// station it leaves from and the one it comes back into.
+type RoundTrip = { base: Town; start: string; from: Place; back: Place };
+
 // The round trips in a run of journeys: each leaves from a town and ends
 // with the first journey back into it, however many legs lie between. A
 // chain that never returns (a one-way move, or bookings missing), or one
@@ -133,7 +141,7 @@ const stayDays = 60;
 // the order they leave, by instant, since local times misorder them across
 // the date line; a journey within one town (a river bus) goes nowhere and
 // says nothing.
-function roundTrips(segments: readonly Booking[]): { base: Town; start: string }[] {
+function roundTrips(segments: readonly Booking[]): RoundTrip[] {
   // A cancelled journey was never travelled, so it says nothing about home.
   const journeys = liveSegments(segments)
     .filter((s) => {
@@ -142,7 +150,7 @@ function roundTrips(segments: readonly Booking[]): { base: Town; start: string }
       return journeyTypes.has(s.type) && from && to && !sameTown(from, to);
     })
     .sort((a, b) => compareInstants(a.start, b.start));
-  const trips: { base: Town; start: string }[] = [];
+  const trips: RoundTrip[] = [];
   let i = 0;
   while (i < journeys.length) {
     const base = town(journeys[i]!.origin)!;
@@ -151,7 +159,7 @@ function roundTrips(segments: readonly Booking[]): { base: Town; start: string }
       i++;
       continue;
     }
-    trips.push({ base, start: localDate(journeys[i]!.start) });
+    trips.push({ base, start: localDate(journeys[i]!.start), from: journeys[i]!.origin!, back: journeys[back]!.destination! });
     i = back + 1;
   }
   return trips;
@@ -164,14 +172,26 @@ function roundTrips(segments: readonly Booking[]): { base: Town; start: string }
 // somewhere home comes straight back to (side trips on a visit whose way
 // out was never imported): the next round trip after them is from home.
 export function homeTimeline(segments: readonly Booking[]): HomePeriod[] {
+  return homeBases(segments).map(({ base, from, until }) => ({
+    city: base.city,
+    ...(base.country ? { country: base.country } : {}),
+    ...(from ? { from } : {}),
+    ...(until ? { until } : {}),
+  }));
+}
+
+// homeTimeline's periods with the town each was worked out from, its point
+// included, so what was found to leave from home is told as it was then
+// (withHomeAirports).
+function homeBases(segments: readonly Booking[]): { base: Town; from?: string; until?: string }[] {
   const trips = roundTrips(segments);
-  const periods: HomePeriod[] = [];
+  const periods: { base: Town; from?: string; until?: string }[] = [];
   let current: Town | undefined;
   for (let i = 0; i < trips.length; i++) {
     const { base, start } = trips[i]!;
     if (!current) {
       current = base;
-      periods.push({ city: base.city, ...(base.country ? { country: base.country } : {}) });
+      periods.push({ base });
       continue;
     }
     if (sameTown(base, current)) continue;
@@ -183,16 +203,48 @@ export function homeTimeline(segments: readonly Booking[]): HomePeriod[] {
       continue;
     }
     periods[periods.length - 1]!.until = dayBefore(start);
-    periods.push({ city: base.city, ...(base.country ? { country: base.country } : {}), from: start });
+    periods.push({ base, from: start });
     current = base;
     i = end;
   }
-  return periods.map(({ city, country, from, until }) => ({
-    city,
-    ...(country ? { country } : {}),
-    ...(from ? { from } : {}),
-    ...(until ? { until } : {}),
-  }));
+  return periods;
+}
+
+// How many round trips must leave from or come back into an airport or
+// station while someone lives somewhere for it to be one of that home's:
+// one could be a trip from a relative's on a visit.
+const homeAirportTrips = 2;
+
+// One airport or station: by its code, else by its name in its city and
+// country, as names repeat (Washington's Union Station and Chicago's).
+const placeKey = (place: Place) => (place.code ?? [place.name, place.city ?? "", place.country ? countryCode(place.country) : ""].join("|")).trim().toLowerCase();
+
+// Each period with the airports and stations its round trips (in
+// `segments`) leave from or come back into, each at least homeAirportTrips
+// times while it was home. For home as worked out and as the person
+// corrected it alike: a correction to "Mountain View" gets the SFO its
+// trips start from.
+export function withHomeAirports(periods: readonly HomePeriod[], segments: readonly Booking[]): HomePeriod[] {
+  // Only round trips from what the journeys say was home at the time
+  // (homeTimeline): side trips on a visit whose way out was never imported
+  // leave from where the visit was, not from home.
+  // As homeTimeline tells them, by name or by being near (SFO and Oakland).
+  const bases = homeBases(segments);
+  const trips = roundTrips(segments).filter((t) => {
+    const home = bases.find((b) => (!b.from || b.from <= t.start) && (!b.until || t.start <= b.until));
+    return !!home && sameTown(t.base, home.base);
+  });
+  return periods.map((period) => {
+    const counts = new Map<string, { place: Place; trips: number }>();
+    for (const trip of trips.filter((t) => covers(period, t.start))) {
+      const ends = new Map([trip.from, trip.back].map((place) => [placeKey(place), place] as const));
+      for (const [key, place] of ends) counts.set(key, { place: counts.get(key)?.place ?? place, trips: (counts.get(key)?.trips ?? 0) + 1 });
+    }
+    const airports = [...counts.values()].filter((c) => c.trips >= homeAirportTrips).map((c) => c.place);
+    const rest: HomePeriod = { ...period };
+    delete rest.airports;
+    return airports.length > 0 ? { ...rest, airports } : rest;
+  });
 }
 
 const covers = (period: HomePeriod, date: string) =>
@@ -501,8 +553,8 @@ function homeBetween(
   const last = earlier.reduce((a, b) => (compareInstants(finishes(b), finishes(a)) > 0 ? b : a));
   if (!journeyTypes.has(last.type)) return false;
   const back = finishes(last);
-  if (!inHomeTown(last.destination, localDate(back), periods, overrides)) return false;
-  if (inHomeTown(last.origin, localDate(last.start), periods, overrides)) return false;
+  if (!journeyHome(last.destination, localDate(back), periods, overrides)) return false;
+  if (journeyHome(last.origin, localDate(last.start), periods, overrides)) return false;
   return later.every((s) => compareInstants(s.start, back) > 0);
 }
 
@@ -527,6 +579,21 @@ function sameArea(a: Place | undefined, b: Place | undefined): boolean {
   if (sameTown(x, y)) return true;
   if (x.country && y.country && countryCode(x.country) !== countryCode(y.country)) return false;
   return located(x) && located(y) && distanceKm(x, y) <= areaKm;
+}
+
+// Whether a journey's end (`place`, on `date`) is home: in the home of its
+// day, or one of that home's airports or stations (withHomeAirports), so
+// landing at SFO is coming home to Mountain View. Only for journeys: a hotel
+// by the airport is not at home (inHomeTown).
+export function journeyHome(
+  place: Place | undefined,
+  date: string,
+  periods: readonly HomePeriod[],
+  overrides: readonly HomePeriod[] = [],
+): boolean {
+  if (inHomeTown(place, date, periods, overrides)) return true;
+  const home = homeAt(periods, date, overrides);
+  return !!place && !!home?.airports?.some((airport) => placeKey(airport) === placeKey(place));
 }
 
 // Whether `next` is the onward journey of a connection at `landing`'s
@@ -555,7 +622,7 @@ export function opensTrip(
 ): boolean {
   if (!journeyTypes.has(landing.type) || !journeyTypes.has(next.type)) return false;
   const landed = arrives({ ...landing, title: "" });
-  if (inHomeTown(landing.destination, localDate(landed), periods, overrides)) return false;
+  if (journeyHome(landing.destination, localDate(landed), periods, overrides)) return false;
   return compareInstants(next.start, landed) > 0 && sameArea(landing.destination, next.origin);
 }
 

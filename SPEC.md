@@ -1672,7 +1672,16 @@ are never at home). Travel joins travel within two days, but never across a
 journey home: once a trip's last journey has brought someone home, what
 starts after it is another trip, however soon (`homeBetween`), so a flight
 to Boston two days after the flight back from Sweden starts a trip of its
-own. Outings never
+own. A journey ends at home when it lands in the home town, or at one of
+home's airports or stations (`journeyHome`): those that two or more round
+trips leave from or come back into while home is there
+(`withHomeAirports`), however far from the town, counting only round trips
+from where the journeys say home was then (so side trips on a visit do not
+count), worked out from the same
+bookings for home as worked out and as corrected. Home corrected to
+Mountain View gets the SFO its trips fly from, so landing at SFO comes
+home; one round trip is not enough, as it could start at a relative's. Only
+journeys count this way: a hotel by the airport is not at home. Outings never
 join by nearness of dates alone, home known or not, since a town that is
 not named as home (Muswell Hill, Bromley) or a home not yet worked out on a
 fresh import would otherwise string a summer of outings and the trips

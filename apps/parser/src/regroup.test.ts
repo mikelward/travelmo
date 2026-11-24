@@ -1,4 +1,4 @@
-import type { ExtractedSegment, Segment, Trip } from "@travelmo/core";
+import { homeCorrections, type ExtractedSegment, type Segment, type Trip } from "@travelmo/core";
 import { describe, expect, it } from "vitest";
 import { regroupTrips } from "./regroup";
 import { memoryStore, type Memory } from "./testStore";
@@ -745,5 +745,30 @@ describe("a flight that lands where the next trip leaves from", () => {
     put(segment("newark", "home", "m4", { type: "flight", title: "UA122 EWR to LHR", start: "2026-04-11T09:10:00-04:00", end: "2026-04-11T21:25:00+01:00", origin: ewr, destination: lhr }));
     await regroupTrips("u1", deps(store));
     expect(summary(store).map((t) => t.segments)).toEqual([["leg1", "leg2", "out", "stay"], ["home"]]);
+  });
+});
+
+// Home corrected to Mountain View while every trip flew from SFO: a homecoming
+// there never ended a trip, so trips two days apart ran together for months.
+describe("regroupTrips with home's airports", () => {
+  const sfo = { name: "San Francisco International", code: "SFO", city: "San Francisco", country: "US" };
+  const bos = { name: "Boston Logan", code: "BOS", city: "Boston", country: "US" };
+  const sea = { name: "Seattle-Tacoma", code: "SEA", city: "Seattle", country: "US" };
+  const flight = (id: string, source: string, start: string, origin: typeof sfo, destination: typeof sfo) =>
+    segment("chain", id, source, { type: "flight", title: `${origin.code} to ${destination.code}`, start, origin, destination });
+  const corrections = [{ city: "Mountain View", country: "US", from: "2011-01-01" }];
+
+  it("ends a trip at a flight home into the airport its round trips leave from", async () => {
+    const store = memoryStore();
+    store.trips.set("chain", trip("chain", "Boston", "2021-11-22", "2021-12-06"));
+    for (const s of [
+      flight("b-out", "mb", "2021-11-22T08:00:00-08:00", sfo, bos),
+      flight("b-back", "mb", "2021-12-01T13:00:00-05:00", bos, sfo),
+      flight("s-out", "ms", "2021-12-03T08:00:00-08:00", sfo, sea),
+      flight("s-back", "ms", "2021-12-06T18:00:00-08:00", sea, sfo),
+    ])
+      store.segments.set(s.id, s);
+    await regroupTrips("u1", { ...deps(store), homeOverrides: async () => homeCorrections(corrections) });
+    expect(summary(store).map((t) => t.segments)).toEqual([["b-back", "b-out"], ["s-back", "s-out"]]);
   });
 });
