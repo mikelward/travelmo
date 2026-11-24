@@ -1134,6 +1134,136 @@ describe("importTripIt", () => {
     expect([...store.segments.values()].map((s) => [s.start, s.sources?.map((r) => r.id)])).toEqual([["2026-12-15T08:20:00+00:00", ["m-booked", "m-receipt", "m-change"]]]);
   });
 
+  // Coming home two days early: the rebooking flies Boston to San Francisco
+  // through Detroit on 19 Dec, and the original flight home on 21 Dec is
+  // filed cancelled, whichever email is read first (a mailbox is read
+  // newest first).
+  it("files cancelled the flight a rebooking under the same reference replaced with other flights", async () => {
+    const sfo = { name: "San Francisco International", code: "SFO", city: "San Francisco", country: "US" };
+    const bos = { name: "Boston Logan", code: "BOS", city: "Boston", country: "US" };
+    const dtw = { name: "Detroit Metro", code: "DTW", city: "Detroit", country: "US" };
+    const leg = (title: string, start: string, end: string, origin: typeof sfo, destination: typeof sfo) => ({ type: "flight" as const, title, start, end, origin, destination, confirmation: "F8D7IY" });
+    const out = leg("Delta 100 SFO to BOS", "2026-12-10T08:00:00-08:00", "2026-12-10T16:30:00-05:00", sfo, bos);
+    const booked: ExtractedBooking = { isBooking: true, segments: [out, leg("Delta 1123 BOS to SFO", "2026-12-21T08:25:00-05:00", "2026-12-21T12:23:00-08:00", bos, sfo)] };
+    const rebooked: ExtractedBooking = {
+      isBooking: true,
+      segments: [out, leg("Delta 919 BOS to DTW", "2026-12-19T13:00:00-05:00", "2026-12-19T15:19:00-05:00", bos, dtw), leg("Delta 2980 DTW to SFO", "2026-12-19T16:45:00-05:00", "2026-12-19T18:56:00-08:00", dtw, sfo)],
+    };
+    const first = email({ id: "m-booked", subject: "Your Delta itinerary", date: "Tue, 20 Oct 2026 10:00:00 +0000" });
+    const change = email({ id: "m-change", subject: "Your Delta itinerary has changed", date: "Fri, 30 Oct 2026 10:00:00 +0000" });
+    for (const order of [[first, change], [change, first]]) {
+      const store = memoryStore();
+      for (const message of order) await importMessage("u1", message, deps(store, async () => (message === change ? rebooked : booked)));
+      const flights = [...store.segments.values()].sort((a, b) => a.start.localeCompare(b.start));
+      expect(flights.map((s) => [s.title, s.cancelledBy ?? null])).toEqual([
+        ["Delta 100 SFO to BOS", null],
+        ["Delta 919 BOS to DTW", null],
+        ["Delta 2980 DTW to SFO", null],
+        ["Delta 1123 BOS to SFO", "m-change"],
+      ]);
+      // The trip ends with the flight home that was flown.
+      expect([...store.trips.values()].map((t) => t.liveEnd ?? t.end)).toEqual(["2026-12-19"]);
+    }
+
+    // Restored by hand: an itinerary sent before the Restore leaves it live.
+    const store = memoryStore();
+    for (const message of [first, change]) await importMessage("u1", message, deps(store, async () => (message === change ? rebooked : booked)));
+    const [id, home] = [...store.segments.entries()].find(([, s]) => s.title === "Delta 1123 BOS to SFO")!;
+    const { cancelledAt: _at, cancelledBy: _by, cancelledSentAt: _sent, ...live } = home;
+    store.segments.set(id, { ...live, restoredFrom: ["m-change"], restoredAt: "2026-11-01T09:00:00.000Z" });
+    const again = email({ id: "m-change-again", subject: "Your Delta itinerary has changed", date: "Sat, 31 Oct 2026 10:00:00 +0000" });
+    await importMessage("u1", again, deps(store, async () => rebooked));
+    expect(store.segments.get(id)?.cancelledBy).toBeUndefined();
+
+    // Rebooked twice: the second rebooking dates the cancellation afresh, so a
+    // confirmation of the original sent between them doesn't revive it.
+    {
+      const twice = memoryStore();
+      const sea2 = { name: "Seattle-Tacoma", code: "SEA", city: "Seattle", country: "US" };
+      const third: ExtractedBooking = {
+        isBooking: true,
+        segments: [out, leg("Alaska 5 BOS to SEA", "2026-12-20T08:00:00-05:00", "2026-12-20T11:00:00-08:00", bos, sea2), leg("Alaska 9 SEA to SFO", "2026-12-20T13:00:00-08:00", "2026-12-20T15:00:00-08:00", sea2, sfo)],
+      };
+      const latest = email({ id: "m-third", subject: "Your Delta itinerary has changed", date: "Fri, 30 Oct 2026 12:00:00 +0000" });
+      const earlier = email({ id: "m-change", subject: "Your Delta itinerary has changed", date: "Tue, 27 Oct 2026 10:00:00 +0000" });
+      const between = email({ id: "m-booked-again", subject: "Your Delta itinerary", date: "Wed, 28 Oct 2026 10:00:00 +0000" });
+      const extracted = new Map([[first, booked], [earlier, rebooked], [latest, third], [between, booked]]);
+      for (const message of [first, earlier, latest, between]) await importMessage("u1", message, deps(twice, async () => extracted.get(message)!));
+      expect([...twice.segments.values()].find((s) => s.title === "Delta 1123 BOS to SFO")?.cancelledBy).toBe("m-third");
+    }
+
+    // An explicit cancellation sent before the rebooking: the later rebooking
+    // dates the cancellation, whichever arrives first.
+    {
+      const cancel = email({ id: "m-cancel", subject: "Your flight is cancelled", date: "Sun, 25 Oct 2026 10:00:00 +0000" });
+      const cancelled: ExtractedBooking = {
+        isBooking: false,
+        segments: [],
+        cancellations: [{ type: "flight", confirmation: "F8D7IY", start: "2026-12-21T08:25:00-05:00", place: "BOS to SFO" }],
+      };
+      const extracted = new Map([[first, booked], [change, rebooked], [cancel, cancelled]]);
+      for (const order of [[cancel, change, first], [first, cancel, change], [change, cancel, first]]) {
+        const both = memoryStore();
+        for (const message of order) await importMessage("u1", message, deps(both, async () => extracted.get(message)!));
+        expect([...both.segments.values()].find((s) => s.title === "Delta 1123 BOS to SFO")?.cancelledBy).toBe("m-change");
+      }
+    }
+
+    // The replacement cancelled in turn, read newest first: it still replaced the original.
+    {
+      const cancel = email({ id: "m-cancel-new", subject: "Your flight is cancelled", date: "Sun, 1 Nov 2026 10:00:00 +0000" });
+      const cancelled: ExtractedBooking = {
+        isBooking: false,
+        segments: [],
+        cancellations: [
+          { type: "flight", confirmation: "F8D7IY", start: "2026-12-19T13:00:00-05:00", place: "BOS to DTW" },
+          { type: "flight", confirmation: "F8D7IY", start: "2026-12-19T16:45:00-05:00", place: "DTW to SFO" },
+        ],
+      };
+      const extracted = new Map([[first, booked], [change, rebooked], [cancel, cancelled]]);
+      for (const order of [[cancel, change, first], [first, change, cancel]]) {
+        const gone = memoryStore();
+        for (const message of order) await importMessage("u1", message, deps(gone, async () => extracted.get(message)!));
+        expect([...gone.segments.values()].filter((s) => !s.cancelledBy).map((s) => s.title)).toEqual(["Delta 100 SFO to BOS"]);
+      }
+    }
+
+    // A replacement filed into another trip still gives the original's trip a fresh revision.
+    {
+      const apart = memoryStore();
+      const homeOnly: ExtractedBooking = { isBooking: true, segments: [booked.segments[1]!] };
+      await importMessage("u1", first, { ...deps(apart, async () => homeOnly), now: () => "2026-10-20T12:00:00Z" });
+      const [tripId] = [...apart.segments.values()].filter((s) => s.title === "Delta 1123 BOS to SFO").map((s) => s.tripId);
+      const early: ExtractedBooking = { isBooking: true, segments: [leg("Delta 919 BOS to SFO", "2026-12-11T13:00:00-05:00", "2026-12-11T16:30:00-08:00", bos, sfo)] };
+      await importMessage("u1", change, { ...deps(apart, async () => early), now: () => "2026-10-30T12:00:00Z" });
+      expect([...apart.segments.values()].find((s) => s.title === "Delta 919 BOS to SFO")?.tripId).not.toBe(tripId);
+      expect([...apart.segments.values()].find((s) => s.title === "Delta 1123 BOS to SFO")?.cancelledBy).toBe("m-change");
+      expect(apart.trips.get(tripId!)?.updatedAt).toBe("2026-10-30T12:00:00Z");
+    }
+
+    // A later email confirming only a leg of the replacement (a seat change) doesn't date the cancellation.
+    {
+      const seat = email({ id: "m-seat", subject: "Your Delta itinerary", date: "Thu, 5 Nov 2026 10:00:00 +0000" });
+      const extracted = new Map([[first, booked], [change, rebooked], [seat, { isBooking: true, segments: [rebooked.segments[1]!] }]]);
+      const partly = memoryStore();
+      for (const message of [change, seat, first]) await importMessage("u1", message, deps(partly, async () => extracted.get(message)!));
+      expect([...partly.segments.values()].find((s) => s.title === "Delta 1123 BOS to SFO")?.cancelledBy).toBe("m-change");
+    }
+
+    // A rebooking that keeps the first leg and changes the onward flights: the dropped one is found.
+    const sea = { name: "Seattle-Tacoma", code: "SEA", city: "Seattle", country: "US" };
+    const viaDetroit: ExtractedBooking = { isBooking: true, segments: rebooked.segments.slice(1) };
+    const viaSeattle: ExtractedBooking = {
+      isBooking: true,
+      segments: [rebooked.segments[1]!, leg("Delta 400 DTW to SEA", "2026-12-19T17:30:00-05:00", "2026-12-19T19:30:00-08:00", dtw, sea), leg("Alaska 9 SEA to SFO", "2026-12-19T21:00:00-08:00", "2026-12-19T23:00:00-08:00", sea, sfo)],
+    };
+    for (const order of [[first, change], [change, first]]) {
+      const kept = memoryStore();
+      for (const message of order) await importMessage("u1", message, deps(kept, async () => (message === change ? viaSeattle : viaDetroit)));
+      expect([...kept.segments.values()].filter((s) => s.cancelledBy).map((s) => s.title)).toEqual(["Delta 2980 DTW to SFO"]);
+    }
+  });
+
   it("keeps the source of a booking dropped as a duplicate on the booking it matched", async () => {
     const store = memoryStore();
     await importMessage("u1", email({ id: "m2", subject: "Your Ryanair itinerary" }), deps(store, async () => flight));

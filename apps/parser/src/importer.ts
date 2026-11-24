@@ -24,6 +24,7 @@ import {
   type ExtractedCancellation,
   homeTimeline,
   homesWithAirports,
+  rebookedFlights,
   type ChosenHomeAirports,
   type HomePeriod,
   icsEventText,
@@ -674,6 +675,46 @@ export function withWaitingCancellations<S extends Segment>(segment: S, confirma
   return settled(segment, standingCancellation(segment, confirmations, waiting, pending), timestamp);
 }
 
+// A rebooking: the flights of older emails under a reference of this one
+// (`email`, sent at `sentAt`, finding `segments`), which it flies another way
+// between the same cities (rebookedFlights), as filed cancelled by it, so the
+// flight home that was never flown stops holding the trip open. Whole
+// journeys are compared; a leg is cancelled only when this email is the
+// newer word on it, it didn't come from this email, and the user hasn't
+// restored it since (as standingCancellation honours Restore). One
+// cancelled before this email was sent (an earlier rebooking) is compared
+// too, so a later rebooking dates its cancellation afresh and an older
+// confirmation can't revive it. Journeys are built from every flight under
+// the reference before any is ruled out, so a leg this email kept still
+// joins the original's journey. An email of payments only (a refund
+// repeating an old itinerary) rebooks nothing. The caller leaves out the
+// legs this email confirmed again (sameBooking). Shared by imports and
+// Refresh from email.
+export function rebookedByEmail(
+  existing: readonly Segment[],
+  segments: readonly ExtractedSegment[],
+  email: { id: string; sentAt: string; subject?: string | undefined },
+  timestamp: string,
+): Segment[] {
+  const { id, sentAt } = email;
+  if (paymentOnly(segments, email.subject)) return [];
+  const references = new Set(segments.flatMap((s) => (s.type === "flight" && s.confirmation ? [normalizeReference(s.confirmation)] : [])));
+  const underReference = (other: Segment) => other.type === "flight" && other.confirmation !== undefined && references.has(normalizeReference(other.confirmation));
+  const replaceable = (other: Segment) =>
+    (!isCancelled(other) || (other.cancelledSentAt !== undefined && compareInstants(other.cancelledSentAt, sentAt) < 0)) &&
+    segmentSources(other).every((s) => s.id !== id && (s.sentAt === undefined || compareInstants(s.sentAt, sentAt) < 0)) &&
+    !(other.restoredFrom ?? []).includes(id) &&
+    !(other.restoredAt !== undefined && compareInstants(sentAt, other.restoredAt) <= 0);
+  return rebookedFlights(existing.filter(underReference), segments)
+    .map(({ flight }) => flight)
+    .filter(replaceable)
+    .map((old) => {
+      // Still unedited stays so (updatedAt its createdAt), as merges do.
+      const unedited = old.updatedAt === old.createdAt;
+      return { ...settled(old, { messageId: id, sentAt }, timestamp), ...(unedited ? { createdAt: timestamp } : {}), updatedAt: timestamp };
+    });
+}
+
 export const cancellationReason = (n: number) =>
   n === 0 ? "no matching booking found" : n === 1 ? "cancelled 1 booking" : `cancelled ${n} bookings`;
 
@@ -990,8 +1031,11 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     const mergedOf = (segment: Segment, found: ExtractedSegment): Segment =>
       withCancellation(mergeDetails(segment, found, { edited: segment.updatedAt !== segment.createdAt, newer: newerThan(segment) }), segment);
     const merges: Segment[] = [];
+    // Trips whose flights a rebooking filed cancelled: each gets a fresh
+    // revision with the others this email changed (recordSources).
+    const rebookedTrips = new Set<string>();
     const recordSources = (target?: string) => {
-      const changedTrips = new Set<string>();
+      const changedTrips = new Set<string>(rebookedTrips);
       for (const { segment, found } of matchedSegments) {
         if (upgrades.has(`${segment.tripId}/${segment.id}`)) {
           const sources = segmentSources(segment).some((s) => s.kind === ref.kind && s.id === ref.id) ? segmentSources(segment) : [...segmentSources(segment), ref];
@@ -1143,6 +1187,17 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
         }
         return !match;
       });
+    // A rebooking (rebookedByEmail): flights of an older email this one
+    // flies another way are filed cancelled by it.
+    if (bookedAt) {
+      for (const written of rebookedByEmail(existing, booking.segments, { id: booking.sourceId, sentAt: bookedAt }, timestamp)) {
+        if (matched.includes(`${written.tripId}/${written.id}`)) continue;
+        tx.putSegment(written);
+        merges.push(written);
+        rebookedTrips.add(written.tripId);
+        log("booking_rebooked", { uid, tripId: written.tripId, segmentId: written.id, messageId: booking.sourceId });
+      }
+    }
     const duplicates = booking.segments.length - fresh.length;
     const freshRange = segmentDateRange(fresh.map((f) => f.segment));
     if (!freshRange) {
@@ -1159,6 +1214,40 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     for (const { segment, id } of fresh) {
       const by = standingCancellation(segment, [bookedAt], waiting, pending);
       if (by) cancelledBy.set(id, by);
+    }
+    // The other way round, as a mailbox is read newest first: flights of
+    // this older email that a newer one already filed flies another way
+    // (rebookedFlights) are filed cancelled by the newest email behind the
+    // journey that replaced them, dated by it. A replacing flight cancelled
+    // since still replaced them: its own cancellation doesn't revive them.
+    if (bookedAt) {
+      const newest = (other: Segment) =>
+        segmentSources(other)
+          .filter((s) => s.sentAt !== undefined && compareInstants(s.sentAt, bookedAt) > 0)
+          .sort((a, b) => compareInstants(b.sentAt!, a.sentAt!))[0];
+      const newer = existing.filter(
+        (other) => other.type === "flight" && other.confirmation !== undefined && references.has(normalizeReference(other.confirmation)) && newest(other),
+      );
+      for (const { flight, by } of rebookedFlights(booking.segments, newer)) {
+        const item = fresh.find((f) => f.segment === flight);
+        if (!item) continue;
+        // The newest email confirming a replacing journey whole: one that
+        // confirmed only a leg of it (a seat change) dates nothing.
+        const whole = (journey: Segment[]) =>
+          segmentSources(journey[0]!).filter(
+            (s) => s.sentAt !== undefined && compareInstants(s.sentAt, bookedAt) > 0 && journey.every((leg) => segmentSources(leg).some((o) => o.kind === s.kind && o.id === s.id)),
+          );
+        const source = by
+          .flatMap(whole)
+          .sort((a, b) => compareInstants(b.sentAt!, a.sentAt!))[0];
+        if (!source) continue;
+        // The later of this and a cancellation already standing, as
+        // standingCancellation keeps the latest: one of unknown date stays.
+        const standing = cancelledBy.get(item.id);
+        if (standing && (standing.sentAt === undefined || compareInstants(standing.sentAt, source.sentAt!) >= 0)) continue;
+        cancelledBy.set(item.id, { messageId: source.id, sentAt: source.sentAt });
+        log("booking_rebooked", { uid, segmentId: item.id, messageId: source.id });
+      }
     }
     // Live first, wherever a trip is chosen, named or widened: what this
     // booking still books (new bookings not filed cancelled, and those it

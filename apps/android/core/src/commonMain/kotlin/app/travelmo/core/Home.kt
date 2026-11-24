@@ -1,5 +1,6 @@
 package app.travelmo.core
 
+import kotlin.math.abs
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
@@ -427,6 +428,58 @@ fun opensTrip(landing: Segment, next: Segment, periods: List<HomePeriod>, overri
     val landed = arrives(landing)
     if (journeyHome(landing.destination, landed.take(10), periods, overrides)) return false
     return compareInstants(next.start, landed) > 0 && sameArea(landing.destination, next.origin)
+}
+
+private const val REBOOKED_WITHIN_DAYS = 14
+
+private fun bookingReference(s: Segment): String = s.confirmation?.uppercase()?.filter { it in 'A'..'Z' || it in '0'..'9' } ?: ""
+
+private const val MAX_JOURNEYS = 64
+
+// Every journey the flights make, as home.ts's journeys: each whole run of connections under one reference, from a
+// flight nothing connects onto to one that connects onto nothing, a flight on several runs on each.
+private fun journeys(flights: List<Segment>): List<List<Segment>> {
+    fun joins(landing: Segment, next: Segment) = bookingReference(landing) == bookingReference(next) && isConnection(landing, next)
+    val sorted = flights.sortedWith { a, b -> compareInstants(a.start, b.start) }
+    val onward = sorted.mapIndexed { i, flight -> sorted.filterIndexed { j, next -> j > i && joins(flight, next) } }
+    val reached = onward.flatten().toSet()
+    val out = mutableListOf<List<Segment>>()
+    fun walk(path: List<Segment>) {
+        if (out.size >= MAX_JOURNEYS) return
+        val next = onward[sorted.indexOf(path.last())]
+        if (next.isEmpty()) out += path
+        for (flight in next) walk(path + flight)
+    }
+    for (flight in sorted) if (flight !in reached) walk(listOf(flight))
+    return out
+}
+
+/** A flight a rebooking replaced, with every journey that replaced it (the latest email confirming one whole dates the cancellation). */
+data class RebookedFlight(val flight: Segment, val by: List<List<Segment>>)
+
+/**
+ * The flights of [older] that [newer] rebooked, as home.ts's rebookedFlights: whole journeys under the same reference,
+ * between the same cities (or their other airports), leaving within two weeks of each other.
+ */
+fun rebookedFlights(older: List<Segment>, newer: List<Segment>): List<RebookedFlight> {
+    fun referenced(list: List<Segment>) = list.filter { it.type == SegmentType.FLIGHT && bookingReference(it).isNotEmpty() }
+    val fresh = journeys(referenced(newer))
+    val found = mutableMapOf<Segment, List<List<Segment>>>()
+    for (journey in journeys(referenced(older))) {
+        val first = journey.first()
+        val last = journey.last()
+        val by = fresh.filter { other ->
+            val from = other.first()
+            val reference = bookingReference(from)
+            journey.all { bookingReference(it) == reference } &&
+                other.all { bookingReference(it) == reference } &&
+                sameArea(first.origin, from.origin) &&
+                sameArea(last.destination, other.last().destination) &&
+                abs(instantMillis(from.start) - instantMillis(first.start)) <= REBOOKED_WITHIN_DAYS * 86_400_000L
+        }
+        if (by.isNotEmpty()) for (flight in journey) found[flight] = (found[flight].orEmpty() + by).distinct()
+    }
+    return older.filter { it in found }.map { RebookedFlight(it, found.getValue(it)) }
 }
 
 /** The Profile's home line, as home.ts: "Home: London since Mar 2021 · Boston 2018–2021"; null when nothing is known. */

@@ -303,6 +303,70 @@ describe("refreshEmail", () => {
     expect(added.cancelledBy).toBe("mc");
   });
 
+  it("cancels the flight an older email booked that this one, a rebooking, flies another way", async () => {
+    const w = world();
+    const bos = { name: "Boston Logan", code: "BOS", city: "Boston", country: "US" };
+    const dtw = { name: "Detroit Metro", code: "DTW", city: "Detroit", country: "US" };
+    const sfo = { name: "San Francisco International", code: "SFO", city: "San Francisco", country: "US" };
+    const leg = (title: string, start: string, end: string, origin: typeof bos, destination: typeof bos): ExtractedSegment => ({ type: "flight", title, start, end, origin, destination, confirmation: "F8D7IY" });
+    const home = leg("Delta 1123 BOS to SFO", "2027-03-21T08:25:00-05:00", "2027-03-21T12:23:00-08:00", bos, sfo);
+    const viaDetroit = [leg("Delta 919 BOS to DTW", "2027-03-11T13:00:00-05:00", "2027-03-11T15:19:00-05:00", bos, dtw), leg("Delta 2980 DTW to SFO", "2027-03-11T16:45:00-05:00", "2027-03-11T18:56:00-08:00", dtw, sfo)];
+    // Both read before rebookings were recognized, each in its own trip.
+    const sources = (id: string, sentAt: string) => ({ sources: [{ kind: "gmail" as const, id, uid, at: filed, sentAt }] });
+    w.put(trip("t1", { start: "2027-03-21", end: "2027-03-21" }), booking("m1-0", "t1", home, sources("m1", "2027-01-01T10:00:00.000Z")));
+    w.put(
+      trip("t2", { start: "2027-03-11", end: "2027-03-11" }),
+      booking("m2-0", "t2", viaDetroit[0]!, sources("m2", "2027-01-04T10:00:00.000Z")),
+      booking("m2-1", "t2", viaDetroit[1]!, sources("m2", "2027-01-04T10:00:00.000Z")),
+    );
+    w.memory.parsed.set(`${uid}/m2`, record("m2", { segmentIds: ["m2-0", "m2-1"], tripId: "t2" }));
+
+    await w.refresh("m2", found(...viaDetroit));
+    expect(w.memory.segments.get("m1-0")).toMatchObject({ cancelledBy: "m2", cancelledSentAt: "2027-01-04T10:00:00.000Z" });
+    expect(w.memory.trips.get("t1")?.updatedAt).toBe(now);
+    // Reading the older email again leaves it cancelled.
+    await w.refresh("m1", found(home));
+    expect(w.memory.segments.get("m1-0")?.cancelledBy).toBe("m2");
+  });
+
+  it("cancels the onward flight a rebooking that kept the first leg dropped, but never for a receipt", async () => {
+    const bos = { name: "Boston Logan", code: "BOS", city: "Boston", country: "US" };
+    const dtw = { name: "Detroit Metro", code: "DTW", city: "Detroit", country: "US" };
+    const sea = { name: "Seattle-Tacoma", code: "SEA", city: "Seattle", country: "US" };
+    const sfo = { name: "San Francisco International", code: "SFO", city: "San Francisco", country: "US" };
+    const leg = (title: string, start: string, end: string, origin: typeof bos, destination: typeof bos): ExtractedSegment => ({ type: "flight", title, start, end, origin, destination, confirmation: "F8D7IY" });
+    const first = leg("Delta 919 BOS to DTW", "2027-03-11T13:00:00-05:00", "2027-03-11T15:19:00-05:00", bos, dtw);
+    const onward = leg("Delta 2980 DTW to SFO", "2027-03-11T16:45:00-05:00", "2027-03-11T18:56:00-08:00", dtw, sfo);
+    const viaSeattle = [leg("Delta 400 DTW to SEA", "2027-03-11T17:30:00-05:00", "2027-03-11T19:30:00-08:00", dtw, sea), leg("Alaska 9 SEA to SFO", "2027-03-11T21:00:00-08:00", "2027-03-11T23:00:00-08:00", sea, sfo)];
+    const from = (...ids: [string, string][]) => ({ sources: ids.map(([id, sentAt]) => ({ kind: "gmail" as const, id, uid, at: filed, sentAt })) });
+    const m1: [string, string] = ["m1", "2027-01-01T10:00:00.000Z"];
+    const m2: [string, string] = ["m2", "2027-01-04T10:00:00.000Z"];
+    // The original and the rebooking that kept its first leg, both read before rebookings were recognized.
+    const setup = () => {
+      const w = world();
+      w.put(
+        trip("t1", { start: "2027-03-11", end: "2027-03-11" }),
+        booking("m1-0", "t1", first, from(m1, m2)),
+        booking("m1-1", "t1", onward, from(m1)),
+        booking("m2-1", "t1", viaSeattle[0]!, from(m2)),
+        booking("m2-2", "t1", viaSeattle[1]!, from(m2)),
+      );
+      w.memory.parsed.set(`${uid}/m2`, record("m2", { segmentIds: ["m1-0", "m2-1", "m2-2"] }));
+      return w;
+    };
+
+    // A refund for an older direct flight under the reference rebooks nothing.
+    const direct = leg("Delta 5 BOS to SFO", "2027-03-11T08:00:00-05:00", "2027-03-11T11:30:00-08:00", bos, sfo);
+    const refunded = setup();
+    const refund = { ...email("m3"), subject: "Your refund receipt", date: "Fri, 8 Jan 2027 10:00:00 +0000" };
+    await refreshEmail(uid, record("m3"), refund, refunded.deps(async () => found(direct)), { generation: 0, snapshot: await refunded.memory.listUserSegments(uid) });
+    expect([...refunded.memory.segments.values()].filter((s) => s.cancelledBy).map((s) => s.id)).toEqual([]);
+
+    const w = setup();
+    await w.refresh("m2", found(first, ...viaSeattle));
+    expect([...w.memory.segments.values()].filter((s) => s.cancelledBy).map((s) => [s.id, s.cancelledBy])).toEqual([["m1-1", "m2"]]);
+  });
+
   it("keeps what only the duplicate knew, its reference and provider, on the booking that stays", async () => {
     const room = { ...stay, confirmation: undefined };
     const w = world();

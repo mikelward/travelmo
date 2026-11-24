@@ -1582,6 +1582,21 @@ are matched; the cancellation stops waiting when all of them have
 all trips clears them too, and deleting the account removes them with
 everything else under the user.
 
+A rebooking cancels too, with no cancellation email: when a newer email
+under a flight's reference flies another way between the same cities (or
+their other airports), leaving within two weeks of the original journey
+(the flight home moved two days earlier, through Detroit), the original
+journey's flights it does not confirm again are filed cancelled by the
+newer email (`rebookedFlights`, `cancelledBy` its id, `cancelledSentAt`
+its date), as a cancellation email would. Either order works: filing the
+newer email cancels the older flights already there, and filing the older
+one (a mailbox is read newest first) files them cancelled by the newer
+email already filed, dated by the latest rebooking. Refresh from email
+does the same, so bookings filed before this are corrected by refreshing.
+An email covering only part of a booking (one leg's
+seat change) cancels nothing, as its flights don't run between the same
+cities as another journey's.
+
 A cancelled booking stays on its trip, struck through under a "Cancelled"
 label (web and Android), and counts for nothing else: the trip's dates,
 Fit dates, what's next, the current stay, check-in, document reminders,
