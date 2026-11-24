@@ -9,6 +9,12 @@ describe("describeRegroup", () => {
 
   it("says when nothing needed changing", () => {
     expect(describeRegroup({ changed: 0, deleted: 0 })).toBe("Your trips were already grouped this way.");
+    expect(describeRegroup({ changed: 0, deleted: 0, placed: 0 })).toBe("Your trips were already grouped this way.");
+  });
+
+  it("counts the bookings it gave a place", () => {
+    expect(describeRegroup({ changed: 0, deleted: 0, placed: 2 })).toBe("Done: 2 bookings placed.");
+    expect(describeRegroup({ changed: 1, deleted: 0, placed: 1 })).toBe("Done: 1 trip rebuilt, 1 booking placed.");
   });
 });
 

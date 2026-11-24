@@ -8,12 +8,18 @@ package app.travelmo.core
 const val REGROUP_PATH = "/trips/regroup"
 const val DELETE_ALL_TRIPS_PATH = "/trips/delete-all"
 
-private fun trips(n: Int) = "$n trip${if (n == 1) "" else "s"}"
+private fun count(n: Int, what: String) = "$n $what${if (n == 1) "" else "s"}"
 
-/** What regrouping did: [changed] trips rebuilt, [deleted] merged away. */
-fun describeRegroup(changed: Int, deleted: Int): String {
-    if (changed == 0 && deleted == 0) return "Your trips were already grouped this way."
-    val parts = listOfNotNull(if (changed > 0) "${trips(changed)} rebuilt" else null, if (deleted > 0) "${trips(deleted)} merged away" else null)
+private fun trips(n: Int) = count(n, "trip")
+
+/** What regrouping did: [changed] trips rebuilt, [deleted] merged away, [placed] bookings given a place from the tables first. */
+fun describeRegroup(changed: Int, deleted: Int, placed: Int = 0): String {
+    if (changed == 0 && deleted == 0 && placed == 0) return "Your trips were already grouped this way."
+    val parts = listOfNotNull(
+        if (changed > 0) "${trips(changed)} rebuilt" else null,
+        if (deleted > 0) "${trips(deleted)} merged away" else null,
+        if (placed > 0) "${count(placed, "booking")} placed" else null,
+    )
     return "Done: ${parts.joinToString(", ")}."
 }
 

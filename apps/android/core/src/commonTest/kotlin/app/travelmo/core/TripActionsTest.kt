@@ -10,6 +10,8 @@ class TripActionsTest {
         describeRegroup(3, 0) shouldBe "Done: 3 trips rebuilt."
         describeRegroup(1, 1) shouldBe "Done: 1 trip rebuilt, 1 trip merged away."
         describeRegroup(0, 0) shouldBe "Your trips were already grouped this way."
+        describeRegroup(0, 0, 2) shouldBe "Done: 2 bookings placed."
+        describeRegroup(1, 0, 1) shouldBe "Done: 1 trip rebuilt, 1 booking placed."
     }
 
     @Test

@@ -1599,7 +1599,12 @@ Trips filed before home was known are rebuilt on request ("Regroup trips"
 in Settings on the web and Android, `POST /trips/regroup`,
 `apps/parser/src/regroup.ts`; both say what it did in the words of
 `tripActions.ts` and its Kotlin twin), in the
-import's per-user transaction. "Import past bookings" does the same once
+import's per-user transaction. It first gives every booking what the
+airport and city tables know and it lacks, a country or a spot
+(`apps/parser/src/placeBookings.ts`; hand-entered bookings aside, and no
+geocoder call, nor any revision moved but the trip's), so a fix to the
+tables reaches bookings already filed at once, and says how many it
+placed. "Import past bookings" does the same once
 it reaches the end of the mailbox, since it files bookings in the order
 their emails are read: a car hire read before its flight would otherwise
 start a trip of its own. A regroup that fails there is logged and leaves
@@ -2347,7 +2352,7 @@ build without one points to the web instead.
 | `POST /imap/disconnect` | Firebase ID token | Stops that mailbox's reading and deletes its password |
 | `POST /imap/backfill` | Firebase ID token | As `/gmail/backfill`, for the IMAP mailbox `emailAddress` names |
 | `POST /imap/backfill/stop` | Firebase ID token | Stops that mailbox's reading after the batch under way |
-| `POST /trips/regroup` | Firebase ID token | Rebuilds the user's trips from their bookings with the current grouping ("Home"); returns how many trips changed and how many were merged away |
+| `POST /trips/regroup` | Firebase ID token | Fills in bookings' countries and spots from the airport and city tables, then rebuilds the user's trips from their bookings with the current grouping ("Home"); returns how many trips changed, how many were merged away and how many bookings were placed |
 | `POST /trips/delete-all` | Firebase ID token | Deletes every trip the user owns with its bookings, their import records, places waiting for a geocode on those bookings, and how far the last mailbox reading got; returns how many trips went. Trips shared with them, their profile and connections stay |
 | `POST /feeds/add` | Firebase ID token | Subscribes to a calendar feed after checking its address and reading it once; returns counts as for `/import/ics` |
 | `POST /feeds/remove` | Firebase ID token | Stops polling a feed; its bookings stay |

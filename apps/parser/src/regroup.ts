@@ -12,6 +12,7 @@ import {
   type Segment,
   type Trip,
 } from "@travelmo/core";
+import { placeBookings } from "./placeBookings";
 import { importGaveTitle, settlingTripDates, sourceTripPrefix, tripTitle, type ImportDeps, type TripTx } from "./importer";
 
 // Rebuilding a user's trips from their bookings with the grouping imports
@@ -315,9 +316,13 @@ function applyPlan(tx: TripTx, uid: string, plan: RegroupPlan, timestamp: string
   return { deleted, more };
 }
 
-export type RegroupResult = { changed: number; deleted: number };
+// `placed`: bookings the airport and city tables gave a country or a spot
+// first (placeBookings).
+export type RegroupResult = { changed: number; deleted: number; placed: number };
 
-// Regroups one user's trips, in the import's per-user transaction so no
+// Fills in what the airport and city tables know first, so the grouping
+// and the trips' places use it, then regroups one user's trips, in the
+// import's per-user transaction so no
 // import runs meanwhile. A plan too large for one transaction is applied
 // over several, each planning afresh from what the last left: a group
 // already applied keeps its trip, so the passes settle. Trips that had no
@@ -327,6 +332,7 @@ export async function regroupTrips(
   deps: Pick<ImportDeps, "store" | "now" | "log" | "homeOverrides">,
   budget = writeBudget,
 ): Promise<RegroupResult> {
+  const placed = await placeBookings(uid, deps);
   const overrides = (await deps.homeOverrides?.(uid)) ?? [];
   let keptEmpty: Set<string> | undefined;
   let changed: number | undefined;
@@ -353,7 +359,7 @@ export async function regroupTrips(
       return r;
     });
     if (!more) {
-      const result = { changed: changed ?? 0, deleted };
+      const result = { changed: changed ?? 0, deleted, placed };
       deps.log("regrouped", { uid, passes: pass + 1, ...result });
       return result;
     }

@@ -43,7 +43,7 @@ class ParserTripActions(private val client: ParserClient) : TripActions {
 
     override suspend fun regroup(): String {
         val body = call(REGROUP_PATH, "Regrouping trips")
-        return describeRegroup(body.optInt("changed"), body.optInt("deleted"))
+        return describeRegroup(body.optInt("changed"), body.optInt("deleted"), body.optInt("placed"))
     }
 
     override suspend fun deleteAll(): String {
