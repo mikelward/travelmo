@@ -867,7 +867,10 @@ silenced or given another sound in the system settings. Browsers ignore a
 push's sound, so the web has no chime. Android fixes a channel's sound when
 the channel is made: a new chime needs a new channel id.
 On Android the flight also has a Live Update while the parser watches it,
-from two hours before departure until 45 minutes after landing: an ongoing,
+from two hours before departure, and on for an hour after landing, past the
+parser's last look at 45 minutes, with the last carousel it gave
+(immigration can take that long, and the carousel rarely changes by then;
+looking longer would cost a call a minute): an ongoing,
 silent notification (channel "Flight progress"), which Android 16 and later
 promote to a chip in the status bar showing the most useful thing now: the
 terminal and gate before it leaves ("T3 G28", whichever is known, a value
@@ -890,7 +893,7 @@ that was off gets only the newest; it moves on from gate to landing to bags
 without anything changing, and a failed send is not tried again, since the
 next look sends a newer one. The look that ends the watch (a
 cancellation, or a delay putting departure more than two hours off) sends
-one more, taking the Live Update down; otherwise it times out 45 minutes
+one more, taking the Live Update down; otherwise it times out an hour
 after landing. A swipe-away lasts until the flight is over, a delayed
 landing moving that later.
 The app draws it from the status (`liveFlight` in `:core`), and one swiped

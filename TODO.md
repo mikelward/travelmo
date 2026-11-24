@@ -438,9 +438,10 @@
         `sealStored.ts`). Neither iCloud nor Infomaniak offers OAuth for
         mail.
 - [ ] Use the phone's location to tell when you've left the arrival
-      airport, ending the trip card's hour after landing (gate, carousel,
-      what comes next) then instead. On the device only, like everything
-      else about where someone is.
+      airport (a geofence around it), ending the trip card's hour after
+      landing (gate, carousel, what comes next) and the Android Live
+      Update's (the carousel) then instead, however long immigration takes.
+      On the device only, like everything else about where someone is.
 
 ## iOS app
 
