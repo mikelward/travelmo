@@ -64,7 +64,7 @@ import { AccountDeletedError } from "./deleted";
 import { optionalEnv, requireEnv } from "./env";
 import { geminiEmbedder, geminiExtractor } from "./extract";
 import { cachedGeocoder, defaultDailyLimit, firestoreGeocodeStore, googleGeocoder } from "./geocode";
-import { firestoreRetryStore, sweepGeocodeRetries } from "./geocodeSweep";
+import { firestoreBackfillScan, firestoreRetryStore, queueGeocodeBackfill, sweepGeocodeRetries } from "./geocodeSweep";
 import { smtpConfig, smtpMailer } from "./mail";
 import { fcmSender } from "./fcm";
 import { pushConfig, webPushSender } from "./push";
@@ -1496,9 +1496,19 @@ app.post("/access/check", async (c) => {
 });
 
 // Cloud Scheduler calls this daily (deploy/scheduler.sh): the places a spent
-// geocoding budget put off get their second chance.
+// geocoding budget put off get their second chance, and the next page of
+// bookings imported before geocoding began joins them.
 app.post("/internal/geocode-sweep", async (c) => {
   await requireInternalCaller(c);
+  if (deps.geocodeRetries) {
+    try {
+      const backfill = await queueGeocodeBackfill(firestoreBackfillScan(db), deps.geocodeRetries, deps.now());
+      log("INFO", "geocode_backfill", backfill);
+    } catch (error) {
+      // The sweep goes ahead; the walk resumes from its cursor tomorrow.
+      log("ERROR", "geocode_backfill_failed", errorFields(error));
+    }
+  }
   const result = await sweepGeocodeRetries(deps);
   log("INFO", "geocode_sweep", { ...result, enabled: Boolean(deps.geocode) });
   return c.json(result);

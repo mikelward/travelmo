@@ -508,5 +508,8 @@ service cloud.firestore {
     match /geocodeRetries/{id} {
       allow read, write: if false;
     }
+    match /geocodeBackfill/{id} {
+      allow read, write: if false;
+    }
   }
 }

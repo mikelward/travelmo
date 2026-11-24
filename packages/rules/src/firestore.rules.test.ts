@@ -449,6 +449,8 @@ describe("server-only collections", () => {
     await assertFails(setDoc(doc(as(owner), paths.geocodeBudget("2026-11-07")), { calls: 0 }));
     await assertFails(getDoc(doc(as(owner), paths.geocodeRetry("t1", "s1"))));
     await assertFails(setDoc(doc(as(owner), paths.geocodeRetry("t1", "s1")), { uid: owner.uid, tripId: "t1", segmentId: "s1", at: "2026-11-07T00:00:00Z" }));
+    await assertFails(getDoc(doc(as(owner), paths.geocodeBackfill())));
+    await assertFails(setDoc(doc(as(owner), paths.geocodeBackfill()), { cursor: "done" }));
     await assertFails(getDoc(doc(as(owner), paths.deletedAccount(owner.uid))));
     await assertFails(setDoc(doc(as(owner), paths.deletedAccount(owner.uid)), { uid: owner.uid }));
   });
