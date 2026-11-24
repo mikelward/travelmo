@@ -10,7 +10,7 @@ Travelmo keeps your trips in one place, on the web and in the Android app. This 
 - **Your access:** whether you asked to use Travelmo, who invited you or which admin approved or declined you, or that you used it before approvals, and when.
 - **Your trips and bookings:** titles, dates, times, places, providers, confirmation numbers, notes, ratings, and where each booking came from.
 - **Your travel profile,** if you import a TripIt export: travelers, documents such as passports and visas with their numbers and expiry dates, and loyalty programs.
-- **Your reminders before trips:** what each says and when it is due, which you ticked off on each trip, and which were sent to you.
+- **Your reminders before trips:** what each says and when it is due, which you ticked off on each trip, and which were sent to you; and the flights you said you checked in for.
 - **Connections you turn on:** access to read your Gmail accounts, Fastmail, other email accounts or Google Calendar, calendar feed addresses, your forwarding address, your calendar export link, and the devices and browsers you asked to notify.
 - **A record of each email or calendar event it looked at:** the sender, the subject, and whether it became a booking, so the same message is never read twice and you can review what was skipped.
 

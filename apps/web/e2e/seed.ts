@@ -87,6 +87,11 @@ export async function seedFlightStatus(key: string, fields: Partial<FlightStatus
   await db.doc(paths.flightStatus(key)).set(status);
 }
 
+// The bookings a user marked "I've checked in" on a trip, as stored.
+export async function readCheckedIn(uid: string, tripId: string): Promise<unknown> {
+  return (await db.doc(paths.checkedIn(uid, tripId)).get()).get("segmentIds");
+}
+
 // An invented past week in Lisbon: flights known only by their airport
 // codes, and a stay that names its country and its spot.
 export async function seedLisbonTrip(ownerUid: string, tripId: string): Promise<Trip> {

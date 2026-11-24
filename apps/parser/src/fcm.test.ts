@@ -34,6 +34,11 @@ describe("fcmSender", () => {
     expect(message.android).toEqual({ ttl: 86_400_000 });
   });
 
+  it("names a check-in reminder's booking, for the app's action", () => {
+    const checkIn = { ...notification, checkedIn: { tripId: "paris", segmentId: "f1" } };
+    expect(reminderMessage(device, checkIn).data).toMatchObject({ checkedInTripId: "paris", checkedInSegmentId: "f1" });
+  });
+
   it("lets news that soon goes stale ask for a shorter life", async () => {
     const sent: { android?: unknown }[] = [];
     const send = fcmSender({

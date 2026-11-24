@@ -39,6 +39,7 @@ export * from "./senders";
 export * from "./backfillText";
 export * from "./calendarResult";
 export * from "./checklist";
+export * from "./checkedIn";
 export * from "./airlinePrograms";
 export * from "./tripsExport";
 export * from "./foundLoyalty";

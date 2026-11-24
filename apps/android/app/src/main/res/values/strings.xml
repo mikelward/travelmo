@@ -7,6 +7,7 @@
     <!-- The clipboard entry's label, which some keyboards show. -->
     <string name="reminders_channel">Trip reminders</string>
     <string name="reminders_channel_description">Passports or visas that run out too soon, what each country asks of your passport, and your own reminders, before a trip.</string>
+    <string name="checked_in_action">I’ve checked in</string>
     <string name="flight_changes_channel">Flight changes</string>
     <string name="live_flights_channel">Flight progress</string>
     <string name="live_flights_channel_description">Your flight\'s terminal and gate, landing time and baggage carousel, from two hours before departure.</string>

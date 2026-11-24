@@ -29,7 +29,11 @@ class ReminderMessagingService : FirebaseMessagingService() {
             TravelmoLog.warning("Message without a title or body ignored")
             return
         }
-        ReminderNotifications.show(this, title, body, data["url"], data["tag"] ?: "reminder")
+        // A check-in reminder names its booking, for "I've checked in".
+        val tripId = data["checkedInTripId"]
+        val segmentId = data["checkedInSegmentId"]
+        val checkedIn = if (tripId != null && segmentId != null) ReminderNotifications.CheckedInTarget(tripId, segmentId) else null
+        ReminderNotifications.show(this, title, body, data["url"], data["tag"] ?: "reminder", checkedIn)
     }
 
     override fun onNewToken(token: String) {

@@ -293,6 +293,19 @@ service cloud.firestore {
         }
       }
 
+      // The flights the user marked "I've checked in" on one trip, by
+      // booking id, at most a hundred: theirs alone, whether the trip is
+      // theirs or shared with them. The parser reads it to skip their
+      // check-in reminders.
+      match /checkedIn/{tripId} {
+        allow read, delete: if isSelf() && approved();
+        allow create, update: if member() && isSelf()
+          && request.resource.data.keys().hasOnly(['segmentIds', 'updatedAt'])
+          && request.resource.data.segmentIds is list
+          && request.resource.data.segmentIds.size() <= 100
+          && request.resource.data.updatedAt is string;
+      }
+
       // What the parser has sent as reminders: nobody's to read or write.
       match /reminders/{tripId} {
         allow read, write: if false;

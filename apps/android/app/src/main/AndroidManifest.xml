@@ -57,6 +57,12 @@
         <receiver
             android:name=".notify.LiveFlightDismissedReceiver"
             android:exported="false" />
+
+        <!-- A check-in reminder's "I've checked in" action: saves the mark
+             for the signed-in user. Only this app's notifications send it. -->
+        <receiver
+            android:name=".notify.CheckedInReceiver"
+            android:exported="false" />
     </application>
 
 </manifest>

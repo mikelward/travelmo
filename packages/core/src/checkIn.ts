@@ -66,7 +66,8 @@ type Booking = Pick<ExtractedSegment, "type" | "title" | "start" | "destination"
 // The notification: what to check in for, that it is open, when the
 // flight leaves (as written, in its own offset), and the booking
 // reference. A tap opens the airline's site where the table knows it,
-// otherwise the trip. Tagged per booking, so nothing else replaces it.
+// otherwise the trip. Tagged per booking, so nothing else replaces it, and
+// naming the booking, for its "I've checked in" action.
 export function checkInNotification(segment: Booking, options: { origin: string }): ReminderNotification {
   const lines = [
     "Online check-in is open.",
@@ -78,6 +79,7 @@ export function checkInNotification(segment: Booking, options: { origin: string 
     body: lines.join("\n"),
     url: airlineCheckIn(segment)?.site ?? tripUrl(segment, options.origin),
     tag: `checkin-${segment.tripId}-${segment.id}`,
+    checkedIn: { tripId: segment.tripId, segmentId: segment.id },
   };
 }
 

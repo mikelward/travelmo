@@ -66,4 +66,10 @@ describe("firestoreCheckInIo", () => {
     expect(await io.settings("ci-user")).toEqual({ email: true });
     expect(await io.settings("ci-nobody")).toBeUndefined();
   });
+
+  it("reads the flights a person marked checked in on a trip", async () => {
+    await db.doc(paths.checkedIn("ci-user", "ci-trip")).set({ segmentIds: ["ci-f", 7], updatedAt: "2032-03-11T09:00:00Z" });
+    expect(await io.checkedIn("ci-user", "ci-trip")).toEqual(["ci-f"]);
+    expect(await io.checkedIn("ci-user", "ci-none")).toEqual([]);
+  });
 });

@@ -109,6 +109,9 @@ export const paths = {
   tripChecklist: (uid: string, tripId: string) => `users/${uid}/tripChecklists/${tripId}`,
   tripChecklistAdded: (uid: string, tripId: string) => `users/${uid}/tripChecklists/${tripId}/added`,
   tripChecklistAddedSlot: (uid: string, tripId: string, slot: string) => `users/${uid}/tripChecklists/${tripId}/added/${slot}`,
+  // The flights the user marked "I've checked in" on a trip (checkedIn.ts). Theirs alone.
+  checkedInTrips: (uid: string) => `users/${uid}/checkedIn`,
+  checkedIn: (uid: string, tripId: string) => `users/${uid}/checkedIn/${tripId}`,
   // Whether a reminder before a trip went to its user, one per user, trip
   // and reminder (`<uid>__<tripId>__<reminderId>`); the parser's alone.
   checklistReminders: () => "checklistReminders",

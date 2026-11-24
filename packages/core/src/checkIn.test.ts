@@ -65,6 +65,7 @@ describe("checkInNotification", () => {
       body: "Online check-in is open.\nDeparts Sun 13 Dec 09:00.\nBooking reference XX1234.",
       url: "https://travelmo.example/trips/t1",
       tag: "checkin-t1-f1",
+      checkedIn: { tripId: "t1", segmentId: "f1" },
     });
   });
 

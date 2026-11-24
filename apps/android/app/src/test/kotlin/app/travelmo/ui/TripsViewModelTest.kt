@@ -745,4 +745,17 @@ class TripsViewModelTest {
         val state = viewModel.state.first { it.groups != null && "sydney" in it.segmentsByTrip && it.flightStatuses.isNotEmpty() }
         state.flightStatuses shouldBe mapOf("XX100_2026-11-02_SYD" to fixtureNextFlightStatus)
     }
+
+    @Test
+    fun `I've checked in marks the viewer alone and undo takes it back`() = runTest {
+        val store = flightTripStore()
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        viewModel.setCheckedIn("t", "sydney", "s-flight", true)
+        viewModel.checkedIn("sydney").first { it == setOf("s-flight") }
+        viewModel.state.first { it.checkedIn["sydney"] == setOf("s-flight") }
+        viewModel.outcomes.first { it["t"] == Outcome.Done }
+        viewModel.outcomeSeen("t")
+        viewModel.setCheckedIn("t", "sydney", "s-flight", false)
+        viewModel.checkedIn("sydney").first { it == emptySet<String>() }
+    }
 }

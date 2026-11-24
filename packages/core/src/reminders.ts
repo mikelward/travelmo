@@ -66,7 +66,9 @@ export type TripReminder = { trip: Trip; lines: string[] };
 
 export type ReminderMail = { subject: string; text: string };
 
-export type ReminderNotification = { title: string; body: string; url: string; tag: string };
+// `checkedIn` names the flight a check-in reminder is about, so the
+// notification can offer "I've checked in" (checkedIn.ts).
+export type ReminderNotification = { title: string; body: string; url: string; tag: string; checkedIn?: { tripId: string; segmentId: string } };
 
 // Whether the trip is under way or how soon it starts.
 function startsWhen(trip: Trip, today: string, capital = false): string {

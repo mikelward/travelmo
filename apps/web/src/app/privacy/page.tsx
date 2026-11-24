@@ -50,7 +50,7 @@ export default function PrivacyPage() {
           </li>
           <li>
             <strong>Your reminders before trips:</strong> what each says and when it is due, which you ticked off on each
-            trip, and which were sent to you.
+            trip, and which were sent to you; and the flights you said you checked in for.
           </li>
           <li>
             <strong>Connections you turn on:</strong> access to read your Gmail accounts, Fastmail, other email accounts or Google Calendar,

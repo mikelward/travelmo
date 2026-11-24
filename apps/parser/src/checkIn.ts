@@ -1,4 +1,5 @@
 import {
+  CheckedIn,
   checkInEmail,
   checkInNotification,
   checkInReminderCutoffMs,
@@ -14,6 +15,7 @@ import type { Firestore } from "firebase-admin/firestore";
 import type { DeviceSender } from "./fcm";
 import type { FlightIo } from "./flightStatus";
 import type { Mailer } from "./mail";
+import { log } from "./log";
 import type { PushSender } from "./push";
 
 // Reminders that online check-in is open (SPEC "Check-in reminders"): the
@@ -47,6 +49,8 @@ export type CheckInIo = Pick<
   // The person's reminder settings, or nothing without a user document.
   settings(uid: string): Promise<ReminderSettings | undefined>;
   verifiedEmail(uid: string): Promise<string | undefined>;
+  // The bookings on a trip the person marked "I've checked in" (checkedIn.ts).
+  checkedIn(uid: string, tripId: string): Promise<readonly string[]>;
   markers(ids: readonly string[]): Promise<Map<string, CheckInMarker>>;
   // Takes the reminders of one flight's bookings for this run, all or none,
   // so two runs never split a flight and each tell someone on two of its
@@ -188,11 +192,23 @@ async function remindFlight(
   // hears of the one on their own trip.
   // Those a done booking of the flight reached count too.
   const told = new Set(markers.flatMap((marker) => marker.sent));
+  const viewersOf = new Map<Trip, Promise<Set<string | undefined>>>();
+  const viewers = (trip: Trip) => {
+    if (!viewersOf.has(trip)) {
+      viewersOf.set(trip, Promise.all(trip.sharedWith.map((email) => io.uidForEmail(email))).then((uids) => new Set([trip.ownerUid, ...uids])));
+    }
+    return viewersOf.get(trip)!;
+  };
+  // Every booking of the flight each person sees, done ones included, so
+  // a mark on one whose reminder already went still counts.
+  const seen = new Map<string, Segment[]>();
+  for (const { segment, trip } of bookings) {
+    for (const uid of await viewers(trip)) if (uid) seen.set(uid, [...(seen.get(uid) ?? []), segment]);
+  }
   const people = new Map<string, { entries: typeof claimed; own?: (typeof claimed)[number] }>();
   for (const entry of claimed) {
     const { trip } = entry;
-    const uids = [trip.ownerUid, ...(await Promise.all(trip.sharedWith.map((email) => io.uidForEmail(email))))];
-    for (const uid of new Set(uids)) {
+    for (const uid of await viewers(trip)) {
       if (!uid || told.has(uid)) continue;
       const person = people.get(uid) ?? { entries: [] };
       person.entries.push(entry);
@@ -204,6 +220,7 @@ async function remindFlight(
   let failed = 0;
   for (const [uid, { entries, own }] of people) {
     if (!(await mayUse(options, uid))) continue;
+    if (await checkedInFor(io, options, uid, seen.get(uid) ?? [])) continue;
     const { segment } = own ?? entries[0]!;
     let outcome: Awaited<ReturnType<typeof deliver>>;
     try {
@@ -243,6 +260,27 @@ async function mayUse(options: CheckInOptions, uid: string): Promise<boolean> {
   }
   if (!approved) options.log("INFO", "check_in_skipped_unapproved", { uid });
   return approved;
+}
+
+// Whether the person marked any of their bookings of the flight "I've
+// checked in": they need no reminder. A mark that can't be read is taken
+// as none, so a reminder too many goes rather than one missed.
+async function checkedInFor(io: CheckInIo, options: CheckInOptions, uid: string, segments: readonly Segment[]): Promise<boolean> {
+  for (const tripId of new Set(segments.map((s) => s.tripId))) {
+    let marked: readonly string[];
+    try {
+      marked = await io.checkedIn(uid, tripId);
+    } catch (error) {
+      options.log("WARNING", "check_in_mark_unreadable", { uid, tripId, reason: (error as Error).message });
+      continue;
+    }
+    const segment = segments.find((s) => s.tripId === tripId && marked.includes(s.id));
+    if (segment) {
+      options.log("INFO", "check_in_skipped_checked_in", { uid, tripId, segmentId: segment.id });
+      return true;
+    }
+  }
+  return false;
 }
 
 const daySeconds = 24 * 60 * 60;
@@ -324,7 +362,7 @@ const sweepPage = 200;
 
 export function firestoreCheckInIo(
   db: Firestore,
-  people: Omit<CheckInIo, "markers" | "claim" | "save" | "track" | "sweep" | "settings">,
+  people: Omit<CheckInIo, "markers" | "claim" | "save" | "track" | "sweep" | "settings" | "checkedIn">,
 ): CheckInIo {
   const parseMarker = (data: unknown): CheckInMarker | undefined => {
     const d = data as Partial<CheckInMarker> | undefined;
@@ -345,6 +383,13 @@ export function firestoreCheckInIo(
     async settings(uid) {
       const parsed = ReminderSettings.safeParse((await db.doc(paths.user(uid)).get()).get("reminders"));
       return parsed.success ? parsed.data : undefined;
+    },
+    async checkedIn(uid, tripId) {
+      const parsed = CheckedIn.safeParse((await db.doc(paths.checkedIn(uid, tripId)).get()).data() ?? {});
+      if (parsed.success) return parsed.data.segmentIds;
+      // Taken as no mark: the reminder goes.
+      log("WARNING", "check_in_mark_malformed", { uid, tripId });
+      return [];
     },
     async markers(ids) {
       if (!ids.length) return new Map();

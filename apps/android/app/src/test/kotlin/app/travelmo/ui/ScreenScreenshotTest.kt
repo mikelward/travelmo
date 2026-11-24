@@ -370,6 +370,15 @@ class ScreenScreenshotTest {
         capture("trip_detail_flight_status_dark", dark = true) { TripDetailScreen(viewModel = viewModel, tripId = "sydney", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
+    // A flight the viewer marked "I've checked in": the mark and its undo.
+    @Test
+    fun trip_detail_checked_in() {
+        val store = flightTripStore()
+        store.checkedIn.value = mapOf("sydney" to setOf("s-flight"))
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        capture("trip_detail_checked_in") { TripDetailScreen(viewModel = viewModel, tripId = "sydney", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
+    }
+
     // A trip shared with the viewer: its violet SHARED label.
     @Test
     fun trip_detail_shared_dark() {

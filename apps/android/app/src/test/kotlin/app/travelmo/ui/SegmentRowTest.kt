@@ -1,5 +1,8 @@
 package app.travelmo.ui
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import app.travelmo.data.GmailStatus
 import android.content.ClipboardManager
 import android.content.Intent
@@ -55,6 +58,18 @@ class SegmentRowTest {
     fun `a flight's row shows its gate and carousel`() {
         composeRule.setContent { TravelmoTheme { SegmentRow(stay, flightLines = listOf("Departs from terminal 1, gate 8", "Bags on carousel 16")) } }
         composeRule.onNodeWithText("Departs from terminal 1, gate 8 · Bags on carousel 16").assertExists()
+    }
+
+    @Test
+    fun `a flight offers I've checked in and once marked says so with an undo`() {
+        val asked = mutableListOf<Boolean>()
+        var state by mutableStateOf(app.travelmo.core.FlightCheckIn.OFFER)
+        composeRule.setContent { TravelmoTheme { SegmentRow(fixtureNextFlight, checkIn = SegmentCheckIn(state) { asked += it }) } }
+        composeRule.onNodeWithText("I’ve checked in").performClick()
+        state = app.travelmo.core.FlightCheckIn.DONE
+        composeRule.onNodeWithText("Checked in").assertExists()
+        composeRule.onNodeWithText("Undo").performClick()
+        asked shouldBe listOf(true, false)
     }
 
     @Test

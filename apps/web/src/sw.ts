@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import { CacheFirst, CacheableResponsePlugin, ExpirationPlugin, NetworkFirst, Serwist, StaleWhileRevalidate } from "serwist";
+import { checkedInAction, checkedInOf, checkedInUrl } from "./sw/checkedIn";
 import { resumeRequest } from "./sw/resume";
 
 // Bundled by sw.build.mjs into public/sw.js. The worker keeps the pages the
@@ -93,26 +94,32 @@ self.addEventListener("message", (event) => {
 });
 
 // A reminder from the parser (see apps/parser/src/push.ts): shown as it
-// came, replacing an earlier one about the same trip.
+// came, replacing an earlier one about the same trip. A check-in reminder
+// names its booking and offers "I've checked in".
 self.addEventListener("push", (event) => {
-  const data = event.data?.json() as { title?: string; body?: string; url?: string; tag?: string } | undefined;
+  const data = event.data?.json() as { title?: string; body?: string; url?: string; tag?: string; checkedIn?: unknown } | undefined;
   if (!data?.title) return;
+  const checkedIn = checkedInOf(data.checkedIn);
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body ?? "",
       tag: data.tag ?? "reminder",
       icon: "/icons/icon-192.png",
-      data: { url: data.url ?? "/" },
-    }),
+      data: { url: data.url ?? "/", ...(checkedIn ? { checkedIn } : {}) },
+      ...(checkedIn ? { actions: [{ action: checkedInAction, title: "I\u2019ve checked in" }] } : {}),
+    } as NotificationOptions),
   );
 });
 
+
 // Tapping one opens the trip, in a window the app already has if any; a
 // check-in reminder's airline site opens in a window of its own, leaving
-// the app where it was.
+// the app where it was. Its "I've checked in" opens the trip to save it.
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const target = new URL((event.notification.data as { url?: string } | undefined)?.url ?? "/", self.location.origin);
+  const data = event.notification.data as { url?: string; checkedIn?: unknown } | undefined;
+  const checkedIn = event.action === checkedInAction ? checkedInOf(data?.checkedIn) : undefined;
+  const target = new URL(checkedIn ? checkedInUrl(checkedIn) : (data?.url ?? "/"), self.location.origin);
   const url = target.href;
   if (target.origin !== self.location.origin) {
     if (target.protocol === "https:") event.waitUntil(self.clients.openWindow(url).then(() => undefined));

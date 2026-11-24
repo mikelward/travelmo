@@ -86,6 +86,10 @@ viewer's zone. Trip bounds are calendar dates.
   it `added/{slot}` — `id, text, createdAt` with `amount, unit` or `date`:
   a one-off for that trip alone, in a slot `a0` to `a9`. The owner's
   alone, whether the trip is theirs or shared with them.
+- `users/{uid}/checkedIn/{tripId}` — `segmentIds[], updatedAt`: the
+  flights the user marked "I've checked in" on a trip, by booking id, at
+  most a hundred ("I've checked in"). The owner's alone, whether the trip
+  is theirs or shared with them; the parser reads it.
 - `checklistReminders/{uid__tripId__reminderId}` — `id, uid, tripId,
   reminderId, ends, attempts, done, at, claimUntil`: whether a reminder
   before a trip went to its user, `ends` the trip's last day for the
@@ -616,6 +620,38 @@ Once nobody is left to try, the booking is done and later runs read only
 its marker; someone added to the trip after that is not told. Markers go
 once their flight has left, swept by the same job, and account deletion
 takes the person's uid off them.
+
+### I've checked in
+
+Whoever has checked in says so, and hears no more of it: the card's
+check-in line carries an "I've checked in" button while check-in is open,
+and a flight on the trip page carries one from when check-in usually opens
+until departure. Once marked, the card's check-in line is gone and the
+flight says "Checked in" with an Undo, until departure. The mark is the
+viewer's own, one document per trip (`users/{uid}/checkedIn/{tripId}` —
+`segmentIds[]`, at most a hundred, `updatedAt`; `packages/core/src/checkedIn.ts`,
+mirrored in the Android app's core), whoever's trip it is: on a shared trip
+it marks only the person who tapped it. Each app writes it in a
+transaction over the stored list.
+
+The parser reads the mark of each person it is about to remind, for the
+trips of their bookings of that flight, and skips someone who marked any
+of them; a mark it can't read counts as none, so a reminder too many goes
+rather than one missed. A person skipped is not recorded as reached, but
+the booking is done all the same, so undoing the mark brings no reminder.
+
+The reminder offers the action too. A web push notification carries the
+booking (`checkedIn: {tripId, segmentId}` beside its title) and the service
+worker shows an "I've checked in" action; the worker has no sign-in, so the
+action opens the trip page with `?checkedIn=<segmentId>`, and the page,
+signed in as the viewer, saves the mark for one of the trip's flights and
+takes the query off the address (`apps/web/src/sw/checkedIn.ts`,
+`apps/web/src/lib/checkedIn.ts`). On Android the data message carries
+`checkedInTripId` and `checkedInSegmentId`, and the notification's action
+is a broadcast the app's `CheckedInReceiver` handles: it saves the mark for
+the signed-in user through the app's store, within the few seconds a
+receiver has, and takes the notification away; a mark it couldn't save
+leaves it up. The email has no action: it links to the trip.
 
 ## Before you go
 

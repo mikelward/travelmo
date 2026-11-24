@@ -5,6 +5,8 @@ import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import io.kotest.matchers.shouldBe
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.travelmo.ui.theme.TravelmoTheme
@@ -42,5 +44,29 @@ class TripListScreenTest {
         composeRule.onNodeWithText("XX 100 SYD to SIN").assertExists()
         composeRule.onNodeWithText("Departs in 3 h · Mon 2 Nov 02:00").assertExists()
         composeRule.onNodeWithText("Terminal 1 · Gate 8").assertExists()
+    }
+
+    @Test
+    fun `I've checked in on the card takes its check-in line away`() {
+        val store = flightTripStore()
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }
+        composeRule.onNodeWithText("Online check-in open, usually until departure · Ref XX7Q2P").assertExists()
+        composeRule.onNodeWithText("I’ve checked in").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Online check-in open, usually until departure · Ref XX7Q2P").assertDoesNotExist()
+        composeRule.onNodeWithText("I’ve checked in").assertDoesNotExist()
+        store.checkedIn.value shouldBe mapOf("sydney" to setOf("s-flight"))
+    }
+
+    @Test
+    fun `a check-in mark that could not be saved says so and leaves the line`() {
+        val store = flightTripStore().apply { failCheckedIn = true }
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }
+        composeRule.onNodeWithText("I’ve checked in").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Couldn't save your check-in. Try again.").assertExists()
+        composeRule.onNodeWithText("Online check-in open, usually until departure · Ref XX7Q2P").assertExists()
     }
 }

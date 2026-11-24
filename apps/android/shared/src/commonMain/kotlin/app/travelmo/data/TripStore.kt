@@ -126,6 +126,12 @@ interface TripStore {
     /** Ticks a reminder off for a trip, or not, in a transaction over the stored list, as the web does. */
     suspend fun setReminderDone(uid: String, tripId: String, id: String, done: Boolean)
 
+    /** The bookings on a trip the user marked "I've checked in" (`users/{uid}/checkedIn/{tripId}`), live; null while it loads. */
+    fun checkedIn(uid: String, tripId: String): Flow<Set<String>?>
+
+    /** Marks a flight checked in for the user, or not, in a transaction over the stored list, as the web does. */
+    suspend fun setCheckedIn(uid: String, tripId: String, segmentId: String, checkedIn: Boolean)
+
     /**
      * The Gmail mailboxes the user connected (`gmails` on their user
      * document), oldest first, each with how far the last reading of it got,

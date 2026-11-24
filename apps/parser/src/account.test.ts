@@ -113,6 +113,8 @@ async function seedUser(uid: string, email: string) {
     paths.tripReminder(uid, "s0"),
     paths.tripChecklist(uid, "t"),
     paths.tripChecklistAddedSlot(uid, "t", "a0"),
+    // The flights they marked "I've checked in".
+    paths.checkedIn(uid, "t"),
   ];
   for (const path of owned) await db.doc(path).set({ at: iso });
   // Whether one of those reminders went to them.

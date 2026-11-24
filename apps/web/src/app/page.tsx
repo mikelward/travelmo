@@ -3,10 +3,12 @@
 import { displayTitles, groupTrips, listWarnings, nextUpFlightKeys, type FlightStatus, type Segment, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
+import { useState } from "react";
 import { SignInGate } from "@/components/SignInGate";
 import { TripCard } from "@/components/TripCard";
 import { localToday } from "@/lib/dates";
 import { usePeopleDocuments, useTripWarnings, warningText } from "@/lib/documents";
+import { setCheckedIn, useCheckedIn } from "@/lib/checkedIn";
 import { useFlightStatusesOf } from "@/lib/flightStatus";
 import { useSaveForOffline } from "@/lib/offline";
 import { useNow, useSegmentsOf, useTrips } from "@/lib/trips";
@@ -24,6 +26,8 @@ function Section({
   segmentsByTrip,
   now,
   flightStatuses,
+  checkedIn,
+  onCheckedIn,
   showNext,
 }: {
   title: string;
@@ -34,6 +38,9 @@ function Section({
   now: string;
   // The live status of the cards' next flights, by key.
   flightStatuses: Record<string, FlightStatus>;
+  // The flights the viewer marked "I've checked in", by trip.
+  checkedIn: Record<string, ReadonlySet<string>>;
+  onCheckedIn: (tripId: string, segmentId: string) => void;
   // Whether the cards say what comes next: only a trip under way does. A
   // card whose bookings are loaded says they were all cancelled either way.
   showNext: boolean;
@@ -50,7 +57,8 @@ function Section({
             title={titles.get(trip.id) ?? trip.title}
             shared={trip.ownerUid !== uid}
             {...(segmentsByTrip[trip.id] ? { segments: segmentsByTrip[trip.id] } : {})}
-            {...(showNext ? { now, flightStatuses } : {})}
+            {...(showNext ? { now, flightStatuses, onCheckedIn: (segmentId: string) => onCheckedIn(trip.id, segmentId) } : {})}
+            {...(checkedIn[trip.id] ? { checkedIn: checkedIn[trip.id] } : {})}
           />
         ))}
       </div>
@@ -73,6 +81,16 @@ function Trips({ user }: { user: User }) {
       return segments ? nextUpFlightKeys(segments, now) : [];
     }),
   );
+  // The viewer's own "I've checked in" marks on the trips under way.
+  const checkedIn = useCheckedIn(user.uid, (groups?.current ?? []).map((trip) => trip.id));
+  const [error, setError] = useState<string>();
+  const onCheckedIn = (tripId: string, segmentId: string) => {
+    setError(undefined);
+    setCheckedIn(user.uid, tripId, segmentId, true).catch((e: unknown) => {
+      console.error("Marking a flight checked in failed", e);
+      setError("Couldn't save your check-in. Try again.");
+    });
+  };
   const people = usePeopleDocuments(user);
   const warnings = useTripWarnings(people, trips ?? [], segmentsByTrip, today);
 
@@ -90,7 +108,7 @@ function Trips({ user }: { user: User }) {
       </div>
     );
   }
-  const sectionProps = { uid: user.uid, titles: displayTitles(trips), segmentsByTrip, now, flightStatuses };
+  const sectionProps = { uid: user.uid, titles: displayTitles(trips), segmentsByTrip, now, flightStatuses, checkedIn, onCheckedIn };
   // Document warnings once, at the top, each for the earliest trip it bears
   // on and linking to it, rather than repeated on every card.
   const listed = listWarnings(warnings, trips);
@@ -110,6 +128,7 @@ function Trips({ user }: { user: User }) {
           ))}
         </ul>
       )}
+      {error && <p className="mb-4 text-sm text-danger">{error}</p>}
       <Section title="Now" trips={groups.current} showNext {...sectionProps} />
       <Section title="Upcoming" trips={groups.upcoming} showNext={false} {...sectionProps} />
       <Section title="Past" trips={groups.past} showNext={false} {...sectionProps} />

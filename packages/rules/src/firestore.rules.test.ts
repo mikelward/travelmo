@@ -342,6 +342,23 @@ describe("users", () => {
     await assertSucceeds(deleteDoc(ref(owner)));
   });
 
+  it("a user marks the flights they checked in for themselves alone, shared trip or not", async () => {
+    const at = "2026-11-07T00:00:00Z";
+    const ref = (user: { uid: string; email: string }, uid = owner.uid) => doc(as(user), paths.checkedIn(uid, trip.id));
+    await assertSucceeds(setDoc(ref(owner), { segmentIds: ["f1"], updatedAt: at }));
+    await assertSucceeds(getDoc(ref(owner)));
+    // The trip's sharee keeps their own mark, under their own account, and
+    // neither reads nor writes the owner's.
+    await assertSucceeds(setDoc(ref(partner, partner.uid), { segmentIds: ["f1"], updatedAt: at }));
+    await assertFails(getDoc(ref(partner)));
+    await assertFails(setDoc(ref(partner), { segmentIds: [], updatedAt: at }));
+    await assertFails(setDoc(ref(owner), { segmentIds: Array.from({ length: 101 }, (_, i) => `f${i}`), updatedAt: at }));
+    await assertFails(setDoc(ref(owner), { segmentIds: "f1", updatedAt: at }));
+    await assertFails(setDoc(ref(owner), { segmentIds: [], updatedAt: at, extra: 1 }));
+    await assertFails(setDoc(ref(owner), { segmentIds: [] }));
+    await assertSucceeds(deleteDoc(ref(owner)));
+  });
+
   it("nobody reads or writes whether a reminder before a trip was sent", async () => {
     const id = `${owner.uid}__${trip.id}__r1`;
     await env.withSecurityRulesDisabled(async (ctx) => {
@@ -536,6 +553,7 @@ describe("a deleted account", () => {
     await assertFails(setDoc(doc(as(owner), paths.travelProfile(owner.uid)), { ownerUid: owner.uid, ownerEmail: owner.email, trustedEmails: [] }));
     await assertFails(setDoc(doc(as(owner), paths.tripReminder(owner.uid, "s0")), { id: "r1", text: "Apply for a visa", amount: 30, unit: "days", createdAt: "2026-11-23T00:00:00Z" }));
     await assertFails(setDoc(doc(as(owner), paths.tripChecklist(owner.uid, trip.id)), { done: ["r1"], updatedAt: "2026-11-23T00:00:00Z" }));
+    await assertFails(setDoc(doc(as(owner), paths.checkedIn(owner.uid, trip.id)), { segmentIds: ["f1"], updatedAt: "2026-11-23T00:00:00Z" }));
     // The partner the trip is shared with is not deleted and still edits it.
     await assertSucceeds(setDoc(doc(as(partner), paths.segment(trip.id, "s3")), { ...segment, id: "s3" }));
   });
