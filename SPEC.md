@@ -515,8 +515,8 @@ Android app registered (`users/{uid}/devices/{id}`) through Firebase Cloud
 Messaging with the parser's Admin credential (`apps/parser/src/fcm.ts`; no
 key of its own, a day to live, the fields as a data message, which
 Messaging queues one by one for an offline phone where it collapses
-notification messages to the last, so the app draws each one itself in its
-`reminders` channel), and a
+notification messages to the last, so the app draws each one itself: flight
+news in its `flight_changes` channel, everything else in `reminders`), and a
 token Messaging reports unregistered is dropped like a lost subscription.
 The app's switch in Settings asks for the notification permission, then
 writes the phone's token under the account and sets `reminders.push`; off
@@ -715,6 +715,15 @@ goes to the owner of every trip holding the flight and the people it is
 shared with (by verified address), each once, on every browser and phone
 they turned notifications on for, through the same channels as reminders,
 titled with the booking and tagged per flight so a later one replaces it.
+On Android flight news has a channel of its own, "Flight changes", which
+the app picks by the `flight-` tag: high importance, so it shows on top of
+the screen, with a chime of its own, a short falling two-note tone in the
+manner of an airport announcement, synthesized for travelmo
+(`apps/android/scripts/flight-chime.py`) so that "look now" sounds unlike
+a day-before reminder, which keeps the system sound. Either channel can be
+silenced or given another sound in the system settings. Browsers ignore a
+push's sound, so the web has no chime. Android fixes a channel's sound when
+the channel is made: a new chime needs a new channel id.
 Push services hold flight news for an offline browser or phone for half
 an hour, not the day reminders get, since directions to a gate are no use
 once the flight has gone. When every browser and phone of a person failed

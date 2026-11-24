@@ -157,6 +157,9 @@
       `fcm.ts` sender beside web push, the switch in Settings). The shared
       `androidzoom` library is for apps that zoom a picture; nothing here
       does.
+- [x] Android app: a "Flight changes" notification channel with its own
+      chime, so gate changes, delays, cancellations and diversions sound
+      unlike reminders.
 - [x] The weekly Gradle batch: `.github/workflows/gradle-update.yml` calls
       `mikelward/gradle-update` with the catalog under `apps/android`, the
       CI checks as its checks, androidlog's Maven branch as an extra
@@ -442,6 +445,11 @@ Kotlin Multiplatform, sharing the Android app's Kotlin (SPEC "iOS app").
 
 Guesses made on autopilot; change any of them freely.
 
+- Flight changes channel: high importance (heads-up) with an original
+  falling E6–C6 chime (`apps/android/scripts/flight-chime.py`); the app
+  picks it by the parser's `flight-` tag rather than a new message field,
+  so it works with the parser as deployed. Reminders keep default
+  importance and the system sound.
 - Flight delays: the card shows a departure or landing five minutes or
   more off schedule; a departure moved 15 minutes or more from what the
   last news said is news; landing estimates are shown but never sent; an

@@ -8,6 +8,8 @@
     <string name="booking_reference">Booking reference</string>
     <string name="reminders_channel">Trip reminders</string>
     <string name="reminders_channel_description">Passports or visas that run out too soon, what each country asks of your passport, and your own reminders, before a trip.</string>
+    <string name="flight_changes_channel">Flight changes</string>
+    <string name="flight_changes_channel_description">Gate, terminal and baggage carousel changes, delays, cancellations and diversions.</string>
     <string name="debug_log_copied_only">No app would take the report, so it is on the clipboard instead.</string>
     <string name="debug_log_share_failed">Couldn\'t share the debug log.</string>
 </resources>
