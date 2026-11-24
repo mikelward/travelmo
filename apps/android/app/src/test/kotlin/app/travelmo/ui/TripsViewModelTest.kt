@@ -30,7 +30,7 @@ import app.travelmo.data.GmailStatus
 import app.travelmo.core.SenderList
 import app.travelmo.core.SenderPatterns
 import app.travelmo.core.rideNeedKey
-import java.time.Instant
+import kotlin.time.Instant
 import kotlinx.coroutines.flow.first
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.CompletableDeferred

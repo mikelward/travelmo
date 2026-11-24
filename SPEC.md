@@ -2664,8 +2664,11 @@ versions beside them; Android implements them with Firestore, Cloud
 Messaging and the parser (`FirestoreTrips`, `Parser*`), and iOS will
 implement the same ones. Shared code logs through `SharedLog`, each value
 marked safe or sensitive as androidlog asks, and the Android app records
-those lines in its own debug log. Next, in order: the screens and their
-view model move to `:shared`, then the iOS app itself
+those lines in its own debug log. The screens' view model,
+`TripsViewModel`, is in `:shared` too, on the multiplatform lifecycle
+library (androidx.lifecycle's own on Android), reading the time from a
+`kotlin.time.Instant` clock. Next, in order: the theme, the screens and
+navigation move to `:shared`, then the iOS app itself
 (Firebase Auth and Firestore, Google sign-in and Sign in with Apple, which
 App Store review asks of an app offering Google's, notifications through
 Cloud Messaging), then a TestFlight build from CI.

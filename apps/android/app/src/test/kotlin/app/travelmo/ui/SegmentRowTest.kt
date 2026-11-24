@@ -24,7 +24,7 @@ import app.travelmo.core.emailLinkFor
 import app.travelmo.ui.theme.TravelmoTheme
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
-import java.time.Instant
+import kotlin.time.Instant
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith

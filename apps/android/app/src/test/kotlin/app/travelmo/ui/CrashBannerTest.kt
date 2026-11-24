@@ -17,7 +17,7 @@ import com.mikelward.androidlog.android.ShareOutcome
 import com.mikelward.androidzoom.FontSizeSettings
 import com.mikelward.androidzoom.compose.FontSizeState
 import io.kotest.matchers.shouldBe
-import java.time.Instant
+import kotlin.time.Instant
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Rule
