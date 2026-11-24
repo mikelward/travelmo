@@ -8,7 +8,6 @@ import app.travelmo.core.ImapMailbox
 import app.travelmo.core.accessDecision
 import app.travelmo.core.accessInvite
 import app.travelmo.core.accessRecordOf
-import app.travelmo.core.accessRequest
 import app.travelmo.core.accessSelfApproval
 import app.travelmo.core.emailAddressOf
 import app.travelmo.core.FlightStatus
@@ -228,8 +227,6 @@ interface TripStore {
     /** Every access record, live, for the Access page (admins alone may list them); null while they load. */
     fun accessRecords(): Flow<List<AccessRecord>?>
 
-    /** Asks for access for the signed-in, verified [email] (accessRequest). */
-    suspend fun requestAccess(email: String, uid: String, now: String)
 
     /** Records an account from before approvals as approved by itself, so admins see it (accessSelfApproval). */
     suspend fun recordSelf(email: String, uid: String, now: String)
@@ -909,10 +906,6 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             )
         }
         awaitClose { registration.remove() }
-    }
-
-    override suspend fun requestAccess(email: String, uid: String, now: String) {
-        accessRef(email).set(accessRequest(email, uid, now)).await()
     }
 
     override suspend fun recordSelf(email: String, uid: String, now: String) {

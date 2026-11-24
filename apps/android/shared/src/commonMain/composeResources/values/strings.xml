@@ -469,8 +469,7 @@
     <!-- Access (SPEC "Access"): the invite-only screen and the admins' Access page, as on the web. -->
     <string name="invite_only">Travelmo is invite-only</string>
     <string name="invite_only_unverified">Sign in with an account whose email address Google has verified.</string>
-    <string name="invite_only_none">You're signed in as %1$s. Ask for access, or ask someone who uses Travelmo to share a trip with you.</string>
-    <string name="request_access">Request access</string>
+    <string name="invite_only_none">You're signed in as %1$s. Ask someone who uses Travelmo to share a trip with you.</string>
     <string name="invite_only_requested">Request sent. Travelmo opens here once it's approved.</string>
     <string name="invite_only_declined">Your request for %1$s wasn't approved.</string>
     <string name="invited_elsewhere">Invited at another address?</string>

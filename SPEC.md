@@ -917,13 +917,13 @@ have checked that a share exists, which a user can make for any address
 anyway.
 
 Asking. An account that is not approved sees "Travelmo is invite-only" on
-every page but a confirmation link's (below) instead of the app, with
-"Request access", "Sign out" and "Delete account" (as in Settings, which
-it cannot open). Asking
-writes `access/{email}` as `requested` with its uid and the time (the rules
-allow only that, for one's own verified address, and asking again only
-while the request waits, so a decision stands). The page then calls the
-parser's `POST /access/check`, as it also does on opening, which:
+every page but a confirmation link's (below) instead of the app, with "Ask
+someone who uses Travelmo to share a trip with you.", "Sign out" and
+"Delete account" (as in Settings, which it cannot open). Nobody may ask for
+access any more: the rules refuse writing a request, since bots filled the
+list. A request made before (`access/{email}` as `requested` with its uid
+and the time) still waits for an admin. The page calls the
+parser's `POST /access/check` on opening, which:
 
 1. lets in an account the rules cannot tell is old: one that owns a trip
    (new accounts cannot make one; an Android-only account never wrote a

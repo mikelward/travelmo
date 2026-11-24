@@ -82,11 +82,10 @@ class AccessViewModelTest {
     }
 
     @Test
-    fun `an unverified address has no record and cannot ask`() = runTest {
+    fun `an unverified address has no record`() = runTest {
         val store = newcomerStore(mapOf(newcomer to accessInvite(newcomer, "friend", now)))
         val viewModel = viewModel(store, emailVerified = false)
         viewModel.access.value.shouldBeInstanceOf<AccessState.Known>().status shouldBe AccountAccess.NONE
-        viewModel.requestAccess("ask")
         store.accessWrites shouldBe emptyList()
     }
 
@@ -105,27 +104,10 @@ class AccessViewModelTest {
     }
 
     @Test
-    fun `asking writes the request for the verified address, then has the parser tell the admins`() = runTest {
-        val store = newcomerStore()
-        val check = CountingAccessCheck(AccountAccess.REQUESTED)
-        val viewModel = viewModel(store, check = check)
-        // Once on opening, as the web's invite-only page does.
+    fun `a waiting account has the parser check it once on opening`() = runTest {
+        val check = CountingAccessCheck(AccountAccess.NONE)
+        viewModel(newcomerStore(), check = check)
         check.calls shouldBe 1
-        viewModel.requestAccess("ask")
-        viewModel.outcomes.value shouldBe mapOf("ask" to Outcome.Done)
-        store.accessFields.value shouldBe mapOf(newcomer to accessRequest(newcomer, "u-new", now))
-        check.calls shouldBe 2
-        viewModel.access.value.shouldBeInstanceOf<AccessState.Known>().status shouldBe AccountAccess.REQUESTED
-    }
-
-    @Test
-    fun `a request that fails says so without the error's words`() = runTest {
-        val store = object : TripStore by newcomerStore() {
-            override suspend fun requestAccess(email: String, uid: String, now: String) = throw IllegalStateException("PERMISSION_DENIED: access/new@example.com")
-        }
-        val viewModel = viewModel(store)
-        viewModel.requestAccess("ask")
-        viewModel.outcomes.value shouldBe mapOf("ask" to Outcome.Failed("Couldn't send your request. Try again."))
     }
 
     @Test

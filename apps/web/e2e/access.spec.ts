@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { owner, signIn, signOut } from "./helpers";
-import { clearData, seedLinkedEmails, seedTrip, setAdmins } from "./seed";
+import { clearData, seedAccessRequest, seedLinkedEmails, seedTrip, setAdmins } from "./seed";
 
 const admin = "admin@example.com";
 const newcomer = "newcomer@example.com";
@@ -26,7 +26,7 @@ async function signOutWaiting(page: Page): Promise<void> {
   await expect(page.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
 }
 
-test("a new account asks for access, and an admin approves it", async ({ page }) => {
+test("a new account can't ask for access; an admin approves one from before", async ({ page }) => {
   const calls = await stubCheck(page);
   await signIn(page, newcomer, { approved: false });
   await expect(page.getByRole("heading", { name: "Travelmo is invite-only" })).toBeVisible();
@@ -35,11 +35,12 @@ test("a new account asks for access, and an admin approves it", async ({ page })
   await page.goto("/settings");
   await expect(page.getByRole("heading", { name: "Travelmo is invite-only" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Request access" }).click();
-  await expect(page.getByText("Request sent. Travelmo opens here once it's approved.")).toBeVisible();
-  // Once on opening, once after asking, so the admins hear of it.
-  await expect.poll(() => calls.length).toBeGreaterThanOrEqual(2);
+  await expect(page.getByRole("button", { name: "Request access" })).toHaveCount(0);
+  // Checked on opening, so an account someone shared with is let in.
+  await expect.poll(() => calls.length).toBeGreaterThanOrEqual(1);
   expect(calls.every((c) => c.startsWith("Bearer "))).toBe(true);
+  // A request from before still waits for an admin.
+  await seedAccessRequest(newcomer);
   await signOutWaiting(page);
 
   await signIn(page, admin, { approved: false });
