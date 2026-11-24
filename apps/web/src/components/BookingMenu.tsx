@@ -184,13 +184,15 @@ function MoveDialog({
 /**
  * A booking's ⋮ menu, in the order Android's has: Copy reference (when it
  * has one) and Sources (when it has sources or a sender) for anyone who sees
- * the trip, then Edit, Restore (for a cancelled booking), Move to and Delete
+ * the trip, then Edit, Mark cancelled (for a booking still booked) or Restore
+ * (for a cancelled one), Move to and Delete
  * for those who may edit.
  */
 export function BookingMenu({
   segment,
   onEdit,
   onRestore,
+  onMarkCancelled,
   onDelete,
   moveTargets,
   onMove,
@@ -203,6 +205,8 @@ export function BookingMenu({
   onEdit?: () => void;
   // Takes back the cancellation an email set; offered only while it's cancelled.
   onRestore?: () => void;
+  // Says it didn't happen; offered only while it's booked.
+  onMarkCancelled?: () => void;
   onDelete?: () => void;
   moveTargets?: Trip[];
   onMove?: (tripId: string) => void;
@@ -223,6 +227,7 @@ export function BookingMenu({
   const hasSources = segmentSources(segment).length > 0 || !!segment.sender;
   const canMove = !!onMove && ((moveTargets?.length ?? 0) > 0 || !!onMoveToNew);
   const canRestore = !!onRestore && isCancelled(segment);
+  const canMarkCancelled = !!onMarkCancelled && !isCancelled(segment);
 
   const close = () => {
     setOpen(false);
@@ -253,7 +258,7 @@ export function BookingMenu({
     return () => clearTimeout(timer);
   }, [status]);
 
-  if (!reference && !hasSources && !onEdit && !canRestore && !onDelete && !canMove) return null;
+  if (!reference && !hasSources && !onEdit && !canRestore && !canMarkCancelled && !onDelete && !canMove) return null;
 
   const copy = async (text: string) => {
     try {
@@ -323,6 +328,7 @@ export function BookingMenu({
           {reference && item("Copy reference", () => void copy(reference))}
           {hasSources && item("Sources", () => setDialog("sources"))}
           {onEdit && item("Edit", onEdit)}
+          {canMarkCancelled && onMarkCancelled && item("Mark cancelled", onMarkCancelled)}
           {canRestore && onRestore && item("Restore", onRestore)}
           {canMove && item("Move to another trip…", () => setDialog("move"))}
           {onDelete && item("Delete", onDelete)}

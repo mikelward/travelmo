@@ -1649,6 +1649,30 @@ one into its trip. A
 calendar's own cancelled events are handled apart, by removing what they
 made (see "Calendar files").
 
+**Cancelling by hand.** Cancelled means it didn't happen: the person didn't
+go. Anyone who may edit a booking can say so with **Mark cancelled** on it
+(web and Android), and the owner can for the whole trip with **Mark trip
+cancelled** at the foot of its page. A booking marked so gets `cancelledAt`
+and `userCancelled: "booking"`, and counts for nothing, exactly as one an
+email cancelled; no email read later revives it (`settled` keeps it), and
+Restore simply takes the mark off, without `restoredFrom` or `restoredAt`,
+since no email was overruled. A cancelled trip gets `cancelledAt` (owner
+only, in the rules), and every booking still booked in it is cancelled with
+it (`userCancelled: "trip"`); those already cancelled stay as they were. It
+isn't happening even with no bookings (`tripCancelled`): no document
+warnings or reminders, no calendar event, nothing in reports or the trips
+download (`reportBounds` has none). Its page says "Trip cancelled" with
+Restore for the owner, its card says "Trip cancelled" and nothing of what
+comes next, and its bookings offer no Restore of their own: they come back
+with the trip, while one cancelled on its own, by the person or an email,
+stays cancelled. A booking filed into a cancelled trip (an import, a
+refresh, one added or moved there by hand, a merge) is cancelled with it,
+and one cancelled only with its trip is live again in a trip that isn't
+(`inTrip`). Regrouping leaves a cancelled trip as it is. Both marks set when
+the trip is shown from what is still booked, read with every booking
+outside the write and the trip's `updatedAt` as their revision, as Fit
+dates does; so a sharee may move the shown dates in, within the trip's own.
+
 ### Home
 
 Trips are travel away from home, so the app needs to know where home is,

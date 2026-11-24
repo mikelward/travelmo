@@ -83,7 +83,9 @@ export function planRegroup(
   const homes = homesWithAirports(known, overrides, chosen);
   const periods = homes.periods;
   overrides = homes.overrides;
-  const eligible = live.filter((trip) => !trip.id.startsWith(sourceTripPrefix));
+  // A trip the owner cancelled keeps its bookings as they are, as one a
+  // source groups itself does.
+  const eligible = live.filter((trip) => !trip.id.startsWith(sourceTripPrefix) && trip.cancelledAt === undefined);
 
   // Segments that share any source are one booking, however they are
   // linked: an outbound from one email and its return filed beside it from a

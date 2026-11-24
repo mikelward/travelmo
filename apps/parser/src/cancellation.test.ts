@@ -614,6 +614,35 @@ describe("cancellation emails", () => {
     expect(store.segments.get("m4-0")?.cancelledBy).toBe("m2");
   });
 
+  it("keep a booking the person marked cancelled that way when its confirmation is read again", async () => {
+    const store = memoryStore();
+    clock = "2026-05-20T08:00:00Z";
+    await importMessage("u1", email(), deps(store, async () => confirmation));
+    // Mark cancelled, as the web and Android write it.
+    store.segments.set("m1-0", { ...store.segments.get("m1-0")!, cancelledAt: "2026-05-20T09:00:00Z", userCancelled: "booking" });
+    clock = "2026-05-26T08:00:00Z";
+    expect(await importMessage("u1", email({ id: "m3", date: "Mon, 25 May 2026 09:00:00 +0000" }), deps(store, async () => confirmation))).toBe("imported");
+    expect(store.segments.size).toBe(1);
+    expect(store.segments.get("m1-0")).toMatchObject({ cancelledAt: "2026-05-20T09:00:00Z", userCancelled: "booking" });
+  });
+
+  it("file a booking into a trip its owner marked cancelled as cancelled with it", async () => {
+    const store = memoryStore();
+    clock = "2026-05-20T08:00:00Z";
+    await importMessage("u1", email(), deps(store, async () => confirmation));
+    const trip = [...store.trips.values()][0]!;
+    store.trips.set(trip.id, { ...trip, cancelledAt: "2026-05-20T09:00:00Z" });
+    store.segments.set("m1-0", { ...store.segments.get("m1-0")!, cancelledAt: "2026-05-20T09:00:00Z", userCancelled: "trip" });
+    const flight: ExtractedBooking = {
+      isBooking: true,
+      segments: [{ type: "flight", title: "SK 1530 LHR to ARN", start: "2026-06-10T08:00:00+01:00", end: "2026-06-10T11:30:00+02:00", origin: { name: "Heathrow", code: "LHR" }, destination: { name: "Arlanda", code: "ARN" } }],
+    };
+    clock = "2026-05-21T08:00:00Z";
+    expect(await importMessage("u1", email({ id: "m5", subject: "Your flight to Stockholm" }), deps(store, async () => flight))).toBe("imported");
+    expect(store.trips.size).toBe(1);
+    expect(store.segments.get("m5-0")).toMatchObject({ tripId: trip.id, cancelledAt: "2026-05-21T08:00:00Z", userCancelled: "trip" });
+  });
+
   it("choose the trip by what is still booked, not by a booking filed cancelled", async () => {
     const store = memoryStore();
     clock = "2026-05-20T08:00:00Z";

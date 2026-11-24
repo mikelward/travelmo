@@ -58,6 +58,12 @@ data class Segment(
     val cancelledAt: String? = null,
     /** The id of the cancellation email that cancelled it. */
     val cancelledBy: String? = null,
+    /**
+     * Set with [cancelledAt] when the person, not an email, said it didn't
+     * happen: "booking" for this booking alone, "trip" when its whole trip was
+     * cancelled. No email revives it; only Restore does.
+     */
+    val userCancelled: String? = null,
 )
 
 val Segment.isCancelled: Boolean get() = cancelledAt != null
@@ -71,6 +77,25 @@ fun liveSegments(segments: List<Segment>): List<Segment> = segments.filter { !it
  */
 fun allCancelled(segments: List<Segment>): Boolean = segments.isNotEmpty() && segments.all { it.isCancelled }
 
+/**
+ * A trip that isn't happening: its owner cancelled it, or every booking in it
+ * was cancelled. One with no bookings yet still is, unless cancelled.
+ */
+fun tripCancelled(trip: Trip, segments: List<Segment>? = null): Boolean =
+    trip.cancelledAt != null || (segments != null && allCancelled(segments))
+
+/**
+ * A booking as it stands in a trip cancelled at [tripCancelledAt] (null for
+ * one that isn't), for a write that puts it there: a live booking in a
+ * cancelled trip is cancelled with it; one cancelled only with its trip is
+ * live again in a trip that isn't (inTrip in packages/core).
+ */
+fun inTrip(segment: Segment, tripCancelledAt: String?, now: String): Segment = when {
+    tripCancelledAt != null && !segment.isCancelled -> segment.copy(cancelledAt = now, userCancelled = "trip")
+    tripCancelledAt == null && segment.userCancelled == "trip" -> segment.copy(cancelledAt = null, userCancelled = null)
+    else -> segment
+}
+
 data class Trip(
     val id: String,
     val title: String,
@@ -83,6 +108,8 @@ data class Trip(
     /** When the person now travels, once cancellations narrowed it (liveBounds in packages/core). */
     val liveStart: String? = null,
     val liveEnd: String? = null,
+    /** When the owner marked the whole trip cancelled: it didn't happen. */
+    val cancelledAt: String? = null,
 )
 
 /** The dates a trip is shown with: when the person now travels, else its own (displayBounds). */

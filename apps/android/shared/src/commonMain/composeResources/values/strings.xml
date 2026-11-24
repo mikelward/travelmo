@@ -245,6 +245,9 @@
     <string name="keep">Keep</string>
     <string name="cancelled">Cancelled</string>
     <string name="trip_all_cancelled">Every booking cancelled</string>
+    <string name="trip_cancelled">Trip cancelled</string>
+    <string name="mark_trip_cancelled">Mark trip cancelled</string>
+    <string name="mark_cancelled">Mark cancelled</string>
     <string name="checked_in_action">I’ve checked in</string>
     <string name="checked_in">Checked in</string>
     <string name="undo">Undo</string>

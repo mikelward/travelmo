@@ -634,10 +634,14 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             if (!tripSnap.exists()) throw TripGoneException("Trip no longer exists")
             if (tripSnap.getBoolean("deleting") == true) throw TripGoneException("This trip is being deleted")
             val stored = if (existingId != null) t.get(segmentRef).data else null
-            t.setData(segmentRef, draftToDocument(draft, stored, segmentRef.id, tripId, now))
+            val written = draftToDocument(draft, stored, segmentRef.id, tripId, now).let {
+                // A booking added to a cancelled trip is cancelled with it.
+                if (stored == null) inTripDocument(it, tripSnap.getString("cancelledAt"), now) else it
+            }
+            t.setData(segmentRef, written)
             // A cancelled booking widens only the trip's own dates.
             val booked = range.min() to range.max()
-            t.updateData(tripRef, widened(tripSnap, booked, if (stored?.get("cancelledAt") is String) null else booked, now))
+            t.updateData(tripRef, widened(tripSnap, booked, if (written["cancelledAt"] is String) null else booked, now))
             null
         }.await()
     }
@@ -665,8 +669,16 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             if (!current.exists()) throw TripGoneException("That booking is no longer in this trip")
             if (trip.getBoolean("deleting") == true) throw TripGoneException("This trip is being deleted")
             val data = current.data ?: throw TripGoneException("That booking is no longer in this trip")
+            if (trip.getString("cancelledAt") != null && data["userCancelled"] == "trip") throw IllegalStateException("Restore the trip first")
             val restored = segmentFromDocument(segmentId, tripId, data)?.copy(cancelledAt = null, cancelledBy = null)
             val range = restored?.let { segmentDateRange(listOf(it)) }
+            // The person's own cancellation is simply taken off: no email was
+            // overruled, so none sent before now is kept from cancelling it later.
+            if (data["userCancelled"] is String) {
+                t.updateData(segmentRef, mapOf("cancelledAt" to FieldValue.delete(), "userCancelled" to FieldValue.delete(), "updatedAt" to now))
+                t.updateData(tripRef, if (range != null) widened(trip, range, range, now) else mapOf("updatedAt" to now))
+                return@runTransaction null
+            }
             // The cancellation is remembered as taken back, and when: reading
             // the booking's confirmation again, or any cancellation sent
             // before now, doesn't cancel it again.
@@ -720,6 +732,74 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             if (applied) return true
         }
         throw IllegalStateException("The trip kept changing; try again")
+    }
+
+    /**
+     * As the web's rewriteBookings: [change] gives the bookings it changed, as
+     * whole documents, and any fields for the trip; when the trip is shown is
+     * then settled from every booking (liveBounds), and its own dates only
+     * widen. The bookings are read outside the transaction, the trip's
+     * updatedAt standing in as their revision, as in [fitTripDates].
+     */
+    private suspend fun rewriteBookings(
+        tripId: String,
+        change: (trip: DocumentSnapshot, bookings: List<Pair<String, Map<String, Any?>>>, now: String) -> Pair<List<Pair<String, Map<String, Any?>>>, Map<String, Any>>,
+    ) {
+        val tripRef = db.collection("trips").document(tripId)
+        repeat(ATTEMPTS) {
+            val before = tripRef.get().await()
+            if (!before.exists()) throw TripGoneException("Trip no longer exists")
+            if (before.getBoolean("deleting") == true) throw TripGoneException("This trip is being deleted")
+            val seen = before.getString("updatedAt")
+            val bookings = tripRef.collection("segments").get().await().documents.mapNotNull { doc -> doc.data?.let { doc.id to it } }
+            val now = Clock.System.now().toString()
+            val applied = db.runTransaction { t ->
+                val snap = t.get(tripRef)
+                if (!snap.exists()) throw TripGoneException("Trip no longer exists")
+                if (snap.getBoolean("deleting") == true) throw TripGoneException("This trip is being deleted")
+                if (snap.getString("updatedAt") != seen) return@runTransaction false
+                val trip = tripFromDocument(tripId, snap.data.orEmpty()) ?: throw IllegalStateException("Malformed trip")
+                val (changed, tripFields) = change(snap, bookings, now)
+                val after = bookings.map { (id, data) -> changed.firstOrNull { it.first == id } ?: (id to data) }
+                    .mapNotNull { (id, data) -> segmentFromDocument(id, tripId, data) }
+                val booked = bookedDateRange(after)
+                val own = if (booked != null) minOf(trip.start, booked.first) to maxOf(trip.end, booked.second) else trip.start to trip.end
+                val live = liveBounds(own, after)
+                // Written whole, so a field taken off (a restore) is gone.
+                for ((id, data) in changed) t.setData(tripRef.collection("segments").document(id), data + mapOf("updatedAt" to now))
+                t.updateData(
+                    tripRef,
+                    mapOf(
+                        "start" to own.first,
+                        "end" to own.second,
+                        "liveStart" to (live?.first ?: FieldValue.delete()),
+                        "liveEnd" to (live?.second ?: FieldValue.delete()),
+                    ) + tripFields + mapOf("updatedAt" to now),
+                )
+                true
+            }.await()
+            if (applied) return
+        }
+        throw IllegalStateException("The trip kept changing; try again")
+    }
+
+    /** As the web's cancelSegment: the person's word that a booking didn't happen. */
+    override suspend fun cancelSegment(tripId: String, segmentId: String) = rewriteBookings(tripId) { _, bookings, now ->
+        val data = bookings.firstOrNull { it.first == segmentId }?.second ?: throw TripGoneException("That booking is no longer in this trip")
+        val changed = if (data["cancelledAt"] is String) emptyList() else listOf(segmentId to data + mapOf("cancelledAt" to now, "userCancelled" to "booking"))
+        changed to emptyMap()
+    }
+
+    /** As the web's cancelTrip: every booking still booked is cancelled with the trip; those already cancelled stay as they were. */
+    override suspend fun cancelTrip(tripId: String) = rewriteBookings(tripId) { _, bookings, now ->
+        bookings.filter { (_, data) -> data["cancelledAt"] !is String }.map { (id, data) -> id to data + mapOf("cancelledAt" to now, "userCancelled" to "trip") } to
+            mapOf("cancelledAt" to now)
+    }
+
+    /** As the web's restoreTrip: the bookings cancelled with the trip are booked again; those cancelled on their own stay so. */
+    override suspend fun restoreTrip(tripId: String) = rewriteBookings(tripId) { _, bookings, now ->
+        bookings.filter { (_, data) -> data["userCancelled"] == "trip" }.map { (id, data) -> id to inTripDocument(data, null, now) } to
+            mapOf("cancelledAt" to FieldValue.delete())
     }
 
     /** As the web's shareTrip: sharing also invites the address, in the same batch, so it can open the trip without asking. */
@@ -815,9 +895,11 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             if (!current.exists()) throw TripGoneException("That booking is no longer in this trip")
             if (from.getBoolean("deleting") == true || to.getBoolean("deleting") == true) throw TripGoneException("This trip is being deleted")
             val data = current.data ?: throw TripGoneException("That booking is no longer in this trip")
-            val segment = segmentFromDocument(segmentId, fromTripId, data) ?: throw IllegalStateException("Malformed booking")
+            // Cancelled with a cancelled trip it joins, live again leaving one.
+            val moved = inTripDocument(data + mapOf("tripId" to toTripId, "updatedAt" to now), to.getString("cancelledAt"), now)
+            val segment = segmentFromDocument(segmentId, toTripId, moved) ?: throw IllegalStateException("Malformed booking")
             val range = bookedDateRange(listOf(segment))
-            t.setData(toRef.collection("segments").document(segmentId), data + mapOf("tripId" to toTripId, "updatedAt" to now))
+            t.setData(toRef.collection("segments").document(segmentId), moved)
             t.delete(segmentRef)
             t.updateData(toRef, if (range != null) widened(to, range, segmentDateRange(listOf(segment)), now) else mapOf("updatedAt" to now))
             t.updateData(fromRef, mapOf("updatedAt" to now))
@@ -896,7 +978,6 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             val docs = sourceRef.collection("segments").get().await().documents
             val segments = docs.mapNotNull { doc -> doc.data?.let { segmentFromDocument(doc.id, sourceId, it) } }
             val range = bookedDateRange(segments)
-            val live = segmentDateRange(segments)
             val now = Clock.System.now().toString()
             val applied = db.runTransaction { t ->
                 val s = t.get(sourceRef)
@@ -904,8 +985,11 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
                 if (!s.exists() || !g.exists()) throw TripGoneException("Trip no longer exists")
                 if (s.getBoolean("deleting") == true || g.getBoolean("deleting") == true) throw TripGoneException("This trip is being deleted")
                 if (s.getString("updatedAt") != seen) return@runTransaction false
-                for (doc in docs) {
-                    t.setData(targetRef.collection("segments").document(doc.id), doc.data.orEmpty() + mapOf("tripId" to targetId, "updatedAt" to now))
+                // As they stand in the target: cancelled with it, or live again.
+                val moved = docs.map { doc -> doc to inTripDocument(doc.data.orEmpty() + mapOf("tripId" to targetId, "updatedAt" to now), g.getString("cancelledAt"), now) }
+                val live = segmentDateRange(moved.mapNotNull { (doc, data) -> segmentFromDocument(doc.id, targetId, data) })
+                for ((doc, data) in moved) {
+                    t.setData(targetRef.collection("segments").document(doc.id), data)
                     t.delete(doc.reference)
                 }
                 t.updateData(targetRef, if (range != null) widened(g, range, live, now) else mapOf("updatedAt" to now))

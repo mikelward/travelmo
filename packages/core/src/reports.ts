@@ -98,9 +98,10 @@ function nextDay(date: string): string {
 // started it, counts for none of its dates), none when every booking is
 // cancelled, and its own dates when none is (as planned, bookings or not).
 export function reportBounds(
-  trip: Pick<Trip, "start" | "end">,
+  trip: Pick<Trip, "start" | "end" | "cancelledAt">,
   segments: readonly ExtractedSegment[],
 ): { start: string; end: string } | undefined {
+  if (trip.cancelledAt !== undefined) return undefined;
   return segments.some(isCancelled) ? segmentDateRange(segments) : { start: trip.start, end: trip.end };
 }
 

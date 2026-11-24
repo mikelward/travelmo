@@ -98,6 +98,30 @@ class DocumentsTest {
     }
 
     @Test
+    fun `reads a cancellation by hand on a booking and on a trip`() {
+        val base = mapOf("type" to "lodging", "title" to "Harbor Inn", "start" to "2026-12-12T15:00:00+01:00")
+        segmentFromDocument("s1", "t1", base + mapOf("cancelledAt" to "2026-11-20T08:00:00Z", "userCancelled" to "booking"))!!.userCancelled shouldBe "booking"
+        segmentFromDocument("s1", "t1", base + mapOf("cancelledAt" to "2026-11-20T08:00:00Z", "userCancelled" to "maybe"))!!.userCancelled.shouldBeNull()
+        val trip = mapOf("title" to "Harbor", "start" to "2026-12-12", "end" to "2026-12-14", "ownerUid" to "u")
+        tripFromDocument("t1", trip + mapOf("cancelledAt" to "2026-11-20T08:00:00Z"))!!.cancelledAt shouldBe "2026-11-20T08:00:00Z"
+        tripFromDocument("t1", trip)!!.cancelledAt.shouldBeNull()
+    }
+
+    @Test
+    fun `puts a booking document into a trip cancelled with it or live again leaving one`() {
+        val now = "2026-11-21T08:00:00Z"
+        val live = mapOf<String, Any?>("type" to "lodging", "title" to "Harbor Inn", "start" to "2026-12-12T15:00:00+01:00")
+        val filed = inTripDocument(live, "2026-11-20T08:00:00Z", now)
+        filed["cancelledAt"] shouldBe now
+        filed["userCancelled"] shouldBe "trip"
+        inTripDocument(filed, null, now) shouldBe live
+        val byHand = live + mapOf("cancelledAt" to now, "userCancelled" to "booking")
+        inTripDocument(byHand, null, now) shouldBe byHand
+        inTripDocument(byHand, "2026-11-20T08:00:00Z", now) shouldBe byHand
+        inTripDocument(live, null, now) shouldBe live
+    }
+
+    @Test
     fun `a save keeps what the form does not edit and drops what it cleared`() {
         val stored = mapOf(
             "id" to "s1", "tripId" to "t1", "type" to "lodging", "title" to "Cove Liverpool", "start" to "2026-12-12T15:00:00+00:00", "end" to "2026-12-14T11:00:00+00:00",

@@ -107,6 +107,7 @@ export function SegmentRow({
   flightLines,
   checkIn,
   onRestore,
+  onMarkCancelled,
 }: {
   segment: Segment;
   onEdit?: () => void;
@@ -129,6 +130,8 @@ export function SegmentRow({
   checkIn?: { state: "offer" | "done"; onChange: (checkedIn: boolean) => void };
   // Takes back a cancellation; offered only on a cancelled booking.
   onRestore?: () => void;
+  // Says the booking didn't happen; offered only on one still booked.
+  onMarkCancelled?: () => void;
 }) {
   const cancelled = isCancelled(segment);
   const route = [place(segment.origin), place(segment.destination)].filter(Boolean).join(" → ");
@@ -194,6 +197,7 @@ export function SegmentRow({
         segment={segment}
         {...(onEdit ? { onEdit } : {})}
         {...(cancelled && onRestore ? { onRestore } : {})}
+        {...(!cancelled && onMarkCancelled ? { onMarkCancelled } : {})}
         {...(onDelete ? { onDelete } : {})}
         {...(moveTargets ? { moveTargets } : {})}
         {...(onMove ? { onMove } : {})}

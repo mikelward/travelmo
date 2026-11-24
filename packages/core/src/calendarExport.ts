@@ -1,6 +1,6 @@
 import type { ExtractedSegment, Place, Trip } from "./schema";
 import { reportBounds } from "./reports";
-import { allCancelled, liveSegments } from "./trips";
+import { liveSegments, tripCancelled } from "./trips";
 
 // The user's trips as an iCalendar (RFC 5545) feed that Google or Apple
 // Calendar can subscribe to: each trip an all-day event across its dates,
@@ -82,7 +82,7 @@ function description(segment: ExtractedSegment, url: string): string {
 }
 
 export type ExportTrip = {
-  trip: Pick<Trip, "id" | "title" | "start" | "end" | "updatedAt">;
+  trip: Pick<Trip, "id" | "title" | "start" | "end" | "updatedAt" | "cancelledAt">;
   segments: readonly (ExtractedSegment & { id: string; updatedAt?: string })[];
 };
 
@@ -102,9 +102,9 @@ export function exportCalendar(items: readonly ExportTrip[], options: { stamp: s
   const event = (fields: string[]) => lines.push("BEGIN:VEVENT", ...fields, "END:VEVENT");
   const sorted = [...items].sort((a, b) => a.trip.start.localeCompare(b.trip.start) || a.trip.id.localeCompare(b.trip.id));
   for (const { trip, segments } of sorted) {
-    // A trip whose every booking was cancelled isn't happening; one with
-    // some cancelled spans what is still booked (reportBounds).
-    if (allCancelled(segments)) continue;
+    // A trip cancelled, or whose every booking was, isn't happening; one
+    // with some cancelled spans what is still booked (reportBounds).
+    if (tripCancelled(trip, segments)) continue;
     const bounds = reportBounds(trip, segments);
     if (!bounds) continue;
     const url = options.tripUrl(trip.id);

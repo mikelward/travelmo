@@ -88,10 +88,14 @@ private fun nextDay(date: String): String = LocalDate.parse(date).plus(DatePerio
  * A trip's dates as reports count them: what its bookings still span once a
  * cancellation has taken some (a cancelled stay that stretched the trip, or
  * started it, counts for none of its dates), none when every booking is
- * cancelled, and its own dates when none is (as planned, bookings or not).
+ * cancelled or the trip is, and its own dates when none is (as planned,
+ * bookings or not).
  */
-fun reportBounds(trip: Trip, segments: List<Segment>): Pair<String, String>? =
-    if (segments.any { it.isCancelled }) segmentDateRange(segments) else trip.start to trip.end
+fun reportBounds(trip: Trip, segments: List<Segment>): Pair<String, String>? = when {
+    trip.cancelledAt != null -> null
+    segments.any { it.isCancelled } -> segmentDateRange(segments)
+    else -> trip.start to trip.end
+}
 
 /**
  * What a trip says about one of its days: the countries the traveler was in,

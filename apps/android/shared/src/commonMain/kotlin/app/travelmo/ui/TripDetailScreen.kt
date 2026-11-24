@@ -142,6 +142,8 @@ import app.travelmo.shared.finish_deleting
 import app.travelmo.shared.fit_dates
 import app.travelmo.shared.from_sender
 import app.travelmo.shared.keep
+import app.travelmo.shared.mark_cancelled
+import app.travelmo.shared.mark_trip_cancelled
 import app.travelmo.shared.merge_into
 import app.travelmo.shared.merge_text
 import app.travelmo.shared.merge_title
@@ -165,6 +167,7 @@ import app.travelmo.shared.source_imap
 import app.travelmo.shared.source_tripit
 import app.travelmo.shared.sources
 import app.travelmo.shared.stop_sharing_with
+import app.travelmo.shared.trip_cancelled
 import app.travelmo.shared.trip_loading
 import app.travelmo.shared.trip_name
 import app.travelmo.shared.trip_no_bookings
@@ -255,6 +258,8 @@ fun TripDetailScreen(
         unshare = { viewModel.unshareTrip("${prefix}unshare/$it", tripId, it) },
         delete = { viewModel.deleteTrip("${prefix}delete", tripId) },
         merge = { viewModel.mergeTrips("${prefix}merge/$it", tripId, it) },
+        cancel = { viewModel.cancelTrip("${prefix}cancel", tripId) },
+        restore = { viewModel.restoreTrip("${prefix}restore", tripId) },
     )
     Scaffold(
         topBar = {
@@ -352,6 +357,9 @@ fun TripDetailScreen(
                         // A new trip only for the owner: a sharee's would take the booking from the owner's sight.
                         onMove = if (targets.isEmpty() && !isOwner) null else { segment -> moving = segment },
                         onRestore = { segment -> viewModel.restoreSegment("${prefix}segment/${segment.id}/restore", tripId, segment.id) },
+                        onMarkCancelled = { segment -> viewModel.cancelSegment("${prefix}segment/${segment.id}/cancel", tripId, segment.id) },
+                        // One cancelled with its trip comes back with the trip.
+                        canRestore = { segment -> current.cancelledAt == null || segment.userCancelled != "trip" },
                     )
                 } else {
                     null
@@ -401,6 +409,9 @@ class BookingActions(
     val onDelete: (Segment) -> Unit,
     val onMove: ((Segment) -> Unit)? = null,
     val onRestore: ((Segment) -> Unit)? = null,
+    /** Says it didn't happen; offered only while it's booked. */
+    val onMarkCancelled: ((Segment) -> Unit)? = null,
+    val canRestore: (Segment) -> Boolean = { true },
 )
 
 /** The owner's sender rules, offered from a booking's Sources; each null where it already stands. */
@@ -414,6 +425,8 @@ class TripActions(
     val unshare: (String) -> Unit,
     val delete: () -> Unit,
     val merge: (String) -> Unit,
+    val cancel: () -> Unit = {},
+    val restore: () -> Unit = {},
 )
 
 @Composable
@@ -493,6 +506,16 @@ private fun TripBody(
         if (trip.deleting && tripActions != null) {
             item(key = "interrupted") { InterruptedDeletion(busy, tripActions.delete) }
         }
+        if (trip.cancelledAt != null) {
+            item(key = "cancelled") {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                    Text(stringResource(Res.string.trip_cancelled), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.error)
+                    if (canManage && tripActions != null) {
+                        TextButton(onClick = tripActions.restore, enabled = !busy) { Text(stringResource(Res.string.restore)) }
+                    }
+                }
+            }
+        }
         for ((token, message) in errors) {
             item(key = "error-$token") { Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp)) }
         }
@@ -524,8 +547,15 @@ private fun TripBody(
             if (targets.isNotEmpty()) {
                 item(key = "merge") { MergeInto(targets, titles, busy, tripActions.merge) }
             }
+            if (trip.cancelledAt == null) {
+                item(key = "cancel") {
+                    TextButton(onClick = tripActions.cancel, enabled = !busy, modifier = Modifier.padding(top = 24.dp).offset(x = -TextButtonInset)) {
+                        Text(stringResource(Res.string.mark_trip_cancelled))
+                    }
+                }
+            }
             item(key = "delete") {
-                TextButton(onClick = { confirmingDelete = true }, enabled = !busy, modifier = Modifier.padding(top = 24.dp).offset(x = -TextButtonInset)) {
+                TextButton(onClick = { confirmingDelete = true }, enabled = !busy, modifier = Modifier.padding(top = if (trip.cancelledAt == null) 0.dp else 24.dp).offset(x = -TextButtonInset)) {
                     Text(stringResource(Res.string.delete_trip), color = MaterialTheme.colorScheme.error)
                 }
             }
@@ -757,8 +787,12 @@ fun SegmentRow(
                     if (actions != null) {
                         DropdownMenuItem(text = { Text(stringResource(Res.string.edit)) }, onClick = { menu = false; actions.onEdit(segment) })
                         if (segment.isCancelled) {
-                            actions.onRestore?.let { restore ->
+                            actions.onRestore?.takeIf { actions.canRestore(segment) }?.let { restore ->
                                 DropdownMenuItem(text = { Text(stringResource(Res.string.restore)) }, onClick = { menu = false; restore(segment) })
+                            }
+                        } else {
+                            actions.onMarkCancelled?.let { cancel ->
+                                DropdownMenuItem(text = { Text(stringResource(Res.string.mark_cancelled)) }, onClick = { menu = false; cancel(segment) })
                             }
                         }
                         actions.onMove?.let { move ->

@@ -176,6 +176,17 @@ describe("regroupTrips", () => {
     expect(store.segments.size).toBe(4);
   });
 
+  it("leaves a trip its owner marked cancelled as it is", async () => {
+    const store = memoryStore();
+    mayAsOneTrip(store);
+    store.trips.set("london", { ...store.trips.get("london")!, cancelledAt: "2026-05-20T09:00:00Z" });
+    for (const s of [...store.segments.values()]) store.segments.set(s.id, { ...s, cancelledAt: "2026-05-20T09:00:00Z", userCancelled: "trip" });
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0, placed: 0 });
+    expect(summary(store)).toEqual([
+      { title: "London", start: "2026-05-22", end: "2026-05-29", sharedWith: ["partner@example.com"], segments: ["m22-0", "m26-0", "mtr-0", "mtr-1"] },
+    ]);
+  });
+
   it("changes nothing the second time", async () => {
     const store = memoryStore();
     mayAsOneTrip(store);

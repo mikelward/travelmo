@@ -1,5 +1,5 @@
 import {
-  allCancelled,
+  tripCancelled,
   bySlot,
   checklistEmail,
   checklistNotification,
@@ -147,8 +147,8 @@ async function remindUser(
     // standing reminders as if the trip went abroad.
     if (!dueEntries(trip, tripChecklist(trip, standing, mine, true), today).length) continue;
     const segments: Segment[] = await io.segments(trip.id);
-    // A trip whose every booking was cancelled isn't happening.
-    if (allCancelled(segments)) continue;
+    // A trip cancelled, or whose every booking was, isn't happening.
+    if (tripCancelled(trip, segments)) continue;
     const international = isInternational(trip, segments, homes, options.lookup);
     for (const entry of dueEntries(trip, tripChecklist(trip, standing, mine, international), today)) due.push({ trip, entry });
   }

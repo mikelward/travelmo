@@ -3,7 +3,7 @@ import { paths, type ExtractedSegment, type Segment, type Trip } from "@travelmo
 import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where, type Firestore } from "firebase/firestore";
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { deleteSegment, deleteTrip, deleteTripIfOnly, favoriteSegment, fitTripDates, mergeTrips, moveSegment, moveSegmentToNewTrip, rateSegment, renameTrip, restoreSegment, saveSegment } from "./edits";
+import { cancelSegment, cancelTrip, deleteSegment, deleteTrip, deleteTripIfOnly, favoriteSegment, fitTripDates, mergeTrips, moveSegment, moveSegmentToNewTrip, rateSegment, renameTrip, restoreSegment, restoreTrip, saveSegment } from "./edits";
 
 // A switch to make reading a collection fail, as when the connection drops.
 const failReads = vi.hoisted(() => ({ on: false }));
@@ -247,6 +247,64 @@ describe("cancelled bookings", () => {
     });
     expect(await fitTripDates(asOwner(), trip.id)).toBe(true);
     expect(await readTrip()).toMatchObject({ start: "2026-12-12", end: "2026-12-18", liveStart: "2026-12-18", liveEnd: "2026-12-18" });
+  });
+});
+
+describe("cancelling by hand", () => {
+  const stored = async (tripId = trip.id, id = imported.id) => (await getDoc(doc(asOwner(), paths.segment(tripId, id)))).data() as Segment | undefined;
+
+  it("lets a sharee mark a booking cancelled, showing the trip by what is still booked, and restore it", async () => {
+    const later = await saveSegment(asOwner(), trip.id, flight("2026-12-16"));
+    await cancelSegment(as(partner), trip.id, imported.id);
+    expect(await stored()).toMatchObject({ cancelledAt: expect.any(String), userCancelled: "booking" });
+    expect(await readTrip()).toMatchObject({ start: "2026-12-12", end: "2026-12-16", liveStart: "2026-12-16", liveEnd: "2026-12-16" });
+    await restoreSegment(as(partner), trip.id, imported.id);
+    const restored = await stored();
+    expect(restored?.cancelledAt).toBeUndefined();
+    expect(restored?.userCancelled).toBeUndefined();
+    // No email was overruled, so none is kept from cancelling it later.
+    expect(restored?.restoredAt).toBeUndefined();
+    expect((await readTrip())?.liveStart).toBeUndefined();
+    expect((await stored(trip.id, later.id))?.cancelledAt).toBeUndefined();
+  });
+
+  it("lets only the owner cancel a trip, cancelling what is still booked with it", async () => {
+    const byEmail = await saveSegment(asOwner(), trip.id, flight("2026-12-13"));
+    await seed(async (db) => {
+      await updateDoc(doc(db, paths.segment(trip.id, byEmail.id)), { cancelledAt: "2026-11-05T09:00:00Z", cancelledBy: "m2" });
+    });
+    await expect(cancelTrip(as(partner), trip.id)).rejects.toThrow();
+    await cancelTrip(asOwner(), trip.id);
+    expect((await readTrip())?.cancelledAt).toEqual(expect.any(String));
+    expect(await stored()).toMatchObject({ cancelledAt: expect.any(String), userCancelled: "trip" });
+    expect(await stored(trip.id, byEmail.id)).toMatchObject({ cancelledAt: "2026-11-05T09:00:00Z", cancelledBy: "m2" });
+    expect((await stored(trip.id, byEmail.id))?.userCancelled).toBeUndefined();
+    // Its bookings come back with the trip, not one at a time.
+    await expect(restoreSegment(asOwner(), trip.id, imported.id)).rejects.toThrow("Restore the trip first");
+  });
+
+  it("cancels a booking added to or moved into a cancelled trip, and books one moved out again", async () => {
+    await cancelTrip(asOwner(), trip.id);
+    const added = await saveSegment(as(partner), trip.id, flight("2026-12-13"));
+    expect(await stored(trip.id, added.id)).toMatchObject({ cancelledAt: expect.any(String), userCancelled: "trip" });
+    await moveSegment(asOwner(), trip.id, imported.id, other.id);
+    const moved = await stored(other.id, imported.id);
+    expect(moved?.cancelledAt).toBeUndefined();
+    expect(moved?.userCancelled).toBeUndefined();
+    await moveSegment(asOwner(), other.id, imported.id, trip.id);
+    expect(await stored()).toMatchObject({ userCancelled: "trip" });
+  });
+
+  it("restores a trip with the bookings cancelled with it, leaving one cancelled on its own", async () => {
+    const own = await saveSegment(asOwner(), trip.id, flight("2026-12-13"));
+    await cancelSegment(asOwner(), trip.id, own.id);
+    await cancelTrip(asOwner(), trip.id);
+    await restoreTrip(asOwner(), trip.id);
+    const restored = await readTrip();
+    expect(restored?.cancelledAt).toBeUndefined();
+    expect((await stored())?.cancelledAt).toBeUndefined();
+    expect((await stored())?.userCancelled).toBeUndefined();
+    expect(await stored(trip.id, own.id)).toMatchObject({ userCancelled: "booking" });
   });
 });
 

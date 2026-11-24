@@ -141,9 +141,10 @@ fun onTrip(person: PersonDocuments, trip: Trip): Boolean =
     person.own || person.uid == trip.ownerUid || (person.email != null && trip.sharedWith.contains(person.email.lowercase()))
 
 fun tripWarnings(people: List<PersonDocuments>, trip: Trip, segments: List<Segment>?, today: String, lookup: (String) -> AirportPlace? = ::airportPlace): List<PersonWarning> {
-    // Every booking cancelled: nobody is going, so no document matters for it.
-    // (No bookings at all is different: where it goes is just unknown.)
-    if (segments != null && allCancelled(segments)) return emptyList()
+    // The trip, or every booking, cancelled: nobody is going, so no document
+    // matters for it. (No bookings at all is different: where it goes is just
+    // unknown.)
+    if (tripCancelled(trip, segments)) return emptyList()
     val places = segments?.let { tripPlaces(it, lookup) }
     return people.filter { onTrip(it, trip) }.flatMap { person -> documentWarnings(person.documents, trip, today, places).map { PersonWarning(person, it) } }
 }

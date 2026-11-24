@@ -55,9 +55,9 @@ private fun abroad(country: String?, date: String, periods: List<HomePeriod>): B
     return home == null || country == null || country != countryCode(home)
 }
 
-// The trips to list: begun by [until] and not wholly cancelled.
+// The trips to list: begun by [until] and not cancelled, wholly or by its owner.
 private fun taken(trips: List<TripWithSegments>, until: String) =
-    trips.filter { (trip, segments) -> displayBounds(trip).first <= until && !(segments.isNotEmpty() && segments.all { it.isCancelled }) }
+    trips.filter { (trip, segments) -> displayBounds(trip).first <= until && !tripCancelled(trip, segments) }
 
 // One town, not two of a name in different countries.
 private fun sameStop(a: Place, aCountry: String?, b: Place, bCountry: String?) =

@@ -301,6 +301,39 @@ class FirestoreTripsTest {
     }
 
     @Test
+    fun cancelSegment_byAShareeShowsTheTripByWhatIsStillBookedAndRestoresPlainly() = runBlocking {
+        val id = seedTrip(end = "2026-12-16")
+        seedSegment(id)
+        owner.store.saveSegment(id, flight("2026-12-16"), null)
+        sharee.store.cancelSegment(id, "s1")
+        assertEquals("booking", segments(id)["s1"]!!["userCancelled"])
+        assertEquals("2026-12-16", trip(id)["liveStart"])
+        sharee.store.restoreSegment(id, "s1")
+        val restored = segments(id)["s1"]!!
+        assertFalse(restored.containsKey("cancelledAt"))
+        assertFalse(restored.containsKey("userCancelled"))
+        // No email was overruled, so none is kept from cancelling it later.
+        assertFalse(restored.containsKey("restoredAt"))
+        assertFalse(trip(id).containsKey("liveStart"))
+    }
+
+    @Test
+    fun cancelTrip_isTheOwnersAndCancelsWhatIsStillBookedUntilRestored() = runBlocking {
+        val id = seedTrip()
+        seedSegment(id)
+        assertTrue(refused { sharee.store.cancelTrip(id) }.isPermissionDenied())
+        owner.store.cancelTrip(id)
+        assertTrue(trip(id)["cancelledAt"] is String)
+        assertEquals("trip", segments(id)["s1"]!!["userCancelled"])
+        // One added meanwhile is cancelled with the trip.
+        sharee.store.saveSegment(id, flight("2026-12-13"), null)
+        assertTrue(segments(id).values.all { it["userCancelled"] == "trip" })
+        owner.store.restoreTrip(id)
+        assertFalse(trip(id).containsKey("cancelledAt"))
+        assertTrue(segments(id).values.none { it.containsKey("cancelledAt") })
+    }
+
+    @Test
     fun moveSegment_refusesABookingThatIsGoneAndATargetBeingDeleted() = runBlocking {
         val from = seedTrip()
         val to = seedTrip(title = "Dublin", start = "2026-12-20", end = "2026-12-22")

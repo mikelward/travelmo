@@ -147,6 +147,11 @@ export const Segment = ExtractedSegment.extend({
   // undated, read) by then applies to this booking again, whichever one
   // had won; one sent later still does.
   restoredAt: isoDateTime.optional(),
+  // Set with `cancelledAt` when the person, not an email, said the booking
+  // didn't happen: "booking" for this booking alone, "trip" when its whole
+  // trip was cancelled (and taken off again with the trip's). No email
+  // revives it; only Restore does.
+  userCancelled: z.enum(["booking", "trip"]).optional(),
   // When the user last changed the booking's details by hand (the booking
   // form, a place picked there). Never set by a rating, a favorite mark, a
   // move between trips or an import, which move only `updatedAt`. Refresh
@@ -175,6 +180,10 @@ export const Trip = z.object({
   // its bookings again and for editing. Absent when nothing is cancelled.
   liveStart: isoDate.optional(),
   liveEnd: isoDate.optional(),
+  // When the owner marked the whole trip cancelled: it didn't happen. Every
+  // booking in it is cancelled with it (`userCancelled: "trip"`), those
+  // filed or moved into it later too, until Restore takes it off.
+  cancelledAt: isoDateTime.optional(),
   createdAt: isoDateTime,
   updatedAt: isoDateTime,
 });

@@ -3,6 +3,7 @@ import {
   findTripForBooking,
   homeTimeline,
   homesWithAirports,
+  inTrip,
   isCancelled,
   mergeDetails,
   normalizeReference,
@@ -396,9 +397,12 @@ export async function refreshEmail(
           createdAt: timestamp,
           updatedAt: timestamp,
         }, [ref.sentAt], pending, timestamp);
-        writes.set(segmentKey(fresh), fresh);
-        added.push(fresh);
-        carrying.push(fresh);
+        // Cancelled with its trip when the owner cancelled that.
+        const into = tripOf.get(tripId);
+        const filed = into ? inTrip(fresh, into, timestamp) : fresh;
+        writes.set(segmentKey(filed), filed);
+        added.push(filed);
+        carrying.push(filed);
       }
       counts.added = added.length;
     }

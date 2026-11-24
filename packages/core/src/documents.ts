@@ -1,6 +1,6 @@
 import { countryCodeOf, countryName } from "./countries";
 import { formatDate } from "./format";
-import { allCancelled, daysBetween, displayBounds } from "./trips";
+import { daysBetween, displayBounds, tripCancelled } from "./trips";
 import { tripPlaces, type PlaceLookup } from "./reports";
 import type { ExtractedSegment, ProfileEntry, TravelProfile, Trip } from "./schema";
 
@@ -172,9 +172,10 @@ export function tripWarnings(
   today: string,
   lookup?: PlaceLookup,
 ): PersonWarning[] {
-  // Every booking cancelled: nobody is going, so no document matters for it.
-  // (No bookings at all is different: where it goes is just unknown.)
-  if (segments && allCancelled(segments)) return [];
+  // The trip, or every booking, cancelled: nobody is going, so no document
+  // matters for it. (No bookings at all is different: where it goes is just
+  // unknown.)
+  if (tripCancelled(trip, segments)) return [];
   const places = segments ? tripPlaces(segments, lookup) : undefined;
   return people
     .filter((p) => onTrip(p, trip))
