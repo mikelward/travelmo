@@ -529,6 +529,7 @@ export async function refreshRecord(
   try {
     const counts = await refreshEmail(uid, record, message, deps, options);
     deps.log("refreshed", { uid, messageId: record.messageId, ...counts });
+    await countRefresh(message, { refreshRead: 1 }, deps);
     return { kind: "refreshed", counts };
   } catch (error) {
     if (error instanceof ImportSupersededError) {
@@ -541,7 +542,22 @@ export async function refreshRecord(
       return { kind: "rateLimited", by: "model" };
     }
     deps.log("refresh_extract_failed", { uid, messageId: record.messageId, reason: (error.cause as Error)?.message }, "WARNING");
+    await countRefresh(message, { refreshRead: 1, refreshFailed: 1 }, deps);
     return { kind: "failed" };
+  }
+}
+
+// A booked email read again by Refresh from email, added to its sender
+// domain's counts (senderStats.ts) apart from first readings, so a domain
+// whose bookings the reader now fails on shows without skewing those. A
+// count that fails is logged and the refresh goes on.
+async function countRefresh(message: EmailMessage, counts: Record<string, number>, deps: ImportDeps): Promise<void> {
+  const domain = senderDomain(message.from);
+  if (!domain) return;
+  try {
+    await deps.store.countSender(domain, counts);
+  } catch (error) {
+    deps.log("sender_count_failed", { domain, reason: (error as Error).message }, "WARNING");
   }
 }
 

@@ -8,6 +8,8 @@ export type Memory = TripStore & {
   trips: Map<string, Trip>;
   segments: Map<string, Segment>;
   parsed: Map<string, ParsedMessage>;
+  // What countSender added up, by sender domain.
+  senderStats: Map<string, Record<string, number>>;
   examplesOf: Map<string, Examples>;
   // Keyed by "uid/messageId".
   pending: Map<string, PendingCancellation>;
@@ -26,6 +28,7 @@ export function memoryStore(): Memory {
   const ownerNames = new Map<string, string>();
   const locks = new Map<string, Promise<unknown>>();
   const generations = new Map<string, number>();
+  const senderStats = new Map<string, Record<string, number>>();
   let ids = 0;
   const tx: Omit<TripTx, "listParsedIds" | "deleteParsed" | "generation" | "bumpGeneration" | "connectedMailboxes" | "clearBackfill"> = {
     listTrips: async () => [...trips.values()],
@@ -78,6 +81,7 @@ export function memoryStore(): Memory {
   };
   return {
     foundLoyalty,
+    senderStats,
     ownerNames,
     trips,
     segments,
@@ -85,6 +89,11 @@ export function memoryStore(): Memory {
     examplesOf,
     pending,
     examples: async (uid) => examplesOf.get(uid) ?? emptyExamples(),
+    countSender: async (domain, counts) => {
+      const now = senderStats.get(domain) ?? {};
+      for (const [field, n] of Object.entries(counts)) now[field] = (now[field] ?? 0) + n;
+      senderStats.set(domain, now);
+    },
     saveExample: async (uid, label, example) => {
       examplesOf.set(uid, addExample(examplesOf.get(uid) ?? emptyExamples(), label, example));
     },

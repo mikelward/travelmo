@@ -8,6 +8,7 @@
     "build": "node build.mjs",
     "start": "node dist/server.mjs",
     "typecheck": "tsc --noEmit",
+    "sender-stats": "tsx src/senderStatsCli.ts",
     "test": "firebase emulators:exec --only firestore --project demo-travelmo --config ../../firebase.json 'vitest run'"
   },
   "dependencies": {
