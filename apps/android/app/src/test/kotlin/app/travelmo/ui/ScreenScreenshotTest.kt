@@ -480,6 +480,23 @@ class ScreenScreenshotTest {
         composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
     }
 
+    // Reports scrolled to downloading a summary of the trips.
+    @Test
+    fun reports_download() = reportsDownload("reports_download", dark = false)
+
+    @Test
+    fun reports_download_dark() = reportsDownload("reports_download_dark", dark = true)
+
+    private fun reportsDownload(name: String, dark: Boolean) {
+        val viewModel = viewModel()
+        composeRule.setContent {
+            TravelmoTheme(darkTheme = dark) { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, bottomBar = { HomeNavigationBar(HomeTab.REPORTS) {} }) }
+        }
+        composeRule.onNode(androidx.compose.ui.test.hasScrollToNodeAction()).performScrollToNode(androidx.compose.ui.test.hasText("Download CSV"))
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
+    }
+
     @Test
     fun reports_dark() {
         val viewModel = viewModel()

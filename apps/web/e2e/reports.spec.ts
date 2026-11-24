@@ -123,3 +123,39 @@ test("residence and visa days ask for home's country when nothing gives one", as
   await expect(section.getByText("Days with no trip count as at home, but home has no country yet.")).toBeVisible();
   await expect(section.getByRole("link", { name: "Add one on your Profile" })).toHaveAttribute("href", "/profile");
 });
+
+test("downloads a summary of trips as CSV, by trip or by place, optionally abroad only", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  await seedLisbonTrip(ownerUid, "e2e-lisbon");
+  // Still ahead on the frozen date: left out until a later day is chosen.
+  await seedTrip(ownerUid, "e2e-liverpool");
+  await updateUser(ownerUid, { homes: [{ city: "London", country: "GB", from: "2020-01-01" }] });
+  await page.goto("/reports");
+  const section = page.getByRole("region", { name: "Download trips" });
+
+  const read = async () => {
+    const [download] = await Promise.all([page.waitForEvent("download"), section.getByRole("button", { name: "Download CSV" }).click()]);
+    const stream = await download.createReadStream();
+    let text = "";
+    for await (const chunk of stream) text += chunk.toString();
+    return { name: download.suggestedFilename(), lines: text.trim().split("\r\n") };
+  };
+
+  const byTrip = await read();
+  expect(byTrip.name).toBe("travelmo-trips.csv");
+  expect(byTrip.lines[0]).toBe("Trip,Start,End,Cities,Countries");
+  expect(byTrip.lines.slice(1).join("\n")).toContain("Lisbon");
+  expect(byTrip.lines.slice(1).join("\n")).toContain("Portugal");
+  expect(byTrip.lines).toHaveLength(2);
+
+  await section.getByLabel("Trips starting up to").fill("2030-12-31");
+  expect((await read()).lines).toHaveLength(3);
+
+  await section.getByLabel("One row per place").check();
+  await section.getByLabel("Outside my home country only").check();
+  const byPlace = await read();
+  expect(byPlace.name).toBe("travelmo-places.csv");
+  expect(byPlace.lines[0]).toBe("City,Country,Start,End,Trip");
+  expect(byPlace.lines.slice(1).every((line) => line.includes("Portugal"))).toBe(true);
+  expect(byPlace.lines.length).toBeGreaterThan(1);
+});
