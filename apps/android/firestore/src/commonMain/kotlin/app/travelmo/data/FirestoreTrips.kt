@@ -48,6 +48,7 @@ import app.travelmo.core.normalizeEmail
 import app.travelmo.core.normalizeTrusted
 import app.travelmo.core.segmentDateRange
 import app.travelmo.core.bookedDateRange
+import app.travelmo.core.tripFlagsToWrite
 import app.travelmo.core.newTripTitle
 import app.travelmo.core.liveBounds
 import app.travelmo.core.widenedFor
@@ -656,7 +657,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             t.setData(segmentRef, written)
             // A cancelled booking widens only the trip's own dates.
             val booked = range.min() to range.max()
-            t.updateData(tripRef, widened(tripSnap, booked, if (written["cancelledAt"] is String) null else booked, now))
+            t.updateData(tripRef, widened(tripSnap, booked, if (written["cancelledAt"] is String) null else booked, now) + FLAGS_UNKNOWN)
             null
         }.await()
     }
@@ -665,7 +666,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         val tripRef = db.collection("trips").document(tripId)
         db.runBatch { batch ->
             batch.delete(tripRef.collection("segments").document(segmentId))
-            batch.updateData(tripRef, mapOf("updatedAt" to Clock.System.now().toString()))
+            batch.updateData(tripRef, mapOf("updatedAt" to Clock.System.now().toString()) + FLAGS_UNKNOWN)
         }.await()
     }
 
@@ -691,7 +692,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             // overruled, so none sent before now is kept from cancelling it later.
             if (data["userCancelled"] is String) {
                 t.updateData(segmentRef, mapOf("cancelledAt" to FieldValue.delete(), "userCancelled" to FieldValue.delete(), "updatedAt" to now))
-                t.updateData(tripRef, if (range != null) widened(trip, range, range, now) else mapOf("updatedAt" to now))
+                t.updateData(tripRef, (if (range != null) widened(trip, range, range, now) else mapOf("updatedAt" to now)) + FLAGS_UNKNOWN)
                 return@runTransaction null
             }
             // The cancellation is remembered as taken back, and when: reading
@@ -699,7 +700,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             // before now, doesn't cancel it again.
             val restoredFrom = (data["cancelledBy"] as? String)?.let { mapOf("restoredFrom" to FieldValue.arrayUnion(it)) }.orEmpty()
             t.updateData(segmentRef, mapOf("cancelledAt" to FieldValue.delete(), "cancelledBy" to FieldValue.delete(), "cancelledSentAt" to FieldValue.delete(), "restoredAt" to now, "updatedAt" to now) + restoredFrom)
-            t.updateData(tripRef, if (range != null) widened(trip, range, range, now) else mapOf("updatedAt" to now))
+            t.updateData(tripRef, (if (range != null) widened(trip, range, range, now) else mapOf("updatedAt" to now)) + FLAGS_UNKNOWN)
             null
         }.await()
     }
@@ -789,7 +790,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
                         "end" to own.second,
                         "liveStart" to (live?.first ?: FieldValue.delete()),
                         "liveEnd" to (live?.second ?: FieldValue.delete()),
-                    ) + tripFields + mapOf("updatedAt" to now),
+                    ) + FLAGS_UNKNOWN + tripFields + mapOf("updatedAt" to now),
                 )
                 true
             }.await()
@@ -916,8 +917,8 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             val range = bookedDateRange(listOf(segment))
             t.setData(toRef.collection("segments").document(segmentId), moved)
             t.delete(segmentRef)
-            t.updateData(toRef, if (range != null) widened(to, range, segmentDateRange(listOf(segment)), now) else mapOf("updatedAt" to now))
-            t.updateData(fromRef, mapOf("updatedAt" to now))
+            t.updateData(toRef, (if (range != null) widened(to, range, segmentDateRange(listOf(segment)), now) else mapOf("updatedAt" to now)) + FLAGS_UNKNOWN)
+            t.updateData(fromRef, mapOf("updatedAt" to now) + FLAGS_UNKNOWN)
             null
         }.await()
     }
@@ -926,6 +927,22 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
      * As the web's moveSegmentToNewTrip: the rules check a booking against its trip as it already is, so the
      * trip is made first and the booking then moved; a move that fails takes the empty trip away again.
      */
+    override suspend fun repairTripFlags(tripId: String) {
+        val ref = db.collection("trips").document(tripId)
+        val before = ref.get(Source.SERVER).await()
+        val revision = before.getString("updatedAt") ?: return
+        val trip = tripFromDocument(tripId, before.data ?: return) ?: return
+        if (trip.deleting) return
+        val flags = tripFlagsToWrite(trip, serverSegments(tripId)) ?: return
+        val written = db.runTransaction { t ->
+            // A booking changed since the bookings were read: it is read again next time.
+            if (t.get(ref).getString("updatedAt") != revision) return@runTransaction false
+            t.updateData(ref, mapOf("allCancelled" to flags.allCancelled, "localOnly" to flags.localOnly))
+            true
+        }.await()
+        if (!written) SharedLog.info("A trip's bookings changed while its list flags were read; left for the next read")
+    }
+
     /** As the web's addSegmentToFittingTrip, when no trip fits: the trip first, then the booking in it. */
     override suspend fun addSegmentToNewTrip(draft: SegmentDraft, uid: String): String {
         val range = listOfNotNull(draft.start, draft.end).map { localDate(it) }
@@ -1040,7 +1057,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
                     t.setData(targetRef.collection("segments").document(doc.id), data)
                     t.delete(doc.reference)
                 }
-                t.updateData(targetRef, if (range != null) widened(g, range, live, now) else mapOf("updatedAt" to now))
+                t.updateData(targetRef, (if (range != null) widened(g, range, live, now) else mapOf("updatedAt" to now)) + FLAGS_UNKNOWN)
                 t.delete(sourceRef)
                 true
             }.await()
@@ -1052,6 +1069,13 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     /** The trip's bookings, read once rather than listened to. */
     private suspend fun segmentsOf(tripRef: DocumentReference): List<Segment> =
         tripRef.collection("segments").get().await().documents.mapNotNull { doc -> doc.data?.let { segmentFromDocument(doc.id, tripRef.id, it) } }
+
+    /**
+     * Taken off a trip by every write here that changes its bookings: unknown again, the list flags are recomputed
+     * from the bookings the next time the app reads them (TripsViewModel.keepTripFlags), rather than stand wrong for
+     * a trip whose screen isn't open. As the web's edits.ts.
+     */
+    private val FLAGS_UNKNOWN: Map<String, Any> = mapOf("allCancelled" to FieldValue.delete(), "localOnly" to FieldValue.delete())
 
     /** The update that widens a trip's dates to hold a span, as a booking write does. */
     /** The trip's dates widened to hold bookings (widenedFor), as a Firestore update. */

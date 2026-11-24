@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hiddenFromList, localOnly, noListFilters } from "./listFilters";
+import { flagsUnknown, hiddenFromList, localOnly, noListFilters, tripFlagsToWrite } from "./listFilters";
 import type { ExtractedSegment } from "./schema";
 
 // Invented bookings: a show and a class in town, a hire car returned where
@@ -55,5 +55,23 @@ describe("hiddenFromList", () => {
     expect(hiddenFromList(trip, [show, flight], filters)).toBe(false);
     // A cancelled night out is cancelled, not local.
     expect(hiddenFromList(trip, [cancelled(show)], filters)).toBe(false);
+  });
+
+  it("goes by the trip's own flags without its bookings, as far as they say", () => {
+    const both = { hideCancelled: true, hideLocal: true };
+    expect(hiddenFromList({ allCancelled: true, localOnly: false }, undefined, both)).toBe(true);
+    expect(hiddenFromList({ allCancelled: false, localOnly: true }, undefined, both)).toBe(true);
+    expect(hiddenFromList({ allCancelled: false, localOnly: false }, undefined, both)).toBe(false);
+  });
+});
+
+describe("the trip's flags", () => {
+  it("are unknown until both are kept, and written only when the bookings disagree", () => {
+    expect(flagsUnknown({})).toBe(true);
+    expect(flagsUnknown({ allCancelled: false })).toBe(true);
+    expect(flagsUnknown({ allCancelled: false, localOnly: false })).toBe(false);
+    expect(tripFlagsToWrite({}, [show])).toEqual({ allCancelled: false, localOnly: true });
+    expect(tripFlagsToWrite({ allCancelled: false, localOnly: true }, [show])).toBeUndefined();
+    expect(tripFlagsToWrite({ allCancelled: false, localOnly: true }, [cancelled(show)])).toEqual({ allCancelled: true, localOnly: false });
   });
 });

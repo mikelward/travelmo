@@ -82,7 +82,8 @@ fun allCancelled(segments: List<Segment>): Boolean = segments.isNotEmpty() && se
  * was cancelled. One with no bookings yet still is, unless cancelled.
  */
 fun tripCancelled(trip: Trip, segments: List<Segment>? = null): Boolean =
-    trip.cancelledAt != null || (segments != null && allCancelled(segments))
+    // Before its bookings are read, the trip's own flag says.
+    trip.cancelledAt != null || (if (segments != null) allCancelled(segments) else trip.allCancelled == true)
 
 /**
  * A booking as it stands in a trip cancelled at [tripCancelledAt] (null for
@@ -110,6 +111,9 @@ data class Trip(
     val liveEnd: String? = null,
     /** When the owner marked the whole trip cancelled: it didn't happen. */
     val cancelledAt: String? = null,
+    /** What the list's filters need of its bookings ([TripFlags]); null on a trip from before they were kept. */
+    val allCancelled: Boolean? = null,
+    val localOnly: Boolean? = null,
 )
 
 /** The dates a trip is shown with: when the person now travels, else its own (displayBounds). */

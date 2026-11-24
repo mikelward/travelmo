@@ -1,5 +1,11 @@
 package app.travelmo.ui
 
+import io.kotest.matchers.collections.shouldNotContain
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.Flow
+import app.travelmo.core.Segment
+import app.travelmo.data.TripStore
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.activity.ComponentActivity
@@ -69,6 +75,26 @@ class TripListScreenTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Called off").assertDoesNotExist()
         filters.read().hideCancelled shouldBe true
+    }
+
+    @Test
+    fun `the filters go by a trip's own flags at once and record them on trips without`() {
+        val fake = FakeTripStore(trips = fixtureTrips + fixtureFlightTrip.copy(title = "Flagged off", allCancelled = true, localOnly = false))
+        // Its bookings never answer: only its flags can hide it.
+        val store = object : TripStore by fake {
+            override fun segments(tripId: String): Flow<List<Segment>> = if (tripId == fixtureFlightTrip.id) flow { awaitCancellation() } else fake.segments(tripId)
+        }
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, listFilterStore = app.travelmo.data.InMemoryListFilterStore())
+        composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }
+        composeRule.onNodeWithText("Flagged off").assertExists()
+        composeRule.onNodeWithText("Hide cancelled").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Flagged off").assertDoesNotExist()
+        // The trips without flags had their bookings read, and their flags recorded.
+        fake.flagsSet["liverpool"] shouldBe app.travelmo.core.TripFlags(allCancelled = false, localOnly = false)
+        fake.flagsSet.keys shouldNotContain fixtureFlightTrip.id
+        // Each trip read once for it, however the others' repairs came and went.
+        fake.repairs.groupingBy { it }.eachCount().values.all { it == 1 } shouldBe true
     }
 
     @Test

@@ -132,6 +132,14 @@ describe("trips", () => {
     await assertFails(updateDoc(shared, { liveStart: trip.start, liveEnd: deleteField() }));
   });
 
+  it("lets the owner and a sharee keep the list's flags, as true or false", async () => {
+    await assertSucceeds(updateDoc(doc(as(owner), paths.trip(trip.id)), { allCancelled: false, localOnly: true }));
+    await assertSucceeds(updateDoc(doc(as(partner), paths.trip(trip.id)), { allCancelled: true, localOnly: false }));
+    await assertFails(updateDoc(doc(as(owner), paths.trip(trip.id)), { allCancelled: "yes" }));
+    await assertFails(updateDoc(doc(as(partner), paths.trip(trip.id)), { localOnly: 1 }));
+    await assertFails(updateDoc(doc(as(stranger), paths.trip(trip.id)), { allCancelled: true }));
+  });
+
   it("lets only the owner mark a trip cancelled, with a time", async () => {
     await assertFails(updateDoc(doc(as(partner), paths.trip(trip.id)), { cancelledAt: "2026-11-24T10:00:00Z" }));
     await assertFails(updateDoc(doc(as(owner), paths.trip(trip.id)), { cancelledAt: "yesterday" }));

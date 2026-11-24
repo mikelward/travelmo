@@ -1,7 +1,7 @@
 import { devices, expect, test } from "@playwright/test";
 import { bookingAction, owner, partner, signIn, signOut } from "./helpers";
 import { gmailIdPrefix } from "@travelmo/core";
-import { clearData, deleteTripDoc, readSegments, readSenderPatterns, seedFlight, seedGmail, seedTrip } from "./seed";
+import { clearData, deleteTripDoc, readSegments, readSenderPatterns, seedFlight, seedGmail, seedTrip, readTrip } from "./seed";
 
 test.beforeEach(async () => {
   await clearData();
@@ -178,7 +178,8 @@ test("a booking's menu copies its reference and moves it to another trip", async
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   const ownerUid = await signIn(page, owner);
   await seedTrip(ownerUid, "e2e-trip", { confirmation: "CV1234" });
-  await seedTrip(ownerUid, "e2e-other", {}, { title: "Manchester", start: "2027-01-08", end: "2027-01-09" });
+  // Its list flags say every booking was cancelled, which the move makes untrue.
+  await seedTrip(ownerUid, "e2e-other", {}, { title: "Manchester", start: "2027-01-08", end: "2027-01-09", allCancelled: true, localOnly: false });
   await page.getByRole("link", { name: /^Liverpool/ }).click();
   await expect(page.getByText("Cove Liverpool", { exact: true })).toBeVisible();
 
@@ -197,6 +198,10 @@ test("a booking's menu copies its reference and moves it to another trip", async
   await expect(dialog.getByRole("button")).toHaveText(["New trip", /^Chester/, /^Manchester/, "Close"]);
   await dialog.getByRole("button", { name: /Manchester/ }).click();
   await expect.poll(async () => (await readSegments("e2e-other")).map((s) => s.title).sort()).toEqual(["Cove Liverpool", "Cove Liverpool"]);
+  // The trip it went into no longer claims to know, so the list reads its bookings again.
+  const other = await readTrip("e2e-other");
+  expect(other?.allCancelled).toBeUndefined();
+  expect(other?.localOnly).toBeUndefined();
 });
 
 test("a booking moved to a new trip gets a trip of its own", async ({ page }) => {

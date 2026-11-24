@@ -54,8 +54,9 @@ export function allCancelled(segments: readonly object[]): boolean {
 
 // A trip that isn't happening: its owner cancelled it, or every booking in
 // it was cancelled. One with no bookings yet still is, unless cancelled.
-export function tripCancelled(trip: Pick<Trip, "cancelledAt">, segments?: readonly object[]): boolean {
-  return trip.cancelledAt !== undefined || (segments !== undefined && allCancelled(segments));
+// Before its bookings are read, the trip's own flag says (listFilters.ts).
+export function tripCancelled(trip: Pick<Trip, "cancelledAt" | "allCancelled">, segments?: readonly object[]): boolean {
+  return trip.cancelledAt !== undefined || (segments !== undefined ? allCancelled(segments) : trip.allCancelled === true);
 }
 
 type Cancellable = { cancelledAt?: string | undefined; userCancelled?: "booking" | "trip" | undefined };

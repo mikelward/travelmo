@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarFeed, ParsedMessage, Segment, SenderPatterns, Trip, UserProfile, myAddresses, paths, queryAddresses } from "@travelmo/core";
+import { CalendarFeed, ParsedMessage, Segment, SenderPatterns, Trip, UserProfile, myAddresses, paths, queryAddresses, flagsUnknown, tripFlagsToWrite } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import {
   collection,
@@ -14,8 +14,11 @@ import {
   where,
   type DocumentData,
   type QuerySnapshot,
+  getDocFromServer,
+  getDocsFromServer,
+  runTransaction,
 } from "firebase/firestore";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { z } from "zod";
 import { firestore } from "./firebase";
 
@@ -116,6 +119,40 @@ export function useSegmentsOf(tripIds: readonly string[]): Record<string, Segmen
     const ids = key ? key.split("\n") : [];
     return Object.fromEntries(ids.flatMap((id) => (byTrip[id] ? [[id, byTrip[id]]] : [])));
   }, [byTrip, key]);
+}
+
+// These trips' bookings, each read once per version of the trip (its
+// `updatedAt`, which every booking change moves), as trips join the set:
+// one already read isn't read again while it stays as it was. Only trips
+// still asked for, and only as read for their current version.
+export function useSegmentsOnce(trips: readonly Pick<Trip, "id" | "updatedAt">[] | undefined): Record<string, Segment[]> {
+  const [read, setRead] = useState<Record<string, { version: string; segments: Segment[] }>>({});
+  const started = useRef(new Set<string>());
+  const key = (trips ?? []).map((t) => `${t.id}@${t.updatedAt}`).join("\n");
+  useEffect(() => {
+    for (const entry of key ? key.split("\n") : []) {
+      if (started.current.has(entry)) continue;
+      started.current.add(entry);
+      const [id = "", version = ""] = entry.split("@");
+      getDocs(query(collection(firestore(), paths.segments(id)), orderBy("start"))).then(
+        (s) => setRead((was) => ({ ...was, [id]: { version, segments: parseDocs(Segment, s) } })),
+        (error: unknown) => {
+          // Not read: tried again the next time it is asked for.
+          console.error(`Reading segments failed for ${id}`, error);
+          started.current.delete(entry);
+        },
+      );
+    }
+  }, [key]);
+  return useMemo(() => {
+    const out: Record<string, Segment[]> = {};
+    for (const t of trips ?? []) {
+      const got = read[t.id];
+      if (got && got.version === t.updatedAt) out[t.id] = got.segments;
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` names the trips and their versions
+  }, [read, key]);
 }
 
 export type AllSegments = { byTrip: Record<string, Segment[]>; failed: string[] };
@@ -275,4 +312,49 @@ export function useSenderPatterns(uid: string): SenderPatterns | undefined {
     );
   }, [uid]);
   return patterns;
+}
+
+// Keeps the flags the trip list filters by (`allCancelled`, `localOnly`,
+// listFilters.ts) true to the bookings just read: after an edit, and for a
+// trip from before they were kept. Only a trip the viewer may write (theirs
+// or shared with them) and not being deleted; a refusal is logged, and the
+// list reads the bookings instead. Bookings read once (`once`, a search's
+// or a filter's) may be older than flags the parser wrote since, so they
+// only fill flags in where a trip has none.
+export function useKeepTripFlags(
+  trips: readonly Trip[] | null | undefined,
+  segmentsOf: (tripId: string) => readonly Segment[] | undefined,
+  once = false,
+): void {
+  // The trips whose bookings disagree with their flags, with the flags they have.
+  const due = (trips ?? []).flatMap((trip) => {
+    const segments = trip.deleting || (once && !flagsUnknown(trip)) ? undefined : segmentsOf(trip.id);
+    return segments && tripFlagsToWrite(trip, segments) ? [{ id: trip.id, allCancelled: trip.allCancelled, localOnly: trip.localOnly }] : [];
+  });
+  const key = JSON.stringify(due);
+  useEffect(() => {
+    for (const { id, ...kept } of JSON.parse(key) as { id: string; allCancelled?: boolean; localOnly?: boolean }[]) {
+      repairTripFlags(id, kept).catch((error: unknown) => console.warn(`Keeping trip ${id}'s list flags failed`, error));
+    }
+  }, [key]);
+}
+
+// What a listener gave may be the offline cache's part: the flags are
+// written only from the server's whole answer, not while offline, and only
+// if no booking changed meanwhile (the trip's `updatedAt` moved); a change
+// then is left to be read again.
+async function repairTripFlags(id: string, kept: { allCancelled?: boolean; localOnly?: boolean }): Promise<void> {
+  const db = firestore();
+  const tripRef = doc(db, paths.trip(id));
+  const revision = (await getDocFromServer(tripRef)).get("updatedAt") as unknown;
+  if (typeof revision !== "string") return;
+  const flags = tripFlagsToWrite(kept, parseDocs(Segment, await getDocsFromServer(query(collection(db, paths.segments(id))))));
+  if (!flags) return;
+  const written = await runTransaction(db, async (t) => {
+    const now = await t.get(tripRef);
+    if (now.get("updatedAt") !== revision || now.get("deleting") === true) return false;
+    t.update(tripRef, flags);
+    return true;
+  });
+  if (!written) console.info(`Trip ${id}'s bookings changed while its list flags were read; left for the next read`);
 }

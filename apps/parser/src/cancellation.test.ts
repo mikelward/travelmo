@@ -73,6 +73,17 @@ describe("cancellation emails", () => {
     });
   });
 
+  it("record on the trip that every booking is cancelled, for the list's filters", async () => {
+    const store = memoryStore();
+    clock = "2026-05-01T12:00:00Z";
+    await importMessage("u1", email(), deps(store, async () => confirmation));
+    const [trip] = [...store.trips.values()];
+    expect(trip).toMatchObject({ allCancelled: false, localOnly: false });
+    clock = "2026-05-20T08:00:00Z";
+    await importMessage("u1", cancelEmail, deps(store, async () => cancellation("1234567890")));
+    expect(store.trips.get(trip!.id)).toMatchObject({ allCancelled: true, localOnly: false });
+  });
+
   it("show the trip's end as what is still booked when the cancelled booking alone reached it", async () => {
     const store = memoryStore();
     clock = "2026-05-01T12:00:00Z";

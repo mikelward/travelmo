@@ -17,6 +17,12 @@ import {
 
 const now = () => new Date().toISOString();
 
+// Every write here that changes a trip's bookings takes the trip's list
+// flags off (listFilters.ts): unknown again, they are recomputed from the
+// bookings the next time an app reads them (useKeepTripFlags), rather than
+// stand wrong for a trip whose page isn't open.
+const flagsUnknown = () => ({ allCancelled: deleteField(), localOnly: deleteField() });
+
 const min = (a: string, b: string) => (a < b ? a : b);
 const max = (a: string, b: string) => (a > b ? a : b);
 
@@ -92,7 +98,7 @@ export async function saveSegment(db: Firestore, tripId: string, extracted: Extr
     }
     t.set(segmentRef, saved);
     // A cancelled booking widens only the trip's own dates.
-    t.update(tripRef, { ...widened(trip, bookedDateRange([saved]), segmentDateRange([saved])), updatedAt: timestamp });
+    t.update(tripRef, { ...widened(trip, bookedDateRange([saved]), segmentDateRange([saved])), ...flagsUnknown(), updatedAt: timestamp });
   });
   return saved;
 }
@@ -138,7 +144,7 @@ export async function restoreSegment(db: Firestore, tripId: string, segmentId: s
     // overruled, so none sent before now is kept from cancelling it later.
     if (stored.userCancelled) {
       t.update(segmentRef, { cancelledAt: deleteField(), userCancelled: deleteField(), updatedAt: timestamp });
-      t.update(tripRef, { ...widened(trip, range, range), updatedAt: timestamp });
+      t.update(tripRef, { ...widened(trip, range, range), ...flagsUnknown(), updatedAt: timestamp });
       return;
     }
     // The cancellation is remembered as taken back, and when: reading the
@@ -152,14 +158,14 @@ export async function restoreSegment(db: Firestore, tripId: string, segmentId: s
       restoredAt: timestamp,
       updatedAt: timestamp,
     });
-    t.update(tripRef, { ...widened(trip, range, range), updatedAt: timestamp });
+    t.update(tripRef, { ...widened(trip, range, range), ...flagsUnknown(), updatedAt: timestamp });
   });
 }
 
 export async function deleteSegment(db: Firestore, tripId: string, segmentId: string): Promise<void> {
   const batch = writeBatch(db);
   batch.delete(doc(db, paths.segment(tripId, segmentId)));
-  batch.update(doc(db, paths.trip(tripId)), { updatedAt: now() });
+  batch.update(doc(db, paths.trip(tripId)), { ...flagsUnknown(), updatedAt: now() });
   await batch.commit();
 }
 
@@ -268,8 +274,8 @@ export async function moveSegment(db: Firestore, fromTripId: string, segmentId: 
     const moved = inTrip({ ...segment, tripId: toTripId, updatedAt: timestamp }, target, timestamp);
     t.set(doc(db, paths.segment(toTripId, segmentId)), moved);
     t.delete(segmentRef);
-    t.update(toRef, { ...widened(target, range, live), updatedAt: timestamp });
-    t.update(fromRef, { updatedAt: timestamp });
+    t.update(toRef, { ...widened(target, range, live), ...flagsUnknown(), updatedAt: timestamp });
+    t.update(fromRef, { ...flagsUnknown(), updatedAt: timestamp });
   });
 }
 
@@ -394,7 +400,7 @@ export async function mergeTrips(
         t.set(doc(db, paths.segment(targetId, segment.id)), segment);
         t.delete(doc(db, paths.segment(sourceId, segment.id)));
       }
-      t.update(targetRef, { ...widened(target, range, live), updatedAt: timestamp });
+      t.update(targetRef, { ...widened(target, range, live), ...flagsUnknown(), updatedAt: timestamp });
       t.delete(sourceRef);
       return true;
     });
@@ -441,6 +447,7 @@ async function rewriteBookings(
         ...own,
         liveStart: live ? live.start : deleteField(),
         liveEnd: live ? live.end : deleteField(),
+        ...flagsUnknown(),
         ...changed.trip,
         updatedAt: timestamp,
       });

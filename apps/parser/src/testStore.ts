@@ -55,6 +55,11 @@ export function memoryStore(): Memory {
       if (!trip) throw new Error(`trip ${id} missing`);
       trips.set(id, { ...trip, ...fields });
     },
+    setTripFlags: (id, flags) => {
+      const trip = trips.get(id);
+      if (!trip) throw new Error(`trip ${id} missing`);
+      trips.set(id, { ...trip, ...flags });
+    },
     setLiveBounds: (id, bounds) => {
       const trip = trips.get(id);
       if (!trip) throw new Error(`trip ${id} missing`);

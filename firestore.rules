@@ -133,8 +133,11 @@ service cloud.firestore {
     }
 
     function validTrip(trip) {
-      return trip.keys().hasOnly(['id', 'title', 'start', 'end', 'liveStart', 'liveEnd', 'ownerUid', 'sharedWith', 'deleting', 'cancelledAt', 'createdAt', 'updatedAt'])
+      return trip.keys().hasOnly(['id', 'title', 'start', 'end', 'liveStart', 'liveEnd', 'ownerUid', 'sharedWith', 'deleting', 'cancelledAt', 'allCancelled', 'localOnly', 'createdAt', 'updatedAt'])
         && (!('deleting' in trip) || trip.deleting is bool)
+        // What the list's filters need of its bookings (listFilters.ts).
+        && (!('allCancelled' in trip) || trip.allCancelled is bool)
+        && (!('localOnly' in trip) || trip.localOnly is bool)
         && (!('cancelledAt' in trip) || (trip.cancelledAt is string && trip.cancelledAt.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}.*')))
         && trip.title is string && trip.title.size() > 0 && trip.title.size() <= 200
         && isDate(trip.start) && isDate(trip.end) && trip.start <= trip.end
@@ -161,10 +164,11 @@ service cloud.firestore {
         && validTrip(request.resource.data);
       // A sharee adding or restoring a booking may only widen the trip's own
       // dates to hold it; those it is shown with stay within them, and may
-      // move in when the sharee marks a booking at its end cancelled.
+      // move in when the sharee marks a booking at its end cancelled. The
+      // list's flags follow the bookings, which a sharee may change too.
       allow update: if member()
         && isSharee(resource.data)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['start', 'end', 'liveStart', 'liveEnd', 'updatedAt'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['start', 'end', 'liveStart', 'liveEnd', 'allCancelled', 'localOnly', 'updatedAt'])
         && request.resource.data.start <= resource.data.start
         && request.resource.data.end >= resource.data.end
         && validTrip(request.resource.data);
