@@ -1,5 +1,6 @@
 package app.travelmo.ui
 
+import app.travelmo.core.withOneWay
 import app.travelmo.core.RefreshShown
 import app.travelmo.core.ImapMailbox
 import app.travelmo.data.ImapActions
@@ -379,6 +380,9 @@ class FakeTripStore(
     override suspend fun hideRideNeed(uid: String, key: String) {
         hiddenRides += key
         rides.value = rides.value.copy(hidden = rides.value.hidden + key)
+    }
+    override suspend fun markOneWay(uid: String, tripId: String) {
+        rides.value = rides.value.copy(oneWayTrips = withOneWay(rides.value.oneWayTrips, tripId))
     }
     override suspend fun setReminderEmail(uid: String, on: Boolean) {
         reminders += on

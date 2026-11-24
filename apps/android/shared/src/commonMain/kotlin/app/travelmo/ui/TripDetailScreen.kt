@@ -339,6 +339,13 @@ fun TripDetailScreen(
                     companies = rideSettings?.companies.orEmpty(),
                     onHide = { need -> viewModel.hideRideNeed("${prefix}ride/${rideNeedKey(need)}", need) },
                 ),
+                journeyGap = viewModel.journeyGapFor(current, segments, rideSettings)?.let { gap ->
+                    JourneyGapActions(
+                        gap,
+                        onAdd = if (canEdit) { { onAddBooking(gap.date) } } else null,
+                        onOneWay = { viewModel.markOneWay("${prefix}one-way", tripId) },
+                    )
+                },
                 bookingActions = if (canEdit) {
                     BookingActions(
                         onEdit = { onEditBooking(it.id) },
@@ -436,6 +443,8 @@ private fun TripBody(
     bookingActions: BookingActions?,
     emailLink: (SourceRef) -> String?,
     rides: RideSuggestions,
+    /** A journey the trip seems to be missing; null when nothing is. */
+    journeyGap: JourneyGapActions? = null,
     tripActions: TripActions?,
     senderOffers: (Segment) -> SenderOffers?,
     checklist: Checklist?,
@@ -511,6 +520,7 @@ private fun TripBody(
         if (warnings.isNotEmpty()) {
             item(key = "warnings") { DocumentWarnings(warnings, today) }
         }
+        journeyGap?.let { actions -> item(key = "journey-gap") { JourneyGapNotice(actions, busy) } }
         if (checklist != null) {
             item(key = "before-you-go") { BeforeYouGo(checklist, today) }
         }

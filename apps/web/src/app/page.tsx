@@ -1,6 +1,6 @@
 "use client";
 
-import { displayTitles, flagsUnknown, groupTrips, hiddenFromList, isEmptyQuery, listWarnings, nextUpFlightKeys, noListFilters, parseTripQuery, tripMatches, type FlightStatus, type ListFilters, type Segment, type Trip } from "@travelmo/core";
+import { displayTitles, flagsUnknown, groupTrips, hiddenFromList, journeyGap, journeyGapHomes, journeyGapText, isEmptyQuery, listWarnings, nextUpFlightKeys, noListFilters, parseTripQuery, tripMatches, type FlightStatus, type ListFilters, type Segment, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -11,7 +11,7 @@ import { usePeopleDocuments, useTripWarnings, warningText } from "@/lib/document
 import { setCheckedIn, useCheckedIn } from "@/lib/checkedIn";
 import { useFlightStatusesOf } from "@/lib/flightStatus";
 import { useSaveForOffline } from "@/lib/offline";
-import { useAllSegments, useKeepTripFlags, useNow, useSegmentsOf, useSegmentsOnce, useTrips } from "@/lib/trips";
+import { useAllSegments, useKeepTripFlags, useNow, useProfile, useSegmentsOf, useSegmentsOnce, useTrips } from "@/lib/trips";
 
 // Trips worth a listener each: everything under way, for the "next up"
 // lines, and the few coming next, so their document warnings know where
@@ -60,6 +60,7 @@ function Section({
   checkedIn,
   onCheckedIn,
   showNext,
+  missingOf,
 }: {
   title: string;
   trips: Trip[];
@@ -75,6 +76,8 @@ function Section({
   // Whether the cards say what comes next: only a trip under way does. A
   // card whose bookings are loaded says they were all cancelled either way.
   showNext: boolean;
+  // What a trip whose bookings are loaded seems to be missing (journeyGap).
+  missingOf: (trip: Trip) => string | undefined;
 }) {
   if (trips.length === 0) return null;
   return (
@@ -90,6 +93,7 @@ function Section({
             {...(segmentsByTrip[trip.id] ? { segments: segmentsByTrip[trip.id] } : {})}
             {...(showNext ? { now, flightStatuses, onCheckedIn: (segmentId: string) => onCheckedIn(trip.id, segmentId) } : {})}
             {...(checkedIn[trip.id] ? { checkedIn: checkedIn[trip.id] } : {})}
+            {...(missingOf(trip) ? { missing: missingOf(trip) } : {})}
           />
         ))}
       </div>
@@ -144,6 +148,7 @@ function Trips({ user }: { user: User }) {
     });
   };
   const people = usePeopleDocuments(user);
+  const profile = useProfile(user.uid);
   const warnings = useTripWarnings(people, trips ?? [], segmentsByTrip, today);
 
   if (!trips || !groups) return <p className="text-muted">Loading trips…</p>;
@@ -160,7 +165,15 @@ function Trips({ user }: { user: User }) {
       </div>
     );
   }
-  const sectionProps = { uid: user.uid, titles, segmentsByTrip, now, flightStatuses, checkedIn, onCheckedIn };
+  // A journey a trip seems to be missing, for the cards whose bookings are
+  // read (those under way and the next few), as the trip's page says it.
+  const missingOf = (trip: Trip) => {
+    const segments = segmentsByTrip[trip.id];
+    if (!segments || !profile || trip.deleting || (profile.oneWayTrips ?? []).includes(trip.id)) return undefined;
+    const gap = journeyGap(segments, journeyGapHomes(profile.homes ?? [], profile.homeAirports ?? []));
+    return gap ? journeyGapText(gap) : undefined;
+  };
+  const sectionProps = { uid: user.uid, titles, segmentsByTrip, now, flightStatuses, checkedIn, onCheckedIn, missingOf };
   // Document warnings once, at the top, each for the earliest trip it bears
   // on and linking to it, rather than repeated on every card.
   const listed = listWarnings(warnings, trips);

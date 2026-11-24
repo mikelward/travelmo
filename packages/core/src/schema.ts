@@ -418,6 +418,9 @@ export const maxRideCompanies = 20;
 
 // Ride suggestions the user hid (rideNeedKey in rides.ts), newest last.
 export const maxHiddenRideNeeds = 200;
+// The trips a person said go one way (journeyGap.ts), kept on their profile;
+// past this many the oldest is dropped.
+export const maxOneWayTrips = 200;
 
 // The traveler's own reminders before a trip (checklist.ts; SPEC "Before
 // you go").
@@ -503,6 +506,8 @@ export const UserProfile = z.object({
     }))
     .optional(),
   hiddenRideNeeds: z.array(z.string()).max(maxHiddenRideNeeds).optional(),
+  // Trips the person said go one way: no "No flight back" on them.
+  oneWayTrips: z.array(z.string()).max(maxOneWayTrips).optional(),
   // Server-written (emails.ts): the addresses the user confirmed besides
   // their sign-in, lowercase, and those waiting for confirmation.
   emails: z.array(z.string()).optional(),

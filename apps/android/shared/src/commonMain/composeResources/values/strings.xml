@@ -59,6 +59,8 @@
     <string name="open_in_gmail">Open in Gmail</string>
     <string name="try_again">Try again</string>
     <string name="add_it_yourself">Add it yourself</string>
+    <string name="find_it_in_gmail">Find it in Gmail</string>
+    <string name="trip_is_one_way">This trip is one way</string>
     <string name="report_a_problem">Report a problem</string>
     <string name="from_sender">From %1$s</string>
     <string name="always_import_sender">Always import this sender</string>

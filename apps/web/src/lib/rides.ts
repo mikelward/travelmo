@@ -1,6 +1,6 @@
 "use client";
 
-import { RideCompany, maxHiddenRideNeeds, paths, withRideCompany, withoutRideCompany } from "@travelmo/core";
+import { RideCompany, maxHiddenRideNeeds, paths, withOneWay, withRideCompany, withoutRideCompany } from "@travelmo/core";
 import { doc, runTransaction, type DocumentReference, type Transaction } from "firebase/firestore";
 import { firestore } from "./firebase";
 
@@ -48,5 +48,17 @@ export async function hideRideNeed(uid: string, key: string): Promise<void> {
     const stored = (await tx.get(ref)).data()?.hiddenRideNeeds;
     const hidden = Array.isArray(stored) ? stored.filter((k): k is string => typeof k === "string") : [];
     tx.set(ref, { hiddenRideNeeds: withHidden(hidden, key) }, { merge: true });
+  });
+}
+
+// Says a trip goes one way, so it no longer says a journey back is missing
+// (journeyGap). Read and written in one transaction, so two tabs marking
+// different trips keep both.
+export async function markOneWay(uid: string, tripId: string): Promise<void> {
+  const ref = doc(firestore(), paths.user(uid));
+  await runTransaction(firestore(), async (tx) => {
+    const stored = (await tx.get(ref)).data()?.oneWayTrips;
+    const trips = Array.isArray(stored) ? stored.filter((k): k is string => typeof k === "string") : [];
+    tx.set(ref, { oneWayTrips: withOneWay(trips, tripId) }, { merge: true });
   });
 }

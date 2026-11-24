@@ -395,7 +395,7 @@ private fun locatedTown(place: Place?): Town? {
 }
 
 // Whether two places are one city's, as far as its airports and stations go: the same town, or within AREA_KM in one country.
-private fun sameArea(a: Place?, b: Place?): Boolean {
+fun sameArea(a: Place?, b: Place?): Boolean {
     val x = locatedTown(a) ?: return false
     val y = locatedTown(b) ?: return false
     if (sameTown(x, y)) return true

@@ -628,7 +628,7 @@ function located_(place: Place | undefined): Town | undefined {
 
 // Whether two places are one city's, as far as its airports and stations
 // go: the same town, or within areaKm in one country.
-function sameArea(a: Place | undefined, b: Place | undefined): boolean {
+export function sameArea(a: Place | undefined, b: Place | undefined): boolean {
   const [x, y] = [located_(a), located_(b)];
   if (!x || !y) return false;
   if (sameTown(x, y)) return true;

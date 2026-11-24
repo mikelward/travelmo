@@ -46,3 +46,4 @@ export * from "./foundLoyalty";
 export * from "./accountDeletion";
 export * from "./tripSearch";
 export * from "./listFilters";
+export * from "./journeyGap";

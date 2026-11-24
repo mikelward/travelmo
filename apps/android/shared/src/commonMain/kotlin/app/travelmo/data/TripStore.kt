@@ -99,6 +99,9 @@ interface TripStore {
     /** Hides one ride suggestion for good, in a transaction over the stored list, as the web does. */
     suspend fun hideRideNeed(uid: String, key: String)
 
+    /** Says a trip goes one way (`oneWayTrips`), in a transaction over the stored list, as the web does. */
+    suspend fun markOneWay(uid: String, tripId: String)
+
     /** Replaces the user's corrections to home (`homes` on their user document), as the web's Profile saves them. */
     suspend fun setHomeCorrections(uid: String, corrections: List<HomeCorrection>)
 
@@ -372,6 +375,8 @@ data class RideSettings(
     val homes: List<HomeCorrection> = emptyList(),
     /** The airports chosen for each home on Profile (`homeAirports`). */
     val homeAirports: List<ChosenHomeAirports> = emptyList(),
+    /** The trips the person said go one way (`oneWayTrips`): no "No flight back" on them. */
+    val oneWayTrips: List<String> = emptyList(),
 )
 
 private fun storedCompany(entry: Any?): RideCompany? {
@@ -420,7 +425,8 @@ fun rideSettingsOf(data: Map<String, Any?>?): RideSettings {
         val parsed = parseAirportCodes(codes.joinToString(" ")) as? ParsedAirports.Codes ?: return@mapNotNull null
         ChosenHomeAirports(city, (map["country"] as? String)?.takeIf { it.length == 2 }, parsed.codes)
     }
-    return RideSettings(companies, hidden, homes, homeAirports)
+    val oneWayTrips = (data?.get("oneWayTrips") as? List<*>).orEmpty().filterIsInstance<String>()
+    return RideSettings(companies, hidden, homes, homeAirports, oneWayTrips)
 }
 
 private fun isCalendarDate(text: String): Boolean = try {
