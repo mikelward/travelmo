@@ -102,6 +102,7 @@ import app.travelmo.core.SenderPatterns
 import app.travelmo.core.cleanSenderList
 import app.travelmo.core.SenderList
 import app.travelmo.core.ParsedRecord
+import app.travelmo.core.fittingTrip
 import app.travelmo.data.SearchedRecords
 import app.travelmo.data.NoImportReview
 import app.travelmo.data.ImportReview
@@ -129,6 +130,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -604,6 +606,22 @@ class TripsViewModel(
     }
 
     fun saveSegment(token: String, tripId: String, draft: SegmentDraft, existingId: String?) = run(token, "saveSegment") { store.saveSegment(tripId, draft, existingId) }
+
+    private val _addedTo = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    /**
+     * Adds a booking with no trip in view (one an email couldn't be read for): into the user's trip that takes in
+     * its first day (fittingTrip), else a trip of its own. [addedTo] then gives the trip, under the same token.
+     */
+    fun addBooking(token: String, draft: SegmentDraft) = run(token, "addBooking") {
+        // Waits for the trips to load: no screen showing them may be following them.
+        val fitting = fittingTrip(trips.filterNotNull().first(), uid, draft.start)
+        val tripId = if (fitting != null) fitting.id.also { store.saveSegment(it, draft, null) } else store.addSegmentToNewTrip(draft, uid)
+        _addedTo.update { it + (token to tripId) }
+    }
+
+    /** The trip [addBooking] under [token] put the booking in, once done. */
+    fun addedTo(token: String): String? = _addedTo.value[token]
 
     fun deleteSegment(token: String, tripId: String, segmentId: String) = run(token, "deleteSegment") { store.deleteSegment(tripId, segmentId) }
 

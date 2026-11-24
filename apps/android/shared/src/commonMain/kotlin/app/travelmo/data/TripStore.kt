@@ -272,6 +272,12 @@ interface TripStore {
      */
     suspend fun moveSegmentToNewTrip(fromTripId: String, segmentId: String, uid: String): String
 
+    /**
+     * Adds a booking in a trip of its own, made for it: owned by [uid], named for where it goes (newTripTitle), over
+     * its dates. A save that fails takes the empty trip away again. Returns the new trip's id.
+     */
+    suspend fun addSegmentToNewTrip(draft: SegmentDraft, uid: String): String
+
     /** Moves every booking of the source into the target and deletes the source; how many moved. Owner of the source only. */
     suspend fun mergeTrips(sourceId: String, targetId: String): Int
 }

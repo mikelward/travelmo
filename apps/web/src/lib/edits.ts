@@ -1,4 +1,4 @@
-import { Segment, Trip, bookedDateRange, displayBounds, inTrip, isCancelled, liveBounds, newTripTitle, paths, segmentDateRange, type ExtractedSegment } from "@travelmo/core";
+import { Segment, Trip, bookedDateRange, displayBounds, fittingTrip, inTrip, isCancelled, liveBounds, newTripTitle, paths, segmentDateRange, type ExtractedSegment } from "@travelmo/core";
 import {
   arrayUnion,
   collection,
@@ -319,6 +319,42 @@ export async function moveSegmentToNewTrip(db: Firestore, fromTripId: string, se
     throw error;
   }
   return ref.id;
+}
+
+// Adds a booking with no trip in view (one an email couldn't be read for):
+// into the user's trip that takes in its first day (fittingTrip), else a
+// trip of its own, owned by the user, named for where it goes, over its
+// dates. As in moveSegmentToNewTrip, the trip is made first; a save that
+// fails takes the empty trip away again. Returns the trip it went into.
+export async function addSegmentToFittingTrip(
+  db: Firestore,
+  uid: string,
+  trips: readonly Trip[],
+  extracted: ExtractedSegment,
+): Promise<{ tripId: string; title: string }> {
+  const fitting = fittingTrip(trips, uid, extracted.start);
+  if (fitting) {
+    await saveSegment(db, fitting.id, extracted);
+    return { tripId: fitting.id, title: fitting.title };
+  }
+  const start = extracted.start.slice(0, 10);
+  const end = max(start, (extracted.end ?? extracted.start).slice(0, 10));
+  const ref = doc(collection(db, paths.trips()));
+  const timestamp = now();
+  const created: Trip = { id: ref.id, title: newTripTitle(extracted), start, end, ownerUid: uid, sharedWith: [], createdAt: timestamp, updatedAt: timestamp };
+  await setDoc(ref, created);
+  try {
+    await saveSegment(db, ref.id, extracted);
+  } catch (error) {
+    console.error("Adding a booking to a new trip failed; removing the empty trip", error);
+    try {
+      await deleteDoc(ref);
+    } catch (cleanup) {
+      console.error("Removing the empty trip failed; it stays", cleanup);
+    }
+    throw error;
+  }
+  return { tripId: ref.id, title: created.title };
 }
 
 // Moves every booking of `sourceId` into `targetId` and deletes the source

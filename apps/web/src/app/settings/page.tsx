@@ -1,6 +1,6 @@
 "use client";
 
-import { RideCompany, cleanSenderList, imapMailboxes, imapRedirect, imapServerFor, maxImapMailboxes, parseCountries, describeBackfill, describeDeletedTrips, gmailMailboxes, isReading, maxGmailMailboxes, pausedReason, describeRegroup, describeRefresh, groupSkips, refreshBlurb, refreshButton, failedEmailIds, failedEmailLine, failedEmailsReport, gmailSourceLink, moreFailedEmails, ParsedMessage, type RefreshProgress, maxRideCompanies, paths, type BackfillProgress, type GmailConnection, type ImapConnection, type SenderPatterns, type SkipGroup } from "@travelmo/core";
+import { RideCompany, cleanSenderList, imapMailboxes, imapRedirect, imapServerFor, maxImapMailboxes, parseCountries, describeBackfill, describeDeletedTrips, gmailMailboxes, isReading, maxGmailMailboxes, pausedReason, describeRegroup, describeRefresh, groupSkips, refreshBlurb, refreshButton, failedEmailIds, failedEmailLine, failedEmailsReport, gmailSourceLink, moreFailedEmails, ParsedMessage, type RefreshProgress, type Trip, maxRideCompanies, paths, type BackfillProgress, type GmailConnection, type ImapConnection, type SenderPatterns, type SkipGroup } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -9,6 +9,8 @@ import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { AccountDeleted, DeleteAccountSection, useAccountDeletion } from "@/components/DeleteAccount";
 import { EmailAddressesSection } from "@/components/EmailAddresses";
 import { ReportDialog } from "@/components/ReportBug";
+import { SegmentForm } from "@/components/SegmentForm";
+import { addSegmentToFittingTrip } from "@/lib/edits";
 import { TripRemindersSection } from "@/components/Checklist";
 import { SignInGate } from "@/components/SignInGate";
 import { api } from "@/lib/api";
@@ -585,6 +587,7 @@ function RegroupSection({ user }: { user: User }) {
 // and those bookings updated, on the server, batch after batch; the line
 // below follows its progress on the profile, as Import past bookings does.
 function RefreshFromEmail({ user, progress, mailboxes }: { user: User; progress: RefreshProgress | undefined; mailboxes: GmailConnection[] }) {
+  const trips = useTrips(user);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   // The clock a stalled refresh is judged by; a minute is fine enough.
@@ -637,6 +640,7 @@ function RefreshFromEmail({ user, progress, mailboxes }: { user: User; progress:
           mailboxes={mailboxes}
           busy={busy}
           onTryAgain={() => void run(() => api.refreshFromEmail(user, false, true), "Trying the failed emails again")}
+          trips={trips}
         />
       )}
       {error && <p className="mt-3 text-sm text-danger">{error}</p>}
@@ -645,9 +649,19 @@ function RefreshFromEmail({ user, progress, mailboxes }: { user: User; progress:
 }
 
 // The emails a refresh couldn't read, by subject and sender: each Gmail one
-// opens in Gmail, to check it or add its booking by hand; Try again reads
-// them alone again, and Report a problem sends us their ids.
-function FailedEmails(props: { uid: string; progress: RefreshProgress; mailboxes: GmailConnection[]; busy: boolean; onTryAgain: () => void }) {
+// opens in Gmail, to check it; Add it yourself takes its booking by hand
+// into the trip it falls in, or a new one; Try again reads them alone
+// again, and Report a problem sends us their ids.
+function FailedEmails(props: {
+  uid: string;
+  progress: RefreshProgress;
+  mailboxes: GmailConnection[];
+  busy: boolean;
+  onTryAgain: () => void;
+  trips: Trip[] | undefined;
+}) {
+  const [adding, setAdding] = useState<string>();
+  const [added, setAdded] = useState<Map<string, { tripId: string; title: string }>>(new Map());
   const ids = failedEmailIds(props.progress);
   const key = ids.join(",");
   const [records, setRecords] = useState<Map<string, ParsedMessage>>(new Map());
@@ -688,6 +702,35 @@ function FailedEmails(props: { uid: string; progress: RefreshProgress; mailboxes
                     Open in Gmail
                   </a>
                 </>
+              )}
+              {added.get(id) ? (
+                <>
+                  {" · Added to "}
+                  <Link href={`/trips/${added.get(id)!.tripId}`} className="underline hover:no-underline">
+                    {added.get(id)!.title}
+                  </Link>
+                </>
+              ) : (
+                props.trips &&
+                adding !== id && (
+                  <>
+                    {" · "}
+                    <button type="button" onClick={() => setAdding(id)} className="underline hover:no-underline">
+                      Add it yourself
+                    </button>
+                  </>
+                )
+              )}
+              {adding === id && props.trips && (
+                <SegmentForm
+                  defaultDate={(record?.sentAt ?? new Date().toISOString()).slice(0, 10)}
+                  onSave={async (extracted) => {
+                    const into = await addSegmentToFittingTrip(firestore(), props.uid, props.trips!, extracted);
+                    setAdded((was) => new Map(was).set(id, into));
+                    setAdding(undefined);
+                  }}
+                  onCancel={() => setAdding(undefined)}
+                />
               )}
             </li>
           );

@@ -147,4 +147,17 @@ class TripsTest {
         newTripTitle(flight.copy(destination = Place("Hotel Example"))) shouldBe "Hotel Example"
         newTripTitle(flight.copy(title = "Toy Story 5", destination = null)) shouldBe "Toy Story 5"
     }
+
+    @Test
+    fun `files a booking added by hand into the user's shortest trip taking in its first day`() {
+        fun trip(id: String, start: String, end: String, ownerUid: String = "u1") = Trip(id, id, start, end, ownerUid)
+        val trips = listOf(trip("long", "2026-11-01", "2026-11-30"), trip("short", "2026-11-09", "2026-11-12"), trip("other", "2026-12-01", "2026-12-05"))
+        fittingTrip(trips, "u1", "2026-11-10T08:00:00+01:00")?.id shouldBe "short"
+        fittingTrip(trips, "u1", "2026-11-20")?.id shouldBe "long"
+        fittingTrip(trips, "u1", "2026-11-05T00:00:00Z")?.id shouldBe "long"
+        fittingTrip(listOf(trip("a", "2026-11-01", "2026-11-03")), "u1", "2026-11-05").shouldBeNull()
+        fittingTrip(listOf(trip("a", "2026-11-01", "2026-11-30", ownerUid = "u2")), "u1", "2026-11-05").shouldBeNull()
+        fittingTrip(listOf(trip("a", "2026-11-01", "2026-11-30").copy(deleting = true)), "u1", "2026-11-05").shouldBeNull()
+        fittingTrip(listOf(trip("a", "2026-11-01", "2026-11-30").copy(cancelledAt = "2026-10-01T00:00:00Z")), "u1", "2026-11-05").shouldBeNull()
+    }
 }

@@ -105,8 +105,8 @@ private val typeLabels = mapOf(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BookingFormScreen(viewModel: TripsViewModel, tripId: String, segmentId: String?, defaultDate: String, onDone: () -> Unit) {
-    val segmentsFlow = remember(tripId) { viewModel.segments(tripId) }
+fun BookingFormScreen(viewModel: TripsViewModel, tripId: String?, segmentId: String?, defaultDate: String, onDone: () -> Unit, onAdded: (tripId: String) -> Unit = { onDone() }) {
+    val segmentsFlow = remember(tripId) { tripId?.let { viewModel.segments(it) } ?: kotlinx.coroutines.flow.flowOf(emptyList()) }
     val segments by segmentsFlow.collectAsStateWithLifecycle(initialValue = null)
     val existing = segments?.firstOrNull { it.id == segmentId }
     // The fields are set up once the booking being edited has arrived.
@@ -122,7 +122,9 @@ fun BookingFormScreen(viewModel: TripsViewModel, tripId: String, segmentId: Stri
     LaunchedEffect(mine) {
         if (mine is Outcome.Done) {
             viewModel.outcomeSeen(token)
-            onDone()
+            // With no trip in view, the trip it went into.
+            val added = if (tripId == null) viewModel.addedTo(token) else null
+            if (added != null) onAdded(added) else onDone()
         }
     }
     BookingForm(
@@ -130,7 +132,7 @@ fun BookingFormScreen(viewModel: TripsViewModel, tripId: String, segmentId: Stri
         defaultDate = defaultDate,
         busy = mine is Outcome.Busy,
         saveError = (mine as? Outcome.Failed)?.message,
-        onSave = { draft -> viewModel.saveSegment(token, tripId, draft, existing?.id) },
+        onSave = { draft -> if (tripId == null) viewModel.addBooking(token, draft) else viewModel.saveSegment(token, tripId, draft, existing?.id) },
         onDone = onDone,
     )
 }

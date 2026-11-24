@@ -41,6 +41,10 @@ data object AccessPage : NavKey
 @Serializable
 data class BookingForm(val tripId: String, val segmentId: String?, val defaultDate: String) : NavKey
 
+/** A booking added with no trip in view, which goes into the trip it falls in, or a new one. */
+@Serializable
+data class NewBooking(val defaultDate: String) : NavKey
+
 
 /**
  * Opens the Access page (SPEC "Access"), for an admin only: the signed-in
@@ -136,9 +140,32 @@ fun SignedInNavigation(user: SignedIn, viewModel: TripsViewModel, backStack: Nav
                     BookingFormScreen(viewModel = viewModel, tripId = key.tripId, segmentId = key.segmentId, defaultDate = key.defaultDate, onDone = { backStack.removeLastOrNull() })
                 }
             }
+            entry<NewBooking> { key ->
+                CompositionLocalProvider(LocalReportScreen provides ReportScreen("Booking form")) {
+                    BookingFormScreen(
+                        viewModel = viewModel,
+                        tripId = null,
+                        segmentId = null,
+                        defaultDate = key.defaultDate,
+                        onDone = { backStack.removeLastOrNull() },
+                        // On to the trip it went into, Back returning to where it was added from.
+                        onAdded = { tripId ->
+                            backStack.removeLastOrNull()
+                            backStack.add(TripDetail(tripId))
+                        },
+                    )
+                }
+            }
             entry<Settings> {
                 CompositionLocalProvider(LocalReportScreen provides ReportScreen("Settings")) {
-                    SettingsScreen(account = account, user = user, viewModel = viewModel, onBack = { backStack.removeLastOrNull() }, onOpenReview = { backStack.add(ImportReview) })
+                    SettingsScreen(
+                        account = account,
+                        user = user,
+                        viewModel = viewModel,
+                        onBack = { backStack.removeLastOrNull() },
+                        onOpenReview = { backStack.add(ImportReview) },
+                        onAddBooking = { backStack.add(NewBooking(it)) },
+                    )
                 }
             }
             entry<ImportReview> {

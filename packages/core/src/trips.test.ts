@@ -1,4 +1,4 @@
-import { daysBetween, eventVerb, findTripForRange, nearbyTrips, newTripTitle, groupTrips, compareMatchRanks, isUntimed, matchRank, mergeDetails, mergePlace, nextEvent, notBookings, overlappingTrips, sameBooking, sameEvent, segmentDateRange, withoutValidityEnds } from "./trips";
+import { daysBetween, eventVerb, findTripForRange, fittingTrip, nearbyTrips, newTripTitle, groupTrips, compareMatchRanks, isUntimed, matchRank, mergeDetails, mergePlace, nextEvent, notBookings, overlappingTrips, sameBooking, sameEvent, segmentDateRange, withoutValidityEnds } from "./trips";
 
 describe("nextEvent", () => {
   const stay = { type: "lodging" as const, title: "Cove Liverpool", start: "2026-12-12T15:00:00+00:00", end: "2026-12-14T11:00:00+00:00" };
@@ -576,5 +576,23 @@ describe("a stay confirmed twice", () => {
 
   it("keeps a place the user edited", () => {
     expect(mergeDetails(requested, confirmed, { edited: true })).toEqual({ ...requested, confirmation: "HMEXAMPLE01" });
+  });
+});
+
+describe("fittingTrip", () => {
+  const trip = (id: string, start: string, end: string, extra: Partial<Trip> = {}) =>
+    ({ id, title: id, start, end, ownerUid: "u1", sharedWith: [], createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", ...extra }) as Trip;
+
+  it("picks the user's shortest trip taking in the booking's first day", () => {
+    const trips = [trip("long", "2026-11-01", "2026-11-30"), trip("short", "2026-11-09", "2026-11-12"), trip("other", "2026-12-01", "2026-12-05")];
+    expect(fittingTrip(trips, "u1", "2026-11-10T08:00:00+01:00")?.id).toBe("short");
+    expect(fittingTrip(trips, "u1", "2026-11-20")?.id).toBe("long");
+  });
+
+  it("finds none outside every trip, or only in someone else's, a deleted or a cancelled one", () => {
+    expect(fittingTrip([trip("a", "2026-11-01", "2026-11-03")], "u1", "2026-11-05")).toBeUndefined();
+    expect(fittingTrip([trip("a", "2026-11-01", "2026-11-30", { ownerUid: "u2" })], "u1", "2026-11-05")).toBeUndefined();
+    expect(fittingTrip([trip("a", "2026-11-01", "2026-11-30", { deleting: true })], "u1", "2026-11-05")).toBeUndefined();
+    expect(fittingTrip([trip("a", "2026-11-01", "2026-11-30", { cancelledAt: "2026-10-01T00:00:00Z" })], "u1", "2026-11-05")).toBeUndefined();
   });
 });

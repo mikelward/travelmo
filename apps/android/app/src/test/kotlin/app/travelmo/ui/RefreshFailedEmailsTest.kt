@@ -30,7 +30,7 @@ class RefreshFailedEmailsTest {
 
     @Test
     fun `lists the emails a refresh could not read and tries them again`() {
-        val hotel = ParsedRecord("fastmail-h1", "imported", FROZEN_NOW, source = "fastmail", subject = "Your hotel")
+        val hotel = ParsedRecord("fastmail-h1", "imported", FROZEN_NOW, source = "fastmail", subject = "Your hotel", sentAt = "2026-10-20T09:00:00Z")
         val store = FakeTripStore(
             refreshProgress = RefreshShown(90, true, FROZEN_NOW, total = 90, failed = 3, failedIds = listOf("booked", "fastmail-h1")),
             parsed = fixtureParsed + hotel,
@@ -38,6 +38,7 @@ class RefreshFailedEmailsTest {
         )
         val actions = FakeTripActions()
         val opened = mutableListOf<String>()
+        val adding = mutableListOf<String>()
         val chrome = object : AppChrome by NoAppChrome {
             override fun openLink(url: String, what: String) {
                 opened += url
@@ -48,7 +49,7 @@ class RefreshFailedEmailsTest {
             TravelmoTheme {
                 // Inside the theme, which provides Android's own.
                 CompositionLocalProvider(LocalAppChrome provides chrome) {
-                    SettingsScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = SignedIn(OWNER, OWNER_EMAIL), viewModel = viewModel, onBack = {})
+                    SettingsScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = SignedIn(OWNER, OWNER_EMAIL), viewModel = viewModel, onBack = {}, onAddBooking = { adding += it })
                 }
             }
         }
@@ -63,5 +64,9 @@ class RefreshFailedEmailsTest {
         composeRule.onNodeWithText("Try again").performScrollTo().performClick()
         composeRule.waitForIdle()
         actions.calls shouldBe listOf("refresh the failed emails")
+        // Each, Gmail or not, can be added by hand, on the day it was sent when known.
+        composeRule.onAllNodesWithText("Add it yourself").assertCountEquals(2)
+        composeRule.onAllNodesWithText("Add it yourself")[1].performScrollTo().performClick()
+        adding shouldBe listOf("2026-10-20")
     }
 }
