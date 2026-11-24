@@ -1,6 +1,5 @@
 package app.travelmo.ui
 
-import app.travelmo.ui.theme.AppBarTitle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,7 +24,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -78,13 +76,7 @@ fun CalendarScreen(
     val month = month ?: monthOf(today)
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { AppBarTitle(stringResource(Res.string.nav_calendar)) },
-                actions = {
-                    SettingsButton(onClick = onOpenSettings)
-                    AppMenu()
-                },
-            )
+            AppTopBar(stringResource(Res.string.nav_calendar), onOpenSettings = onOpenSettings)
         },
         bottomBar = bottomBar,
     ) { padding ->

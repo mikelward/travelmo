@@ -2893,10 +2893,10 @@ pure-Kotlin `:core` guarded by `verifyNoAndroid`, JUnit 5 with Kotest
 assertions, the commit count as `versionCode`, Firebase dormant until
 `google-services.json` is dropped in) rather than the React Native port once
 pencilled in; `design/android/` is its reference, Material 3 in this palette,
-and the strings follow the web app exactly. The "Travelmo" wordmark (the trip
-list's app bar, the sign-in screen, the web's header and sign-in card) is Fira
-Sans Medium, bundled under the SIL Open Font License; all other text keeps the
-system font on Android and Geist on the web. On the web the app icon
+and the strings follow the web app exactly. The "Travelmo" wordmark (the web's header and sign-in card, the Android
+sign-in screen) and every Android top bar's title are Fira Sans Medium, bundled
+under the SIL Open Font License; all other text keeps the system font on
+Android and Geist on the web. On the web the app icon
 (`components/Logo.tsx`, inline, in step with `app/icon.svg`) stands beside it in
 the header and above it on the sign-in card. The header links Trips (the
 trip list), Calendar, Reports, Profile and Settings, in the Android bar's
@@ -2951,7 +2951,7 @@ tab's icon white on the logo's orange, switches between Trips, the Calendar
 (the month view of `/calendar`, with the same weeks, bars and lanes from
 `:core`, its month switched by arrows and Today in a row above the grid),
 Reports and Profile, each with the Settings gear in its top bar. Every
-page's top bar starts with the logo, before its title (Trips: the wordmark). Reports counts what `/reports`
+page's top bar is the one `AppTopBar`: the back arrow (an X on the booking form), the logo, the title (Trips: "Travelmo"), the page's own actions, the gear on a tab, then ⋮. Reports counts what `/reports`
 does, from `:core`'s port of the same logic with the same tests: the trips
 begun, days away and days in each country, on the web's world map
 (`worldMap.json` read as a resource, spots placed by the same Equal Earth

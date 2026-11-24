@@ -1,6 +1,5 @@
 package app.travelmo.ui
 
-import app.travelmo.ui.theme.AppBarTitle
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,7 +14,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -24,15 +22,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
@@ -163,18 +158,14 @@ fun BookingForm(
     }
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { AppBarTitle(stringResource(if (existing == null) Res.string.add_booking else Res.string.edit_booking)) },
-                navigationIcon = {
-                    IconButton(onClick = onDone) { Icon(Icons.Filled.Close, contentDescription = stringResource(Res.string.cancel)) }
-                },
-                actions = {
-                    TextButton(onClick = { save() }, enabled = !busy) {
-                        Text(stringResource(if (existing == null) Res.string.add else Res.string.save))
-                    }
-                    AppMenu()
-                },
-            )
+            AppTopBar(
+                stringResource(if (existing == null) Res.string.add_booking else Res.string.edit_booking),
+                navigation = TopBarNavigation.Close(onDone),
+            ) {
+                TextButton(onClick = { save() }, enabled = !busy) {
+                    Text(stringResource(if (existing == null) Res.string.add else Res.string.save))
+                }
+            }
         },
     ) { padding ->
         val scroll = rememberScrollState()

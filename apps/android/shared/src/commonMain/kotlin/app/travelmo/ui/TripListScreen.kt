@@ -21,13 +21,11 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,6 +59,7 @@ import app.travelmo.shared.Res
 import app.travelmo.shared.all_trips_hidden
 import app.travelmo.shared.hide_cancelled
 import app.travelmo.shared.hide_local_events
+import app.travelmo.shared.app_name
 import app.travelmo.shared.badge_deleting
 import app.travelmo.shared.badge_shared
 import app.travelmo.shared.checked_in_action
@@ -76,7 +75,6 @@ import app.travelmo.shared.trip_cancelled
 import app.travelmo.shared.trips_empty
 import app.travelmo.shared.trips_empty_hint
 import app.travelmo.shared.trips_loading
-import app.travelmo.ui.theme.Brand
 import app.travelmo.ui.theme.TextButtonInset
 import app.travelmo.ui.theme.TravelmoTheme
 import org.jetbrains.compose.resources.stringResource
@@ -101,13 +99,7 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
     }
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Brand() },
-                actions = {
-                    SettingsButton(onClick = onOpenSettings)
-                    AppMenu()
-                },
-            )
+            AppTopBar(stringResource(Res.string.app_name), onOpenSettings = onOpenSettings)
         },
         bottomBar = bottomBar,
     ) { padding ->
