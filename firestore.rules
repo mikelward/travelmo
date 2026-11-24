@@ -188,7 +188,7 @@ service cloud.firestore {
         function validSegment(segment) {
           return segment.keys().hasOnly(['id', 'tripId', 'type', 'title', 'provider', 'confirmation', 'start', 'end',
               'origin', 'destination', 'notes', 'source', 'gmailMessageIds', 'sources', 'sender', 'rating', 'favorite',
-              'cancelledAt', 'cancelledBy', 'cancelledSentAt', 'restoredFrom', 'restoredAt', 'createdAt', 'updatedAt'])
+              'cancelledAt', 'cancelledBy', 'cancelledSentAt', 'restoredFrom', 'restoredAt', 'editedAt', 'createdAt', 'updatedAt'])
             && segment.id == segmentId && segment.tripId == tripId
             && segment.type in ['flight', 'train', 'bus', 'ferry', 'lodging', 'car_rental', 'activity', 'other']
             && segment.title is string && segment.title.size() > 0 && segment.title.size() <= 200
@@ -204,15 +204,28 @@ service cloud.firestore {
             && (!('cancelledSentAt' in segment) || isInstant(segment.cancelledSentAt))
             && (!('restoredFrom' in segment) || (segment.restoredFrom is list && segment.restoredFrom.size() <= 50))
             && (!('restoredAt' in segment) || isInstant(segment.restoredAt))
+            && (!('editedAt' in segment) || isInstant(segment.editedAt))
             && segment.createdAt is string && segment.updatedAt is string;
+        }
+        // A change to a booking's details is a hand edit, which records when
+        // (`editedAt`): "Refresh from email" leaves an edited booking alone,
+        // and can tell one only rated, marked or moved from one edited.
+        function recordsEdit() {
+          return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['type', 'title', 'provider', 'confirmation',
+              'start', 'end', 'origin', 'destination', 'notes'])
+            || request.resource.data.diff(resource.data).affectedKeys().hasAny(['editedAt']);
         }
         function canEdit() {
           return approved() && (isOwner(trip()) || isSharee(trip()));
         }
         allow read: if canEdit();
-        allow create, update: if member() && canEdit()
+        allow create: if member() && canEdit()
           && trip().get('deleting', false) == false
           && validSegment(request.resource.data);
+        allow update: if member() && canEdit()
+          && trip().get('deleting', false) == false
+          && validSegment(request.resource.data)
+          && recordsEdit();
         allow delete: if canEdit();
       }
     }
