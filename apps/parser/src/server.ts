@@ -25,6 +25,9 @@ import {
   type ImportedProfile,
   type LinkRefusal,
   type ParsedMessage,
+  bugReportLimits,
+  bugReportPath,
+  checkBugReport,
 } from "@travelmo/core";
 import { randomBytes } from "node:crypto";
 import { Hono, type Context } from "hono";
@@ -67,6 +70,7 @@ import { geminiEmbedder, geminiExtractor } from "./extract";
 import { cachedGeocoder, defaultDailyLimit, firestoreGeocodeStore, googleGeocoder } from "./geocode";
 import { firestoreBackfillScan, firestoreRetryStore, queueGeocodeBackfill, sweepGeocodeRetries } from "./geocodeSweep";
 import { smtpConfig, smtpMailer } from "./mail";
+import { isPng, sendBugReport } from "./bugReports";
 import { fcmSender } from "./fcm";
 import { pushConfig, webPushSender } from "./push";
 import { firestoreReminderIo, sendReminders } from "./reminders";
@@ -283,6 +287,7 @@ app.use("/trips/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "C
 app.use("/flights/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/access/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 app.use("/emails/*", cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
+app.use(bugReportPath, cors({ origin: webOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
 
 app.get("/healthz", (c) => c.text("ok"));
 
@@ -1603,6 +1608,55 @@ app.post("/access/check", async (c) => {
   );
   return c.json({ status });
 });
+
+// Bug reports from the apps (bugReports.ts; SPEC "Bug reports"), emailed
+// to BUG_REPORT_TO; without it or SMTP the route answers 503. The body is
+// a screenshot's base64 and a log at most, with room for JSON's escapes.
+const bugReportTo = process.env.BUG_REPORT_TO?.trim() || undefined;
+const bugReportMaxBytes = Math.ceil((bugReportLimits.screenshotBytes * 4) / 3) + 2 * (bugReportLimits.log + bugReportLimits.tripJson) + 64 * 1024;
+
+app.post(
+  bugReportPath,
+  bodyLimit({
+    maxSize: bugReportMaxBytes,
+    onError: () => {
+      throw new HTTPException(413, { message: "The report is too large" });
+    },
+  }),
+  async (c) => {
+    const token = await requireApprovedToken(c);
+    const mail = reminderChannels.mail;
+    if (!mail || !bugReportTo) throw new HTTPException(503, { message: "Bug reports are not set up on this server" });
+    const body = await c.req.json().catch((error: unknown) => {
+      // The error's name only: a parse error's message quotes the body.
+      log("INFO", "bug_report_unreadable", { uid: token.uid, error: (error as Error).name });
+      return undefined;
+    });
+    const checked = checkBugReport(body);
+    if (!checked.ok) {
+      log("INFO", "bug_report_refused", { uid: token.uid, status: checked.status, reason: checked.reason });
+      throw new HTTPException(checked.status, { message: checked.reason });
+    }
+    const screenshot = checked.report.screenshot ? new Uint8Array(Buffer.from(checked.report.screenshot, "base64")) : undefined;
+    if (screenshot && !isPng(screenshot)) throw new HTTPException(400, { message: "The screenshot is not a PNG" });
+    let sent;
+    try {
+      sent = await sendBugReport(
+        { db, mail, to: bugReportTo, now: deps.now, newId: () => randomBytes(12).toString("base64url"), log },
+        token.uid,
+        verifiedEmailOf(token),
+        checked.report,
+        screenshot,
+      );
+    } catch (error) {
+      if (error instanceof AccountDeletedError) throw new HTTPException(410, { message: "This account was deleted" });
+      throw error;
+    }
+    if (sent.status === "limit") throw new HTTPException(429, { message: "Too many reports today" });
+    if (sent.status === "mail_failed") throw new HTTPException(502, { message: "The report could not be emailed" });
+    return c.json({ id: sent.id });
+  },
+);
 
 // Cloud Scheduler calls this daily (deploy/scheduler.sh): the places a spent
 // geocoding budget put off get their second chance, and the next page of

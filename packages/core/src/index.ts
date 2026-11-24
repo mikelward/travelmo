@@ -11,6 +11,7 @@ export * from "./ics";
 export * from "./sources";
 export * from "./travelProfile";
 export * from "./reports";
+export * from "./bugReports";
 export * from "./residence";
 export * from "./documents";
 export * from "./calendarExport";

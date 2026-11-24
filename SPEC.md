@@ -170,6 +170,11 @@ viewer's zone. Trip bounds are calendar dates.
   address is, by the hash of its token, as `calendarExports` does for export
   links; `users/{uid}/private/forwardBudget` → `{day, count}`, the day's
   forwarded emails. Server only.
+- `bugReports/{id}` → `{id, uid, at, app, page?, version?, userAgent?,
+  text, logChars, hasScreenshot, tripBookings?}`: a copy of each bug report
+  a user sent ("Bug reports"), what they wrote and the sizes of the rest,
+  never the log, screenshot or bookings; `users/{uid}/private/bugReportBudget`
+  → `{day, count}`, the day's reports. Server only, not even the reporter's.
 - `linkedEmails/{email}` → `{uid, linkedAt}`, the one account a confirmed
   address is linked to, made in the same transaction as `confirmed`;
   `users/{uid}/private/emails` → `{confirmed[], mailboxes[], pending[{email,
@@ -2413,6 +2418,50 @@ Android's Connect Gmail opens Google's consent page in the
 phone's browser, and the flow finishes there on the web as above, so the
 browser must be signed in to Travelmo as the same user.
 
+## Bug reports
+
+Report a bug sends a report to the maintainer from inside the apps, by
+email, never anywhere public. On the web it is a link at the foot of every
+page for an account that may use the app; on Android, the ⋮ menu's item,
+signed in with a parser (signed out, or without one, it shares through the
+share sheet as before, "Android app"). The dialog asks "What went wrong?"
+(required on the web, which has no debug log; optional on Android) and
+says, before Send, what the maintainer will see, in one sentence: on a
+trip's page (the web's trip page; Android's trip screen and the booking
+form under it) "We'll see this trip's bookings, including addresses,
+confirmation numbers and names, plus" the page's address and the browser
+(web) or the app's log and a screenshot of this screen (Android), "We use
+them only to fix the problem."; elsewhere the same without the bookings.
+The choice is Send or Cancel (Android adds Share instead, the share sheet
+as before). Sending shows "Sending…", then "Sent. We'll reply by email."
+or "Couldn't send the report." with the reason (`bugReportFailure`).
+
+`POST /reports` takes `{text, log?, screenshot? (base64 PNG), page?, app
+("web" | "android"), version?, userAgent? (web), trip? {id, title,
+bookings[]}}` for an approved account (`requireUser`), checked by
+`packages/core`'s `checkBugReport` (zod): 400 for the wrong shape, an empty
+report or a screenshot that isn't a PNG; 413 past 5,000 characters typed,
+200,000 of log, a 2 MB screenshot, 100 bookings or 200,000 characters of
+trip JSON (and a request past about 3.7 MB). The bookings are the trip
+page's as stored, each place in full (name, address, city, country, code,
+spot), never another trip's. The web sends the build time as its version
+and the browser's user agent; Android its version name and code, the
+debug report's text and a screenshot of the window, halved until it fits
+or left out. Each account may send five a day (UTC; 429 beyond), counted
+in `users/{uid}/private/bugReportBudget` in the same transaction that
+copies the report to `bugReports/{id}` (reads first; refused for a deleted
+account). Then `apps/parser/src/bugReports.ts` emails it to `BUG_REPORT_TO`
+through the reminders' SMTP: subject "Travelmo bug report from <the
+reporter's verified sign-in address>" (else the account's uid), Reply-To
+that address, a body of what they wrote, the page, the app and version, the
+browser, the account and the report's id, then every booking as readable
+lines (each place as "Destination: name, address · city, country · code ·
+lat,lon"), then the log; the screenshot (`screenshot.png`) and the bookings
+(`trip.json`) as attachments. A mail that fails answers 502 and keeps the
+copy, logged by its id. 503 without SMTP or `BUG_REPORT_TO`. Logs carry
+ids and sizes only, never what was written, the log or the bookings. The
+copies go when the account is deleted ("Deleting an account").
+
 ## Deleting an account
 
 Settings on the web and in the Android app ends with "Delete account" (on
@@ -2431,7 +2480,8 @@ caller's uid, in this order:
    (whose new token is revoked instead), a forwarding address, a
    calendar link, a TripIt profile, a calendar feed, an upload lease, a
    sign-in's OAuth state, and background bookkeeping (calendar event
-   aliases, reminder logs and markers, geocode retries, the forwarding budget); a
+   aliases, reminder logs and markers, geocode retries, the forwarding budget,
+   a bug report and its daily count); a
    disconnect touches the user document only while it exists. Writes that only change a document that must already exist
    need no check: deletion removed it. Every user endpoint but `/account/delete` answers 410
    for the account from then on. The rules refuse every client create
@@ -2448,7 +2498,7 @@ caller's uid, in this order:
 2. Lookups that name the user outside their own documents: `gmailAccounts`,
    `forwardAddresses` (the forwarding address bounces from then on),
    `calendarExports` (the export link stops working), `pendingConnections`,
-   `oauthStates`, `geocodeRetries` and `checklistReminders`, each by its
+   `oauthStates`, `geocodeRetries`, `checklistReminders` and `bugReports`, each by its
    `uid` field; and their uid comes off the `sent` list of
    `checkInReminders`.
 3. Every trip they own: marked `deleting` first, as a trip deletion is, so
@@ -2532,6 +2582,7 @@ didn't finish" in place of every page, with "Finish deleting", which calls
 | `POST /emails/add` | Firebase ID token, approved or waiting | Mails a confirmation link for `email` ("Linked email addresses"); returns `{email}`; a refusal answers `{refusal}` (400 invalid, yours or full; 403 notInvited, for an account not approved yet; 409 taken; 429 the day's links spent); 503 without SMTP |
 | `POST /emails/confirm` | Firebase ID token, approved or waiting | Links the address a link (`token`) was sent to, for the account that asked; returns `{email}`; 410 `{refusal: "expired"}` for a link unknown, used, expired or another account's; 403 notInvited, for an account not approved yet whose address no longer lets it in; 409 taken |
 | `POST /emails/remove` | Firebase ID token | Unlinks `email` or withdraws its pending link |
+| `POST /reports` | Firebase ID token | Emails a bug report to `BUG_REPORT_TO` and keeps a copy without its log, screenshot or bookings ("Bug reports"); returns `{id}`; 400 malformed or empty, 413 too large, 429 past five a day, 502 the email failed (the copy stays), 503 without SMTP or `BUG_REPORT_TO` |
 | `POST /access/check` | Firebase ID token, approved or not | Settles the caller's access ("Access"): lets in an account from before approvals or one already shared with, otherwise tells the admins of a waiting request once; returns `{status}` (approved, requested, declined, none) |
 | `GET /healthz` | none | Liveness |
 
@@ -2566,8 +2617,8 @@ about half a cent a call past it, and `GEOCODE_DAILY_LIMIT` bounds the worst
 day. Address
 autocomplete in the form is billed to the user's browser key per lookup
 session, free up to the Places API's monthly allowance; a hand-entered
-booking is a rare thing beside imports. Reminders by email ride the
-operator's SMTP service, by push the browsers' own push services and
+booking is a rare thing beside imports. Reminders by email and bug
+reports (at most five a user a day) ride the operator's SMTP service, by push the browsers' own push services and
 Firebase Cloud Messaging for phones (free), which
 are free; the daily job is the fourth Cloud Scheduler job, about ten cents
 a month. Live flight status is about 200 AeroAPI queries a flight at
@@ -2639,8 +2690,12 @@ list, or of the sign-in screen when signed out, offers that report (without
 a screenshot: the crash was in an earlier run) or Dismiss, and comes down
 when the report's clipboard copy lands or on Dismiss, the crashed run
 staying on the phone; every screen's top bar, and the sign-in screen's corner, ends
-with the same ⋮ menu, as in the sibling apps: Report a bug shares that
-report with a screenshot of the screen it was opened from, after a dialog
+with the same ⋮ menu, as in the sibling apps: Report a bug, signed in
+with a parser, sends that report with a screenshot of the screen it was
+opened from (and on a trip's screens the trip's bookings) to the
+maintainer ("Bug reports"), with Share instead for the share sheet;
+signed out, or without a parser, it shares that report with the
+screenshot, after a dialog
 that says what goes (the log, never bookings or addresses, and a
 screenshot that can show trips and names) and where (the clipboard and an
 app the user picks), with Continue, Cancel and "Don't show again" (kept

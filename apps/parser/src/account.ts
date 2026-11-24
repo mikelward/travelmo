@@ -126,11 +126,12 @@ export async function deleteAccount(uid: string, email: string | undefined, deps
     // Records outside the user's own documents that name them: a mailbox's
     // owner, the addresses they linked (free to link again), the forwarding
     // address and calendar link lookups (so both stop working at once),
-    // consents in flight, places awaiting a geocode, and whether their own
-    // reminders before a trip went to them. Links still waiting
+    // consents in flight, places awaiting a geocode, whether their own
+    // reminders before a trip went to them, and the bug reports they sent.
+    // Links still waiting
     // for confirmation live under the user document, deleted below.
     step = "lookups";
-    for (const collection of ["gmailAccounts", "linkedEmails", "forwardAddresses", "calendarExports", "pendingConnections", "oauthStates", "geocodeRetries", paths.checklistReminders()]) {
+    for (const collection of ["gmailAccounts", "linkedEmails", "forwardAddresses", "calendarExports", "pendingConnections", "oauthStates", "geocodeRetries", paths.checklistReminders(), paths.bugReports()]) {
       await deleteMatching(db, db.collection(collection).where("uid", "==", uid));
     }
     // Check-in reminders that reached them keep the booking, not the uid.
