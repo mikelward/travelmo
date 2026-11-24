@@ -313,6 +313,11 @@ describe("users", () => {
     await assertFails(setDoc(doc(as(partner), paths.user(owner.uid)), { rideCompanies }, { merge: true }));
   });
 
+  it("nobody reads or writes the sender counts but the server", async () => {
+    await assertFails(getDoc(doc(as(owner), paths.senderStats("cove.example"))));
+    await assertFails(setDoc(doc(as(owner), paths.senderStats("cove.example")), { read: 1 }));
+  });
+
   it("a user keeps the trips they said go one way, at most two hundred, and nobody else writes them", async () => {
     await assertSucceeds(setDoc(doc(as(owner), paths.user(owner.uid)), { oneWayTrips: ["t1"] }, { merge: true }));
     await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { oneWayTrips: "t1" }, { merge: true }));

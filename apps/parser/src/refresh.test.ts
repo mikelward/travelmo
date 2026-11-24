@@ -488,6 +488,16 @@ describe("refreshRecord", () => {
     });
     expect(await refreshRecord(uid, r, broken, { generation: 0, snapshot: [], fetch: async () => email("m1") })).toEqual({ kind: "failed" });
   });
+
+  it("adds each reading again to its sender domain's counts, apart from first readings", async () => {
+    const w = world();
+    w.memory.parsed.set(`${uid}/m1`, r);
+    await refreshRecord(uid, r, w.deps(async () => found(stay)), { generation: 0, snapshot: [], fetch: async () => email("m1") });
+    await refreshRecord(uid, r, w.deps(async () => {
+      throw new Error("Gemini returned no text");
+    }), { generation: 0, snapshot: [], fetch: async () => email("m1") });
+    expect(w.memory.senderStats.get("cove.example")).toEqual({ refreshRead: 2, refreshFailed: 1 });
+  });
 });
 
 describe("refreshRecord, an email an older reader found no booking in", () => {

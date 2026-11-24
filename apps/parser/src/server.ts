@@ -916,7 +916,7 @@ app.post("/gmail/reimport", async (c) => {
     await source.close?.();
   }
   const debug: ImportDebug = {};
-  const outcome = await importMessage(uid, message, deps, { force: true, reclaim: true, source: source.provider, debug });
+  const outcome = await importMessage(uid, message, deps, { force: true, reclaim: true, importAnyway: true, source: source.provider, debug });
   log("INFO", "reimport", { uid, messageId: message.id, outcome });
   if (outcome === "skipped") {
     throw new HTTPException(409, { message: "That email is already imported or being imported right now" });

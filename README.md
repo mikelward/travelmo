@@ -583,6 +583,23 @@ image to Artifact Registry, so keep the cleanup policy from step 3. The
 Firestore, Worker and Cloud Scheduler deploys are free: the jobs cost
 nothing beyond themselves (about ten cents a month each past three).
 
+### Sender counts
+
+How the email reader does with each sender, across everyone, is kept as
+counts per sender domain in `senderStats` (no user, no email; SPEC "Sender
+counts"). To see the domains most worth a look (where people used Import
+anyway to make a booking of an email the reader turned down, then those it
+most often turns down), sign in with an account that can read the project's
+Firestore and run:
+
+```sh
+gcloud auth application-default login
+GOOGLE_CLOUD_PROJECT=travelmo-13a7c pnpm --filter @travelmo/parser sender-stats 50
+```
+
+It also notes that it started, how it ended and any error in
+`~/.local/state/travelmo/sender-stats.log`.
+
 ## Costs
 
 Everything scales to zero. At a hundred users the bill is dominated by

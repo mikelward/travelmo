@@ -415,6 +415,20 @@ describe("importMessage", () => {
     expect(failed).toEqual({ attachments: 0, error: "Gemini returned no text" });
   });
 
+  it("adds what came of each email to its sender domain's counts, and nothing of the person or the email", async () => {
+    const store = memoryStore();
+    await importMessage("u1", email(), deps(store, async () => ({ isBooking: false, segments: [] })));
+    await importMessage("u1", email({ id: "m2" }), deps(store, async () => lodging), { force: true, importAnyway: true });
+    // Skipping the pre-filter alone (a forward, a refresh reading again) is no Import anyway.
+    await importMessage("u1", email({ id: "m3" }), deps(store, async () => lodging), { force: true });
+    expect(Object.fromEntries(store.senderStats)).toEqual({ "cove.example": { read: 3, notBooking: 1, imported: 2, importAnyway: 1, importAnywayImported: 1 } });
+    // One already read is skipped without counting again; a calendar event has no sender.
+    await importMessage("u1", email(), deps(store, async () => lodging));
+    await importMessage("u1", email({ id: "ics-1", from: "" }), deps(store, async () => lodging), { source: "ics" });
+    expect(store.senderStats.get("cove.example")?.read).toBe(3);
+    expect(store.senderStats.size).toBe(1);
+  });
+
   it("records not_booking when the model says so, with the reader that said it", async () => {
     const store = memoryStore();
     const outcome = await importMessage("u1", email(), deps(store, async () => ({ isBooking: false, segments: [] })));

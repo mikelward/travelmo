@@ -289,6 +289,10 @@ export function firestoreStore(db: Firestore): TripStore {
       const snap = await db.doc(paths.examples(uid)).get();
       return snap.exists ? Examples.parse(snap.data()) : emptyExamples();
     },
+    async countSender(domain, counts) {
+      const increments = Object.fromEntries(Object.entries(counts).map(([field, n]) => [field, FieldValue.increment(n)]));
+      await db.doc(paths.senderStats(domain)).set({ ...increments, updatedAt: new Date().toISOString() }, { merge: true });
+    },
     async saveExample(uid, label, example) {
       // Read-modify-write in a transaction: two imports finishing together
       // both keep their example.

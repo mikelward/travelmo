@@ -1026,6 +1026,26 @@ from, and a trip is taken to start at home. The list's cards say the same,
 on the web and Android, for the trips whose bookings the list reads (those
 under way and the next few); a cancelled or deleting trip says nothing.
 
+### Sender counts
+
+To tune the email reader across everyone without keeping anyone's mail, the
+parser adds what came of each email it reads to its sender's domain, in
+`senderStats/{domain}` (the original sender's, for a forward; nothing for a
+calendar event): `read` (it reached the model) or `skipped` (the
+pre-filter left it out), then `imported`, `notBooking`, `failed` or
+`cancellation`, and for a person's Import anyway (not a forward or Refresh
+from email reading again, which skip the pre-filter too) `importAnyway` and,
+when it made a booking, `importAnywayImported`; Refresh from email's
+reading again of a booked email adds to `refreshRead`, and to
+`refreshFailed` when the model fails on it, apart from first readings so as
+not to skew them; `importAnywayImported` is an email the reader turned down that a
+person said was one. The documents hold counts and when they last changed,
+never a user, an email, its subject or its text; the rules let no client
+read or write them, and a count that fails is logged and the import stands.
+`pnpm --filter @travelmo/parser sender-stats` lists the domains most worth a
+look (README "Sender counts"). A domain few people use can still say
+someone booked with it, which is why the counts carry nothing else.
+
 ### Car and ride suggestions
 
 Under a flight with nothing booked on the ground, the trip page suggests

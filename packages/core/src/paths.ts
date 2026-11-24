@@ -3,6 +3,9 @@ export const paths = {
   // Who may use the app (access.ts): one record per lowercased email, and
   // the admins' list, written by hand in the console.
   accessRecords: () => "access",
+  // How the email reader does with each sender's domain (parser's
+  // senderStats.ts): counts alone, no user, no email. Server-only.
+  senderStats: (domain: string) => `senderStats/${domain}`,
   access: (email: string) => `access/${email}`,
   accessConfig: () => "config/access",
   // When the requests for access left from before invite-only were removed.

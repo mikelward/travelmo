@@ -68,6 +68,7 @@ import {
 import { airportPlace } from "@travelmo/core/airportPlaces";
 import { cityCountry } from "@travelmo/core/cityCountries";
 import { readerVersion, type Extractor } from "./extract";
+import { senderCounts } from "./senderStats";
 import type { RetryStore } from "./geocodeSweep";
 import { isNotFound, type Attachment, type EmailMessage } from "./gmail";
 import type { MailProvider } from "./mailSource";
@@ -235,6 +236,8 @@ export type TripStore = {
   // Embeddings of emails the model has judged for this user (see similarity.ts).
   examples(uid: string): Promise<Examples>;
   saveExample(uid: string, label: ExampleLabel, example: Example): Promise<void>;
+  // Adds to a sender domain's counts (senderStats.ts): no user, no email.
+  countSender(domain: string, counts: Readonly<Record<string, number>>): Promise<void>;
   newId(): string;
 };
 
@@ -271,6 +274,10 @@ export type ImportDebug = { attachments?: number; extraction?: ExtractedBooking;
 export type ImportOptions = {
   // Filled in as the import goes, for a report of it (ImportDebug).
   debug?: ImportDebug;
+  // A person's Import anyway (POST /gmail/reimport), counted apart from the
+  // other reads that skip the pre-filter (a forward, Refresh from email's
+  // reading again): senderStats.ts.
+  importAnyway?: boolean;
   // The reset generation, when the caller read it before state of its own
   // that the import depends on (a calendar's records, a batch's place);
   // otherwise importMessage reads it first thing.
@@ -305,6 +312,32 @@ export async function importMessage(
   message: EmailMessage,
   deps: ImportDeps,
   options: ImportOptions = {},
+): Promise<ImportOutcome> {
+  const outcome = await importOnce(uid, message, deps, options);
+  await countOutcome(message, outcome, deps, options);
+  return outcome;
+}
+
+// Adds what came of an email to its sender domain's counts (senderStats.ts),
+// for tuning the reader across everyone: the domain and counts alone. A
+// count that fails is logged and the import stands.
+async function countOutcome(message: EmailMessage, outcome: ImportOutcome, deps: ImportDeps, options: ImportOptions): Promise<void> {
+  const source = options.source ?? "gmail";
+  if (source === "ics" || outcome === "skipped") return;
+  const domain = senderDomain((source === "forward" ? unwrapForwarded(message) : message).from);
+  if (!domain) return;
+  try {
+    await deps.store.countSender(domain, senderCounts(outcome, !!options.importAnyway));
+  } catch (error) {
+    deps.log("sender_count_failed", { domain, outcome, reason: (error as Error).message }, "WARNING");
+  }
+}
+
+async function importOnce(
+  uid: string,
+  message: EmailMessage,
+  deps: ImportDeps,
+  options: ImportOptions,
 ): Promise<ImportOutcome> {
   const { store, now, log } = deps;
   const replacing = options.replacing;
