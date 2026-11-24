@@ -224,3 +224,26 @@ test("a slow lookup never overwrites what was typed after it", async ({ page }) 
   gates.shift()!();
   await expect(page.getByRole("option", { name: /Sample Place/ })).toBeVisible();
 });
+
+test("the booking form's time fields show the whole time at desktop and phone widths", async ({ page }) => {
+  const uid = await signIn(page, owner);
+  await seedTrip(uid, "e2e-trip");
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/trips/e2e-trip");
+    await page.getByRole("button", { name: "Add a booking" }).click();
+    const time = page.locator('input[type="time"]').first();
+    await time.fill("09:00");
+    // Room for the widest time in the field's own font ("00:00 AM" where the
+    // locale writes a 12-hour clock, as this browser's does), and the space
+    // Chrome puts between its parts and around the clock icon.
+    const { room, needed } = await time.evaluate((el) => {
+      const style = getComputedStyle(el);
+      const context = document.createElement("canvas").getContext("2d")!;
+      context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      const text = context.measureText("00:00 AM").width;
+      return { room: el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight), needed: text + 40 };
+    });
+    expect(room, `at ${width}px`).toBeGreaterThanOrEqual(needed);
+  }
+});
