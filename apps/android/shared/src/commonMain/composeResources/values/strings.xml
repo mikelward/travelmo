@@ -449,7 +449,7 @@
     <string name="notifications_blocked">Notifications for Travelmo are off in the system settings; allow them there to turn this on.</string>
     <!-- The traveler's own reminders before a trip (SPEC "Before you go"). -->
     <string name="before_international_trips">Before international trips</string>
-    <string name="before_international_trips_hint">Things to do before every trip abroad.</string>
+    <string name="before_international_trips_hint">Things to do before every trip abroad. Prescriptions, phone plans, shopping, etc.</string>
     <string name="before_you_go">Before you go</string>
     <string name="add_reminder">Add a reminder</string>
     <string name="edit_reminder">Edit reminder</string>
