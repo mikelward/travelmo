@@ -1,5 +1,6 @@
 package app.travelmo.ui
 
+import app.travelmo.ui.theme.AppBarTitle
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.clickable
@@ -125,7 +126,7 @@ internal fun LicensesContent(libraries: Libs?, onBack: () -> Unit = {}, onOpenLi
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(Res.string.licenses)) },
+                title = { AppBarTitle(stringResource(Res.string.licenses)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(Res.string.back))

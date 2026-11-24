@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.travelmo.shared.logo
@@ -28,6 +29,18 @@ fun Brand(modifier: Modifier = Modifier, logoSize: Dp = 28.dp, style: TextStyle 
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(logoSize / 3), verticalAlignment = Alignment.CenterVertically) {
         Image(painterResource(Res.drawable.logo), contentDescription = null, modifier = Modifier.size(logoSize))
         Text(stringResource(Res.string.app_name), style = style, fontFamily = Wordmark)
+    }
+}
+
+/**
+ * A top bar's title with the logo before it, as every page has; Trips shows
+ * the wordmark ([Brand]) instead of a title. The logo is decorative.
+ */
+@Composable
+fun AppBarTitle(text: String, logoSize: Dp = 28.dp) {
+    Row(horizontalArrangement = Arrangement.spacedBy(logoSize / 3), verticalAlignment = Alignment.CenterVertically) {
+        Image(painterResource(Res.drawable.logo), contentDescription = null, modifier = Modifier.size(logoSize))
+        Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

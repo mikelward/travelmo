@@ -1,5 +1,6 @@
 package app.travelmo.ui
 
+import app.travelmo.ui.theme.AppBarTitle
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -246,7 +247,7 @@ fun AccessScreen(viewModel: TripsViewModel, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(Res.string.access)) },
+                title = { AppBarTitle(stringResource(Res.string.access)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(Res.string.back))

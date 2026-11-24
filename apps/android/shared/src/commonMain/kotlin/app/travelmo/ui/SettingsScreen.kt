@@ -1,5 +1,6 @@
 package app.travelmo.ui
 
+import app.travelmo.ui.theme.AppBarTitle
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -280,7 +281,7 @@ fun SettingsScreen(account: SignedInAccount, user: SignedIn, viewModel: TripsVie
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(Res.string.settings)) },
+                title = { AppBarTitle(stringResource(Res.string.settings)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(Res.string.back))

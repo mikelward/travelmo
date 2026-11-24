@@ -1,5 +1,6 @@
 package app.travelmo.ui
 
+import app.travelmo.ui.theme.AppBarTitle
 import app.travelmo.shared.ic_segment_train
 import app.travelmo.shared.ic_segment_other
 import app.travelmo.shared.ic_segment_lodging
@@ -258,7 +259,7 @@ fun TripDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(trip?.title ?: "", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { AppBarTitle(trip?.title ?: "") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(Res.string.back))
