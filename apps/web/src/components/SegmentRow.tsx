@@ -104,6 +104,7 @@ export function SegmentRow({
   onRate,
   onFavorite,
   flightLines,
+  checkIn,
   onRestore,
 }: {
   segment: Segment;
@@ -121,6 +122,9 @@ export function SegmentRow({
   onFavorite?: (favorite: boolean) => void;
   // A flight's live delays, gates and carousel (flightStatusLines).
   flightLines?: readonly string[];
+  // A flight's "I've checked in" (flightCheckInState): offered, or marked
+  // with an undo. The viewer's own, whoever's trip it is.
+  checkIn?: { state: "offer" | "done"; onChange: (checkedIn: boolean) => void };
   // Takes back a cancellation; offered only on a cancelled booking.
   onRestore?: () => void;
 }) {
@@ -150,6 +154,21 @@ export function SegmentRow({
         {flightLines && flightLines.length > 0 && (
           <p className="text-sm font-medium text-amber-800 dark:text-amber-300" data-testid="segment-flight-status">
             {flightLines.join(" · ")}
+          </p>
+        )}
+        {checkIn?.state === "offer" && (
+          <p className="mt-1 text-sm">
+            <button type="button" onClick={() => checkIn.onChange(true)} className="font-medium underline hover:no-underline">
+              I&rsquo;ve checked in
+            </button>
+          </p>
+        )}
+        {checkIn?.state === "done" && (
+          <p className="mt-1 flex gap-3 text-sm" data-testid="segment-checked-in">
+            <span>Checked in</span>
+            <button type="button" onClick={() => checkIn.onChange(false)} className="text-muted underline hover:no-underline">
+              Undo
+            </button>
           </p>
         )}
         {addresses && <p className="mt-1 text-xs text-muted">{addresses}</p>}

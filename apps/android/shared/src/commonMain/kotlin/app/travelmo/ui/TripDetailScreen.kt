@@ -89,6 +89,8 @@ import app.travelmo.core.ProfileEntry
 import app.travelmo.core.RideCompany
 import app.travelmo.core.RideNeed
 import app.travelmo.core.Segment
+import app.travelmo.core.FlightCheckIn
+import app.travelmo.core.flightCheckInState
 import app.travelmo.core.SegmentType
 import app.travelmo.core.SourceKind
 import app.travelmo.core.SourceRef
@@ -119,6 +121,9 @@ import app.travelmo.shared.badge_shared
 import app.travelmo.shared.booking_actions
 import app.travelmo.shared.cancel
 import app.travelmo.shared.cancelled
+import app.travelmo.shared.checked_in
+import app.travelmo.shared.checked_in_action
+import app.travelmo.shared.undo
 import app.travelmo.shared.choose_trip
 import app.travelmo.shared.close
 import app.travelmo.shared.copy_reference
@@ -188,6 +193,8 @@ fun TripDetailScreen(
     val segments by segmentsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     val flightStatusesFlow = remember(tripId) { viewModel.flightStatuses(tripId) }
     val flightStatuses by flightStatusesFlow.collectAsStateWithLifecycle(initialValue = emptyMap())
+    val checkedInFlow = remember(tripId) { viewModel.checkedIn(tripId) }
+    val checkedIn by checkedInFlow.collectAsStateWithLifecycle(initialValue = null)
     // While the trip is in front, its flights near departure are looked at
     // as often as the parser allows, so the gate on screen is fresh.
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -310,6 +317,11 @@ fun TripDetailScreen(
                 warnings = tripWarnings(people, current, segments, viewModel.today()), today = viewModel.today(),
                 programsFor = { provider -> programsFor(provider, ownProfile?.let(::allLoyalty).orEmpty()) },
                 flightLines = { segment -> viewModel.flightLines(segment, flightStatuses) },
+                checkIn = { segment ->
+                    checkedIn?.let { flightCheckInState(segment, it, viewModel.now()) }?.let { state ->
+                        SegmentCheckIn(state) { on -> viewModel.setCheckedIn("${prefix}checked-in/${segment.id}", tripId, segment.id, on) }
+                    }
+                },
                 emailLink = { source -> emailLinkFor(source, uid, ownsTrip = isOwner, mailboxes = gmailMailboxes) },
                 rides = RideSuggestions(
                     needs = viewModel.rideNeedsFor(segments, rideSettings).groupBy { it.segmentId },
@@ -399,6 +411,8 @@ private fun TripBody(
     programsFor: (String?) -> List<ProfileEntry>,
     /** A flight's live gates and carousel. */
     flightLines: (Segment) -> List<String>,
+    /** A flight's "I've checked in", the viewer's own: offered, or marked with an undo. */
+    checkIn: (Segment) -> SegmentCheckIn? = { null },
     bookingActions: BookingActions?,
     emailLink: (SourceRef) -> String?,
     rides: RideSuggestions,
@@ -480,7 +494,7 @@ private fun TripBody(
                 Text(formatDate(date), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 20.dp, bottom = 4.dp))
             }
             items(items, key = { it.id }) { segment ->
-                SegmentRow(segment, bookingActions, programs = programsFor(segment.provider), emailLink = emailLink, flightLines = flightLines(segment), senderOffers = senderOffers(segment))
+                SegmentRow(segment, bookingActions, programs = programsFor(segment.provider), emailLink = emailLink, flightLines = flightLines(segment), checkIn = checkIn(segment), senderOffers = senderOffers(segment))
                 for (need in rides.needs[segment.id].orEmpty()) {
                     RideSuggestion(need.kind, segment, rides.companies, onHide = { rides.onHide(need) })
                 }
@@ -630,6 +644,9 @@ private fun MoveDialog(segment: Segment, targets: List<Trip>, onDismiss: () -> U
  * the viewer may edit. [emailLink] is the Gmail link of a source the viewer
  * imported, else null.
  */
+/** A flight's "I've checked in" as its row shows it, and the change a tap asks for. */
+class SegmentCheckIn(val state: FlightCheckIn, val onChange: (checkedIn: Boolean) -> Unit)
+
 @Composable
 fun SegmentRow(
     segment: Segment,
@@ -637,6 +654,7 @@ fun SegmentRow(
     programs: List<ProfileEntry> = emptyList(),
     emailLink: (SourceRef) -> String? = { null },
     flightLines: List<String> = emptyList(),
+    checkIn: SegmentCheckIn? = null,
     senderOffers: SenderOffers? = null,
 ) {
     val chrome = LocalAppChrome.current
@@ -671,6 +689,16 @@ fun SegmentRow(
             timesLine(segment)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = muted) }
             if (flightLines.isNotEmpty()) {
                 Text(flightLines.joinToString(" · "), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.tertiary)
+            }
+            when (checkIn?.state) {
+                FlightCheckIn.OFFER -> TextButton(onClick = { checkIn.onChange(true) }, modifier = Modifier.offset(x = -TextButtonInset)) {
+                    Text(stringResource(Res.string.checked_in_action))
+                }
+                FlightCheckIn.DONE -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(Res.string.checked_in), style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = { checkIn.onChange(false) }) { Text(stringResource(Res.string.undo)) }
+                }
+                null -> Unit
             }
             referenceLine(segment)?.let { line ->
                 // A long press on the line copies the reference too, as ⋮ does.

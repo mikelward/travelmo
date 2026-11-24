@@ -1,11 +1,11 @@
 "use client";
 
-import { allLoyalty, bookedDateRange, displayBounds, effectiveHomes, homeTimeline, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, gmailMailboxes, localDate, normalizeEmail, paths, programsFor, sharedWithAny, type Segment, type SenderCleanup, type Trip } from "@travelmo/core";
+import { allLoyalty, bookedDateRange, flightCheckInState, displayBounds, effectiveHomes, homeTimeline, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, gmailMailboxes, localDate, normalizeEmail, paths, programsFor, sharedWithAny, type Segment, type SenderCleanup, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { arrayRemove, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Fragment, Suspense, use, useMemo, useState, type FormEvent } from "react";
+import { Fragment, Suspense, use, useCallback, useMemo, useState, type FormEvent } from "react";
 import { SegmentForm } from "@/components/SegmentForm";
 import { RideSuggestion } from "@/components/RideSuggestion";
 import { SegmentRow } from "@/components/SegmentRow";
@@ -28,6 +28,7 @@ import { useTripChecklist } from "@/lib/checklist";
 import { useReportTrip } from "@/components/ReportBug";
 import { useAddresses, useNow, useProfile, useSegments, useSenderPatterns, useTrip, useTrips } from "@/lib/trips";
 import { flightLinesFor, useFlightRefresh, useFlightStatuses } from "@/lib/flightStatus";
+import { setCheckedIn, useCheckedIn, useCheckedInFromNotification } from "@/lib/checkedIn";
 
 const buttonClass =
   "rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
@@ -315,6 +316,17 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   const checklist = useTripChecklist(user.uid, tripId, trip, segments, profile ? (profile.homes ?? []) : undefined, today);
   const [editing, setEditing] = useState<Editing>();
   const [error, setError] = useState<string>();
+  // The viewer's own "I've checked in" marks on this trip's flights.
+  const checkedIn = useCheckedIn(user.uid, [tripId])[tripId];
+  const markCheckedIn = useCallback(
+    (segmentId: string, on: boolean) =>
+      setCheckedIn(user.uid, tripId, segmentId, on).catch((e: unknown) => {
+        console.error("Saving a check-in mark failed", e);
+        setError("Couldn't save your check-in. Try again.");
+      }),
+    [user.uid, tripId],
+  );
+  useCheckedInFromNotification(segments, markCheckedIn);
   // After "Never import this sender": what it already imported, offered for deletion.
   const [cleanup, setCleanup] = useState<{ domain: string; plan: SenderCleanup }>();
   const router = useRouter();
@@ -455,6 +467,10 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
                       emailLinks={{ uid: user.uid, mailboxes: gmailMailboxes(profile), ownsTrip: isOwner }}
                       programs={programsFor(segment.provider, loyalty)}
                       flightLines={flightLinesFor(segment, flightStatuses, now)}
+                      {...(() => {
+                        const state = checkedIn && flightCheckInState(segment, checkedIn, now);
+                        return state ? { checkIn: { state, onChange: (on: boolean) => void markCheckedIn(segment.id, on) } } : {};
+                      })()}
                       {...(canEdit
                         ? {
                             onRate: (rating: number | null) => rateSegment(firestore(), trip.id, segment.id, rating).catch((e: Error) => setError(e.message)),

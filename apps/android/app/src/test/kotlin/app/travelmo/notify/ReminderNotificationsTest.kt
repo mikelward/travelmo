@@ -50,4 +50,22 @@ class ReminderNotificationsTest {
         context.resources.getIdentifier("flight_chime", "raw", context.packageName) shouldBe R.raw.flight_chime
         manager.getNotificationChannel(ReminderNotifications.CHANNEL_ID).importance shouldBe NotificationManager.IMPORTANCE_DEFAULT
     }
+
+    @Test
+    fun `a check-in reminder offers I've checked in and other reminders do not`() {
+        shadowOf(context as Application).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        ReminderNotifications.show(context, "Check in for XX 100 to Dubai", "Online check-in is open.", "https://airline.example/", "checkin-t1-f1", ReminderNotifications.CheckedInTarget("t1", "f1"))
+        ReminderNotifications.show(context, "Before your trip to Paris", "Your passport runs out too soon.", "https://travelmo.example/trips/paris", "reminder-paris")
+
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val byTitle = shadowOf(manager).allNotifications.associateBy { it.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() }
+        byTitle.getValue("Before your trip to Paris").actions shouldBe null
+        val action = byTitle.getValue("Check in for XX 100 to Dubai").actions.single()
+        action.title.toString() shouldBe "I’ve checked in"
+        val sent = shadowOf(action.actionIntent).savedIntent
+        sent.component?.className shouldBe CheckedInReceiver::class.java.name
+        sent.getStringExtra(CheckedInReceiver.EXTRA_TRIP_ID) shouldBe "t1"
+        sent.getStringExtra(CheckedInReceiver.EXTRA_SEGMENT_ID) shouldBe "f1"
+        sent.getStringExtra(CheckedInReceiver.EXTRA_TAG) shouldBe "checkin-t1-f1"
+    }
 }

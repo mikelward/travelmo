@@ -380,6 +380,17 @@ class FakeTripStore(
         val mine = checklists.value[tripId] ?: MyChecklist()
         checklists.value += tripId to mine.copy(done = withDone(mine.done, id, done))
     }
+    /** The bookings the user marked "I've checked in", by trip. */
+    val checkedIn = MutableStateFlow<Map<String, Set<String>>>(emptyMap())
+    override fun checkedIn(uid: String, tripId: String): Flow<Set<String>?> = checkedIn.map { it[tripId].orEmpty() }
+    /** When set, marking a flight checked in fails, as offline. */
+    var failCheckedIn = false
+
+    override suspend fun setCheckedIn(uid: String, tripId: String, segmentId: String, checkedIn: Boolean) {
+        check(!failCheckedIn) { "offline" }
+        val before = this.checkedIn.value[tripId].orEmpty().toList()
+        this.checkedIn.value += tripId to app.travelmo.core.withCheckedIn(before, segmentId, checkedIn).toSet()
+    }
     /** Every registration write, in order: the id and its token, or null for a removal. */
     val devices = mutableListOf<Pair<String, String?>>()
     private val registered = mutableSetOf<String>()

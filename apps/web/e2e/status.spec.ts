@@ -15,7 +15,7 @@ test("a trip under way says where you are staying, how soon the flight is, and t
   await seedFlight("e2e-status", { confirmation: "XX1234" });
   await page.clock.setSystemTime(new Date("2026-12-12T20:00:00Z"));
   await page.goto("/");
-  const card = page.getByRole("link", { name: /Liverpool/ });
+  const card = page.getByTestId("trip-card").filter({ hasText: "Liverpool" });
   await expect(card.getByTestId("trip-stay")).toHaveText("Staying at Cove Liverpool · until Mon 14 Dec 11:00");
   await expect(card.getByTestId("trip-next-title")).toHaveText("XX 100 MAN to DXB");
   await expect(card.getByTestId("trip-next-when")).toHaveText("Departs in 8 h · Sun 13 Dec 09:00");
@@ -30,7 +30,7 @@ test("the card gives the flight's gate before takeoff, then its arrival and caro
   await seedFlightStatus("XX100_2026-12-13_MAN", { departureTerminal: "1", departureGate: "8", arrivalTerminal: "3", baggageClaim: "5" });
   await page.clock.setSystemTime(new Date("2026-12-12T20:00:00Z"));
   await page.goto("/");
-  const card = page.getByRole("link", { name: /Liverpool/ });
+  const card = page.getByTestId("trip-card").filter({ hasText: "Liverpool" });
   await expect(card.getByTestId("trip-next-when")).toHaveText("Departs in 8 h · Sun 13 Dec 09:00");
   await expect(card.getByTestId("trip-next-step")).toHaveText("Terminal 1 · Gate 8");
   // Two hours after takeoff the card turns to the arrival.
@@ -49,7 +49,7 @@ test("before the window, the card says when online check-in opens; an upcoming t
   // The trip's first morning, before the stay's check-in and before the flight's window opens.
   await page.clock.setSystemTime(new Date("2026-12-12T02:00:00Z"));
   await page.goto("/");
-  const card = page.getByRole("link", { name: /Liverpool/ });
+  const card = page.getByTestId("trip-card").filter({ hasText: "Liverpool" });
   await expect(card.getByTestId("trip-next-title")).toHaveText("Cove Liverpool");
   await expect(card.getByTestId("trip-next-when")).toHaveText("Check-in in 13 h · Sat 12 Dec 15:00");
   await expect(card.getByTestId("trip-checkin")).toHaveText("Online check-in usually opens Sat 12 Dec 09:00");
@@ -69,7 +69,7 @@ test("the card uses the airline's own check-in window", async ({ page }) => {
   await seedFlight("e2e-status", { title: "EK 18 MAN to DXB" });
   await page.clock.setSystemTime(new Date("2026-12-12T02:00:00Z"));
   await page.goto("/");
-  const card = page.getByRole("link", { name: /Liverpool/ });
+  const card = page.getByTestId("trip-card").filter({ hasText: "Liverpool" });
   await expect(card.getByTestId("trip-checkin")).toHaveText("Online check-in open, usually until departure");
 });
 
@@ -80,7 +80,7 @@ test("an upcoming trip's card says when every booking was cancelled", async ({ p
   await seedFlight("e2e-status", cancelled);
   await page.clock.setSystemTime(new Date("2026-12-11T12:00:00Z"));
   await page.goto("/");
-  const card = page.getByRole("link", { name: /Liverpool/ });
+  const card = page.getByTestId("trip-card").filter({ hasText: "Liverpool" });
   await expect(card.getByTestId("trip-cancelled")).toHaveText("Every booking cancelled");
   await expect(card.getByTestId("trip-next")).toHaveCount(0);
 });

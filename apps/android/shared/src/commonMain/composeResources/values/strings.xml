@@ -242,6 +242,9 @@
     <string name="keep">Keep</string>
     <string name="cancelled">Cancelled</string>
     <string name="trip_all_cancelled">Every booking cancelled</string>
+    <string name="checked_in_action">I’ve checked in</string>
+    <string name="checked_in">Checked in</string>
+    <string name="undo">Undo</string>
     <string name="restore">Restore</string>
     <string name="move_to">Move to another trip…</string>
     <string name="move_booking_title">Move %1$s to</string>

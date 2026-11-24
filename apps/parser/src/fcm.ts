@@ -31,6 +31,8 @@ const utf8Length = (text: string): number => new TextEncoder().encode(text).leng
 // What the app draws: the title and body, the trip's URL as the tap target,
 // and a tag per trip so a later reminder for the same trip replaces the
 // earlier one on the phone's shade (not in Messaging's queue).
+// A check-in reminder also names its booking, for the "I've checked in"
+// action.
 export function reminderMessage(device: Device, notification: ReminderNotification, ttl = ttlMs): TokenMessage {
   const lines = notification.body.split("\n");
   const build = (kept: number): TokenMessage => ({
@@ -40,6 +42,8 @@ export function reminderMessage(device: Device, notification: ReminderNotificati
       body: kept === lines.length ? notification.body : [...lines.slice(0, kept), moreLine].join("\n"),
       url: notification.url,
       tag: notification.tag,
+      // A check-in reminder's booking, for the app's "I've checked in" action.
+      ...(notification.checkedIn ? { checkedInTripId: notification.checkedIn.tripId, checkedInSegmentId: notification.checkedIn.segmentId } : {}),
     },
     android: { ttl },
   });

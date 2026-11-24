@@ -44,6 +44,8 @@ function setup(
     settings?: Record<string, ReminderSettings>;
     approved?: (uid: string) => Promise<boolean>;
     mailFails?: boolean;
+    // The bookings each person marked "I've checked in", by uid and trip.
+    checkedIn?: Record<string, Record<string, string[]>>;
   } = {},
 ) {
   const segments = options.segments ?? [booking("t1"), booking("t2", { confirmation: "EK5678" })];
@@ -66,6 +68,7 @@ function setup(
     uidForEmail: async (email) => (email === "partner@example.com" ? "partner" : undefined),
     settings: async (uid) => settings.get(uid),
     verifiedEmail: async (uid) => `${uid}@example.com`,
+    checkedIn: async (uid, tripId) => options.checkedIn?.[uid]?.[tripId] ?? [],
     pushSubscriptions: async (uid) => subscriptions.get(uid) ?? [],
     removePushSubscription: async () => {},
     devices: async (uid) => devices.get(uid) ?? [],
@@ -139,6 +142,41 @@ describe("sendCheckInReminders", () => {
     expect(await sendCheckInReminders(io, optionsAt("2026-12-11T09:01:00Z"))).toMatchObject({ due: 0, reminded: 0 });
     expect(await sendCheckInReminders(io, optionsAt("2026-12-12T20:00:00Z"))).toMatchObject({ due: 0, reminded: 0 });
     expect(sent).toEqual([]);
+  });
+
+  it("skips whoever marked the flight checked in, and only them", async () => {
+    // The partner checked in, by the owner's booking shared with them.
+    const { io, optionsAt, sent, logs, markers } = setup({ checkedIn: { partner: { t1: ["t1-f"] } } });
+    const run = await sendCheckInReminders(io, optionsAt(opens));
+    expect(run).toMatchObject({ due: 2, reminded: 2, failed: 0 });
+    expect(sent.map(({ channel, to }) => `${channel} ${to}`).sort()).toEqual(["mail friend@example.com", "mail owner@example.com", "push https://push.example/1"]);
+    expect(logs).toContain("check_in_skipped_checked_in");
+    // Done for the booking: a later run tells nobody, the partner included.
+    expect(markers.get(checkInMarkerId("owner", booking("t1").id))).toMatchObject({ sent: ["owner"], done: true });
+  });
+
+  it("still skips them when another booking of the flight arrives later", async () => {
+    // The partner checked in on the owner's booking, whose reminder went;
+    // then a friend shares their own booking of the flight with them.
+    const segments = [booking("t1")];
+    const { io, optionsAt, sent } = setup({
+      segments,
+      trips: [trip("t1", "owner", ["partner@example.com"]), trip("t2", "friend", ["partner@example.com"])],
+      checkedIn: { partner: { t1: ["t1-f"] } },
+    });
+    await sendCheckInReminders(io, optionsAt(opens));
+    segments.push(booking("t2", { confirmation: "EK5678" }));
+    sent.length = 0;
+    expect(await sendCheckInReminders(io, optionsAt("2026-12-11T10:00:00Z"))).toMatchObject({ reminded: 1 });
+    expect(sent.map(({ channel, to }) => `${channel} ${to}`)).toEqual(["mail friend@example.com"]);
+  });
+
+  it("reminds anyway when the mark can't be read", async () => {
+    const { io, optionsAt, sent, logs } = setup();
+    const unreadable: CheckInIo = { ...io, checkedIn: async () => Promise.reject(new Error("unavailable")) };
+    expect(await sendCheckInReminders(unreadable, optionsAt(opens))).toMatchObject({ reminded: 3 });
+    expect(sent).toHaveLength(4);
+    expect(logs).toContain("check_in_mark_unreadable");
   });
 
   it("reminds someone on two bookings of the same flight once, of their own", async () => {

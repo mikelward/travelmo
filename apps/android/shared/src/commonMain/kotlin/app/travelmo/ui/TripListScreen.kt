@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,8 +23,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +56,7 @@ import app.travelmo.core.warningText
 import app.travelmo.shared.Res
 import app.travelmo.shared.badge_deleting
 import app.travelmo.shared.badge_shared
+import app.travelmo.shared.checked_in_action
 import app.travelmo.shared.section_now
 import app.travelmo.shared.section_past
 import app.travelmo.shared.section_upcoming
@@ -63,6 +67,7 @@ import app.travelmo.shared.trips_empty
 import app.travelmo.shared.trips_empty_hint
 import app.travelmo.shared.trips_loading
 import app.travelmo.ui.theme.Brand
+import app.travelmo.ui.theme.TextButtonInset
 import app.travelmo.ui.theme.TravelmoTheme
 import org.jetbrains.compose.resources.stringResource
 
@@ -72,6 +77,14 @@ import org.jetbrains.compose.resources.stringResource
 fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) -> Unit, onOpenSettings: () -> Unit, bottomBar: @Composable () -> Unit = {}) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val crashed = crashPending()
+    // The cards' "I've checked in" writes: a finished one is acknowledged, a
+    // failed one says so above the trips until the next tap replaces it.
+    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val checkIns = outcomes.filterKeys { it.startsWith(CHECKED_IN_TOKEN) }
+    val checkInFailed = checkIns.values.firstNotNullOfOrNull { (it as? Outcome.Failed)?.message }
+    LaunchedEffect(checkIns) {
+        for ((token, outcome) in checkIns) if (outcome is Outcome.Done) viewModel.outcomeSeen(token)
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -111,6 +124,11 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
                 val titles = displayTitles(groups.current + groups.upcoming + groups.past)
                 // In the list, so it scrolls away with it rather than taking room from the trips.
                 if (crashed) item(key = "crash") { LastCrashBanner() }
+                if (checkInFailed != null) {
+                    item(key = "checked-in-failed") {
+                        Text(checkInFailed, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
                 // Document warnings once, at the top, each for the earliest trip
                 // it bears on and opening it, rather than repeated on every card.
                 if (state.warnings.isNotEmpty()) {
@@ -120,20 +138,33 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
                 }
                 // What comes next is said only for a trip under way; an upcoming
                 // trip's card is its title and dates.
-                section(Res.string.section_now, groups.current, titles, state, uid, showNext = true, onOpenTrip)
-                section(Res.string.section_upcoming, groups.upcoming, titles, state, uid, showNext = false, onOpenTrip)
-                section(Res.string.section_past, groups.past, titles, state, uid, showNext = false, onOpenTrip)
+                val onCheckedIn = { tripId: String, segmentId: String -> viewModel.setCheckedIn("$CHECKED_IN_TOKEN$tripId/$segmentId", tripId, segmentId, true) }
+                section(Res.string.section_now, groups.current, titles, state, uid, showNext = true, onOpenTrip, onCheckedIn)
+                section(Res.string.section_upcoming, groups.upcoming, titles, state, uid, showNext = false, onOpenTrip, onCheckedIn)
+                section(Res.string.section_past, groups.past, titles, state, uid, showNext = false, onOpenTrip, onCheckedIn)
             }
         }
     }
 }
+
+/** The prefix of the cards' "I've checked in" write tokens. */
+private const val CHECKED_IN_TOKEN = "list/checked-in/"
 
 @Composable
 private fun Message(text: String, modifier: Modifier = Modifier) {
     Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier.padding(16.dp))
 }
 
-private fun androidx.compose.foundation.lazy.LazyListScope.section(title: StringResource, trips: List<Trip>, titles: Map<String, String>, state: TripListState, uid: String, showNext: Boolean, onOpenTrip: (String) -> Unit) {
+private fun androidx.compose.foundation.lazy.LazyListScope.section(
+    title: StringResource,
+    trips: List<Trip>,
+    titles: Map<String, String>,
+    state: TripListState,
+    uid: String,
+    showNext: Boolean,
+    onOpenTrip: (String) -> Unit,
+    onCheckedIn: (tripId: String, segmentId: String) -> Unit,
+) {
     if (trips.isEmpty()) return
     item(key = "section-$title") {
         Text(
@@ -143,7 +174,12 @@ private fun androidx.compose.foundation.lazy.LazyListScope.section(title: String
         )
     }
     items(trips, key = { it.id }) { trip ->
-        TripCard(trip = trip, title = titles[trip.id] ?: trip.title, shared = trip.ownerUid != uid, segments = state.segmentsByTrip[trip.id], now = state.now, showNext = showNext, flightStatuses = state.flightStatuses, onClick = { onOpenTrip(trip.id) })
+        TripCard(
+            trip = trip, title = titles[trip.id] ?: trip.title, shared = trip.ownerUid != uid, segments = state.segmentsByTrip[trip.id], now = state.now, showNext = showNext,
+            flightStatuses = state.flightStatuses, checkedIn = state.checkedIn[trip.id].orEmpty(),
+            onCheckedIn = { segmentId -> onCheckedIn(trip.id, segmentId) },
+            onClick = { onOpenTrip(trip.id) },
+        )
     }
 }
 
@@ -161,6 +197,8 @@ fun TripCard(
     now: String,
     showNext: Boolean = true,
     flightStatuses: Map<String, FlightStatus> = emptyMap(),
+    checkedIn: Set<String> = emptySet(),
+    onCheckedIn: ((segmentId: String) -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     val badge = when {
@@ -187,16 +225,23 @@ fun TripCard(
             badge?.let { (text, color) -> Text(text.uppercase(), style = MaterialTheme.typography.labelMedium, color = color) }
         }
         Text(formatDateRange(trip.shownStart, trip.shownEnd), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
-        if (segments != null) StatusLines(segments, now, showNext, flightStatuses)
+        if (segments != null) StatusLines(segments, now, showNext, flightStatuses, checkedIn, onCheckedIn)
     }
 }
 
 /**
  * Whether every booking was cancelled, then with [showNext] the stay under way, what comes next ([tripNextUp], with the
- * live status of its flight from [flightStatuses]), and the flight's check-in window.
+ * live status of its flight from [flightStatuses]), and the flight's check-in window until the user marks it [checkedIn].
  */
 @Composable
-private fun StatusLines(segments: List<Segment>, now: String, showNext: Boolean, flightStatuses: Map<String, FlightStatus>) {
+private fun StatusLines(
+    segments: List<Segment>,
+    now: String,
+    showNext: Boolean,
+    flightStatuses: Map<String, FlightStatus>,
+    checkedIn: Set<String>,
+    onCheckedIn: ((segmentId: String) -> Unit)?,
+) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     if (allCancelled(segments)) {
         Text(stringResource(Res.string.trip_all_cancelled), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
@@ -220,13 +265,19 @@ private fun StatusLines(segments: List<Segment>, now: String, showNext: Boolean,
         Text(next.`when`, style = MaterialTheme.typography.bodyLarge, color = muted)
         next.step?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
     }
-    status.checkIn?.let { checkIn ->
+    // Until the user says they checked in, which only an open window offers.
+    status.checkIn?.takeIf { it.segment.id !in checkedIn }?.let { checkIn ->
         Text(
             checkInLine(checkIn),
             style = MaterialTheme.typography.bodyLarge,
             color = if (checkIn.open) MaterialTheme.colorScheme.tertiary else muted,
             modifier = Modifier.padding(top = 4.dp),
         )
+        if (checkIn.open && onCheckedIn != null) {
+            TextButton(onClick = { onCheckedIn(checkIn.segment.id) }, modifier = Modifier.offset(x = -TextButtonInset)) {
+                Text(stringResource(Res.string.checked_in_action))
+            }
+        }
     }
 }
 

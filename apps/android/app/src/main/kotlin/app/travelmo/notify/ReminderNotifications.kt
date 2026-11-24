@@ -73,12 +73,16 @@ object ReminderNotifications {
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED &&
             NotificationManagerCompat.from(context).areNotificationsEnabled()
 
+    /** The booking a check-in reminder is about, for its "I've checked in" action. */
+    data class CheckedInTarget(val tripId: String, val segmentId: String)
+
     /**
      * Shows one reminder; [tag] (one per trip) makes a later reminder for the
-     * same trip replace the earlier. Nothing is shown without the permission,
-     * which only the switch in Settings asks for.
+     * same trip replace the earlier. A check-in reminder ([checkedIn]) offers
+     * "I've checked in" ([CheckedInReceiver]). Nothing is shown without the
+     * permission, which only the switch in Settings asks for.
      */
-    fun show(context: Context, title: String, body: String, url: String?, tag: String) {
+    fun show(context: Context, title: String, body: String, url: String?, tag: String, checkedIn: CheckedInTarget? = null) {
         if (!allowed(context)) {
             TravelmoLog.info("Reminder not shown: notifications are not allowed")
             return
@@ -92,6 +96,7 @@ object ReminderNotifications {
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setContentIntent(tap)
             .setAutoCancel(true)
+            .apply { checkedIn?.let { addAction(0, context.getString(R.string.checked_in_action), checkedInIntent(context, it, tag)) } }
             .build()
         try {
             NotificationManagerCompat.from(context).notify(tag, 0, notification)
@@ -99,6 +104,15 @@ object ReminderNotifications {
             // The permission was revoked between the check and the post.
             TravelmoLog.error(e, "Reminder not shown: %s", safe(e.javaClass.simpleName))
         }
+    }
+
+    /** The broadcast "I've checked in" sends, naming the booking and the notification to take away. */
+    internal fun checkedInIntent(context: Context, target: CheckedInTarget, tag: String): PendingIntent {
+        val intent = Intent(context, CheckedInReceiver::class.java)
+            .putExtra(CheckedInReceiver.EXTRA_TRIP_ID, target.tripId)
+            .putExtra(CheckedInReceiver.EXTRA_SEGMENT_ID, target.segmentId)
+            .putExtra(CheckedInReceiver.EXTRA_TAG, tag)
+        return PendingIntent.getBroadcast(context, tag.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 
     /**

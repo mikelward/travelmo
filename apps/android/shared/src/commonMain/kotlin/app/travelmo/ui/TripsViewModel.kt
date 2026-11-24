@@ -141,6 +141,8 @@ data class TripListState(
     val warnings: List<ListWarning> = emptyList(),
     /** The live status of the next flight of each trip under way, by flight key ([nextUpFlightKeys]). */
     val flightStatuses: Map<String, FlightStatus> = emptyMap(),
+    /** The bookings the user marked "I've checked in" on each trip under way, by trip; a trip still loading has none. */
+    val checkedIn: Map<String, Set<String>> = emptyMap(),
 )
 
 /** How a write asked for by a screen is going, as that screen sees it. */
@@ -398,11 +400,26 @@ class TripsViewModel(
         groups?.current.orEmpty().flatMap { trip -> details[trip.id]?.let { nextUpFlightKeys(it, now) }.orEmpty() }.distinct().sorted()
     }.distinctUntilChanged().flatMapLatest(::statusesOf)
 
-    val state: StateFlow<TripListState> = combine(groups, details, now, people, listFlightStatuses) { groups, details, now, people, statuses ->
+    /** The user's own "I've checked in" marks on each trip under way: a listener per trip. */
+    private val listCheckedIn: Flow<Map<String, Set<String>>> = groups.map { groups -> groups?.current.orEmpty().map { it.id }.sorted() }
+        .distinctUntilChanged()
+        .flatMapLatest { ids ->
+            if (ids.isEmpty()) {
+                flowOf(emptyMap())
+            } else {
+                combine(ids.map { id -> store.checkedIn(uid, id).map { id to it } }) { pairs ->
+                    pairs.mapNotNull { (id, marks) -> marks?.let { id to it } }.toMap()
+                }
+            }
+        }
+
+    val state: StateFlow<TripListState> = combine(
+        groups, details, now, people, combine(listFlightStatuses, listCheckedIn, ::Pair),
+    ) { groups, details, now, people, (statuses, checkedIn) ->
         val today = today()
         val trips = groups?.let { it.current + it.upcoming + it.past }.orEmpty()
         val byTrip = trips.filter { it.id in details }.associate { trip -> trip.id to tripWarnings(people, trip, details[trip.id], today) }
-        TripListState(groups, details, now, listWarnings(byTrip, trips), statuses)
+        TripListState(groups, details, now, listWarnings(byTrip, trips), statuses, checkedIn)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TripListState(null, emptyMap(), clock().toString()))
 
 
@@ -641,6 +658,13 @@ class TripsViewModel(
     fun removeReminder(token: String, tripId: String?, slot: String) = run(token, "removeReminder") { store.removeReminder(uid, tripId, slot) }
 
     fun setReminderDone(token: String, tripId: String, id: String, done: Boolean) = run(token, "setReminderDone") { store.setReminderDone(uid, tripId, id, done) }
+
+    /** The bookings on a trip the user marked "I've checked in"; null while they load. Theirs alone, shared trip or not. */
+    fun checkedIn(tripId: String): Flow<Set<String>?> = store.checkedIn(uid, tripId)
+
+    /** Marks a flight checked in for the user, or not: their check-in line and reminders stop. */
+    fun setCheckedIn(token: String, tripId: String, segmentId: String, checkedIn: Boolean) =
+        run(token, "setCheckedIn", failure = "Couldn't save your check-in. Try again.") { store.setCheckedIn(uid, tripId, segmentId, checkedIn) }
 
     /** One connected mailbox as Settings shows it: the address, and how far the last reading of it got. */
     data class MailboxShown(val emailAddress: String, val progress: BackfillShown?, val reading: Boolean)

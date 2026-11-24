@@ -1,6 +1,8 @@
 package app.travelmo.data
 
 import app.travelmo.core.RefreshShown
+import app.travelmo.core.checkedInOf
+import app.travelmo.core.withCheckedIn
 import app.travelmo.core.AccessConfig
 import app.travelmo.core.AccessRecord
 import app.travelmo.core.AccountAccess
@@ -438,6 +440,30 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             tx.setData(ref, mapOf("done" to withDone(before, id, done), "updatedAt" to Clock.System.now().toString()))
         }.await()
     }
+
+    override fun checkedIn(uid: String, tripId: String): Flow<Set<String>?> = callbackFlow {
+        val registration = checkedInRef(uid, tripId).addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                // As none marked: the check-in line and button stay.
+                SharedLog.error(error, "Reading the check-in marks failed")
+                trySend(emptySet())
+                return@addSnapshotListener
+            }
+            trySend(checkedInOf(snapshot?.data?.get("segmentIds") as? List<*>).toSet())
+        }
+        awaitClose { registration.remove() }
+    }
+
+    override suspend fun setCheckedIn(uid: String, tripId: String, segmentId: String, checkedIn: Boolean) {
+        val ref = checkedInRef(uid, tripId)
+        db.runTransaction { tx ->
+            val before = checkedInOf(tx.get(ref).data?.get("segmentIds") as? List<*>)
+            tx.setData(ref, mapOf("segmentIds" to withCheckedIn(before, segmentId, checkedIn), "updatedAt" to Clock.System.now().toString()))
+        }.await()
+    }
+
+    private fun checkedInRef(uid: String, tripId: String): DocumentReference =
+        db.collection("users").document(uid).collection("checkedIn").document(tripId)
 
     private fun checklistRef(uid: String, tripId: String): DocumentReference =
         db.collection("users").document(uid).collection("tripChecklists").document(tripId)
