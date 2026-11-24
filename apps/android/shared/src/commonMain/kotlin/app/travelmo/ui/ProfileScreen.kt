@@ -1,5 +1,6 @@
 package app.travelmo.ui
 
+import app.travelmo.ui.theme.AppBarTitle
 import app.travelmo.core.today
 import org.jetbrains.compose.resources.StringResource
 import androidx.compose.foundation.border
@@ -155,7 +156,7 @@ fun ProfileScreen(viewModel: TripsViewModel, onOpenSettings: () -> Unit, bottomB
             onDismiss = { editing = null },
         )
     }
-    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(Res.string.profile)) }, actions = {
+    Scaffold(topBar = { TopAppBar(title = { AppBarTitle(stringResource(Res.string.profile)) }, actions = {
         SettingsButton(onClick = onOpenSettings)
         AppMenu()
     }) }, bottomBar = bottomBar) { padding ->

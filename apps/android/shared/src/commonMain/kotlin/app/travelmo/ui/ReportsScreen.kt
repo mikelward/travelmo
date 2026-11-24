@@ -1,5 +1,6 @@
 package app.travelmo.ui
 
+import app.travelmo.ui.theme.AppBarTitle
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -132,7 +133,7 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
     val report = remember(input, today, year) { if (year == null) whole else input?.let { travelReport(it, today, year) } }
     val titles = remember(input) { displayTitles(input.orEmpty().map { it.trip }) }
     val favorites = remember(input) { input?.let { trips -> favoritePlaces(trips.map { TripWithBookings(it.trip, it.segments) }) }.orEmpty() }
-    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(Res.string.reports_title)) }, actions = {
+    Scaffold(topBar = { TopAppBar(title = { AppBarTitle(stringResource(Res.string.reports_title)) }, actions = {
         SettingsButton(onClick = onOpenSettings)
         AppMenu()
     }) }, bottomBar = bottomBar) { padding ->

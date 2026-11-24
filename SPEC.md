@@ -2894,7 +2894,8 @@ while the import settings stay on the web; a navigation bar, its selected
 tab's icon white on the logo's orange, switches between Trips, the Calendar
 (the month view of `/calendar`, with the same weeks, bars and lanes from
 `:core`, its month switched by arrows and Today in a row above the grid),
-Reports and Profile, each with the Settings gear in its top bar. Reports counts what `/reports`
+Reports and Profile, each with the Settings gear in its top bar. Every
+page's top bar starts with the logo, before its title (Trips: the wordmark). Reports counts what `/reports`
 does, from `:core`'s port of the same logic with the same tests: the trips
 begun, days away and days in each country, on the web's world map
 (`worldMap.json` read as a resource, spots placed by the same Equal Earth

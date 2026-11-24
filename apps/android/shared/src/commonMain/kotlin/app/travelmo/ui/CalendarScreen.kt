@@ -1,5 +1,6 @@
 package app.travelmo.ui
 
+import app.travelmo.ui.theme.AppBarTitle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -78,7 +79,7 @@ fun CalendarScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(Res.string.nav_calendar)) },
+                title = { AppBarTitle(stringResource(Res.string.nav_calendar)) },
                 actions = {
                     SettingsButton(onClick = onOpenSettings)
                     AppMenu()

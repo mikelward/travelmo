@@ -1,5 +1,6 @@
 package app.travelmo.ui
 
+import app.travelmo.ui.theme.AppBarTitle
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -161,7 +162,7 @@ fun BookingForm(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(if (existing == null) Res.string.add_booking else Res.string.edit_booking)) },
+                title = { AppBarTitle(stringResource(if (existing == null) Res.string.add_booking else Res.string.edit_booking)) },
                 navigationIcon = {
                     IconButton(onClick = onDone) { Icon(Icons.Filled.Close, contentDescription = stringResource(Res.string.cancel)) }
                 },
