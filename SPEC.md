@@ -674,14 +674,21 @@ until the account goes; nothing reads them.
 
 ## Live flight status
 
-A flight's card on the trip page says, near departure, where it leaves
-from and arrives at and where the bags come out ("Departs from terminal 1,
-gate 8 · Arrives at gate D46 · Bags on carousel 16"), and whoever has the
-trip gets a notification when one of them is given or changes ("Now
-departs from terminal 1, gate 9 (was terminal 1, gate 8)"). The card
-also says how late the flight leaves and lands, once five minutes or more
-off the schedule, by the airports' clocks ("Leaves 40 min late, at 09:40 ·
-Lands 20 min early, at 15:10"; the times are FlightAware's UTC estimates
+A flight's card on the trip page says, near departure, what matters at
+its stage. Before takeoff: where it leaves from, how late it leaves and
+the arrival terminal ("Departs from terminal 1, gate 8 · Arrives at
+terminal 3"), but no arrival gate or carousel. After takeoff (the service
+says it left, or its estimated, else scheduled, departure has passed;
+`flightDeparted`): when it lands, where it arrives and where the bags come
+out ("Lands 20 min early, at 15:10 · Arrives at terminal 3, gate D46 ·
+Bags on carousel 16"), and no longer where it left from. Whoever has the
+trip gets a notification when one of those is given or changes ("Now
+departs from terminal 1, gate 9 (was terminal 1, gate 8)"), judged at the
+stage of each look: an arrival gate or carousel known before takeoff is
+news at the first look after it, never before. The card says how late the
+flight leaves once five minutes or more off the schedule, and after
+takeoff when it lands, on time or not, by the airports' clocks ("Leaves 40
+min late, at 09:40"; "Lands on time, at 15:30"; the times are FlightAware's UTC estimates
 written in the offset of the booking's start or end), whether it was
 diverted ("Diverted to KUL", or just "Diverted" when the service gives
 the booked airport or none), and of a flight the airline cancelled only

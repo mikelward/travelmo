@@ -730,11 +730,12 @@ class TripsViewModelTest {
     }
 
     @Test
-    fun `a flight's row says its gate and carousel near departure`() = runTest {
+    fun `a flight row says its gate before takeoff and its carousel after`() = runTest {
         val viewModel = flightModel("2026-12-12T21:00:00Z", mapOf("XX100_2026-12-13_SYD" to gate), mutableListOf())
         val statuses = viewModel.flightStatuses("sydney").first()
         statuses shouldBe mapOf("XX100_2026-12-13_SYD" to gate)
-        viewModel.flightLines(flight, statuses) shouldBe listOf("Departs from gate 8", "Bags on carousel 16")
+        viewModel.flightLines(flight, statuses) shouldBe listOf("Departs from gate 8")
+        flightModel("2026-12-12T23:00:00Z", statuses, mutableListOf()).flightLines(flight, statuses) shouldBe listOf("Bags on carousel 16")
         flightModel("2026-12-10T21:00:00Z", emptyMap(), mutableListOf()).flightLines(flight, statuses) shouldBe emptyList()
     }
 

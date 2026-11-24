@@ -242,18 +242,43 @@ export function flightNextStep(status: FlightStatus | undefined, booked: Booked,
   ]);
 }
 
-// What the flight's card says: whether it is cancelled or diverted, how late
-// it leaves and lands, where it leaves from and arrives at, and where the
-// bags come out. Times read as the airports' clocks do when the booking is
-// given; a cancelled flight says only that. A departure back on time after
-// news of a delay still says so (it has a noticedOut), on the card and in a
+// Whether the flight had taken off as of `at` (flightDeparted), going by
+// the status alone when the booking is not given.
+function departedAt(status: FlightStatus, booked: Pick<ExtractedSegment, "start"> | undefined, at: string): boolean {
+  if (booked) return flightDeparted(booked, status, at);
+  if (status.cancelled) return false;
+  if (status.actualOut) return true;
+  const out = status.estimatedOut ?? status.scheduledOut;
+  return out !== undefined && Date.parse(at) >= Date.parse(out);
+}
+
+// What of a status is said at its stage: before takeoff, where it leaves
+// from and the arrival terminal, but no arrival gate or carousel; after,
+// where it arrives and the carousel, but not where it left from.
+function staged(status: FlightStatus, departed: boolean): FlightStatus {
+  if (departed) {
+    const { departureGate: _gate, departureTerminal: _terminal, ...rest } = status;
+    return rest;
+  }
+  const { arrivalGate: _gate, baggageClaim: _bags, ...rest } = status;
+  return rest;
+}
+
+// What the flight's card says, by its stage as of `now` (the look's own
+// time when not given): whether it is cancelled or diverted; before
+// takeoff, how late it leaves, where it leaves from and the arrival
+// terminal; after, when it lands, where it arrives and where the bags come
+// out. Times read as the airports' clocks do when the booking is given; a
+// cancelled flight says only that. A departure back on time after news of
+// a delay still says so (it has a noticedOut), on the card and in a
 // retried notification.
-export function flightStatusLines(status: FlightStatus | undefined, booked?: Booked): string[] {
+export function flightStatusLines(status: FlightStatus | undefined, booked?: Booked, now?: string): string[] {
   if (!status?.found) return [];
   if (status.cancelled) return ["Flight cancelled"];
-  const { departure, arrival, bags } = places(status);
-  const leaves = leavesLate(status);
-  const lands = !status.actualIn && offSchedule(status.scheduledIn, status.estimatedIn);
+  const departed = departedAt(status, booked, now ?? status.checkedAt);
+  const { departure, arrival, bags } = places(staged(status, departed));
+  const leaves = !departed && leavesLate(status);
+  const lands = departed && !status.actualIn && status.scheduledIn !== undefined && status.estimatedIn !== undefined;
   return [
     ...(status.diverted ? [divertedLine(status, booked)] : []),
     ...(leaves ? [`Leaves ${timing(status.scheduledOut!, status.estimatedOut!, booked?.start)}`] : []),
@@ -313,9 +338,13 @@ export function keepKnownPlaces(before: FlightStatus | undefined, after: FlightS
 export function flightStatusNews(before: FlightStatus | undefined, after: FlightStatus, booked?: Booked): string[] {
   if (!after.found) return [];
   if (after.cancelled) return before?.cancelled ? [] : ["Flight cancelled"];
-  const known = before?.found ? before : undefined;
+  // Each look as it was said at its own stage, so a carousel known before
+  // takeoff is news at the first look after, and a departure gate is no
+  // news once the flight has left.
+  const known = before?.found ? staged(before, departedAt(before, booked, before.checkedAt)) : undefined;
+  const shown = staged(after, departedAt(after, booked, after.checkedAt));
   const was = places(known);
-  const now = places(after);
+  const now = places(shown);
   const given = (old: string | undefined, next: string | undefined) => next !== undefined && next !== old;
   const news = (oldGate: string | undefined, oldTerminal: string | undefined, gate: string | undefined, terminal: string | undefined) => {
     const changed = given(oldGate, gate) || given(oldTerminal, terminal);
@@ -329,11 +358,11 @@ export function flightStatusNews(before: FlightStatus | undefined, after: Flight
   if (departureMoved(before, after)) {
     lines.push(`${before?.noticedOut ? "Now leaves" : "Leaves"} ${timing(after.scheduledOut!, after.estimatedOut!, booked?.start)}`);
   }
-  const departure = news(known?.departureGate, known?.departureTerminal, after.departureGate, after.departureTerminal);
-  if (now.departure && departure.changed && !after.actualOut) {
+  const departure = news(known?.departureGate, known?.departureTerminal, shown.departureGate, shown.departureTerminal);
+  if (now.departure && departure.changed) {
     lines.push(departure.replaced && was.departure ? `Now departs from ${now.departure} (was ${was.departure})` : `Departs from ${now.departure}`);
   }
-  const arrival = news(known?.arrivalGate, known?.arrivalTerminal, after.arrivalGate, after.arrivalTerminal);
+  const arrival = news(known?.arrivalGate, known?.arrivalTerminal, shown.arrivalGate, shown.arrivalTerminal);
   if (now.arrival && arrival.changed) {
     lines.push(arrival.replaced && was.arrival ? `Now arrives at ${now.arrival} (was ${was.arrival})` : `Arrives at ${now.arrival}`);
   }

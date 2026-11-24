@@ -110,18 +110,28 @@ class FlightStatusTest {
     }
 
     @Test
-    fun saysWhereTheFlightLeavesArrivesAndWhereTheBagsComeOut() {
-        val known = status(departureGate = "8", departureTerminal = "1", arrivalGate = "D46", baggageClaim = "16")
-        flightStatusLines(known) shouldBe listOf("Departs from terminal 1, gate 8", "Arrives at gate D46", "Bags on carousel 16")
+    fun saysBeforeTakeoffWhereItLeavesFromAndTheArrivalTerminalButNoArrivalGateOrCarousel() {
+        val known = status(departureGate = "8", departureTerminal = "1", arrivalGate = "D46", arrivalTerminal = "3", baggageClaim = "16")
+        flightStatusLines(known) shouldBe listOf("Departs from terminal 1, gate 8", "Arrives at terminal 3")
+        flightStatusLines(known, flight, "2026-12-12T21:59:00Z") shouldBe listOf("Departs from terminal 1, gate 8", "Arrives at terminal 3")
         flightStatusLines(status(arrivalTerminal = "3")) shouldBe listOf("Arrives at terminal 3")
         flightStatusLines(null) shouldBe emptyList<String>()
         flightStatusLines(status(found = false, departureGate = "8")) shouldBe emptyList<String>()
     }
 
     @Test
-    fun saysHowLateTheFlightLeavesAndLandsByTheAirportsClocks() {
+    fun saysAfterTakeoffWhenItLandsWhereItArrivesAndTheCarouselButNotWhereItLeftFrom() {
+        val flying = status(actualOut = "2026-12-12T22:05:00Z", estimatedIn = "2026-12-13T07:10:00Z", departureGate = "8", arrivalGate = "D46", arrivalTerminal = "3", baggageClaim = "16")
+        flightStatusLines(flying, flight, "2026-12-13T01:00:00Z") shouldBe listOf("Lands 20 min early, at 15:10", "Arrives at terminal 3, gate D46", "Bags on carousel 16")
+        flightStatusLines(status(actualOut = "2026-12-12T22:05:00Z", estimatedIn = "2026-12-13T07:32:00Z"), flight, "2026-12-13T01:00:00Z") shouldBe listOf("Lands on time, at 15:32")
+        flightStatusLines(status(actualOut = "2026-12-12T22:05:00Z", estimatedIn = "2026-12-13T07:10:00Z", actualIn = "2026-12-13T07:10:00Z"), flight, "2026-12-13T08:00:00Z") shouldBe emptyList<String>()
+        flightStatusLines(status(departureGate = "8", baggageClaim = "16"), flight, "2026-12-12T22:01:00Z") shouldBe listOf("Bags on carousel 16")
+    }
+
+    @Test
+    fun saysHowLateTheFlightLeavesByTheAirportsClock() {
         val late = status(estimatedOut = "2026-12-12T22:40:00Z", estimatedIn = "2026-12-13T07:10:00Z", departureGate = "8")
-        flightStatusLines(late, flight) shouldBe listOf("Leaves 40 min late, at 09:40", "Departs from gate 8", "Lands 20 min early, at 15:10")
+        flightStatusLines(late, flight, "2026-12-12T21:00:00Z") shouldBe listOf("Leaves 40 min late, at 09:40", "Departs from gate 8")
         flightStatusLines(status(estimatedOut = "2026-12-13T00:05:00Z")) shouldBe listOf("Leaves 2 h 5 min late")
         flightStatusLines(status(estimatedOut = "2026-12-12T22:04:00Z", estimatedIn = "2026-12-13T07:26:00Z"), flight) shouldBe emptyList<String>()
         flightStatusLines(status(estimatedOut = "2026-12-12T22:40:00Z", actualOut = "2026-12-12T22:41:00Z"), flight) shouldBe emptyList<String>()
