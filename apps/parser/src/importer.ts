@@ -19,6 +19,8 @@ import {
   inTrip,
   isCancelled,
   liveBounds,
+  tripFlagsToWrite,
+  type TripFlags,
   bookedDateRange,
   displayBounds,
   normalizeReference,
@@ -92,6 +94,8 @@ export type TripTx = {
   // When the person now travels (liveBounds), or none: beside the trip's
   // own dates, which stay its full span.
   setLiveBounds(tripId: string, bounds: { start: string; end: string } | undefined): void;
+  // What the trip list's filters need of its bookings (tripFlags).
+  setTripFlags(tripId: string, flags: TripFlags): void;
   // A new title and bounds for a trip regrouping reshaped (regroup.ts).
   updateTrip(tripId: string, fields: Pick<Trip, "title" | "start" | "end" | "updatedAt">): void;
   // Removes a trip regrouping emptied of bookings.
@@ -880,7 +884,7 @@ export async function placeSegments(uid: string, booking: BookingToFile, deps: I
 // upgraded bookings, and the cancellations they meet), `settle` records on
 // each trip it touched when the person now travels (liveBounds), whichever
 // path cancelled or revived a booking, and clears it once nothing is
-// cancelled. The trip's own dates are never narrowed: they stay the span its
+// cancelled; and what the trip list's filters need (tripFlags). The trip's own dates are never narrowed: they stay the span its
 // bookings are found again by.
 export function settlingTripDates(tx: TripTx, timestamp: string): TripTx & { settle(trips: readonly Trip[], segmentsOf: (tripId: string) => readonly Segment[]): void } {
   const bounds = new Map<string, { start: string; end: string }>();
@@ -932,6 +936,8 @@ export function settlingTripDates(tx: TripTx, timestamp: string): TripTx & { set
       ];
       const next = liveBounds(now, after);
       if (next?.start !== trip?.liveStart || next?.end !== trip?.liveEnd) tx.setLiveBounds(tripId, next);
+      const flags = tripFlagsToWrite(trip ?? {}, after);
+      if (flags) tx.setTripFlags(tripId, flags);
     }
   };
   return new Proxy(tx, {

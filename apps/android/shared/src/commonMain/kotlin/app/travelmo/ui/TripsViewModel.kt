@@ -103,6 +103,9 @@ import app.travelmo.core.cleanSenderList
 import app.travelmo.core.SenderList
 import app.travelmo.core.ParsedRecord
 import app.travelmo.core.fittingTrip
+import kotlinx.coroutines.flow.onEach
+import app.travelmo.core.tripFlagsToWrite
+import app.travelmo.core.flagsUnknown
 import app.travelmo.data.SearchedRecords
 import app.travelmo.data.NoImportReview
 import app.travelmo.data.ImportReview
@@ -496,31 +499,73 @@ class TripsViewModel(
     }
 
     /**
-     * The trips the filters leave out. Every trip's bookings are listened to
-     * while a filter is on; until they answer, only a trip its owner
-     * cancelled is hidden.
+     * The trips the filters leave out, by each trip's own flags (TripFlags), at once. Only trips that don't yet say
+     * (flagsUnknown: from before the flags were kept, or edited since) have their bookings listened to, each counting
+     * as it answers, and their flags are then recorded so they are read no more.
      */
-    val hiddenTrips: StateFlow<Set<String>> = _listFilters.flatMapLatest { filters ->
-        if (!filters.any) flowOf(emptySet())
-        else combine(trips, allSegments()) { trips, all ->
-            val segments = all?.associate { it.trip.id to it.segments }
-            trips.orEmpty().filter { hiddenFromList(it, segments?.get(it.id), filters) }.map { it.id }.toSet()
+    val hiddenTrips: StateFlow<Set<String>> = _listFilters.map { it.any }.distinctUntilChanged().flatMapLatest { on ->
+        if (!on) flowOf(emptyMap())
+        // The trips that don't yet say, as they turn up so (a later snapshot, an edit that took the flags off).
+        else trips.filterNotNull().map { all -> all.filter(::flagsUnknown).map { it.id } }.distinctUntilChanged().flatMapLatest(::segmentsAsTheyAnswer)
+    }.let { read ->
+        combine(trips, _listFilters, read) { trips, filters, segments ->
+            if (!filters.any) emptySet()
+            else trips.orEmpty().filter { hiddenFromList(it, segments[it.id], filters) }.map { it.id }.toSet()
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
+    // These trips' bookings by trip, each as it answers, its flags recorded on its trip.
+    private fun segmentsAsTheyAnswer(ids: List<String>): Flow<Map<String, List<Segment>>> =
+        if (ids.isEmpty()) flowOf(emptyMap())
+        else combine(ids.map { id -> sharedSegments(id).map { read -> read?.let { id to it } } }) { read -> read.filterNotNull().toMap() }
+
+    // One listener per trip for the filters, kept a while past its last collector, so the set of trips being read
+    // changing (a repair taking one out) doesn't restart the others' listeners, nor their repairs.
+    private val filterSegments = mutableMapOf<String, StateFlow<List<Segment>?>>()
+
+    private fun sharedSegments(tripId: String): StateFlow<List<Segment>?> =
+        filterSegments.getOrPut(tripId) { segments(tripId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null) }
+
+    // Trips whose flags are being repaired now: one repair at a time each.
+    private val repairing = mutableSetOf<String>()
 
     // Every trip's bookings, by trip, null until each has answered.
     private fun allSegments(): Flow<List<TripWithSegments>?> = trips.flatMapLatest { list ->
         when {
             list == null -> flowOf(null)
             list.isEmpty() -> flowOf(emptyList())
-            else -> combine(list.map { trip -> store.segments(trip.id).map { TripWithSegments(trip, it) } }) { it.toList() }
+            else -> combine(list.map { trip -> segments(trip.id).map { TripWithSegments(trip, it) } }) { it.toList() }
         }
     }
 
     /** One trip, or null once the list has answered without it. */
     fun trip(id: String): Flow<Trip?> = trips.map { trips -> trips?.firstOrNull { it.id == id } }
 
-    fun segments(tripId: String): Flow<List<Segment>> = store.segments(tripId)
+    /** A trip's bookings, live; each read keeps the trip's list flags true to them (keepTripFlags). */
+    fun segments(tripId: String): Flow<List<Segment>> = store.segments(tripId).onEach { keepTripFlags(tripId, it) }
+
+    /**
+     * Records the flags the trip list filters by when [segments] disagree with what the trip says: after an edit,
+     * and for a trip from before they were kept. Not for a trip being deleted; a refusal is logged, and the list
+     * reads the bookings instead.
+     */
+    private fun keepTripFlags(tripId: String, segments: List<Segment>) {
+        val trip = trips.value?.firstOrNull { it.id == tripId } ?: return
+        if (trip.deleting || tripFlagsToWrite(trip, segments) == null || !repairing.add(tripId)) return
+        viewModelScope.launch {
+            try {
+                // What the listener gave may be the cache's part, or nothing after a failure: the store writes the
+                // flags only from the server's whole answer, and only if no booking changed meanwhile.
+                store.repairTripFlags(tripId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                SharedLog.error(e, "Keeping a trip's list flags failed")
+            } finally {
+                repairing.remove(tripId)
+            }
+        }
+    }
 
     /**
      * The live status of a trip's flights near departure, by flight key: a

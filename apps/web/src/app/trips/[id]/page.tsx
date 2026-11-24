@@ -26,7 +26,7 @@ import { useTravelProfile } from "@/lib/travelProfile";
 import { BeforeYouGo } from "@/components/Checklist";
 import { useTripChecklist } from "@/lib/checklist";
 import { useReportTrip } from "@/components/ReportBug";
-import { useAddresses, useNow, useProfile, useSegments, useSenderPatterns, useTrip, useTrips } from "@/lib/trips";
+import { useAddresses, useNow, useProfile, useSegments, useSenderPatterns, useTrip, useTrips, useKeepTripFlags } from "@/lib/trips";
 import { flightLinesFor, useFlightRefresh, useFlightStatuses } from "@/lib/flightStatus";
 import { setCheckedIn, useCheckedIn, useCheckedInFromNotification } from "@/lib/checkedIn";
 
@@ -326,6 +326,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   const segments = useSegments(tripId);
   // A bug report sent from here carries this trip's bookings.
   useReportTrip(trip, segments);
+  useKeepTripFlags(trip ? [trip] : undefined, () => segments);
   const now = useNow();
   const flightStatuses = useFlightStatuses(segments, now);
   useFlightRefresh(user, tripId, segments, flightStatuses, now);

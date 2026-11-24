@@ -273,6 +273,13 @@ interface TripStore {
     suspend fun moveSegmentToNewTrip(fromTripId: String, segmentId: String, uid: String): String
 
     /**
+     * Puts right what the trip list's filters need of a trip's bookings (TripFlags), from the server's bookings and
+     * not the cache's, and only if no booking changed meanwhile (the trip's `updatedAt` moved): a change then is left
+     * to be read again. Not for a trip being deleted.
+     */
+    suspend fun repairTripFlags(tripId: String)
+
+    /**
      * Adds a booking in a trip of its own, made for it: owned by [uid], named for where it goes (newTripTitle), over
      * its dates. A save that fails takes the empty trip away again. Returns the new trip's id.
      */

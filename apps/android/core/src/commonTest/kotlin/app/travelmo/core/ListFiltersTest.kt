@@ -62,4 +62,22 @@ class ListFiltersTest {
         // A cancelled night out is cancelled, not local.
         hiddenFromList(trip, listOf(cancelled(show)), filters) shouldBe false
     }
+
+    @Test
+    fun `the filters go by the trip's own flags without its bookings`() {
+        val both = ListFilters(hideCancelled = true, hideLocal = true)
+        hiddenFromList(trip.copy(allCancelled = true, localOnly = false), null, both) shouldBe true
+        hiddenFromList(trip.copy(allCancelled = false, localOnly = true), null, both) shouldBe true
+        hiddenFromList(trip.copy(allCancelled = false, localOnly = false), null, both) shouldBe false
+    }
+
+    @Test
+    fun `the flags are unknown until both are kept and written only when the bookings disagree`() {
+        flagsUnknown(trip) shouldBe true
+        flagsUnknown(trip.copy(allCancelled = false)) shouldBe true
+        flagsUnknown(trip.copy(allCancelled = false, localOnly = false)) shouldBe false
+        tripFlagsToWrite(trip, listOf(show)) shouldBe TripFlags(allCancelled = false, localOnly = true)
+        tripFlagsToWrite(trip.copy(allCancelled = false, localOnly = true), listOf(show)) shouldBe null
+        tripFlagsToWrite(trip.copy(allCancelled = false, localOnly = true), listOf(cancelled(show))) shouldBe TripFlags(allCancelled = true, localOnly = false)
+    }
 }

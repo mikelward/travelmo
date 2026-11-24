@@ -8,6 +8,8 @@ import app.travelmo.data.GmailActions
 import app.travelmo.data.FastmailStatus
 import app.travelmo.data.GmailStatus
 import app.travelmo.core.ParsedRecord
+import app.travelmo.core.TripFlags
+import app.travelmo.core.tripFlagsToWrite
 import app.travelmo.core.REVIEW_RECENT
 import app.travelmo.core.SenderList
 import app.travelmo.core.SenderPatterns
@@ -528,6 +530,15 @@ class FakeTripStore(
     override suspend fun moveSegmentToNewTrip(fromTripId: String, segmentId: String, uid: String): String {
         movedToNew += Triple(fromTripId, segmentId, uid)
         return "new-trip"
+    }
+    /** The list's flags recorded on trips, by trip. */
+    val flagsSet = mutableMapOf<String, TripFlags>()
+    /** Every repair asked for, by trip, in order. */
+    val repairs = mutableListOf<String>()
+    override suspend fun repairTripFlags(tripId: String) {
+        repairs += tripId
+        val trip = trips.firstOrNull { it.id == tripId } ?: return
+        tripFlagsToWrite(trip, serverSegments(tripId))?.let { flagsSet[tripId] = it }
     }
     /** Bookings added in a trip of their own. */
     val addedToNew = mutableListOf<SegmentDraft>()

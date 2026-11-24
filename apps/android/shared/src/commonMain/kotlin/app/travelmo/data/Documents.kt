@@ -66,6 +66,8 @@ fun tripFromDocument(id: String, data: Map<String, Any?>): Trip? {
         liveStart = data.text("liveStart"),
         liveEnd = data.text("liveEnd"),
         cancelledAt = data.text("cancelledAt"),
+        allCancelled = data["allCancelled"] as? Boolean,
+        localOnly = data["localOnly"] as? Boolean,
     )
 }
 

@@ -343,11 +343,26 @@ stay or ride to somewhere else (`localOnly` in
 `packages/core/src/listFilters.ts`, mirrored in `ListFilters.kt`). A trip
 with nothing booked is neither. Both are off until the person turns them
 on, and are kept on that device (the browser's local storage; Android's
-own preferences file), not synced: they are about how this screen reads. A
-trip document says only whether its owner cancelled it, so while a switch
-is on every trip's bookings are read, as a search reads them (the web once,
-Android listening); until they answer, only owner-cancelled trips are left
-out. With a switch on and nothing left, the list says "Every trip is
+own preferences file), not synced: they are about how this screen reads.
+They filter at once, from the trip documents the list already has: each
+trip keeps what they need of its bookings (`allCancelled`, `localOnly`;
+`tripFlags`). The parser records them whenever it files, cancels or
+regroups bookings (`settlingTripDates`). An app's own edit to a trip's
+bookings (adding, editing, cancelling, restoring, deleting, moving or
+merging) takes the flags off that trip and any other it touched, so they
+are unknown rather than wrong; an app that then reads a trip's bookings
+live (its page, a search or reports on Android) and finds them disagreeing
+with the trip writes them, the owner or a sharee alike
+(`tripFlagsToWrite`; the rules allow both, as booleans), computed from the
+server's bookings rather than the cache's and written only if the trip's
+`updatedAt` hasn't moved since (a booking changed meanwhile is read again
+later). Bookings read
+once (the web's search and filter reads) may be older than what the parser
+wrote since, so they only fill flags in where a trip has none. That also fills them in for trips from
+before they were kept: only such trips have their bookings read when a
+switch goes on, each counting as it answers, and once read they are not
+read again. A card is struck through by the trip's flag until its bookings
+are read. With a switch on and nothing left, the list says "Every trip is
 hidden."; the search applies to what the switches leave.
 
 `/calendar` shows the same trips month by month (`packages/core/src/calendar.ts`):

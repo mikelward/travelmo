@@ -1,6 +1,6 @@
 "use client";
 
-import { displayTitles, groupTrips, hiddenFromList, isEmptyQuery, listWarnings, nextUpFlightKeys, noListFilters, parseTripQuery, tripMatches, type FlightStatus, type ListFilters, type Segment, type Trip } from "@travelmo/core";
+import { displayTitles, flagsUnknown, groupTrips, hiddenFromList, isEmptyQuery, listWarnings, nextUpFlightKeys, noListFilters, parseTripQuery, tripMatches, type FlightStatus, type ListFilters, type Segment, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -11,7 +11,7 @@ import { usePeopleDocuments, useTripWarnings, warningText } from "@/lib/document
 import { setCheckedIn, useCheckedIn } from "@/lib/checkedIn";
 import { useFlightStatusesOf } from "@/lib/flightStatus";
 import { useSaveForOffline } from "@/lib/offline";
-import { useAllSegments, useNow, useSegmentsOf, useTrips } from "@/lib/trips";
+import { useAllSegments, useKeepTripFlags, useNow, useSegmentsOf, useSegmentsOnce, useTrips } from "@/lib/trips";
 
 // Trips worth a listener each: everything under way, for the "next up"
 // lines, and the few coming next, so their document warnings know where
@@ -109,11 +109,16 @@ function Trips({ user }: { user: User }) {
   const searching = !isEmptyQuery(query);
   const [filters, setFilters] = useListFilters();
   const filtering = filters.hideCancelled || filters.hideLocal;
-  // Every trip's bookings, read once a search starts (SPEC "Searching trips")
-  // or while a filter is on.
-  const all = useAllSegments((searched || filtering) && trips ? trips.map((t) => t.id) : undefined);
+  // Every trip's bookings, read once a search starts (SPEC "Searching trips").
+  const all = useAllSegments(trips && searched ? trips.map((t) => t.id) : undefined);
+  // While a filter is on, only the bookings of trips that don't yet say what
+  // the filters need (flagsUnknown), each read once per version of the trip,
+  // whenever it turns up so (a later snapshot, an edit), and its flags kept.
+  const unknown = useSegmentsOnce(filtering && trips ? trips.filter(flagsUnknown) : undefined);
+  const bookingsOf = (id: string) => all?.byTrip[id] ?? unknown[id];
+  useKeepTripFlags(trips, bookingsOf, true);
   const titles = displayTitles(trips ?? []);
-  const kept = trips?.filter((t) => !hiddenFromList(t, all?.byTrip[t.id], filters));
+  const kept = trips?.filter((t) => !hiddenFromList(t, bookingsOf(t.id), filters));
   const shown = kept && searching ? kept.filter((t) => tripMatches(query, t, titles.get(t.id) ?? t.title, all?.byTrip[t.id] ?? [])) : kept;
   // Listeners follow every trip, searched or not; the sections show what a search found.
   const everything = trips ? groupTrips(trips, today) : undefined;

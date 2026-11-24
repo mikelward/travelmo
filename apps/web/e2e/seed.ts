@@ -271,3 +271,12 @@ export async function readTripChecklist(uid: string, tripId: string): Promise<{ 
 export async function readPushSubscriptions(uid: string): Promise<PushSubscription[]> {
   return (await db.collection(paths.pushSubscriptions(uid)).get()).docs.map((d) => d.data() as PushSubscription);
 }
+
+export async function readTrip(tripId: string): Promise<Record<string, unknown> | undefined> {
+  return (await db.doc(paths.trip(tripId)).get()).data();
+}
+
+// Takes a trip's list flags off, as an app's edit to its bookings does.
+export async function forgetTripFlags(tripId: string): Promise<void> {
+  await db.doc(paths.trip(tripId)).update({ allCancelled: FieldValue.delete(), localOnly: FieldValue.delete(), updatedAt: new Date().toISOString() });
+}

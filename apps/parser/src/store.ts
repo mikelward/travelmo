@@ -218,6 +218,9 @@ export function firestoreStore(db: Firestore): TripStore {
           updateTrip(tripId, fields) {
             t.update(db.doc(paths.trip(tripId)), fields);
           },
+          setTripFlags(tripId, flags) {
+            t.update(db.doc(paths.trip(tripId)), flags);
+          },
           setLiveBounds(tripId, bounds) {
             t.update(
               db.doc(paths.trip(tripId)),
