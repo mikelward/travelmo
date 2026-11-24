@@ -67,8 +67,8 @@ viewer's zone. Trip bounds are calendar dates.
   for the apps, of the addresses the user confirmed besides their sign-in,
   lowercase; never trusted, see below) and `pendingEmails` (those whose
   confirmation link is still out) are server-written ("Linked email addresses"); `reminders` is the owner's choice; `backfill` is how far a reading of the whole mailbox has
-  got (`cursor, after, scanned, imported, failed, done, updatedAt`, and the
-  reading under way: `run, step, running, queued, leaseUntil, retryAfter, wake, handoff, failures, lastFailed`); `refresh`,
+  got (`cursor, after, scanned, imported, failed, failedIds, retrying, done, updatedAt`, and the
+  reading under way: `run, step, running, queued, leaseUntil, retryAfter, wake, handoff, failures, slowed`); `refresh`,
   server-written, is how far the last "Refresh from email" got (the same
   fields, `cursor` the last import record read, plus `total, updated,
   added, removed, merged, kept, missing` and the reset `generation` it ran
@@ -2258,24 +2258,38 @@ place and sets it once the next batch is published; if the worker dies or
 publishing fails in between, the push fails, and the copy Pub/Sub delivers
 again publishes the next batch instead of reading (a second copy of that
 next batch, at worst, is dropped by its step). A batch that fails fails the
-push, gives up its lease and sets `retryAfter` fifteen minutes on, as long
-as the claim it may have left on the email it was importing (`claimLeaseMs`)
-blocks that email: read sooner, the batch would skip the email as another
-import's and pass it by, so no batch of any reading runs before then. One
-whose process died frees its lease after sixteen minutes for the same
-reason. Three failed batches in a row (`failures`) stop the reading, since
-the cause is not passing (a revoked grant, say). A delivery that comes
+push, gives up its lease and sets `retryAfter` fifteen minutes on, at least
+as long as the claim it may have left on the email it was importing
+(`claimLeaseMs`) blocks that email: read sooner, the batch would skip the
+email as another import's and pass it by, so no batch of any reading runs
+before then. Each failure in a row doubles the wait, up to two hours
+(`failedBatchPauseMs`). One whose process died frees its lease after
+sixteen minutes for the same reason. Six failed batches in a row
+(`failures`), about six hours of them, stop the reading, since the cause is
+not passing (a revoked grant, say); Settings says it stopped after repeated
+errors and offers Continue. A delivery that comes
 while a lease holds is kept, not dropped, even if the reading was stopped
 meanwhile, so a Continue that joins a dead worker's reading has a delivery
 to carry it on; one for a stopped reading with no lease is dropped. Stop (`POST /gmail/backfill/stop`) clears `running`: the batch
 under way saves its place and queues nothing. Pressing Import while a batch
-reads joins that reading instead of starting another. A batch with failed
-imports (the model or Gmail may be down) saves `lastFailed` and stops, and
-Settings shows why and offers Continue. "Delete all trips" removes the
+reads joins that reading instead of starting another. A batch in which
+emails failed to import (the model may be down) goes on all the same,
+without anyone pressing Continue, but holds the next batch off five
+minutes, doubling while batch after batch has failures, up to an hour
+(`slowed`, `slowedPauseMs`); a batch without one ends the slowdown. The
+failed emails' ids are kept with the place (`failedIds`, up to 1,000), and
+once the mailbox has been read through they are tried again by id
+(`retrying`, the ones still to try) before the reading is done; each that
+works no longer counts as failed. Settings says what happens to them ("6
+emails couldn't be read yet; they're tried again at the end", then "Trying
+6 emails that failed again…") and, once done, how many failed both times,
+which Read again from the start tries once more. "Refresh from email"
+still pauses after a batch with failures (`lastFailed`), with Continue. "Delete all trips" removes the
 progress and moves the reset generation on, so the batch under way cannot
 save and every queued message is dropped. If queueing the first batch
 fails, the reading stops, and a reading with no batch saved or reading for
-half an hour (dead-lettered, say) shows as stopped, so Settings offers to
+half an hour past any pause it set itself (`retryAfter`; dead-lettered, say)
+shows as stopped, so Settings offers to
 continue it. A finished reading can start over, and starting over tries
 failed emails again. The parser logs each start, batch, stop and end, and
 each failure with the run and step.

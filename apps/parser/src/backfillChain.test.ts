@@ -361,17 +361,28 @@ describe("continueBackfill", () => {
     expect(w.queued).toEqual([]);
   });
 
-  it("pauses after a batch with failed imports, which Settings shows", async () => {
-    const w = world({ pages: 5, failOn: new Set([2]) });
+  it("carries on past a batch with failed imports, holding the next off longer while they keep failing", async () => {
+    const w = world({ pages: 5, failOn: new Set([2, 3]) });
     await startBackfill("u1", "r1", false, w.io);
     await w.drain();
-    expect(w.read).toHaveLength(2);
-    expect(w.stored).toMatchObject({ scanned: 600, failed: 2, lastFailed: 2, running: false, done: false });
-    // Continue carries on from there and clears the pause.
-    await startBackfill("u1", "r2", false, w.io);
+    // Every batch read without anyone pressing Continue.
+    expect(w.read).toHaveLength(5);
+    expect(w.stored).toMatchObject({ scanned: 1500, failed: 4, done: true });
     expect(w.stored?.lastFailed).toBeUndefined();
-    await w.drain();
-    expect(w.stored).toMatchObject({ scanned: 1500, done: true });
+    // Five minutes after the first batch with failures, ten after the second.
+    expect(w.read[2]!.at - w.read[1]!.at).toBe(5 * 60_000);
+    expect(w.read[3]!.at - w.read[2]!.at).toBe(10 * 60_000);
+    // A clean batch ends the slowdown.
+    expect(w.read[4]!.at - w.read[3]!.at).toBe(0);
+  });
+
+  it("pauses \"Refresh from email\" after a batch with failed imports, which Settings shows", async () => {
+    const w = world({ pages: 5, failOn: new Set([2]) });
+    await startBackfill("u1", "r1", false, w.io);
+    await continueBackfill({ ...w.queued.shift()!, kind: "refresh" }, w.io);
+    await continueBackfill({ ...w.queued.shift()!, kind: "refresh" }, w.io);
+    expect(w.queued).toEqual([]);
+    expect(w.stored).toMatchObject({ scanned: 600, failed: 2, lastFailed: 2, running: false, done: false });
   });
 
   it("stops when the trips are reset: the batch under way does not save, and no more run", async () => {

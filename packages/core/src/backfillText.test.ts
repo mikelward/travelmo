@@ -15,6 +15,9 @@ describe("isReading", () => {
     expect(isReading({ ...running, updatedAt: ago(stalledAfterMs) }, now)).toBe(false);
     // Unless a batch is reading right now.
     expect(isReading({ ...running, updatedAt: ago(stalledAfterMs), leaseUntil: ago(-60_000) }, now)).toBe(true);
+    // Nor while it waits out a pause it set, however long.
+    expect(isReading({ ...running, updatedAt: ago(stalledAfterMs * 2), retryAfter: ago(-60 * 60_000) }, now)).toBe(true);
+    expect(isReading({ ...running, updatedAt: ago(stalledAfterMs * 4), retryAfter: ago(stalledAfterMs) }, now)).toBe(false);
   });
 });
 
@@ -30,26 +33,36 @@ describe("describeBackfill", () => {
     expect(describeBackfill({ scanned: 1234, imported: 12, done: true, updatedAt: at }, false)).toBe(
       "Whole mailbox read: 1,234 booking-like emails read, 12 bookings imported.",
     );
-    expect(describeBackfill({ scanned: 1234, imported: 12, failed: 3, done: true, updatedAt: at }, false)).toBe(
-      "Whole mailbox read: 1,234 booking-like emails read, 12 bookings imported, 3 failed. Read again from the start to try the failed ones again.",
+  });
+
+  it("says what happens to emails that failed, asking nothing of the user until both tries are spent", () => {
+    const at = ago(0);
+    expect(describeBackfill({ scanned: 600, imported: 2, failed: 6, done: false, updatedAt: at }, true)).toBe(
+      "Reading your mailbox… 600 booking-like emails read, 2 bookings imported so far. 6 emails couldn't be read yet; they're tried again at the end. You can close this page.",
+    );
+    expect(describeBackfill({ scanned: 900, imported: 3, failed: 6, retrying: ["a", "b", "c", "d", "e", "f"], done: false, updatedAt: at }, true)).toBe(
+      "Trying 6 emails that failed again… 900 booking-like emails read, 3 bookings imported so far. You can close this page.",
+    );
+    expect(describeBackfill({ scanned: 1234, imported: 12, failed: 1, done: true, updatedAt: at }, false)).toBe(
+      "Whole mailbox read: 1,234 booking-like emails read, 12 bookings imported. 1 email couldn't be read, even on a second try. Read again from the start to try it once more.",
     );
   });
 });
 
 describe("pausedReason", () => {
-  const paused = { scanned: 600, imported: 0, failed: 2, lastFailed: 2, done: false, running: false, updatedAt: ago(0) };
+  const stopped = { scanned: 600, imported: 0, failures: 6, done: false, running: false, updatedAt: ago(0) };
 
-  it("says why a batch with failed imports paused the reading", () => {
-    expect(pausedReason(paused, false)).toBe(
-      "Reading paused: 2 emails in the last batch could not be imported. Continue when ready; failed emails are tried again when you read from the start.",
+  it("says why a reading stopped after batch after batch failed", () => {
+    expect(pausedReason(stopped, false)).toBe(
+      "Reading stopped after repeated errors. Continue to try again; if it stops again, disconnect the mailbox and connect it again.",
     );
-    expect(pausedReason({ ...paused, lastFailed: 1 }, false)).toContain("1 email in the last batch");
   });
 
-  it("gives no reason when the reading did not pause on its own", () => {
+  it("gives no reason when the reading did not stop on its own", () => {
     expect(pausedReason(undefined, false)).toBeUndefined();
-    expect(pausedReason({ ...paused, lastFailed: undefined }, false)).toBeUndefined();
-    expect(pausedReason(paused, true)).toBeUndefined();
-    expect(pausedReason({ ...paused, done: true }, false)).toBeUndefined();
+    expect(pausedReason({ ...stopped, failures: undefined }, false)).toBeUndefined();
+    expect(pausedReason({ ...stopped, running: true }, false)).toBeUndefined();
+    expect(pausedReason(stopped, true)).toBeUndefined();
+    expect(pausedReason({ ...stopped, done: true }, false)).toBeUndefined();
   });
 });

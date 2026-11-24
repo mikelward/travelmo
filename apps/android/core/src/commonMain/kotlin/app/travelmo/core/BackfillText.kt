@@ -31,7 +31,12 @@ data class BackfillShown(
     val failed: Int = 0,
     val running: Boolean = false,
     val leaseUntil: String? = null,
-    val lastFailed: Int = 0,
+    /** No batch reads before then: a pause the reading set itself (a rate limit, failed emails, a failed batch). */
+    val retryAfter: String? = null,
+    /** Batches in a row that failed; set on a reading that stopped after them. */
+    val failures: Int = 0,
+    /** Emails that failed, being tried again now that the rest are read. */
+    val retrying: Int = 0,
 )
 
 /** A reading that has saved nothing for this long has stalled, so Settings offers to continue it. */
@@ -41,21 +46,33 @@ private fun millis(at: String?): Long = at?.let { runCatching { Instant.parse(it
 
 fun isReading(progress: BackfillShown?, nowMs: Long): Boolean {
     if (progress == null || !progress.running || progress.done) return false
-    return nowMs - maxOf(millis(progress.updatedAt), millis(progress.leaseUntil)) < STALLED_AFTER_MS
+    // Waiting out a pause it set itself, up to two hours, is still reading.
+    return nowMs - maxOf(millis(progress.updatedAt), millis(progress.leaseUntil), millis(progress.retryAfter)) < STALLED_AFTER_MS
 }
 
 private fun n(x: Int) = groupThousands(x.toLong())
 
+private fun emails(x: Int) = if (x == 1) "1 email" else "${n(x)} emails"
+
+/**
+ * The reading goes on by itself past emails that fail to import (the model was down, say) and
+ * tries them again once the rest are read, so the count says what happens to them rather than
+ * asking anything of the user.
+ */
 fun describeBackfill(progress: BackfillShown, reading: Boolean): String {
-    val failed = if (progress.failed > 0) ", ${n(progress.failed)} failed" else ""
-    val read = "${n(progress.scanned)} booking-like emails read, ${n(progress.imported)} ${if (progress.imported == 1) "booking" else "bookings"} imported$failed"
-    if (progress.done) return "Whole mailbox read: $read.${if (progress.failed > 0) " Read again from the start to try the failed ones again." else ""}"
-    return if (reading) "Reading your mailbox… $read so far. You can close this page." else "Stopped part way: $read. Continue to read the rest."
+    val read = "${n(progress.scanned)} booking-like emails read, ${n(progress.imported)} ${if (progress.imported == 1) "booking" else "bookings"} imported"
+    val failed = progress.failed
+    if (progress.done) {
+        val left = if (failed > 0) " ${emails(failed)} couldn't be read, even on a second try. Read again from the start to try ${if (failed == 1) "it" else "them"} once more." else ""
+        return "Whole mailbox read: $read.$left"
+    }
+    if (reading && progress.retrying > 0) return "Trying ${emails(progress.retrying)} that failed again… $read so far. You can close this page."
+    val later = if (failed > 0) " ${emails(failed)} couldn't be read yet; ${if (failed == 1) "it's" else "they're"} tried again at the end." else ""
+    return if (reading) "Reading your mailbox… $read so far.$later You can close this page." else "Stopped part way: $read.$later Continue to read the rest."
 }
 
-/** Why a reading paused on its own, if it did. */
+/** Why a reading stopped on its own, if it did: batch after batch failed for hours (a revoked grant, say). */
 fun pausedReason(progress: BackfillShown?, reading: Boolean): String? {
-    if (progress == null || progress.lastFailed == 0 || reading || progress.done) return null
-    val what = if (progress.lastFailed == 1) "1 email" else "${n(progress.lastFailed)} emails"
-    return "Reading paused: $what in the last batch could not be imported. Continue when ready; failed emails are tried again when you read from the start."
+    if (progress == null || progress.failures == 0 || progress.running || reading || progress.done) return null
+    return "Reading stopped after repeated errors. Continue to try again; if it stops again, disconnect the mailbox and connect it again."
 }

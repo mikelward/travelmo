@@ -211,13 +211,16 @@ class DocumentsTest {
 
     @Test
     fun `reads the Fastmail connection and how far its reading got a malformed progress as none`() {
-        val progress = mapOf("scanned" to 1200L, "imported" to 14L, "done" to false, "updatedAt" to "2026-11-01T12:00:00Z", "running" to true, "failed" to 2L)
+        val progress = mapOf(
+            "scanned" to 1200L, "imported" to 14L, "done" to false, "updatedAt" to "2026-11-01T12:00:00Z", "running" to true, "failed" to 2L,
+            "retrying" to listOf("m1", "m2"), "failures" to 1L,
+        )
         val doc = mapOf(
             "gmail" to mapOf("emailAddress" to "owner@example.com", "connectedAt" to "2026-11-01T00:00:00Z"),
             "fastmail" to mapOf("emailAddress" to "owner@fastmail.example", "connectedAt" to "2026-11-01T00:00:00Z", "backfill" to progress),
         )
         fastmailStatusOf(doc) shouldBe
-            FastmailStatus("owner@fastmail.example", BackfillShown(scanned = 1200, imported = 14, done = false, updatedAt = "2026-11-01T12:00:00Z", failed = 2, running = true))
+            FastmailStatus("owner@fastmail.example", BackfillShown(scanned = 1200, imported = 14, done = false, updatedAt = "2026-11-01T12:00:00Z", failed = 2, running = true, failures = 1, retrying = 2))
         // Gmail's mailboxes are not Fastmail's.
         gmailStatusesOf(doc).map { it.emailAddress } shouldBe listOf("owner@example.com")
         fastmailStatusOf(mapOf("fastmail" to mapOf("emailAddress" to "owner@fastmail.example", "backfill" to mapOf("scanned" to 3L)))) shouldBe

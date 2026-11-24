@@ -18,6 +18,8 @@ class BackfillTextTest {
         isReading(null, now) shouldBe false
         isReading(running.copy(updatedAt = ago(STALLED_AFTER_MS)), now) shouldBe false
         isReading(running.copy(updatedAt = ago(STALLED_AFTER_MS), leaseUntil = ago(-60_000)), now) shouldBe true
+        isReading(running.copy(updatedAt = ago(STALLED_AFTER_MS * 2), retryAfter = ago(-60 * 60_000)), now) shouldBe true
+        isReading(running.copy(updatedAt = ago(STALLED_AFTER_MS * 4), retryAfter = ago(STALLED_AFTER_MS)), now) shouldBe false
     }
 
     @Test
@@ -26,18 +28,28 @@ class BackfillTextTest {
         describeBackfill(BackfillShown(600, 1, false, at), true) shouldBe "Reading your mailbox… 600 booking-like emails read, 1 booking imported so far. You can close this page."
         describeBackfill(BackfillShown(600, 2, false, at), false) shouldBe "Stopped part way: 600 booking-like emails read, 2 bookings imported. Continue to read the rest."
         describeBackfill(BackfillShown(1234, 12, true, at), false) shouldBe "Whole mailbox read: 1,234 booking-like emails read, 12 bookings imported."
-        describeBackfill(BackfillShown(1234, 12, true, at, failed = 3), false) shouldBe
-            "Whole mailbox read: 1,234 booking-like emails read, 12 bookings imported, 3 failed. Read again from the start to try the failed ones again."
     }
 
     @Test
-    fun `says why a batch with failed imports paused the reading and nothing otherwise`() {
-        val paused = BackfillShown(600, 0, false, ago(0), failed = 2, lastFailed = 2)
-        pausedReason(paused, false) shouldBe
-            "Reading paused: 2 emails in the last batch could not be imported. Continue when ready; failed emails are tried again when you read from the start."
+    fun `says what happens to emails that failed asking nothing until both tries are spent`() {
+        val at = ago(0)
+        describeBackfill(BackfillShown(600, 2, false, at, failed = 6), true) shouldBe
+            "Reading your mailbox… 600 booking-like emails read, 2 bookings imported so far. 6 emails couldn't be read yet; they're tried again at the end. You can close this page."
+        describeBackfill(BackfillShown(900, 3, false, at, failed = 6, retrying = 6), true) shouldBe
+            "Trying 6 emails that failed again… 900 booking-like emails read, 3 bookings imported so far. You can close this page."
+        describeBackfill(BackfillShown(1234, 12, true, at, failed = 1), false) shouldBe
+            "Whole mailbox read: 1,234 booking-like emails read, 12 bookings imported. 1 email couldn't be read, even on a second try. Read again from the start to try it once more."
+    }
+
+    @Test
+    fun `says why a reading stopped after repeated errors and nothing otherwise`() {
+        val stopped = BackfillShown(600, 0, false, ago(0), failures = 6)
+        pausedReason(stopped, false) shouldBe
+            "Reading stopped after repeated errors. Continue to try again; if it stops again, disconnect the mailbox and connect it again."
         pausedReason(null, false) shouldBe null
-        pausedReason(paused.copy(lastFailed = 0), false) shouldBe null
-        pausedReason(paused, true) shouldBe null
-        pausedReason(paused.copy(done = true), false) shouldBe null
+        pausedReason(stopped.copy(failures = 0), false) shouldBe null
+        pausedReason(stopped.copy(running = true), false) shouldBe null
+        pausedReason(stopped, true) shouldBe null
+        pausedReason(stopped.copy(done = true), false) shouldBe null
     }
 }

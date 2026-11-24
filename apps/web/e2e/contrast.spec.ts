@@ -67,7 +67,7 @@ for (const colorScheme of ["light", "dark"] as const) {
     await seedGmail(uid, {
       emailAddress: "traveler@example.com",
       connectedAt: "2026-11-01T00:00:00Z",
-      backfill: { scanned: 300, imported: 0, failed: 3, lastFailed: 3, done: false, running: false, updatedAt: "2026-11-01T00:00:00Z" },
+      backfill: { scanned: 300, imported: 0, failed: 3, failures: 6, done: false, running: false, updatedAt: "2026-11-01T00:00:00Z" },
     });
     await seedFeed(uid, { id: "f1", url: "https://feeds.example.com/trips.ics", addedAt: "2026-11-01T00:00:00Z", lastError: "The feed answered 404." });
 
@@ -93,7 +93,7 @@ for (const colorScheme of ["light", "dark"] as const) {
 
     await page.goto("/settings");
     await expect(page.getByText("The feed answered 404.")).toBeVisible();
-    await expect(page.getByText("Reading paused", { exact: false })).toBeVisible();
+    await expect(page.getByText("Reading stopped after repeated errors", { exact: false })).toBeVisible();
     await expectReadable(page);
 
     for (const [path, ready] of [

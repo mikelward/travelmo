@@ -175,8 +175,32 @@ describe("runBackfillBatch failures", () => {
     const first = await runBackfillBatch(undefined, false, failing);
     expect(first.progress).toMatchObject({ imported: 1, failed: 1 });
     const second = await runBackfillBatch(first.progress, false, failing);
-    expect(second.progress).toMatchObject({ imported: 1, failed: 2, done: true });
-    expect((await runBackfillBatch(second.progress, false, io)).progress).toMatchObject({ imported: 2, failed: 0 });
+    // Read through, but not done: the failed emails are tried again first.
+    expect(second.progress).toMatchObject({ imported: 1, failed: 2, done: false, retrying: ["b", "c"] });
+    expect(second.progress.cursor).toBeUndefined();
+    const again = await runBackfillBatch(second.progress, false, failing);
+    expect(again.progress).toMatchObject({ imported: 1, failed: 2, done: true });
+    expect(again.progress.retrying).toBeUndefined();
+    // A new reading starts the count over.
+    expect((await runBackfillBatch(again.progress, false, io)).progress).toMatchObject({ imported: 2, failed: 0 });
+  });
+
+  it("tries the failed emails again by id at the end, and no longer counts those that work", async () => {
+    const { io } = mailbox(pages);
+    let down = true;
+    const tried: string[] = [];
+    const flaky: BackfillIo = { ...io, importIds: async (ids) => {
+      tried.push(...ids);
+      const failed = down ? ids.filter((id) => id === "b" || id === "c").length : 0;
+      return { ...emptyCounts(), imported: ids.length - failed, failed };
+    } };
+    let progress = (await runBackfillBatch(undefined, false, flaky)).progress;
+    progress = (await runBackfillBatch(progress, false, flaky)).progress;
+    down = false;
+    tried.length = 0;
+    const retried = await runBackfillBatch(progress, false, flaky);
+    expect(tried).toEqual(["b", "c"]);
+    expect(retried.progress).toMatchObject({ imported: 3, failed: 0, done: true });
   });
 });
 
@@ -303,6 +327,10 @@ describe("searchMessagePage", () => {
     left = 100;
     progress = (await runBackfillBatch(progress, false, io)).progress;
     expect(attempts).toEqual(["bad1", "bad2", "good1", "good2"]);
+    expect(progress).toMatchObject({ imported: 2, failed: 2, scanned: 4, done: false, retrying: ["bad1", "bad2"] });
+    // Their second try, one each, also within the time left.
+    progress = (await runBackfillBatch(progress, false, io)).progress;
+    expect(attempts.slice(4)).toEqual(["bad1", "bad2"]);
     expect(progress).toMatchObject({ imported: 2, failed: 2, scanned: 4, done: true });
   });
 

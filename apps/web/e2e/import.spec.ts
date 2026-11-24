@@ -227,15 +227,16 @@ test("a finished reading starts over from the beginning when asked", async ({ pa
   await expect.poll(() => sent).toEqual([{ emailAddress: "traveler@example.com", restart: true }]);
 });
 
-test("a batch with failed imports pauses the reading and says why", async ({ page }) => {
+test("a reading that stopped after repeated errors says why", async ({ page }) => {
   const uid = await signIn(page, owner);
   await seedGmail(uid, {
     emailAddress: "traveler@example.com",
     connectedAt: "2026-11-01T00:00:00Z",
-    backfill: { scanned: 300, imported: 0, failed: 3, lastFailed: 3, done: false, running: false, updatedAt: new Date().toISOString() },
+    backfill: { scanned: 300, imported: 0, failed: 3, failures: 6, done: false, running: false, updatedAt: new Date().toISOString() },
   });
   await page.goto("/settings");
-  await expect(page.getByText("Reading paused: 3 emails in the last batch could not be imported.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Reading stopped after repeated errors.", { exact: false })).toBeVisible();
+  await expect(page.getByTestId("backfill-progress")).toContainText("3 emails couldn't be read yet; they're tried again at the end.");
   await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Continue reading past emails" })).toBeVisible();
 });
