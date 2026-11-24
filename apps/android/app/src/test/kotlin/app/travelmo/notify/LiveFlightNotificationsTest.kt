@@ -65,8 +65,15 @@ class LiveFlightNotificationsTest {
         NotificationCompat.getShortCriticalText(posted) shouldBe "T3 G28"
         posted.extras.getCharSequence(Notification.EXTRA_TITLE).toString() shouldBe "XX 100 SYD to SIN"
         posted.extras.getCharSequence(Notification.EXTRA_TEXT).toString() shouldBe "Leaves at 09:00 · Departs from terminal 3, gate 28"
+        // What Android 16 asks of a Live Update: requested, ongoing, titled, a progress style, not
+        // colorized, not a group summary (and no custom views, which it never sets). Checked one by one, not with
+        // hasPromotableCharacteristics(): Robolectric's Android 16 build has the pre-release rule,
+        // which wanted it colorized, the opposite of what shipped.
         NotificationCompat.isRequestPromotedOngoing(posted) shouldBe true
-        NotificationCompat.hasPromotableCharacteristics(posted) shouldBe true
+        (posted.flags and Notification.FLAG_ONGOING_EVENT) shouldBe Notification.FLAG_ONGOING_EVENT
+        posted.extras.getString(Notification.EXTRA_TEMPLATE) shouldBe Notification.ProgressStyle::class.java.name
+        posted.extras.getBoolean(Notification.EXTRA_COLORIZED) shouldBe false
+        (posted.flags and Notification.FLAG_GROUP_SUMMARY) shouldBe 0
         manager.getNotificationChannel(LiveFlightNotifications.CHANNEL_ID).sound.shouldBeNull()
     }
 
