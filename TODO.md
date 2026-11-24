@@ -340,7 +340,7 @@
       list keeps the undated retention (`stillWaiting`).
 - [x] Revival after a reconfirmation should check the other pending
       cancellations for that booking (`standingCancellation`).
-- [ ] Show the cancelled label on upcoming trip cards: pass segments for
+- [x] Show the cancelled label on upcoming trip cards: pass segments for
       cancellation status independently of showNext (web page.tsx Section,
       Android TripListScreen), with a snapshot re-record.
 - [ ] Cancel through an alternate reference: one kept only as "Other

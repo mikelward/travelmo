@@ -146,13 +146,16 @@ private fun androidx.compose.foundation.lazy.LazyListScope.section(title: String
         )
     }
     items(trips, key = { it.id }) { trip ->
-        TripCard(trip = trip, title = titles[trip.id] ?: trip.title, shared = trip.ownerUid != uid, segments = if (showNext) state.segmentsByTrip[trip.id] else null, now = state.now, onClick = { onOpenTrip(trip.id) })
+        TripCard(trip = trip, title = titles[trip.id] ?: trip.title, shared = trip.ownerUid != uid, segments = state.segmentsByTrip[trip.id], now = state.now, showNext = showNext, onClick = { onOpenTrip(trip.id) })
     }
 }
 
-/** One trip: the title (as [displayTitles] shows it among the list), its dates, and for the trips with listeners what comes next. */
+/**
+ * One trip: the title (as [displayTitles] shows it among the list), its dates, whether every booking was
+ * cancelled when its [segments] are loaded, and with [showNext] (a trip under way) what comes next.
+ */
 @Composable
-fun TripCard(trip: Trip, title: String = trip.title, shared: Boolean, segments: List<Segment>?, now: String, onClick: () -> Unit) {
+fun TripCard(trip: Trip, title: String = trip.title, shared: Boolean, segments: List<Segment>?, now: String, showNext: Boolean = true, onClick: () -> Unit) {
     val badge = when {
         trip.deleting -> stringResource(Res.string.badge_deleting) to MaterialTheme.colorScheme.onSurfaceVariant
         shared -> stringResource(Res.string.badge_shared) to TravelmoTheme.colors.shared
@@ -177,18 +180,19 @@ fun TripCard(trip: Trip, title: String = trip.title, shared: Boolean, segments: 
             badge?.let { (text, color) -> Text(text.uppercase(), style = MaterialTheme.typography.labelMedium, color = color) }
         }
         Text(formatDateRange(trip.shownStart, trip.shownEnd), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
-        if (segments != null) StatusLines(segments, now)
+        if (segments != null) StatusLines(segments, now, showNext)
     }
 }
 
-/** The stay under way, the next event with how soon, and the flight's check-in window. */
+/** Whether every booking was cancelled, then with [showNext] the stay under way, the next event with how soon, and the flight's check-in window. */
 @Composable
-private fun StatusLines(segments: List<Segment>, now: String) {
-    val status = tripStatus(segments, now)
+private fun StatusLines(segments: List<Segment>, now: String, showNext: Boolean) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     if (allCancelled(segments)) {
         Text(stringResource(Res.string.trip_all_cancelled), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
     }
+    if (!showNext) return
+    val status = tripStatus(segments, now)
     status.stay?.let { stay ->
         val until = stay.end?.let { " · until ${formatDate(localDate(it))} ${localTime(it)}" } ?: ""
         Text(stringResource(Res.string.staying_at, stay.title) + until, style = MaterialTheme.typography.bodyLarge, color = muted, modifier = Modifier.padding(top = 8.dp))

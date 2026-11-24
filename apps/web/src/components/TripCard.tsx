@@ -2,8 +2,9 @@ import { allCancelled, checkInLine, displayBounds, eventVerb, formatDate, format
 import Link from "next/link";
 
 // A trip's card: the title (as displayTitles shows it among the list), its
-// dates, and for a trip under way what comes next (the list's top carries
-// the document warnings).
+// dates, whether every booking was cancelled, and given the time now (for a
+// trip under way) what comes next. The list's top carries the document
+// warnings.
 export function TripCard({
   trip,
   title = trip.title,

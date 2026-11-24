@@ -50,3 +50,15 @@ test("the card uses the airline's own check-in window", async ({ page }) => {
   const card = page.getByRole("link", { name: /Liverpool/ });
   await expect(card.getByTestId("trip-checkin")).toHaveText("Online check-in open, usually until departure");
 });
+
+test("an upcoming trip's card says when every booking was cancelled", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  const cancelled = { cancelledAt: "2026-12-01T09:00:00Z", cancelledBy: "m-cancel" };
+  await seedTrip(ownerUid, "e2e-status", cancelled);
+  await seedFlight("e2e-status", cancelled);
+  await page.clock.setSystemTime(new Date("2026-12-11T12:00:00Z"));
+  await page.goto("/");
+  const card = page.getByRole("link", { name: /Liverpool/ });
+  await expect(card.getByTestId("trip-cancelled")).toHaveText("Every booking cancelled");
+  await expect(card.getByTestId("trip-next")).toHaveCount(0);
+});
