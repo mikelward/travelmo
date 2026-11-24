@@ -46,7 +46,6 @@ import app.travelmo.core.emailAddressOf
 import app.travelmo.core.isAdmin
 import app.travelmo.core.linkedEmails
 import app.travelmo.data.Seen
-import com.mikelward.androidlog.safe
 import app.travelmo.core.LinkCheck
 import app.travelmo.core.checkNewLink
 import app.travelmo.core.myAddresses
@@ -103,12 +102,14 @@ import app.travelmo.core.isInternational
 import app.travelmo.core.shownEnd
 import app.travelmo.core.tripChecklist
 import app.travelmo.data.TripStore
-import app.travelmo.log.TravelmoLog
+import app.travelmo.logging.SharedLog
+import app.travelmo.logging.safe
 import app.travelmo.notify.NoPushDevice
 import app.travelmo.notify.PushDevice
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
+import kotlin.time.Clock
+import kotlin.time.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -183,7 +184,7 @@ class TripsViewModel(
     private val uid: String,
     private val email: String?,
     /** The clock, replaceable so a test renders a fixed moment. */
-    private val clock: () -> Instant = { Instant.now() },
+    private val clock: () -> Instant = { Clock.System.now() },
     /** This phone's messaging token and registration memory; none by default. */
     private val pushDevice: PushDevice = NoPushDevice,
     /** The parser's account deletion; none by default. */
@@ -226,7 +227,7 @@ class TripsViewModel(
     fun now(): String = clock().toString()
 
     /** Today's date on this device, as grouping and the calendar read it. */
-    fun today(): String = LocalDate.ofInstant(clock(), ZoneId.systemDefault()).toString()
+    fun today(): String = clock().toLocalDateTime(TimeZone.currentSystemDefault()).date.toString()
 
     /** The current instant, refreshed each minute so "next up" lines move on as events pass. */
     private val now: Flow<String> = flow {
@@ -347,7 +348,7 @@ class TripsViewModel(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        TravelmoLog.error(e, "Recording access failed")
+                        SharedLog.error(e, "Recording access failed")
                     }
                 }
             }
@@ -463,12 +464,12 @@ class TripsViewModel(
                 throw e
             } catch (e: Exception) {
                 if (failure == null) {
-                    TravelmoLog.error(e, "$operation failed")
+                    SharedLog.error(e, "$operation failed")
                 } else {
                     // By kind only: the message may name the address the write was for.
-                    TravelmoLog.error("%s failed: %s", safe(operation), safe(e.javaClass.simpleName))
+                    SharedLog.error(null, "%s failed: %s", safe(operation), safe(e::class.simpleName))
                 }
-                Outcome.Failed(failure ?: e.message ?: e.javaClass.simpleName)
+                Outcome.Failed(failure ?: e.message ?: e::class.simpleName.orEmpty())
             }
             _outcomes.update { it + (token to outcome) }
         }
@@ -648,20 +649,20 @@ class TripsViewModel(
 
     /** The Gmail mailboxes, judged against the clock each minute so a stalled reading shows as stopped. */
     val gmail: StateFlow<GmailState> = combine(accessSettled.flatMapLatest { store.gmailStatuses(uid) }, now) { statuses, at ->
-        val millis = Instant.parse(at).toEpochMilli()
+        val millis = Instant.parse(at).toEpochMilliseconds()
         if (statuses.isEmpty()) GmailState.NotConnected
         else GmailState.Connected(statuses.map { MailboxShown(it.emailAddress, it.progress, isReading(it.progress, millis)) })
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), GmailState.Loading)
 
     /** The Fastmail connection, judged against the clock the same way. */
     val fastmail: StateFlow<FastmailState> = combine(accessSettled.flatMapLatest { store.fastmailStatus(uid) }, now) { status, at ->
-        status?.let { FastmailState.Connected(MailboxShown(it.emailAddress, it.progress, isReading(it.progress, Instant.parse(at).toEpochMilli()))) }
+        status?.let { FastmailState.Connected(MailboxShown(it.emailAddress, it.progress, isReading(it.progress, Instant.parse(at).toEpochMilliseconds()))) }
             ?: FastmailState.NotConnected
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FastmailState.Loading)
 
     /** The mailboxes connected over IMAP, judged against the clock the same way. */
     val imap: StateFlow<ImapState> = combine(accessSettled.flatMapLatest { store.imapStatuses(uid) }, now) { statuses, at ->
-        val millis = Instant.parse(at).toEpochMilli()
+        val millis = Instant.parse(at).toEpochMilliseconds()
         ImapState.Loaded(statuses.map { ImapShown(MailboxShown(it.emailAddress, it.backfill, isReading(it.backfill, millis)), it.loginFailedAt != null) })
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ImapState.Loading)
 
@@ -888,7 +889,7 @@ class TripsViewModel(
             throw e
         } catch (e: Exception) {
             // Logged by kind only: the number is the user's.
-            TravelmoLog.error(e, "Removing a loyalty number found in emails failed")
+            SharedLog.error(e, "Removing a loyalty number found in emails failed")
             throw e
         }
     }
@@ -900,7 +901,7 @@ class TripsViewModel(
             throw e
         } catch (e: Exception) {
             // Logged by kind only: the number and the name are the user's.
-            TravelmoLog.error(e, "Saving whose a loyalty number is failed")
+            SharedLog.error(e, "Saving whose a loyalty number is failed")
             throw e
         }
     }
@@ -916,7 +917,7 @@ class TripsViewModel(
             try {
                 pushDevice.tokenChanged(store, uid, token)
             } catch (e: Exception) {
-                TravelmoLog.error(e, "Moving the registration to the current token failed")
+                SharedLog.error(e, "Moving the registration to the current token failed")
             }
         }
         emit(true)
@@ -1019,4 +1020,4 @@ class TripsViewModel(
 }
 
 /** A new reminder's id: random, so one that takes a freed slot is not ticked off where the one before it was. */
-internal fun newReminderId(): String = java.util.UUID.randomUUID().toString().replace("-", "").take(20)
+fun newReminderId(): String = kotlin.uuid.Uuid.random().toHexString().take(20)

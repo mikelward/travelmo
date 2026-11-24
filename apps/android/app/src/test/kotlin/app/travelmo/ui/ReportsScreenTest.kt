@@ -13,7 +13,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.travelmo.ui.theme.TravelmoTheme
 import io.kotest.matchers.shouldBe
-import java.time.Instant
+import kotlin.time.Instant
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith

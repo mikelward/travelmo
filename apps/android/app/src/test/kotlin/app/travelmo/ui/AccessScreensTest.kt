@@ -19,7 +19,7 @@ import app.travelmo.core.accessDecision
 import app.travelmo.core.accessRecordOf
 import app.travelmo.ui.theme.TravelmoTheme
 import io.kotest.matchers.shouldBe
-import java.time.Instant
+import kotlin.time.Instant
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith

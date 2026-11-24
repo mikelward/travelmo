@@ -51,7 +51,7 @@ import com.mikelward.androidzoom.FontSizeSettings
 import com.mikelward.androidzoom.compose.FontSizeState
 import com.mikepenz.aboutlibraries.Libs
 import com.mikepenz.aboutlibraries.util.withJson
-import java.time.Instant
+import kotlin.time.Instant
 import java.util.TimeZone
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking

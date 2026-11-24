@@ -29,6 +29,7 @@ kotlin {
         commonMain.dependencies {
             api(project(":core"))
             api(libs.kotlinx.coroutines.core)
+            api(libs.lifecycle.viewmodel.mp)
             api(libs.compose.mp.runtime)
             api(libs.compose.mp.resources)
         }

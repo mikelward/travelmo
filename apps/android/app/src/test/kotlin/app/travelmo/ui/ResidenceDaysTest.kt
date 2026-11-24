@@ -15,7 +15,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.travelmo.core.HomeCorrection
 import app.travelmo.data.RideSettings
 import app.travelmo.ui.theme.TravelmoTheme
-import java.time.Instant
+import kotlin.time.Instant
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
