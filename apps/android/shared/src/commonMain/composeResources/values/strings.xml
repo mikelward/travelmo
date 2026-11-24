@@ -22,6 +22,9 @@
     <!-- Trip list. -->
     <string name="trips_loading">Loading trips…</string>
     <string name="trips_empty">No trips yet.</string>
+    <string name="search_trips">Search trips</string>
+    <string name="searching_bookings">Searching bookings…</string>
+    <string name="no_trips_match">No trips match.</string>
     <string name="trips_empty_hint">Connect Gmail on the web app to import your bookings.</string>
     <string name="section_now">Now</string>
     <string name="section_upcoming">Upcoming</string>

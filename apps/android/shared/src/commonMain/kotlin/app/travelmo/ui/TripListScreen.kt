@@ -16,11 +16,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -40,6 +42,7 @@ import app.travelmo.core.ListWarning
 import app.travelmo.core.FlightStatus
 import app.travelmo.core.Segment
 import app.travelmo.core.Trip
+import app.travelmo.core.TripGroups
 import app.travelmo.core.WarningWhen
 import app.travelmo.core.allCancelled
 import app.travelmo.core.checkInLine
@@ -57,6 +60,9 @@ import app.travelmo.shared.Res
 import app.travelmo.shared.badge_deleting
 import app.travelmo.shared.badge_shared
 import app.travelmo.shared.checked_in_action
+import app.travelmo.shared.no_trips_match
+import app.travelmo.shared.search_trips
+import app.travelmo.shared.searching_bookings
 import app.travelmo.shared.section_now
 import app.travelmo.shared.section_past
 import app.travelmo.shared.section_upcoming
@@ -76,6 +82,8 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) -> Unit, onOpenSettings: () -> Unit, bottomBar: @Composable () -> Unit = {}) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val searchText by viewModel.searchText.collectAsStateWithLifecycle()
+    val found by viewModel.searchResult.collectAsStateWithLifecycle()
     val crashed = crashPending()
     // The cards' "I've checked in" writes: a finished one is acknowledged, a
     // failed one says so above the trips until the next tap replaces it.
@@ -124,6 +132,21 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
                 val titles = displayTitles(groups.current + groups.upcoming + groups.past)
                 // In the list, so it scrolls away with it rather than taking room from the trips.
                 if (crashed) item(key = "crash") { LastCrashBanner() }
+                // Searching every trip's bookings too (SPEC "Searching trips").
+                item(key = "search") {
+                    OutlinedTextField(
+                        value = searchText,
+                        onValueChange = viewModel::searchTrips,
+                        label = { Text(stringResource(Res.string.search_trips)) },
+                        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                val result = found
+                val shown = if (result == null) groups else groups.only(result.ids)
+                if (result != null && !result.bookingsSearched) item(key = "searching") { Message(stringResource(Res.string.searching_bookings), Modifier) }
+                if (result != null && result.bookingsSearched && result.ids.isEmpty()) item(key = "no-match") { Message(stringResource(Res.string.no_trips_match), Modifier) }
                 if (checkInFailed != null) {
                     item(key = "checked-in-failed") {
                         Text(checkInFailed, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
@@ -139,9 +162,9 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
                 // What comes next is said only for a trip under way; an upcoming
                 // trip's card is its title and dates.
                 val onCheckedIn = { tripId: String, segmentId: String -> viewModel.setCheckedIn("$CHECKED_IN_TOKEN$tripId/$segmentId", tripId, segmentId, true) }
-                section(Res.string.section_now, groups.current, titles, state, uid, showNext = true, onOpenTrip, onCheckedIn)
-                section(Res.string.section_upcoming, groups.upcoming, titles, state, uid, showNext = false, onOpenTrip, onCheckedIn)
-                section(Res.string.section_past, groups.past, titles, state, uid, showNext = false, onOpenTrip, onCheckedIn)
+                section(Res.string.section_now, shown.current, titles, state, uid, showNext = true, onOpenTrip, onCheckedIn)
+                section(Res.string.section_upcoming, shown.upcoming, titles, state, uid, showNext = false, onOpenTrip, onCheckedIn)
+                section(Res.string.section_past, shown.past, titles, state, uid, showNext = false, onOpenTrip, onCheckedIn)
             }
         }
     }
@@ -149,6 +172,9 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
 
 /** The prefix of the cards' "I've checked in" write tokens. */
 private const val CHECKED_IN_TOKEN = "list/checked-in/"
+
+private fun TripGroups.only(ids: Set<String>) =
+    TripGroups(current.filter { it.id in ids }, upcoming.filter { it.id in ids }, past.filter { it.id in ids })
 
 @Composable
 private fun Message(text: String, modifier: Modifier = Modifier) {

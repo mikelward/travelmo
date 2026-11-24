@@ -7,6 +7,8 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import io.kotest.matchers.shouldBe
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.travelmo.ui.theme.TravelmoTheme
@@ -68,5 +70,35 @@ class TripListScreenTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Couldn't save your check-in. Try again.").assertExists()
         composeRule.onNodeWithText("Online check-in open, usually until departure · Ref XX7Q2P").assertExists()
+    }
+
+    @Test
+    fun `searching finds trips by a booking's provider or place and by date`() {
+        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }
+        val search = composeRule.onNodeWithText("Search trips")
+
+        // Avanti runs the train to Liverpool; Dublin's flight lands at DUB.
+        search.performTextInput("avanti")
+        composeRule.waitUntil { viewModel.searchResult.value?.bookingsSearched == true }
+        composeRule.onNodeWithText("Liverpool").assertExists()
+        composeRule.onNodeWithText("Dublin").assertDoesNotExist()
+
+        search.performTextClearance()
+        search.performTextInput("DUB")
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Dublin").assertExists()
+        composeRule.onNodeWithText("Liverpool").assertDoesNotExist()
+
+        search.performTextClearance()
+        search.performTextInput("March 2026")
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Paris").assertExists()
+        composeRule.onNodeWithText("Dublin").assertDoesNotExist()
+
+        search.performTextClearance()
+        search.performTextInput("madrid")
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("No trips match.").assertExists()
     }
 }

@@ -259,6 +259,21 @@ class TripsViewModelTest {
     }
 
     @Test
+    fun `a search finds trips by their bookings once those are read, and by title before`() = runTest {
+        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        val watching = backgroundScope.launch { viewModel.searchResult.collect {} }
+        runCurrent()
+        viewModel.searchResult.value shouldBe null
+        viewModel.searchTrips("avanti")
+        runCurrent()
+        viewModel.searchResult.value shouldBe TripSearchResult(setOf("liverpool"), bookingsSearched = true)
+        viewModel.searchTrips("  ")
+        runCurrent()
+        viewModel.searchResult.value shouldBe null
+        watching.cancel()
+    }
+
+    @Test
     fun `the reminders switch writes the choice and reads the stored one`() = runTest {
         val store = FakeTripStore()
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL)

@@ -32,6 +32,34 @@ test("an imported email opens in the Gmail account it came from", async ({ page 
   );
 });
 
+// Bookings are searched too, not only titles (SPEC "Searching trips").
+test("the trips list finds trips by a booking's provider or place, and by date", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  await seedTrip(ownerUid, "e2e-liverpool", { provider: "Cove Hotels" });
+  await seedTrip(
+    ownerUid,
+    "e2e-lisbon",
+    { title: "Hotel Avenida", provider: "Hilton", start: "2025-03-28T15:00:00+00:00", end: "2025-04-02T11:00:00+00:00", destination: { name: "Hotel Avenida", city: "Lisbon", country: "PT" } },
+    { title: "Portugal", start: "2025-03-28", end: "2025-04-02" },
+  );
+  await page.goto("/");
+  const cards = page.getByRole("link", { name: /Liverpool|Portugal/ });
+  await expect(cards).toHaveCount(2);
+  const search = page.getByRole("searchbox", { name: "Search trips" });
+
+  await search.fill("hilton");
+  await expect(cards).toHaveText([/Portugal/]);
+  await search.fill("lisbon");
+  await expect(cards).toHaveText([/Portugal/]);
+  await search.fill("December 2026");
+  await expect(cards).toHaveText([/Liverpool/]);
+  await search.fill("madrid");
+  await expect(page.getByText("No trips match.")).toBeVisible();
+  await expect(cards).toHaveCount(0);
+  await search.fill("");
+  await expect(cards).toHaveCount(2);
+});
+
 test.describe("on a phone", () => {
   // The device but not its browser type, which a describe block can't set.
   const { viewport, userAgent, deviceScaleFactor, isMobile, hasTouch } = devices["Pixel 7"];

@@ -298,6 +298,26 @@ is the airline's, read from the flight number ("Check-in reminders"); an
 airline may change it, so the card says "usually". The clock behind these
 lines ticks once a minute.
 
+### Searching trips
+
+A search box tops the trip list, on the web and Android, and narrows its
+now, upcoming and past sections to the trips it finds
+(`packages/core/src/tripSearch.ts`, `TripSearch.kt`). A query is words and
+optionally a date. Every word must begin a word, ignoring case and
+accents, of the trip's title as listed or of one of its bookings' title,
+provider, reference, or a place's name, code, city, country code or
+country name: "hilton", "lisb", "LIS", "BA" (but not inside "Lisboa").
+A date picks trips under way at some point during it: a year ("2025"), a
+month of any year ("march") or of one ("March 2025", "2025-03"), or a day
+("12 Dec 2025", "2025-12-12"); a number beside a month is its day, else a
+word ("VS 11"). Words and a date combine ("lisbon april"). The trip
+documents hold only titles and dates, so the first search reads every
+trip's bookings (the web once, as the reports page does; Android listens,
+as its reports do) and keeps them while the list is open; until they
+answer, trips are matched by title and dates, under "Searching bookings…".
+A trip whose bookings couldn't be read is searched by title and dates
+only, and the web says so. With no match the list says "No trips match."
+
 `/calendar` shows the same trips month by month (`packages/core/src/calendar.ts`):
 weeks run Monday to Sunday, padded with the neighboring months' days, and
 each trip is a bar across the days it covers, clipped at the week's edges
