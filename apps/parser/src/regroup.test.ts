@@ -66,7 +66,7 @@ describe("regroupTrips with cancelled bookings", () => {
     store.trips.set("stockholm", trip("stockholm", "Stockholm", "2026-06-10", "2026-06-13"));
     const stay = { type: "lodging" as const, title: "Example Hotel Gamla Stan", start: "2026-06-10T15:00:00+02:00", end: "2026-06-13T11:00:00+02:00", destination: { name: "Example Hotel Gamla Stan", city: "Stockholm", country: "SE" } };
     store.segments.set("ms-0", segment("stockholm", "ms-0", "ms", stay, cancelled));
-    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0 });
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0, placed: 0 });
     expect(summary(store)).toEqual([{ title: "Stockholm", start: "2026-06-10", end: "2026-06-13", sharedWith: [], segments: ["ms-0"] }]);
   });
 
@@ -165,7 +165,7 @@ describe("regroupTrips", () => {
   it("splits days out at home from the trip away, each part shared as the trip was", async () => {
     const store = memoryStore();
     mayAsOneTrip(store);
-    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 3, deleted: 0 });
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 3, deleted: 0, placed: 0 });
     expect(summary(store)).toEqual([
       { title: "Eva Ward's Stage Stars! Holiday Club", start: "2026-05-22", end: "2026-05-22", sharedWith: ["partner@example.com"], segments: ["m22-0"] },
       { title: "Liverpool", start: "2026-05-23", end: "2026-05-25", sharedWith: ["partner@example.com"], segments: ["mtr-0", "mtr-1"] },
@@ -182,7 +182,7 @@ describe("regroupTrips", () => {
     await regroupTrips("u1", deps(store));
     const before = summary(store);
     const trips = new Map(store.trips);
-    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0 });
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0, placed: 0 });
     expect(summary(store)).toEqual(before);
     expect(new Map(store.trips)).toEqual(trips);
   });
@@ -219,10 +219,10 @@ describe("regroupTrips", () => {
         }),
       );
     }
-    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 1, deleted: 0 });
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 1, deleted: 0, placed: 0 });
     expect(store.trips.get("camp")?.title).toBe("Debutots Camp");
     store.trips.set("camp", { ...store.trips.get("camp")!, title: "Summer camp" });
-    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0 });
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0, placed: 0 });
     expect(store.trips.get("camp")?.title).toBe("Summer camp");
   });
 
@@ -258,7 +258,7 @@ describe("regroupTrips", () => {
       "h-0",
       segment("b", "h-0", "h", { type: "lodging", title: "Hotel", start: "2026-05-24T15:00:00+01:00", destination: { name: "Hotel", city: "Liverpool", country: "GB" } }),
     );
-    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 1, deleted: 1 });
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 1, deleted: 1, placed: 0 });
     expect(summary(store).map((t) => [t.title, t.segments])).toEqual([
       ["Liverpool", ["h-0", "o-0"]],
       ["Japan, some day", []],
@@ -293,7 +293,7 @@ describe("regroupTrips", () => {
     );
     store.segments.set("h2-0", segment("d", "h2-0", "h2", { type: "lodging", title: "Hotel", start: "2026-08-02T15:00:00+01:00", destination: hotel("Leeds") }));
     // Room for one trip's moves a pass, so the second waits for a second pass.
-    expect(await regroupTrips("u1", deps(store), 4)).toEqual({ changed: 2, deleted: 2 });
+    expect(await regroupTrips("u1", deps(store), 4)).toEqual({ changed: 2, deleted: 2, placed: 0 });
     expect([...store.trips.keys()].sort()).toEqual(["a", "c"]);
     expect(summary(store).map((t) => t.segments)).toEqual([["h-0", "o-0"], ["h2-0", "o2-0"]]);
   });
@@ -305,7 +305,8 @@ describe("regroupTrips", () => {
     let firstPass: Trip | undefined;
     store.withUserLock = async (uid, fn) => {
       const result = await lock(uid, fn);
-      firstPass ??= store.trips.get("london");
+      // Regrouping's own passes, not placing the bookings before them.
+      if (result && typeof result === "object" && "changedTrips" in result) firstPass ??= store.trips.get("london");
       return result;
     };
     // The first pass has room for the 22 May club day only.
@@ -324,7 +325,7 @@ describe("regroupTrips", () => {
     store.trips.set("liv", trip("liv", "Liverpool", "2026-05-01", "2026-05-08"));
     store.segments.set("m1-0", legacy("m1-0", { type: "train", title: "Out", start: "2026-05-01T12:07:00+01:00", origin: euston, destination: limeStreet }));
     store.segments.set("m1-1", legacy("m1-1", { type: "train", title: "Back", start: "2026-05-08T11:43:00+01:00", origin: limeStreet, destination: euston }));
-    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0 });
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0, placed: 0 });
     expect(summary(store).map((t) => [t.title, t.segments])).toEqual([["Liverpool", ["m1-0", "m1-1"]]]);
   });
 
@@ -360,7 +361,7 @@ describe("regroupTrips", () => {
       for (let i = 0; i < privateCount; i++) store.segments.set(`p${i}-0`, stay("private", `p${i}-0`, `2026-05-2${3 + (i % 2)}T15:00:00+01:00`));
       for (let i = 0; i < sharedCount; i++) store.segments.set(`s${i}-0`, train("shared", `s${i}-0`, `2026-05-2${3 + (i % 2)}T12:00:00+01:00`));
       const before = placement(store);
-      expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0 });
+      expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0, placed: 0 });
       expect(placement(store)).toEqual(before);
       expect(sharing(store)).toEqual(["private:", "shared:sam@example.com"]);
     });
@@ -413,12 +414,12 @@ describe("regroupTrips", () => {
     for (let i = 0; i < 4; i++) store.segments.set(`a10-${i}`, ticket("a", `a10-${i}`, "10"));
     for (let i = 0; i < 6; i++) store.segments.set(`b10-${i}`, ticket("b", `b10-${i}`, "10"));
     // Moving A's four 10 May tickets to B takes ten writes; a pass has six.
-    expect(await regroupTrips("u1", deps(store), 6)).toEqual({ changed: 2, deleted: 0 });
+    expect(await regroupTrips("u1", deps(store), 6)).toEqual({ changed: 2, deleted: 0, placed: 0 });
     const where = (prefix: string) => [...store.segments.values()].filter((s) => s.id.startsWith(prefix)).map((s) => s.tripId);
     expect(new Set(where("a1-"))).toEqual(new Set(["a"]));
     expect(new Set([...where("a10-"), ...where("b10-")])).toEqual(new Set(["b"]));
     expect(store.trips.get("a")).toMatchObject({ start: "2026-05-01", end: "2026-05-01" });
-    expect(await regroupTrips("u1", deps(store), 6)).toEqual({ changed: 0, deleted: 0 });
+    expect(await regroupTrips("u1", deps(store), 6)).toEqual({ changed: 0, deleted: 0, placed: 0 });
   });
 
   it("keeps legs together that a later email links", async () => {
@@ -441,7 +442,7 @@ describe("regroupTrips", () => {
         sources: [ref("b", "2026-04-20T09:00:00Z")],
       }),
     );
-    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0 });
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0, placed: 0 });
     expect(summary(store).map((t) => [t.title, t.segments])).toEqual([["Liverpool", ["a-0", "b-1"]]]);
   });
 });
@@ -521,13 +522,13 @@ describe("regroupTrips with outings at home", () => {
       origin: gb("Southampton Central", "Southampton"),
       destination: gb("London Waterloo", "London"),
     });
-    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 3, deleted: 0 });
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 3, deleted: 0, placed: 0 });
     expect(summary(store).map((t) => [t.start, t.end, t.segments])).toEqual([
       ["2025-06-27", "2025-06-27", ["dinner-0"]],
       ["2025-06-27", "2025-06-27", ["show-0"]],
       ["2025-06-29", "2025-06-29", ["train-0"]],
     ]);
-    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0 });
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0, placed: 0 });
   });
 
   it("splits a summer filed as one trip into the outings and the two trips away", async () => {
@@ -590,7 +591,7 @@ describe("regroupTrips with outings at home", () => {
       ["Boston", "2026-08-25", "2026-09-05", ["vs-0", "vs-1"]],
       ["Tower of London", "2026-11-01", "2026-11-01", ["tower-0"]],
     ]);
-    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0 });
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0, placed: 0 });
   });
 });
 
@@ -628,9 +629,10 @@ describe("regroupTrips with a trip named for a stay with no town", () => {
   it("names it after the town the trip goes to", async () => {
     const store = memoryStore();
     fill(store, "Designer Collingwood Terrace");
-    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 1, deleted: 0 });
+    // The flight's airports gain their spots from the table first.
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 1, deleted: 0, placed: 1 });
     expect(store.trips.get("mel")?.title).toBe("Melbourne");
-    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0 });
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0, placed: 0 });
   });
 
   it("names it after the town once the stay's place has since gained one", async () => {
@@ -638,14 +640,14 @@ describe("regroupTrips with a trip named for a stay with no town", () => {
     fill(store, "Designer Collingwood Terrace");
     const stay = store.segments.get("t-0")!;
     store.segments.set("t-0", { ...stay, destination: { name: "Designer Collingwood Terrace", city: "Collingwood", country: "AU" } });
-    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 1, deleted: 0 });
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 1, deleted: 0, placed: 1 });
     expect(store.trips.get("mel")?.title).toBe("Melbourne");
   });
 
   it("keeps a name the user gave it", async () => {
     const store = memoryStore();
     fill(store, "Christmas away");
-    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0 });
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0, placed: 1 });
     expect(store.trips.get("mel")?.title).toBe("Christmas away");
   });
 });
@@ -681,5 +683,28 @@ describe("regroupTrips after a journey home", () => {
       ["2026-08-15", "2026-08-23", ["fr-0", "fr-1"]],
       ["2026-08-25", "2026-09-05", ["vs-0", "vs-1"]],
     ]);
+  });
+});
+
+describe("regroupTrips placing bookings", () => {
+  it("first gives bookings the country their unambiguous city has, leaving their revision", async () => {
+    const store = memoryStore();
+    store.trips.set("liverpool", trip("liverpool", "Liverpool", "2026-05-23", "2026-05-25"));
+    const train = segment("liverpool", "t-0", "t", {
+      type: "train",
+      title: "London Euston to Liverpool Lime Street",
+      start: "2026-05-23T12:07:00+01:00",
+      end: "2026-05-23T14:23:00+01:00",
+      origin: { name: "London Euston", city: "London" },
+      destination: { name: "Liverpool Lime Street", city: "Liverpool" },
+    });
+    const typed = segment("liverpool", "h-0", "h", { type: "lodging", title: "Cove", start: "2026-05-23T15:00:00+01:00", end: "2026-05-25T11:00:00+01:00", destination: { name: "Cove", city: "Liverpool" } }, { source: "manual" });
+    store.segments.set(train.id, train);
+    store.segments.set(typed.id, typed);
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0, placed: 1 });
+    expect(store.segments.get("t-0")).toMatchObject({ origin: { country: "GB" }, destination: { country: "GB" }, updatedAt: at });
+    // A hand-entered booking stays as its author wrote it.
+    expect(store.segments.get("h-0")?.destination?.country).toBeUndefined();
+    expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0, placed: 0 });
   });
 });

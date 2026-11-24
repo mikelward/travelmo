@@ -5,13 +5,19 @@
 export const regroupPath = "/trips/regroup";
 export const deleteAllTripsPath = "/trips/delete-all";
 
-// What regrouping did, in a line for the Settings page.
-export type RegroupResult = { changed: number; deleted: number };
+// What regrouping did, in a line for the Settings page: `placed` counts the
+// bookings it first gave a country or a spot from the airport and city
+// tables (absent from a parser older than that).
+export type RegroupResult = { changed: number; deleted: number; placed?: number };
 
-export function describeRegroup({ changed, deleted }: RegroupResult): string {
-  if (changed === 0 && deleted === 0) return "Your trips were already grouped this way.";
-  const trips = (n: number) => `${n} trip${n === 1 ? "" : "s"}`;
-  const parts = [changed ? `${trips(changed)} rebuilt` : "", deleted ? `${trips(deleted)} merged away` : ""].filter(Boolean);
+export function describeRegroup({ changed, deleted, placed = 0 }: RegroupResult): string {
+  if (changed === 0 && deleted === 0 && placed === 0) return "Your trips were already grouped this way.";
+  const count = (n: number, what: string) => `${n} ${what}${n === 1 ? "" : "s"}`;
+  const parts = [
+    changed ? `${count(changed, "trip")} rebuilt` : "",
+    deleted ? `${count(deleted, "trip")} merged away` : "",
+    placed ? `${count(placed, "booking")} placed` : "",
+  ].filter(Boolean);
   return `Done: ${parts.join(", ")}.`;
 }
 
