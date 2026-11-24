@@ -1513,15 +1513,15 @@ export function tripTitle(
 }
 
 // The course a trip of nothing but tickets is: one ticket, which may span
-// several days, or one a day whose titles differ only in the day or date
-// ("Holiday Camp - Junior Group (Day 2)", "Debutots Camp - 12th Aug 2025"),
-// named without it. Otherwise undefined: tickets for different things are
-// named for where they are.
+// several days, or one a day with the same title, or titles that differ
+// only in the day or date ("Holiday Camp - Junior Group (Day 2)", "Debutots
+// Camp - 12th Aug 2025"), named without it. Otherwise undefined: tickets
+// for different things are named for where they are.
 export function courseTitle(segments: readonly ExtractedSegment[]): string | undefined {
   const first = segments[0];
   if (!first || !segments.every((s) => s.type === "activity")) return undefined;
-  const names = new Set(segments.map((s) => courseName(s.title)));
-  if (segments.length === 1 || (names.size === 1 && segments.some((s) => s.title !== courseName(s.title)))) return courseName(first.title);
+  const names = new Set(segments.map((s) => courseName(s.title).trim().toLowerCase()));
+  if (segments.length === 1 || names.size === 1) return courseName(first.title);
   return undefined;
 }
 

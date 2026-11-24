@@ -1547,8 +1547,8 @@ changes what its bookings say (a stay's confirmation giving the town its
 request lacked); a trip the owner renamed keeps its name
 (`importGaveTitle`). A day
 out is named after what it is, and so is a course of several days at one
-place: one ticket spanning them, or one a day whose titles differ only in
-the day or date ("Holiday Camp East Finchley - Junior Group" for "... (Day
+place: one ticket spanning them, or one a day with the same title or
+titles that differ only in the day or date ("Holiday Camp East Finchley - Junior Group" for "... (Day
 2)", "Debutots Camp" for "Debutots Camp - 11th Aug 2025", not the school it
 runs at). A date there has a day and a month, in the forms bookings write
 ("- 11th Aug 2025", "(Mon 11 Aug)", ", 11/08/2025", "- 2025-08-11", "on 11
