@@ -54,9 +54,9 @@ fun loyaltySummary(entry: ProfileEntry): LoyaltySummary = LoyaltySummary(
 // Words that name what a program is, not whose it is, and the parts of a
 // web address that are not the brand.
 private val generic = setOf(
-    "air", "airline", "airlines", "airways", "and", "award", "awards", "biz", "bonus", "card", "club", "com", "flyer", "frequent", "group",
+    "air", "airline", "airlines", "airways", "and", "award", "awards", "biz", "bonus", "card", "club", "com", "flier", "flyer", "frequent", "group",
     "honors", "hotel", "hotels", "http", "https", "info", "inn", "international", "loyalty", "member", "members", "membership", "miles",
-    "net", "org", "plus", "points", "privilege", "privileges", "program", "programme", "reward", "rewards", "resorts", "the", "travel", "www",
+    "net", "number", "org", "plus", "points", "privilege", "privileges", "program", "programme", "reward", "rewards", "resorts", "the", "travel", "www",
 )
 
 /** The distinctive words of a name: three or more letters or digits, not generic. */

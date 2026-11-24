@@ -1677,8 +1677,14 @@ The same model call that reads a booking email lists the loyalty numbers it
 shows (`memberships`: program, number, the member's name, status), never a
 booking reference or card number. Once the email is imported as a booking,
 the parser keeps them in `foundLoyalty` on the travel profile, starting the
-profile if need be. One whose name could not be the account's (it shares no
-name with the Google profile's `displayName`) is someone the owner books
+profile if need be. A number under a generic label ("Frequent Flyer") is
+filed under its airline's program (`namedProgram`): by the airline code
+written before it ("UA-…" → United MileagePlus), else the one airline every
+flight of the booking is with; the model is also asked to name the program
+and, where an email lists travelers one after another, the traveler each
+number is listed with. One whose name could not be the account's (it shares
+no name with the Google profile's `displayName`, or its first name is
+another, as family who share a surname) is someone the owner books
 for, a partner or a child: it is kept as theirs (`person`, the name as a
 person is called: "MR ALEX SAMPLE" and "SAMPLE/ALEX MR" become "Alex
 Sample"). A number that is a balance read as one ("9,600 Points": a comma,

@@ -198,6 +198,27 @@ describe("importMessage", () => {
     expect(JSON.stringify(logged)).not.toContain("EA 123 456");
   });
 
+  it("files numbers under a generic label with the airline's program, each traveler's as theirs", async () => {
+    const store = memoryStore();
+    store.ownerNames.set("u1", "Mikel Example");
+    const united: ExtractedBooking = {
+      isBooking: true,
+      segments: [
+        { type: "flight", title: "UA 123 LHR to DEN", start: "2026-12-15T09:00:00+00:00", origin: { name: "London Heathrow", code: "LHR", country: "GB" }, destination: { name: "Denver", code: "DEN", country: "US" } },
+      ],
+      memberships: [
+        { program: "Frequent Flyer", number: "UA-*****505", holder: "Mikel Example" },
+        { program: "Frequent Flyer", number: "UA-*****166", holder: "Jessica Example" },
+      ],
+    };
+    expect(await importMessage("u1", email({ subject: "Your United booking confirmation" }), deps(store, async () => united))).toBe("imported");
+    expect(store.foundLoyalty.get("u1")).toEqual([
+      expect.objectContaining({ program: "United MileagePlus", number: "UA-*****505", holder: "Mikel Example" }),
+      expect.objectContaining({ program: "United MileagePlus", number: "UA-*****166", holder: "Jessica Example", person: "Jessica Example" }),
+    ]);
+    expect(store.foundLoyalty.get("u1")?.[0]).not.toHaveProperty("person");
+  });
+
   it("keeps no membership from an email that books no travel, nor from one that is no booking", async () => {
     const store = memoryStore();
     const appointment: ExtractedBooking = {

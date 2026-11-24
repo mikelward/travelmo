@@ -34,6 +34,8 @@ class LoyaltyTest {
         programsFor("www.example-air.com", listOf(air)) shouldBe listOf(air)
         val dotCom = entry("Example.com Rewards", "Account number" to "EX123")
         nameWords("www.example.com") shouldBe setOf("example")
+        nameWords("Frequent Flyer number") shouldBe emptySet()
+        nameWords("Frequent flier no.") shouldBe emptySet()
         programsFor("Other-air.com", listOf(dotCom)) shouldBe emptyList()
         programsFor("example.com", listOf(dotCom)) shouldBe listOf(dotCom)
         programsFor("Air Miles", listOf(air, hotels)) shouldBe emptyList()

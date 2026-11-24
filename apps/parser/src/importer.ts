@@ -39,6 +39,7 @@ import {
   segmentDateRange,
   segmentSources,
   stableHash,
+  namedProgram,
   type ExtractedSegment,
   needsGeocoding,
   type GeocodeLookup,
@@ -439,7 +440,7 @@ export async function importMessage(
     // A travel loyalty statement (the pre-filter let it through for its
     // sender) is no booking, but its balance and status are kept; any other
     // email that is no booking keeps nothing.
-    if (statement && booking.memberships?.length) await keepMemberships(uid, message, booking.memberships, now(), deps, sent);
+    if (statement && booking.memberships?.length) await keepMemberships(uid, message, booking.memberships, booking.segments, now(), deps, sent);
     await save(record("not_booking", { reason }));
     await learn("others");
     log("not_booking", { uid, messageId: message.id });
@@ -508,7 +509,7 @@ export async function importMessage(
   // Only from an email that books travel: a ticket or an appointment that
   // shows a member number (a clinic's, a party's) keeps nothing.
   const booksTravel = booking.segments.some((segment) => travelTypes.has(segment.type));
-  if (isEmail && booksTravel && booking.memberships?.length) await keepMemberships(uid, message, booking.memberships, timestamp, deps, sent);
+  if (isEmail && booksTravel && booking.memberships?.length) await keepMemberships(uid, message, booking.memberships, booking.segments, timestamp, deps, sent);
   log("imported", { uid, messageId: message.id, tripId, segments: segmentIds.length, duplicates });
   return "imported";
 }
@@ -521,6 +522,7 @@ async function keepMemberships(
   uid: string,
   message: EmailMessage,
   memberships: readonly ExtractedMembership[],
+  segments: readonly ExtractedSegment[],
   at: string,
   deps: ImportDeps,
   sent: string | undefined,
@@ -535,8 +537,11 @@ async function keepMemberships(
         uid,
         // A balance and a status are as of when the email was sent, so an
         // older one never replaces a newer (withFoundLoyalty).
+        // A number under a generic label ("Frequent Flyer") is filed under
+        // its airline's program (namedProgram).
         kept.map((m) => ({
           ...m,
+          program: namedProgram(m, segments),
           ...personOf(m.holder, owner),
           messageId: message.id,
           label: message.subject,

@@ -81,6 +81,8 @@ describe("programsFor", () => {
   it("never matches on the parts of a web address", () => {
     const dotCom: ProfileEntry = { title: "Example.com Rewards", fields: [{ label: "Account number", value: "EX123" }] };
     expect(nameWords("www.example.com")).toEqual(new Set(["example"]));
+    expect(nameWords("Frequent Flyer number").size).toBe(0);
+    expect(nameWords("Frequent flier no.").size).toBe(0);
     expect(programsFor("Other-air.com", [dotCom])).toEqual([]);
     expect(programsFor("https://www.other.net", [dotCom])).toEqual([]);
     expect(programsFor("example.com", [dotCom])).toEqual([dotCom]);
@@ -181,6 +183,13 @@ describe("loyalty from emails", () => {
 
   it("tells the owner's membership from a fellow traveler's by name", () => {
     expect(couldBeOwner("MR J SMITH", "Jane Smith")).toBe(true);
+    expect(couldBeOwner("SMITH/JANE MRS", "Jane Smith")).toBe(true);
+    expect(couldBeOwner("Ann Smith", "Jane Ann Smith")).toBe(true);
+    expect(couldBeOwner("Smith", "Jane Smith")).toBe(true);
+    // Family on the same booking: a surname in common is not enough.
+    expect(couldBeOwner("Jessica Ward", "Mikel Ward")).toBe(false);
+    expect(couldBeOwner("MS J WARD", "Mikel Ward")).toBe(false);
+    expect(couldBeOwner("WARD/MIKEL MR", "Mikel Ward")).toBe(true);
     expect(couldBeOwner("Alex Example", "Jane Smith")).toBe(false);
     expect(couldBeOwner(undefined, "Jane Smith")).toBe(true);
     expect(couldBeOwner("Alex Example", undefined)).toBe(true);
