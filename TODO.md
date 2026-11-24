@@ -437,6 +437,10 @@
         the other credentials are (`sealing.ts`, and found by
         `sealStored.ts`). Neither iCloud nor Infomaniak offers OAuth for
         mail.
+- [ ] Use the phone's location to tell when you've left the arrival
+      airport, ending the trip card's hour after landing (gate, carousel,
+      what comes next) then instead. On the device only, like everything
+      else about where someone is.
 
 ## iOS app
 
@@ -466,6 +470,10 @@ Kotlin Multiplatform, sharing the Android app's Kotlin (SPEC "iOS app").
 
 Guesses made on autopilot; change any of them freely.
 
+- Trip card after landing: an hour (no location yet), measured from the
+  service's landing, else its estimate, else as booked; a booking that
+  started while the flight was in the air counts as still to come for that
+  hour; with no live status the card shows that booking, not the flight.
 - Forwarded and IMAP messages are read up to 16 MB (was 2 MB), so the
   10 MB of PDFs the model is shown fits after base64; Cloudflare takes
   messages up to 25 MiB and Cloud Run requests up to 32 MiB. A bigger
