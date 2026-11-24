@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./airports": "./src/airports.ts",
     "./airportPlaces": "./src/airportPlaces.ts",
+    "./cityCountries": "./src/cityCountries.ts",
     "./projection": "./src/projection.ts",
     "./visaRules": "./src/visaRules.ts"
   },
@@ -14,6 +15,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "airports": "node scripts/airports.mjs",
+    "cities": "node scripts/cities.mjs",
     "visas": "node scripts/visas.mjs"
   },
   "dependencies": {
@@ -21,6 +23,7 @@
   },
   "devDependencies": {
     "airport-data": "1.0.1",
+    "all-the-cities": "3.1.0",
     "typescript": "^5.9.0",
     "tz-lookup": "6.1.25",
     "vitest": "^5.0.5"

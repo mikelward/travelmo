@@ -1,5 +1,6 @@
-import { enrichSegments, fillAirports, needsGeocoding, paths, type Segment, type Trip } from "@travelmo/core";
+import { enrichSegments, fillAirports, fillCities, needsGeocoding, paths, type GeocodeLookup, type Segment, type Trip } from "@travelmo/core";
 import { airportPlace } from "@travelmo/core/airportPlaces";
+import { cityCountry } from "@travelmo/core/cityCountries";
 import { FieldPath, type Firestore } from "firebase-admin/firestore";
 import { refuseIfDeleted } from "./deleted";
 import type { ImportDeps } from "./importer";
@@ -61,6 +62,16 @@ export function memoryRetryStore(): RetryStore & { entries: Map<string, GeocodeR
   };
 }
 
+// A booking's places as the airport and city tables fill them in.
+const placedLocally = (segment: Segment): Segment => fillCities(fillAirports(segment, airportPlace), cityCountry) as Segment;
+
+// How many places gained a country from the tables.
+const countriesAdded = (before: Segment, after: Segment): number =>
+  [
+    [before.origin, after.origin],
+    [before.destination, after.destination],
+  ].filter(([a, b]) => !a?.country && b?.country).length;
+
 export const defaultSweepLimit = 200;
 // An entry this old is dropped unasked: the budget has had its chances.
 export const maxRetryAgeDays = 30;
@@ -68,14 +79,17 @@ export const maxRetryAgeDays = 30;
 export type SweepResult = { seen: number; placed: number; dropped: number; deferred: number; failed: number };
 
 // Asks again for each queued booking, oldest first, until the budget is
-// spent again. A booking edited since (by its revision) is left alone and
+// spent again; what the airport and city tables answer is filled in first,
+// with no call, and with no geocoder at all the tables alone answer. A booking edited since (by its revision) is left alone and
 // kept for another day. What the sweep writes does not move the booking's
 // revision: an unedited booking (updatedAt still its createdAt) stays one,
 // so a calendar cancellation or change can still replace it.
 export async function sweepGeocodeRetries(deps: ImportDeps, limit = defaultSweepLimit): Promise<SweepResult> {
   const result: SweepResult = { seen: 0, placed: 0, dropped: 0, deferred: 0, failed: 0 };
-  const { store, geocode, geocodeRetries } = deps;
-  if (!geocode || !geocodeRetries) return result;
+  const { store, geocodeRetries } = deps;
+  if (!geocodeRetries) return result;
+  // Without a geocoder every question waits; the tables still answer.
+  const geocode: GeocodeLookup = deps.geocode ?? (async () => "later");
   const now = deps.now();
   const tooOld = Date.parse(now) - maxRetryAgeDays * 86_400_000;
   // A booking moved to another trip, or carried along by a merge, keeps its
@@ -108,20 +122,32 @@ export async function sweepGeocodeRetries(deps: ImportDeps, limit = defaultSweep
       continue;
     }
     const { tripId } = segment;
-    const { segments, deferred, countryDeferred, failed, filled } = await enrichSegments([fillAirports(segment, airportPlace)], geocode);
-    const enriched = segments[0]!;
+    // What the tables answer (an airport, an unambiguous city) costs no call.
+    const local = placedLocally(segment);
+    const fromTables = countriesAdded(segment, local);
+    const { segments, deferred, countryDeferred, failed, filled: asked } = await enrichSegments([local], geocode);
+    // A failed lookup keeps only what the tables gave.
+    const enriched = failed ? local : segments[0]!;
+    const filled = (failed ? 0 : asked) + fromTables;
     if (deferred) {
       result.deferred += 1;
       // A country lookup refused means the whole budget is spent for today,
       // and the rest of the queue waits with it; a spot-only refusal means
       // only the spots' share is, and bookings lacking a country still get
       // their turn.
-      if (countryDeferred) break;
-      if (!filled) continue;
+      if (!filled) {
+        if (!deps.geocode) {
+          // The tables have nothing more to say, and nothing else will.
+          await drop();
+          continue;
+        }
+        if (countryDeferred) break;
+        continue;
+      }
     }
     if (failed) {
       result.failed += 1;
-      continue;
+      if (!filled) continue;
     }
     if (filled) {
       const written = await store.withUserLock(entry.uid, async (tx) => {
@@ -141,8 +167,12 @@ export async function sweepGeocodeRetries(deps: ImportDeps, limit = defaultSweep
       result.placed += 1;
       deps.log("geocode_swept", { uid: entry.uid, tripId, segmentId: entry.segmentId, filled });
     }
-    // A booking still waiting for its spot keeps its place in the queue.
-    if (deferred) continue;
+    // A booking still waiting for an answer keeps its place in the queue.
+    if (failed) continue;
+    if (deferred && deps.geocode) {
+      if (countryDeferred) break;
+      continue;
+    }
     // Answered, whether or not anything was filled ("none" is an answer).
     await drop();
   }

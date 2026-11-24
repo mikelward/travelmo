@@ -252,9 +252,11 @@ const deps: ImportDeps = {
           now: () => new Date().toISOString(),
           log: (event, fields) => log("INFO", event, fields),
         }),
-        geocodeRetries: firestoreRetryStore(db),
       }
     : {}),
+  // Without a geocoder the queue still gets the airport and city tables'
+  // answers, in the daily sweep.
+  geocodeRetries: firestoreRetryStore(db),
   homeOverrides: (uid) => loadHomeOverrides(db, uid, (event, fields) => log("WARNING", event, fields)),
   now: () => new Date().toISOString(),
   log: (event, fields, severity) => log(severity ?? "INFO", event, fields),
