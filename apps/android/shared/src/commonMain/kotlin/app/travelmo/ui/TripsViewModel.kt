@@ -1,5 +1,8 @@
 package app.travelmo.ui
 
+import app.travelmo.core.JourneyGap
+import app.travelmo.core.journeyGap
+import app.travelmo.core.journeyGapHomes
 import app.travelmo.core.displayTitles
 import app.travelmo.core.homeTownKey
 import app.travelmo.core.ChosenHomeAirports
@@ -1086,6 +1089,19 @@ class TripsViewModel(
     fun removeRideCompany(token: String, company: RideCompany) = run(token, "removeRideCompany") { store.removeRideCompany(uid, company) }
 
     fun hideRideNeed(token: String, need: RideNeed) = run(token, "hideRideNeed") { store.hideRideNeed(uid, rideNeedKey(need)) }
+
+    /** Says a trip goes one way, so it no longer says a journey back is missing. */
+    fun markOneWay(token: String, tripId: String) = run(token, "markOneWay") { store.markOneWay(uid, tripId) }
+
+    /**
+     * The journey a trip seems to be missing (journeyGap), unless the viewer
+     * said it goes one way, or it was cancelled or is being deleted. Home is
+     * only what they set on Profile, as on the web.
+     */
+    fun journeyGapFor(trip: Trip, segments: List<Segment>, settings: RideSettings?): JourneyGap? {
+        if (settings == null || trip.cancelledAt != null || trip.deleting || trip.id in settings.oneWayTrips) return null
+        return journeyGap(segments, journeyGapHomes(settings.homes, settings.homeAirports))
+    }
 
     /** Removes a loyalty number found in the user's emails from their profile. */
     fun removeFoundLoyalty(token: String, found: FoundLoyalty) = run(token, "removeFoundLoyalty") {

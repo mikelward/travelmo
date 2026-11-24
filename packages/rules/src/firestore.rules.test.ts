@@ -313,6 +313,13 @@ describe("users", () => {
     await assertFails(setDoc(doc(as(partner), paths.user(owner.uid)), { rideCompanies }, { merge: true }));
   });
 
+  it("a user keeps the trips they said go one way, at most two hundred, and nobody else writes them", async () => {
+    await assertSucceeds(setDoc(doc(as(owner), paths.user(owner.uid)), { oneWayTrips: ["t1"] }, { merge: true }));
+    await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { oneWayTrips: "t1" }, { merge: true }));
+    await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { oneWayTrips: Array.from({ length: 201 }, (_, i) => `t${i}`) }, { merge: true }));
+    await assertFails(setDoc(doc(as(partner), paths.user(owner.uid)), { oneWayTrips: ["t1"] }, { merge: true }));
+  });
+
   it("a user keeps their own reminders before international trips, at most twenty, each checked, and nobody else sees them", async () => {
     const at = "2026-11-07T00:00:00Z";
     const visa = { id: "r1", text: "Apply for a visa", amount: 30, unit: "days", createdAt: at };

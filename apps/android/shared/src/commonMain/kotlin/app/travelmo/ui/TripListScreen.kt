@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.travelmo.core.journeyGapText
 import app.travelmo.core.ListWarning
 import app.travelmo.core.FlightStatus
 import app.travelmo.core.Segment
@@ -91,6 +92,9 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
     val found by viewModel.searchResult.collectAsStateWithLifecycle()
     val filters by viewModel.listFilters.collectAsStateWithLifecycle()
     val hidden by viewModel.hiddenTrips.collectAsStateWithLifecycle()
+    val rideSettings by viewModel.rideSettings.collectAsStateWithLifecycle()
+    // A journey a trip seems to be missing, for the cards whose bookings are read, as its page says it.
+    val missingOf = { trip: Trip -> state.segmentsByTrip[trip.id]?.let { viewModel.journeyGapFor(trip, it, rideSettings) }?.let(::journeyGapText) }
     val crashed = crashPending()
     // The cards' "I've checked in" writes: a finished one is acknowledged, a
     // failed one says so above the trips until the next tap replaces it.
@@ -183,9 +187,9 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
                 // What comes next is said only for a trip under way; an upcoming
                 // trip's card is its title and dates.
                 val onCheckedIn = { tripId: String, segmentId: String -> viewModel.setCheckedIn("$CHECKED_IN_TOKEN$tripId/$segmentId", tripId, segmentId, true) }
-                section(Res.string.section_now, shown.current, titles, state, uid, showNext = true, onOpenTrip, onCheckedIn)
-                section(Res.string.section_upcoming, shown.upcoming, titles, state, uid, showNext = false, onOpenTrip, onCheckedIn)
-                section(Res.string.section_past, shown.past, titles, state, uid, showNext = false, onOpenTrip, onCheckedIn)
+                section(Res.string.section_now, shown.current, titles, state, uid, showNext = true, onOpenTrip, onCheckedIn, missingOf)
+                section(Res.string.section_upcoming, shown.upcoming, titles, state, uid, showNext = false, onOpenTrip, onCheckedIn, missingOf)
+                section(Res.string.section_past, shown.past, titles, state, uid, showNext = false, onOpenTrip, onCheckedIn, missingOf)
             }
         }
     }
@@ -214,6 +218,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.section(
     showNext: Boolean,
     onOpenTrip: (String) -> Unit,
     onCheckedIn: (tripId: String, segmentId: String) -> Unit,
+    missingOf: (Trip) -> String?,
 ) {
     if (trips.isEmpty()) return
     item(key = "section-$title") {
@@ -228,6 +233,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.section(
             trip = trip, title = titles[trip.id] ?: trip.title, shared = trip.ownerUid != uid, segments = state.segmentsByTrip[trip.id], now = state.now, showNext = showNext,
             flightStatuses = state.flightStatuses, checkedIn = state.checkedIn[trip.id].orEmpty(),
             onCheckedIn = { segmentId -> onCheckedIn(trip.id, segmentId) },
+            missing = missingOf(trip),
             onClick = { onOpenTrip(trip.id) },
         )
     }
@@ -249,6 +255,8 @@ fun TripCard(
     flightStatuses: Map<String, FlightStatus> = emptyMap(),
     checkedIn: Set<String> = emptySet(),
     onCheckedIn: ((segmentId: String) -> Unit)? = null,
+    /** "No flight back to London found", for a trip that seems to miss one (journeyGap). */
+    missing: String? = null,
     onClick: () -> Unit,
 ) {
     val badge = when {
@@ -288,6 +296,9 @@ fun TripCard(
             textDecoration = struck,
             modifier = Modifier.padding(top = 4.dp),
         )
+        if (!cancelled && missing != null) {
+            Text(missing, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.padding(top = 8.dp))
+        }
         // A cancelled trip has nothing coming.
         if (!cancelled && segments != null) StatusLines(segments, now, showNext, flightStatuses, checkedIn, onCheckedIn)
     }

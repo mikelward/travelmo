@@ -1005,6 +1005,27 @@ widens, the source is deleted, and the target keeps its own sharing list.
 Both run as transactions; the merge reads the source's bookings first and
 re-reads if the source's `updatedAt` moved in between.
 
+### A journey missing
+
+A trip whose journeys (flights, trains, buses and ferries still booked, with
+both ends known, in order) don't come back to the city they left from
+(another of its airports counts, `sameArea`) seems to be missing one: the
+flight home an email the import never read, or read wrong, would have
+given (`journeyGap`, in `packages/core` and `:core`). Its page says "No
+flight back to London found" ("journey" when not every journey flies),
+with Find it in Gmail (a search for the trip's booking references, else the
+city), Add it yourself (for those who may edit, the booking form starting on
+the day the last journey lands) and This trip is one way, which adds the
+trip to the viewer's `oneWayTrips` on their user document (at most two
+hundred, the newest kept) and stops it saying so, for them alone. A trip
+that ends at a home the viewer set on Profile but leaves from elsewhere says
+the journey out is missing instead ("No flight to Boston found"; one of the
+airports chosen for that home counts as home); home is
+otherwise not worked out, as a one-way trip has no round trip to work it
+from, and a trip is taken to start at home. The list's cards say the same,
+on the web and Android, for the trips whose bookings the list reads (those
+under way and the next few); a cancelled or deleting trip says nothing.
+
 ### Car and ride suggestions
 
 Under a flight with nothing booked on the ground, the trip page suggests

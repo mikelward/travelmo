@@ -1,5 +1,6 @@
 package app.travelmo.ui
 
+import app.travelmo.core.journeyGapText
 import app.travelmo.core.RefreshShown
 import app.travelmo.core.ImapMailbox
 import app.travelmo.core.imapMailboxes
@@ -189,6 +190,20 @@ class TripsViewModelTest {
         viewModel.hideRideNeed("hide", needs[1])
         viewModel.outcomes.value shouldBe mapOf("hide" to Outcome.Done)
         store.hiddenRides shouldBe listOf("b-out/car")
+    }
+
+    @Test
+    fun `a trip with no flight back says so until the viewer says it goes one way`() = runTest {
+        val store = FakeTripStore()
+        val viewModel = TripsViewModel(store, OWNER, null, clock = { Instant.parse(FROZEN_NOW) })
+        val out = fixtureBostonSegments.filter { it.id == "b-out" }
+        viewModel.journeyGapFor(fixtureBostonTrip, out, RideSettings())?.let(::journeyGapText) shouldBe "No flight back to London found"
+        viewModel.journeyGapFor(fixtureBostonTrip, fixtureBostonSegments, RideSettings()) shouldBe null
+        viewModel.journeyGapFor(fixtureBostonTrip, out, null) shouldBe null
+        viewModel.markOneWay("one-way", "boston")
+        viewModel.outcomes.value shouldBe mapOf("one-way" to Outcome.Done)
+        store.rides.value.oneWayTrips shouldBe listOf("boston")
+        viewModel.journeyGapFor(fixtureBostonTrip, out, store.rides.value) shouldBe null
     }
 
     @Test

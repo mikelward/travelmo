@@ -1,5 +1,6 @@
 package app.travelmo.data
 
+import app.travelmo.core.withOneWay
 import app.travelmo.core.RefreshShown
 import app.travelmo.core.checkedInOf
 import app.travelmo.core.withCheckedIn
@@ -404,6 +405,14 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         db.runTransaction { tx ->
             val stored = (tx.get(ref).get("hiddenRideNeeds") as? List<*>).orEmpty().filterIsInstance<String>()
             tx.setData(ref, mapOf("hiddenRideNeeds" to withHidden(stored, key)), SetOptions.merge())
+        }.await()
+    }
+
+    override suspend fun markOneWay(uid: String, tripId: String) {
+        val ref = db.collection("users").document(uid)
+        db.runTransaction { tx ->
+            val stored = (tx.get(ref).get("oneWayTrips") as? List<*>).orEmpty().filterIsInstance<String>()
+            tx.setData(ref, mapOf("oneWayTrips" to withOneWay(stored, tripId)), SetOptions.merge())
         }.await()
     }
 

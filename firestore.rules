@@ -246,13 +246,15 @@ service cloud.firestore {
         return (!('homes' in data) || (data.homes is list && data.homes.size() <= 50))
           && (!('homeAirports' in data) || (data.homeAirports is list && data.homeAirports.size() <= 50));
       }
-      // The user's own car and ride companies (Settings) and the ride
-      // suggestions they hid: lists of at most twenty and two hundred. The
-      // app parses each entry and leaves out one that does not parse, so a
-      // link that is not https:// is never shown.
+      // The user's own car and ride companies (Settings), the ride
+      // suggestions they hid and the trips they said go one way: lists of at
+      // most twenty, two hundred and two hundred. The app parses each entry
+      // and leaves out one that does not parse, so a link that is not
+      // https:// is never shown.
       function validRides(data) {
         return (!('rideCompanies' in data) || (data.rideCompanies is list && data.rideCompanies.size() <= 20))
-          && (!('hiddenRideNeeds' in data) || (data.hiddenRideNeeds is list && data.hiddenRideNeeds.size() <= 200));
+          && (!('hiddenRideNeeds' in data) || (data.hiddenRideNeeds is list && data.hiddenRideNeeds.size() <= 200))
+          && (!('oneWayTrips' in data) || (data.oneWayTrips is list && data.oneWayTrips.size() <= 200));
       }
       // Readable to its owner even before approval: the app reads it to
       // tell an account from before approvals from a new one.

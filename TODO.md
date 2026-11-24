@@ -470,6 +470,12 @@ Kotlin Multiplatform, sharing the Android app's Kotlin (SPEC "iOS app").
 
 Guesses made on autopilot; change any of them freely.
 
+- A journey missing: a trip counts as starting at home unless home is set
+  on Profile; the list's cards say it only for the trips whose bookings the
+  list already reads (under way and the next few), so a past trip says it
+  only on its page. Flagging past trips on the list would mean keeping the
+  gap on the trip document, as `allCancelled` is.
+
 - Trip card after landing: an hour (no location yet), measured from the
   service's landing, else its estimate, else as booked; a booking that
   started while the flight was in the air counts as still to come for that

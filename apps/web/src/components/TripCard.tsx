@@ -5,7 +5,8 @@ import Link from "next/link";
 // dates, both struck through once it was cancelled, and given the time now (for a
 // trip under way) what comes next (tripNextUp), with the live status of its
 // next flight, and the flight's online check-in until the viewer says they
-// checked in. The list's top carries the document warnings.
+// checked in, and a journey it seems to be missing (`missing`, from
+// journeyGap). The list's top carries the document warnings.
 export function TripCard({
   trip,
   title = trip.title,
@@ -15,6 +16,7 @@ export function TripCard({
   flightStatuses,
   checkedIn,
   onCheckedIn,
+  missing,
 }: {
   trip: Trip;
   title?: string;
@@ -25,6 +27,8 @@ export function TripCard({
   // The bookings on this trip the viewer marked "I've checked in".
   checkedIn?: ReadonlySet<string>;
   onCheckedIn?: (segmentId: string) => void;
+  // "No flight back to London found", for a trip that seems to miss one.
+  missing?: string;
 }) {
   const badge = trip.deleting ? "Deleting" : shared ? "Shared" : undefined;
   // A cancelled trip (by hand, or every booking) is struck through, as a
@@ -56,6 +60,11 @@ export function TripCard({
         <p className={`mt-1 text-sm text-zinc-600 dark:text-zinc-400${cancelled ? " line-through" : ""}`}>
           {formatDateRange(displayBounds(trip).start, displayBounds(trip).end)}
         </p>
+        {missing && !cancelled && (
+          <p className="mt-2 text-sm text-amber-800 dark:text-amber-300" data-testid="trip-missing">
+            {missing}
+          </p>
+        )}
         {stay && (
           <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="trip-stay">
             Staying at {stay.title}
