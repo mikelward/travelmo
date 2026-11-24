@@ -41,7 +41,9 @@ class TripActionsTest {
         val at = "2027-02-01T12:00:00Z"
         describeRefresh(RefreshShown(340, true, at, total = 340, updated = 12, added = 2, merged = 3, removed = 1, kept = 4, missing = 2, failed = 1), false) shouldBe
             "Refreshed 340 emails: 12 bookings updated, 2 added, 3 duplicates merged, 1 removed. 4 bookings you edited were left as you left them. " +
-            "2 emails are no longer in a connected mailbox. 1 email couldn't be read, even on a second try:"
+            "2 emails are no longer in a connected mailbox. 1 email couldn't be read, even on a second try. Refresh again to see which."
+        describeRefresh(RefreshShown(340, true, at, failed = 1, failedIds = listOf("m1")), false) shouldBe
+            "Refreshed 340 emails: your bookings were already up to date. 1 email couldn't be read, even on a second try:"
         describeRefresh(RefreshShown(1, true, at, updated = 1, merged = 1, kept = 1, missing = 1), false) shouldBe
             "Refreshed 1 email: 1 booking updated, 1 duplicate merged. 1 booking you edited was left as you left it. 1 email is no longer in a connected mailbox."
         describeRefresh(RefreshShown(2400, true, at), false) shouldBe "Refreshed 2,400 emails: your bookings were already up to date."
