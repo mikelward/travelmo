@@ -393,7 +393,12 @@ days are not absences; Schengen, the US, Canada and Australia count any
 part of a day in the country, so they are days there. A day spent wholly
 in the air (a flight across the date line can skip one) is in no country.
 A day with no trip is at home, from home over time as the Profile works it
-out (`effectiveHomes`); a day of a trip before its first booking is too. A
+out (`effectiveHomes`); a day of a trip before its first booking is too,
+and so is a day of a trip of outings alone (a class, a show) whose bookings
+name no place and take the traveler nowhere: no journey or stay so far. A
+booking that names no country moves the traveler only if it is a journey
+or a stay; an outing leaves them where they were, so a show with no place
+in Las Vegas keeps the days after the flight in the US. A
 day nothing places (a booking naming no country, or home with no country)
 counts against the traveler: as away for a limit on absences or a minimum
 of days in, as in for a limit on days in, and the page says how many there

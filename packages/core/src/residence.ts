@@ -59,8 +59,10 @@ export function presenceTimeline(
     const bounds = reportBounds(trip, segments);
     if (!bounds || bounds.end < from || bounds.start > to) continue;
     for (const [day, place] of tripDayPlaces(trip, segments, to, lookup)) {
-      // A trip dated before its first booking says nothing about those days.
-      if (day < from || !place.started) continue;
+      // A trip dated before its first booking says nothing about those
+      // days, and a day of outings near home that name no place puts the
+      // traveler nowhere new: both are at home.
+      if (day < from || !place.started || place.local) continue;
       const known = days.get(day) ?? { countries: new Set<string>(), tripIds: new Set<string>(), assumedHome: false, inTransit: false };
       for (const c of place.countries) known.countries.add(c);
       known.tripIds.add(trip.id);

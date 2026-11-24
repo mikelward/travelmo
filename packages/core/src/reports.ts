@@ -23,8 +23,11 @@ const transport: ReadonlySet<SegmentType> = new Set(["flight", "train", "bus", "
 // A moment the traveler is known to be somewhere: the country counts for
 // that day, and `then` is where they are afterwards (undefined while in
 // transit or not known); `transit` marks setting off on a journey, after
-// which they are in no country until it arrives.
-type Moment = { at: string; country?: string; then?: string; transit?: true };
+// which they are in no country until it arrives. `moves` marks a journey or
+// a stay, which puts the traveler where it says even when that is not known;
+// an outing that names no country (a show, a class) leaves them where they
+// were.
+type Moment = { at: string; country?: string; then?: string; transit?: true; moves?: true };
 
 // A flight's ends that are a connection: it lands where the next flight
 // leaves from (the same airport code) within a day, with no stay booked in
@@ -71,12 +74,12 @@ function moments(segment: ExtractedSegment, lookup?: PlaceLookup, connecting: { 
     const flight = segment.type === "flight";
     const during = !flight && from && from === to ? from : undefined;
     return [
-      { at: segment.start, ...(from ? { country: from } : {}), ...(during ? { then: during } : flight ? { transit: true as const } : {}) },
-      { at: segment.end ?? segment.start, ...(to ? { country: to, then: to } : connecting.lands ? { transit: true as const } : {}) },
+      { at: segment.start, moves: true, ...(from ? { country: from } : {}), ...(during ? { then: during } : flight ? { transit: true as const } : {}) },
+      { at: segment.end ?? segment.start, moves: true, ...(to ? { country: to, then: to } : connecting.lands ? { transit: true as const } : {}) },
     ];
   }
   const here = placeCountry(segment.destination ?? segment.origin, segment.type, lookup);
-  const at = here ? { country: here, then: here } : {};
+  const at = { ...(here ? { country: here, then: here } : {}), ...(segment.type === "lodging" ? { moves: true as const } : {}) };
   return [{ at: segment.start, ...at }, ...(segment.end ? [{ at: segment.end, ...at }] : [])];
 }
 
@@ -105,8 +108,10 @@ export function reportBounds(
 // in, whether they spent all of it between countries (a flight across the
 // date line can skip a calendar day), and whether any booking has started
 // to place them yet (a trip dated before its first booking says nothing
-// about those days).
-export type TripDay = { countries: Set<string>; inTransit: boolean; started: boolean };
+// about those days), and whether, with no country, nothing has yet taken
+// them anywhere: only outings that name no place so far, no journey or stay
+// (a trip that is a class or a show near home), so they are at home.
+export type TripDay = { countries: Set<string>; inTransit: boolean; started: boolean; local: boolean };
 
 export function tripDayPlaces(
   trip: Pick<Trip, "start" | "end">,
@@ -131,17 +136,23 @@ export function tripDayPlaces(
     let where: string | undefined;
     let transit = false;
     let started = false;
+    let travelled = false;
     const countries = new Set<string>();
     for (const m of timeline) {
       const date = localDate(m.at);
-      if (date <= day) started = true;
-      if (date < day) {
+      if (date <= day) {
+        started = true;
+        if (m.moves || m.country) travelled = true;
+      }
+      // An outing that names no country leaves the traveler where they were.
+      if (date < day && (m.moves || m.then)) {
         where = m.then;
         transit = Boolean(m.transit);
       } else if (date === day && m.country) countries.add(m.country);
     }
     if (where) countries.add(where);
-    days.set(day, { countries, inTransit: !countries.size && transit, started });
+    const inTransit = !countries.size && transit;
+    days.set(day, { countries, inTransit, started, local: !countries.size && !inTransit && !travelled });
   }
   return days;
 }
