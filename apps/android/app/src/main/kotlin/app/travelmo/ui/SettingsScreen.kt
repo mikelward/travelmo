@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -109,6 +111,7 @@ private const val REMOVE_EMAIL_TOKEN = "settings/emails/remove"
 private const val SENDER_RULES_TOKEN = "settings/senders"
 private const val FORWARD_TOKEN = "settings/forward"
 private const val EXPORT_TOKEN = "settings/export"
+private const val CALENDAR_TOKEN = "settings/calendar"
 private const val ADD_FEED_TOKEN = "settings/feeds/add"
 private const val REMOVE_FEED_TOKEN = "settings/feeds/remove"
 private const val ADD_COMPANY_TOKEN = "settings/rides/add"
@@ -163,6 +166,7 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
             FastmailSection(viewModel)
             TripsSection(viewModel)
             FeedsSection(viewModel)
+            GoogleCalendarSection(viewModel)
             CalendarExportSection(viewModel)
             Text(stringResource(R.string.import_review), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
             Text(stringResource(R.string.import_review_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -268,6 +272,88 @@ private fun FeedsSection(viewModel: TripsViewModel) {
     for (outcome in listOf(adding, removing)) {
         (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
     }
+}
+
+/**
+ * Settings' "Google Calendar", as on the web: Connect opens Google's consent
+ * page in the browser, which hands back to Travelmo there; once connected,
+ * the account's calendars to tick, each read one with what its last read
+ * did, Save choice and Disconnect.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun GoogleCalendarSection(viewModel: TripsViewModel) {
+    val context = LocalContext.current
+    val shown by viewModel.googleCalendar.collectAsStateWithLifecycle()
+    val consent by viewModel.calendarConsentUrl.collectAsStateWithLifecycle()
+    val saved by viewModel.calendarSaved.collectAsStateWithLifecycle()
+    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val outcome = outcomes[CALENDAR_TOKEN]
+    val busy = outcome is Outcome.Busy
+    // The ticks as changed here, until saved; the stored choice otherwise.
+    var draft by rememberSaveable { mutableStateOf<List<String>?>(null) }
+    LaunchedEffect(consent) {
+        consent?.let {
+            openLink(context, it, "Google Calendar consent")
+            viewModel.calendarConsentOpened()
+        }
+    }
+    LaunchedEffect(outcome) {
+        if (outcome is Outcome.Done) {
+            draft = null
+            viewModel.outcomeSeen(CALENDAR_TOKEN)
+        }
+    }
+    val state = shown ?: return
+    Text(stringResource(R.string.google_calendar), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(R.string.google_calendar_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val connection = state.connection
+    if (!viewModel.canConnectCalendar) {
+        Text(stringResource(R.string.google_calendar_on_web), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+        return
+    }
+    if (connection == null) {
+        Button(onClick = { viewModel.connectCalendar(CALENDAR_TOKEN) }, enabled = !busy, modifier = Modifier.padding(top = 8.dp)) {
+            Text(stringResource(R.string.connect_google_calendar))
+        }
+    } else {
+        Text(stringResource(R.string.connected_as, connection.emailAddress), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
+        val stored = connection.calendars.filter { it.selected }.map { it.id }.toSet()
+        val chosen = draft?.toSet() ?: stored
+        Column(modifier = Modifier.selectableGroup().padding(top = 4.dp)) {
+            for (calendar in connection.calendars) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().toggleable(value = calendar.id in chosen, enabled = !busy, role = Role.Checkbox) { on ->
+                        draft = (if (on) chosen + calendar.id else chosen - calendar.id).toList()
+                    },
+                ) {
+                    Checkbox(checked = calendar.id in chosen, onCheckedChange = null, enabled = !busy)
+                    Column(modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp)) {
+                        Text(calendar.summary, style = MaterialTheme.typography.bodyLarge)
+                        if (calendar.selected) {
+                            calendar.lastError?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
+                                ?: calendar.lastReadAt?.let { read ->
+                                    Text(
+                                        listOfNotNull(stringResource(R.string.feed_read_on, read.take(10)), calendar.lastResult).joinToString(" · "),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                        }
+                    }
+                }
+            }
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+            Button(onClick = { viewModel.selectCalendars(CALENDAR_TOKEN, chosen.toList()) }, enabled = !busy && chosen != stored) {
+                Text(stringResource(if (busy && draft != null) R.string.reading else R.string.save_choice))
+            }
+            OutlinedButton(onClick = { draft = null; viewModel.disconnectCalendar(CALENDAR_TOKEN) }, enabled = !busy) { Text(stringResource(R.string.disconnect)) }
+        }
+        saved?.let { Text(stringResource(if (it) R.string.calendars_saved_read else R.string.saved), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp)) }
+    }
+    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
 }
 
 /**

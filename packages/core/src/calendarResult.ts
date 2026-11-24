@@ -3,6 +3,12 @@
 
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
+// The parser routes that connect Google Calendar, choose its calendars and
+// disconnect it.
+export const calendarConnectPath = "/calendar/connect";
+export const calendarSelectPath = "/calendar/select";
+export const calendarDisconnectPath = "/calendar/disconnect";
+
 // The parser routes that subscribe to a calendar feed and drop one.
 export const feedAddPath = "/feeds/add";
 export const feedRemovePath = "/feeds/remove";

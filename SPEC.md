@@ -1775,7 +1775,9 @@ same way.
 A second Google consent, `calendar.readonly`, separate from Gmail's: its own
 refresh token, its own disconnect, the same OAuth client and callback (the
 OAuth state records which consent it was, and the callback sends the browser
-back with `calendar=` rather than `gmail=`). Once connected, Settings lists
+back with `calendar=` rather than `gmail=`; Android's Connect opens the same
+consent page in the browser, which hands back to the web). Once connected,
+Settings on the web or Android lists
 the account's calendars, none chosen: the user ticks the ones that hold
 travel, which are read at once, and all chosen calendars are read daily with
 the feeds (`/internal/poll-feeds`), at most 100 model reads per calendar per

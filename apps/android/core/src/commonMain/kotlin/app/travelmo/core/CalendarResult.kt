@@ -3,6 +3,11 @@ package app.travelmo.core
 // What an import of calendar events did, as packages/core's
 // calendarResult.ts words it: the parser's /import/ics and /feeds/add answer.
 
+/** The parser routes that connect Google Calendar, choose its calendars and disconnect it. */
+const val CALENDAR_CONNECT_PATH = "/calendar/connect"
+const val CALENDAR_SELECT_PATH = "/calendar/select"
+const val CALENDAR_DISCONNECT_PATH = "/calendar/disconnect"
+
 /** The parser routes that subscribe to a calendar feed and drop one. */
 const val FEED_ADD_PATH = "/feeds/add"
 const val FEED_REMOVE_PATH = "/feeds/remove"

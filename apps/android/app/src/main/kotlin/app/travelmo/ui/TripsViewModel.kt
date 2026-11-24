@@ -58,6 +58,9 @@ import app.travelmo.core.GmailMailbox
 import app.travelmo.core.MAX_GMAIL_MAILBOXES
 import app.travelmo.data.NoGmailActions
 import app.travelmo.data.GmailActions
+import app.travelmo.data.GoogleCalendarShown
+import app.travelmo.data.NoGoogleCalendarActions
+import app.travelmo.data.GoogleCalendarActions
 import app.travelmo.data.CalendarExportShown
 import app.travelmo.data.NoCalendarExportActions
 import app.travelmo.data.CalendarExportActions
@@ -189,6 +192,8 @@ class TripsViewModel(
     private val gmailActions: GmailActions = NoGmailActions,
     /** The parser's Fastmail connection and mailbox reading; none by default. */
     private val fastmailActions: FastmailActions = NoFastmailActions,
+    /** The parser's Google Calendar connection; none by default. */
+    private val googleCalendarActions: GoogleCalendarActions = NoGoogleCalendarActions,
     /** The parser's calendar export link; none by default. */
     private val calendarExportActions: CalendarExportActions = NoCalendarExportActions,
     /** The parser's address, for the export link's URL (BuildConfig.PARSER_URL); none by default. */
@@ -643,6 +648,46 @@ class TripsViewModel(
     /** Whether Import review is searching, which reads every record. */
     fun setReviewSearching(on: Boolean) {
         reviewSearching.value = on
+    }
+
+    /** The user's Google Calendar connection, live; null while it loads. */
+    val googleCalendar: StateFlow<GoogleCalendarShown?> = accessSettled.flatMapLatest { store.googleCalendar(uid) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Whether this build can connect and change Google Calendar here. */
+    val canConnectCalendar: Boolean
+        get() = googleCalendarActions.available
+
+    private val _calendarSaved = MutableStateFlow<Boolean?>(null)
+
+    /** After a save of the calendar choice: whether newly chosen calendars were read then; null before one. */
+    val calendarSaved: StateFlow<Boolean?> = _calendarSaved
+
+    private val _calendarConsentUrl = MutableStateFlow<String?>(null)
+
+    /** Google's consent page for Google Calendar, for the screen to open once. */
+    val calendarConsentUrl: StateFlow<String?> = _calendarConsentUrl
+
+    /** Asks the parser for Google's consent page for Google Calendar. */
+    fun connectCalendar(token: String) = run(token, "connectCalendar") {
+        _calendarSaved.value = null
+        _calendarConsentUrl.value = googleCalendarActions.connectUrl()
+    }
+
+    fun calendarConsentOpened() {
+        _calendarConsentUrl.value = null
+    }
+
+    /** Saves which calendars are read. */
+    fun selectCalendars(token: String, ids: List<String>) = run(token, "selectCalendars") {
+        _calendarSaved.value = null
+        _calendarSaved.value = googleCalendarActions.select(ids)
+    }
+
+    /** Disconnects Google Calendar. */
+    fun disconnectCalendar(token: String) = run(token, "disconnectCalendar") {
+        _calendarSaved.value = null
+        googleCalendarActions.disconnect()
     }
 
     /** The user's calendar export link, live; null while it loads. */

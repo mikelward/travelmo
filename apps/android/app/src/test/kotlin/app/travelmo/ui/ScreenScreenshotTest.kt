@@ -620,6 +620,41 @@ class ScreenScreenshotTest {
         composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
     }
 
+    // Settings scrolled to Google Calendar: two calendars, one read yesterday.
+    @Test
+    fun settings_google_calendar() = settingsGoogleCalendar("settings_google_calendar", dark = false)
+
+    @Test
+    fun settings_google_calendar_dark() = settingsGoogleCalendar("settings_google_calendar_dark", dark = true)
+
+    private fun settingsGoogleCalendar(name: String, dark: Boolean) {
+        val store = FakeTripStore()
+        store.calendar.value = app.travelmo.data.GoogleCalendarShown(
+            app.travelmo.data.GoogleCalendarConnection(
+                "owner@example.com",
+                listOf(
+                    app.travelmo.data.GoogleCalendarChoice("primary", "Owner", selected = true, lastReadAt = "2026-11-22T06:00:00Z", lastResult = "3 events imported."),
+                    app.travelmo.data.GoogleCalendarChoice("travel", "Travel", selected = false),
+                ),
+            ),
+        )
+        val actions = object : app.travelmo.data.GoogleCalendarActions {
+            override val available = true
+            override suspend fun connectUrl() = ""
+            override suspend fun select(ids: List<String>) = false
+            override suspend fun disconnect() {}
+        }
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, googleCalendarActions = actions)
+        composeRule.setContent {
+            TravelmoTheme(darkTheme = dark) {
+                SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
+            }
+        }
+        composeRule.onNodeWithText("Save choice").performScrollTo()
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
+    }
+
     // Settings scrolled to the calendar export link.
     @Test
     fun settings_export() = settingsExport("settings_export", dark = false)

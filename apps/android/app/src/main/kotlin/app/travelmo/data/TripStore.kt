@@ -96,6 +96,9 @@ interface TripStore {
      */
     fun addressHolder(uid: String): Flow<AddressHolder>
 
+    /** The user's Google Calendar connection (`googleCalendar` on their user document), live; [GoogleCalendarShown.connection] null when not connected, the flow's value null while it loads. */
+    fun googleCalendar(uid: String): Flow<GoogleCalendarShown?>
+
     /** The user's calendar export link (`users/{uid}/calendarExport/main`), live; [CalendarExportShown.token] null when they have none, the flow's value null while it loads. */
     fun calendarExport(uid: String): Flow<CalendarExportShown?>
 
@@ -267,6 +270,34 @@ class TripGoneException(message: String) : Exception(message)
  * useAccess does).
  */
 data class Seen<T>(val value: T, val confirmed: Boolean)
+
+/** One of the connected account's calendars, whether it is read, and what its last read did. */
+data class GoogleCalendarChoice(
+    val id: String,
+    val summary: String,
+    val selected: Boolean,
+    val lastReadAt: String? = null,
+    val lastResult: String? = null,
+    val lastError: String? = null,
+)
+
+/** The connected Google account and its calendars. */
+data class GoogleCalendarConnection(val emailAddress: String, val calendars: List<GoogleCalendarChoice>)
+
+/** The user's Google Calendar connection, when there is one. */
+data class GoogleCalendarShown(val connection: GoogleCalendarConnection?)
+
+/** `googleCalendar` on the user document, as the parser writes it; a calendar without an id is left out. */
+internal fun googleCalendarOf(data: Map<String, Any?>?): GoogleCalendarShown {
+    val map = data?.get("googleCalendar") as? Map<*, *> ?: return GoogleCalendarShown(null)
+    val email = map["emailAddress"] as? String ?: return GoogleCalendarShown(null)
+    val calendars = (map["calendars"] as? List<*>).orEmpty().mapNotNull { entry ->
+        val c = entry as? Map<*, *> ?: return@mapNotNull null
+        val id = (c["id"] as? String)?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+        GoogleCalendarChoice(id, c["summary"] as? String ?: id, c["selected"] == true, c["lastReadAt"] as? String, c["lastResult"] as? String, c["lastError"] as? String)
+    }
+    return GoogleCalendarShown(GoogleCalendarConnection(email, calendars))
+}
 
 /** The user's calendar export token, when they have one. */
 data class CalendarExportShown(val token: String?)
@@ -466,6 +497,18 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         return db.collectionGroup("travelProfile").whereArrayContainsAny("trustedEmails", asked).snapshots().orNothing("shared profiles").map { snapshot ->
             snapshot?.documents.orEmpty().mapNotNull { doc -> profileFromDocument(doc.data ?: emptyMap()) }
         }
+    }
+
+    override fun googleCalendar(uid: String): Flow<GoogleCalendarShown?> = callbackFlow {
+        val registration = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                TravelmoLog.error(error, "Reading the Google Calendar connection failed")
+                trySend(GoogleCalendarShown(null))
+                return@addSnapshotListener
+            }
+            trySend(googleCalendarOf(snapshot?.data))
+        }
+        awaitClose { registration.remove() }
     }
 
     override fun calendarExport(uid: String): Flow<CalendarExportShown?> = callbackFlow {
