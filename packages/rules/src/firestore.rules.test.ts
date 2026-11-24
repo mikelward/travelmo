@@ -154,8 +154,8 @@ describe("segments", () => {
     await assertSucceeds(getDoc(doc(as(owner), paths.segment(trip.id, segment.id))));
     await assertSucceeds(getDocs(collection(as(partner), paths.segments(trip.id))));
     await assertFails(getDocs(collection(as(stranger), paths.segments(trip.id))));
-    await assertSucceeds(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { title: "Renamed", sender: "cove.example" }));
-    await assertSucceeds(updateDoc(doc(as(partner), paths.segment(trip.id, segment.id)), { title: "Renamed by partner" }));
+    await assertSucceeds(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { title: "Renamed", sender: "cove.example", editedAt: "2026-11-24T00:00:00Z" }));
+    await assertSucceeds(updateDoc(doc(as(partner), paths.segment(trip.id, segment.id)), { title: "Renamed by partner", editedAt: "2026-11-24T00:01:00Z" }));
     await assertFails(updateDoc(doc(as(stranger), paths.segment(trip.id, segment.id)), { title: "Renamed" }));
   });
 
@@ -173,7 +173,7 @@ describe("segments", () => {
   it("lets owner and sharee edit a booking imported from TripIt or a calendar, but not invent a source", async () => {
     const imported = { ...segment, id: "s5", source: "tripit", gmailMessageIds: [] };
     await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s5")), imported));
-    await assertSucceeds(updateDoc(doc(as(partner), paths.segment(trip.id, "s5")), { title: "Edited by partner" }));
+    await assertSucceeds(updateDoc(doc(as(partner), paths.segment(trip.id, "s5")), { title: "Edited by partner", editedAt: "2026-11-24T00:00:00Z" }));
     await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s7")), { ...imported, id: "s7", source: "ics" }));
     // A forwarded email's booking is the owner's to edit, rate and move too.
     await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s10")), { ...imported, id: "s10", source: "forward" }));
@@ -184,7 +184,7 @@ describe("segments", () => {
     await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s12")), { ...imported, id: "s12", source: "imap" }));
     const withSources = { ...imported, id: "s8", sources: [{ kind: "gmail", id: "m1", label: "Your booking", at: "2026-11-01T00:00:00Z" }] };
     await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s8")), withSources));
-    await assertSucceeds(updateDoc(doc(as(partner), paths.segment(trip.id, "s8")), { title: "Edited, sources kept" }));
+    await assertSucceeds(updateDoc(doc(as(partner), paths.segment(trip.id, "s8")), { title: "Edited, sources kept", editedAt: "2026-11-24T00:00:00Z" }));
     await assertFails(setDoc(doc(as(owner), paths.segment(trip.id, "s9")), { ...withSources, id: "s9", sources: "m1" }));
     await assertFails(setDoc(doc(as(owner), paths.segment(trip.id, "s6")), { ...imported, id: "s6", source: "carrier-pigeon" }));
   });
@@ -221,6 +221,17 @@ describe("segments", () => {
     await assertFails(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { rating: 3.5 }));
     await assertFails(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { favorite: "yes" }));
     await assertFails(updateDoc(doc(as(stranger), paths.segment(trip.id, segment.id)), { rating: 5 }));
+  });
+
+  it("refuses a change to a booking's details that does not record when it was edited", async () => {
+    const at = doc(as(owner), paths.segment(trip.id, segment.id));
+    await assertFails(updateDoc(at, { title: "Quietly renamed" }));
+    await assertFails(updateDoc(at, { start: "2026-12-12T16:00:00+00:00", updatedAt: "2026-11-24T00:00:00Z" }));
+    await assertFails(updateDoc(at, { title: "Renamed", editedAt: "yesterday" }));
+    await assertSucceeds(updateDoc(at, { start: "2026-12-12T16:00:00+00:00", editedAt: "2026-11-24T00:02:00Z", updatedAt: "2026-11-24T00:02:00Z" }));
+    // A rating, a favorite mark or a restore is no edit of its details.
+    await assertSucceeds(updateDoc(at, { rating: 3, favorite: true, updatedAt: "2026-11-24T00:03:00Z" }));
+    await assertSucceeds(updateDoc(at, { restoredAt: "2026-11-24T00:04:00Z" }));
   });
 
   it("rejects malformed segments", async () => {

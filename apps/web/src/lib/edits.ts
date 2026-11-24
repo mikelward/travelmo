@@ -50,6 +50,9 @@ export async function saveSegment(db: Firestore, tripId: string, extracted: Extr
     source: existing?.source ?? "manual",
     gmailMessageIds: existing?.gmailMessageIds ?? [],
     ...(existing?.sender ? { sender: existing.sender } : {}),
+    // A hand edit, which "Refresh from email" leaves as it is; a rating, a
+    // favorite mark or a move moves only updatedAt.
+    editedAt: timestamp,
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: timestamp,
   };

@@ -121,6 +121,7 @@ class DocumentsTest {
         doc["favorite"] shouldBe true
         doc["createdAt"] shouldBe "2026-11-01T00:00:00Z"
         doc["updatedAt"] shouldBe "2026-11-07T20:00:00Z"
+        doc["editedAt"] shouldBe "2026-11-07T20:00:00Z"
         // A renamed place starts afresh; a new booking is manual.
         val renamed = draftToDocument(draft.copy(destination = PlaceDraft("Elsewhere", "XYZ", null)), stored, "s1", "t1", "now")
         renamed["destination"] shouldBe mapOf("name" to "Elsewhere", "code" to "XYZ")
@@ -128,7 +129,7 @@ class DocumentsTest {
         fresh["source"] shouldBe "manual"
         fresh["gmailMessageIds"] shouldBe emptyList<String>()
         fresh["createdAt"] shouldBe "now"
-        fresh.keys shouldBe setOf("id", "tripId", "type", "title", "start", "confirmation", "destination", "source", "gmailMessageIds", "createdAt", "updatedAt")
+        fresh.keys shouldBe setOf("id", "tripId", "type", "title", "start", "confirmation", "destination", "source", "gmailMessageIds", "createdAt", "editedAt", "updatedAt")
     }
 
     @Test

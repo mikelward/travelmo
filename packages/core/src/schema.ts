@@ -147,6 +147,11 @@ export const Segment = ExtractedSegment.extend({
   // undated, read) by then applies to this booking again, whichever one
   // had won; one sent later still does.
   restoredAt: isoDateTime.optional(),
+  // When the user last changed the booking's details by hand (the booking
+  // form, a place picked there). Never set by a rating, a favorite mark, a
+  // move between trips or an import, which move only `updatedAt`. Refresh
+  // from email leaves a booking carrying it as the user left it.
+  editedAt: isoDateTime.optional(),
   createdAt: isoDateTime,
   updatedAt: isoDateTime,
 });

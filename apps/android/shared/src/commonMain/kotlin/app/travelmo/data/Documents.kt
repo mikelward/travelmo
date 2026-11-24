@@ -147,7 +147,8 @@ fun placeToDocument(draft: PlaceDraft?, stored: Map<String, Any?>?): Map<String,
 /**
  * The booking document a save writes: the stored document with the form's
  * fields over it, so what the form does not edit (sources, the sender, the
- * rating and the favorite mark, places' details) stays. A new booking is
+ * rating and the favorite mark, places' details) stays, and when it was
+ * edited is recorded (editedAt). A new booking is
  * manual, with no sources. Absent values are absent, never null: the rules
  * list the keys a booking may have and Firestore keeps a null as a field.
  */
@@ -169,6 +170,9 @@ fun draftToDocument(draft: SegmentDraft, stored: Map<String, Any?>?, id: String,
     if (doc["source"] !is String) doc["source"] = "manual"
     if (doc["gmailMessageIds"] !is List<*>) doc["gmailMessageIds"] = emptyList<String>()
     if (doc["createdAt"] !is String) doc["createdAt"] = now
+    // A hand edit, which Refresh from email leaves as it is (the rules refuse
+    // a change to the details without it).
+    doc["editedAt"] = now
     doc["updatedAt"] = now
     return doc
 }

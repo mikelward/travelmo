@@ -34,7 +34,8 @@ viewer's zone. Trip bounds are calendar dates.
   lodging, car_rental, activity, other), `title, provider, confirmation,
   start, end, origin, destination, notes, source, gmailMessageIds[], sources[],
   sender` (the booking email's domain), `rating` (one to five) and
-  `favorite`, the traveler's own verdict. `source` is `gmail`, `manual`,
+  `favorite`, the traveler's own verdict, and `editedAt`, when someone last
+  changed its details by hand (see "Editing by hand"). `source` is `gmail`, `manual`,
   `tripit`, `ics`, `forward` (an email forwarded to the user's forwarding
   address), `fastmail` (read from a connected Fastmail mailbox) or `imap`
   (read from a mailbox connected over IMAP): where the booking first came
@@ -721,8 +722,15 @@ with "Always import this sender" and "Never import this sender" for the owner
 viewer's other trips. The row itself shows only the booking.
 The same people can rate a booking one to five stars and mark it a favorite
 (`rating`, `favorite` on the segment; tapping the current star clears the
-rating): an edit like any other, moving the booking's revision, so a calendar
-change no longer replaces it and the verdict survives. Reports lists the
+rating): a write like any other, moving the booking's revision
+(`updatedAt`), so a calendar change no longer replaces it and the verdict
+survives. Saving the booking form (on the web and Android, a place picked
+there included) is a hand edit, and also sets `editedAt`; a rating, a
+favorite mark, a move between trips, a restore and every import leave it as
+it is. The rules refuse a change to a booking's details (`type, title,
+provider, confirmation, start, end, origin, destination, notes`) that does
+not set `editedAt` too, so an app from before it cannot edit unrecorded.
+Reports lists the
 places rated or marked, favorites first with the best rating given, each
 linking to the trips it was on (`packages/core/src/favorites.ts`: a place is
 where a journey ends or where a stay is, by name and country).

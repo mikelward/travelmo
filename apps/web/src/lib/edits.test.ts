@@ -3,7 +3,7 @@ import { paths, type ExtractedSegment, type Segment, type Trip } from "@travelmo
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, type Firestore } from "firebase/firestore";
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { deleteSegment, deleteTrip, deleteTripIfOnly, fitTripDates, mergeTrips, moveSegment, renameTrip, restoreSegment, saveSegment } from "./edits";
+import { deleteSegment, deleteTrip, deleteTripIfOnly, favoriteSegment, fitTripDates, mergeTrips, moveSegment, rateSegment, renameTrip, restoreSegment, saveSegment } from "./edits";
 
 // A switch to make reading a collection fail, as when the connection drops.
 const failReads = vi.hoisted(() => ({ on: false }));
@@ -108,6 +108,16 @@ describe("saveSegment", () => {
     expect(saved).toMatchObject({ id: imported.id, source: "gmail", gmailMessageIds: ["m1"], sender: "cove.example", createdAt: imported.createdAt });
     expect((await getDoc(doc(asOwner(), paths.segment(trip.id, imported.id)))).data()?.sender).toBe("cove.example");
     expect(await readTrip()).toMatchObject({ start: "2026-12-10", end: "2026-12-14" });
+  });
+
+  it("records a hand edit, and not a rating, a favorite mark or a move", async () => {
+    await rateSegment(asOwner(), trip.id, imported.id, 4);
+    await favoriteSegment(asOwner(), trip.id, imported.id, true);
+    const stored = async () => (await getDoc(doc(asOwner(), paths.segment(trip.id, imported.id)))).data();
+    expect((await stored())?.editedAt).toBeUndefined();
+    const saved = await saveSegment(asOwner(), trip.id, { ...imported, title: "Renamed" }, imported);
+    expect(saved.editedAt).toBe(saved.updatedAt);
+    expect(await stored()).toMatchObject({ editedAt: saved.editedAt, rating: 4, favorite: true });
   });
 
   it("keeps a source the importer added while the booking was being edited", async () => {
@@ -309,6 +319,8 @@ describe("moveSegment", () => {
     expect(await segmentIds(other.id)).toEqual([imported.id]);
     const moved = (await getDoc(doc(asOwner(), paths.segment(other.id, imported.id)))).data();
     expect(moved).toMatchObject({ tripId: other.id, title: imported.title, source: "gmail", sender: "cove.example" });
+    // A move is no edit of the booking's details.
+    expect(moved?.editedAt).toBeUndefined();
     expect(await readOther()).toMatchObject({ start: "2026-12-12", end: "2026-12-22" });
     expect(await readTrip()).toMatchObject({ start: "2026-12-12", end: "2026-12-14" });
   });
