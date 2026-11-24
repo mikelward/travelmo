@@ -308,6 +308,10 @@
       from two hours before departure to 45 minutes after landing, its
       status-bar chip the terminal and gate ("T3 G28"), the landing time or
       the carousel, sent after every look (no extra AeroAPI calls).
+- [ ] The seat on a flight's Live Update: keep the seat as a field of the
+      booking (today it is only in the notes, from imports and TripIt's
+      `seats`), per traveler, and show it on the Live Update near boarding
+      ("Seat 32A" beside the gate) and on the flight's card.
 - [ ] Maybe: switch the Live Update's chip from terminal to gate by where
       the phone is (at the airport or not). Needs background location
       ("Allow all the time") and Play's location declaration; "T3 G28"
