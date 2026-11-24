@@ -172,8 +172,8 @@ class FlightStatusTest {
         live.chip shouldBe "T3 G28"
         live.text shouldBe "Leaves at 09:00 · Departs from terminal 3, gate 28"
         live.progress shouldBe 0
-        // 45 minutes after the scheduled landing.
-        live.endsAt shouldBe instantMillis("2026-12-13T08:15:00Z")
+        // An hour after the scheduled landing.
+        live.endsAt shouldBe instantMillis("2026-12-13T08:30:00Z")
     }
 
     @Test
@@ -207,7 +207,7 @@ class FlightStatusTest {
         live.landsAt shouldBe instantMillis("2026-12-13T07:10:00Z")
         live.text shouldBe "Lands 20 min early, at 15:10 · Arrives at gate D46"
         live.progress shouldBe 50
-        live.endsAt shouldBe instantMillis("2026-12-13T07:55:00Z")
+        live.endsAt shouldBe instantMillis("2026-12-13T08:10:00Z")
         // Past the estimate and not yet down: nothing to count down to.
         val late = liveFlight(status(actualOut = "2026-12-12T22:00:00Z", estimatedIn = "2026-12-13T07:10:00Z"), flight, "2026-12-13T07:12:00Z")!!
         late.chip shouldBe "Landing"
@@ -246,6 +246,15 @@ class FlightStatusTest {
         bags.chip shouldBe "Bags 16"
         liveFlight(landed.copy(baggageClaim = "16A"), flight, "2026-12-13T07:30:00Z")!!.chip shouldBe "16A"
         bags.text shouldBe "Bags on carousel 16"
+    }
+
+    @Test
+    fun liveUpdateKeepsTheCarouselForAnHourAfterLandingThoughTheLooksStopAt45Minutes() {
+        val landed = status(actualOut = "2026-12-12T22:00:00Z", actualIn = "2026-12-13T07:20:00Z", baggageClaim = "16")
+        flightCheckInterval(flight, landed, "2026-12-13T08:10:00Z").shouldBeNull()
+        liveFlight(landed, flight, "2026-12-13T08:10:00Z")!!.chip shouldBe "Bags 16"
+        liveFlight(landed, flight, "2026-12-13T08:19:00Z")!!.endsAt shouldBe instantMillis("2026-12-13T08:20:00Z")
+        liveFlight(landed, flight, "2026-12-13T08:20:00Z").shouldBeNull()
     }
 
     @Test

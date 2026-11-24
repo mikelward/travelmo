@@ -50,6 +50,12 @@ private const val HOUR = 60 * MINUTE
 private const val FAST_BEFORE_DEPARTURE = 2 * HOUR
 private const val FAST_BEFORE_ARRIVAL = 30 * MINUTE
 private const val AFTER_ARRIVAL = 45 * MINUTE
+/**
+ * How long after landing the Live Update stays, with the last carousel the parser gave: longer
+ * than it looks ([AFTER_ARRIVAL]), since immigration can take an hour and the carousel rarely
+ * changes by then, and every look costs a call.
+ */
+private const val SHOWN_AFTER_LANDING = 60 * MINUTE
 private const val FAST_INTERVAL = MINUTE
 private const val SLOW_INTERVAL = 15 * MINUTE
 private const val REFRESH_BEFORE_DEPARTURE = 6 * HOUR
@@ -270,12 +276,15 @@ private fun shortWhere(gate: String?, terminal: String?): String? {
 /**
  * What the flight's Live Update shows now, for [booked] (the person's booking, whose offsets give
  * the airports' clocks); null while the parser does not watch the flight (too early, over,
- * cancelled, or never found), when the phone takes it down.
+ * cancelled, or never found) and it is not in the hour after landing, when the phone takes it down.
  */
 fun liveFlight(status: FlightStatus?, booked: Segment, now: String): LiveFlight? {
     if (status == null || !status.found || status.cancelled) return null
-    if (flightCheckInterval(booked, status, now) == null) return null
     val at = instantMillis(now)
+    val landsAt = status.actualIn ?: status.estimatedIn ?: status.scheduledIn ?: booked.end
+    // Past the looks, it stays only in the hour after landing.
+    val afterLanding = landsAt?.let { at >= instantMillis(it) && at < instantMillis(it) + SHOWN_AFTER_LANDING } ?: false
+    if (flightCheckInterval(booked, status, now) == null && !afterLanding) return null
     val to = status.divertedTo?.uppercase()
     val diverted = when {
         !status.diverted -> null
@@ -283,8 +292,7 @@ fun liveFlight(status: FlightStatus?, booked: Segment, now: String): LiveFlight?
         else -> "Diverted"
     }
     val leavesAt = status.estimatedOut ?: status.scheduledOut ?: booked.start
-    val landsAt = status.actualIn ?: status.estimatedIn ?: status.scheduledIn ?: booked.end
-    val endsAt = landsAt?.let { instantMillis(it) + AFTER_ARRIVAL } ?: (instantMillis(booked.start) + GIVE_UP_AFTER)
+    val endsAt = landsAt?.let { instantMillis(it) + SHOWN_AFTER_LANDING } ?: (instantMillis(booked.start) + GIVE_UP_AFTER)
     val departureWhere = where(status.departureGate, status.departureTerminal)
     val arrivalWhere = where(status.arrivalGate, status.arrivalTerminal)
     // Left, as reported, or taken to have left once well past its estimate with no word.
