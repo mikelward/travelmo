@@ -264,4 +264,26 @@ class HomeTest {
         parseCorrection("London", "ZZ", "2021-03-12") shouldBe ParsedCorrection.Problem("Use a two-letter country code, such as GB.")
         parseCorrection("London", "GB", "") shouldBe ParsedCorrection.Problem("Enter a date.")
     }
+
+    private val cdg = Place("Paris Charles de Gaulle", code = "CDG", city = "Paris", country = "FR")
+    private val jfk = Place("JFK", code = "JFK", city = "New York", country = "US")
+    private val ewr = Place("Newark", code = "EWR", city = "Newark", country = "US")
+    private val toParis = Segment("p", "t", SegmentType.FLIGHT, "ZAG to PAR", "2026-04-04T16:00:00+02:00", "2026-04-04T18:15:00+02:00", destination = cdg)
+    private val toNewYork = Segment("n", "t", SegmentType.FLIGHT, "PAR to JFK", "2026-04-04T20:30:00+02:00", "2026-04-04T22:40:00-04:00", origin = cdg, destination = jfk)
+    private val homeFlight = Segment("h", "t", SegmentType.FLIGHT, "EWR to LHR", "2026-04-11T09:10:00-04:00", "2026-04-11T21:25:00+01:00", origin = ewr)
+    private val london = listOf(HomePeriod("London", "GB"))
+
+    @Test
+    fun `takes a flight on within twelve hours from the same city as a connection`() {
+        isConnection(toParis, toNewYork) shouldBe true
+        isConnection(toParis, toNewYork.copy(start = "2026-04-05T20:30:00+02:00")) shouldBe false
+    }
+
+    @Test
+    fun `lets a flight that lands away open the trip whose first flight leaves that city from another of its airports too`() {
+        opensTrip(toNewYork, homeFlight, london) shouldBe true
+        opensTrip(toNewYork, homeFlight.copy(origin = Place("Boston Logan", code = "BOS", city = "Boston", country = "US")), london) shouldBe false
+        val lhr = Place("Heathrow", code = "LHR", city = "London", country = "GB")
+        opensTrip(toNewYork.copy(destination = lhr), homeFlight.copy(origin = lhr), london) shouldBe false
+    }
 }

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   awayPlace,
+  isConnection,
+  opensTrip,
   connects,
   countryCode,
   describeHomes,
@@ -822,5 +824,27 @@ describe("outingRuns", () => {
   it("keeps a booking with any travel in it whole", () => {
     const trip = [session("2026-08-10"), flight("2026-08-20T09:00:00+00:00", "London", "Paris")];
     expect(outingRuns(trip)).toEqual([trip]);
+  });
+});
+
+describe("connections and the trips they open", () => {
+  const cdg = { name: "Paris Charles de Gaulle", code: "CDG", city: "Paris", country: "FR" };
+  const jfk = { name: "JFK", code: "JFK", city: "New York", country: "US" };
+  const ewr = { name: "Newark", code: "EWR", city: "Newark", country: "US" };
+  const toParis = { type: "flight" as const, start: "2026-04-04T16:00:00+02:00", end: "2026-04-04T18:15:00+02:00", destination: cdg };
+  const toNewYork = { type: "flight" as const, start: "2026-04-04T20:30:00+02:00", end: "2026-04-04T22:40:00-04:00", origin: cdg, destination: jfk };
+  const home = { type: "flight" as const, start: "2026-04-11T09:10:00-04:00", end: "2026-04-11T21:25:00+01:00", origin: ewr };
+  const london = [{ city: "London", country: "GB" }];
+
+  it("takes a flight on within twelve hours from the same city as a connection", () => {
+    expect(isConnection(toParis, toNewYork)).toBe(true);
+    expect(isConnection(toParis, { ...toNewYork, start: "2026-04-05T20:30:00+02:00" })).toBe(false);
+  });
+
+  it("lets a flight that lands away open the trip whose first flight leaves that city, from another of its airports too", () => {
+    expect(opensTrip(toNewYork, home, london)).toBe(true);
+    expect(opensTrip(toNewYork, { ...home, origin: { name: "Boston Logan", code: "BOS", city: "Boston", country: "US" } }, london)).toBe(false);
+    // Landing at home ends a trip; it opens nothing.
+    expect(opensTrip({ ...toNewYork, destination: { name: "Heathrow", code: "LHR", city: "London", country: "GB" } }, { ...home, origin: { name: "Heathrow", code: "LHR", city: "London", country: "GB" } }, london)).toBe(false);
   });
 });

@@ -1534,7 +1534,11 @@ a new trip is named after its first destination that is not home, or
 failing that its first origin that is not (a return leg booked alone),
 looking at journeys first, then stays and the rest, then a car or
 transfer's drop-off, so a flight to Melbourne makes a Melbourne trip
-whichever suburb the stays are in. Only a town names a trip: a place's city
+whichever suburb the stays are in. A connection's stop is on the way, not
+where the trip goes: a journey's destination the next journey leaves from
+within twelve hours, from the same city or another of its airports or
+stations within 80 km (`isConnection`), so Zagreb to New York via Paris
+names nothing "Paris". Only a town names a trip: a place's city
 (the geocoder's when the source gave none), or for a journey an airport or
 station named without one. A place that is only its own name (a stay's
 listing, "Designer Collingwood Terrace") names the trip only when nothing
@@ -1634,7 +1638,12 @@ regrouped only among trips with the same share list, compared as a set and
 ignoring case, a private trip's being empty, and a trip they start is shared
 as the trips they came from were. So nobody gains sight of a booking, as a
 sharee could by filling a shared trip until it won the regroup, and nobody
-loses it. A trip left with
+loses it. A booking of nothing but journeys that ends one trip by landing
+away from home where the next trip's first journey leaves from (the same
+city or another of its airports or stations within 80 km, after it lands:
+`opensTrip`) opens that next trip instead: the flights from Zagreb to New
+York on 4 Apr join the week in New York that ends with the flight home
+from Newark, rather than ending the Zagreb trip. A trip left with
 none of its bookings is deleted; one that never had any is left alone, and
 a TripIt trip keeps its own grouping. Bookings are moved, never changed or
 deleted, so ratings and favorites go with them, and two bookings an earlier

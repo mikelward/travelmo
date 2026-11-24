@@ -3,6 +3,7 @@ import {
   fillAirports,
   fillCities,
   awayPlace,
+  isConnection,
   compareInstants,
   courseName,
   findTripForBooking,
@@ -1547,7 +1548,9 @@ export function placeTitle(
     .sort((a, b) => rank(a.segment) - rank(b.segment) || a.index - b.index)
     .map(({ segment }) => segment);
   const asTown = (s: ExtractedSegment, place: ExtractedSegment["origin"]) => (place && (place.city || journeyTypes.has(s.type)) ? place : undefined);
-  const towns = ordered.map((s) => ({ start: s.start, origin: asTown(s, s.origin), destination: asTown(s, s.destination) }));
+  // A connection's stop (Paris between Zagreb and New York) is on the way, not where the trip goes.
+  const via = (s: ExtractedSegment) => segments.some((t) => isConnection(s, t));
+  const towns = ordered.map((s) => ({ start: s.start, origin: asTown(s, s.origin), destination: via(s) ? undefined : asTown(s, s.destination) }));
   const place = awayPlace(towns, periods, overrides) ?? towns.find((s) => s.destination)?.destination;
   return place?.city ?? place?.name ?? legacyPlaceTitle(segments, periods, overrides);
 }
