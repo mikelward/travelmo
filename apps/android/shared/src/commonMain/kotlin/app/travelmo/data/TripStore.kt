@@ -5,6 +5,7 @@ import app.travelmo.core.AccessRecord
 import app.travelmo.core.AccountAccess
 import app.travelmo.core.AddressHolder
 import app.travelmo.core.ImapMailbox
+import app.travelmo.core.RefreshShown
 import app.travelmo.core.accessDecision
 import app.travelmo.core.accessSelfApproval
 import app.travelmo.core.FlightStatus
@@ -138,6 +139,9 @@ interface TripStore {
 
     /** The mailboxes connected over IMAP (`imaps` on the user document), oldest first, each with how far its last reading got, live; empty when none. */
     fun imapStatuses(uid: String): Flow<List<ImapMailbox>>
+
+    /** How far the last Refresh from email got (`refresh` on the user document), live; null when none ran. */
+    fun refreshProgress(uid: String): Flow<RefreshShown?>
 
     /** The [REVIEW_RECENT] import records read last, newest first, live; null while they load. */
     fun latestParsed(uid: String): Flow<List<ParsedRecord>?>

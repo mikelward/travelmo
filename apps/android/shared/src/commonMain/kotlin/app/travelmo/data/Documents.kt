@@ -5,6 +5,7 @@ import app.travelmo.core.PendingEmail
 import app.travelmo.core.FlightStatus
 import app.travelmo.core.FoundLoyalty
 import app.travelmo.core.BackfillShown
+import app.travelmo.core.RefreshShown
 import app.travelmo.core.GmailMailbox
 import app.travelmo.core.gmailMailboxes
 import app.travelmo.core.ImapMailbox
@@ -323,6 +324,28 @@ fun imapStatusesOf(data: Map<String, Any?>?): List<ImapMailbox> = imapMailboxes(
 
 /** A mailbox connection's address; null when blank or missing. */
 private fun connectedAddressOf(connection: Map<*, *>): String? = (connection["emailAddress"] as? String)?.takeIf { it.isNotBlank() }
+
+/** How far the last Refresh from email got (`refresh` on the user document); null when none or malformed. */
+fun refreshOf(data: Map<String, Any?>?): RefreshShown? {
+    val p = data?.get("refresh") as? Map<*, *> ?: return null
+    fun count(key: String) = (p[key] as? Number)?.toInt()
+    return RefreshShown(
+        scanned = count("scanned") ?: return null,
+        done = p["done"] as? Boolean ?: return null,
+        updatedAt = p["updatedAt"] as? String ?: return null,
+        total = count("total"),
+        updated = count("updated") ?: 0,
+        added = count("added") ?: 0,
+        removed = count("removed") ?: 0,
+        merged = count("merged") ?: 0,
+        kept = count("kept") ?: 0,
+        missing = count("missing") ?: 0,
+        failed = count("failed") ?: 0,
+        running = p["running"] == true,
+        leaseUntil = p["leaseUntil"] as? String,
+        lastFailed = count("lastFailed") ?: 0,
+    )
+}
 
 /** How far a mailbox connection's last reading got; null when none or malformed. */
 private fun backfillOf(connection: Map<*, *>): BackfillShown? {

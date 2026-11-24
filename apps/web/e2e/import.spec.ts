@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { owner, signIn } from "./helpers";
-import { gmailIdPrefix } from "@travelmo/core";
-import { clearData, seedFeed, seedGmail, seedGoogleCalendar, seedImap, seedLegacyGmail } from "./seed";
+import { gmailIdPrefix, refreshBlurb } from "@travelmo/core";
+import { clearData, seedFeed, seedGmail, seedGoogleCalendar, seedImap, seedLegacyGmail, updateUser } from "./seed";
 
 test.beforeEach(async () => {
   await clearData();
@@ -374,4 +374,56 @@ test("choosing Google calendars saves the choice and shows how each was read", a
   await save.click();
   await expect(page.getByText("Saved; the newly chosen calendars were read.")).toBeVisible();
   expect(sent).toEqual([{ ids: ["traveler@example.com", "trips@example.com"] }]);
+});
+
+test("Refresh from email runs on the server, shows how far it got, and stops and continues", async ({ page }) => {
+  const uid = await signIn(page, owner);
+  await seedGmail(uid, { emailAddress: "traveler@example.com", connectedAt: "2026-11-01T00:00:00Z" });
+  const sent: unknown[] = [];
+  let stops = 0;
+  await page.route("http://localhost:8080/trips/refresh", async (route) => {
+    sent.push(route.request().postDataJSON());
+    await route.fulfill({ json: { progress: { scanned: 0, imported: 0, done: false, running: true, updatedAt: new Date().toISOString() } } });
+  });
+  await page.route("http://localhost:8080/trips/refresh/stop", async (route) => {
+    stops += 1;
+    await route.fulfill({ status: 204 });
+  });
+  await page.goto("/settings");
+  const refresh = page.getByTestId("refresh");
+  await expect(refresh.getByText(refreshBlurb)).toBeVisible();
+  await refresh.getByRole("button", { name: "Refresh from email" }).click();
+  await expect.poll(() => sent).toEqual([{}]);
+
+  // The parser reads on by itself and records how far it got.
+  const running = { scanned: 120, imported: 3, done: false, running: true, run: "r1", step: 1, total: 340, updatedAt: new Date().toISOString() };
+  await updateUser(uid, { refresh: running });
+  await expect(refresh.getByTestId("refresh-progress")).toHaveText("Refreshing your bookings… 120 of 340 emails read so far. You can close this page.");
+  await refresh.getByRole("button", { name: "Stop" }).click();
+  await expect.poll(() => stops).toBe(1);
+  await updateUser(uid, { refresh: { ...running, running: false } });
+  await expect(refresh.getByTestId("refresh-progress")).toHaveText("Stopped part way: 120 of 340 emails read. Continue to refresh the rest.");
+  await refresh.getByRole("button", { name: "Continue refreshing" }).click();
+  await expect.poll(() => sent.length).toBe(2);
+  expect(sent[1]).toEqual({});
+
+  // Done: what it did, and another refresh starts from the first email.
+  await updateUser(uid, { refresh: { ...running, running: false, done: true, scanned: 340, updated: 12, merged: 2, kept: 1 } });
+  await expect(refresh.getByTestId("refresh-progress")).toHaveText(
+    "Refreshed 340 emails: 12 bookings updated, 2 duplicates merged. 1 booking you edited was left as you left it.",
+  );
+  await refresh.getByRole("button", { name: "Refresh from email" }).click();
+  await expect.poll(() => sent.length).toBe(3);
+  expect(sent[2]).toEqual({ restart: true });
+});
+
+test("a refresh the model's rate limit stopped says so and offers to continue", async ({ page }) => {
+  const uid = await signIn(page, owner);
+  await updateUser(uid, {
+    refresh: { scanned: 40, imported: 2, done: false, running: false, lastFailed: 1, total: 90, updatedAt: new Date().toISOString() },
+  });
+  await page.goto("/settings");
+  const refresh = page.getByTestId("refresh");
+  await expect(refresh.getByText("Refresh paused: an email couldn't be read right now. Continue when ready.")).toBeVisible();
+  await expect(refresh.getByRole("button", { name: "Continue refreshing" })).toBeVisible();
 });

@@ -7,6 +7,15 @@ import { embeddingDimensions } from "./similarity";
 
 export type Extractor = (message: EmailMessage) => Promise<ExtractedBooking>;
 
+// The model's answer when the project's quota or rate is used up (429,
+// RESOURCE_EXHAUSTED): the email is fine, and is read again once it frees up.
+export function isModelRateLimit(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const { status, code, message } = error as { status?: unknown; code?: unknown; message?: unknown };
+  if (status === 429 || code === 429 || status === "RESOURCE_EXHAUSTED") return true;
+  return typeof message === "string" && /\b429\b|RESOURCE_EXHAUSTED/.test(message);
+}
+
 const responseJsonSchema = z.toJSONSchema(ExtractedBooking, { target: "draft-7" });
 
 const instructions = `You read a single email and extract any travel bookings it confirms.

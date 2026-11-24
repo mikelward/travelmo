@@ -239,7 +239,7 @@ service cloud.firestore {
       // not forge a connection, a forwarding address or a linked email
       // address.
       function serverKeys() {
-        return ['gmail', 'gmails', 'fastmail', 'imaps', 'googleCalendar', 'forward', 'emails', 'pendingEmails'];
+        return ['gmail', 'gmails', 'fastmail', 'imaps', 'googleCalendar', 'forward', 'emails', 'pendingEmails', 'refresh'];
       }
       // Corrections to where home was (Profile): a list of at most fifty.
       // Rules cannot check each entry; the parser parses them and ignores a

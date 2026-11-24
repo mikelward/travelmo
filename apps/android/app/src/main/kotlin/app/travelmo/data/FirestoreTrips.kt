@@ -1,5 +1,6 @@
 package app.travelmo.data
 
+import app.travelmo.core.RefreshShown
 import app.travelmo.core.AccessConfig
 import app.travelmo.core.AccessRecord
 import app.travelmo.core.AccountAccess
@@ -271,6 +272,9 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
 
     override fun imapStatuses(uid: String): Flow<List<ImapMailbox>> =
         userDocument(uid, "Reading the IMAP connections failed", emptyList(), ::imapStatusesOf)
+
+    override fun refreshProgress(uid: String): Flow<RefreshShown?> =
+        userDocument(uid, "Reading the refresh's progress failed", null, ::refreshOf)
 
     /** What [read] makes of the user document, live; [fallback] once reading it fails, logged as [failure]. */
     private fun <T> userDocument(uid: String, failure: String, fallback: T, read: (Map<String, Any?>?) -> T): Flow<T> = callbackFlow {

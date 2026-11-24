@@ -403,6 +403,26 @@ class ScreenScreenshotTest {
         composeRule.onRoot().captureRoboImage(filePath = "$outputDir/settings_trip_reminders.png")
     }
 
+    // Settings scrolled to Refresh from email, part way through one.
+    @Test
+    fun settings_refresh() = settingsRefresh("settings_refresh", dark = false)
+
+    @Test
+    fun settings_refresh_dark() = settingsRefresh("settings_refresh_dark", dark = true)
+
+    private fun settingsRefresh(name: String, dark: Boolean) {
+        val running = app.travelmo.core.RefreshShown(scanned = 120, done = false, updatedAt = FROZEN_NOW, total = 340, running = true)
+        val viewModel = TripsViewModel(FakeTripStore(refreshProgress = running), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, tripActions = FakeTripActions())
+        composeRule.setContent {
+            TravelmoTheme(darkTheme = dark, fontSize = FontSizeState(FontSizeSettings(scale = 1f), onScaleSettled = {}, onPinchEnabledChange = {})) {
+                SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
+            }
+        }
+        composeRule.onNodeWithText("Refreshing your bookings", substring = true).performScrollTo()
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
+    }
+
     @Test
     fun trip_manage() {
         val viewModel = viewModel()

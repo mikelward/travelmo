@@ -186,6 +186,10 @@ export type TripStore = {
   // `generation`; false, writing nothing, once a reset has moved it on.
   setParsedIfCurrent(record: ParsedMessage, generation: number): Promise<boolean>;
   getParsed(uid: string, messageId: string): Promise<ParsedMessage | undefined>;
+  // Up to `limit` of the user's import records that made bookings (outcome
+  // "imported"), in order of id, after the one with id `after`: what
+  // "Refresh from email" reads again (refresh.ts).
+  importedRecords(uid: string, after: string | undefined, limit: number): Promise<ParsedMessage[]>;
   // Every booking in the user's own live trips, read outside any lock: a
   // snapshot for planning an import, never for deciding a write.
   listUserSegments(uid: string): Promise<Segment[]>;
@@ -656,6 +660,15 @@ function settled<S extends ExtractedSegment & Pick<Partial<Segment>, "cancelledA
   return live as S;
 }
 
+// A booking as the cancellations waiting for bookings leave it, against the
+// emails that confirmed it (`confirmations`, when each was sent), as an
+// import files a new one: cancelled by one that stands, else live. For a
+// booking another path adds (a refresh finding one the first reading missed).
+export function withWaitingCancellations<S extends Segment>(segment: S, confirmations: readonly (string | undefined)[], pending: readonly PendingCancellation[], timestamp: string): S {
+  const waiting = pending.filter((p) => !pendingCancellationExpired(p, timestamp)).map((p) => ({ ...p, cancellations: stillWaiting(p, timestamp) }));
+  return settled(segment, standingCancellation(segment, confirmations, waiting, pending), timestamp);
+}
+
 export const cancellationReason = (n: number) =>
   n === 0 ? "no matching booking found" : n === 1 ? "cancelled 1 booking" : `cancelled ${n} bookings`;
 
@@ -803,7 +816,7 @@ async function recordRetries(uid: string, segments: readonly Segment[], deps: Im
 // tables, no call), anything else's from the geocoder when there is one. Network calls stay outside the transaction,
 // which Firestore may run more than once. A geocoder failure costs the
 // country, never the booking.
-async function placeSegments(uid: string, booking: BookingToFile, deps: ImportDeps): Promise<{ segments: readonly ExtractedSegment[]; deferred: number }> {
+export async function placeSegments(uid: string, booking: BookingToFile, deps: ImportDeps): Promise<{ segments: readonly ExtractedSegment[]; deferred: number }> {
   const fromAirports = booking.segments.map((segment) => fillCities(fillAirports(segment, airportPlace), cityCountry));
   if (!deps.geocode) return { segments: fromAirports, deferred: 0 };
   const { segments, filled, failed, deferred } = await enrichSegments(fromAirports, deps.geocode);

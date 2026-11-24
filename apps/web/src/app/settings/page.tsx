@@ -1,6 +1,6 @@
 "use client";
 
-import { RideCompany, cleanSenderList, imapMailboxes, imapRedirect, imapServerFor, maxImapMailboxes, parseCountries, describeBackfill, describeDeletedTrips, gmailMailboxes, isReading, maxGmailMailboxes, pausedReason, describeRegroup, groupSkips, maxRideCompanies, paths, type BackfillProgress, type GmailConnection, type ImapConnection, type SenderPatterns, type SkipGroup } from "@travelmo/core";
+import { RideCompany, cleanSenderList, imapMailboxes, imapRedirect, imapServerFor, maxImapMailboxes, parseCountries, describeBackfill, describeDeletedTrips, gmailMailboxes, isReading, maxGmailMailboxes, pausedReason, describeRegroup, describeRefresh, groupSkips, refreshBlurb, refreshButton, refreshPausedReason, type RefreshProgress, maxRideCompanies, paths, type BackfillProgress, type GmailConnection, type ImapConnection, type SenderPatterns, type SkipGroup } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -504,6 +504,7 @@ type FilePreview = { text: string; canImport: boolean; notImported?: SkipGroup[]
 // Files every booking again with the grouping imports use now, for trips
 // imported before it knew where home was.
 function RegroupSection({ user }: { user: User }) {
+  const profile = useProfile(user.uid);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string>();
   const [error, setError] = useState<string>();
@@ -573,7 +574,64 @@ function RegroupSection({ user }: { user: User }) {
       )}
       {result && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{result}</p>}
       {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+      <RefreshFromEmail user={user} progress={profile?.refresh} />
     </section>
+  );
+}
+
+// "Refresh from email": the emails the user's bookings came from read again
+// and those bookings updated, on the server, batch after batch; the line
+// below follows its progress on the profile, as Import past bookings does.
+function RefreshFromEmail({ user, progress }: { user: User; progress: RefreshProgress | undefined }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  // The clock a stalled refresh is judged by; a minute is fine enough.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  const reading = isReading(progress, now);
+  const paused = refreshPausedReason(progress, reading);
+  const run = async (action: () => Promise<unknown>, what: string) => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await action();
+    } catch (e) {
+      console.error(`${what} failed`, e);
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-6" data-testid="refresh">
+      <p className="text-sm text-zinc-600 dark:text-zinc-400">{refreshBlurb}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {reading ? (
+          <button type="button" disabled={busy} className={buttonClass} onClick={() => void run(() => api.stopRefresh(user), "Stopping the refresh")}>
+            Stop
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={busy}
+            className={buttonClass}
+            onClick={() => void run(() => api.refreshFromEmail(user, !!progress?.done), "Refreshing from email")}
+          >
+            {refreshButton(progress)}
+          </button>
+        )}
+      </div>
+      {progress && (
+        <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400" data-testid="refresh-progress">
+          {describeRefresh(progress, reading)}
+        </p>
+      )}
+      {paused && <p className="mt-3 text-sm text-danger">{paused}</p>}
+      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+    </div>
   );
 }
 

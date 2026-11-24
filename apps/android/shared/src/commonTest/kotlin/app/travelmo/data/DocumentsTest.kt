@@ -2,6 +2,7 @@ package app.travelmo.data
 
 import app.travelmo.core.ImapMailbox
 import app.travelmo.core.BackfillShown
+import app.travelmo.core.RefreshShown
 import app.travelmo.core.FoundLoyalty
 import app.travelmo.core.AddressHolder
 import app.travelmo.core.PendingEmail
@@ -225,6 +226,21 @@ class DocumentsTest {
         fastmailStatusOf(mapOf("fastmail" to "junk")).shouldBeNull()
         fastmailStatusOf(mapOf("gmail" to mapOf("emailAddress" to "owner@example.com"))).shouldBeNull()
         fastmailStatusOf(null).shouldBeNull()
+    }
+
+    @Test
+    fun `reads how far the last refresh got and a malformed one as none`() {
+        val progress = mapOf(
+            "scanned" to 120L, "imported" to 5L, "done" to false, "updatedAt" to "2027-02-01T12:00:00Z", "total" to 340L, "updated" to 4L,
+            "merged" to 1L, "kept" to 2L, "running" to true, "leaseUntil" to "2027-02-01T12:16:00Z", "cursor" to "m9", "generation" to 0L,
+        )
+        refreshOf(mapOf("refresh" to progress)) shouldBe RefreshShown(
+            scanned = 120, done = false, updatedAt = "2027-02-01T12:00:00Z", total = 340, updated = 4, merged = 1, kept = 2, running = true, leaseUntil = "2027-02-01T12:16:00Z",
+        )
+        refreshOf(mapOf("refresh" to mapOf("scanned" to 3L))).shouldBeNull()
+        refreshOf(mapOf("refresh" to "junk")).shouldBeNull()
+        refreshOf(mapOf("email" to "owner@example.com")).shouldBeNull()
+        refreshOf(null).shouldBeNull()
     }
 
     @Test

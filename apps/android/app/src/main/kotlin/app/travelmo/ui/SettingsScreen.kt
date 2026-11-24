@@ -83,6 +83,10 @@ import app.travelmo.core.RideNear
 import app.travelmo.core.YAHOO_IMAP
 import app.travelmo.core.countryName
 import app.travelmo.core.describeBackfill
+import app.travelmo.core.REFRESH_BLURB
+import app.travelmo.core.describeRefresh
+import app.travelmo.core.refreshButton
+import app.travelmo.core.refreshPausedReason
 import app.travelmo.core.emailRows
 import app.travelmo.core.imapRedirect
 import app.travelmo.core.imapServerFor
@@ -256,6 +260,8 @@ private const val IMAP_DISCONNECT_TOKEN = "settings/imap/disconnect"
 /** Where Fastmail users make (and later delete) the API token Travelmo reads with. */
 private const val FASTMAIL_TOKENS_URL = "https://app.fastmail.com/settings/security/tokens"
 private const val REGROUP_TOKEN = "settings/trips/regroup"
+private const val REFRESH_TOKEN = "settings/trips/refresh"
+private const val REFRESH_STOP_TOKEN = "settings/trips/refresh/stop"
 private const val DELETE_TRIPS_TOKEN = "settings/trips/delete"
 private const val ADD_EMAIL_TOKEN = "settings/emails/add"
 private const val REMOVE_EMAIL_TOKEN = "settings/emails/remove"
@@ -1258,8 +1264,9 @@ private fun MailboxRow(
 
 /**
  * Settings' "Trips", as on the web: "Regroup trips" files every booking
- * again with the grouping imports use now, and "Delete all trips" asks
+ * again with the grouping imports use now, "Delete all trips" asks
  * first, with how many will go, before deleting them so the user can import
+ * again, and "Refresh from email" reads the emails the bookings came from
  * again. A build with no parser address says to use the web.
  */
 @Composable
@@ -1298,6 +1305,7 @@ private fun TripsSection(viewModel: TripsViewModel) {
     listOf(regrouping, deleting).filterIsInstance<Outcome.Failed>().lastOrNull()?.let {
         Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
     }
+    RefreshFromEmail(viewModel)
     if (confirming) {
         AppAlertDialog(
             onDismissRequest = { confirming = false },
@@ -1317,6 +1325,48 @@ private fun TripsSection(viewModel: TripsViewModel) {
             },
             dismissButton = { TextButton(onClick = { confirming = false }) { Text(stringResource(Res.string.keep)) } },
         )
+    }
+}
+
+/**
+ * "Refresh from email", as on the web: start it (Continue after it stopped
+ * part way, from the first email again once done) or Stop it while it runs,
+ * and how far it got, which the parser records on the user document as it
+ * goes, so it carries on with the app closed.
+ */
+@Composable
+private fun RefreshFromEmail(viewModel: TripsViewModel) {
+    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val state by viewModel.refresh.collectAsStateWithLifecycle()
+    val starting = outcomes[REFRESH_TOKEN]
+    val stopping = outcomes[REFRESH_STOP_TOKEN]
+    val busy = starting is Outcome.Busy || stopping is Outcome.Busy
+    LaunchedEffect(starting) { if (starting is Outcome.Done) viewModel.outcomeSeen(REFRESH_TOKEN) }
+    LaunchedEffect(stopping) { if (stopping is Outcome.Done) viewModel.outcomeSeen(REFRESH_STOP_TOKEN) }
+    val progress = state.progress
+    Text(REFRESH_BLURB, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 16.dp))
+    if (state.reading) {
+        OutlinedButton(onClick = { viewModel.stopRefresh(REFRESH_STOP_TOKEN) }, enabled = !busy, modifier = Modifier.padding(top = 8.dp)) {
+            Text(stringResource(Res.string.stop))
+        }
+    } else {
+        OutlinedButton(
+            onClick = {
+                listOf(REFRESH_TOKEN, REFRESH_STOP_TOKEN).forEach(viewModel::outcomeSeen)
+                viewModel.startRefresh(REFRESH_TOKEN, progress?.done == true)
+            },
+            enabled = !busy,
+            modifier = Modifier.padding(top = 8.dp),
+        ) { Text(refreshButton(progress)) }
+    }
+    progress?.let {
+        Text(describeRefresh(it, state.reading), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+    }
+    refreshPausedReason(progress, state.reading)?.let {
+        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
+    }
+    listOf(starting, stopping).filterIsInstance<Outcome.Failed>().lastOrNull()?.let {
+        Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
     }
 }
 

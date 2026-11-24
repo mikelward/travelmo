@@ -54,13 +54,24 @@ export const maxFailedBatches = 3;
 // absent from batches queued before a user could connect several.
 // `provider` is "fastmail" for a Fastmail mailbox's reading (which has no
 // key: one per user), "imap" for one connected over IMAP (`mailbox` its
-// key, as Gmail's), absent for Gmail's.
-export type ContinueMessage = { uid: string; mailbox?: string; provider?: "fastmail" | "imap"; run: string; step: number; wake?: string };
+// key, as Gmail's), absent for Gmail's. `kind` is "refresh" for a batch of
+// "Refresh from email" (refresh.ts), which runs on the same chain over the
+// user's import records rather than a mailbox; absent for a mailbox reading.
+export type ContinueMessage = {
+  uid: string;
+  mailbox?: string;
+  provider?: "fastmail" | "imap";
+  kind?: "refresh";
+  run: string;
+  step: number;
+  wake?: string;
+};
 
 const continueSchema = z.object({
   uid: z.string().min(1),
   mailbox: z.string().min(1).optional(),
   provider: z.enum(["fastmail", "imap"]).optional(),
+  kind: z.literal("refresh").optional(),
   run: z.string().min(1),
   step: z.number().int().nonnegative(),
   wake: z.string().min(1).optional(),
@@ -70,8 +81,16 @@ export function parseContinuePush(body: unknown): ContinueMessage & { pubsubMess
   const { data, pubsubMessageId, deliveryAttempt } = parsePush(body);
   const message = continueSchema.safeParse(data);
   if (!message.success) throw new BadPushEnvelope("Pub/Sub message is not a backfill batch");
-  const { wake, mailbox, provider, ...rest } = message.data;
-  return { ...rest, ...(mailbox ? { mailbox } : {}), ...(provider ? { provider } : {}), ...(wake ? { wake } : {}), pubsubMessageId, deliveryAttempt };
+  const { wake, mailbox, provider, kind, ...rest } = message.data;
+  return {
+    ...rest,
+    ...(mailbox ? { mailbox } : {}),
+    ...(provider ? { provider } : {}),
+    ...(kind ? { kind } : {}),
+    ...(wake ? { wake } : {}),
+    pubsubMessageId,
+    deliveryAttempt,
+  };
 }
 
 // The same reading's message for `step`.
@@ -80,6 +99,7 @@ function forStep(message: ContinueMessage, step: number, wake?: string): Continu
     uid: message.uid,
     ...(message.mailbox ? { mailbox: message.mailbox } : {}),
     ...(message.provider ? { provider: message.provider } : {}),
+    ...(message.kind ? { kind: message.kind } : {}),
     run: message.run,
     step,
     ...(wake ? { wake } : {}),

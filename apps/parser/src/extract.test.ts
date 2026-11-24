@@ -1,4 +1,4 @@
-import { parseExtraction } from "./extract";
+import { isModelRateLimit, parseExtraction } from "./extract";
 
 describe("parseExtraction", () => {
   it("reads the loyalty numbers a booking shows", () => {
@@ -69,5 +69,15 @@ describe("parseExtraction", () => {
     expect(() =>
       parseExtraction(JSON.stringify({ isBooking: true, segments: [{ type: "spaceship", title: "x", start: "2026-01-01T00:00:00Z" }] }), "m3"),
     ).toThrow(/schema/);
+  });
+});
+
+describe("isModelRateLimit", () => {
+  it("tells the model's rate limit from other failures", () => {
+    expect(isModelRateLimit(Object.assign(new Error("got status: 429 Too Many Requests"), { status: 429 }))).toBe(true);
+    expect(isModelRateLimit(new Error('{"error":{"code":429,"status":"RESOURCE_EXHAUSTED"}}'))).toBe(true);
+    expect(isModelRateLimit(Object.assign(new Error("Internal"), { status: 500 }))).toBe(false);
+    expect(isModelRateLimit(new Error("Gemini returned no text for message m1"))).toBe(false);
+    expect(isModelRateLimit("429")).toBe(false);
   });
 });

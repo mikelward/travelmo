@@ -677,6 +677,12 @@ describe("parseContinuePush", () => {
     expect(() => parseContinuePush(envelope({ uid: "u1", run: "r1", step: 0, provider: "hotmail" }))).toThrow(BadPushEnvelope);
   });
 
+  it("tells a refresh's batch from a mailbox reading's", () => {
+    expect(parseContinuePush(envelope({ uid: "u1", run: "r1", step: 2, kind: "refresh" }))).toMatchObject({ kind: "refresh", step: 2 });
+    expect(parseContinuePush(envelope({ uid: "u1", run: "r1", step: 2 })).kind).toBeUndefined();
+    expect(() => parseContinuePush(envelope({ uid: "u1", run: "r1", step: 0, kind: "delete" }))).toThrow(BadPushEnvelope);
+  });
+
   it("rejects anything else", () => {
     expect(() => parseContinuePush(envelope({ uid: "u1", run: "r1" }))).toThrow(BadPushEnvelope);
     expect(() => parseContinuePush(envelope({ emailAddress: "a@example.com", historyId: 1 }))).toThrow(BadPushEnvelope);

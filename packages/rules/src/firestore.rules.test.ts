@@ -256,6 +256,8 @@ describe("users", () => {
     const forged = { "forged@example.com": { emailAddress: "forged@example.com", connectedAt: "2026-11-01T00:00:00Z" } };
     await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { gmails: forged }, { merge: true }));
     await assertFails(setDoc(doc(as(stranger), paths.user(stranger.uid)), { gmails: forged }));
+    // Nor a refresh's progress: the parser runs those.
+    await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { refresh: { scanned: 1, imported: 0, done: true, updatedAt: "2026-11-24T00:00:00Z" } }, { merge: true }));
     // Nor a forwarding address: the parser issues those.
     await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { forward: { address: "abcdefghijklmnopqrst@travelmo.app", createdAt: "2026-11-08T00:00:00Z" } }, { merge: true }));
   });
