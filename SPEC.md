@@ -426,8 +426,7 @@ were, and lists them by run of days with the trips that have them, to
 fix; with no country for home, it asks for one on the Profile.
 
 The person picks a set of rules and a date ("Applying on" for an
-application, "On" otherwise; today by default; the Android app counts to
-today). Trips booked up to the date count, so a date ahead shows what
+application, "On" otherwise; today by default). Trips booked up to the date count, so a date ahead shows what
 planned trips would leave. Each rule shows the days used of the limit,
 what is left (or short, or to spare), the worst window and its dates
 ("Worst 12 months: …", and for a rolling limit the days in the window

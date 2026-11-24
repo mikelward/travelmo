@@ -19,8 +19,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -33,9 +31,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -82,7 +78,6 @@ import app.travelmo.log.TravelmoLog
 import app.travelmo.shared.Res
 import app.travelmo.shared.abroad_only
 import app.travelmo.shared.all_years
-import app.travelmo.shared.cancel
 import app.travelmo.shared.col_countries
 import app.travelmo.shared.col_country
 import app.travelmo.shared.col_days
@@ -99,7 +94,6 @@ import app.travelmo.shared.favorite_places
 import app.travelmo.shared.map_description
 import app.travelmo.shared.map_empty
 import app.travelmo.shared.no_trips_yet
-import app.travelmo.shared.ok
 import app.travelmo.shared.reports_loading
 import app.travelmo.shared.reports_title
 import app.travelmo.shared.row_per_place
@@ -117,8 +111,6 @@ import app.travelmo.shared.year
 import app.travelmo.ui.theme.TravelmoTheme
 import com.mikelward.androidzoom.compose.pinchFontSizeHost
 import java.io.IOException
-import java.time.LocalDate
-import java.time.ZoneOffset
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -371,7 +363,6 @@ fun WorldMap(data: WorldMapData, visited: Set<String>, airports: List<AirportVis
  * on the web: one row per trip or per place, optionally only what was
  * abroad. The phone's file picker says where the file goes.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DownloadTrips(trips: List<TripWithSegments>, periods: List<HomePeriod>, titles: Map<String, String>, today: String) {
     val context = LocalContext.current
@@ -380,7 +371,6 @@ private fun DownloadTrips(trips: List<TripWithSegments>, periods: List<HomePerio
     var international by rememberSaveable { mutableStateOf(false) }
     // The last start date to include: today unless the user picks another.
     var until by rememberSaveable { mutableStateOf(today) }
-    var picking by rememberSaveable { mutableStateOf(false) }
     var said by remember { mutableStateOf<StringResource?>(null) }
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -418,23 +408,7 @@ private fun DownloadTrips(trips: List<TripWithSegments>, periods: List<HomePerio
         Checkbox(checked = international, onCheckedChange = null)
         Text(stringResource(Res.string.abroad_only), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 12.dp, top = 10.dp, bottom = 10.dp))
     }
-    OutlinedButton(onClick = { picking = true }, modifier = Modifier.padding(top = 4.dp)) {
-        Text(stringResource(Res.string.trips_up_to, formatDateWithYear(until)))
-    }
-    if (picking) {
-        val state = rememberDatePickerState(initialSelectedDateMillis = LocalDate.parse(until).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
-        DatePickerDialog(
-            onDismissRequest = { picking = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    // The picker answers in UTC midnights.
-                    state.selectedDateMillis?.let { until = java.time.Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toString() }
-                    picking = false
-                }) { Text(stringResource(Res.string.ok)) }
-            },
-            dismissButton = { TextButton(onClick = { picking = false }) { Text(stringResource(Res.string.cancel)) } },
-        ) { DatePicker(state = state) }
-    }
+    DateButton(stringResource(Res.string.trips_up_to, formatDateWithYear(until)), until, { until = it }, Modifier.padding(top = 4.dp))
     OutlinedButton(onClick = { said = null; save.launch(if (byPlace) "travelmo-places.csv" else "travelmo-trips.csv") }, modifier = Modifier.padding(top = 4.dp)) {
         Text(stringResource(Res.string.download_csv))
     }
