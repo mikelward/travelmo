@@ -190,8 +190,8 @@ private fun forgetRow(viewModel: TripsViewModel, messageId: String) {
 
 /**
  * One reviewed message: its subject, then when it was sent (or read), who
- * from, which source and what became of it, then Import anyway for a Gmail
- * or Fastmail message and Always or Never import its sender unless the
+ * from, which source and what became of it, then Import anyway for a message
+ * read from a mailbox and Always or Never import its sender unless the
  * rules already say so.
  */
 @OptIn(ExperimentalLayoutApi::class)

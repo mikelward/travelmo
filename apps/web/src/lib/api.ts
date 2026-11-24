@@ -1,5 +1,5 @@
 import type { User } from "firebase/auth";
-import { backfillStartPath, backfillStopPath, calendarConnectPath, calendarDisconnectPath, calendarExportIssuePath, calendarSelectPath, calendarExportStopPath, deleteAllTripsPath, fastmailBackfillStartPath, fastmailBackfillStopPath, fastmailConnectPath, fastmailDisconnectPath, feedAddPath, feedRemovePath, forwardIssuePath, forwardStopPath, gmailConnectPath, gmailDisconnectPath, linkRefusalText, refusalOf, regroupPath, type AccountAccess, type CalendarExport, type ForwardAddress, type RegroupResult } from "@travelmo/core";
+import { backfillStartPath, backfillStopPath, calendarConnectPath, calendarDisconnectPath, calendarExportIssuePath, calendarSelectPath, calendarExportStopPath, deleteAllTripsPath, fastmailBackfillStartPath, fastmailBackfillStopPath, fastmailConnectPath, fastmailDisconnectPath, feedAddPath, imapBackfillStartPath, imapBackfillStopPath, imapConnectPath, imapDisconnectPath, feedRemovePath, forwardIssuePath, forwardStopPath, gmailConnectPath, gmailDisconnectPath, linkRefusalText, refusalOf, regroupPath, type AccountAccess, type CalendarExport, type ForwardAddress, type RegroupResult } from "@travelmo/core";
 import type { CalendarResult } from "./ics";
 import type { TripItResult } from "./tripit";
 
@@ -60,6 +60,13 @@ export const api = {
   startFastmailBackfill: (user: User, restart = false) =>
     post<BackfillStarted>(user, fastmailBackfillStartPath, restart ? { restart } : {}, true),
   stopFastmailBackfill: (user: User) => post<void>(user, fastmailBackfillStopPath),
+  // `server` only for an address whose provider Travelmo does not know.
+  connectImap: (user: User, emailAddress: string, password: string, server?: string) =>
+    post<{ emailAddress: string }>(user, imapConnectPath, { emailAddress, password, ...(server ? { server } : {}) }, true),
+  disconnectImap: (user: User, emailAddress: string) => post<void>(user, imapDisconnectPath, { emailAddress }, true),
+  startImapBackfill: (user: User, emailAddress: string, restart = false) =>
+    post<BackfillStarted>(user, imapBackfillStartPath, restart ? { emailAddress, restart } : { emailAddress }, true),
+  stopImapBackfill: (user: User, emailAddress: string) => post<void>(user, imapBackfillStopPath, { emailAddress }),
   reimport: (user: User, messageId: string) => post<{ outcome: string }>(user, "/gmail/reimport", { messageId }),
   importTripIt: (user: User, exported: unknown) => post<TripItResult>(user, "/import/tripit", { export: exported }),
   importIcs: (user: User, text: string) => post<CalendarResult>(user, "/import/ics", { text }),

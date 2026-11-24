@@ -1,5 +1,6 @@
 package app.travelmo.data
 
+import app.travelmo.core.ImapMailbox
 import app.travelmo.core.BackfillShown
 import app.travelmo.core.FoundLoyalty
 import app.travelmo.core.AddressHolder
@@ -223,6 +224,26 @@ class DocumentsTest {
         fastmailStatusOf(mapOf("fastmail" to "junk")).shouldBeNull()
         fastmailStatusOf(mapOf("gmail" to mapOf("emailAddress" to "owner@example.com"))).shouldBeNull()
         fastmailStatusOf(null).shouldBeNull()
+    }
+
+    @Test
+    fun `reads the IMAP mailboxes oldest first, with their progress and refused logins, a malformed entry as none`() {
+        val progress = mapOf("scanned" to 40L, "imported" to 2L, "done" to true, "updatedAt" to "2026-11-01T12:00:00Z")
+        val doc = mapOf(
+            "imaps" to mapOf(
+                "trips@yahoo.com" to mapOf("emailAddress" to "trips@yahoo.com", "connectedAt" to "2026-11-02T00:00:00Z", "loginFailedAt" to "2026-11-03T00:00:00Z"),
+                "me@icloud.com" to mapOf("emailAddress" to "Me@icloud.com", "connectedAt" to "2026-11-01T00:00:00Z", "backfill" to progress),
+                "junk" to "junk",
+                "blank" to mapOf("emailAddress" to " "),
+            ),
+            "fastmail" to mapOf("emailAddress" to "owner@fastmail.example"),
+        )
+        imapStatusesOf(doc) shouldBe listOf(
+            ImapMailbox("Me@icloud.com", "2026-11-01T00:00:00Z", BackfillShown(scanned = 40, imported = 2, done = true, updatedAt = "2026-11-01T12:00:00Z")),
+            ImapMailbox("trips@yahoo.com", "2026-11-02T00:00:00Z", loginFailedAt = "2026-11-03T00:00:00Z"),
+        )
+        imapStatusesOf(mapOf("fastmail" to mapOf("emailAddress" to "owner@fastmail.example"))) shouldBe emptyList()
+        imapStatusesOf(null) shouldBe emptyList()
     }
 
     @Test

@@ -22,6 +22,8 @@ export const paths = {
   // message ids (the account's first, for good: gmail.ts's gmailIdPrefix).
   gmailIds: (uid: string) => `users/${uid}/private/gmailIds`,
   fastmailState: (uid: string) => `users/${uid}/private/fastmail`,
+  // One per mailbox connected over IMAP, by its key (gmail.ts's mailboxKey).
+  imapMailbox: (uid: string, key: string) => `users/${uid}/private/imap-${key}`,
   googleCalendarState: (uid: string) => `users/${uid}/private/googleCalendar`,
   // Per chosen calendar (by a hash of its id): Google event id → iCalendar
   // UID, for events whose UID Google does not derive from their id.

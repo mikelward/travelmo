@@ -53,13 +53,14 @@ export const maxFailedBatches = 3;
 // key of the mailbox being read (mailboxKey in packages/core's gmail.ts),
 // absent from batches queued before a user could connect several.
 // `provider` is "fastmail" for a Fastmail mailbox's reading (which has no
-// key: one per user), absent for Gmail's.
-export type ContinueMessage = { uid: string; mailbox?: string; provider?: "fastmail"; run: string; step: number; wake?: string };
+// key: one per user), "imap" for one connected over IMAP (`mailbox` its
+// key, as Gmail's), absent for Gmail's.
+export type ContinueMessage = { uid: string; mailbox?: string; provider?: "fastmail" | "imap"; run: string; step: number; wake?: string };
 
 const continueSchema = z.object({
   uid: z.string().min(1),
   mailbox: z.string().min(1).optional(),
-  provider: z.literal("fastmail").optional(),
+  provider: z.enum(["fastmail", "imap"]).optional(),
   run: z.string().min(1),
   step: z.number().int().nonnegative(),
   wake: z.string().min(1).optional(),

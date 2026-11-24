@@ -5,6 +5,7 @@ import { deleteAccount, type AccountDeps } from "./account";
 import { hashToken, issueExport } from "./calendarExport";
 import { createOAuthState, removeCalendarState, removeConnection, saveCalendarState, saveConnection, saveEventAliases, savePending } from "./connections";
 import { AccountDeletedError } from "./deleted";
+import { saveImapConnection } from "./imapConnection";
 import { firestoreForwardStore } from "./inbound";
 import { firestoreReminderIo } from "./reminders";
 import { firestoreFeeds } from "./feeds";
@@ -127,7 +128,9 @@ async function seedUser(uid: string, email: string) {
     `geocodeRetries/${retry}`,
     paths.linkedEmail(linked),
   ];
-  const mailboxes = [paths.gmailMailbox(uid, mailboxKey(mailbox)), paths.gmailMailbox(uid, mailboxKey(second)), paths.gmailIds(uid)];
+  // A mailbox connected over IMAP: its sealed password goes with the rest.
+  await saveImapConnection(db, uid, { emailAddress: "me@icloud.com", password: `pw-${uid}`, host: "imap.mail.me.com", port: 993, connectedAt: iso });
+  const mailboxes = [paths.gmailMailbox(uid, mailboxKey(mailbox)), paths.gmailMailbox(uid, mailboxKey(second)), paths.gmailIds(uid), paths.imapMailbox(uid, mailboxKey("me@icloud.com"))];
   return { mailbox, second, owned, lookups, mailboxes };
 }
 

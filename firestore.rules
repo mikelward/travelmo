@@ -194,7 +194,7 @@ service cloud.firestore {
             && segment.title is string && segment.title.size() > 0 && segment.title.size() <= 200
             && isInstant(segment.start)
             && (!('end' in segment) || isInstant(segment.end))
-            && segment.source in ['gmail', 'manual', 'tripit', 'ics', 'forward', 'fastmail']
+            && segment.source in ['gmail', 'manual', 'tripit', 'ics', 'forward', 'fastmail', 'imap']
             && segment.gmailMessageIds is list
             && (!('sources' in segment) || segment.sources is list)
             && (!('rating' in segment) || (segment.rating is int && segment.rating >= 1 && segment.rating <= 5))
@@ -221,11 +221,12 @@ service cloud.firestore {
       function isSelf() {
         return signedIn() && request.auth.uid == uid;
       }
-      // `gmail`, `gmails`, `fastmail`, `googleCalendar`, `forward`, `emails`
-      // and `pendingEmails` are written by the server; clients may not forge
-      // a connection, a forwarding address or a linked email address.
+      // `gmail`, `gmails`, `fastmail`, `imaps`, `googleCalendar`, `forward`,
+      // `emails` and `pendingEmails` are written by the server; clients may
+      // not forge a connection, a forwarding address or a linked email
+      // address.
       function serverKeys() {
-        return ['gmail', 'gmails', 'fastmail', 'googleCalendar', 'forward', 'emails', 'pendingEmails'];
+        return ['gmail', 'gmails', 'fastmail', 'imaps', 'googleCalendar', 'forward', 'emails', 'pendingEmails'];
       }
       // Corrections to where home was (Profile): a list of at most fifty.
       // Rules cannot check each entry; the parser parses them and ignores a

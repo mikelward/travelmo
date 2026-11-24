@@ -1,5 +1,7 @@
 package app.travelmo.ui
 
+import app.travelmo.core.ImapMailbox
+import app.travelmo.core.imapMailboxes
 import app.travelmo.core.Lead
 import app.travelmo.core.LeadUnit
 import app.travelmo.core.Reminder
@@ -494,6 +496,82 @@ class TripsViewModelTest {
         runCurrent()
         viewModel.outcomes.value["f"] shouldBe Outcome.Failed("Paste your Fastmail API token.")
         fastmail.calls shouldBe listOf("connect fmu1-writable")
+    }
+
+    @Test
+    fun `IMAP mailboxes connect with an app password and each reads and disconnects through its own routes`() = runTest {
+        val done = BackfillShown(scanned = 40, imported = 2, done = true, updatedAt = "2026-11-22T11:00:00Z")
+        val gmail = FakeGmailActions()
+        val imap = FakeImapActions()
+        val mailboxes = listOf(
+            ImapMailbox("trips@yahoo.com", "2026-11-02T00:00:00Z", loginFailedAt = "2026-11-22T10:00:00Z"),
+            ImapMailbox("me@icloud.com", "2026-11-01T00:00:00Z", done),
+        )
+        val viewModel = TripsViewModel(
+            FakeTripStore(imapStatuses = imapMailboxes(mailboxes)), OWNER, OWNER_EMAIL,
+            clock = { Instant.parse("2026-11-22T12:00:00Z") }, gmailActions = gmail, imapActions = imap,
+        )
+        val watching = launch { viewModel.imap.collect {} }
+        runCurrent()
+        val loaded = viewModel.imap.value as TripsViewModel.ImapState.Loaded
+        loaded.mailboxes shouldBe listOf(
+            TripsViewModel.ImapShown(TripsViewModel.MailboxShown("me@icloud.com", done, reading = false), loginFailed = false),
+            TripsViewModel.ImapShown(TripsViewModel.MailboxShown("trips@yahoo.com", null, reading = false), loginFailed = true),
+        )
+        loaded.canConnectMore shouldBe true
+        viewModel.canUseImap shouldBe true
+        // A known provider's server is filled in by the parser, so none is sent.
+        viewModel.connectImap("i", " new@icloud.com ", "abcd-efgh", server = "ignored.example.com")
+        runCurrent()
+        viewModel.outcomeSeen("i")
+        viewModel.connectImap("i", "me@example.org", "secret", server = "imap.example.org")
+        runCurrent()
+        viewModel.outcomeSeen("i")
+        viewModel.startImapReading("i", "trips@yahoo.com", restart = false)
+        runCurrent()
+        viewModel.outcomeSeen("i")
+        viewModel.stopImapReading("i", "trips@yahoo.com")
+        runCurrent()
+        viewModel.outcomeSeen("i")
+        viewModel.disconnectImap("i", "me@icloud.com")
+        runCurrent()
+        imap.calls shouldBe listOf(
+            "connect new@icloud.com -",
+            "connect me@example.org imap.example.org",
+            "start trips@yahoo.com",
+            "stop trips@yahoo.com",
+            "disconnect me@icloud.com",
+        )
+        gmail.calls shouldBe emptyList()
+        watching.cancel()
+    }
+
+    @Test
+    fun `IMAP sends Gmail and Fastmail addresses to their sections and says what is missing`() = runTest {
+        val imap = FakeImapActions(refusal = "The server didn't accept that address and app password. Check them, or make a new app password.")
+        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, imapActions = imap)
+        suspend fun failure(address: String, password: String, server: String = ""): Outcome {
+            viewModel.connectImap("i", address, password, server)
+            runCurrent()
+            return viewModel.outcomes.value["i"]!!.also { viewModel.outcomeSeen("i") }
+        }
+        failure("me@gmail.com", "x") shouldBe Outcome.Failed("For a Gmail address, use Connect Gmail above.")
+        failure("me@fastmail.com", "x") shouldBe Outcome.Failed("For a Fastmail address, use the Fastmail section above.")
+        failure("me@icloud.com", " ") shouldBe Outcome.Failed("Enter an app password.")
+        failure("me@example.org", "x", "not a server") shouldBe Outcome.Failed("Enter your mail server, such as imap.example.com.")
+        imap.calls shouldBe emptyList()
+        failure("me@icloud.com", "wrong") shouldBe Outcome.Failed("The server didn't accept that address and app password. Check them, or make a new app password.")
+        imap.calls shouldBe listOf("connect me@icloud.com -")
+    }
+
+    @Test
+    fun `five IMAP mailboxes are the most`() = runTest {
+        val five = (1..5).map { ImapMailbox("me$it@example.org", "2026-11-0${it}T00:00:00Z") }
+        val viewModel = TripsViewModel(FakeTripStore(imapStatuses = five), OWNER, OWNER_EMAIL, imapActions = FakeImapActions())
+        val watching = launch { viewModel.imap.collect {} }
+        runCurrent()
+        (viewModel.imap.value as TripsViewModel.ImapState.Loaded).canConnectMore shouldBe false
+        watching.cancel()
     }
 
     @Test

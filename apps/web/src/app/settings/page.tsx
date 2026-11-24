@@ -1,6 +1,6 @@
 "use client";
 
-import { RideCompany, cleanSenderList, parseCountries, describeBackfill, describeDeletedTrips, gmailMailboxes, isReading, maxGmailMailboxes, pausedReason, describeRegroup, groupSkips, maxRideCompanies, paths, type BackfillProgress, type GmailConnection, type SenderPatterns, type SkipGroup } from "@travelmo/core";
+import { RideCompany, cleanSenderList, imapMailboxes, imapRedirect, imapServerFor, maxImapMailboxes, parseCountries, describeBackfill, describeDeletedTrips, gmailMailboxes, isReading, maxGmailMailboxes, pausedReason, describeRegroup, groupSkips, maxRideCompanies, paths, type BackfillProgress, type GmailConnection, type ImapConnection, type SenderPatterns, type SkipGroup } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -315,6 +315,187 @@ function FastmailSection({ user }: { user: User }) {
   );
 }
 
+// Where iCloud and Yahoo explain making an app password.
+const icloudAppPasswords = "https://support.apple.com/en-us/102654";
+const yahooAppPasswords = "https://help.yahoo.com/kb/SLN15241.html";
+
+// Any other mailbox, read over IMAP with an app password the user makes
+// with their provider (iCloud, Yahoo and others offer apps like this one no
+// sign-in of their own). The server is filled in for providers Travelmo
+// knows; the parser keeps the password.
+function ImapSection({ user }: { user: User }) {
+  const profile = useProfile(user.uid);
+  const [address, setAddress] = useState("");
+  const [password, setPassword] = useState("");
+  const [server, setServer] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string>();
+  const [disconnected, setDisconnected] = useState(false);
+  const [error, setError] = useState<string>();
+
+  const run = async (action: () => Promise<void>) => {
+    setBusy(true);
+    setNotice(undefined);
+    setDisconnected(false);
+    setError(undefined);
+    try {
+      await action();
+    } catch (e) {
+      // Logged without the message, which may quote the mailbox's address.
+      console.error("An IMAP action failed", { error: (e as Error).name });
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const typed = address.trim();
+  const redirect = typed.includes("@") ? imapRedirect(typed) : undefined;
+  const choice = imapServerFor(typed);
+  const needsServer = typed.includes("@") && choice.kind === "other";
+  const connect = (e: React.FormEvent) => {
+    e.preventDefault();
+    void run(async () => {
+      const { emailAddress } = await api.connectImap(user, typed, password, needsServer ? server.trim() : undefined);
+      setAddress("");
+      setPassword("");
+      setServer("");
+      setNotice(`Connected ${emailAddress}. Import your past bookings below.`);
+    });
+  };
+
+  const mailboxes = profile ? imapMailboxes(profile) : [];
+  const field = "mt-1 rounded-lg border border-field bg-background px-3 py-2";
+  return (
+    <section className="mt-10">
+      <h2 className="text-lg font-medium">Other email (IMAP)</h2>
+      {profile === undefined && <p className="mt-2 text-muted">Loading…</p>}
+      {mailboxes.length > 0 && (
+        <ul className="mt-3 space-y-4">
+          {mailboxes.map((mailbox) => (
+            <ImapMailboxRow
+              key={mailbox.emailAddress}
+              user={user}
+              mailbox={mailbox}
+              busy={busy}
+              run={run}
+              onDisconnected={() => setDisconnected(true)}
+            />
+          ))}
+        </ul>
+      )}
+      {profile && mailboxes.length >= maxImapMailboxes && (
+        <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
+          You can connect up to {maxImapMailboxes} mailboxes this way. To connect another, disconnect one; to give one a
+          new app password, connect it again below.
+        </p>
+      )}
+      {/* At the limit, the form still gives a connected mailbox a new app password; the parser refuses only a new address. */}
+      {profile && (
+        <form onSubmit={connect} data-testid="imap-connect">
+          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+            Imports booking confirmations from another inbox, such as iCloud or Yahoo, checking for new ones every few
+            minutes. Use an app password, not your usual one:{" "}
+            <a href={icloudAppPasswords} target="_blank" rel="noreferrer" className="underline">
+              iCloud
+            </a>
+            ,{" "}
+            <a href={yahooAppPasswords} target="_blank" rel="noreferrer" className="underline">
+              Yahoo
+            </a>
+            .
+          </p>
+          <div className="mt-3 flex flex-wrap items-end gap-2 text-sm">
+            <label className="flex flex-col">
+              <span className="font-medium">Email address</span>
+              <input type="email" autoComplete="email" required value={address} onChange={(e) => setAddress(e.target.value)} className={field} />
+            </label>
+            <label className="flex flex-col">
+              <span className="font-medium">App password</span>
+              <input
+                type="password"
+                autoComplete="off"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className={field}
+              />
+            </label>
+            {needsServer && (
+              <label className="flex flex-col">
+                <span className="font-medium">Server</span>
+                <input
+                  type="text"
+                  autoComplete="off"
+                  required
+                  placeholder="imap.example.com"
+                  value={server}
+                  onChange={(e) => setServer(e.target.value)}
+                  className={field}
+                />
+              </label>
+            )}
+            <button type="submit" disabled={busy || !!redirect || !typed || !password.trim() || (needsServer && !server.trim())} className={buttonClass}>
+              {busy ? "Connecting…" : "Connect"}
+            </button>
+          </div>
+          {redirect && <p className="mt-2 text-sm">{redirect}</p>}
+        </form>
+      )}
+      {notice && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{notice}</p>}
+      {disconnected && <p className="mt-3 text-sm">Disconnected. Delete the app password with your email provider too.</p>}
+      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+    </section>
+  );
+}
+
+// One mailbox connected over IMAP, as a Gmail one: its address, its own
+// Import past bookings and Disconnect, and whether its server turned the
+// app password down.
+function ImapMailboxRow({
+  user,
+  mailbox,
+  busy,
+  run,
+  onDisconnected,
+}: {
+  user: User;
+  mailbox: ImapConnection;
+  busy: boolean;
+  run: (action: () => Promise<void>) => Promise<void>;
+  onDisconnected: () => void;
+}) {
+  const address = mailbox.emailAddress;
+  return (
+    <li className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800" data-testid="imap-mailbox">
+      <p className="text-sm font-medium">{address}</p>
+      {mailbox.loginFailedAt && (
+        <p className="mt-1 text-sm text-danger">The server turned down the app password. Connect again with a new one.</p>
+      )}
+      <PastBookings
+        progress={mailbox.backfill}
+        busy={busy}
+        testId="imap-backfill-progress"
+        onStart={(restart) => void run(async () => void (await api.startImapBackfill(user, address, restart)))}
+        onStop={() => void run(() => api.stopImapBackfill(user, address))}
+      >
+        <button
+          type="button"
+          disabled={busy}
+          className={buttonClass}
+          onClick={() =>
+            run(async () => {
+              await api.disconnectImap(user, address);
+              onDisconnected();
+            })
+          }
+        >
+          Disconnect
+        </button>
+      </PastBookings>
+    </li>
+  );
+}
 
 type FilePreview = { text: string; canImport: boolean; notImported?: SkipGroup[]; run: () => Promise<string> };
 
@@ -1224,6 +1405,7 @@ export default function SettingsPage() {
             <GmailSection user={user} />
           </Suspense>
           <FastmailSection user={user} />
+          <ImapSection user={user} />
           <RegroupSection user={user} />
           <TripItSection user={user} />
           <CalendarSection user={user} />

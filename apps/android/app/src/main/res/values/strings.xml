@@ -52,6 +52,7 @@
     <string name="source_ics">Calendar</string>
     <string name="source_forward">Forwarded email</string>
     <string name="source_fastmail">Fastmail email</string>
+    <string name="source_imap">Other email</string>
     <string name="open_in_gmail">Open in Gmail</string>
     <string name="from_sender">From %1$s</string>
     <string name="close">Close</string>
@@ -119,6 +120,22 @@
     <string name="fastmail_delete_token">After you disconnect, delete the token in Fastmail.</string>
     <string name="fastmail_disconnected">Disconnected. Now delete the token in Fastmail.</string>
     <string name="fastmail_on_web">Connect Fastmail and import past bookings from Settings on the web.</string>
+    <string name="imap">Other email (IMAP)</string>
+    <string name="imap_connect_hint">Imports booking confirmations from another inbox, such as iCloud or Yahoo, checking for new ones every few minutes. Use an app password, not your usual one.</string>
+    <string name="imap_icloud_passwords">iCloud app passwords</string>
+    <string name="imap_yahoo_passwords">Yahoo app passwords</string>
+    <string name="imap_address">Email address</string>
+    <string name="imap_password">App password</string>
+    <string name="imap_server">Server</string>
+    <string name="imap_server_example">imap.example.com</string>
+    <string name="connect_imap">Connect</string>
+    <string name="imap_login_failed">The server turned down the app password. Connect again with a new one.</string>
+    <string name="imap_disconnected">Disconnected. Delete the app password with your email provider too.</string>
+    <plurals name="imap_limit">
+        <item quantity="one">You can connect up to %d mailbox this way. To connect another, disconnect it; to give it a new app password, connect it again below.</item>
+        <item quantity="other">You can connect up to %d mailboxes this way. To connect another, disconnect one; to give one a new app password, connect it again below.</item>
+    </plurals>
+    <string name="imap_on_web">Connect other email and import past bookings from Settings on the web.</string>
     <string name="trips_section">Trips</string>
     <string name="import_review">Import review</string>
     <string name="import_review_hint">Recent emails and other imports that did not become bookings. Teach the importer about a sender, or import one anyway.</string>

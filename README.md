@@ -289,16 +289,17 @@ One Google Cloud project holds everything.
    `PROJECT=… REGION=<the parser's region> PARSER_SA=<the parser's service
    account> deploy/kms.sh` enables Cloud KMS and creates the key the parser
    encrypts stored mail credentials with (Gmail and Calendar refresh tokens,
-   Fastmail API tokens; SPEC "Stored credentials"): a key ring `travelmo`
+   Fastmail API tokens, IMAP app passwords; SPEC "Stored credentials"): a key ring `travelmo`
    and a symmetric key `credentials`, rotated every 90 days, which only the
    parser's service account may encrypt and decrypt with
    (`roles/cloudkms.cryptoKeyEncrypterDecrypter` on that key alone). It
    prints the `CREDENTIALS_KMS_KEY` value for step 3. Each key version
    costs about $0.06 a month (four a year with rotation, all kept so old
    ciphertext still decrypts) and each call about $0.03 per 10,000: one per
-   Gmail notification, Fastmail poll, batch of "Import past bookings" and
-   connection made. A connected Fastmail mailbox, polled every five
-   minutes, is about 8,600 calls a month, under three cents; a Gmail
+   Gmail notification, Fastmail or IMAP poll, batch of "Import past
+   bookings" and connection made. A connected Fastmail or IMAP mailbox,
+   polled every five minutes, is about 8,600 calls a month, under three
+   cents; a Gmail
    mailbox's calls follow its mail, usually fewer. While Cloud KMS
    is unreachable, nothing that needs a token works; Pub/Sub and the
    scheduled jobs try again.
@@ -388,8 +389,16 @@ One Google Cloud project holds everything.
    reminder people set themselves before a trip) by email and push, daily, and `/internal/flight-status`, which sends check-in
    reminders and looks at the flights near departure or arrival, every
    minute (check-in reminders go even without `AEROAPI_KEY`), and
-   `/internal/poll-fastmail`, which reads new mail in connected Fastmail
-   mailboxes, every five minutes. Three jobs per billing account
+   `/internal/poll-mail` (the job is still named `poll-fastmail`), which
+   reads new mail in connected Fastmail and IMAP mailboxes, every five
+   minutes. IMAP mailboxes are read with the `imapflow` library (MIT,
+   bundled with the parser, no service or fee: a poll costs a few seconds
+   of Cloud Run time per mailbox); the parser reaches each provider's IMAP
+   server on port 993 (or the one the user gave) with TLS, so Cloud Run's
+   egress must allow it (it does by default). Providers rate-limit
+   logins: a mailbox whose server refuses its app password is left alone
+   for an hour and Settings asks the user to connect it again; a provider
+   that is down only delays that mailbox's mail to a later poll. Three jobs per billing account
    are free; each further one costs about ten cents a month. Deploy the
    Firestore indexes first: the flight status job queries bookings by type
    and start across trips. Once continuous deployment is set up (below,

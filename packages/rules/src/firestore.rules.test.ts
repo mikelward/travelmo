@@ -180,6 +180,8 @@ describe("segments", () => {
     await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s10")), { ...imported, id: "s10", source: "forward", rating: 4 }));
     // So is one read from a connected Fastmail mailbox.
     await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s11")), { ...imported, id: "s11", source: "fastmail" }));
+    // And one read from a mailbox connected over IMAP.
+    await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s12")), { ...imported, id: "s12", source: "imap" }));
     const withSources = { ...imported, id: "s8", sources: [{ kind: "gmail", id: "m1", label: "Your booking", at: "2026-11-01T00:00:00Z" }] };
     await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s8")), withSources));
     await assertSucceeds(updateDoc(doc(as(partner), paths.segment(trip.id, "s8")), { title: "Edited, sources kept" }));
@@ -385,6 +387,16 @@ describe("users", () => {
       await setDoc(doc(ctx.firestore(), paths.fastmailState(owner.uid)), { ...forged, token: "fmu1-secret", accountId: "u1" });
     });
     await assertFails(getDoc(doc(as(owner), paths.fastmailState(owner.uid))));
+  });
+
+  it("a user may not forge an IMAP connection or read its password", async () => {
+    const forged = { emailAddress: "forged@icloud.com", connectedAt: "2026-11-01T00:00:00Z" };
+    await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { imaps: { "forged@icloud.com": forged } }, { merge: true }));
+    await assertFails(setDoc(doc(as(stranger), paths.user(stranger.uid)), { imaps: { "forged@icloud.com": forged } }));
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), paths.imapMailbox(owner.uid, "k1")), { ...forged, password: "kms1:secret", host: "imap.mail.me.com", port: 993 });
+    });
+    await assertFails(getDoc(doc(as(owner), paths.imapMailbox(owner.uid, "k1"))));
   });
 
   it("calendar feeds are readable by their owner only and written by the parser alone", async () => {

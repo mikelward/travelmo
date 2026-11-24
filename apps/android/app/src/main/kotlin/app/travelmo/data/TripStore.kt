@@ -4,6 +4,7 @@ import app.travelmo.core.AccessConfig
 import app.travelmo.core.AccessRecord
 import app.travelmo.core.AccountAccess
 import app.travelmo.core.AddressHolder
+import app.travelmo.core.ImapMailbox
 import app.travelmo.core.accessDecision
 import app.travelmo.core.accessInvite
 import app.travelmo.core.accessRecordOf
@@ -166,6 +167,9 @@ interface TripStore {
 
     /** The Fastmail connection (`fastmail` on the user document) and how far the last reading of it got, live; null when not connected. */
     fun fastmailStatus(uid: String): Flow<FastmailStatus?>
+
+    /** The mailboxes connected over IMAP (`imaps` on the user document), oldest first, each with how far its last reading got, live; empty when none. */
+    fun imapStatuses(uid: String): Flow<List<ImapMailbox>>
 
     /** The [REVIEW_RECENT] import records read last, newest first, live; null while they load. */
     fun latestParsed(uid: String): Flow<List<ParsedRecord>?>
@@ -621,6 +625,9 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
 
     override fun fastmailStatus(uid: String): Flow<FastmailStatus?> =
         userDocument(uid, "Reading the Fastmail connection failed", null, ::fastmailStatusOf)
+
+    override fun imapStatuses(uid: String): Flow<List<ImapMailbox>> =
+        userDocument(uid, "Reading the IMAP connections failed", emptyList(), ::imapStatusesOf)
 
     /** What [read] makes of the user document, live; [fallback] once reading it fails, logged as [failure]. */
     private fun <T> userDocument(uid: String, failure: String, fallback: T, read: (Map<String, Any?>?) -> T): Flow<T> = callbackFlow {

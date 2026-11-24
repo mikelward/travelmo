@@ -623,7 +623,7 @@ fun SegmentRow(
  * Every email, TripIt trip or calendar event the booking was read from, as
  * the web's trip page lists them, then the sender. A Gmail email the viewer
  * imported opens in Gmail; others' are in a mailbox the viewer can't open,
- * and Fastmail has no link to a message.
+ * and Fastmail and IMAP mailboxes have no link to a message.
  */
 @Composable
 private fun SourcesDialog(segment: Segment, emailLink: (SourceRef) -> String?, onDismiss: () -> Unit) {
@@ -682,6 +682,7 @@ private fun sourceKindLabel(kind: SourceKind): Int = when (kind) {
     SourceKind.ICS -> R.string.source_ics
     SourceKind.FORWARD -> R.string.source_forward
     SourceKind.FASTMAIL -> R.string.source_fastmail
+    SourceKind.IMAP -> R.string.source_imap
 }
 
 /** The traveler's stars and heart, shown when there are any. */

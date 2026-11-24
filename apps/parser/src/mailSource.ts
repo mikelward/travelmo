@@ -12,8 +12,8 @@ import {
 
 // A mailbox the import reads, whoever hosts it: the backfill pages through
 // its booking-like mail, and every import fetches a message by id. Each
-// provider (Gmail today) implements it; how new mail is noticed stays the
-// provider's own (Gmail's push notifications).
+// provider implements it; how new mail is noticed stays the provider's own
+// (Gmail's push notifications, Fastmail's and IMAP's polls).
 export type MailSource = {
   // Which mailbox it is, recorded on every import read from it.
   provider: MailProvider;
@@ -26,10 +26,13 @@ export type MailSource = {
   isStaleCursor: (error: unknown) => boolean;
   // An error saying the message is gone from the mailbox.
   isNotFound: (error: unknown) => boolean;
+  // Ends the connection a source that keeps one open (IMAP) made, once its
+  // user is done with it; the others have none.
+  close?: () => Promise<void>;
 };
 
 // The mailboxes the parser can read.
-export type MailProvider = "gmail" | "fastmail";
+export type MailProvider = "gmail" | "fastmail" | "imap";
 
 // Spends a call's share of the provider's quota before making it.
 export type Pace = (units: number) => Promise<void>;

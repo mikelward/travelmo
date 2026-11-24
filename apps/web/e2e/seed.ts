@@ -1,4 +1,4 @@
-import { paths, type CalendarFeed, type GmailConnection, type GoogleCalendarConnection, type ParsedMessage, type TravelProfile, type Segment, type Trip, type UserProfile } from "@travelmo/core";
+import { paths, type CalendarFeed, type GmailConnection, type ImapConnection, type GoogleCalendarConnection, type ParsedMessage, type TravelProfile, type Segment, type Trip, type UserProfile } from "@travelmo/core";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { FieldPath, FieldValue, getFirestore } from "firebase-admin/firestore";
 
@@ -137,6 +137,13 @@ export async function seedGmail(uid: string, gmail: GmailConnection): Promise<vo
   if (!(await ref.get()).exists) await ref.set({});
   await ref.update(new FieldPath("gmails", gmail.emailAddress.toLowerCase()), { idPrefix: "", ...gmail });
   await db.doc(paths.emailLinks(uid)).set({ mailboxes: FieldValue.arrayUnion(gmail.emailAddress.toLowerCase()) }, { merge: true });
+}
+
+// A mailbox connected over IMAP, as the parser shows it on the profile.
+export async function seedImap(uid: string, imap: ImapConnection): Promise<void> {
+  const ref = db.doc(paths.user(uid));
+  if (!(await ref.get()).exists) await ref.set({});
+  await ref.update(new FieldPath("imaps", imap.emailAddress.toLowerCase()), imap);
 }
 
 // One connected before there could be several, as the parser left it then.

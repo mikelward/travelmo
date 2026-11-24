@@ -612,6 +612,37 @@ class ScreenScreenshotTest {
         composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
     }
 
+    // Settings scrolled to Other email (IMAP), none connected: the app password links, the address and app password fields, and Connect.
+    @Test
+    fun settings_imap() = imap("settings_imap", mailboxes = emptyList())
+
+    // Two IMAP mailboxes: iCloud's whole mailbox read, and Yahoo's app password turned down by its server; then the form for another.
+    @Test
+    fun settings_imap_connected() = imap(
+        "settings_imap_connected",
+        mailboxes = listOf(
+            app.travelmo.core.ImapMailbox("owner@icloud.example", "2026-10-01T00:00:00Z", BackfillShown(scanned = 120, imported = 4, done = true, updatedAt = FROZEN_NOW)),
+            app.travelmo.core.ImapMailbox("trips@yahoo.example", "2026-10-02T00:00:00Z", loginFailedAt = "2026-10-31T12:00:00Z"),
+        ),
+    )
+
+    private fun imap(name: String, mailboxes: List<app.travelmo.core.ImapMailbox>) {
+        val viewModel = TripsViewModel(
+            FakeTripStore(imapStatuses = mailboxes), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) },
+            gmailActions = FakeGmailActions(), fastmailActions = FakeFastmailActions(), imapActions = FakeImapActions(),
+        )
+        val fontSize = FontSizeState(FontSizeSettings(scale = 1f), onScaleSettled = {}, onPinchEnabledChange = {})
+        composeRule.setContent {
+            TravelmoTheme(fontSize = fontSize) {
+                SettingsScreen(account = GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id"), user = user, viewModel = viewModel, onBack = {})
+            }
+        }
+        // The section's end on screen, so the whole section shows.
+        composeRule.onNodeWithText(composeRule.activity.getString(R.string.connect_imap)).performScrollTo()
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
+    }
+
     // Settings scrolled to the calendar feeds: TripIt's, read yesterday.
     @Test
     fun settings_feeds() = settingsFeeds("settings_feeds", dark = false)

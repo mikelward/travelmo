@@ -2,7 +2,7 @@ import { mailboxKey, paths } from "@travelmo/core";
 import { google } from "googleapis";
 
 // Stored mail credentials (Gmail and Calendar refresh tokens, parked OAuth
-// tokens, Fastmail API tokens) are sealed with a Cloud KMS key before they
+// tokens, Fastmail API tokens, IMAP app passwords) are sealed with a Cloud KMS key before they
 // reach Firestore, so a leak or export of the database reveals nothing
 // usable: only the parser's service account may decrypt them (SPEC "Stored
 // credentials"). Each is sealed with a context naming the document and
@@ -100,6 +100,7 @@ export const credentialContext = {
   calendar: (uid: string) => `${paths.googleCalendarState(uid)}#refreshToken`,
   pending: (token: string) => `${paths.pendingConnection(token)}#refreshToken`,
   fastmail: (uid: string) => `${paths.fastmailState(uid)}#token`,
+  imap: (uid: string, emailAddress: string) => `${paths.imapMailbox(uid, mailboxKey(emailAddress))}#password`,
 };
 
 // Opens a stored credential before the transaction that changes its

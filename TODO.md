@@ -407,7 +407,7 @@
         nothing usable.
   - [ ] Maintainer: run `deploy/kms.sh`, set `CREDENTIALS_KMS_KEY` on the
         parser, and check `credentials_sealed` in its log.
-  - [ ] IMAP with app passwords (iCloud, Infomaniak, Yahoo, others), as a
+  - [x] IMAP with app passwords (iCloud, Infomaniak, Yahoo, others), as a
         `MailSource`: inbox opened read-only, new mail polled with the
         Fastmail job, the backfill through IMAP search; server settings
         filled in for known providers; passwords sealed with Cloud KMS as
@@ -438,6 +438,23 @@ Guesses made on autopilot; change any of them freely.
   change when Gmail moves into the same list of mailboxes.
 - Fastmail: only read-only tokens are accepted, and new mail is polled
   every five minutes (about ten cents a month for the scheduler job).
+- IMAP: up to five mailboxes per account, as Gmail's; like Fastmail, a
+  connected IMAP address does not count as a confirmed one, and two users
+  may connect the same mailbox (the password is proof of access).
+- IMAP: only the inbox is read, new mail and backfill alike; archive
+  folders (iCloud's Archive, Yahoo's) are not, and the statements search
+  is not narrowed to travel programs' senders (the pre-filter does it).
+- IMAP: the username is always the email address, and the server always
+  implicit TLS; a server that only offers STARTTLS on 143 is refused.
+- IMAP: known providers are iCloud, Yahoo and Infomaniak by their own
+  domains; a custom domain hosted there asks for the server.
+- IMAP: after a refused password, background reads skip the mailbox for an
+  hour; "Import anyway" still tries. Messages are read up to 2 MB, and a
+  poll imports at most 200 new ones.
+- IMAP: the five-minute job keeps its `poll-fastmail` name and now calls
+  `/internal/poll-mail`, which polls both, rather than adding a job.
+- IMAP: sources and review rows read "Other email" (not "Email", which
+  Gmail's sources use).
 
 - iOS: the shared screens will be Compose Multiplatform rather than SwiftUI,
   so one UI serves both phones; SwiftUI would feel more native but means a

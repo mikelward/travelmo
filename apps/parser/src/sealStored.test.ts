@@ -1,8 +1,9 @@
-import { mailboxKey, paths, type FastmailState, type GmailState, type GoogleCalendarState } from "@travelmo/core";
+import { mailboxKey, paths, type FastmailState, type GmailState, type GoogleCalendarState, type ImapState } from "@travelmo/core";
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { loadCalendarState, loadMailbox, loadMailboxes, changeBackfill, pendingTokens, resolveMailbox, saveCalendarState, saveConnection, savePending, takePending } from "./connections";
 import { changeFastmailBackfill, loadFastmailState, saveFastmailConnection } from "./fastmailConnection";
+import { changeImapBackfill, loadImapMailbox, loadImapMailboxes, saveImapConnection } from "./imapConnection";
 import { sealStoredCredentials } from "./sealStored";
 import { credentialContext, isSealed, kmsSealer, useSealer, type Sealer } from "./sealing";
 import { fakeKms, testKeyName } from "./testSealer";
@@ -34,6 +35,7 @@ const raw = async (path: string, field: string) => (await db.doc(path).get()).ge
 const gmail = (emailAddress: string, refreshToken: string): GmailState => ({ refreshToken, emailAddress, connectedAt: iso, historyId: "1", watchExpiration: iso });
 const calendar = (refreshToken: string): GoogleCalendarState => ({ refreshToken, emailAddress: "me@example.com", connectedAt: iso, calendars: [] });
 const fastmail = (token: string): FastmailState => ({ token, accountId: "u1", emailAddress: "me@fastmail.com", connectedAt: iso, emailState: "1" });
+const imap = (emailAddress: string, password: string): ImapState => ({ password, emailAddress, connectedAt: iso, host: "imap.mail.me.com", port: 993, mailboxState: "1:1" });
 const progress = { scanned: 10, imported: 1, done: false, updatedAt: iso };
 
 // A KMS that is down for decryption, as during an outage.
@@ -134,6 +136,25 @@ describe("stored credentials", () => {
     await saveFastmailConnection(db, "u1", fastmail("fmu1-new"));
     expect((await loadFastmailState(db, "u1"))?.token).toBe("fmu1-new");
   });
+
+  it("keeps IMAP app passwords as ciphertext, nowhere the apps read", async () => {
+    const saved = await saveImapConnection(db, "u1", imap("Me@icloud.com", "abcd-efgh-ijkl-mnop"));
+    expect(saved.password).toBe("abcd-efgh-ijkl-mnop");
+    const stored = await raw(paths.imapMailbox("u1", mailboxKey("me@icloud.com")), "password");
+    expect(typeof stored === "string" && isSealed(stored)).toBe(true);
+    expect(stored).not.toContain("abcd-efgh-ijkl-mnop");
+    expect(JSON.stringify((await db.doc(paths.user("u1")).get()).data())).not.toContain("password");
+    expect((await loadImapMailboxes(db, "u1")).map((m) => m.password)).toEqual(["abcd-efgh-ijkl-mnop"]);
+    expect((await loadImapMailbox(db, "u1", { key: mailboxKey("me@icloud.com") }))?.password).toBe("abcd-efgh-ijkl-mnop");
+    expect((await changeImapBackfill(db, "u1", "me@icloud.com", () => ({ next: progress, result: undefined })))?.state.password).toBe("abcd-efgh-ijkl-mnop");
+  });
+
+  it("refuses an IMAP password copied into another user's mailbox", async () => {
+    await saveImapConnection(db, "u1", imap("me@icloud.com", "pw-one"));
+    const copied = await raw(paths.imapMailbox("u1", mailboxKey("me@icloud.com")), "password");
+    await db.doc(paths.imapMailbox("u2", mailboxKey("me@icloud.com"))).set({ ...imap("me@icloud.com", "x"), password: copied });
+    await expect(loadImapMailboxes(db, "u2")).rejects.toThrow("additional authenticated data");
+  });
 });
 
 describe("sealStoredCredentials", () => {
@@ -148,6 +169,7 @@ describe("sealStoredCredentials", () => {
     await db.doc(paths.gmailState(uid)).set(gmail("old@example.com", `rt-old-${uid}`));
     await db.doc(paths.googleCalendarState(uid)).set(calendar(`rt-cal-${uid}`));
     await db.doc(paths.fastmailState(uid)).set(fastmail(`fmu1-${uid}`));
+    await db.doc(paths.imapMailbox(uid, mailboxKey("me@icloud.com"))).set(imap("me@icloud.com", `pw-${uid}`));
   }
 
   it("seals every plaintext credential, leaves sealed ones and other documents alone, and is idempotent", async () => {
@@ -159,7 +181,7 @@ describe("sealStoredCredentials", () => {
     await db.doc(paths.importLock("u1")).set({ token: "not-a-credential" });
 
     const { logged, log } = logger();
-    expect(await sealStoredCredentials(db, log)).toEqual({ sealed: 5, changed: 0, failed: 0 });
+    expect(await sealStoredCredentials(db, log)).toEqual({ sealed: 6, changed: 0, failed: 0 });
     expect(logged).toEqual([]);
 
     for (const [path, field] of [
@@ -167,6 +189,7 @@ describe("sealStoredCredentials", () => {
       [paths.gmailState("u1"), "refreshToken"],
       [paths.googleCalendarState("u1"), "refreshToken"],
       [paths.fastmailState("u1"), "token"],
+      [paths.imapMailbox("u1", mailboxKey("me@icloud.com")), "password"],
       [paths.pendingConnection("code1"), "refreshToken"],
     ] as const) {
       const stored = await raw(path, field);
@@ -179,6 +202,7 @@ describe("sealStoredCredentials", () => {
     expect((await loadMailboxes(db, "u1")).map((m) => m.refreshToken).sort()).toEqual(["rt-old-u1", "rt-u1"]);
     expect((await loadCalendarState(db, "u1"))?.refreshToken).toBe("rt-cal-u1");
     expect((await loadFastmailState(db, "u1"))?.token).toBe("fmu1-u1");
+    expect((await loadImapMailboxes(db, "u1")).map((m) => m.password)).toEqual(["pw-u1"]);
     expect((await takePending(db, "code1", now))?.refreshToken).toBe("rt-pending");
 
     expect(await sealStoredCredentials(db, log)).toEqual({ sealed: 0, changed: 0, failed: 0 });
@@ -195,7 +219,7 @@ describe("sealStoredCredentials", () => {
       open: (stored, context) => sealer.open(stored, context),
     });
     const { logged, log } = logger();
-    expect(await sealStoredCredentials(db, log)).toEqual({ sealed: 7, changed: 0, failed: 1 });
+    expect(await sealStoredCredentials(db, log)).toEqual({ sealed: 9, changed: 0, failed: 1 });
     expect(logged).toEqual([{ severity: "ERROR", event: "credential_seal_failed", fields: { kind: "fastmail", uid: "u2", error: "Error", code: 503 } }]);
     expect(JSON.stringify(logged)).not.toContain("fmu1-u2");
     expect(await raw(paths.fastmailState("u2"), "token")).toBe("fmu1-u2");

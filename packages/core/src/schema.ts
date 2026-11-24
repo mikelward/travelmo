@@ -90,8 +90,9 @@ export type ExtractedBooking = z.infer<typeof ExtractedBooking>;
 
 // Where a booking came from: an email read from Gmail, a hand entry, a
 // TripIt export, a calendar file, an email forwarded to the user's
-// forwarding address or one read from a connected Fastmail mailbox.
-export const SegmentSource = z.enum(["gmail", "manual", "tripit", "ics", "forward", "fastmail"]);
+// forwarding address, or one read from a connected Fastmail mailbox or
+// another mailbox connected over IMAP.
+export const SegmentSource = z.enum(["gmail", "manual", "tripit", "ics", "forward", "fastmail", "imap"]);
 export type SegmentSource = z.infer<typeof SegmentSource>;
 
 // One place a booking came from: the email, TripIt item or calendar event
@@ -99,7 +100,7 @@ export type SegmentSource = z.infer<typeof SegmentSource>;
 // too, so a dropped duplicate (perhaps a second room after all) is one
 // click away, as is anything the extraction left out.
 export const SourceRef = z.object({
-  kind: z.enum(["gmail", "tripit", "ics", "forward", "fastmail"]),
+  kind: z.enum(["gmail", "tripit", "ics", "forward", "fastmail", "imap"]),
   // The Gmail message id, or the import record's id for the others.
   id: z.string().min(1),
   // What the user recognizes it by: the email's subject, the TripIt trip's
@@ -241,6 +242,19 @@ export const FastmailConnection = z.object({
   backfill: BackfillProgress.optional(),
 });
 export type FastmailConnection = z.infer<typeof FastmailConnection>;
+
+// What the client may see about a mailbox connected over IMAP (imap.ts);
+// the app password and the server stay in the server-only ImapState
+// document. `loginFailedAt`: the server last refused the password then,
+// and the mailbox is left alone for a while (Settings asks to connect it
+// again).
+export const ImapConnection = z.object({
+  emailAddress: z.string(),
+  connectedAt: isoDateTime,
+  backfill: BackfillProgress.optional(),
+  loginFailedAt: isoDateTime.optional(),
+});
+export type ImapConnection = z.infer<typeof ImapConnection>;
 
 // One calendar of a connected Google account: whether the user chose it, and
 // what its last daily read did.
@@ -404,6 +418,8 @@ export const UserProfile = z.object({
   gmail: GmailConnection.optional(),
   gmails: z.record(z.string(), GmailConnection).optional(),
   fastmail: FastmailConnection.optional(),
+  // Mailboxes connected over IMAP, by lowercased address.
+  imaps: z.record(z.string(), ImapConnection).optional(),
   googleCalendar: GoogleCalendarConnection.optional(),
   reminders: ReminderSettings.optional(),
   forward: ForwardAddress.optional(),
@@ -441,6 +457,22 @@ export const FastmailState = FastmailConnection.extend({
 });
 export type FastmailState = z.infer<typeof FastmailState>;
 
+// A mailbox connected over IMAP as the parser keeps it: the app password
+// (sealed), the server (always implicit TLS), and where new mail is read
+// from: `mailboxState` is the inbox's UIDVALIDITY and the last UID read,
+// as `<uidvalidity>:<uid>`.
+export const ImapState = ImapConnection.extend({
+  password: z.string().min(1),
+  host: z.string().min(1),
+  port: z.number().int().min(1).max(65535),
+  mailboxState: z.string().optional(),
+  lastPolledAt: isoDateTime.optional(),
+  // New with each password saved, so work begun with an older one does not
+  // report on the newer (imapConnection.ts's updateImapLive).
+  passwordId: z.string().optional(),
+});
+export type ImapState = z.infer<typeof ImapState>;
+
 export const SenderPatterns = z.object({
   allow: z.array(z.string()).default([]),
   deny: z.array(z.string()).default([]),
@@ -452,7 +484,7 @@ export type SenderPatterns = z.infer<typeof SenderPatterns>;
 // with `source` saying which). A record without `source` is a Gmail one.
 export const ParsedMessage = z.object({
   messageId: z.string().min(1),
-  source: z.enum(["gmail", "tripit", "ics", "forward", "fastmail"]).optional(),
+  source: z.enum(["gmail", "tripit", "ics", "forward", "fastmail", "imap"]).optional(),
   uid: z.string().min(1),
   // `cancellation`: an email cancelling bookings; `reason` says how many
   // were found and marked.

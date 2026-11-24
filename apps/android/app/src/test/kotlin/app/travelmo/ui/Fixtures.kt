@@ -1,5 +1,7 @@
 package app.travelmo.ui
 
+import app.travelmo.core.ImapMailbox
+import app.travelmo.data.ImapActions
 import app.travelmo.data.FastmailActions
 import app.travelmo.data.GmailActions
 import app.travelmo.data.FastmailStatus
@@ -227,6 +229,7 @@ class FakeTripStore(
     private val parsed: List<ParsedRecord> = fixtureParsed,
     private val gmailStatuses: List<GmailStatus> = emptyList(),
     private val fastmailStatus: FastmailStatus? = null,
+    private val imapStatuses: List<ImapMailbox> = emptyList(),
     /** Each `access/{email}` as stored, by address: the owner approved by default. */
     access: Map<String, Map<String, String>> = mapOf(OWNER_EMAIL to mapOf("email" to OWNER_EMAIL) + accessDecision(AccountAccess.APPROVED, "admin", FROZEN_NOW)),
     /** `config/access` as the owner may read it: null for someone not an admin. */
@@ -236,6 +239,7 @@ class FakeTripStore(
 ) : TripStore {
     override fun gmailStatuses(uid: String): Flow<List<GmailStatus>> = flowOf(gmailStatuses)
     override fun fastmailStatus(uid: String): Flow<FastmailStatus?> = flowOf(fastmailStatus)
+    override fun imapStatuses(uid: String): Flow<List<ImapMailbox>> = flowOf(imapStatuses)
     /** The stored access records' fields, by address, as Firestore would merge them. */
     val accessFields = MutableStateFlow(access)
     val config = MutableStateFlow(accessConfig)
@@ -523,6 +527,25 @@ class FakeFastmailActions(private val refusal: String? = null) : FastmailActions
     }
     override suspend fun disconnect() {
         calls += "disconnect"
+    }
+}
+
+/** The parser's IMAP routes as they would answer, recording what was asked (never the password's value). */
+class FakeImapActions(private val refusal: String? = null) : ImapActions {
+    val calls = mutableListOf<String>()
+    override val available = true
+    override suspend fun connect(emailAddress: String, password: String, server: String?) {
+        calls += "connect $emailAddress ${server ?: "-"}"
+        refusal?.let { throw app.travelmo.data.TripActionFailed(it) }
+    }
+    override suspend fun start(emailAddress: String, restart: Boolean) {
+        calls += "${if (restart) "restart" else "start"} $emailAddress"
+    }
+    override suspend fun stop(emailAddress: String) {
+        calls += "stop $emailAddress"
+    }
+    override suspend fun disconnect(emailAddress: String) {
+        calls += "disconnect $emailAddress"
     }
 }
 

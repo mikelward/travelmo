@@ -39,6 +39,9 @@ import app.travelmo.data.NoGmailActions
 import app.travelmo.data.ParserGmailActions
 import app.travelmo.data.FastmailActions
 import app.travelmo.data.NoFastmailActions
+import app.travelmo.data.ImapActions
+import app.travelmo.data.NoImapActions
+import app.travelmo.data.ParserImapActions
 import app.travelmo.data.ParserFastmailActions
 import app.travelmo.data.TripActions
 import app.travelmo.data.TripStore
@@ -99,6 +102,9 @@ class TravelmoApplication : Application() {
 
     /** Connecting Fastmail with an API token and reading the mailbox through the parser; nothing without Firebase or a parser address. */
     val fastmailActions: FastmailActions by lazy { if (firebaseReady) ParserFastmailActions(ParserClient(BuildConfig.PARSER_URL)) else NoFastmailActions }
+
+    /** Connecting other mailboxes over IMAP with an app password and reading them through the parser; nothing without Firebase or a parser address. */
+    val imapActions: ImapActions by lazy { if (firebaseReady) ParserImapActions(ParserClient(BuildConfig.PARSER_URL)) else NoImapActions }
 
     /** Connecting Google Calendar and choosing its calendars through the parser; nothing without Firebase or a parser address. */
     val googleCalendarActions: GoogleCalendarActions by lazy { if (firebaseReady) ParserGoogleCalendarActions(ParserClient(BuildConfig.PARSER_URL)) else NoGoogleCalendarActions }

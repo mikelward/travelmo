@@ -2,7 +2,7 @@ package app.travelmo.core
 
 // Where a booking was read from, as packages/core/src/sources.ts: every
 // email, TripIt trip or calendar event, and the link that opens an email in
-// the mailbox it came from (Gmail only: Fastmail has no stable address for
+// the mailbox it came from (Gmail only: Fastmail and IMAP mailboxes have no stable address for
 // a message).
 
 enum class SourceKind(val wire: String) {
@@ -11,6 +11,7 @@ enum class SourceKind(val wire: String) {
     ICS("ics"),
     FORWARD("forward"),
     FASTMAIL("fastmail"),
+    IMAP("imap"),
     ;
 
     companion object {

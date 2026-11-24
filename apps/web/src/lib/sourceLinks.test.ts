@@ -42,8 +42,14 @@ describe("emailLinkFor", () => {
 });
 
 describe("source labels", () => {
-  it("names a Fastmail email apart from a Gmail or forwarded one", () => {
+  it("never links an email read over IMAP", () => {
+    expect(emailLinkFor({ ...email, kind: "imap", id: "imap-k-1-2", uid: "alex" }, { uid: "alex", mailboxes: [alex], ownsTrip: true })).toBeUndefined();
+  });
+
+  it("names a Fastmail or IMAP email apart from a Gmail or forwarded one", () => {
     expect(sourceKindLabels.fastmail).toBe("Fastmail email");
+    expect(sourceKindLabels.imap).toBe("Other email");
+    expect(recordSourceLabels.imap).toBe("Other email");
     expect(new Set(Object.values(sourceKindLabels)).size).toBe(Object.keys(sourceKindLabels).length);
     expect(recordSourceLabels.fastmail).toBe("Fastmail");
     expect(recordSourceLabels.gmail).toBe("Gmail");
@@ -51,10 +57,11 @@ describe("source labels", () => {
 });
 
 describe("isFromMailbox", () => {
-  it("offers reading again and teaching the sender for Gmail and Fastmail records only", () => {
+  it("offers reading again and teaching the sender for records read from a mailbox only", () => {
     expect(isFromMailbox({})).toBe(true);
     expect(isFromMailbox({ source: "gmail" })).toBe(true);
     expect(isFromMailbox({ source: "fastmail" })).toBe(true);
+    expect(isFromMailbox({ source: "imap" })).toBe(true);
     expect(isFromMailbox({ source: "forward" })).toBe(false);
     expect(isFromMailbox({ source: "tripit" })).toBe(false);
     expect(isFromMailbox({ source: "ics" })).toBe(false);

@@ -4,6 +4,7 @@ import { gmailSourceLink, type GmailConnection, type ParsedMessage, type SourceR
 export const sourceKindLabels: Record<SourceRef["kind"], string> = {
   gmail: "Email",
   fastmail: "Fastmail email",
+  imap: "Other email",
   tripit: "TripIt",
   ics: "Calendar",
   forward: "Forwarded email",
@@ -15,6 +16,7 @@ type RecordSource = NonNullable<ParsedMessage["source"]>;
 export const recordSourceLabels: Record<RecordSource, string> = {
   gmail: "Gmail",
   fastmail: "Fastmail",
+  imap: "Other email",
   tripit: "TripIt",
   ics: "Calendar",
   forward: "Forwarded email",
@@ -25,7 +27,7 @@ export const recordSourceLabels: Record<RecordSource, string> = {
 // emails, TripIt items and calendar events have neither.
 export function isFromMailbox(record: Pick<ParsedMessage, "source">): boolean {
   const source = record.source ?? "gmail";
-  return source === "gmail" || source === "fastmail";
+  return source === "gmail" || source === "fastmail" || source === "imap";
 }
 
 export type EmailLinks = {
@@ -38,8 +40,8 @@ export type EmailLinks = {
 };
 
 // An email links only for the user whose mailbox it was read from, and
-// opens in that mailbox. Only Gmail ones link: Fastmail has no stable
-// address for a message.
+// opens in that mailbox. Only Gmail ones link: Fastmail and IMAP mailboxes
+// have no stable address for a message.
 export function emailLinkFor(source: SourceRef, links: EmailLinks | undefined): string | undefined {
   if (source.kind !== "gmail" || !links) return undefined;
   const mine = source.uid ? source.uid === links.uid : links.ownsTrip;
