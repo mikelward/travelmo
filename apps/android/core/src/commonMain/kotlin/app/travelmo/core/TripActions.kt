@@ -60,7 +60,10 @@ data class RefreshShown(
     val failed: Int = 0,
     val running: Boolean = false,
     val leaseUntil: String? = null,
-    val lastFailed: Int = 0,
+    /** The emails that failed again on a second try, the first up to the parser's limit. */
+    val failedIds: List<String> = emptyList(),
+    /** While the failed emails are being read again: those still to try. */
+    val retrying: List<String> = emptyList(),
 ) {
     /** Whether the parser is refreshing now, judged as a mailbox reading is ([isReading]). */
     fun reading(nowMs: Long): Boolean =
@@ -79,6 +82,12 @@ fun refreshButton(progress: RefreshShown?): String =
 fun describeRefresh(progress: RefreshShown, reading: Boolean): String {
     val read = progress.total?.let { "${count(progress.scanned)} of ${plural(it, "email", "emails")}" } ?: plural(progress.scanned, "email", "emails")
     if (!progress.done) {
+        val again = progress.retrying.size
+        if (again > 0) {
+            val these = plural(again, "email that couldn't be read", "emails that couldn't be read")
+            return if (reading) "Refreshing your bookings… trying $these again. You can close this page."
+            else "Stopped part way: $these still to try again. Continue to try ${if (again == 1) "it" else "them"}."
+        }
         return if (reading) "Refreshing your bookings… $read read so far. You can close this page." else "Stopped part way: $read read. Continue to refresh the rest."
     }
     val changes = listOfNotNull(
@@ -92,12 +101,31 @@ fun describeRefresh(progress: RefreshShown, reading: Boolean): String {
     )
     if (progress.kept > 0) lines += "${plural(progress.kept, "booking you edited was", "bookings you edited were")} left as you left ${if (progress.kept == 1) "it" else "them"}."
     if (progress.missing > 0) lines += "${plural(progress.missing, "email is", "emails are")} no longer in a connected mailbox."
-    if (progress.failed > 0) lines += "${plural(progress.failed, "email", "emails")} couldn't be read; refresh again to try ${if (progress.failed == 1) "it" else "them"}."
+    if (progress.failed > 0) lines += "${plural(progress.failed, "email", "emails")} couldn't be read, even on a second try:"
     return lines.joinToString(" ")
 }
 
-/** Why a refresh stopped on its own, if it did. */
-fun refreshPausedReason(progress: RefreshShown?, reading: Boolean): String? {
-    if (progress == null || progress.lastFailed == 0 || reading || progress.done) return null
-    return "Refresh paused: an email couldn't be read right now. Continue when ready."
+/** How many of the emails a finished refresh couldn't read Settings lists under what it did. */
+const val FAILED_EMAILS_SHOWN = 10
+
+/** The first of those emails' ids, once the refresh is done. */
+fun failedEmailIds(progress: RefreshShown?): List<String> =
+    if (progress?.done == true) progress.failedIds.take(FAILED_EMAILS_SHOWN) else emptyList()
+
+/** How many more couldn't be read than the list shows. */
+fun moreFailedEmails(progress: RefreshShown): String? {
+    val more = progress.failed - failedEmailIds(progress).size
+    return if (more > 0) "and ${count(more)} more" else null
+}
+
+/** One email in that list, by what its import record kept of it. */
+fun failedEmailLine(record: ParsedRecord?): String {
+    val subject = record?.subject?.trim()?.takeIf { it.isNotEmpty() } ?: "(no subject)"
+    return record?.from?.let { "$subject · $it" } ?: subject
+}
+
+/** The bug report Report a problem starts from: what happened and the emails' ids, which the maintainer finds them by in the logs. */
+fun failedEmailsReport(progress: RefreshShown): String {
+    val total = if (progress.failed > 0) progress.failed else progress.failedIds.size
+    return "\"Refresh from email\" couldn't read ${plural(total, "email", "emails")}: ${progress.failedIds.take(50).joinToString(", ")}"
 }

@@ -376,13 +376,14 @@ describe("continueBackfill", () => {
     expect(w.read[4]!.at - w.read[3]!.at).toBe(0);
   });
 
-  it("pauses \"Refresh from email\" after a batch with failed imports, which Settings shows", async () => {
+  it("carries \"Refresh from email\" on past a batch with failed imports too", async () => {
     const w = world({ pages: 5, failOn: new Set([2]) });
     await startBackfill("u1", "r1", false, w.io);
     await continueBackfill({ ...w.queued.shift()!, kind: "refresh" }, w.io);
     await continueBackfill({ ...w.queued.shift()!, kind: "refresh" }, w.io);
-    expect(w.queued).toEqual([]);
-    expect(w.stored).toMatchObject({ scanned: 600, failed: 2, lastFailed: 2, running: false, done: false });
+    expect(w.queued).toHaveLength(1);
+    expect(w.stored).toMatchObject({ scanned: 600, failed: 2, running: true, done: false, slowed: 1 });
+    expect(w.stored?.lastFailed).toBeUndefined();
   });
 
   it("stops when the trips are reset: the batch under way does not save, and no more run", async () => {

@@ -309,6 +309,21 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         awaitClose { registration.remove() }
     }
 
+    override suspend fun parsedRecords(uid: String, ids: List<String>): Map<String, ParsedRecord> {
+        val records = db.collection("users").document(uid).collection("parsedMessages")
+        return ids.mapNotNull { id ->
+            try {
+                parsedRecordOf(id, records.document(id).get().await().data)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Listed by id alone, as if the record were gone.
+                SharedLog.error(e, "Reading a failed email's import record failed")
+                null
+            }
+        }.associateBy { it.messageId }
+    }
+
     override fun allParsed(uid: String): Flow<SearchedRecords> = flow {
         val base = db.collection("users").document(uid).collection("parsedMessages").orderBy("processedAt", Query.Direction.DESCENDING)
         val read = mutableListOf<ParsedRecord>()

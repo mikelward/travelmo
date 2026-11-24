@@ -1929,14 +1929,20 @@ the server as a mailbox reading does, on the same Pub/Sub chain
 (`backfillChain.ts`, its messages marked `kind: "refresh"`), its progress
 on the user document (`refresh`): batches of up to a hundred records in id
 order, each stopping before Cloud Run's request limit, Gmail paced to the
-same 4,000 units a minute, Gmail's rate limit waited out a minute with the
-refresh going on by itself, while the model's rate limit, or an email the
-model fails on (passed and counted), stops it for Settings to offer
-Continue; Stop saves the place. Settings says how far it got ("120 of 340
-emails read") and, once done, what changed (bookings updated, added,
-duplicates merged, removed, bookings edited and so left alone, emails no
-longer in a connected mailbox, emails that could not be read), in the
-words of `tripActions.ts` and its Kotlin twin. Progress saved under an
+same 4,000 units a minute. It never stops for one email: Gmail's rate
+limit is waited out a minute and the model's longer (as a failed batch
+slows a mailbox reading), the email read again after; an email the model
+fails on is passed, counted and its id kept (`failedIds`), and once every
+record is read those emails are read again by id (`retrying`) before the
+refresh is done. Stop saves the place. Settings says how far it got ("120
+of 340 emails read", then "trying 2 emails that couldn't be read again")
+and, once done, what changed (bookings updated, added, duplicates merged,
+removed, bookings edited and so left alone, emails no longer in a
+connected mailbox), in the words of `tripActions.ts` and its Kotlin twin.
+Emails that failed both times are listed, the first ten by subject and
+sender from their import records ("and 4 more" past that): each Gmail one
+opens in Gmail, Try again reads only those emails again (`retryFailed:
+true`), and Report a problem opens Report a bug with their ids written in. Progress saved under an
 older reset generation counts as none, so "Delete all trips" stops a
 refresh, and drops its progress from Settings.
 
@@ -2389,7 +2395,7 @@ works no longer counts as failed. Settings says what happens to them ("6
 emails couldn't be read yet; they're tried again at the end", then "Trying
 6 emails that failed again…") and, once done, how many failed both times,
 which Read again from the start tries once more. "Refresh from email"
-still pauses after a batch with failures (`lastFailed`), with Continue. "Delete all trips" removes the
+carries on the same way. "Delete all trips" removes the
 progress and moves the reset generation on, so the batch under way cannot
 save and every queued message is dropped. If queueing the first batch
 fails, the reading stops, and a reading with no batch saved or reading for
@@ -2780,7 +2786,7 @@ didn't finish" in place of every page, with "Finish deleting", which calls
 | `POST /imap/backfill` | Firebase ID token | As `/gmail/backfill`, for the IMAP mailbox `emailAddress` names |
 | `POST /imap/backfill/stop` | Firebase ID token | Stops that mailbox's reading after the batch under way |
 | `POST /trips/regroup` | Firebase ID token | Fills in bookings' countries and spots from the airport and city tables, then rebuilds the user's trips from their bookings with the current grouping ("Home"); returns how many trips changed, how many were merged away and how many bookings were placed |
-| `POST /trips/refresh` | Firebase ID token | Starts "Refresh from email" on the server (`restart: true` from the first email again) and returns its progress at once; 409 when no mailbox is connected or a batch is still reading |
+| `POST /trips/refresh` | Firebase ID token | Starts "Refresh from email" on the server (`restart: true` from the first email again; `retryFailed: true` only the emails the last one couldn't read) and returns its progress at once; 409 when no mailbox is connected or a batch is still reading |
 | `POST /trips/refresh/stop` | Firebase ID token | Stops the refresh after the batch under way |
 | `POST /trips/delete-all` | Firebase ID token | Deletes every trip the user owns with its bookings, their import records, places waiting for a geocode on those bookings, and how far the last mailbox reading got; returns how many trips went. Trips shared with them, their profile and connections stay |
 | `POST /feeds/add` | Firebase ID token | Subscribes to a calendar feed after checking its address and reading it once; returns counts as for `/import/ics` |

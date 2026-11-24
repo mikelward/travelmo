@@ -39,7 +39,7 @@ export const refreshBlurb = "Reads the emails your bookings came from again and 
 // Settings shows.
 export type ShownRefresh = Pick<
   RefreshProgress,
-  "scanned" | "done" | "failed" | "lastFailed" | "total" | "updated" | "added" | "removed" | "merged" | "kept" | "missing"
+  "scanned" | "done" | "failed" | "failedIds" | "retrying" | "total" | "updated" | "added" | "removed" | "merged" | "kept" | "missing"
 >;
 
 const count = (x: number) => x.toLocaleString("en-US");
@@ -56,6 +56,11 @@ export function describeRefresh(progress: ShownRefresh, reading: boolean): strin
   const read =
     progress.total !== undefined ? `${count(progress.scanned)} of ${plural(progress.total, "email", "emails")}` : plural(progress.scanned, "email", "emails");
   if (!progress.done) {
+    const again = progress.retrying?.length;
+    if (again) {
+      const these = plural(again, "email that couldn't be read", "emails that couldn't be read");
+      return reading ? `Refreshing your bookings… trying ${these} again. You can close this page.` : `Stopped part way: ${these} still to try again. Continue to try ${again === 1 ? "it" : "them"}.`;
+    }
     return reading ? `Refreshing your bookings… ${read} read so far. You can close this page.` : `Stopped part way: ${read} read. Continue to refresh the rest.`;
   }
   const changes = [
@@ -67,12 +72,33 @@ export function describeRefresh(progress: ShownRefresh, reading: boolean): strin
   const lines = [`Refreshed ${plural(progress.scanned, "email", "emails")}: ${changes.length ? `${changes.join(", ")}.` : "your bookings were already up to date."}`];
   if (progress.kept) lines.push(`${plural(progress.kept, "booking you edited was", "bookings you edited were")} left as you left ${progress.kept === 1 ? "it" : "them"}.`);
   if (progress.missing) lines.push(`${plural(progress.missing, "email is", "emails are")} no longer in a connected mailbox.`);
-  if (progress.failed) lines.push(`${plural(progress.failed, "email", "emails")} couldn't be read; refresh again to try ${progress.failed === 1 ? "it" : "them"}.`);
+  if (progress.failed) lines.push(`${plural(progress.failed, "email", "emails")} couldn't be read, even on a second try:`);
   return lines.join(" ");
 }
 
-// Why a refresh stopped on its own, if it did.
-export function refreshPausedReason(progress: (ShownRefresh & { lastFailed?: number }) | undefined, reading: boolean): string | undefined {
-  if (!progress?.lastFailed || reading || progress.done) return undefined;
-  return "Refresh paused: an email couldn't be read right now. Continue when ready.";
+// The emails a finished refresh couldn't read, which Settings lists under
+// what it did (describeRefresh), each with what can be done about it.
+export const failedEmailsShown = 10;
+
+export function failedEmailIds(progress: ShownRefresh | undefined): string[] {
+  return progress?.done ? (progress.failedIds ?? []).slice(0, failedEmailsShown) : [];
+}
+
+// How many more couldn't be read than the list shows.
+export function moreFailedEmails(progress: ShownRefresh): string | undefined {
+  const more = (progress.failed ?? 0) - failedEmailIds(progress).length;
+  return more > 0 ? `and ${plural(more, "more", "more")}` : undefined;
+}
+
+// One email in that list, by what the import record kept of it.
+export function failedEmailLine(record: { subject?: string | undefined; from?: string | undefined } | undefined): string {
+  const subject = record?.subject?.trim() || "(no subject)";
+  return record?.from ? `${subject} · ${record.from}` : subject;
+}
+
+// The bug report "Report a problem" starts from: what happened and the
+// emails' ids, which the maintainer finds them by in the logs.
+export function failedEmailsReport(progress: ShownRefresh): string {
+  const ids = progress.failedIds ?? [];
+  return `"Refresh from email" couldn't read ${plural(progress.failed ?? ids.length, "email", "emails")}: ${ids.slice(0, 50).join(", ")}`;
 }

@@ -158,6 +158,9 @@ interface TripStore {
     /** The [REVIEW_RECENT] import records read last, newest first, live; null while they load. */
     fun latestParsed(uid: String): Flow<List<ParsedRecord>?>
 
+    /** The import records with [ids], read once; one missing or unreadable is left out. */
+    suspend fun parsedRecords(uid: String, ids: List<String>): Map<String, ParsedRecord>
+
     /**
      * Every import record, newest first, read once in pages for a search, up
      * to [REVIEW_SEARCH_CAP]: each page emits what has been read so far, the

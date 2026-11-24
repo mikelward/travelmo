@@ -318,6 +318,8 @@ class FakeTripStore(
         write(email, mapOf("email" to email) + accessDecision(decision, adminUid, now), merge = true)
     }
     override fun latestParsed(uid: String): Flow<List<ParsedRecord>?> = flowOf(parsed.take(REVIEW_RECENT))
+    override suspend fun parsedRecords(uid: String, ids: List<String>): Map<String, ParsedRecord> =
+        parsed.filter { it.messageId in ids }.associateBy { it.messageId }
     override fun allParsed(uid: String): Flow<SearchedRecords> = flowOf(SearchedRecords(parsed, done = true))
     val patterns = MutableStateFlow(SenderPatterns(deny = listOf("news.example")))
     override fun senderPatterns(uid: String): Flow<SenderPatterns> = patterns
@@ -585,8 +587,8 @@ class FakeTripActions(private val failure: String? = null) : TripActions {
         failure?.let { throw TripActionFailed(it) }
         return describeDeletedTrips(3)
     }
-    override suspend fun refresh(restart: Boolean) {
-        calls += if (restart) "refresh from the start" else "refresh"
+    override suspend fun refresh(restart: Boolean, retryFailed: Boolean) {
+        calls += if (restart) "refresh from the start" else if (retryFailed) "refresh the failed emails" else "refresh"
         failure?.let { throw TripActionFailed(it) }
     }
     override suspend fun stopRefresh() {

@@ -29,8 +29,13 @@ class ParserTripActions(private val client: ParserClient) : TripActions {
         return describeDeletedTrips(body.optInt("trips"))
     }
 
-    override suspend fun refresh(restart: Boolean) {
-        call(REFRESH_PATH, "Refreshing from email", if (restart) JSONObject().put("restart", true).toString() else "{}")
+    override suspend fun refresh(restart: Boolean, retryFailed: Boolean) {
+        val body = when {
+            restart -> JSONObject().put("restart", true)
+            retryFailed -> JSONObject().put("retryFailed", true)
+            else -> JSONObject()
+        }
+        call(REFRESH_PATH, if (retryFailed) "Trying the failed emails again" else "Refreshing from email", body.toString())
     }
 
     override suspend fun stopRefresh() {

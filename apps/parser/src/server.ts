@@ -960,6 +960,7 @@ function refreshIo(uid: string): ChainIo<undefined> {
       try {
         return await runRefreshBatch(from, {
           records: (after, limit) => deps.store.importedRecords(uid, after, limit),
+          record: (messageId) => deps.store.getParsed(uid, messageId),
           snapshot: () => deps.store.listUserSegments(uid),
           refresh: (record, snapshot) => refreshRecord(uid, record, deps, { generation, snapshot, fetch }),
           timeLeftMs,
@@ -982,18 +983,20 @@ function refreshIo(uid: string): ChainIo<undefined> {
   };
 }
 
-// Starts a refresh (`restart: true` from the first email again) and returns
-// at once; closing the page does not stop it.
+// Starts a refresh (`restart: true` from the first email again;
+// `retryFailed: true` only the emails the last one couldn't read) and
+// returns at once; closing the page does not stop it.
 app.post("/trips/refresh", async (c) => {
   const uid = await requireUser(c);
-  const body = (await c.req.json().catch(() => ({}))) as { restart?: unknown };
+  const body = (await c.req.json().catch(() => ({}))) as { restart?: unknown; retryFailed?: unknown };
   const restart = body.restart === true;
+  const retryFailed = body.retryFailed === true;
   const connected = (await loadMailboxes(db, uid)).length + (await loadImapMailboxes(db, uid)).length + ((await loadFastmailState(db, uid)) ? 1 : 0);
   if (connected === 0) throw new HTTPException(409, { message: "Connect the mailbox your bookings came from first." });
-  const result = await startBackfill(uid, randomBytes(12).toString("base64url"), restart, refreshIo(uid));
+  const result = await startBackfill(uid, randomBytes(12).toString("base64url"), restart, refreshIo(uid), undefined, retryFailed);
   if (result.kind === "disconnected") throw new HTTPException(409, { message: "Sign out, sign in again and try again." });
   if (result.kind === "busy") throw new HTTPException(409, { message: "A batch is still being read. Try again in a few minutes." });
-  log("INFO", "refresh_started", { uid, restart, joined: result.kind === "joined", run: result.progress.run });
+  log("INFO", "refresh_started", { uid, restart, retryFailed, joined: result.kind === "joined", run: result.progress.run });
   const { cursor: _cursor, after: _after, ...progress } = result.progress;
   return c.json({ progress });
 });

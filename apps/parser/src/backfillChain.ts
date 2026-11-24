@@ -156,14 +156,23 @@ export type StartDecision =
   | { kind: "joined"; next: BackfillProgress }
   | { kind: "busy" };
 
-export function decideStart(current: BackfillProgress | undefined, run: string, restart: boolean, now: string): StartDecision {
+// `retryFailed`: a reading done with emails that failed is read again for
+// those emails alone (refresh.ts's "Try again"); otherwise it starts over.
+export function decideStart(current: BackfillProgress | undefined, run: string, restart: boolean, now: string, retryFailed = false): StartDecision {
   if (current && leased(current, now)) {
     // Starting over would need the batch under way to stop first.
     if (restart) return { kind: "busy" };
     return { kind: "joined", next: { ...current, running: true } };
   }
-  const fresh = restart || !current || current.done;
-  const from: BackfillProgress = fresh || !current ? { scanned: 0, imported: 0, failed: 0, done: false, updatedAt: now } : place(current);
+  const retrying = retryFailed && !restart && current?.done ? current.failedIds : undefined;
+  const fresh = restart || !current || (current.done && !retrying?.length);
+  const from: BackfillProgress =
+    fresh || !current ? { scanned: 0, imported: 0, failed: 0, done: false, updatedAt: now } : place(current);
+  if (retrying?.length) {
+    delete from.failedIds;
+    from.retrying = retrying;
+    from.done = false;
+  }
   // A failed batch's claims, or Gmail's rate limit, hold whichever reading
   // comes next.
   if (current?.retryAfter) from.retryAfter = current.retryAfter;
@@ -224,8 +233,7 @@ export function decideHandedOn(current: BackfillProgress | undefined, message: C
 // on, its place saved and the next held off a minute (`retryAfter` in its
 // progress). One in which emails failed to import goes on too, holding the
 // next off for a while (`slowedPauseMs`); those emails are tried again at
-// the end (backfill.ts). "Refresh from email" (`kind: "refresh"`) still
-// pauses on them, with Continue in Settings.
+// the end (backfill.ts, refresh.ts).
 export function decideFinish(
   current: BackfillProgress | undefined,
   message: ContinueMessage,
@@ -234,8 +242,7 @@ export function decideFinish(
 ): BackfillProgress | undefined {
   if (!current || current.run !== message.run || current.step !== message.step) return undefined;
   const failed = batch.counts.failed;
-  const pauses = message.kind === "refresh" && failed > 0;
-  const slowed = failed > 0 && !pauses ? (current.slowed ?? 0) + 1 : undefined;
+  const slowed = failed > 0 ? (current.slowed ?? 0) + 1 : undefined;
   const slowedUntil = slowed ? new Date(Date.parse(now) + slowedPauseMs(slowed)).toISOString() : undefined;
   const retryAfter = [batch.progress.retryAfter, slowedUntil].filter((at): at is string => at !== undefined).sort().at(-1);
   const { retryAfter: _retryAfter, ...progress } = batch.progress;
@@ -244,10 +251,9 @@ export function decideFinish(
     ...(retryAfter ? { retryAfter } : {}),
     run: message.run,
     step: message.step + 1,
-    running: current.running === true && !batch.progress.done && !pauses,
+    running: current.running === true && !batch.progress.done,
     queued: false,
     ...(slowed ? { slowed } : {}),
-    ...(pauses ? { lastFailed: failed } : {}),
   };
 }
 
@@ -357,10 +363,10 @@ async function handOn<S>(message: ContinueMessage, wake: string, io: ChainIo<S>)
 
 export type StartResult = { kind: "disconnected" } | { kind: "busy" } | { kind: "started" | "joined"; progress: BackfillProgress };
 
-export async function startBackfill<S>(uid: string, run: string, restart: boolean, io: ChainIo<S>, mailbox?: string): Promise<StartResult> {
+export async function startBackfill<S>(uid: string, run: string, restart: boolean, io: ChainIo<S>, mailbox?: string, retryFailed = false): Promise<StartResult> {
   const now = io.now();
   const changed = await io.change((current) => {
-    const decision = decideStart(current, run, restart, now);
+    const decision = decideStart(current, run, restart, now, retryFailed);
     return { next: decision.kind === "busy" ? undefined : decision.next, result: decision };
   });
   if (!changed) return { kind: "disconnected" };
