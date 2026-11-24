@@ -127,7 +127,9 @@ viewer's zone. Trip bounds are calendar dates.
   actualIn, cancelled, diverted, divertedTo, noticedOut, checkedAt`: a
   flight's live gates, carousel, delay, cancellation and diversion, one
   per flight (`key` is its number, local departure date and airport,
-  `QF1_2026-12-13_SYD`) and shared by everyone booked on it, times in UTC;
+  `QF1_2026-12-13_SYD`) and shared by everyone booked on it, times in UTC
+  (`actualOut` and `actualIn` are leaving and reaching the gate, or takeoff
+  and touchdown where the airports report no gate times);
   `flightStatusBudget/{day}` — `calls`, the day's count against
   `FLIGHT_STATUS_DAILY_LIMIT`; `flightStatusClaims/{key}` — `until`, a
   look at the flight under way; `flightStatusNews/{key__uid}` — `uid, key,

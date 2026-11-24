@@ -61,6 +61,20 @@ describe("matchFlight", () => {
 });
 
 describe("statusFromFlight", () => {
+  it("takes takeoff and touchdown for departure and arrival when the airports report no gate times", () => {
+    const flown = { ...outbound, actual_off: "2026-12-12T22:25:00Z", actual_on: "2026-12-13T07:20:00Z" };
+    expect(statusFromFlight(flown, { ident: "XX100", date: "2026-12-13" }, "2026-12-13T08:00:00Z")).toMatchObject({
+      actualOut: "2026-12-12T22:25:00Z",
+      actualIn: "2026-12-13T07:20:00Z",
+    });
+    // Gate times, when there are any, come first.
+    const gated = { ...flown, actual_out: "2026-12-12T22:12:00Z", actual_in: "2026-12-13T07:28:00Z" };
+    expect(statusFromFlight(gated, { ident: "XX100", date: "2026-12-13" }, "2026-12-13T08:00:00Z")).toMatchObject({
+      actualOut: "2026-12-12T22:12:00Z",
+      actualIn: "2026-12-13T07:28:00Z",
+    });
+  });
+
   it("keeps the places and times, leaving out what AeroAPI did not say", () => {
     expect(statusFromFlight(outbound, { ident: "XX100", date: "2026-12-13", origin: "SYD" }, "2026-12-12T21:00:00Z")).toEqual({
       ident: "XX100",

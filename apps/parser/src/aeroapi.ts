@@ -20,9 +20,13 @@ export const AeroFlight = z.object({
   scheduled_out: instant,
   estimated_out: instant,
   actual_out: instant,
+  // Takeoff and touchdown. Many airports report no gate times (`actual_out`,
+  // `actual_in`), so these stand in for them.
+  actual_off: instant,
   scheduled_in: instant,
   estimated_in: instant,
   actual_in: instant,
+  actual_on: instant,
   gate_origin: text,
   gate_destination: text,
   terminal_origin: text,
@@ -119,10 +123,11 @@ export function statusFromFlight(
     baggageClaim: flight.baggage_claim ?? undefined,
     scheduledOut: isoInstant(flight.scheduled_out),
     estimatedOut: isoInstant(flight.estimated_out),
-    actualOut: isoInstant(flight.actual_out),
+    // Left the gate, or failing a gate time, took off: either way it has gone.
+    actualOut: isoInstant(flight.actual_out) ?? isoInstant(flight.actual_off),
     scheduledIn: isoInstant(flight.scheduled_in),
     estimatedIn: isoInstant(flight.estimated_in),
-    actualIn: isoInstant(flight.actual_in),
+    actualIn: isoInstant(flight.actual_in) ?? isoInstant(flight.actual_on),
     ...(flight.cancelled ? { cancelled: true } : {}),
     // A diverted flight's destination is where it now goes.
     ...(flight.diverted ? { diverted: true, divertedTo: flight.destination?.code_iata ?? undefined } : {}),
