@@ -41,7 +41,7 @@ Travelmo uses these services to run, and they handle data only to provide them:
 - **Google Cloud and Firebase** host the app and store your data, and handle sign-in and phone notifications.
 - **Google's Gemini API** reads the text of an email, calendar event or file that looks like a booking and returns the booking's details.
 - **Google Maps Platform** looks up the places in your bookings by name, and suggests addresses as you type one.
-- **FlightAware** is asked about a flight's number, date and departure airport, never who is on it, to give its gates and baggage carousel near departure and arrival.
+- **FlightAware** is asked about a flight's number, date and departure airport, never who is on it, to give its gates, baggage carousel, delays, cancellation and diversion near departure and arrival.
 - **Cloudflare** receives emails you forward to your Travelmo address and passes them on.
 - **An email delivery service** sends the reminders you ask for by email, and your browser's push service delivers the notifications you turn on in a browser.
 

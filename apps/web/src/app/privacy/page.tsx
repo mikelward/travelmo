@@ -133,7 +133,7 @@ export default function PrivacyPage() {
           </li>
           <li>
             <strong>FlightAware</strong> is asked about a flight&apos;s number, date and departure airport, never who is
-            on it, to give its gates and baggage carousel near departure and arrival.
+            on it, to give its gates, baggage carousel, delays, cancellation and diversion near departure and arrival.
           </li>
           <li>
             <strong>Cloudflare</strong> receives emails you forward to your Travelmo address and passes them on.

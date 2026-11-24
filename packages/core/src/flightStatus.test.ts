@@ -10,6 +10,7 @@ import {
   flightStatusKey,
   flightStatusShown,
   keepKnownPlaces,
+  noticeDeparture,
 } from "./flightStatus";
 
 // An invented flight: leaves at 09:00 in Sydney (22:00Z the day before),
@@ -141,6 +142,33 @@ describe("flightStatusLines", () => {
     expect(flightStatusLines(undefined)).toEqual([]);
     expect(flightStatusLines(status({ found: false, departureGate: "8" }))).toEqual([]);
   });
+
+  it("says how late the flight leaves and lands, by the airports' clocks", () => {
+    const late = status({ estimatedOut: "2026-12-12T22:40:00Z", estimatedIn: "2026-12-13T07:10:00Z", departureGate: "8" });
+    expect(flightStatusLines(late, flight)).toEqual(["Leaves 40 min late, at 09:40", "Departs from gate 8", "Lands 20 min early, at 15:10"]);
+    // Without the booking there is no place to read the clock at.
+    expect(flightStatusLines(status({ estimatedOut: "2026-12-13T00:05:00Z" }))).toEqual(["Leaves 2 h 5 min late"]);
+    // A few minutes either way is on time, and a flight that left or landed has no estimate to give.
+    expect(flightStatusLines(status({ estimatedOut: "2026-12-12T22:04:00Z", estimatedIn: "2026-12-13T07:26:00Z" }), flight)).toEqual([]);
+    expect(flightStatusLines(status({ estimatedOut: "2026-12-12T22:40:00Z", actualOut: "2026-12-12T22:41:00Z" }), flight)).toEqual([]);
+  });
+
+  it("says a flight leaves on time again after news of its delay, so a retry of that news says it too", () => {
+    const back = status({ estimatedOut: "2026-12-12T22:00:00Z", noticedOut: "2026-12-12T22:00:00Z" });
+    expect(flightStatusLines(back, flight)).toEqual(["Leaves on time, at 09:00"]);
+    expect(flightStatusLines(back)).toEqual(["Leaves on time"]);
+  });
+
+  it("says only that a cancelled flight is cancelled", () => {
+    expect(flightStatusLines(status({ cancelled: true, departureGate: "8", estimatedOut: "2026-12-12T22:40:00Z" }), flight)).toEqual(["Flight cancelled"]);
+  });
+
+  it("says where a diverted flight goes when that is not where it was booked to", () => {
+    const booked = { ...flight, destination: { name: "Singapore", code: "SIN" } };
+    expect(flightStatusLines(status({ diverted: true, divertedTo: "KUL" }), booked)).toEqual(["Diverted to KUL"]);
+    expect(flightStatusLines(status({ diverted: true, divertedTo: "SIN" }), booked)).toEqual(["Diverted"]);
+    expect(flightStatusLines(status({ diverted: true }), booked)).toEqual(["Diverted"]);
+  });
 });
 
 describe("keepKnownPlaces", () => {
@@ -191,5 +219,45 @@ describe("flightStatusNews", () => {
     // A gate given where only the terminal was known is news, not a change.
     expect(flightStatusNews(status({ departureTerminal: "1" }), status({ departureTerminal: "1", departureGate: "8" }))).toEqual(["Departs from terminal 1, gate 8"]);
     expect(flightStatusNews(undefined, status({ departureGate: "8", actualOut: "2026-12-12T22:00:00Z" }))).toEqual([]);
+  });
+
+  it("tells of a cancellation once, and nothing else about a cancelled flight", () => {
+    const cancelled = status({ cancelled: true, departureGate: "9" });
+    expect(flightStatusNews(status({ departureGate: "8" }), cancelled, flight)).toEqual(["Flight cancelled"]);
+    expect(flightStatusNews(cancelled, cancelled, flight)).toEqual([]);
+  });
+
+  it("tells of a diversion once", () => {
+    const diverted = status({ diverted: true, divertedTo: "KUL" });
+    expect(flightStatusNews(status(), diverted, flight)).toEqual(["Diverted to KUL"]);
+    expect(flightStatusNews(diverted, diverted, flight)).toEqual([]);
+  });
+
+  it("tells of a departure moved a quarter of an hour or more from what was last said", () => {
+    const look = (estimatedOut: string, before?: FlightStatus) => {
+      const after = noticeDeparture(before, status({ estimatedOut }));
+      return { after, news: flightStatusNews(before, after, flight) };
+    };
+    // Ten minutes late is not yet news; 40 is.
+    const ten = look("2026-12-12T22:10:00Z", noticeDeparture(undefined, status()));
+    expect(ten.news).toEqual([]);
+    expect(ten.after).not.toHaveProperty("noticedOut");
+    const forty = look("2026-12-12T22:40:00Z", ten.after);
+    expect(forty.news).toEqual(["Leaves 40 min late, at 09:40"]);
+    expect(forty.after.noticedOut).toBe("2026-12-12T22:40:00Z");
+    // Creeping five minutes a look is news once it adds up to 15 more.
+    const fortyFive = look("2026-12-12T22:45:00Z", forty.after);
+    expect(fortyFive.news).toEqual([]);
+    expect(fortyFive.after.noticedOut).toBe("2026-12-12T22:40:00Z");
+    const fifty = look("2026-12-12T22:50:00Z", fortyFive.after);
+    expect(fifty.news).toEqual([]);
+    const fiftyFive = look("2026-12-12T22:55:00Z", fifty.after);
+    expect(fiftyFive.news).toEqual(["Now leaves 55 min late, at 09:55"]);
+    // Back on schedule is news too.
+    expect(look("2026-12-12T22:00:00Z", fiftyFive.after).news).toEqual(["Now leaves on time, at 09:00"]);
+    // Once it has left, its departure is no news.
+    const gone = noticeDeparture(forty.after, status({ estimatedOut: "2026-12-12T23:30:00Z", actualOut: "2026-12-12T23:30:00Z" }));
+    expect(flightStatusNews(forty.after, gone, flight)).toEqual([]);
+    expect(gone.noticedOut).toBe("2026-12-12T22:40:00Z");
   });
 });

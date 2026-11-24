@@ -126,6 +126,9 @@ fun flightStatusFromDocument(data: Map<String, Any?>): FlightStatus? {
         estimatedIn = data.text("estimatedIn"),
         actualIn = data.text("actualIn"),
         cancelled = data["cancelled"] == true,
+        diverted = data["diverted"] == true,
+        divertedTo = data.text("divertedTo"),
+        noticedOut = data.text("noticedOut"),
         checkedAt = checkedAt,
     )
 }

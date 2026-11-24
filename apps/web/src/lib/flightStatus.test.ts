@@ -38,4 +38,9 @@ describe("flightLinesFor", () => {
     expect(flightLinesFor(flight, {}, "2026-12-12T21:00:00Z")).toBeUndefined();
     expect(flightLinesFor(stay, statuses, "2026-12-12T21:00:00Z")).toBeUndefined();
   });
+
+  it("gives a delay by the departure airport's clock", () => {
+    const late = { ...status, scheduledOut: "2026-12-12T22:00:00Z", estimatedOut: "2026-12-12T22:40:00Z" };
+    expect(flightLinesFor(flight, { "XX100_2026-12-13_SYD": late }, "2026-12-12T21:00:00Z")?.[0]).toBe("Leaves 40 min late, at 09:40");
+  });
 });

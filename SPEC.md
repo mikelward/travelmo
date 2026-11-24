@@ -120,7 +120,8 @@ viewer's zone. Trip bounds are calendar dates.
 - `flightStatus/{key}` — `ident, date, origin, found, departureGate,
   departureTerminal, arrivalGate, arrivalTerminal, baggageClaim,
   scheduledOut, estimatedOut, actualOut, scheduledIn, estimatedIn,
-  actualIn, cancelled, checkedAt`: a flight's live gates and carousel, one
+  actualIn, cancelled, diverted, divertedTo, noticedOut, checkedAt`: a
+  flight's live gates, carousel, delay, cancellation and diversion, one
   per flight (`key` is its number, local departure date and airport,
   `QF1_2026-12-13_SYD`) and shared by everyone booked on it, times in UTC;
   `flightStatusBudget/{day}` — `calls`, the day's count against
@@ -655,7 +656,25 @@ A flight's card on the trip page says, near departure, where it leaves
 from and arrives at and where the bags come out ("Departs from terminal 1,
 gate 8 · Arrives at gate D46 · Bags on carousel 16"), and whoever has the
 trip gets a notification when one of them is given or changes ("Now
-departs from terminal 1, gate 9 (was terminal 1, gate 8)"). Only a field
+departs from terminal 1, gate 9 (was terminal 1, gate 8)"). The card
+also says how late the flight leaves and lands, once five minutes or more
+off the schedule, by the airports' clocks ("Leaves 40 min late, at 09:40 ·
+Lands 20 min early, at 15:10"; the times are FlightAware's UTC estimates
+written in the offset of the booking's start or end), whether it was
+diverted ("Diverted to KUL", or just "Diverted" when the service gives
+the booked airport or none), and of a flight the airline cancelled only
+"Flight cancelled". News of these: a cancellation and a diversion once
+each, and a departure whose estimate moved a quarter of an hour or more
+from what the last news said, or from the schedule before any did
+("Now leaves 55 min late, at 09:55", "Now leaves on time, at 09:00"):
+the status keeps that time as `noticedOut`, so a delay creeping five
+minutes a look is news once it adds up, and a departure is no news once
+the flight has left. Once news of a delay was sent, the card keeps the
+departure line even when it is back on time ("Leaves on time, at 09:00"),
+so a retried notification of that says it too. A landing estimate is
+shown, not sent: it moves
+throughout the flight. A retried notification gives no clock time, since
+it has only the flight's status, not the booking. Only a field
 given a new value is news: nothing is said of one taken away, which is the
 source losing it, nor of a departure gate once the flight has left (`packages/core/src/flightStatus.ts`,
 mirrored in the Android app's core).

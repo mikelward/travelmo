@@ -1,8 +1,11 @@
 import { z } from "zod";
+import { localTime } from "./format";
 import { isoDate, isoDateTime, type ExtractedSegment } from "./schema";
+import { shiftInstant } from "./status";
 import { isCancelled, localDate } from "./trips";
 
-// Live gates, terminals and the baggage carousel for a flight, read from a
+// Live gates, terminals, the baggage carousel, delays, cancellation and
+// diversion for a flight, read from a
 // flight-status service by the parser and kept once per flight
 // (`flightStatus/{key}`), not on any booking: everyone booked on the
 // flight reads the same document, one look serves them all, and a status
@@ -30,6 +33,12 @@ export const FlightStatus = z.object({
   estimatedIn: isoDateTime.optional(),
   actualIn: isoDateTime.optional(),
   cancelled: z.boolean().optional(),
+  // Landing somewhere other than planned, and where when the service says.
+  diverted: z.boolean().optional(),
+  divertedTo: z.string().min(1).optional(),
+  // The departure time the last news gave (UTC), so a delay that creeps a
+  // few minutes a look is news once it adds up.
+  noticedOut: isoDateTime.optional(),
   checkedAt: isoDateTime,
 });
 export type FlightStatus = z.infer<typeof FlightStatus>;
@@ -150,15 +159,84 @@ function places(status: FlightStatus | undefined): Places {
   };
 }
 
-// What the flight's card says: where it leaves from and arrives at, and
-// where the bags come out.
-export function flightStatusLines(status: FlightStatus | undefined): string[] {
+// A departure or landing this far from the schedule is shown; one moved
+// this far from what the last news said is news again.
+export const delayShownMs = 5 * minute;
+export const delayNewsMs = 15 * minute;
+
+// The booking a status is for: its own instants carry the places' offsets,
+// so times are given as the airport's clock reads.
+type Booked = Pick<ExtractedSegment, "start" | "end" | "destination">;
+
+// "40 min", "1 h", "2 h 5 min".
+function span(ms: number): string {
+  const total = Math.round(Math.abs(ms) / minute);
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  if (!hours) return `${minutes} min`;
+  return minutes ? `${hours} h ${minutes} min` : `${hours} h`;
+}
+
+// A UTC instant as the clock reads where `place` (an instant with that
+// place's offset) is: "10:25". Nothing without a place.
+function clockAt(at: string, place: string | undefined): string | undefined {
+  return place ? localTime(shiftInstant(place, Date.parse(at) - Date.parse(place))) : undefined;
+}
+
+// "40 min late, at 10:25", "20 min early, at 18:10" or "on time, at 09:00".
+function timing(scheduled: string, estimated: string, place: string | undefined): string {
+  const off = Date.parse(estimated) - Date.parse(scheduled);
+  const word = Math.abs(off) < delayShownMs ? "on time" : `${span(off)} ${off > 0 ? "late" : "early"}`;
+  const at = clockAt(estimated, place);
+  return at ? `${word}, at ${at}` : word;
+}
+
+const offSchedule = (scheduled: string | undefined, estimated: string | undefined): boolean =>
+  scheduled !== undefined && estimated !== undefined && Math.abs(Date.parse(estimated) - Date.parse(scheduled)) >= delayShownMs;
+
+function divertedLine(status: FlightStatus, booked: Booked | undefined): string {
+  const to = status.divertedTo?.toUpperCase();
+  return to && to !== booked?.destination?.code?.toUpperCase() ? `Diverted to ${to}` : "Diverted";
+}
+
+// What the flight's card says: whether it is cancelled or diverted, how late
+// it leaves and lands, where it leaves from and arrives at, and where the
+// bags come out. Times read as the airports' clocks do when the booking is
+// given; a cancelled flight says only that. A departure back on time after
+// news of a delay still says so (it has a noticedOut), on the card and in a
+// retried notification.
+export function flightStatusLines(status: FlightStatus | undefined, booked?: Booked): string[] {
+  if (!status?.found) return [];
+  if (status.cancelled) return ["Flight cancelled"];
   const { departure, arrival, bags } = places(status);
+  const leaves =
+    !status.actualOut && status.estimatedOut !== undefined && (offSchedule(status.scheduledOut, status.estimatedOut) || status.noticedOut !== undefined);
+  const lands = !status.actualIn && offSchedule(status.scheduledIn, status.estimatedIn);
   return [
+    ...(status.diverted ? [divertedLine(status, booked)] : []),
+    ...(leaves ? [`Leaves ${timing(status.scheduledOut!, status.estimatedOut!, booked?.start)}`] : []),
     ...(departure ? [`Departs from ${departure}`] : []),
+    ...(lands ? [`Lands ${timing(status.scheduledIn!, status.estimatedIn!, booked?.end)}`] : []),
     ...(arrival ? [`Arrives at ${arrival}`] : []),
     ...(bags ? [`Bags on carousel ${bags}`] : []),
   ];
+}
+
+// Whether this look's departure time is news: it has not left, and its
+// estimate moved at least delayNewsMs from what the last news said (the
+// schedule, before any did).
+function departureMoved(before: FlightStatus | undefined, after: FlightStatus): boolean {
+  if (!after.found || after.cancelled || after.actualOut || !after.estimatedOut || !after.scheduledOut) return false;
+  const said = before?.noticedOut ?? after.scheduledOut;
+  return Math.abs(Date.parse(after.estimatedOut) - Date.parse(said)) >= delayNewsMs;
+}
+
+// The answer with the departure time news has given: this look's estimate
+// when it is news (flightStatusNews), else the last one.
+export function noticeDeparture(before: FlightStatus | undefined, after: FlightStatus): FlightStatus {
+  const { noticedOut: _dropped, ...rest } = after;
+  const noticedOut = departureMoved(before, after) ? after.estimatedOut : before?.noticedOut;
+  return noticedOut ? { ...rest, noticedOut } : rest;
 }
 
 // The answer with any gate, terminal or carousel it lacks taken from the
@@ -186,7 +264,13 @@ export function keepKnownPlaces(before: FlightStatus | undefined, after: FlightS
 // Only a field given a new value is news: one taken away is the service
 // losing it, so a gate dropped while the terminal stays says nothing. A
 // gate given where only the terminal was known is news, not a change.
-export function flightStatusNews(before: FlightStatus | undefined, after: FlightStatus): string[] {
+//
+// Also news: the flight cancelled or diverted, and its departure moved at
+// least a quarter of an hour from what the last news said ("Now leaves
+// 40 min late, at 10:25").
+export function flightStatusNews(before: FlightStatus | undefined, after: FlightStatus, booked?: Booked): string[] {
+  if (!after.found) return [];
+  if (after.cancelled) return before?.cancelled ? [] : ["Flight cancelled"];
   const known = before?.found ? before : undefined;
   const was = places(known);
   const now = places(after);
@@ -199,6 +283,10 @@ export function flightStatusNews(before: FlightStatus | undefined, after: Flight
     return { changed, replaced };
   };
   const lines: string[] = [];
+  if (after.diverted && !known?.diverted) lines.push(divertedLine(after, booked));
+  if (departureMoved(before, after)) {
+    lines.push(`${before?.noticedOut ? "Now leaves" : "Leaves"} ${timing(after.scheduledOut!, after.estimatedOut!, booked?.start)}`);
+  }
   const departure = news(known?.departureGate, known?.departureTerminal, after.departureGate, after.departureTerminal);
   if (now.departure && departure.changed && !after.actualOut) {
     lines.push(departure.replaced && was.departure ? `Now departs from ${now.departure} (was ${was.departure})` : `Departs from ${now.departure}`);

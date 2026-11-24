@@ -298,7 +298,7 @@
       after, every 15 minutes between, and when the trip page is open (at
       most once a minute per flight, shared by everyone on it); about $1 a
       flight, with a daily cap.
-- [ ] Live flight updates, second part: delays, cancellations and
+- [x] Live flight updates, second part: delays, cancellations and
       diversions on the flight's card and as notifications, from the same
       AeroAPI polling.
 - [x] Approve sign-ups by hand: a new account waits until an admin
@@ -441,6 +441,11 @@ Kotlin Multiplatform, sharing the Android app's Kotlin (SPEC "iOS app").
 ## Decisions needing review
 
 Guesses made on autopilot; change any of them freely.
+
+- Flight delays: the card shows a departure or landing five minutes or
+  more off schedule; a departure moved 15 minutes or more from what the
+  last news said is news; landing estimates are shown but never sent; an
+  airline cancellation shows only "Flight cancelled", hiding gates.
 
 - Fastmail: two users may connect the same Fastmail mailbox, since the
   token is proof of access. (Settled by the maintainer: a connected

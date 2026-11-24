@@ -119,7 +119,7 @@ export function SegmentRow({
   // Stars and the favorite mark; without these the row only shows them.
   onRate?: (rating: number | null) => void;
   onFavorite?: (favorite: boolean) => void;
-  // A flight's live gates and carousel (flightStatusLines).
+  // A flight's live delays, gates and carousel (flightStatusLines).
   flightLines?: readonly string[];
   // Takes back a cancellation; offered only on a cancelled booking.
   onRestore?: () => void;

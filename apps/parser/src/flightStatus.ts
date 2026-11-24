@@ -8,6 +8,7 @@ import {
   FlightStatus,
   keepKnownPlaces,
   giveUpAfterMs,
+  noticeDeparture,
   paths,
   refreshBeforeDepartureMs,
   Segment,
@@ -21,7 +22,7 @@ import type { DeviceSender } from "./fcm";
 import type { PushSender } from "./push";
 import type { StoredDevice, StoredSubscription } from "./reminders";
 
-// Live gates and carousels: every minute Cloud Scheduler calls the job,
+// Live gates, carousels, delays, cancellations and diversions: every minute Cloud Scheduler calls the job,
 // which finds the flight bookings near departure or arrival, asks AeroAPI
 // about each flight once for everyone booked on it (when flightCheckDue
 // says it is time), keeps the answer in `flightStatus/{key}` and sends what
@@ -149,10 +150,11 @@ export async function checkFlights(io: FlightIo, options: FlightOptions, only?: 
       const { from, to } = lookupWindow(first!.start);
       const [ident, date, origin] = flight.key.split("_");
       const match = matchFlight(await options.lookup(ident!, from, to), first!);
-      const after = keepKnownPlaces(before, statusFromFlight(match, { ident: ident!, date: date!, ...(origin ? { origin } : {}) }, current(options)));
+      const answer = statusFromFlight(match, { ident: ident!, date: date!, ...(origin ? { origin } : {}) }, current(options));
+      const after = noticeDeparture(before, keepKnownPlaces(before, answer));
       run.checked += 1;
       if (!(await io.saveStatus(flight.key, before, after))) continue;
-      const news = flightStatusNews(before, after);
+      const news = flightStatusNews(before, after, first);
       if (!news.length) continue;
       run.notified += await notify(io, options, flight, news, tripOf);
     } catch (error) {
