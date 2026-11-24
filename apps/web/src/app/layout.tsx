@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Fira_Sans, Geist } from "next/font/google";
 import { Nav } from "@/components/Nav";
 import { OfflineBanner } from "@/components/OfflineBanner";
+import { BugReportProvider, ReportBug } from "@/components/ReportBug";
 import { ServiceWorker } from "@/components/ServiceWorker";
 import { AuthProvider } from "@/lib/auth";
 import "./globals.css";
@@ -33,14 +34,17 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" className={`${geistSans.variable} ${wordmark.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
         <AuthProvider>
-          <OfflineBanner />
-          <Nav />
-          <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">{children}</main>
-          <footer className="mx-auto w-full max-w-3xl px-4 pb-6 text-sm text-muted">
-            <Link href="/privacy" className="hover:underline">
-              Privacy
-            </Link>
-          </footer>
+          <BugReportProvider>
+            <OfflineBanner />
+            <Nav />
+            <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">{children}</main>
+            <footer className="mx-auto flex w-full max-w-3xl gap-4 px-4 pb-6 text-sm text-muted">
+              <Link href="/privacy" className="hover:underline">
+                Privacy
+              </Link>
+              <ReportBug />
+            </footer>
+          </BugReportProvider>
         </AuthProvider>
         <ServiceWorker />
       </body>

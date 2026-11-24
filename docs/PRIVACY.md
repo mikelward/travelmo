@@ -43,7 +43,7 @@ Travelmo uses these services to run, and they handle data only to provide them:
 - **Google Maps Platform** looks up the places in your bookings by name, and suggests addresses as you type one.
 - **FlightAware** is asked about a flight's number, date and departure airport, never who is on it, to give its gates, baggage carousel, delays, cancellation and diversion near departure and arrival.
 - **Cloudflare** receives emails you forward to your Travelmo address and passes them on.
-- **An email delivery service** sends the reminders you ask for by email, and your browser's push service delivers the notifications you turn on in a browser.
+- **An email delivery service** sends the reminders you ask for by email and the bug reports you send, and your browser's push service delivers the notifications you turn on in a browser.
 
 People you share a trip with see its bookings. People you share your travel profile with see all of it, documents included. Sharing with an email address also lets it use Travelmo.
 
@@ -51,7 +51,11 @@ Travelmo's admins see the email address of everyone who asks to use it, and are 
 
 ## On your phone
 
-The Android app keeps a debug log on the phone to help fix bugs. It records what the app did, never your bookings or addresses, and leaves the phone only if you share it from Settings.
+The Android app keeps a debug log on the phone to help fix bugs. It records what the app did, never your bookings or addresses, and leaves the phone only if you share it or send it with a bug report.
+
+## Bug reports you send
+
+When you report a bug from the web or the Android app, Travelmo emails the report to its maintainer, who reads it only to fix the problem and replies to the address you sign in with. A report has what you wrote, the page or screen you sent it from, the app's version and, on the web, your browser. From the Android app it also has the app's debug log and a screenshot of the screen, which can show trips and names. Sent from a trip's page, it always has that trip's bookings, including addresses, confirmation numbers and names, and never another trip's. Travelmo keeps a copy of what you wrote, without the log, screenshot or bookings, until you delete your account. The emailed report stays with the maintainer; to have it deleted, email [play@mikelward.com](mailto:play@mikelward.com).
 
 ## Analytics and telemetry (planned)
 
@@ -59,7 +63,7 @@ Travelmo doesn't collect analytics yet. The plan is to count, on its own servers
 
 ## Keeping and deleting your data
 
-Your data stays until you delete it. Deleting a trip or booking removes it; disconnecting Gmail or Google Calendar removes Travelmo's access, and disconnecting Fastmail or another email account deletes its token or app password. Deleting your account in Settings removes your trips, bookings, travel profile, reminders, connections and access record, and takes you off trips others shared with you; bookings you added to someone else's trip stay with that trip. Service logs are kept for 30 days.
+Your data stays until you delete it. Deleting a trip or booking removes it; disconnecting Gmail or Google Calendar removes Travelmo's access, and disconnecting Fastmail or another email account deletes its token or app password. Deleting your account in Settings removes your trips, bookings, travel profile, reminders, connections, access record and the copies of bug reports you sent, and takes you off trips others shared with you; bookings you added to someone else's trip stay with that trip. Service logs are kept for 30 days.
 
 To ask about your data or have it deleted without signing in, email [play@mikelward.com](mailto:play@mikelward.com).
 
