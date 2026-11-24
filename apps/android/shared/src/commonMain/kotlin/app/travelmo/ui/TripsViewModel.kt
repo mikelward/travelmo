@@ -4,6 +4,7 @@ import app.travelmo.core.senderCleanup
 import app.travelmo.core.SenderCleanup
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.travelmo.core.RefreshShown
 import app.travelmo.core.FlightStatus
 import app.travelmo.core.ImapServerChoice
 import app.travelmo.core.MAX_IMAP_MAILBOXES
@@ -974,6 +975,19 @@ class TripsViewModel(
         _tripNotice.value = null
         _tripNotice.value = tripActions.regroup()
     }
+
+    /** Refresh from email as Settings shows it: how far the last one got, and whether it is running now. */
+    data class RefreshState(val progress: RefreshShown?, val reading: Boolean)
+
+    /** The refresh's progress, judged against the clock each minute so a stalled one shows as stopped. */
+    val refresh: StateFlow<RefreshState> = combine(accessSettled.flatMapLatest { store.refreshProgress(uid) }, now) { progress, at ->
+        RefreshState(progress, progress?.reading(Instant.parse(at).toEpochMilliseconds()) == true)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RefreshState(null, false))
+
+    /** Starts or continues Refresh from email on the parser; from the first email again once the last one finished. */
+    fun startRefresh(token: String, restart: Boolean) = run(token, "startRefresh") { tripActions.refresh(restart) }
+
+    fun stopRefresh(token: String) = run(token, "stopRefresh") { tripActions.stopRefresh() }
 
     /** Deletes every trip the user owns, with its bookings, so they can import again. */
     fun deleteAllTrips(token: String) = run(token, "deleteAllTrips") {

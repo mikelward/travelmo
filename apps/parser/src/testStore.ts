@@ -120,6 +120,11 @@ export function memoryStore(): Memory {
     },
     setParsed: async (r) => void parsed.set(`${r.uid}/${r.messageId}`, r),
     getParsed: async (uid, id) => parsed.get(`${uid}/${id}`),
+    importedRecords: async (uid, after, limit) =>
+      [...parsed.values()]
+        .filter((r) => r.uid === uid && r.outcome === "imported" && (after === undefined || r.messageId > after))
+        .sort((a, b) => (a.messageId < b.messageId ? -1 : a.messageId > b.messageId ? 1 : 0))
+        .slice(0, limit),
     readSegment: async (tripId, id) => tx.getSegment(tripId, id),
     listUserSegments: async (uid) => {
       const mine = new Set([...trips.values()].filter((trip) => trip.ownerUid === uid && !trip.deleting).map((trip) => trip.id));

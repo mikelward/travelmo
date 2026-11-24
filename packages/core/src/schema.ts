@@ -226,6 +226,28 @@ export const BackfillProgress = z.object({
 });
 export type BackfillProgress = z.infer<typeof BackfillProgress>;
 
+// How far "Refresh from email" has got: the emails the user's bookings came
+// from, read again in the order of their import records' ids, batch after
+// batch on the server as a mailbox reading runs (`cursor` is the last
+// record read). `scanned` counts emails read; `imported` the bookings
+// updated, added, merged or removed; the rest what happened to them.
+// `generation`: the trips' reset generation it ran under; a reset leaves it
+// behind.
+export const RefreshProgress = BackfillProgress.extend({
+  // Emails to read in all, counted when the refresh started.
+  total: z.number().int().nonnegative().optional(),
+  updated: z.number().int().nonnegative().optional(),
+  added: z.number().int().nonnegative().optional(),
+  removed: z.number().int().nonnegative().optional(),
+  merged: z.number().int().nonnegative().optional(),
+  // Bookings left as they are because the user edited them.
+  kept: z.number().int().nonnegative().optional(),
+  // Emails no longer there, or in a mailbox no longer connected.
+  missing: z.number().int().nonnegative().optional(),
+  generation: z.number().int().nonnegative().optional(),
+});
+export type RefreshProgress = z.infer<typeof RefreshProgress>;
+
 export const GmailConnection = z.object({
   emailAddress: z.string(),
   connectedAt: isoDateTime,
@@ -425,6 +447,8 @@ export const UserProfile = z.object({
   fastmail: FastmailConnection.optional(),
   // Mailboxes connected over IMAP, by lowercased address.
   imaps: z.record(z.string(), ImapConnection).optional(),
+  // Server-written: how far the last "Refresh from email" got.
+  refresh: RefreshProgress.optional(),
   googleCalendar: GoogleCalendarConnection.optional(),
   reminders: ReminderSettings.optional(),
   forward: ForwardAddress.optional(),

@@ -1,5 +1,6 @@
 package app.travelmo.ui
 
+import app.travelmo.core.RefreshShown
 import app.travelmo.core.ImapMailbox
 import app.travelmo.core.imapMailboxes
 import app.travelmo.core.Lead
@@ -377,6 +378,28 @@ class TripsViewModelTest {
         viewModel.tripNotice.value shouldBe "Deleted 3 trips. Import past bookings to start again."
         actions.calls shouldBe listOf("regroup", "deleteAll")
         viewModel.outcomes.value shouldBe mapOf("regroup" to Outcome.Done, "delete" to Outcome.Done)
+    }
+
+    @Test
+    fun `refresh from email shows how far it got, and its buttons go to the parser`() = runTest {
+        val running = RefreshShown(scanned = 120, done = false, updatedAt = "2026-11-22T11:59:00Z", total = 340, running = true)
+        val actions = FakeTripActions()
+        val viewModel = TripsViewModel(FakeTripStore(refreshProgress = running), OWNER, OWNER_EMAIL, clock = { Instant.parse("2026-11-22T12:00:00Z") }, tripActions = actions)
+        val watching = launch { viewModel.refresh.collect {} }
+        runCurrent()
+        viewModel.refresh.value shouldBe TripsViewModel.RefreshState(running, reading = true)
+        viewModel.stopRefresh("stop")
+        viewModel.startRefresh("start", restart = false)
+        viewModel.startRefresh("again", restart = true)
+        actions.calls shouldBe listOf("stopRefresh", "refresh", "refresh from the start")
+        watching.cancel()
+
+        // Stalled: nothing saved for half an hour reads as stopped, for Continue.
+        val stalled = TripsViewModel(FakeTripStore(refreshProgress = running), OWNER, OWNER_EMAIL, clock = { Instant.parse("2026-11-22T13:00:00Z") })
+        val watchingStalled = launch { stalled.refresh.collect {} }
+        runCurrent()
+        stalled.refresh.value.reading shouldBe false
+        watchingStalled.cancel()
     }
 
     @Test

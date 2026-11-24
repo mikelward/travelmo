@@ -1,6 +1,8 @@
 package app.travelmo.data
 
 import app.travelmo.core.DELETE_ALL_TRIPS_PATH
+import app.travelmo.core.REFRESH_PATH
+import app.travelmo.core.REFRESH_STOP_PATH
 import app.travelmo.core.REGROUP_PATH
 import app.travelmo.core.describeDeletedTrips
 import app.travelmo.core.describeRegroup
@@ -12,7 +14,7 @@ import kotlinx.coroutines.CancellationException
 import org.json.JSONException
 import org.json.JSONObject
 
-/** `POST /trips/regroup` and `POST /trips/delete-all` on the parser, as the web's api.ts sends them. */
+/** `POST /trips/regroup`, `/trips/refresh` and `/trips/delete-all` on the parser, as the web's api.ts sends them. */
 class ParserTripActions(private val client: ParserClient) : TripActions {
     override val available: Boolean
         get() = client.available
@@ -27,10 +29,18 @@ class ParserTripActions(private val client: ParserClient) : TripActions {
         return describeDeletedTrips(body.optInt("trips"))
     }
 
-    private suspend fun call(path: String, what: String): JSONObject {
+    override suspend fun refresh(restart: Boolean) {
+        call(REFRESH_PATH, "Refreshing from email", if (restart) JSONObject().put("restart", true).toString() else "{}")
+    }
+
+    override suspend fun stopRefresh() {
+        call(REFRESH_STOP_PATH, "Stopping the refresh")
+    }
+
+    private suspend fun call(path: String, what: String, json: String = "{}"): JSONObject {
         TravelmoLog.info("%s", safe(what))
         val reply = try {
-            client.post(path) ?: throw TripActionFailed(tripActionFailure(401))
+            client.post(path, json) ?: throw TripActionFailed(tripActionFailure(401))
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
@@ -39,9 +49,12 @@ class ParserTripActions(private val client: ParserClient) : TripActions {
         }
         if (reply.status !in 200..299) {
             TravelmoLog.warning("%s failed: HTTP %s", safe(what), safe(reply.status.toString()))
+            // A refusal the parser words for the user (no mailbox connected, a batch still reading).
+            if (reply.status == 409 && reply.body.isNotBlank()) throw TripActionFailed(reply.body.trim())
             throw TripActionFailed(tripActionFailure(reply.status))
         }
         TravelmoLog.info("%s done", safe(what))
+        if (reply.body.isBlank()) return JSONObject()
         return try {
             JSONObject(reply.body)
         } catch (e: JSONException) {

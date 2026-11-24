@@ -24,6 +24,7 @@ import {
   type GoogleCalendarChoice,
   type ImportedProfile,
   type LinkRefusal,
+  type ParsedMessage,
 } from "@travelmo/core";
 import { randomBytes } from "node:crypto";
 import { Hono, type Context } from "hono";
@@ -88,6 +89,7 @@ import {
   oauthClient,
   stopWatch,
   watch,
+  type EmailMessage,
   type OAuthConfig,
   recordedAs,
 } from "./gmail";
@@ -153,6 +155,8 @@ import {
   type ImapSource,
 } from "./imap";
 import { continueBackfill, parseContinuePush, startBackfill, stopBackfill, type ChainIo, type ContinueMessage } from "./backfillChain";
+import { refreshRecord, runRefreshBatch } from "./refresh";
+import { changeRefresh } from "./refreshStore";
 import { pubsubPublisher } from "./publish";
 import { sealStoredCredentials } from "./sealStored";
 import { reviseFoundLoyaltyOnce } from "./loyaltyRevision";
@@ -837,19 +841,28 @@ app.post("/trips/delete-all", async (c) => {
 // mailbox's key too), Gmail's name their mailbox (gmail.ts's
 // sourceMailbox). `background`: an IMAP mailbox whose login last failed is
 // not tried again yet (imap.ts's connectMailbox).
-async function recordMailbox(uid: string, messageId: string, background = false): Promise<{ source: MailSource; id: string } | undefined> {
+// `mailbox` names the mailbox, so a caller reading many emails can keep one
+// source a mailbox; `pace` spaces a Gmail mailbox's calls out.
+async function recordMailbox(
+  uid: string,
+  messageId: string,
+  background = false,
+  pace?: Pace,
+): Promise<{ source: MailSource; id: string; mailbox: string } | undefined> {
   if (messageId.startsWith(imapRecordPrefix)) {
     // By its record key: the address on the server it was read from.
     const parsed = parseImapRecordId(messageId);
     const state = parsed && (await loadImapMailboxes(db, uid)).find((m) => imapRecordKey(m.emailAddress, m.host, m.port) === parsed.key);
-    return state ? { source: imapMailSource(uid, state, background), id: messageId } : undefined;
+    return state ? { source: imapMailSource(uid, state, background), id: messageId, mailbox: `imap:${parsed.key}` } : undefined;
   }
   if (messageId.startsWith(fastmailRecordPrefix)) {
     const state = await loadFastmailState(db, uid);
-    return state ? { source: fastmailMailSource(state), id: messageId } : undefined;
+    return state ? { source: fastmailMailSource(state), id: messageId, mailbox: "fastmail" } : undefined;
   }
   const state = sourceMailbox(messageId, await loadMailboxes(db, uid));
-  return state ? { source: gmailMailSource(state), id: messageId.slice((state.idPrefix ?? "").length) } : undefined;
+  return state
+    ? { source: gmailMailSource(state, pace), id: messageId.slice((state.idPrefix ?? "").length), mailbox: `gmail:${mailboxKey(state.emailAddress)}` }
+    : undefined;
 }
 
 // A second look at one message the user picked from the review list: the
@@ -886,6 +899,90 @@ app.post("/gmail/reimport", async (c) => {
     throw new HTTPException(409, { message: "That email is already imported or being imported right now" });
   }
   return c.json({ outcome });
+});
+
+// "Refresh from email" (refresh.ts): the emails the user's bookings came
+// from, read again batch after batch on the server, on the same chain as a
+// mailbox reading (backfillChain.ts), its progress on the user's document
+// (refreshStore.ts). Each batch keeps one source a mailbox, paces Gmail as
+// a mailbox reading does, and stops before Cloud Run's request limit. The
+// last batch regroups the trips.
+function refreshIo(uid: string): ChainIo<undefined> {
+  const deadline = Date.now() + backfillBudgetMs;
+  const timeLeftMs = () => deadline - Date.now();
+  const warn = (event: string, fields: Record<string, unknown>) => log("WARNING", event, { uid, ...fields });
+  return {
+    change: (fn) => changeRefresh(db, uid, fn),
+    runBatch: async (_state, from, generation) => {
+      const pace = gmailPacer(backfillUnitsPerMinute, { nowMs: Date.now, sleep });
+      const sources = new Map<string, MailSource>();
+      // The record's email, or undefined when it is gone or its mailbox is
+      // not connected or cannot be signed in to.
+      const fetch = async (record: ParsedMessage): Promise<EmailMessage | undefined> => {
+        const found = await recordMailbox(uid, record.messageId, true, pace);
+        if (!found) return undefined;
+        let source = sources.get(found.mailbox);
+        if (source) await found.source.close?.();
+        else sources.set(found.mailbox, (source = found.source));
+        const reading = source;
+        try {
+          return await withRateLimitRetry(() => reading.fetch(found.id), { timeLeftMs, sleep, log: warn });
+        } catch (error) {
+          if (reading.isNotFound(error)) return undefined;
+          if (error instanceof ImapLoginPaused || isImapAuthFailure(error)) {
+            warn("refresh_mailbox_unreachable", { provider: reading.provider, ...errorKind(error) });
+            return undefined;
+          }
+          throw error;
+        }
+      };
+      try {
+        return await runRefreshBatch(from, {
+          records: (after, limit) => deps.store.importedRecords(uid, after, limit),
+          snapshot: () => deps.store.listUserSegments(uid),
+          refresh: (record, snapshot) => refreshRecord(uid, record, deps, { generation, snapshot, fetch }),
+          timeLeftMs,
+          now: () => new Date().toISOString(),
+          log: warn,
+        });
+      } finally {
+        for (const source of sources.values()) await source.close?.();
+      }
+    },
+    publish: (message: ContinueMessage) => publishBackfill({ ...message, kind: "refresh" }),
+    now: () => new Date().toISOString(),
+    log: (severity, event, fields) => log(severity, event, fields),
+    sleep,
+    newWake: () => randomBytes(12).toString("base64url"),
+    finished: async () => {
+      const result = await regroupTrips(uid, deps);
+      log("INFO", "refresh_regrouped", { uid, ...result });
+    },
+  };
+}
+
+// Starts a refresh (`restart: true` from the first email again) and returns
+// at once; closing the page does not stop it.
+app.post("/trips/refresh", async (c) => {
+  const uid = await requireUser(c);
+  const body = (await c.req.json().catch(() => ({}))) as { restart?: unknown };
+  const restart = body.restart === true;
+  const connected = (await loadMailboxes(db, uid)).length + (await loadImapMailboxes(db, uid)).length + ((await loadFastmailState(db, uid)) ? 1 : 0);
+  if (connected === 0) throw new HTTPException(409, { message: "Connect the mailbox your bookings came from first." });
+  const result = await startBackfill(uid, randomBytes(12).toString("base64url"), restart, refreshIo(uid));
+  if (result.kind === "disconnected") throw new HTTPException(409, { message: "Sign out, sign in again and try again." });
+  if (result.kind === "busy") throw new HTTPException(409, { message: "A batch is still being read. Try again in a few minutes." });
+  log("INFO", "refresh_started", { uid, restart, joined: result.kind === "joined", run: result.progress.run });
+  const { cursor: _cursor, after: _after, ...progress } = result.progress;
+  return c.json({ progress });
+});
+
+// Stop: the batch under way saves its place, and no more are queued.
+app.post("/trips/refresh/stop", async (c) => {
+  const uid = await requireUser(c);
+  const stopped = await stopBackfill(refreshIo(uid));
+  log("INFO", "refresh_stopped", { uid, stopped });
+  return c.body(null, 204);
 });
 
 function calendarIo(uid: string, refreshToken: string, mailboxImported: boolean): CalendarIo {
@@ -1678,10 +1775,19 @@ app.post("/internal/backfill", async (c) => {
     if (error instanceof BadPushEnvelope) throw new HTTPException(400, { message: error.message });
     throw error;
   }
-  const { uid, mailbox, provider, run, step, wake, pubsubMessageId, deliveryAttempt } = message;
-  const fields = { uid, mailbox, provider, run, step, wake, pubsubMessageId, deliveryAttempt };
-  const continued: ContinueMessage = { uid, ...(mailbox ? { mailbox } : {}), ...(provider ? { provider } : {}), run, step, ...(wake ? { wake } : {}) };
+  const { uid, mailbox, provider, kind, run, step, wake, pubsubMessageId, deliveryAttempt } = message;
+  const fields = { uid, mailbox, provider, kind, run, step, wake, pubsubMessageId, deliveryAttempt };
+  const continued: ContinueMessage = {
+    uid,
+    ...(mailbox ? { mailbox } : {}),
+    ...(provider ? { provider } : {}),
+    ...(kind ? { kind } : {}),
+    run,
+    step,
+    ...(wake ? { wake } : {}),
+  };
   try {
+    if (kind === "refresh") return await continueChain(c, continued, refreshIo(uid), fields);
     let target: BackfillTarget;
     if (provider === "fastmail") {
       target = { provider };
@@ -1702,49 +1808,55 @@ app.post("/internal/backfill", async (c) => {
       }
       target = { emailAddress: state.emailAddress };
     }
-    const io = backfillIo(uid, target);
-    if (!(await approvedUid(db, uid, verifiedEmail, log))) {
-      // Marked stopped where it got to, so Settings shows Continue at once
-      // if access comes back, rather than a reading nothing is doing.
-      const stopped = await stopBackfill(io, continued);
-      log("INFO", "backfill_for_unapproved_user", { ...fields, stopped });
-      return c.body(null, 204);
-    }
-    const result = await continueBackfill(continued, io);
-    switch (result.kind) {
-      case "disconnected":
-        log("WARNING", "backfill_for_disconnected_user", fields);
-        return c.body(null, 204);
-      case "stale":
-        log("INFO", "backfill_message_dropped", { ...fields, reason: result.reason });
-        return c.body(null, 204);
-      case "requeued":
-        log("WARNING", "backfill_requeued", fields);
-        return c.body(null, 204);
-      case "deferred":
-        log("INFO", "backfill_deferred", { ...fields, until: result.until });
-        return c.body(null, 204);
-      case "superseded":
-        log("WARNING", "backfill_progress_not_saved", { ...fields, candidates: result.batch.candidates, ...result.batch.counts });
-        return c.body(null, 204);
-      case "ran": {
-        const { cursor: _cursor, after: _after, ...progress } = result.progress;
-        log("INFO", "backfill", {
-          ...fields,
-          candidates: result.batch.candidates,
-          rateLimited: result.batch.rateLimited === true,
-          ...result.batch.counts,
-          ...progress,
-        });
-        if (!result.progress.running) log("INFO", "backfill_ended", { uid, run, done: result.progress.done, failed: result.batch.counts.failed });
-        return c.body(null, 204);
-      }
-    }
+    return await continueChain(c, continued, backfillIo(uid, target), fields);
   } catch (error) {
     log("ERROR", "backfill_batch_failed", { ...fields, ...errorFields(error) });
     throw error;
   }
 });
+
+// One batch of a chain (a mailbox reading or a refresh), as /internal/backfill
+// answers for it.
+async function continueChain<S>(c: Context<Env>, continued: ContinueMessage, io: ChainIo<S>, fields: Record<string, unknown>) {
+  const { uid, run } = continued;
+  if (!(await approvedUid(db, uid, verifiedEmail, log))) {
+    // Marked stopped where it got to, so Settings shows Continue at once
+    // if access comes back, rather than a reading nothing is doing.
+    const stopped = await stopBackfill(io, continued);
+    log("INFO", "backfill_for_unapproved_user", { ...fields, stopped });
+    return c.body(null, 204);
+  }
+  const result = await continueBackfill(continued, io);
+  switch (result.kind) {
+    case "disconnected":
+      log("WARNING", "backfill_for_disconnected_user", fields);
+      return c.body(null, 204);
+    case "stale":
+      log("INFO", "backfill_message_dropped", { ...fields, reason: result.reason });
+      return c.body(null, 204);
+    case "requeued":
+      log("WARNING", "backfill_requeued", fields);
+      return c.body(null, 204);
+    case "deferred":
+      log("INFO", "backfill_deferred", { ...fields, until: result.until });
+      return c.body(null, 204);
+    case "superseded":
+      log("WARNING", "backfill_progress_not_saved", { ...fields, candidates: result.batch.candidates, ...result.batch.counts });
+      return c.body(null, 204);
+    case "ran": {
+      const { cursor: _cursor, after: _after, ...progress } = result.progress;
+      log("INFO", "backfill", {
+        ...fields,
+        candidates: result.batch.candidates,
+        rateLimited: result.batch.rateLimited === true,
+        ...result.batch.counts,
+        ...progress,
+      });
+      if (!result.progress.running) log("INFO", "backfill_ended", { uid, run, done: result.progress.done, failed: result.batch.counts.failed });
+      return c.body(null, 204);
+    }
+  }
+}
 
 // New mail in polled mailboxes, every five minutes (deploy/scheduler.sh):
 // Fastmail's and those connected over IMAP. One mailbox's failure is logged

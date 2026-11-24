@@ -1,12 +1,14 @@
 package app.travelmo.core
 
 // What Settings' trip actions did, in a line, as packages/core's
-// tripActions.ts says it on the web (SPEC "Home": regrouping; "Deleting all
-// trips").
+// tripActions.ts says it on the web (SPEC "Home": regrouping; "Refresh from
+// email"; "Deleting all trips").
 
 /** The parser's paths for them. */
 const val REGROUP_PATH = "/trips/regroup"
 const val DELETE_ALL_TRIPS_PATH = "/trips/delete-all"
+const val REFRESH_PATH = "/trips/refresh"
+const val REFRESH_STOP_PATH = "/trips/refresh/stop"
 
 private fun count(n: Int, what: String) = "$n $what${if (n == 1) "" else "s"}"
 
@@ -35,4 +37,67 @@ fun tripActionFailure(status: Int?): String = when (status) {
     null -> "Couldn't reach Travelmo. Check your connection and try again."
     401, 403 -> "Couldn't confirm it's you. Sign out, sign in again and try again."
     else -> "That didn't work (error $status). Try again."
+}
+
+/** What Refresh from email does, under its button. */
+const val REFRESH_BLURB = "Reads the emails your bookings came from again and updates those bookings. Bookings you edited stay as you left them."
+
+/**
+ * How far the last Refresh from email got (refresh on the user document):
+ * emails read of [total], and what it did to the bookings.
+ */
+data class RefreshShown(
+    val scanned: Int,
+    val done: Boolean,
+    val updatedAt: String,
+    val total: Int? = null,
+    val updated: Int = 0,
+    val added: Int = 0,
+    val removed: Int = 0,
+    val merged: Int = 0,
+    val kept: Int = 0,
+    val missing: Int = 0,
+    val failed: Int = 0,
+    val running: Boolean = false,
+    val leaseUntil: String? = null,
+    val lastFailed: Int = 0,
+) {
+    /** Whether the parser is refreshing now, judged as a mailbox reading is ([isReading]). */
+    fun reading(nowMs: Long): Boolean =
+        isReading(BackfillShown(scanned, 0, done, updatedAt, running = running, leaseUntil = leaseUntil), nowMs)
+}
+
+private fun count(x: Int) = groupThousands(x.toLong())
+
+private fun plural(x: Int, one: String, many: String) = "${count(x)} ${if (x == 1) one else many}"
+
+/** The refresh's button while none is running: start one, or carry on with one that stopped part way. */
+fun refreshButton(progress: RefreshShown?): String =
+    if (progress != null && !progress.done) "Continue refreshing" else "Refresh from email"
+
+/** How far a refresh has got, or what it did once done. */
+fun describeRefresh(progress: RefreshShown, reading: Boolean): String {
+    val read = progress.total?.let { "${count(progress.scanned)} of ${plural(it, "email", "emails")}" } ?: plural(progress.scanned, "email", "emails")
+    if (!progress.done) {
+        return if (reading) "Refreshing your bookings… $read read so far. You can close this page." else "Stopped part way: $read read. Continue to refresh the rest."
+    }
+    val changes = listOfNotNull(
+        if (progress.updated > 0) "${plural(progress.updated, "booking", "bookings")} updated" else null,
+        if (progress.added > 0) "${count(progress.added)} added" else null,
+        if (progress.merged > 0) "${plural(progress.merged, "duplicate", "duplicates")} merged" else null,
+        if (progress.removed > 0) "${count(progress.removed)} removed" else null,
+    )
+    val lines = mutableListOf(
+        "Refreshed ${plural(progress.scanned, "email", "emails")}: " + if (changes.isEmpty()) "your bookings were already up to date." else "${changes.joinToString(", ")}.",
+    )
+    if (progress.kept > 0) lines += "${plural(progress.kept, "booking you edited was", "bookings you edited were")} left as you left ${if (progress.kept == 1) "it" else "them"}."
+    if (progress.missing > 0) lines += "${plural(progress.missing, "email is", "emails are")} no longer in a connected mailbox."
+    if (progress.failed > 0) lines += "${plural(progress.failed, "email", "emails")} couldn't be read; refresh again to try ${if (progress.failed == 1) "it" else "them"}."
+    return lines.joinToString(" ")
+}
+
+/** Why a refresh stopped on its own, if it did. */
+fun refreshPausedReason(progress: RefreshShown?, reading: Boolean): String? {
+    if (progress == null || progress.lastFailed == 0 || reading || progress.done) return null
+    return "Refresh paused: an email couldn't be read right now. Continue when ready."
 }

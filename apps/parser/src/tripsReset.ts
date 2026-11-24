@@ -2,6 +2,7 @@ import { paths } from "@travelmo/core";
 import type { DocumentSnapshot, Firestore } from "firebase-admin/firestore";
 import type { TripStore } from "./importer";
 import { errorFields } from "./log";
+import { dropStaleRefresh } from "./refreshStore";
 import { firestoreStore } from "./store";
 
 // Deleting all of a user's trips so they can import again from scratch:
@@ -105,7 +106,8 @@ export async function deleteOldRetries(
 
 // The whole reset for one user: their trips and import records, then the
 // places still waiting for a geocode on bookings now gone, and how far the
-// last reading of their mailbox got, so "Import past bookings" starts over.
+// last reading of their mailbox got, so "Import past bookings" starts over,
+// and how far the last "Refresh from email" got.
 export async function resetTrips(
   db: Firestore,
   uid: string,
@@ -118,6 +120,10 @@ export async function resetTrips(
     const result = await deleteOwnTrips(uid, store);
     step = "geocode_retries";
     await deleteOldRetries(db, uid, await store.resetGeneration(uid));
+    // A refresh under way already stopped with the generation (refreshStore.ts);
+    // this only takes its progress off Settings.
+    step = "refresh";
+    await dropStaleRefresh(db, uid);
     log("INFO", "trips_deleted", { uid, ...result });
     return result;
   } catch (error) {

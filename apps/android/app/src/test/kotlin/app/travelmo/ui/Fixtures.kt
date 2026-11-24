@@ -1,5 +1,6 @@
 package app.travelmo.ui
 
+import app.travelmo.core.RefreshShown
 import app.travelmo.core.ImapMailbox
 import app.travelmo.data.ImapActions
 import app.travelmo.data.FastmailActions
@@ -229,6 +230,7 @@ class FakeTripStore(
     private val gmailStatuses: List<GmailStatus> = emptyList(),
     private val fastmailStatus: FastmailStatus? = null,
     private val imapStatuses: List<ImapMailbox> = emptyList(),
+    private val refreshProgress: RefreshShown? = null,
     /** Each `access/{email}` as stored, by address: the owner approved by default. */
     access: Map<String, Map<String, String>> = mapOf(OWNER_EMAIL to mapOf("email" to OWNER_EMAIL) + accessDecision(AccountAccess.APPROVED, "admin", FROZEN_NOW)),
     /** `config/access` as the owner may read it: null for someone not an admin. */
@@ -239,6 +241,7 @@ class FakeTripStore(
     override fun gmailStatuses(uid: String): Flow<List<GmailStatus>> = flowOf(gmailStatuses)
     override fun fastmailStatus(uid: String): Flow<FastmailStatus?> = flowOf(fastmailStatus)
     override fun imapStatuses(uid: String): Flow<List<ImapMailbox>> = flowOf(imapStatuses)
+    override fun refreshProgress(uid: String): Flow<RefreshShown?> = flowOf(refreshProgress)
     /** The stored access records' fields, by address, as Firestore would merge them. */
     val accessFields = MutableStateFlow(access)
     val config = MutableStateFlow(accessConfig)
@@ -502,6 +505,14 @@ class FakeTripActions(private val failure: String? = null) : TripActions {
         calls += "deleteAll"
         failure?.let { throw TripActionFailed(it) }
         return describeDeletedTrips(3)
+    }
+    override suspend fun refresh(restart: Boolean) {
+        calls += if (restart) "refresh from the start" else "refresh"
+        failure?.let { throw TripActionFailed(it) }
+    }
+    override suspend fun stopRefresh() {
+        calls += "stopRefresh"
+        failure?.let { throw TripActionFailed(it) }
     }
 }
 

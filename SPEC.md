@@ -68,7 +68,11 @@ viewer's zone. Trip bounds are calendar dates.
   lowercase; never trusted, see below) and `pendingEmails` (those whose
   confirmation link is still out) are server-written ("Linked email addresses"); `reminders` is the owner's choice; `backfill` is how far a reading of the whole mailbox has
   got (`cursor, after, scanned, imported, failed, done, updatedAt`, and the
-  reading under way: `run, step, running, queued, leaseUntil, retryAfter, wake, handoff, failures, lastFailed`); each calendar
+  reading under way: `run, step, running, queued, leaseUntil, retryAfter, wake, handoff, failures, lastFailed`); `refresh`,
+  server-written, is how far the last "Refresh from email" got (the same
+  fields, `cursor` the last import record read, plus `total, updated,
+  added, removed, merged, kept, missing` and the reset `generation` it ran
+  under); each calendar
   is `{id, summary, primary, selected, lastReadAt, lastResult, lastError}`.
 - `access/{email}` — `email, status (approved | declined), uid, invitedBy,
   invitedAt, approvedBy, approvedAt, declinedBy, declinedAt`: who may use the app, one per lowercased verified
@@ -730,7 +734,15 @@ favorite mark, a move between trips, a restore and every import leave it as
 it is. The rules refuse a change to a booking's details (`type, title,
 provider, confirmation, start, end, origin, destination, notes`) that does
 not set `editedAt` too, so an app from before it cannot edit unrecorded.
-Reports lists the
+"Refresh from email" leaves a hand-edited booking as the user left it,
+judged by `handEdited` (`apps/parser/src/refresh.ts`): one with `editedAt`
+is edited; one whose `updatedAt` is still its `createdAt` is not (imports
+keep an unedited booking so); one touched since it was filed is edited when
+created before `editedAtSince` (2026-12-15, when every client and the rules
+record edits), since a rating, a move and an edit were not told apart before
+then, unless its details already are what its email says now, which shows
+nothing of the user's would be lost; one created since then was only rated,
+marked or moved. Reports lists the
 places rated or marked, favorites first with the best rating given, each
 linking to the trips it was on (`packages/core/src/favorites.ts`: a place is
 where a journey ends or where a stay is, by name and country).
@@ -1617,6 +1629,66 @@ with the old place; a reading saves its place only while the generation it
 read first is unchanged. Trips others share with the user, bookings the user added to
 them, the travel profile, home corrections, connections and feeds stay.
 
+To bring bookings imported before a fix to extraction or matching up to
+date without deleting anything, "Refresh from email" in Settings on the web
+and Android (`POST /trips/refresh`, `apps/parser/src/refresh.ts`) reads
+again only the emails that made bookings: the user's import records with
+outcome `imported` from a mailbox (Gmail, Fastmail, IMAP; not TripIt items,
+calendar events or forwards, which cannot be fetched again), never a
+mailbox search. Each email is fetched from the mailbox its record id names
+(as `/gmail/reimport` does), read by the model with today's prompt, placed
+from the airport and city tables and the geocoder, and filed by today's
+matching, in place, in one transaction under the import's per-user lock
+that checks the reset generation like every import write. Every booking the
+email gives now is paired with the one it gave before, chosen for all of
+them before any is filed so none takes another's (the one filed for that
+very item while it still looks like it, else any of the email's that does
+by `sameBooking`/`sameEvent`, else the one at its place in the email of
+its type) and with any other the matching takes for the same reservation, an
+older import's duplicate. One of them stays: one the user edited by hand
+("Editing by hand"), else one they rated, else one they marked a favorite,
+else the email's own. It keeps its id, trip, rating, favorite mark and
+cancellation, gains the others' sources, rating and favorite mark and
+what only they knew where it has none (a reference, a provider, a time),
+is weighed again against the cancellations waiting for bookings once
+corrected, as an import weighs one it finds again,
+and the others are deleted, unless the user edited them or they are on a trip
+shared with other people. As an import keeps them apart, only bookings
+from emails merge (one from a calendar event, a TripIt item or the
+booking form is its own reservation, two alike rooms say), never the
+email's own bookings, which are its items', one each, never two
+bookings any one email gave (each is its own reservation) or two under
+different references, only within
+trips shared as the email's own booking's is, and only one as cancelled
+or live as it (a cancelled stay and the one booked again in its place
+stay two). An unedited booking that stays takes the new
+details: all of them when this email is its only source, else what it
+lacked (`mergeDetails`, as an import fills a booking found again); an
+edited one is left as it is. A booking the email gives now that matches
+none is added beside the email's other bookings (else where an import
+would file it), cancelled when a cancellation already waiting for a
+booking covers it, as an import would file it. One the email gave before and no longer gives is deleted
+when unedited and from this email alone, and kept otherwise. An email the
+model finds no booking in now changes nothing, so a passing model failure
+never empties a trip; a trip left with no bookings is deleted unless it is
+shared. Trip ids, names the user gave, sharing and "Before you go" ticks
+(by trip id) are never touched; the refresh ends by regrouping (below),
+which renames only trips still named as an import named them. It runs on
+the server as a mailbox reading does, on the same Pub/Sub chain
+(`backfillChain.ts`, its messages marked `kind: "refresh"`), its progress
+on the user document (`refresh`): batches of up to a hundred records in id
+order, each stopping before Cloud Run's request limit, Gmail paced to the
+same 4,000 units a minute, Gmail's rate limit waited out a minute with the
+refresh going on by itself, while the model's rate limit, or an email the
+model fails on (passed and counted), stops it for Settings to offer
+Continue; Stop saves the place. Settings says how far it got ("120 of 340
+emails read") and, once done, what changed (bookings updated, added,
+duplicates merged, removed, bookings edited and so left alone, emails no
+longer in a connected mailbox, emails that could not be read), in the
+words of `tripActions.ts` and its Kotlin twin. Progress saved under an
+older reset generation counts as none, so "Delete all trips" stops a
+refresh, and drops its progress from Settings.
+
 Trips filed before home was known are rebuilt on request ("Regroup trips"
 in Settings on the web and Android, `POST /trips/regroup`,
 `apps/parser/src/regroup.ts`; both say what it did in the words of
@@ -2384,6 +2456,8 @@ build without one points to the web instead.
 | `POST /imap/backfill` | Firebase ID token | As `/gmail/backfill`, for the IMAP mailbox `emailAddress` names |
 | `POST /imap/backfill/stop` | Firebase ID token | Stops that mailbox's reading after the batch under way |
 | `POST /trips/regroup` | Firebase ID token | Fills in bookings' countries and spots from the airport and city tables, then rebuilds the user's trips from their bookings with the current grouping ("Home"); returns how many trips changed, how many were merged away and how many bookings were placed |
+| `POST /trips/refresh` | Firebase ID token | Starts "Refresh from email" on the server (`restart: true` from the first email again) and returns its progress at once; 409 when no mailbox is connected or a batch is still reading |
+| `POST /trips/refresh/stop` | Firebase ID token | Stops the refresh after the batch under way |
 | `POST /trips/delete-all` | Firebase ID token | Deletes every trip the user owns with its bookings, their import records, places waiting for a geocode on those bookings, and how far the last mailbox reading got; returns how many trips went. Trips shared with them, their profile and connections stay |
 | `POST /feeds/add` | Firebase ID token | Subscribes to a calendar feed after checking its address and reading it once; returns counts as for `/import/ics` |
 | `POST /feeds/remove` | Firebase ID token | Stops polling a feed; its bookings stay |
@@ -2395,7 +2469,7 @@ build without one points to the web instead.
 | `POST /import/ics` | Firebase ID token | Imports an `.ics` file's text (up to 10 MB), reading at most 100 events with the model; returns counts per outcome, repeating and cancelled events skipped, and events left for the next upload |
 | `POST /import/tripit` | Firebase ID token | Imports a TripIt JSON export (up to 20 MB); returns counts of trips, bookings, duplicates, items imported before, failures and items not importable; 409 while another TripIt upload of the same user runs |
 | `POST /internal/pubsub/gmail` | OIDC from `INTERNAL_CALLERS` | Pub/Sub push target |
-| `POST /internal/backfill` | OIDC from `INTERNAL_CALLERS` | Pub/Sub push target for the mailbox reading's next batch |
+| `POST /internal/backfill` | OIDC from `INTERNAL_CALLERS` | Pub/Sub push target for the next batch of a mailbox reading or a "Refresh from email" |
 | `POST /internal/poll-mail` | OIDC from `INTERNAL_CALLERS` | Cloud Scheduler target, every five minutes: new mail in Fastmail and IMAP mailboxes (`/internal/poll-fastmail` is the same) |
 | `POST /internal/renew-watches` | OIDC from `INTERNAL_CALLERS` | Cloud Scheduler target |
 | `POST /internal/flight-status` | OIDC from `INTERNAL_CALLERS` | Cloud Scheduler target, every minute: sends the check-in reminders due ("Check-in reminders"), then looks at the flights due a look and sends their news ("Live flight status"); `{enabled: false}` without `AEROAPI_KEY`, though check-in reminders still go |
@@ -2431,7 +2505,12 @@ Flash-Lite costs a fraction of a cent per booking email, and an embedding
 of a few hundred tokens a hundredth of that; a hundred users importing
 fifty bookings a month is a few dollars. Bringing stored loyalty numbers up to a new way of reading them
 (`foundLoyaltyRevision`) costs Firestore reads, plus one such model call per
-email that still needs reading again, once. Geocoding is one call per place
+email that still needs reading again, once. "Refresh from email" costs one
+model call per email that made bookings (a user with five hundred such
+emails spends well under a dollar, and nothing for an email whose mailbox
+is gone), 60 Gmail units per email fetched (paced at 4,000 a minute,
+about 66 emails a minute, within each user's 6,000), one read of the
+user's bookings per batch and the trips around each email. Geocoding is one call per place
 name Travelmo has not seen before (a 20-year export needs a few hundred:
 about 240 for countries and 170 more for spots alone, which the daily cap
 spreads over two days), free up to the Geocoding API's monthly allowance and

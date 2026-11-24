@@ -105,6 +105,26 @@ export function firestoreStore(db: Firestore): TripStore {
       const snap = await db.doc(paths.parsedMessage(uid, messageId)).get();
       return snap.exists ? ParsedMessage.parse(snap.data()) : undefined;
     },
+    async importedRecords(uid, after, limit) {
+      // An equality and the id order: served by single-field indexes.
+      // A record that no longer parses is passed over, never fatal, and
+      // never shortens the page: a short page is the callers' sign of the
+      // end, so reading goes on until `limit` parse or none are left.
+      const records: ParsedMessage[] = [];
+      let cursor = after;
+      for (;;) {
+        let query = db.collection(paths.parsedMessages(uid)).where("outcome", "==", "imported").orderBy(FieldPath.documentId());
+        if (cursor !== undefined) query = query.startAfter(cursor);
+        const want = limit - records.length;
+        const snap = await query.limit(want).get();
+        for (const d of snap.docs) {
+          const parsed = ParsedMessage.safeParse(d.data());
+          if (parsed.success) records.push(parsed.data);
+        }
+        if (snap.size < want || records.length >= limit) return records;
+        cursor = snap.docs.at(-1)!.id;
+      }
+    },
     retryMessage(uid, messageId, processedAt, generation) {
       return claimWhen(uid, messageId, processedAt, (existing) => retryable(existing, processedAt), generation);
     },
