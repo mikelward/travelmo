@@ -217,26 +217,43 @@ fun flightStatusLines(status: FlightStatus?, booked: Segment? = null, now: Strin
 
 /**
  * A flight's Live Update: an ongoing notification from two hours before departure until 45 minutes
- * after landing, with the most useful thing now in the status bar's [chip] ("T3 G28" before it
- * leaves, "Lands 15:10" in the air, "Bags 16" once landed), a one-line [text], [progress]
- * through the flight (0 to 100) and when to take it down ([endsAt], epoch
- * milliseconds) should no later look say so.
+ * after landing, with the most useful thing now in the status bar: the [chip] text ("T3 G28"
+ * before it leaves, "Bags 16" once landed, never over [CHIP_MAX] characters) or, in the air, a countdown to the landing estimate
+ * ([landsAt], epoch milliseconds), which the phone keeps running offline; a one-line [text],
+ * [progress] through the flight (0 to 100) and when to take it down ([endsAt], epoch
+ * milliseconds) should no later look say so. Exactly one of [chip] and [landsAt] is set.
  */
 data class LiveFlight(
-    val chip: String,
+    val chip: String?,
     val text: String,
     val progress: Int,
     val endsAt: Long,
+    val landsAt: Long? = null,
 )
 
 /** "T3" or "G28" for a short value, "Intl" or "B12" for one that names itself. */
 private fun shortPlace(letter: String, value: String): String =
     if (value.length == 1 || value.first().isDigit()) "$letter$value" else value
 
-/** "T3 G28", "T3", "G28", or null when neither is known. */
-private fun shortWhere(gate: String?, terminal: String?): String? =
-    listOfNotNull(terminal?.let { shortPlace("T", it) }, gate?.let { shortPlace("G", it) })
-        .takeIf { it.isNotEmpty() }?.joinToString(" ")
+/** The most a status-bar chip holds before Android cuts it off. */
+const val CHIP_MAX = 7
+
+/** The first of [options] that fits a chip; failing that, the last cut to fit. Null when there are none. */
+private fun fit(vararg options: String?): String? {
+    val known = options.filterNotNull()
+    return known.firstOrNull { it.length <= CHIP_MAX } ?: known.lastOrNull()?.take(CHIP_MAX)?.trimEnd()
+}
+
+/**
+ * "T3 G28", "T3", "G28", or null when neither is known. When both do not fit, the gate alone:
+ * the terminal is in the line below, and the gate is where to go.
+ */
+private fun shortWhere(gate: String?, terminal: String?): String? {
+    val t = terminal?.let { shortPlace("T", it) }
+    val g = gate?.let { shortPlace("G", it) }
+    // The gate wins, cut short if need be; the terminal alone only when there is no gate.
+    return if (g != null) fit(t?.let { "$it $g" }, g) else fit(t)
+}
 
 /**
  * What the flight's Live Update shows now, for [booked] (the person's booking, whose offsets give
@@ -265,7 +282,7 @@ fun liveFlight(status: FlightStatus?, booked: Segment, now: String): LiveFlight?
         } else {
             clockAt(leavesAt, booked.start)?.let { "Leaves at $it" }
         }
-        val chip = shortWhere(status.departureGate, status.departureTerminal) ?: clockAt(leavesAt, booked.start) ?: "Soon"
+        val chip = shortWhere(status.departureGate, status.departureTerminal) ?: fit(clockAt(leavesAt, booked.start)) ?: "Soon"
         val text = listOfNotNull(diverted, leaves, departureWhere?.let { "Departs from $it" }).joinToString(" · ")
         return LiveFlight(chip, text, 0, endsAt)
     }
@@ -275,16 +292,20 @@ fun liveFlight(status: FlightStatus?, booked: Segment, now: String): LiveFlight?
         } else {
             landsAt?.let { clockAt(it, booked.end) }?.let { "Lands at $it" }
         }
-        val chip = landsAt?.let { clockAt(it, booked.end) }?.let { "Lands $it" } ?: "In the air"
         val text = listOfNotNull(diverted, lands, arrivalWhere?.let { "Arrives at $it" }).joinToString(" · ").ifEmpty { "In the air" }
         val progress = landsAt?.let {
             val from = instantMillis(out)
             val span = instantMillis(it) - from
             if (span <= 0) 99 else ((at - from) * 100 / span).toInt().coerceIn(0, 99)
         } ?: 50
-        return LiveFlight(chip, text, progress, endsAt)
+        // A word when there is nothing to count down to: no landing time known, or it has passed
+        // without a landing (the next look brings the new estimate).
+        val countdown = landsAt?.let(::instantMillis)?.takeIf { it > at }
+        val word = if (landsAt == null) "Flying" else "Landing"
+        return LiveFlight(if (countdown == null) word else null, text, progress, endsAt, countdown)
     }
-    val chip = status.baggageClaim?.let { "Bags $it" } ?: shortWhere(status.arrivalGate, status.arrivalTerminal) ?: "Landed"
+    // "Bags 16", or the carousel alone when the word does not fit.
+    val chip = status.baggageClaim?.let { fit("Bags $it", it) } ?: shortWhere(status.arrivalGate, status.arrivalTerminal) ?: "Landed"
     val text = listOfNotNull(
         diverted,
         status.baggageClaim?.let { "Bags on carousel $it" } ?: arrivalWhere?.let { "Arrives at $it" } ?: "Landed",
