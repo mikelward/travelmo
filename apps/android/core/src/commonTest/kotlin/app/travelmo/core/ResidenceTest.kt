@@ -292,6 +292,39 @@ class ResidenceTest {
         evaluate(rule("uk-settlement", "uk-settlement-absences"), emptyList(), london, "2026-11-23").period shouldBe QualifyingPeriod("2021-11-24", "2026-11-23", moved = false)
     }
 
+    private fun show(title: String, start: String) = Segment("$start-show", "t", SegmentType.ACTIVITY, title, start, start, origin = Place(title))
+
+    @Test
+    fun `a booking that names no place leaves the traveler where a flight took them`() {
+        // Out on the 9th, a show with no place on the 10th, back on the 22nd.
+        val vegas = trip(
+            "vegas", "2026-07-09", "2026-07-22",
+            listOf(
+                flight("LHR", "LAS", "2026-07-09T10:00:00+01:00", "2026-07-09T13:00:00-07:00"),
+                show("A show", "2026-07-10T19:00:00-07:00"),
+                flight("LAS", "LHR", "2026-07-21T18:00:00-07:00", "2026-07-22T12:00:00+01:00"),
+            ),
+        )
+        val result = evaluate(rule("uk-settlement", "uk-settlement-absences"), listOf(vegas), london, "2026-11-23")
+        result.unknownDays shouldBe 0
+        result.unplaced shouldBe emptyList()
+        result.stretches shouldBe listOf(Stretch("2026-07-10", "2026-07-21", 12, listOf("US"), listOf("vegas")))
+    }
+
+    @Test
+    fun `outings that name no place are at home when nothing takes the traveler anywhere`() {
+        val club = trip("club", "2025-11-13", "2025-11-13", listOf(show("Drama club", "2025-11-13T16:00:00+00:00")))
+        val result = evaluate(rule("uk-settlement", "uk-settlement-absences"), listOf(club), london, "2026-11-23")
+        result.used shouldBe 0.0
+        result.unknownDays shouldBe 0
+    }
+
+    @Test
+    fun `a stay that names no place still counts against the traveler`() {
+        val away = trip("away", "2026-04-01", "2026-04-03", listOf(Segment("s", "t", SegmentType.LODGING, "Somewhere", "2026-04-01T15:00:00+00:00", "2026-04-03T11:00:00+00:00", destination = Place("Somewhere"))))
+        evaluate(rule("uk-settlement", "uk-settlement-absences"), listOf(away), london, "2026-11-23").unknownDays shouldBe 3
+    }
+
     @Test
     fun `names a window the way the report shows it`() {
         spanText(DateShift(months = 12)) shouldBe "12 months"

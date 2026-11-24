@@ -49,8 +49,10 @@ fun presenceTimeline(
         val bounds = reportBounds(trip, segments) ?: continue
         if (bounds.second < from || bounds.first > to) continue
         for ((day, place) in tripDayPlaces(trip, segments, to, lookup)) {
-            // A trip dated before its first booking says nothing about those days.
-            if (day < from || !place.started) continue
+            // A trip dated before its first booking says nothing about those
+            // days, and a day of outings near home that name no place puts
+            // the traveler nowhere new: both are at home.
+            if (day < from || !place.started || place.local) continue
             val known = countries.getOrPut(day) { mutableSetOf() }
             known += place.countries
             trips.getOrPut(day) { mutableSetOf() } += trip.id

@@ -247,6 +247,36 @@ describe("UK settlement", () => {
   });
 });
 
+describe("bookings that name no place", () => {
+  const ilr = rule("uk-settlement", "uk-settlement-absences");
+  const show = (title: string, start: string): ExtractedSegment => ({ type: "activity", title, start, end: start, origin: { name: title } });
+
+  it("leave the traveler where a flight took them", () => {
+    // Out on the 9th, a show with no place on the 10th, back on the 22nd.
+    const vegas = trip("vegas", "2026-07-09", "2026-07-22", [
+      flight("LHR", "LAS", "2026-07-09T10:00:00+01:00", "2026-07-09T13:00:00-07:00"),
+      show("A show", "2026-07-10T19:00:00-07:00"),
+      flight("LAS", "LHR", "2026-07-21T18:00:00-07:00", "2026-07-22T12:00:00+01:00"),
+    ]);
+    const result = evaluate(ilr, [vegas], london, "2026-11-23");
+    expect(result.unknownDays).toBe(0);
+    expect(result.unplaced).toEqual([]);
+    expect(result.stretches).toEqual([{ start: "2026-07-10", end: "2026-07-21", days: 12, countries: ["US"], tripIds: ["vegas"] }]);
+  });
+
+  it("are at home when nothing takes the traveler anywhere: a class or a show near home", () => {
+    const club = trip("club", "2025-11-13", "2025-11-13", [show("Drama club", "2025-11-13T16:00:00+00:00")]);
+    const result = evaluate(ilr, [club], london, "2026-11-23");
+    expect(result.used).toBe(0);
+    expect(result.unknownDays).toBe(0);
+  });
+
+  it("still count against the traveler for a stay that names no place", () => {
+    const away = trip("away", "2026-04-01", "2026-04-03", [{ type: "lodging", title: "Somewhere", start: "2026-04-01T15:00:00+00:00", end: "2026-04-03T11:00:00+00:00", destination: { name: "Somewhere" } }]);
+    expect(evaluate(ilr, [away], london, "2026-11-23").unknownDays).toBe(3);
+  });
+});
+
 describe("UK citizenship", () => {
   it("counts absences in the five years and in the last 12 months before applying", () => {
     const trips = [roundTrip("old", "2022-03-01", "2022-03-31"), roundTrip("recent", "2026-05-01", "2026-08-01")];
