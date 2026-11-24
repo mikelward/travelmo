@@ -1258,9 +1258,11 @@ message there, and its HTML flattened to text otherwise: a plain part under
 a third the length of the HTML's text is a stub (Virgin Atlantic's
 e-tickets put only a footer there), and the HTML is read instead
 (`bodyText`, for Gmail and forwarded mail alike), at most 24,000
-characters. A Gmail email that passes the filters also has its PDF
-attachments read (a rail ticket may carry the journey only there): up to
-three, each at most 5 MB and 10 MB in all (`pdfParts`), fetched only then
+characters. An email that passes the filters also has its PDF
+attachments read (a rail ticket may carry the journey only there), from
+every source: Gmail, Fastmail, IMAP and forwarded mail. Up to
+three, each at most 5 MB and 10 MB in all (`withinAttachmentLimits`), fetched only then where the
+source fetches them apart (Gmail's attachment API, Fastmail's blob download),
 and handed to the model as documents beside the text, by every reader of
 an email alike (an import, Refresh from email, a loyalty re-read:
 `attachmentsOf`), so a refresh never drops what only the PDF gave. Nothing in the
@@ -2009,7 +2011,7 @@ the Email Worker in `apps/inbound`, which does no parsing of its own (the
 free plan's CPU allowance is small) and relays the message as it arrived,
 with the envelope recipient and a shared bearer secret, to the parser's
 `/inbound/cloudflare`. The parser checks the secret in constant time,
-refuses more than 2 MB (attachments are not read), parses the MIME
+refuses more than 16 MB (room for the PDFs the model is shown), parses the MIME
 (`postal-mime`), reads the original sender and subject out of the forwarding
 block Gmail, Apple Mail, Outlook and Thunderbird write (else the forwarder's
 own, the `Fwd:` prefix stripped), and runs `importMessage` with
@@ -2264,8 +2266,9 @@ through `MailSource` (`mailSource.ts`): a page of the booking-like search
 nor junk (even with another label), newest first, each page anchored on the last email of the one
 before so mail arriving meanwhile shifts nothing; a deleted anchor starts
 the reading over, its claims skipping what was read), and one email by id
-(`Email/get` with the text and HTML body values, attachments unread,
-reduced as Gmail's are). Record ids are `fm-<email id>`, kept apart from
+(`Email/get` with the text and HTML body values and the attachments'
+blob ids, reduced as Gmail's are; its PDFs are downloaded from the
+session's `downloadUrl`, on Fastmail's own hosts only, when the email is read). Record ids are `fm-<email id>`, kept apart from
 Gmail's; "import anyway" routes them to Fastmail. A Fastmail booking links
 to no message, as there is no stable URL for one; its sender is learnable
 as any email's. Deleting all trips forgets every mailbox's reading
@@ -2337,8 +2340,8 @@ own ids and cursor, and Trash and Junk are left out without knowing
 each provider's names for them. Pages go down by UID, newest first, 300
 at a time, the cursor `<uidvalidity>:<lowest uid read>`; a cursor whose
 UIDVALIDITY is no longer current starts the reading over, claims skipping
-what was read. Each message is downloaded whole up to 2 MB (a large
-attachment past that is cut off) and reduced as a forwarded one is
+what was read. Each message is downloaded whole up to 16 MB (a message cut
+off there keeps its text but not its PDFs) and reduced as a forwarded one is
 (`inbound.ts`'s `parseInbound`). "Import anyway" routes `imap-` ids to
 their mailbox by key; "Delete all trips" forgets every IMAP mailbox's
 reading position; deleting the account removes every IMAP connection with
@@ -2521,7 +2524,7 @@ didn't finish" in place of every page, with "Finish deleting", which calls
 | `POST /flights/refresh` | Firebase ID token | Looks at the flights of a trip the caller can see (`tripId`) that are due a refresh; 404 for a trip they cannot see |
 | `POST /forward/issue` | Firebase ID token | Issues the user's forwarding address, retiring any old one; returns it; 503 without `FORWARD_DOMAIN` |
 | `POST /forward/stop` | Firebase ID token | Retires the user's forwarding address |
-| `POST /inbound/cloudflare` | Bearer `INBOUND_SECRET` | The Email Worker's relay of one message (raw MIME, up to 2 MB, `X-Envelope-To`); 204 accepted, 404 no such address, 429 over the day's limit, 413 too large, 503 the model could not read it (the sender's server retries) |
+| `POST /inbound/cloudflare` | Bearer `INBOUND_SECRET` | The Email Worker's relay of one message (raw MIME, up to 16 MB, `X-Envelope-To`); 204 accepted, 404 no such address, 429 over the day's limit, 413 too large, 503 the model could not read it (the sender's server retries) |
 | `POST /export/calendar` | Firebase ID token | Issues the user's calendar export link, retiring any old one; returns its token |
 | `POST /export/calendar/stop` | Firebase ID token | Turns the calendar export link off |
 | `GET /cal/{token}.ics` | the token | The calendar export itself, for calendar apps; 404 for a link not in use or whose owner may no longer use the app |

@@ -1,7 +1,7 @@
 import type { ExtractedBooking, ForwardAddress } from "@travelmo/core";
 import { describe, expect, it, vi } from "vitest";
 import { hashToken } from "./calendarExport";
-import type { EmailMessage } from "./gmail";
+import type { Attachment, EmailMessage } from "./gmail";
 import type { ImportDeps } from "./importer";
 import {
   forwardRecord,
@@ -68,6 +68,40 @@ const forwarded = (over: { messageId?: string; subject?: string } = {}) =>
       "",
     ].join("\r\n"),
   );
+
+// A message carrying `files` after its text, each base64 as mail clients
+// send them.
+const withFiles = (files: { name: string; type: string; bytes: string }[]) =>
+  new TextEncoder().encode(
+    [
+      "MIME-Version: 1.0",
+      "Message-ID: <files-1@mail.example.com>",
+      "Subject: Fwd: Your e-ticket",
+      "From: Sam Traveler <sam@example.com>",
+      'Content-Type: multipart/mixed; boundary="m1"',
+      "",
+      "--m1",
+      "Content-Type: text/plain; charset=UTF-8",
+      "",
+      "Your ticket is attached.",
+      ...files.flatMap((f) => [
+        "--m1",
+        `Content-Type: ${f.type}; name="${f.name}"`,
+        `Content-Disposition: attachment; filename="${f.name}"`,
+        "Content-Transfer-Encoding: base64",
+        "",
+        Buffer.from(f.bytes).toString("base64"),
+      ]),
+      "--m1--",
+      "",
+    ].join("\r\n"),
+  );
+
+const ticketFiles = [
+  { name: "ticket.pdf", type: "application/pdf", bytes: "%PDF-1.4 ticket" },
+  { name: "notes.txt", type: "text/plain", bytes: "not a PDF" },
+  { name: "receipt.PDF", type: "application/octet-stream", bytes: "%PDF-1.4 receipt" },
+];
 
 function memoryForwardStore(known: Record<string, string> = {}): ForwardStore & { records: Map<string, ForwardAddress>; counts: Map<string, number> } {
   const tokens = new Map(Object.entries(known));
@@ -140,6 +174,21 @@ describe("parseInbound", () => {
     expect(mail.messageId).toBeUndefined();
   });
 
+  it("keeps its PDFs for the model, by type or by name, and nothing else", async () => {
+    const mail = await parseInbound(withFiles(ticketFiles));
+    expect(mail.text).toContain("Your ticket is attached.");
+    expect(mail.attachments).toEqual([
+      { name: "ticket.pdf", mimeType: "application/pdf", data: Buffer.from("%PDF-1.4 ticket").toString("base64") },
+      { name: "receipt.PDF", mimeType: "application/pdf", data: Buffer.from("%PDF-1.4 receipt").toString("base64") },
+    ]);
+  });
+
+  it("leaves out the PDFs of a message cut short, which may be cut too", async () => {
+    const mail = await parseInbound(withFiles(ticketFiles), false);
+    expect(mail.text).toContain("Your ticket is attached.");
+    expect(mail.attachments).toEqual([]);
+  });
+
   it("derives one record id per message, from its id when it has one and its bytes otherwise", async () => {
     const withId = await parseInbound(forwarded());
     expect(inboundMessageId(withId, forwarded())).toBe(inboundMessageId(withId, forwarded({ subject: "changed" })));
@@ -173,6 +222,12 @@ describe("receiveForwarded", () => {
     // The forwarder's request is the pre-filter: the model read it.
     expect(extract).toHaveBeenCalledTimes(1);
     expect((extract.mock.calls[0] as unknown as [EmailMessage])[0].text).toContain("Check-in 12 Dec");
+  });
+
+  it("shows the model the PDFs a forwarded email carries", async () => {
+    const extract = vi.fn(async (_message: EmailMessage, _attachments?: readonly Attachment[]) => lodging);
+    await receiveForwarded({ to: address, raw: withFiles(ticketFiles) }, { store: memoryForwardStore(known), domain, limit: 50, deps: deps(memoryStore(), extract) });
+    expect(extract.mock.calls[0]![1]!.map((a) => a.name)).toEqual(["ticket.pdf", "receipt.PDF"]);
   });
 
   it("refuses an address that is not one of ours, or one nobody holds", async () => {

@@ -47,27 +47,39 @@ export const maxAttachmentsBytes = 10 * 1024 * 1024;
 
 type AttachedPart = { filename?: string | null; mimeType?: string | null; body?: { attachmentId?: string | null; data?: string | null; size?: number | null } | null; parts?: AttachedPart[] | null };
 
-// The PDFs among a message's parts, within the limits above, in order.
-export function pdfParts(payload: AttachedPart | undefined): { name: string; attachmentId?: string; data?: string; size: number }[] {
-  const found: { name: string; attachmentId?: string; data?: string; size: number }[] = [];
-  const walk = (part: AttachedPart) => {
-    const name = part.filename ?? "";
-    const pdf = part.mimeType === "application/pdf" || (part.mimeType === "application/octet-stream" && /\.pdf$/i.test(name));
-    const size = part.body?.size ?? 0;
-    if (pdf && size > 0 && size <= maxAttachmentBytes && (part.body?.attachmentId || part.body?.data)) {
-      found.push({ name, size, ...(part.body?.attachmentId ? { attachmentId: part.body.attachmentId } : {}), ...(part.body?.data ? { data: part.body.data } : {}) });
-    }
-    for (const child of part.parts ?? []) walk(child);
-  };
-  if (payload) walk(payload);
-  const kept: typeof found = [];
+// A PDF by its type, or by its name when a sender labels it only as bytes.
+export function isPdf(mimeType: string | null | undefined, name: string | null | undefined): boolean {
+  const type = mimeType?.toLowerCase();
+  return type === "application/pdf" || (type === "application/octet-stream" && /\.pdf$/i.test(name ?? ""));
+}
+
+// The attachments the model is shown, of PDFs found in order: each within
+// its own limit, and as many as fit the others. Every mail source reads
+// its PDFs through this.
+export function withinAttachmentLimits<T extends { size: number }>(found: readonly T[]): T[] {
+  const kept: T[] = [];
   let total = 0;
   for (const part of found) {
+    if (part.size <= 0 || part.size > maxAttachmentBytes) continue;
     if (kept.length >= maxAttachments || total + part.size > maxAttachmentsBytes) break;
     kept.push(part);
     total += part.size;
   }
   return kept;
+}
+
+// The PDFs among a message's parts, within the limits above, in order.
+export function pdfParts(payload: AttachedPart | undefined): { name: string; attachmentId?: string; data?: string; size: number }[] {
+  const found: { name: string; attachmentId?: string; data?: string; size: number }[] = [];
+  const walk = (part: AttachedPart) => {
+    const name = part.filename ?? "";
+    if (isPdf(part.mimeType, name) && (part.body?.attachmentId || part.body?.data)) {
+      found.push({ name, size: part.body?.size ?? 0, ...(part.body?.attachmentId ? { attachmentId: part.body.attachmentId } : {}), ...(part.body?.data ? { data: part.body.data } : {}) });
+    }
+    for (const child of part.parts ?? []) walk(child);
+  };
+  if (payload) walk(payload);
+  return withinAttachmentLimits(found);
 }
 
 function header(headers: gmail_v1.Schema$MessagePartHeader[] | undefined, name: string): string | undefined {

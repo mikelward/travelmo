@@ -75,7 +75,8 @@ function fakeClient(options: { uidValidity?: bigint; messages?: FakeMessage[]; a
     async fetchOne(uid, query) {
       commands.push(`UID FETCH ${uid} ${query.source.maxLength}`);
       const found = messages.find((m) => m.uid === Number(uid));
-      return found ? { uid: found.uid, source: Buffer.from(found.raw ?? `Subject: ${found.subject}\r\nFrom: Air <air@example.com>\r\n\r\nYour flight`) } : false;
+      // As a server sends it: no more than the length asked for.
+      return found ? { uid: found.uid, source: Buffer.from(found.raw ?? `Subject: ${found.subject}\r\nFrom: Air <air@example.com>\r\n\r\nYour flight`).subarray(0, query.source.maxLength) } : false;
     },
     async logout() {
       commands.push("LOGOUT");
@@ -173,6 +174,34 @@ describe("one message", () => {
       listUnsubscribe: true,
       text: expect.stringContaining("ABC123"),
     });
+  });
+
+  it("offers its PDFs for the model, unless the message was too big to read whole", async () => {
+    const withPdf = (padding: string) =>
+      [
+        "Subject: Your e-ticket",
+        "From: Example Air <bookings@example-air.com>",
+        'Content-Type: multipart/mixed; boundary="m1"',
+        "",
+        "--m1",
+        "Content-Type: text/plain",
+        "",
+        `Ticket attached.${padding}`,
+        "--m1",
+        'Content-Type: application/pdf; name="ticket.pdf"',
+        "Content-Transfer-Encoding: base64",
+        "",
+        Buffer.from("%PDF-1.4 ticket").toString("base64"),
+        "--m1--",
+        "",
+      ].join("\r\n");
+    const { client } = fakeClient({ messages: [{ uid: 5, subject: "x", raw: withPdf("") }, { uid: 6, subject: "x", raw: withPdf(" ".repeat(imapMaxBytes)) }] });
+    const source = imapSource(key, () => openInbox(client));
+    const whole = await source.fetch(imapRecordId(key, "1700000000", 5));
+    expect(await whole.attachments?.()).toEqual([{ name: "ticket.pdf", mimeType: "application/pdf", data: Buffer.from("%PDF-1.4 ticket").toString("base64") }]);
+    const cut = await source.fetch(imapRecordId(key, "1700000000", 6));
+    expect(cut.text).toContain("Ticket attached.");
+    expect(cut.attachments).toBeUndefined();
   });
 
   it("names new mail with ids it then fetches", async () => {

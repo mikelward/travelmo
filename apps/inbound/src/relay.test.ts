@@ -17,7 +17,7 @@ describe("relayRequest", () => {
   });
 
   it("caps the message at the parser's own limit", () => {
-    expect(maxRawBytes).toBe(2 * 1024 * 1024);
+    expect(maxRawBytes).toBe(16 * 1024 * 1024);
   });
 });
 

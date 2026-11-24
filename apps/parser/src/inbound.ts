@@ -12,7 +12,7 @@ import {
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
 import { refuseIfDeleted } from "./deleted";
 import { hashToken } from "./calendarExport";
-import type { EmailMessage } from "./gmail";
+import { isPdf, withinAttachmentLimits, type Attachment, type EmailMessage } from "./gmail";
 import { importMessage, type ImportDeps, type ImportOutcome } from "./importer";
 import { bodyText } from "./text";
 
@@ -21,9 +21,11 @@ import { bodyText } from "./text";
 // runs as for an email read from Gmail, the forwarder's own request standing
 // in for the pre-filter.
 
-// Big enough for a confirmation with its HTML part; attachments are not
-// read, and a PDF-laden message is refused rather than parsed.
-export const inboundMaxBytes = 2 * 1024 * 1024;
+// Big enough for a confirmation with the PDFs the model is shown (gmail.ts's
+// limits, 10 MB at most, a third more as base64) and its text; anything
+// bigger is refused rather than parsed. The Worker (apps/inbound) refuses
+// the same first.
+export const inboundMaxBytes = 16 * 1024 * 1024;
 
 // Forwarded emails the model reads per user per day: the forwarder's
 // requests are deliberate, so the cap is for a leaked address, not a quota.
@@ -60,6 +62,8 @@ export type InboundMail = {
   date: string;
   listUnsubscribe: boolean;
   text: string;
+  // Its PDFs within gmail.ts's limits, for the model (extract.ts).
+  attachments: Attachment[];
 };
 
 function nameAndAddress(sender: { name?: string | undefined; address?: string | undefined } | undefined): string {
@@ -69,10 +73,17 @@ function nameAndAddress(sender: { name?: string | undefined; address?: string | 
 
 // The parts of a raw message the import reads, in the shape Gmail's are
 // reduced to (text.ts's bodyText): plain text when it is the whole message,
-// else the HTML flattened.
-export async function parseInbound(raw: Uint8Array): Promise<InboundMail> {
+// else the HTML flattened. `whole` says the bytes are the whole message:
+// a message cut short (imap.ts) has its attachments left out, since the
+// last of them may be cut too.
+export async function parseInbound(raw: Uint8Array, whole = true): Promise<InboundMail> {
   const mail = await PostalMime.parse(raw);
   const text = bodyText(mail.text ?? "", mail.html ?? "");
+  const pdfs = whole
+    ? mail.attachments
+        .filter((a) => isPdf(a.mimeType, a.filename) && typeof a.content !== "string")
+        .map((a) => ({ name: a.filename ?? "", content: a.content as ArrayBuffer, size: (a.content as ArrayBuffer).byteLength }))
+    : [];
   return {
     ...(mail.messageId ? { messageId: mail.messageId } : {}),
     from: nameAndAddress(mail.from),
@@ -80,7 +91,13 @@ export async function parseInbound(raw: Uint8Array): Promise<InboundMail> {
     date: mail.date ?? "",
     listUnsubscribe: mail.headers.some((h) => h.key === "list-unsubscribe"),
     text,
+    attachments: withinAttachmentLimits(pdfs).map((a) => ({ name: a.name, mimeType: "application/pdf" as const, data: Buffer.from(a.content).toString("base64") })),
   };
+}
+
+// An email's PDFs as EmailMessage offers them: none to fetch when it has none.
+export function offered(attachments: readonly Attachment[]): Pick<EmailMessage, "attachments"> {
+  return attachments.length ? { attachments: async () => [...attachments] } : {};
 }
 
 // The import record's id: the message's own id when it has one, else the
@@ -139,6 +156,7 @@ export async function receiveForwarded(input: { to: string; raw: Uint8Array }, i
     date: mail.date,
     listUnsubscribe: mail.listUnsubscribe,
     text: mail.text,
+    ...offered(mail.attachments),
   };
   const outcome = await importMessage(uid, message, io.deps, { source: "forward", force: true, retryFailed: true });
   if (outcome === "failed") return { status: "failed", uid, messageId };

@@ -327,7 +327,7 @@
       passes the filter: an SJ "Tickets for booking …" email was read as
       not a booking, most likely because the journey is only in the PDF.
       Gmail's, handed to the model as documents, never parsed here.
-- [ ] Read PDF attachments of Fastmail, IMAP and forwarded emails too, as
+- [x] Read PDF attachments of Fastmail, IMAP and forwarded emails too, as
       Gmail's are: each source's fetch offers them (`attachments`); the
       forwarding Worker's size limit cuts large attachments off.
 - [x] File a car or taxi from the airport with the flight it meets, not as
@@ -453,6 +453,11 @@ Kotlin Multiplatform, sharing the Android app's Kotlin (SPEC "iOS app").
 ## Decisions needing review
 
 Guesses made on autopilot; change any of them freely.
+
+- Forwarded and IMAP messages are read up to 16 MB (was 2 MB), so the
+  10 MB of PDFs the model is shown fits after base64; Cloudflare takes
+  messages up to 25 MiB and Cloud Run requests up to 32 MiB. A bigger
+  message still bounces (forwarding) or keeps its text only (IMAP).
 
 - iOS: the sign-in and licenses screens stay each app's own rather than
   shared: iOS signs in with Apple as well as Google and lists its own

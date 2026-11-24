@@ -10,7 +10,7 @@ export type RelayEnv = {
 
 // The parser refuses bigger messages (inboundMaxBytes there); refusing here
 // first saves relaying what would be refused.
-export const maxRawBytes = 2 * 1024 * 1024;
+export const maxRawBytes = 16 * 1024 * 1024;
 
 export type Envelope = { to: string; from: string };
 
