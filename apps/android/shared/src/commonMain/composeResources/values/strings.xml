@@ -251,6 +251,9 @@
     <string name="keep">Keep</string>
     <string name="cancelled">Cancelled</string>
     <string name="trip_cancelled">Trip cancelled</string>
+    <string name="filters">Filters</string>
+    <string name="close_search">Close search</string>
+    <string name="clear_search">Clear search</string>
     <string name="hide_cancelled">Hide cancelled</string>
     <string name="hide_local_events">Hide local events</string>
     <string name="all_trips_hidden">Every trip is hidden.</string>

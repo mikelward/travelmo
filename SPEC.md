@@ -314,8 +314,14 @@ lines ticks once a minute.
 
 ### Searching trips
 
-A search box tops the trip list, on the web and Android, and narrows its
-now, upcoming and past sections to the trips it finds
+Search sits in the trip list's top bar, on the web and Android: a search
+button beside the filters' funnel, which puts the search field, focused, in
+the title's place (Android's wordmark, the web's "Trips"), with Back to
+leave it and clear the search (Escape on the web, the back gesture on
+Android) and a clear button while it holds text. A tap or click anywhere
+else, or scrolling the list on Android, takes the focus (and the keyboard)
+away and leaves the search as it is; an empty search closes then. It
+narrows the list's now, upcoming and past sections to the trips it finds
 (`packages/core/src/tripSearch.ts`, `TripSearch.kt`). A query is words and
 optionally a date. Every word must begin a word, ignoring case and
 accents, of the trip's title as listed or of one of its bookings' title,
@@ -334,7 +340,9 @@ only, and the web says so. With no match the list says "No trips match."
 
 ### Filtering the trip list
 
-Below the search box, on the web and Android, two switches narrow the list:
+The funnel in the trip list's top bar, on the web and Android, outlined
+while no filter is on and filled while one is, opens two switches that
+narrow the list:
 **Hide cancelled** leaves out a trip its owner cancelled and one whose every
 booking was cancelled (`tripCancelled`), and **Hide local events** leaves out
 a trip of outings alone: everything still booked in it is an activity, an

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { SignInGate } from "@/components/SignInGate";
 import { TripCard } from "@/components/TripCard";
+import { TripListToolbar } from "@/components/TripListToolbar";
 import { localToday } from "@/lib/dates";
 import { usePeopleDocuments, useTripWarnings, warningText } from "@/lib/documents";
 import { setCheckedIn, useCheckedIn } from "@/lib/checkedIn";
@@ -179,6 +180,15 @@ function Trips({ user }: { user: User }) {
   const listed = listWarnings(warnings, trips);
   return (
     <>
+      <TripListToolbar
+        query={search}
+        onQuery={(next) => {
+          setSearch(next);
+          if (next.trim()) setSearched(true);
+        }}
+        filters={filters}
+        onFilters={setFilters}
+      />
       {listed.length > 0 && (
         <ul
           className="mb-8 space-y-1 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950"
@@ -194,27 +204,6 @@ function Trips({ user }: { user: User }) {
         </ul>
       )}
       {error && <p className="mb-4 text-sm text-danger">{error}</p>}
-      <input
-        type="search"
-        value={search}
-        onChange={(e) => {
-          setSearch(e.target.value);
-          if (e.target.value.trim()) setSearched(true);
-        }}
-        placeholder="Search trips"
-        aria-label="Search trips"
-        className="mb-3 w-full rounded-lg border border-field bg-background px-3 py-2"
-      />
-      <div className="mb-6 flex flex-wrap gap-x-5 gap-y-1 text-sm">
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={filters.hideCancelled} onChange={(e) => setFilters({ ...filters, hideCancelled: e.target.checked })} />
-          Hide cancelled
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={filters.hideLocal} onChange={(e) => setFilters({ ...filters, hideLocal: e.target.checked })} />
-          Hide local events
-        </label>
-      </div>
       {searching && !all && <p className="mb-4 text-sm text-muted">Searching bookings…</p>}
       {searching && all && all.failed.length > 0 && <p className="mb-4 text-sm text-danger">Some trips&apos; bookings couldn&apos;t be read, so they&apos;re searched by title and dates only.</p>}
       {searching && all && shown?.length === 0 && <p className="text-muted">No trips match.</p>}

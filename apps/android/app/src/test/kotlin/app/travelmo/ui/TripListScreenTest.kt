@@ -12,6 +12,10 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import io.kotest.matchers.shouldBe
@@ -71,6 +75,7 @@ class TripListScreenTest {
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, listFilterStore = filters)
         composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }
         composeRule.onNodeWithText("Called off").assertExists()
+        composeRule.onNodeWithContentDescription("Filters").performClick()
         composeRule.onNodeWithText("Hide cancelled").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Called off").assertDoesNotExist()
@@ -87,6 +92,7 @@ class TripListScreenTest {
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, listFilterStore = app.travelmo.data.InMemoryListFilterStore())
         composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }
         composeRule.onNodeWithText("Flagged off").assertExists()
+        composeRule.onNodeWithContentDescription("Filters").performClick()
         composeRule.onNodeWithText("Hide cancelled").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Flagged off").assertDoesNotExist()
@@ -98,6 +104,47 @@ class TripListScreenTest {
     }
 
     @Test
+    fun `search opens in the top bar and back closes and clears it`() {
+        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }
+        composeRule.onNodeWithText("Travelmo").assertExists()
+        composeRule.onNode(hasSetTextAction()).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Search trips").performClick()
+        composeRule.onNode(hasSetTextAction()).assertIsFocused()
+        composeRule.onNodeWithText("Travelmo").assertDoesNotExist()
+        composeRule.onNode(hasSetTextAction()).performTextInput("dublin")
+        composeRule.onNodeWithText("Paris").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Close search").performClick()
+        viewModel.searchText.value shouldBe ""
+        composeRule.onNodeWithText("Travelmo").assertExists()
+        composeRule.onNodeWithText("Paris").assertExists()
+    }
+
+    @Test
+    fun `an empty search closes once a tap outside takes its focus`() {
+        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }
+        composeRule.onNodeWithContentDescription("Search trips").performClick()
+        composeRule.onNode(hasSetTextAction()).assertIsFocused()
+        composeRule.onNodeWithText("Upcoming").performClick()
+        composeRule.onNode(hasSetTextAction()).assertDoesNotExist()
+        composeRule.onNodeWithText("Travelmo").assertExists()
+    }
+
+    @Test
+    fun `a tap outside the search field takes its focus away`() {
+        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }
+        composeRule.onNodeWithContentDescription("Search trips").performClick()
+        composeRule.onNode(hasSetTextAction()).performTextInput("dublin")
+        composeRule.onNode(hasSetTextAction()).assertIsFocused()
+        composeRule.onNodeWithText("Upcoming").performClick()
+        composeRule.onNode(hasSetTextAction()).assertIsNotFocused()
+        // The search stays.
+        viewModel.searchText.value shouldBe "dublin"
+    }
+
+    @Test
     fun `a search that finds only hidden trips says nothing matches`() {
         val store = FakeTripStore(
             trips = fixtureTrips + fixtureFlightTrip.copy(title = "Called off", cancelledAt = "2026-10-28T09:00:00Z"),
@@ -106,7 +153,8 @@ class TripListScreenTest {
         val filters = app.travelmo.data.InMemoryListFilterStore(app.travelmo.core.ListFilters(hideCancelled = true))
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, listFilterStore = filters)
         composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }
-        composeRule.onNodeWithText("Search trips").performTextInput("called")
+        composeRule.onNodeWithContentDescription("Search trips").performClick()
+        composeRule.onNode(hasSetTextAction()).performTextInput("called")
         composeRule.waitForIdle()
         composeRule.onNodeWithText("No trips match.").assertExists()
     }
@@ -148,7 +196,8 @@ class TripListScreenTest {
     fun `searching finds trips by a booking's provider or place and by date`() {
         val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
         composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }
-        val search = composeRule.onNodeWithText("Search trips")
+        composeRule.onNodeWithContentDescription("Search trips").performClick()
+        val search = composeRule.onNode(hasSetTextAction())
 
         // Avanti runs the train to Liverpool; Dublin's flight lands at DUB.
         search.performTextInput("avanti")

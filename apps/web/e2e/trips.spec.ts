@@ -45,7 +45,9 @@ test("the trips list finds trips by a booking's provider or place, and by date",
   await page.goto("/");
   const cards = page.getByRole("link", { name: /Liverpool|Portugal/ });
   await expect(cards).toHaveCount(2);
+  await page.getByRole("button", { name: "Search trips" }).click();
   const search = page.getByRole("searchbox", { name: "Search trips" });
+  await expect(search).toBeFocused();
 
   await search.fill("hilton");
   await expect(cards).toHaveText([/Portugal/]);
