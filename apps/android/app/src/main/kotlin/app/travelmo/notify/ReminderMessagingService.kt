@@ -19,8 +19,8 @@ import kotlinx.coroutines.runBlocking
 class ReminderMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
-        liveFlightMessage(data)?.let {
-            LiveFlightNotifications.show(this, it)
+        if (liveFlightMessage(data) != null) {
+            LiveFlightNotifications.received(this, data)
             return
         }
         val title = data["title"]

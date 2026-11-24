@@ -229,7 +229,19 @@ data class LiveFlight(
     val progress: Int,
     val endsAt: Long,
     val landsAt: Long? = null,
+    /**
+     * When the phone should draw it again from the same status, with no news (epoch
+     * milliseconds): when the flight is taken to have left, or when its landing estimate comes.
+     * The phone may be offline by then, in flight mode, so it does not wait for a message.
+     */
+    val redrawAt: Long? = null,
 )
+
+/**
+ * How long past its departure estimate a flight no one has reported leaving is taken to have
+ * left: the phone may have gone offline at the gate, and some airports never report it.
+ */
+private const val ASSUMED_DEPARTED = 15 * MINUTE
 
 /** "T3" or "G28" for a short value, "Intl" or "B12" for one that names itself. */
 private fun shortPlace(letter: String, value: String): String =
@@ -275,7 +287,9 @@ fun liveFlight(status: FlightStatus?, booked: Segment, now: String): LiveFlight?
     val endsAt = landsAt?.let { instantMillis(it) + AFTER_ARRIVAL } ?: (instantMillis(booked.start) + GIVE_UP_AFTER)
     val departureWhere = where(status.departureGate, status.departureTerminal)
     val arrivalWhere = where(status.arrivalGate, status.arrivalTerminal)
-    val out = status.actualOut
+    // Left, as reported, or taken to have left once well past its estimate with no word.
+    val assumedAt = instantMillis(leavesAt) + ASSUMED_DEPARTED
+    val out = status.actualOut?.let(::instantMillis) ?: assumedAt.takeIf { at >= it }
     if (out == null) {
         val leaves = if (status.scheduledOut != null && status.estimatedOut != null) {
             "Leaves ${timing(status.scheduledOut, status.estimatedOut, booked.start)}"
@@ -284,7 +298,7 @@ fun liveFlight(status: FlightStatus?, booked: Segment, now: String): LiveFlight?
         }
         val chip = shortWhere(status.departureGate, status.departureTerminal) ?: fit(clockAt(leavesAt, booked.start)) ?: "Soon"
         val text = listOfNotNull(diverted, leaves, departureWhere?.let { "Departs from $it" }).joinToString(" · ")
-        return LiveFlight(chip, text, 0, endsAt)
+        return LiveFlight(chip, text, 0, endsAt, redrawAt = assumedAt)
     }
     if (status.actualIn == null) {
         val lands = if (status.scheduledIn != null && status.estimatedIn != null) {
@@ -294,7 +308,7 @@ fun liveFlight(status: FlightStatus?, booked: Segment, now: String): LiveFlight?
         }
         val text = listOfNotNull(diverted, lands, arrivalWhere?.let { "Arrives at $it" }).joinToString(" · ").ifEmpty { "In the air" }
         val progress = landsAt?.let {
-            val from = instantMillis(out)
+            val from = out
             val span = instantMillis(it) - from
             if (span <= 0) 99 else ((at - from) * 100 / span).toInt().coerceIn(0, 99)
         } ?: 50
@@ -302,7 +316,8 @@ fun liveFlight(status: FlightStatus?, booked: Segment, now: String): LiveFlight?
         // without a landing (the next look brings the new estimate).
         val countdown = landsAt?.let(::instantMillis)?.takeIf { it > at }
         val word = if (landsAt == null) "Flying" else "Landing"
-        return LiveFlight(if (countdown == null) word else null, text, progress, endsAt, countdown)
+        // At the landing estimate the countdown ends: draw "Landing" then, online or not.
+        return LiveFlight(if (countdown == null) word else null, text, progress, endsAt, countdown, redrawAt = countdown)
     }
     // "Bags 16", or the carousel alone when the word does not fit.
     val chip = status.baggageClaim?.let { fit("Bags $it", it) } ?: shortWhere(status.arrivalGate, status.arrivalTerminal) ?: "Landed"

@@ -884,7 +884,15 @@ one more, taking the Live Update down; otherwise it times out 45 minutes
 after landing. A swipe-away lasts until the flight is over, a delayed
 landing moving that later.
 The app draws it from the status (`liveFlight` in `:core`), and one swiped
-away stays away for that flight. Delays, gate changes and the rest still
+away stays away for that flight. It does not depend on the network once the
+first message is in: the app keeps the last message and sets an alarm for
+when the notification next changes with no news, and draws it again then.
+A flight no one has reported leaving is taken to have left 15 minutes past
+its departure estimate, so a phone put in flight mode at the gate still
+moves on to the countdown, and at the landing estimate it shows "Landing".
+The alarm is inexact, so it needs no exact-alarm permission, and Doze may
+hold it a few minutes. A message, whenever one arrives, corrects all of
+this. Delays, gate changes and the rest still
 come as "Flight changes" alerts with the chime. The web has no equivalent.
 Push services hold flight news for an offline browser or phone for half
 an hour, not the day reminders get, since directions to a gate are no use
