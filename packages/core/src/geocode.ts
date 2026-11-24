@@ -151,6 +151,28 @@ export function fillAirports(segment: ExtractedSegment, lookup: AirportLookup): 
   };
 }
 
+export type CityLookup = (name: string) => string | undefined;
+
+// A place's country from its city's name, when that name is unambiguous
+// (`cityCountry`), without asking anyone: the city a booking names, or for a
+// journey a station or port named for its city ("Liverpool"). A venue's own
+// name is not taken for a city: a restaurant called Florence is not in Italy.
+export function fillCities(segment: ExtractedSegment, lookup: CityLookup): ExtractedSegment {
+  const journey = segment.type !== "lodging" && segment.type !== "activity" && segment.type !== "other";
+  const fill = (place: Place | undefined) => {
+    if (!place || place.country) return place;
+    const country = (place.city && lookup(place.city)) || (journey ? lookup(place.name) : undefined);
+    return country ? { ...place, country } : place;
+  };
+  const origin = fill(segment.origin);
+  const destination = fill(segment.destination);
+  return {
+    ...segment,
+    ...(origin ? { origin } : {}),
+    ...(destination ? { destination } : {}),
+  };
+}
+
 // Asks about a place; `need` says whether the place lacks its country or
 // only its coordinates, so a caller on a budget can keep the country calls
 // coming when coordinates are a luxury. "none" is an answer (the place

@@ -293,8 +293,15 @@ that looks wrong can be traced to the booking that put it there.
 A place's country is the one its booking names, and its spot (`lat`, `lon`)
 the one its booking carries. Imports fill both in when the source gave none:
 a flight's from its airport code (`packages/core/src/airportPlaces.json`,
-generated from the same OpenFlights data as the zone table, which also gives
-the airport's coordinates for the map), anything else's from Google's
+generated from the same OpenFlights and OurAirports data as the zone table,
+9,342 codes, which also gives the airport's coordinates for the map); a
+place whose city is unambiguous gets that city's country, with no call
+(`packages/core/src/cityCountries.json`, from GeoNames' cities of 1,000
+people or more: a name whose cities are all in one country, or whose
+largest is ten times the largest elsewhere, so Boston is the US's and
+Birmingham, shared with Alabama, is left out), as does a journey's end
+named for its city ("Liverpool"), though never a venue's name (a restaurant
+called Florence); anything else's from Google's
 Geocoding API (`packages/core/src/geocode.ts` for what to ask and how to read
 the answer, `apps/parser/src/geocode.ts` for the call), asked once per
 distinct place name (with the country on the end when the source named one),
@@ -311,7 +318,10 @@ Scheduler early in the UTC day, `apps/parser/src/geocodeSweep.ts`): oldest
 first, up to 200 a day, writing what it learns under the user's import lock
 only if the booking has not been edited since, dropping an entry once it is
 answered (a "none" included), its booking is gone, or it is thirty days old,
-and stopping for the day when the budget runs out again.
+and stopping for the day when the budget runs out again. The airport and
+city tables answer first, with no call, and with no geocoder configured
+they alone answer: each queued booking gets what they know and leaves the
+queue.
 Bookings imported before geocoding began (7 November 2026) join the queue
 too: each sweep first reads the next 100 trips in id order (where it got to
 is kept in `geocodeBackfill/state`) and queues every booking, hand-entered
@@ -722,8 +732,8 @@ shape as an imported one; the form takes a local date, time and time zone
 for each end and stores the instant with that zone's offset on that date, so
 it reads back exactly as the traveler sees it. Typing a known airport code
 into From or To preselects that end's zone from a generated table of IATA
-codes (`packages/core/src/airports.json`, from the OpenFlights airport
-database, loaded on demand); the picker still has the last word. An
+codes (`packages/core/src/airports.json`, from the OpenFlights and
+OurAirports airport databases, loaded on demand); the picker still has the last word. An
 imported instant carries only an offset, so editing one offers that offset
 "as imported" alongside the zones, and keeps it unless the editor picks a
 zone. With a Places API (New) key (`NEXT_PUBLIC_GOOGLE_MAPS_KEY`, a browser

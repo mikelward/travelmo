@@ -150,13 +150,39 @@ describe("sweepGeocodeRetries", () => {
     expect(edited.retries.entries.size).toBe(1);
   });
 
-  it("does nothing without a geocoder or a queue", async () => {
+  it("does nothing without a queue", async () => {
     const { deps, retries } = setup({}, stay("s1"));
     await retries.put({ uid: "u1", tripId: "t1", segmentId: "s1", at });
-    const { geocode: _geocode, ...withoutGeocoder } = deps;
     const { geocodeRetries: _retries, ...withoutQueue } = deps;
-    expect(await sweepGeocodeRetries(withoutGeocoder)).toEqual({ seen: 0, placed: 0, dropped: 0, deferred: 0, failed: 0 });
     expect(await sweepGeocodeRetries(withoutQueue)).toEqual({ seen: 0, placed: 0, dropped: 0, deferred: 0, failed: 0 });
+  });
+
+  it("keeps a country the city table gave when the geocoder fails, and the booking stays queued", async () => {
+    const train: Segment = stay("s1", { type: "train", title: "To Liverpool", origin: { name: "London Euston", city: "London" }, destination: { name: "Liverpool Lime Street", city: "Liverpool" } });
+    const { deps, retries, store } = setup({ "London Euston, London, GB": new Error("key refused"), "Liverpool Lime Street, Liverpool, GB": new Error("key refused") }, train);
+    await retries.put({ uid: "u1", tripId: "t1", segmentId: "s1", at });
+    expect(await sweepGeocodeRetries(deps)).toMatchObject({ placed: 1, failed: 1, dropped: 0 });
+    expect(store.segments.get("s1")).toMatchObject({ origin: { country: "GB" }, destination: { country: "GB" } });
+    expect(retries.entries.size).toBe(1);
+  });
+
+  it("fills a country from an unambiguous city with no call, and without a geocoder too", async () => {
+    const train: Segment = stay("s1", {
+      type: "train",
+      title: "London Euston to Liverpool Lime Street",
+      origin: { name: "London Euston", city: "London" },
+      destination: { name: "Liverpool Lime Street", city: "Liverpool" },
+    });
+    for (const withGeocoder of [true, false]) {
+      const { deps, retries, store, asked } = setup({}, train);
+      await retries.put({ uid: "u1", tripId: "t1", segmentId: "s1", at });
+      const { geocode: _geocode, ...withoutGeocoder } = deps;
+      expect(await sweepGeocodeRetries(withGeocoder ? deps : withoutGeocoder)).toMatchObject({ placed: 1, dropped: 1 });
+      expect(store.segments.get("s1")).toMatchObject({ origin: { country: "GB" }, destination: { country: "GB" } });
+      // Only the spots are asked about, when there is someone to ask.
+      expect(asked).toEqual(withGeocoder ? ["London Euston, London, GB", "Liverpool Lime Street, Liverpool, GB"] : []);
+      expect(retries.entries.size).toBe(0);
+    }
   });
 });
 

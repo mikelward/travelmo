@@ -48,7 +48,9 @@ pnpm --filter @travelmo/web test:e2e
 
 `pnpm --filter @travelmo/core airports` regenerates the airport tables (time
 zone, and country and coordinates) from the OpenFlights data (ODbL) packaged in
-`airport-data`, `pnpm --filter @travelmo/core visas` the entry-requirements
+`airport-data` and OurAirports (public domain, fetched from GitHub), `pnpm
+--filter @travelmo/core cities` the city-to-country table from GeoNames (CC
+BY 4.0) packaged in `all-the-cities`, `pnpm --filter @travelmo/core visas` the entry-requirements
 table from the Passport Index dataset (MIT, fetched from GitHub; rerun it now
 and then, since rules change and the trip page shows the month it was
 fetched), and `pnpm --filter @travelmo/web worldmap` the reports page's

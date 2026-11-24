@@ -1,6 +1,7 @@
 import {
   enrichSegments,
   fillAirports,
+  fillCities,
   awayPlace,
   compareInstants,
   courseName,
@@ -55,6 +56,7 @@ import {
   type FoundLoyalty,
 } from "@travelmo/core";
 import { airportPlace } from "@travelmo/core/airportPlaces";
+import { cityCountry } from "@travelmo/core/cityCountries";
 import type { Extractor } from "./extract";
 import type { RetryStore } from "./geocodeSweep";
 import { isNotFound, type EmailMessage } from "./gmail";
@@ -795,12 +797,12 @@ async function recordRetries(uid: string, segments: readonly Segment[], deps: Im
 }
 
 // A place's country and coordinates, before anything is written: a flight's
-// from its airport code (a table, no call), anything else's from the
-// geocoder when there is one. Network calls stay outside the transaction,
+// from its airport code, a place in an unambiguous city from its name (both
+// tables, no call), anything else's from the geocoder when there is one. Network calls stay outside the transaction,
 // which Firestore may run more than once. A geocoder failure costs the
 // country, never the booking.
 async function placeSegments(uid: string, booking: BookingToFile, deps: ImportDeps): Promise<{ segments: readonly ExtractedSegment[]; deferred: number }> {
-  const fromAirports = booking.segments.map((segment) => fillAirports(segment, airportPlace));
+  const fromAirports = booking.segments.map((segment) => fillCities(fillAirports(segment, airportPlace), cityCountry));
   if (!deps.geocode) return { segments: fromAirports, deferred: 0 };
   const { segments, filled, failed, deferred } = await enrichSegments(fromAirports, deps.geocode);
   if (filled || failed || deferred) deps.log("geocoded", { uid, source: booking.source, sourceId: booking.sourceId, filled, failed, deferred });
