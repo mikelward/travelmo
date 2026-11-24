@@ -15,6 +15,7 @@ import {
   segmentDateRange,
   segmentSources,
   untimedMatchDays,
+  oneBookingPerEvent,
   withoutValidityEnds,
   type ExtractedSegment,
   type ParsedMessage,
@@ -193,7 +194,7 @@ export async function refreshEmail(
   } catch (error) {
     throw new ExtractionFailed(error);
   }
-  const dated = withoutValidityEnds(booking.segments);
+  const dated = oneBookingPerEvent(withoutValidityEnds(booking.segments));
   const bought = notBookings(dated);
   const found = dated.filter((segment) => !bought.includes(segment));
   if (!booking.isBooking || found.length === 0 || !segmentDateRange(found)) {
