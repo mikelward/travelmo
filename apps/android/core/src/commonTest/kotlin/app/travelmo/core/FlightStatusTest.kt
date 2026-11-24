@@ -215,6 +215,27 @@ class FlightStatusTest {
     }
 
     @Test
+    fun liveUpdateMovesOnByItselfWithNoNewsSoItWorksOffline() {
+        // Before departure it asks to be drawn again 15 minutes past the estimate...
+        val waiting = status(departureGate = "26", departureTerminal = "3", estimatedOut = "2026-12-12T22:10:00Z", estimatedIn = "2026-12-13T07:30:00Z")
+        val atGate = liveFlight(waiting, flight, "2026-12-12T21:00:00Z")!!
+        atGate.chip shouldBe "T3 G26"
+        atGate.redrawAt shouldBe instantMillis("2026-12-12T22:25:00Z")
+        // ...when, with the same status and no word of leaving, it is taken to be in the air.
+        val assumed = liveFlight(waiting, flight, "2026-12-12T22:25:00Z")!!
+        assumed.chip shouldBe null
+        assumed.landsAt shouldBe instantMillis("2026-12-13T07:30:00Z")
+        assumed.progress shouldBe 0
+        assumed.redrawAt shouldBe instantMillis("2026-12-13T07:30:00Z")
+        // At the landing estimate, still with no news: "Landing", and nothing more to wait for.
+        val landing = liveFlight(waiting, flight, "2026-12-13T07:30:00Z")!!
+        landing.chip shouldBe "Landing"
+        landing.redrawAt shouldBe null
+        // A reported departure counts from when it happened.
+        liveFlight(waiting.copy(actualOut = "2026-12-12T22:00:00Z"), flight, "2026-12-12T22:05:00Z")!!.chip shouldBe null
+    }
+
+    @Test
     fun liveUpdateOnceLandedShowsTheCarousel() {
         val landed = status(arrivalGate = "D46", actualOut = "2026-12-12T22:00:00Z", actualIn = "2026-12-13T07:20:00Z")
         val before = liveFlight(landed, flight, "2026-12-13T07:25:00Z")!!

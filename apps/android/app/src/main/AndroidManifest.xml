@@ -63,6 +63,12 @@
             android:name=".notify.LiveFlightDismissedReceiver"
             android:exported="false" />
 
+        <!-- Draws a flight's Live Update again when it is due to move on, with or without the
+             network: taken to have left, then at its landing estimate. -->
+        <receiver
+            android:name=".notify.LiveFlightRedrawReceiver"
+            android:exported="false" />
+
         <!-- A check-in reminder's "I've checked in" action: saves the mark
              for the signed-in user. Only this app's notifications send it. -->
         <receiver

@@ -1,5 +1,6 @@
 package app.travelmo.notify
 
+import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -12,6 +13,8 @@ import androidx.core.content.edit
 import app.travelmo.R
 import app.travelmo.core.LiveFlightMessage
 import app.travelmo.core.liveFlight
+import app.travelmo.core.liveFlightMessage
+import org.json.JSONObject
 import app.travelmo.log.TravelmoLog
 import com.mikelward.androidlog.safe
 import java.time.Instant
@@ -22,6 +25,10 @@ import java.time.Instant
  * parser sends one after each look at the flight ([liveFlightMessage][app.travelmo.core.liveFlightMessage]);
  * each replaces the last without a sound, and one the flight no longer needs (cancelled, or over)
  * takes it down. Dismissed, it stays away for that flight.
+ *
+ * It moves on without the network too: the last message is kept, and an alarm draws it again when
+ * the flight is taken to have left and when its landing estimate comes ([LiveFlight.redrawAt]
+ * [app.travelmo.core.LiveFlight.redrawAt]), so a phone in flight mode still counts down to landing.
  */
 object LiveFlightNotifications {
     const val CHANNEL_ID = "live_flights"
@@ -30,6 +37,55 @@ object LiveFlightNotifications {
     private const val ACTION_DISMISSED = "app.travelmo.LIVE_FLIGHT_DISMISSED"
     private const val EXTRA_KEY = "key"
     private const val EXTRA_ENDS_AT = "endsAt"
+    private const val EXTRA_TAG = "tag"
+    private const val ACTION_REDRAW = "app.travelmo.LIVE_FLIGHT_REDRAW"
+
+    /** Each flight's last message, by tag, for drawing it again with no network. */
+    private const val MESSAGES = "live_flight_messages"
+
+    /** Shows a Live Update message from the parser, keeping it for redrawing offline. */
+    fun received(context: Context, data: Map<String, String>, now: Long = System.currentTimeMillis()) {
+        val message = liveFlightMessage(data) ?: return
+        context.getSharedPreferences(MESSAGES, Context.MODE_PRIVATE).edit { putString(message.tag, JSONObject(data).toString()) }
+        show(context, message, now)
+    }
+
+    /** Draws a flight's Live Update again from its last message, as its alarm asks. */
+    internal fun redraw(context: Context, tag: String, now: Long = System.currentTimeMillis()) {
+        val json = context.getSharedPreferences(MESSAGES, Context.MODE_PRIVATE).getString(tag, null) ?: return
+        val data = try {
+            JSONObject(json).let { o -> o.keys().asSequence().associateWith { o.getString(it) } }
+        } catch (e: org.json.JSONException) {
+            TravelmoLog.error(e, "Live Update not redrawn: its kept message is unreadable")
+            forget(context, tag)
+            return
+        }
+        liveFlightMessage(data)?.let { show(context, it, now) } ?: forget(context, tag)
+    }
+
+    private fun forget(context: Context, tag: String) {
+        context.getSharedPreferences(MESSAGES, Context.MODE_PRIVATE).edit { remove(tag) }
+        context.getSystemService(AlarmManager::class.java).cancel(redrawIntent(context, tag))
+    }
+
+    private fun redrawIntent(context: Context, tag: String): PendingIntent = PendingIntent.getBroadcast(
+        context,
+        tag.hashCode(),
+        Intent(context, LiveFlightRedrawReceiver::class.java).setAction(ACTION_REDRAW).putExtra(EXTRA_TAG, tag),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
+    /**
+     * Draws it again at [at], or forgets it when nothing will change without news. Inexact, so no
+     * exact-alarm permission: Android may hold it a few minutes in Doze, which a flight can spare.
+     */
+    private fun scheduleRedraw(context: Context, tag: String, at: Long?) {
+        if (at == null) {
+            forget(context, tag)
+            return
+        }
+        context.getSystemService(AlarmManager::class.java).setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, redrawIntent(context, tag))
+    }
 
     private fun ensureChannel(context: Context) {
         val channel = NotificationChannel(CHANNEL_ID, context.getString(R.string.live_flights_channel), NotificationManager.IMPORTANCE_DEFAULT)
@@ -45,8 +101,10 @@ object LiveFlightNotifications {
         val live = liveFlight(message.status, message.booking, Instant.ofEpochMilli(now).toString())
         if (live == null || live.endsAt <= now) {
             manager.cancel(message.tag, 0)
+            forget(context, message.tag)
             return
         }
+        scheduleRedraw(context, message.tag, live.redrawAt)
         if (!ReminderNotifications.allowed(context)) {
             TravelmoLog.info("Live Update not shown: notifications are not allowed")
             return
@@ -126,5 +184,13 @@ object LiveFlightNotifications {
 class LiveFlightDismissedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         LiveFlightNotifications.rememberDismissed(context, intent)
+    }
+}
+
+/** Draws a flight's Live Update again when its alarm comes, network or not. */
+class LiveFlightRedrawReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val tag = intent.getStringExtra("tag") ?: return
+        LiveFlightNotifications.redraw(context, tag)
     }
 }
