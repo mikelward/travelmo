@@ -262,7 +262,7 @@ private fun SignedInNavigation(app: TravelmoApplication, user: SignedIn, viewMod
                 BookingFormScreen(viewModel = viewModel, tripId = key.tripId, segmentId = key.segmentId, defaultDate = key.defaultDate, onDone = { backStack.removeLastOrNull() })
             }
             entry<Settings> {
-                SettingsScreen(account = app.account, user = user, viewModel = viewModel, onBack = { backStack.removeLastOrNull() }, onOpenReview = { backStack.add(ImportReview) })
+                SettingsScreen(account = rememberSignedInAccount(app.account), user = user, viewModel = viewModel, onBack = { backStack.removeLastOrNull() }, onOpenReview = { backStack.add(ImportReview) })
             }
             entry<ImportReview> {
                 ImportReviewScreen(viewModel = viewModel, onBack = { backStack.removeLastOrNull() })

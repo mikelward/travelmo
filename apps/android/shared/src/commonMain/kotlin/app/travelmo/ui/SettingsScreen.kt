@@ -1,13 +1,5 @@
 package app.travelmo.ui
 
-import androidx.compose.ui.res.stringResource
-import org.jetbrains.compose.resources.StringResource
-import android.Manifest
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,8 +50,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -68,9 +58,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.travelmo.BuildConfig
-import app.travelmo.R
-import app.travelmo.auth.GoogleAccount
 import app.travelmo.auth.SignedIn
 import app.travelmo.core.EmailRowKind
 import app.travelmo.core.ICLOUD_IMAP
@@ -79,23 +66,20 @@ import app.travelmo.core.MAX_GMAIL_MAILBOXES
 import app.travelmo.core.MAX_IMAP_MAILBOXES
 import app.travelmo.core.MAX_RIDE_COMPANIES
 import app.travelmo.core.ParsedCountries
+import app.travelmo.core.REFRESH_BLURB
 import app.travelmo.core.RideNear
 import app.travelmo.core.YAHOO_IMAP
 import app.travelmo.core.countryName
 import app.travelmo.core.describeBackfill
-import app.travelmo.core.REFRESH_BLURB
 import app.travelmo.core.describeRefresh
-import app.travelmo.core.refreshButton
-import app.travelmo.core.refreshPausedReason
 import app.travelmo.core.emailRows
 import app.travelmo.core.imapRedirect
 import app.travelmo.core.imapServerFor
 import app.travelmo.core.parseCountries
 import app.travelmo.core.pausedReason
+import app.travelmo.core.refreshButton
+import app.travelmo.core.refreshPausedReason
 import app.travelmo.core.rideCompanyOrNull
-import app.travelmo.log.DebugLogging
-import app.travelmo.log.TravelmoLog
-import app.travelmo.notify.ReminderNotifications
 import app.travelmo.shared.Res
 import app.travelmo.shared.add
 import app.travelmo.shared.add_feed
@@ -237,18 +221,12 @@ import app.travelmo.shared.trips_section
 import app.travelmo.shared.turn_off
 import app.travelmo.shared.use_https_link
 import app.travelmo.shared.version
-import com.mikelward.androidlog.android.ShareOutcome
-import com.mikelward.androidzoom.MAX_FONT_SCALE
-import com.mikelward.androidzoom.MIN_FONT_SCALE
-import com.mikelward.androidzoom.compose.LocalFontSizeState
-import com.mikelward.androidzoom.compose.StableInputDensity
-import com.mikelward.androidzoom.fontScalePercent
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 private const val REMINDER_TOKEN = "settings/reminders/email"
-private const val PUSH_TOKEN = "settings/reminders/push"
 private const val SETTINGS_DELETE_ACCOUNT_TOKEN = "settings/account/delete"
 private const val GMAIL_TOKEN = "settings/gmail"
 private const val FASTMAIL_TOKEN = "settings/fastmail"
@@ -282,8 +260,8 @@ private const val REMOVE_COMPANY_TOKEN = "settings/rides/remove"
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewModel, onBack: () -> Unit, onOpenReview: () -> Unit = {}) {
-    val context = LocalContext.current
+fun SettingsScreen(account: SignedInAccount, user: SignedIn, viewModel: TripsViewModel, onBack: () -> Unit, onOpenReview: () -> Unit = {}) {
+    val chrome = LocalAppChrome.current
     val scope = rememberCoroutineScope()
     val stored by viewModel.reminderEmail.collectAsStateWithLifecycle()
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
@@ -316,7 +294,7 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
         val scroll = rememberScrollState()
         Column(modifier = Modifier.fillMaxSize().padding(padding).scrollEdgeCue(scroll, scrollCueColors()).verticalScroll(scroll).padding(16.dp)) {
             Text(stringResource(Res.string.signed_in_as, user.email ?: user.uid), style = MaterialTheme.typography.bodyLarge)
-            OutlinedButton(onClick = { scope.launch { account.signOut(context) } }, modifier = Modifier.padding(top = 12.dp)) {
+            OutlinedButton(onClick = { scope.launch { account.signOut() } }, modifier = Modifier.padding(top = 12.dp)) {
                 Text(stringResource(Res.string.sign_out))
             }
             GmailSection(viewModel)
@@ -351,13 +329,12 @@ fun SettingsScreen(account: GoogleAccount, user: SignedIn, viewModel: TripsViewM
                 )
             }
             (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
-            PushSwitch(viewModel)
+            chrome.PushSettings(viewModel)
             TripRemindersSection(viewModel)
-            TextSizeSection()
-            DebugLogSection(signedIn = true)
-            DeleteAccountSection(rememberSignedInAccount(account), viewModel, SETTINGS_DELETE_ACCOUNT_TOKEN)
+            chrome.DeviceSettings()
+            DeleteAccountSection(account, viewModel, SETTINGS_DELETE_ACCOUNT_TOKEN)
             Text(
-                stringResource(Res.string.version, BuildConfig.VERSION_NAME),
+                stringResource(Res.string.version, chrome.versionName),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 24.dp),
@@ -441,7 +418,7 @@ private fun FeedsSection(viewModel: TripsViewModel) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun GoogleCalendarSection(viewModel: TripsViewModel) {
-    val context = LocalContext.current
+    val chrome = LocalAppChrome.current
     val shown by viewModel.googleCalendar.collectAsStateWithLifecycle()
     val consent by viewModel.calendarConsentUrl.collectAsStateWithLifecycle()
     val saved by viewModel.calendarSaved.collectAsStateWithLifecycle()
@@ -452,7 +429,7 @@ private fun GoogleCalendarSection(viewModel: TripsViewModel) {
     var draft by rememberSaveable { mutableStateOf<List<String>?>(null) }
     LaunchedEffect(consent) {
         consent?.let {
-            openLink(context, it, "Google Calendar consent")
+            chrome.openLink(it, "Google Calendar consent")
             viewModel.calendarConsentOpened()
         }
     }
@@ -526,7 +503,7 @@ private fun CalendarExportSection(viewModel: TripsViewModel) {
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
     val outcome = outcomes[EXPORT_TOKEN]
     val busy = outcome is Outcome.Busy
-    val context = LocalContext.current
+    val chrome = LocalAppChrome.current
     // Which change is waiting for the user to confirm it: replace or turn off.
     var confirming by rememberSaveable { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(outcome) { if (outcome is Outcome.Done) viewModel.outcomeSeen(EXPORT_TOKEN) }
@@ -544,9 +521,9 @@ private fun CalendarExportSection(viewModel: TripsViewModel) {
         SelectionContainer { Text(links.https, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp)) }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
             val exportLabel = stringResource(Res.string.calendar_export)
-            OutlinedButton(onClick = { copyToClipboard(context, exportLabel, links.https) }) { Text(stringResource(Res.string.copy_link)) }
-            OutlinedButton(onClick = { openLink(context, links.google, "Google Calendar's add-by-link page") }) { Text(stringResource(Res.string.add_to_google_calendar)) }
-            OutlinedButton(onClick = { openLink(context, links.webcal, "the calendar link in a calendar app") }) { Text(stringResource(Res.string.open_in_calendar_app)) }
+            OutlinedButton(onClick = { chrome.copyToClipboard(exportLabel, links.https) }) { Text(stringResource(Res.string.copy_link)) }
+            OutlinedButton(onClick = { chrome.openLink(links.google, "Google Calendar's add-by-link page") }) { Text(stringResource(Res.string.add_to_google_calendar)) }
+            OutlinedButton(onClick = { chrome.openLink(links.webcal, "the calendar link in a calendar app") }) { Text(stringResource(Res.string.open_in_calendar_app)) }
             OutlinedButton(onClick = { confirming = true }, enabled = !busy) { Text(stringResource(Res.string.replace_link)) }
             OutlinedButton(onClick = { confirming = false }, enabled = !busy) { Text(stringResource(Res.string.turn_off)) }
         }
@@ -582,7 +559,7 @@ private fun ForwardSection(viewModel: TripsViewModel) {
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
     val outcome = outcomes[FORWARD_TOKEN]
     val busy = outcome is Outcome.Busy
-    val context = LocalContext.current
+    val chrome = LocalAppChrome.current
     // Which change is waiting for the user to confirm it: replace or turn off.
     var confirming by rememberSaveable { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(outcome) { if (outcome is Outcome.Done) viewModel.outcomeSeen(FORWARD_TOKEN) }
@@ -599,7 +576,7 @@ private fun ForwardSection(viewModel: TripsViewModel) {
         SelectionContainer { Text(address, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp)) }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
             val forwardLabel = stringResource(Res.string.forward_by_email)
-            OutlinedButton(onClick = { copyToClipboard(context, forwardLabel, address) }) { Text(stringResource(Res.string.copy_address)) }
+            OutlinedButton(onClick = { chrome.copyToClipboard(forwardLabel, address) }) { Text(stringResource(Res.string.copy_address)) }
             OutlinedButton(onClick = { confirming = true }, enabled = !busy) { Text(stringResource(Res.string.replace_address)) }
             OutlinedButton(onClick = { confirming = false }, enabled = !busy) { Text(stringResource(Res.string.turn_off)) }
         }
@@ -630,15 +607,6 @@ private enum class CompanyProblem(val text: StringResource) {
     NOT_HTTPS(Res.string.use_https_link),
 }
 
-/** Puts [text] on the clipboard, labeled [label]; Android confirms the copy itself. */
-private fun copyToClipboard(context: Context, label: String, text: String) {
-    val clipboard = context.getSystemService(ClipboardManager::class.java)
-    if (clipboard == null) {
-        TravelmoLog.warning("No clipboard to copy to")
-        return
-    }
-    clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
-}
 
 /**
  * Settings' "Car and ride companies", as on the web: the user's own, which
@@ -659,7 +627,7 @@ private fun RideCompaniesSection(viewModel: TripsViewModel) {
     // What is wrong with the company as typed, and the text it names, if any.
     var invalid by rememberSaveable { mutableStateOf<CompanyProblem?>(null) }
     var invalidText by rememberSaveable { mutableStateOf<String?>(null) }
-    val context = LocalContext.current
+    val chrome = LocalAppChrome.current
     LaunchedEffect(adding) {
         if (adding is Outcome.Done) {
             name = ""
@@ -679,7 +647,7 @@ private fun RideCompaniesSection(viewModel: TripsViewModel) {
                 Text(
                     company.name,
                     style = MaterialTheme.typography.bodyLarge.copy(textDecoration = TextDecoration.Underline),
-                    modifier = Modifier.clickable(onClickLabel = stringResource(Res.string.open_company, company.name)) { openLink(context, company.url, "a car or ride company") },
+                    modifier = Modifier.clickable(onClickLabel = stringResource(Res.string.open_company, company.name)) { chrome.openLink(company.url, "a car or ride company") },
                 )
                 Text(
                     (listOf(stringResource(nearLabel(company.near))) + company.countries.map(::countryName).joinToString(", ").ifEmpty { null }).filterNotNull().joinToString(" · "),
@@ -807,63 +775,6 @@ private fun SenderRulesSection(viewModel: TripsViewModel) {
     (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
 }
 
-/**
- * Reminders as notifications on this phone: the switch asks for the
- * notification permission the first time, then registers the phone's
- * messaging token under the account; off forgets the phone. It is absent
- * when the phone has no token (Firebase dormant, no Play services).
- */
-@Composable
-private fun PushSwitch(viewModel: TripsViewModel) {
-    val context = LocalContext.current
-    val state by viewModel.pushState.collectAsStateWithLifecycle()
-    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
-    val outcome = outcomes[PUSH_TOKEN]
-    val ready = state as? PushState.Ready ?: return
-    var chosen by remember { mutableStateOf<Boolean?>(null) }
-    var blocked by remember { mutableStateOf(false) }
-    LaunchedEffect(outcome) {
-        when (outcome) {
-            is Outcome.Done -> viewModel.outcomeSeen(PUSH_TOKEN)
-            is Outcome.Failed -> chosen = null
-            else -> {}
-        }
-    }
-    LaunchedEffect(ready.on) { if (ready.on == chosen) chosen = null }
-    val turnOn = {
-        if (ReminderNotifications.allowed(context)) {
-            blocked = false
-            chosen = true
-            viewModel.setPushDevice(PUSH_TOKEN, true)
-        } else {
-            // Granted, yet the app is blocked in the system settings.
-            blocked = true
-        }
-    }
-    val askPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) turnOn() else blocked = true
-    }
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        Text(stringResource(Res.string.notify_me), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        Switch(
-            checked = chosen ?: ready.on,
-            onCheckedChange = { on ->
-                if (!on) {
-                    blocked = false
-                    chosen = false
-                    viewModel.setPushDevice(PUSH_TOKEN, false)
-                } else if (ReminderNotifications.allowed(context)) {
-                    turnOn()
-                } else {
-                    askPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                }
-            },
-            enabled = outcome !is Outcome.Busy,
-        )
-    }
-    if (blocked) Text(stringResource(Res.string.notifications_blocked), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
-}
 
 /**
  * The user's email addresses (SPEC "Linked email addresses"), as on the web:
@@ -943,7 +854,7 @@ private fun EmailAddressesSection(user: SignedIn, viewModel: TripsViewModel) {
  */
 @Composable
 private fun GmailSection(viewModel: TripsViewModel) {
-    val context = LocalContext.current
+    val chrome = LocalAppChrome.current
     val gmail by viewModel.gmail.collectAsStateWithLifecycle()
     val consent by viewModel.gmailConsentUrl.collectAsStateWithLifecycle()
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
@@ -951,7 +862,7 @@ private fun GmailSection(viewModel: TripsViewModel) {
     val busy = outcome is Outcome.Busy
     LaunchedEffect(consent) {
         consent?.let {
-            openLink(context, it, "Gmail consent")
+            chrome.openLink(it, "Gmail consent")
             viewModel.gmailConsentOpened()
         }
     }
@@ -1009,7 +920,7 @@ private fun GmailSection(viewModel: TripsViewModel) {
  */
 @Composable
 private fun FastmailSection(viewModel: TripsViewModel) {
-    val context = LocalContext.current
+    val chrome = LocalAppChrome.current
     val fastmail by viewModel.fastmail.collectAsStateWithLifecycle()
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
     val outcome = outcomes[FASTMAIL_TOKEN]
@@ -1041,7 +952,7 @@ private fun FastmailSection(viewModel: TripsViewModel) {
         TripsViewModel.FastmailState.NotConnected -> {
             if (disconnected) Text(stringResource(Res.string.fastmail_disconnected), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(bottom = 8.dp))
             Text(stringResource(Res.string.fastmail_connect_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            TextButton(onClick = { openLink(context, FASTMAIL_TOKENS_URL, "Fastmail API tokens") }) { Text(stringResource(Res.string.fastmail_tokens)) }
+            TextButton(onClick = { chrome.openLink(FASTMAIL_TOKENS_URL, "Fastmail API tokens") }) { Text(stringResource(Res.string.fastmail_tokens)) }
             OutlinedTextField(
                 value = apiToken,
                 onValueChange = { apiToken = it },
@@ -1093,7 +1004,7 @@ private fun FastmailSection(viewModel: TripsViewModel) {
  */
 @Composable
 private fun ImapSection(viewModel: TripsViewModel) {
-    val context = LocalContext.current
+    val chrome = LocalAppChrome.current
     val imap by viewModel.imap.collectAsStateWithLifecycle()
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
     val connecting = outcomes[IMAP_CONNECT_TOKEN]
@@ -1165,8 +1076,8 @@ private fun ImapSection(viewModel: TripsViewModel) {
                     modifier = Modifier.padding(top = if (state.mailboxes.isEmpty()) 0.dp else 16.dp),
                 )
                 Row {
-                    ICLOUD_IMAP.appPasswordUrl?.let { url -> TextButton(onClick = { openLink(context, url, "iCloud app passwords") }) { Text(stringResource(Res.string.imap_icloud_passwords)) } }
-                    YAHOO_IMAP.appPasswordUrl?.let { url -> TextButton(onClick = { openLink(context, url, "Yahoo app passwords") }) { Text(stringResource(Res.string.imap_yahoo_passwords)) } }
+                    ICLOUD_IMAP.appPasswordUrl?.let { url -> TextButton(onClick = { chrome.openLink(url, "iCloud app passwords") }) { Text(stringResource(Res.string.imap_icloud_passwords)) } }
+                    YAHOO_IMAP.appPasswordUrl?.let { url -> TextButton(onClick = { chrome.openLink(url, "Yahoo app passwords") }) { Text(stringResource(Res.string.imap_yahoo_passwords)) } }
                 }
                 OutlinedTextField(
                     value = address,
@@ -1371,125 +1282,4 @@ private fun RefreshFromEmail(viewModel: TripsViewModel) {
 }
 
 
-/**
- * The on-device debug log: a switch to stop recording (which also empties
- * what was collected) and a share of a report built from this run and the
- * earlier ones, through the system share sheet with a clipboard copy. The
- * log carries nothing of the user's that the privacy floor withholds.
- */
-@Composable
-private fun DebugLogSection(signedIn: Boolean) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var enabled by remember { mutableStateOf(DebugLogging.isEnabled(context)) }
-    var saveFailed by remember { mutableStateOf(false) }
-    var sharing by remember { mutableStateOf(false) }
-    var shareNote by remember { mutableStateOf<Int?>(null) }
-    Text(stringResource(Res.string.debug_log), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
-    Text(stringResource(Res.string.debug_log_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        Text(stringResource(Res.string.debug_log_record), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        Switch(
-            checked = enabled,
-            onCheckedChange = { on ->
-                enabled = on
-                saveFailed = !DebugLogging.setEnabled(context, on)
-            },
-        )
-    }
-    if (saveFailed) Text(stringResource(Res.string.setting_not_saved), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-    OutlinedButton(
-        onClick = {
-            sharing = true
-            shareNote = null
-            scope.launch {
-                val outcome = DebugLogging.share(context, signedIn)
-                shareNote = when (outcome) {
-                    ShareOutcome.SHARED -> null
-                    ShareOutcome.COPIED_ONLY -> R.string.debug_log_copied_only
-                    ShareOutcome.FAILED -> R.string.debug_log_share_failed
-                }
-                sharing = false
-            }
-        },
-        enabled = !sharing,
-        modifier = Modifier.padding(top = 8.dp),
-    ) { Text(stringResource(if (sharing) Res.string.sharing else Res.string.share_debug_log)) }
-    shareNote?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
-}
 
-/**
- * The text size (SPEC "Text size"): the percentage of the phone's own size,
- * a slider that resizes the app as it moves and saves on release, − and +
- * for one percent a tap, each off at its end of the range, and a switch for
- * the two-finger pinch. Reads the theme's state, so the slider and a pinch
- * move one value; absent outside the theme.
- */
-@Composable
-internal fun TextSizeSection() {
-    val fontSize = LocalFontSizeState.current ?: return
-    val scale = fontSize.scale
-    val percent = stringResource(Res.string.text_size_value, fontScalePercent(scale))
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 4.dp)) {
-        Text(stringResource(Res.string.text_size), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-        Text(percent, style = MaterialTheme.typography.titleLarge)
-    }
-    Text(stringResource(Res.string.text_size_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    // Where the drag last was, so the release saves exactly that: [scale]
-    // comes back through recomposition, which a release in the same frame
-    // as the last movement would beat.
-    var dragged by remember { mutableFloatStateOf(scale) }
-    var dragging by remember { mutableStateOf(false) }
-    // Level with a pinch or a step whenever the slider isn't the one moving it.
-    if (!dragging) dragged = scale
-    // Leaving Settings mid-drag never calls onValueChangeFinished; end the drag
-    // here, or the state would hold back stored values for the rest of the run.
-    DisposableEffect(Unit) { onDispose { if (dragging) fontSize.commit(dragged) } }
-    val smaller = stepTextScale(scale, -1)
-    val larger = stepTextScale(scale, 1)
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        IconButton(
-            onClick = {
-                fontSize.preview(smaller)
-                fontSize.commit(smaller)
-            },
-            enabled = smaller != scale,
-        ) { Icon(painterResource(R.drawable.ic_remove), contentDescription = stringResource(Res.string.text_size_smaller)) }
-        Box(modifier = Modifier.weight(1f)) {
-            // At the density before the text size: dragging changes that
-            // density, which would otherwise restart the slider's own gesture.
-            StableInputDensity {
-                Slider(
-                    value = scale,
-                    onValueChange = {
-                        dragging = true
-                        dragged = it
-                        fontSize.preview(it)
-                    },
-                    onValueChangeFinished = {
-                        dragging = false
-                        fontSize.commit(dragged)
-                    },
-                    // Not stepped, like the pinch, so neither rounds away the other's size.
-                    valueRange = MIN_FONT_SCALE..MAX_FONT_SCALE,
-                    // The palette has no secondaryContainer, Material's default here.
-                    colors = SliderDefaults.colors(inactiveTrackColor = MaterialTheme.colorScheme.outlineVariant),
-                    // The percentage beside the title, not the thumb's place in the track.
-                    modifier = Modifier.semantics { stateDescription = percent },
-                )
-            }
-        }
-        IconButton(
-            onClick = {
-                fontSize.preview(larger)
-                fontSize.commit(larger)
-            },
-            enabled = larger != scale,
-        ) { Icon(Icons.Filled.Add, contentDescription = stringResource(Res.string.text_size_larger)) }
-    }
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        Text(stringResource(Res.string.pinch_to_resize), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        Switch(checked = fontSize.pinchEnabled, onCheckedChange = fontSize::choosePinch)
-    }
-    if (TextSizeSetting.saveFailed) Text(stringResource(Res.string.setting_not_saved), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-}

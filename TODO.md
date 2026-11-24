@@ -436,7 +436,9 @@ Kotlin Multiplatform, sharing the Android app's Kotlin (SPEC "iOS app").
   - [x] the palette, the brand and most screens (trip list, calendar,
         profile, booking form, checklist, import review, residence days);
   - [x] the trip page, Reports and Access;
-  - [ ] Settings, sign-in, the licenses screen and navigation.
+  - [x] Settings, its Android-only sections (notifications, text size,
+        debug log) coming from the app;
+  - [ ] navigation (the back stack and the home tabs).
 - [ ] The iOS app: Firebase Auth and Firestore, Google sign-in, Sign in
       with Apple (how Apple's private relay addresses meet sharing and
       Gmail import is the user's call), notifications.
@@ -446,6 +448,9 @@ Kotlin Multiplatform, sharing the Android app's Kotlin (SPEC "iOS app").
 
 Guesses made on autopilot; change any of them freely.
 
+- iOS: the sign-in and licenses screens stay each app's own rather than
+  shared: iOS signs in with Apple as well as Google and lists its own
+  bundled libraries, so sharing them would mean sharing little.
 - Flight changes channel: high importance (heads-up) with an original
   falling E6–C6 chime (`apps/android/scripts/flight-chime.py`); the app
   picks it by the parser's `flight-` tag rather than a new message field,

@@ -2788,15 +2788,17 @@ those lines in its own debug log. The screens' view model,
 library (androidx.lifecycle's own on Android), reading the time from a
 `kotlin.time.Instant` clock. The palette and brand (`TravelmoPalette`, the
 logo and the Fira Sans wordmark as Compose resources) and most screens are
-in `:shared` too, the trip page, Reports and Access among them; what only
+in `:shared` too, the trip page, Reports, Access and Settings among
+them; the sign-in and licenses screens stay each app's own; what only
 an app can do reaches them through `AppChrome` (the ⋮ menu, the crash
 report banner, opening a link, the clipboard, saving a file where the user
-picks), which Android supplies from its own menu, banner, Intents,
+picks, the app's version, and Settings' device sections: reminders as
+notifications, then the text size and the debug log), which Android supplies from its own menu, banner, Intents,
 clipboard and file picker, and signing out through `SignedInAccount`,
 Android's Google sign-in, and the text size the
 Android user picks reaches menus and dialogs through `pinchFontSizeHost`
-and `FontSizeWindow`, which do nothing on iOS. Next, in order: Settings,
-sign-in, the licenses screen and navigation move to `:shared`,
+and `FontSizeWindow`, which do nothing on iOS. Next, in order: navigation (the
+back stack and the home tabs) moves to `:shared`,
 then the iOS app itself
 (Firebase Auth and Firestore, Google sign-in and Sign in with Apple, which
 App Store review asks of an app offering Google's, notifications through
