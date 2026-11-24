@@ -68,6 +68,7 @@ fun CalendarScreen(
     month: String?,
     onMonthChange: (String) -> Unit,
     onOpenTrip: (String) -> Unit,
+    onOpenSettings: () -> Unit,
     bottomBar: @Composable () -> Unit,
 ) {
     val trips by viewModel.trips.collectAsStateWithLifecycle()
@@ -87,6 +88,7 @@ fun CalendarScreen(
                     IconButton(onClick = { onMonthChange(addMonths(month, 1)) }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(Res.string.next_month), modifier = Modifier.scale(scaleX = -1f, scaleY = 1f))
                     }
+                    SettingsButton(onClick = onOpenSettings)
                     AppMenu()
                 },
             )

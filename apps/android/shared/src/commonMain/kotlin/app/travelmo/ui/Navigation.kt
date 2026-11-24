@@ -20,7 +20,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 
 // The pages, as Navigation 3 keys: the back stack is a list the app owns.
-// Home holds the navigation bar's destinations (Trips, Calendar) as a tab;
+// Home holds the navigation bar's destinations (Trips, Calendar, Reports,
+// Profile) as tabs;
 // a trip and Settings are pushed above it.
 @Serializable
 data object Home : NavKey
@@ -87,6 +88,8 @@ fun SignedInNavigation(user: SignedIn, viewModel: TripsViewModel, backStack: Nav
                 // The calendar's month lives with the tab, not the screen: a
                 // visit to Trips and back lands on the month left, not on today.
                 var month by rememberSaveable { mutableStateOf<String?>(null) }
+                // Every tab's top bar has the Settings gear.
+                val openSettings: () -> Unit = { backStack.add(Settings) }
                 val bar: @Composable () -> Unit = { HomeNavigationBar(selected = tab, onSelect = { tab = it }) }
                 CompositionLocalProvider(LocalReportScreen provides ReportScreen(tab.reportPage)) {
                 when (tab) {
@@ -94,17 +97,18 @@ fun SignedInNavigation(user: SignedIn, viewModel: TripsViewModel, backStack: Nav
                         viewModel = viewModel,
                         uid = user.uid,
                         onOpenTrip = { backStack.add(TripDetail(it)) },
-                        onOpenSettings = { backStack.add(Settings) },
+                        onOpenSettings = openSettings,
                         bottomBar = bar,
                     )
-                    HomeTab.PROFILE -> ProfileScreen(viewModel = viewModel, bottomBar = bar)
-                    HomeTab.REPORTS -> ReportsScreen(viewModel = viewModel, onOpenTrip = { backStack.add(TripDetail(it)) }, bottomBar = bar)
+                    HomeTab.PROFILE -> ProfileScreen(viewModel = viewModel, onOpenSettings = openSettings, bottomBar = bar)
+                    HomeTab.REPORTS -> ReportsScreen(viewModel = viewModel, onOpenTrip = { backStack.add(TripDetail(it)) }, onOpenSettings = openSettings, bottomBar = bar)
                     HomeTab.CALENDAR -> CalendarScreen(
                         viewModel = viewModel,
                         uid = user.uid,
                         month = month,
                         onMonthChange = { month = it },
                         onOpenTrip = { backStack.add(TripDetail(it)) },
+                        onOpenSettings = openSettings,
                         bottomBar = bar,
                     )
                 }

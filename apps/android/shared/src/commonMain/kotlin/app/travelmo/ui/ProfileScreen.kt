@@ -127,7 +127,7 @@ import org.jetbrains.compose.resources.stringResource
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProfileScreen(viewModel: TripsViewModel, bottomBar: @Composable () -> Unit) {
+fun ProfileScreen(viewModel: TripsViewModel, onOpenSettings: () -> Unit, bottomBar: @Composable () -> Unit) {
     val profile by viewModel.ownProfile.collectAsStateWithLifecycle()
     val shared by viewModel.sharedProfiles.collectAsStateWithLifecycle()
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
@@ -155,7 +155,10 @@ fun ProfileScreen(viewModel: TripsViewModel, bottomBar: @Composable () -> Unit) 
             onDismiss = { editing = null },
         )
     }
-    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(Res.string.profile)) }, actions = { AppMenu() }) }, bottomBar = bottomBar) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(Res.string.profile)) }, actions = {
+        SettingsButton(onClick = onOpenSettings)
+        AppMenu()
+    }) }, bottomBar = bottomBar) { padding ->
         val list = rememberLazyListState()
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).scrollEdgeCue(list, scrollCueColors()), state = list, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
             val own = profile

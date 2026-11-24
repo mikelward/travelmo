@@ -31,7 +31,7 @@ class ProfileScreenTest {
 
     private fun show(store: TripStore) {
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL)
-        composeRule.setContent { TravelmoTheme { ProfileScreen(viewModel = viewModel, bottomBar = {}) } }
+        composeRule.setContent { TravelmoTheme { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = {}) } }
     }
 
     @Test

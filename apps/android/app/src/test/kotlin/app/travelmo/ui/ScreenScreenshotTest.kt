@@ -307,13 +307,13 @@ class ScreenScreenshotTest {
     @Test
     fun profile() {
         val viewModel = viewModel()
-        capture("profile") { ProfileScreen(viewModel = viewModel, bottomBar = { HomeNavigationBar(HomeTab.PROFILE) {} }) }
+        capture("profile") { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.PROFILE) {} }) }
     }
 
     @Test
     fun profile_dark() {
         val viewModel = viewModel()
-        capture("profile_dark", dark = true) { ProfileScreen(viewModel = viewModel, bottomBar = { HomeNavigationBar(HomeTab.PROFILE) {} }) }
+        capture("profile_dark", dark = true) { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.PROFILE) {} }) }
     }
 
     // The Profile scrolled to home: London since 2022 by a correction.
@@ -328,7 +328,7 @@ class ScreenScreenshotTest {
         store.rides.value = app.travelmo.data.RideSettings(homes = listOf(app.travelmo.core.HomeCorrection("London", "GB", "2022-01-15")))
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
         composeRule.setContent {
-            TravelmoTheme(darkTheme = dark) { ProfileScreen(viewModel = viewModel, bottomBar = { HomeNavigationBar(HomeTab.PROFILE) {} }) }
+            TravelmoTheme(darkTheme = dark) { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.PROFILE) {} }) }
         }
         composeRule.onNode(androidx.compose.ui.test.hasScrollToNodeAction()).performScrollToNode(androidx.compose.ui.test.hasText("Set"))
         composeRule.waitForIdle()
@@ -527,7 +527,7 @@ class ScreenScreenshotTest {
     fun calendar() {
         val viewModel = viewModel()
         capture("calendar") {
-            CalendarScreen(viewModel = viewModel, uid = OWNER, month = null, onMonthChange = {}, onOpenTrip = {}, bottomBar = { HomeNavigationBar(HomeTab.CALENDAR) {} })
+            CalendarScreen(viewModel = viewModel, uid = OWNER, month = null, onMonthChange = {}, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.CALENDAR) {} })
         }
     }
 
@@ -535,14 +535,14 @@ class ScreenScreenshotTest {
     fun calendar_dark() {
         val viewModel = viewModel()
         capture("calendar_dark", dark = true) {
-            CalendarScreen(viewModel = viewModel, uid = OWNER, month = null, onMonthChange = {}, onOpenTrip = {}, bottomBar = { HomeNavigationBar(HomeTab.CALENDAR) {} })
+            CalendarScreen(viewModel = viewModel, uid = OWNER, month = null, onMonthChange = {}, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.CALENDAR) {} })
         }
     }
 
     @Test
     fun reports() {
         val viewModel = viewModel()
-        capture("reports") { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, bottomBar = { HomeNavigationBar(HomeTab.REPORTS) {} }) }
+        capture("reports") { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.REPORTS) {} }) }
     }
 
     // A country opened to the trips with days there.
@@ -555,7 +555,7 @@ class ScreenScreenshotTest {
     private fun reportsCountry(name: String, dark: Boolean) {
         val viewModel = viewModel()
         composeRule.setContent {
-            TravelmoTheme(darkTheme = dark) { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, bottomBar = { HomeNavigationBar(HomeTab.REPORTS) {} }) }
+            TravelmoTheme(darkTheme = dark) { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.REPORTS) {} }) }
         }
         composeRule.onNodeWithText("Portugal").performScrollTo().performClick()
         composeRule.onNodeWithText("Lisbon · ", substring = true).performScrollTo()
@@ -573,7 +573,7 @@ class ScreenScreenshotTest {
     private fun reportsDownload(name: String, dark: Boolean) {
         val viewModel = viewModel()
         composeRule.setContent {
-            TravelmoTheme(darkTheme = dark) { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, bottomBar = { HomeNavigationBar(HomeTab.REPORTS) {} }) }
+            TravelmoTheme(darkTheme = dark) { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.REPORTS) {} }) }
         }
         composeRule.onNode(androidx.compose.ui.test.hasScrollToNodeAction()).performScrollToNode(androidx.compose.ui.test.hasText("Download CSV"))
         composeRule.waitForIdle()
@@ -583,7 +583,7 @@ class ScreenScreenshotTest {
     @Test
     fun reports_dark() {
         val viewModel = viewModel()
-        capture("reports_dark", dark = true) { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, bottomBar = { HomeNavigationBar(HomeTab.REPORTS) {} }) }
+        capture("reports_dark", dark = true) { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.REPORTS) {} }) }
     }
 
     // The residence and visa days below the map, on their own: home in London, so
