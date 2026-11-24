@@ -1723,13 +1723,38 @@ or points, miles, credits or nights) is never kept, and one already stored
 is left out when read. A number seen again (ignoring spaces, dashes and
 case, in a program sharing a distinctive word, or one whose name has none,
 such as "Privilege Club") is refreshed rather than added, keeping whose it
-was first seen to be, and the newest fifty are kept. A TripIt upload replaces its own sections and leaves these alone.
+was first seen to be. Every number is kept: the list is bounded only by
+Firestore's 1 MiB document limit, sharing the profile document with
+TripIt's details (up to 700,000 bytes): 300,000 bytes
+(`foundLoyaltyBudgetBytes`) and at most 2,000 entries (`maxFoundLoyalty`,
+which the rules check), which nobody reaches; past either a new number is refused
+rather than an old one dropped, and the parser logs `found_loyalty_full`
+(counts only). A TripIt upload replaces its own sections and leaves these alone.
 Profile's table and a booking's loyalty line read both (`allLoyalty`): what
 TripIt imported, then what emails showed that it did not have by number,
 each noting the email it came from. "Found in your emails" on the owner's
 own Profile lists them with Remove, since the extraction is sometimes
 wrong; the Android Profile tab and booking rows show them the same way,
 with the same Remove. Nothing is logged but counts.
+
+When how numbers are read changes, those already kept are brought up to
+it once (`foundLoyaltyRevision`, run in the background as the parser
+starts and marked done in the server-only `config/foundLoyaltyRevision`
+with its totals, `found_loyalty_revised`: users, entries fixed, emails read
+again, skipped and failed). First, from what is stored: each entry's
+program by `namedProgram` with the bookings its email made (its import
+record's), and whose it is from its holder by the owner's name, filling or
+correcting only the automatic `person`, never `loyaltyPeople`; entries that
+now name one membership are merged. Then an entry still with no holder or
+a program any could have ("Frequent Flyer") has its email read again from
+its mailbox, once per email and only from a Gmail, Fastmail or IMAP
+mailbox still connected, and the model's memberships replace that email's
+entries (keeping a balance or status the new read lacks; a read that finds
+none changes nothing). Trips, bookings and import records are never
+touched. An email that is gone, forwarded, or in a mailbox no longer
+connected is skipped, and a user that fails is logged and skipped, by
+counts and kinds of error only. The first step costs only Firestore reads;
+the second one model call per email that still needs it.
 
 The loyalty table is grouped by person: the owner's ("You") first, then
 each other person's under their name, the headings shown once any number is
@@ -2355,7 +2380,9 @@ list) wherever the rules or the parser decide, which Firestore bills as
 reads: a few per page opened or write made, and per background import. Gemini
 Flash-Lite costs a fraction of a cent per booking email, and an embedding
 of a few hundred tokens a hundredth of that; a hundred users importing
-fifty bookings a month is a few dollars. Geocoding is one call per place
+fifty bookings a month is a few dollars. Bringing stored loyalty numbers up to a new way of reading them
+(`foundLoyaltyRevision`) costs Firestore reads, plus one such model call per
+email that still needs reading again, once. Geocoding is one call per place
 name Travelmo has not seen before (a 20-year export needs a few hundred:
 about 240 for countries and 170 more for spots alone, which the daily cap
 spreads over two days), free up to the Geocoding API's monthly allowance and

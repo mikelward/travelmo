@@ -1,4 +1,4 @@
-import { withFoundLoyalty, type FoundLoyalty, type ParsedMessage, type PendingCancellation, type Segment, type Trip } from "@travelmo/core";
+import { withFoundLoyalties, type FoundLoyalty, type ParsedMessage, type PendingCancellation, type Segment, type Trip } from "@travelmo/core";
 import { changeClaimable, claimable, reclaimable, retryable, type TripStore, type TripTx } from "./importer";
 import { addExample, emptyExamples, type Examples } from "./similarity";
 
@@ -149,7 +149,9 @@ export function memoryStore(): Memory {
     senderPatterns: async () => ({ allow: [], deny: [] }),
     ownerName: async (uid) => ownerNames.get(uid),
     addFoundLoyalty: async (uid, found) => {
-      foundLoyalty.set(uid, found.reduce(withFoundLoyalty, foundLoyalty.get(uid) ?? []));
+      const { found: next, refused } = withFoundLoyalties(foundLoyalty.get(uid) ?? [], found);
+      foundLoyalty.set(uid, next);
+      return { refused };
     },
     newId: () => `trip${++ids}`,
   };

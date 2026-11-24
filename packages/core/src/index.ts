@@ -39,3 +39,4 @@ export * from "./calendarResult";
 export * from "./checklist";
 export * from "./airlinePrograms";
 export * from "./tripsExport";
+export * from "./foundLoyalty";

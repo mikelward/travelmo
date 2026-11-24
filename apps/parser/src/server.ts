@@ -155,6 +155,7 @@ import {
 import { continueBackfill, parseContinuePush, startBackfill, stopBackfill, type ChainIo, type ContinueMessage } from "./backfillChain";
 import { pubsubPublisher } from "./publish";
 import { sealStoredCredentials } from "./sealStored";
+import { reviseFoundLoyaltyOnce } from "./loyaltyRevision";
 import { googleKmsClient, kmsSealer, useSealer } from "./sealing";
 
 // How long one backfill request may spend waiting its turn and importing.
@@ -256,7 +257,7 @@ const deps: ImportDeps = {
     : {}),
   homeOverrides: (uid) => loadHomeOverrides(db, uid, (event, fields) => log("WARNING", event, fields)),
   now: () => new Date().toISOString(),
-  log: (event, fields) => log("INFO", event, fields),
+  log: (event, fields, severity) => log(severity ?? "INFO", event, fields),
 };
 
 type Env = { Variables: { uid: string } };
@@ -827,6 +828,27 @@ app.post("/trips/delete-all", async (c) => {
   return c.json(result);
 });
 
+// The connected mailbox an import record's email is in, and the id it is
+// fetched by; undefined when that mailbox isn't connected. The record's id
+// says which: Fastmail's and IMAP ones carry their prefix (an IMAP one its
+// mailbox's key too), Gmail's name their mailbox (gmail.ts's
+// sourceMailbox). `background`: an IMAP mailbox whose login last failed is
+// not tried again yet (imap.ts's connectMailbox).
+async function recordMailbox(uid: string, messageId: string, background = false): Promise<{ source: MailSource; id: string } | undefined> {
+  if (messageId.startsWith(imapRecordPrefix)) {
+    // By its record key: the address on the server it was read from.
+    const parsed = parseImapRecordId(messageId);
+    const state = parsed && (await loadImapMailboxes(db, uid)).find((m) => imapRecordKey(m.emailAddress, m.host, m.port) === parsed.key);
+    return state ? { source: imapMailSource(uid, state, background), id: messageId } : undefined;
+  }
+  if (messageId.startsWith(fastmailRecordPrefix)) {
+    const state = await loadFastmailState(db, uid);
+    return state ? { source: fastmailMailSource(state), id: messageId } : undefined;
+  }
+  const state = sourceMailbox(messageId, await loadMailboxes(db, uid));
+  return state ? { source: gmailMailSource(state), id: messageId.slice((state.idPrefix ?? "").length) } : undefined;
+}
+
 // A second look at one message the user picked from the review list: the
 // pre-filter is skipped, and an earlier non-booking outcome no longer stands
 // in the way. An import already under way, or already done, does.
@@ -836,30 +858,16 @@ app.post("/gmail/reimport", async (c) => {
   const uid = await requireUser(c);
   const body = (await c.req.json().catch(() => ({}))) as { messageId?: string };
   if (!body.messageId) throw new HTTPException(400, { message: "Missing messageId" });
-  // The record's id says which mailbox the email is in: Fastmail's and
-  // IMAP ones carry their prefix (an IMAP one its mailbox's key too),
-  // Gmail's name their mailbox (gmail.ts's sourceMailbox).
+  // Which kind of mailbox, for what to say when it fails (recordMailbox).
   const fastmail = body.messageId.startsWith(fastmailRecordPrefix);
   const imap = body.messageId.startsWith(imapRecordPrefix);
   const name = fastmail ? "Fastmail" : imap ? "that mailbox" : "Gmail";
-  let source: MailSource;
-  let id = body.messageId;
-  if (imap) {
-    // By its record key: the address on the server it was read from.
-    const parsed = parseImapRecordId(body.messageId);
-    const state = parsed && (await loadImapMailboxes(db, uid)).find((m) => imapRecordKey(m.emailAddress, m.host, m.port) === parsed.key);
-    if (!state) throw new HTTPException(409, { message: "The mailbox this email is in isn't connected" });
-    source = imapMailSource(uid, state);
-  } else if (fastmail) {
-    const state = await loadFastmailState(db, uid);
-    if (!state) throw new HTTPException(409, { message: "Fastmail not connected" });
-    source = fastmailMailSource(state);
-  } else {
-    const state = sourceMailbox(body.messageId, await loadMailboxes(db, uid));
-    if (!state) throw new HTTPException(409, { message: "The Gmail account this email is in isn't connected" });
-    source = gmailMailSource(state);
-    id = body.messageId.slice((state.idPrefix ?? "").length);
+  const mailbox = await recordMailbox(uid, body.messageId);
+  if (!mailbox) {
+    const message = imap ? "The mailbox this email is in isn't connected" : fastmail ? "Fastmail not connected" : "The Gmail account this email is in isn't connected";
+    throw new HTTPException(409, { message });
   }
+  const { source, id } = mailbox;
   let message;
   try {
     message = await source.fetch(id);
@@ -1889,6 +1897,17 @@ void moveLegacyMailboxes(db, log)
       log("INFO", "credentials_sealed", await sealStoredCredentials(db, log));
     } catch (error) {
       log("ERROR", "credentials_seal_failed", errorKind(error));
+    }
+  })
+  // Then, once per revision, loyalty numbers kept by earlier versions are
+  // filed as they would be now (loyaltyRevision.ts), reading again only
+  // the emails that need it.
+  .then(async () => {
+    try {
+      const result = await reviseFoundLoyaltyOnce({ db, extract: deps.extract, mailbox: (uid, messageId) => recordMailbox(uid, messageId, true), now: deps.now, log });
+      if (result) log("INFO", "found_loyalty_revised", result);
+    } catch (error) {
+      log("ERROR", "found_loyalty_revision_failed", errorKind(error));
     }
   });
 

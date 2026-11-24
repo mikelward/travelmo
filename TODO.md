@@ -436,15 +436,16 @@ Kotlin Multiplatform, sharing the Android app's Kotlin (SPEC "iOS app").
 
 Guesses made on autopilot; change any of them freely.
 
-- Fastmail: a connected Fastmail address does not count as a confirmed
-  address for sharing (a connected Gmail does), and two users may connect
-  the same Fastmail mailbox, since the token is proof of access; both can
-  change when Gmail moves into the same list of mailboxes.
+- Fastmail: two users may connect the same Fastmail mailbox, since the
+  token is proof of access. (Settled by the maintainer: a connected
+  Fastmail or IMAP address does not count as a confirmed address for
+  sharing; confirming it under Email addresses is enough.)
 - Fastmail: only read-only tokens are accepted, and new mail is polled
   every five minutes (about ten cents a month for the scheduler job).
-- IMAP: up to five mailboxes per account, as Gmail's; like Fastmail, a
-  connected IMAP address does not count as a confirmed one, and two users
-  may connect the same mailbox (the password is proof of access).
+- IMAP: up to five mailboxes per account, as Gmail's; like Fastmail, two
+  users may connect the same mailbox (the password is proof of access).
+- Loyalty revision: when reading an email again finds no numbers at all,
+  the numbers kept from it stay as they were rather than being removed.
 - IMAP: only the inbox is read, new mail and backfill alike; archive
   folders (iCloud's Archive, Yahoo's) are not, and the statements search
   is not narrowed to travel programs' senders (the pre-filter does it).

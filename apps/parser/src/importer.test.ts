@@ -1,4 +1,4 @@
-import { gmailIdPrefix, parseIcs, parseTripItExport, type ExtractedBooking, type ExtractedSegment, type ParsedMessage, type Segment, type Trip } from "@travelmo/core";
+import { gmailIdPrefix, maxFoundLoyalty, parseIcs, parseTripItExport, type ExtractedBooking, type ExtractedSegment, type ParsedMessage, type Segment, type Trip } from "@travelmo/core";
 import { recordedAs, type EmailMessage } from "./gmail";
 import {
   claimLeaseMs,
@@ -217,6 +217,19 @@ describe("importMessage", () => {
       expect.objectContaining({ program: "United MileagePlus", number: "UA-*****166", holder: "Jessica Example", person: "Jessica Example" }),
     ]);
     expect(store.foundLoyalty.get("u1")?.[0]).not.toHaveProperty("person");
+  });
+
+  it("keeps every number already found when the list is full, saying so in the logs by count", async () => {
+    const store = memoryStore();
+    const full = Array.from({ length: maxFoundLoyalty }, (_, i) => ({ program: "Example Air Club", number: `EA${i}`, messageId: `old${i}`, at: "2026-10-01T00:00:00Z" }));
+    store.foundLoyalty.set("u1", full);
+    const withNumbers: ExtractedBooking = { ...flight, memberships: [{ program: "Example Air Club", number: "EA 999 000" }] };
+    const logged: unknown[] = [];
+    const log: ImportDeps["log"] = (event, fields, severity) => void logged.push({ event, severity, ...fields });
+    expect(await importMessage("u1", email(), { ...deps(store, async () => withNumbers), log })).toBe("imported");
+    expect(store.foundLoyalty.get("u1")).toEqual(full);
+    expect(logged).toContainEqual({ event: "found_loyalty_full", severity: "WARNING", uid: "u1", messageId: "m1", refused: 1 });
+    expect(JSON.stringify(logged)).not.toContain("EA 999 000");
   });
 
   it("keeps no membership from an email that books no travel, nor from one that is no booking", async () => {

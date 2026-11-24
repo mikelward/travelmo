@@ -571,7 +571,15 @@ export const FoundLoyalty = ExtractedMembership.extend({
   person: z.string().min(1).max(80).optional(),
 });
 export type FoundLoyalty = z.infer<typeof FoundLoyalty>;
-export const maxFoundLoyalty = 50;
+// Safety bounds, not limits anyone reaches. Firestore keeps a document to
+// 1 MiB (1,048,576 bytes); the travel profile's imported details may take
+// 700,000 of it (profileBudgetBytes), and its other fields stay well under
+// 48,576, which leaves 300,000 for found numbers. An entry is ~150–500
+// bytes, so that is 600 to 2,000 of them; the count is what the security
+// rules can check. Past either a new number is refused, never an old one
+// dropped (withFoundLoyalty), and the parser logs it.
+export const maxFoundLoyalty = 2000;
+export const foundLoyaltyBudgetBytes = 300_000;
 
 // Whom the owner says a membership belongs to, over what the email said:
 // a name, or nobody for themself.

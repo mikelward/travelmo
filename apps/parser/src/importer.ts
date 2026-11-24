@@ -39,7 +39,6 @@ import {
   segmentDateRange,
   segmentSources,
   stableHash,
-  namedProgram,
   type ExtractedSegment,
   needsGeocoding,
   type GeocodeLookup,
@@ -51,9 +50,7 @@ import {
   type Trip,
   type TripItImport,
   untimedMatchDays,
-  couldBeOwner,
-  isMembershipNumber,
-  personName,
+  foundLoyaltyFrom,
   type ExtractedMembership,
   type FoundLoyalty,
 } from "@travelmo/core";
@@ -197,8 +194,9 @@ export type TripStore = {
   // The name on the user's account (their Google profile's), if known.
   ownerName(uid: string): Promise<string | undefined>;
   // Adds loyalty memberships read from the user's booking emails to their
-  // travel profile (withFoundLoyalty), starting the profile if need be.
-  addFoundLoyalty(uid: string, found: readonly FoundLoyalty[]): Promise<void>;
+  // travel profile (withFoundLoyalties), starting the profile if need be;
+  // `refused`: new ones left out because the list was full.
+  addFoundLoyalty(uid: string, found: readonly FoundLoyalty[]): Promise<{ refused: number }>;
   // Embeddings of emails the model has judged for this user (see similarity.ts).
   examples(uid: string): Promise<Examples>;
   saveExample(uid: string, label: ExampleLabel, example: Example): Promise<void>;
@@ -222,7 +220,8 @@ export type ImportDeps = {
   // they win over the home worked out from journeys for their dates.
   homeOverrides?: (uid: string) => Promise<readonly HomePeriod[]>;
   now: () => string;
-  log: (event: string, fields: Record<string, unknown>) => void;
+  // At INFO unless said otherwise.
+  log: (event: string, fields: Record<string, unknown>, severity?: "WARNING") => void;
 };
 
 export type ImportOutcome = Exclude<ParsedMessage["outcome"], "processing"> | "skipped";
@@ -529,38 +528,19 @@ async function keepMemberships(
 ): Promise<void> {
   try {
     const owner = await deps.store.ownerName(uid);
-    // A balance read as a number is no membership. One whose name is not
-    // the owner's is someone they book for: kept as theirs (`person`).
-    const kept = memberships.filter((m) => isMembershipNumber(m.number));
+    // A balance and a status are as of when the email was sent, so an older
+    // one never replaces a newer (withFoundLoyalty). How each is filed:
+    // foundLoyaltyFrom.
+    const kept = foundLoyaltyFrom(memberships, segments, owner, { messageId: message.id, label: message.subject, at, ...(sent ? { sent } : {}) });
     if (kept.length) {
-      await deps.store.addFoundLoyalty(
-        uid,
-        // A balance and a status are as of when the email was sent, so an
-        // older one never replaces a newer (withFoundLoyalty).
-        // A number under a generic label ("Frequent Flyer") is filed under
-        // its airline's program (namedProgram).
-        kept.map((m) => ({
-          ...m,
-          program: namedProgram(m, segments),
-          ...personOf(m.holder, owner),
-          messageId: message.id,
-          label: message.subject,
-          at,
-          ...(m.balance ? { balanceAt: sent ?? at } : {}),
-          ...(m.status ? { statusAt: sent ?? at } : {}),
-        })),
-      );
+      const { refused } = await deps.store.addFoundLoyalty(uid, kept);
+      // Never reached in practice (maxFoundLoyalty); counts only.
+      if (refused) deps.log("found_loyalty_full", { uid, messageId: message.id, refused }, "WARNING");
     }
     deps.log("memberships", { uid, messageId: message.id, found: memberships.length, kept: kept.length });
   } catch (error) {
     deps.log("memberships_failed", { uid, messageId: message.id, reason: (error as Error).message });
   }
-}
-
-// Whose a membership is, when the email names someone other than the owner.
-function personOf(holder: string | undefined, owner: string | undefined): { person?: string } {
-  const person = holder && !couldBeOwner(holder, owner) ? personName(holder) : undefined;
-  return person ? { person } : {};
 }
 
 // What a membership number is kept from: an email booking one of these.
@@ -591,7 +571,7 @@ function sentAt(date: string | undefined): string | undefined {
 // dated by its original's Date line, never the forward's: an old
 // confirmation forwarded today is still old. Unknown when that line is
 // missing or unreadable, which orders it against nothing.
-function originalSentAt(message: EmailMessage, source: string): string | undefined {
+export function originalSentAt(message: EmailMessage, source: string): string | undefined {
   const forwarded = source === "forward" || stripForwardPrefix(message.subject) !== message.subject.trim();
   return forwarded ? unwrapForwarded(message).date : sentAt(message.date);
 }

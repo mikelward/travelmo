@@ -94,7 +94,7 @@ describe("firestoreStore loyalty from emails", () => {
   it("starts the profile, then refreshes a number seen again, leaving TripIt's sections alone", async () => {
     const uid = unique();
     const seen = { program: "Example Air Club", number: "EA 123", messageId: "m1", label: "Your flight", at: at(0) };
-    await store.addFoundLoyalty(uid, [seen]);
+    expect(await store.addFoundLoyalty(uid, [seen])).toEqual({ refused: 0 });
     const ref = db.doc(paths.travelProfile(uid));
     expect((await ref.get()).data()).toMatchObject({ ownerUid: uid, trustedEmails: [], foundLoyalty: [seen] });
     await ref.set({ loyalty: [{ title: "Imported", fields: [] }] }, { merge: true });

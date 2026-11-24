@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { allLoyalty, couldBeOwner, foundLoyaltyEntry, formatBalance, loyaltyByPerson, loyaltyLine, loyaltySummary, nameWords, personName, programsFor, withFoundLoyalty, withLoyaltyPerson } from "./loyalty";
-import { isMembershipNumber, maxFoundLoyalty, TravelProfile, type FoundLoyalty, type ProfileEntry } from "./schema";
+import { allLoyalty, couldBeOwner, foundLoyaltyEntry, formatBalance, loyaltyByPerson, loyaltyLine, loyaltySummary, nameWords, personName, programsFor, withFoundLoyalties, withFoundLoyalty, withLoyaltyPerson } from "./loyalty";
+import { foundLoyaltyBudgetBytes, isMembershipNumber, maxFoundLoyalty, TravelProfile, type FoundLoyalty, type ProfileEntry } from "./schema";
 
 // Invented programs and numbers.
 const air: ProfileEntry = {
@@ -174,11 +174,29 @@ describe("loyalty from emails", () => {
     expect(withFoundLoyalty(withFoundLoyalty([], ba), { ...ba, program: "ba ", messageId: "m2" })).toHaveLength(1);
   });
 
-  it("keeps the newest when the list is full", () => {
+  it("keeps every number, refusing a new one only once the list is full, never dropping one", () => {
     let found: FoundLoyalty[] = [];
-    for (let i = 0; i < maxFoundLoyalty + 1; i++) found = withFoundLoyalty(found, seen(`n${i}`));
-    expect(found).toHaveLength(maxFoundLoyalty);
-    expect(found[0]!.number).toBe("n1");
+    // Past the fifty once kept, every one stays.
+    for (let i = 0; i < 51; i++) found = withFoundLoyalty(found, seen(`n${i}`));
+    expect(found).toHaveLength(51);
+    expect(found[0]!.number).toBe("n0");
+    const full = Array.from({ length: maxFoundLoyalty }, (_, i) => seen(`n${i}`));
+    expect(withFoundLoyalty(full, seen("new"))).toEqual(full);
+    expect(withFoundLoyalties(full, [seen("new"), seen("n3", { status: "Gold" })])).toEqual({
+      found: [...full.filter((f) => f.number !== "n3"), seen("n3", { status: "Gold" })],
+      refused: 1,
+    });
+  });
+
+  it("refuses a new number once the list would outgrow its share of the profile document", () => {
+    // Long email subjects: the size fills before the count does.
+    const long = Array.from({ length: 400 }, (_, i) => seen(`n${i}`, { label: "x".repeat(1000) }));
+    const { found, refused } = withFoundLoyalties([], long);
+    expect(refused).toBeGreaterThan(0);
+    expect(found.length + refused).toBe(400);
+    expect(new TextEncoder().encode(JSON.stringify(found)).length).toBeLessThanOrEqual(foundLoyaltyBudgetBytes);
+    // One already kept is still refreshed.
+    expect(withFoundLoyalties(found, [seen("n0", { status: "Gold" })]).refused).toBe(0);
   });
 
   it("tells the owner's membership from a fellow traveler's by name", () => {
