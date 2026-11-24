@@ -122,7 +122,7 @@ import org.jetbrains.compose.resources.stringResource
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, bottomBar: @Composable () -> Unit) {
+fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpenSettings: () -> Unit, bottomBar: @Composable () -> Unit) {
     val all by viewModel.reportTrips.collectAsStateWithLifecycle()
     val homes by viewModel.reportHomes.collectAsStateWithLifecycle()
     var year by rememberSaveable { mutableStateOf<String?>(null) }
@@ -132,7 +132,10 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, botto
     val report = remember(input, today, year) { if (year == null) whole else input?.let { travelReport(it, today, year) } }
     val titles = remember(input) { displayTitles(input.orEmpty().map { it.trip }) }
     val favorites = remember(input) { input?.let { trips -> favoritePlaces(trips.map { TripWithBookings(it.trip, it.segments) }) }.orEmpty() }
-    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(Res.string.reports_title)) }, actions = { AppMenu() }) }, bottomBar = bottomBar) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(Res.string.reports_title)) }, actions = {
+        SettingsButton(onClick = onOpenSettings)
+        AppMenu()
+    }) }, bottomBar = bottomBar) { padding ->
         if (whole == null || report == null) {
             Text(stringResource(Res.string.reports_loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp))
             return@Scaffold

@@ -30,7 +30,7 @@ class ResidenceDaysTest {
 
     private fun show(store: FakeTripStore) {
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
-        composeRule.setContent { TravelmoTheme { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, bottomBar = {}) } }
+        composeRule.setContent { TravelmoTheme { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = {}) } }
     }
 
     @Test

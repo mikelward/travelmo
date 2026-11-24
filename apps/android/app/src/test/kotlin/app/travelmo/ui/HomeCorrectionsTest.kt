@@ -45,7 +45,7 @@ class HomeCorrectionsTest {
         val store = FakeTripStore()
         store.rides.value = RideSettings(homes = listOf(london))
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL)
-        composeRule.setContent { TravelmoTheme { ProfileScreen(viewModel = viewModel, bottomBar = {}) } }
+        composeRule.setContent { TravelmoTheme { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = {}) } }
         return store
     }
 

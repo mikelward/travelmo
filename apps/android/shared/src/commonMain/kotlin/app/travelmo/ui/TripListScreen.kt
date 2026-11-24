@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -66,7 +65,6 @@ import app.travelmo.shared.searching_bookings
 import app.travelmo.shared.section_now
 import app.travelmo.shared.section_past
 import app.travelmo.shared.section_upcoming
-import app.travelmo.shared.settings
 import app.travelmo.shared.staying_at
 import app.travelmo.shared.trip_all_cancelled
 import app.travelmo.shared.trips_empty
@@ -98,9 +96,7 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
             TopAppBar(
                 title = { Brand() },
                 actions = {
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Filled.Settings, contentDescription = stringResource(Res.string.settings))
-                    }
+                    SettingsButton(onClick = onOpenSettings)
                     AppMenu()
                 },
             )

@@ -4,8 +4,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -17,8 +19,20 @@ import app.travelmo.shared.nav_calendar
 import app.travelmo.shared.nav_profile
 import app.travelmo.shared.nav_reports
 import app.travelmo.shared.nav_trips
+import app.travelmo.shared.settings
 import app.travelmo.ui.theme.TravelmoTheme
 import org.jetbrains.compose.resources.stringResource
+
+/**
+ * Settings, as a gear in the top bar of every tab, before the menu. Pages
+ * opened over the tabs have a back arrow instead.
+ */
+@Composable
+fun SettingsButton(onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        Icon(Icons.Filled.Settings, contentDescription = stringResource(Res.string.settings))
+    }
+}
 
 /** The destinations the navigation bar switches between, as the web's navigation has them. */
 enum class HomeTab { TRIPS, CALENDAR, REPORTS, PROFILE }

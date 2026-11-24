@@ -31,7 +31,7 @@ class ReportsScreenTest {
     fun `a country opens to the trips with days there, each opening its trip`() {
         val opened = mutableListOf<String>()
         val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
-        composeRule.setContent { TravelmoTheme { ReportsScreen(viewModel = viewModel, onOpenTrip = { opened += it }, bottomBar = {}) } }
+        composeRule.setContent { TravelmoTheme { ReportsScreen(viewModel = viewModel, onOpenTrip = { opened += it }, onOpenSettings = {}, bottomBar = {}) } }
         composeRule.onNodeWithText("Portugal").performScrollTo().performClick()
         composeRule.onNodeWithText("Lisbon · ", substring = true).performScrollTo().performClick()
         composeRule.waitForIdle()
@@ -41,7 +41,7 @@ class ReportsScreenTest {
     @Test
     fun `downloads trips by place and abroad only through the file picker`() {
         val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
-        composeRule.setContent { TravelmoTheme { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, bottomBar = {}) } }
+        composeRule.setContent { TravelmoTheme { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = {}) } }
         composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Download CSV"))
         composeRule.onNodeWithText("One row per place").performClick()
         composeRule.onNodeWithText("Outside my home country only").performClick()
