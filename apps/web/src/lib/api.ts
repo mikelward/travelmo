@@ -1,5 +1,5 @@
 import type { User } from "firebase/auth";
-import { accountDeletePath, backfillStartPath, backfillStopPath, calendarConnectPath, calendarDisconnectPath, calendarExportIssuePath, calendarSelectPath, calendarExportStopPath, deleteAllTripsPath, fastmailBackfillStartPath, fastmailBackfillStopPath, fastmailConnectPath, fastmailDisconnectPath, feedAddPath, imapBackfillStartPath, imapBackfillStopPath, imapConnectPath, imapDisconnectPath, feedRemovePath, forwardIssuePath, forwardStopPath, gmailConnectPath, gmailDisconnectPath, isDeletionUnfinished, linkRefusalText, refusalOf, refreshPath, refreshStopPath, regroupPath, type AccountAccess, type CalendarExport, type ForwardAddress, type RegroupResult } from "@travelmo/core";
+import { accountDeletePath, bugReportFailure, bugReportPath, type BugReport, backfillStartPath, backfillStopPath, calendarConnectPath, calendarDisconnectPath, calendarExportIssuePath, calendarSelectPath, calendarExportStopPath, deleteAllTripsPath, fastmailBackfillStartPath, fastmailBackfillStopPath, fastmailConnectPath, fastmailDisconnectPath, feedAddPath, imapBackfillStartPath, imapBackfillStopPath, imapConnectPath, imapDisconnectPath, feedRemovePath, forwardIssuePath, forwardStopPath, gmailConnectPath, gmailDisconnectPath, isDeletionUnfinished, linkRefusalText, refusalOf, refreshPath, refreshStopPath, regroupPath, type AccountAccess, type CalendarExport, type ForwardAddress, type RegroupResult } from "@travelmo/core";
 import type { CalendarResult } from "./ics";
 import type { TripItResult } from "./tripit";
 
@@ -63,6 +63,27 @@ async function post<T>(user: User, path: string, body: unknown = {}, plain = fal
   return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
 }
 
+// Sends a bug report; a failure says why in the user's words, from the
+// status alone (SPEC "Bug reports").
+async function sendBugReport(user: User, report: BugReport): Promise<void> {
+  const token = await user.getIdToken();
+  let response: Response;
+  try {
+    response = await fetch(`${parserUrl()}${bugReportPath}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(report),
+    });
+  } catch (error) {
+    console.error("Sending the bug report failed: the parser could not be reached", error);
+    throw new Error(bugReportFailure(null));
+  }
+  if (!response.ok) {
+    console.error(`Sending the bug report failed: ${response.status}`);
+    throw new Error(bugReportFailure(response.status));
+  }
+}
+
 export const api = {
   connectGmail: (user: User) => post<{ url: string }>(user, gmailConnectPath),
   completeGmail: (user: User, state: string) => post<{ emailAddress: string }>(user, "/gmail/complete", { state }),
@@ -110,5 +131,6 @@ export const api = {
   // server; its progress shows on the profile.
   refreshFromEmail: (user: User, restart = false) => post<BackfillStarted>(user, refreshPath, restart ? { restart } : {}, true),
   stopRefresh: (user: User) => post<void>(user, refreshStopPath),
+  sendBugReport,
   refreshFlights: (user: User, tripId: string) => post<{ enabled: boolean; checked?: number }>(user, "/flights/refresh", { tripId }),
 };

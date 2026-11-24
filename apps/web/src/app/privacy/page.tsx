@@ -139,8 +139,8 @@ export default function PrivacyPage() {
             <strong>Cloudflare</strong> receives emails you forward to your Travelmo address and passes them on.
           </li>
           <li>
-            <strong>An email delivery service</strong> sends the reminders you ask for by email, and your browser&apos;s
-            push service delivers the notifications you turn on in a browser.
+            <strong>An email delivery service</strong> sends the reminders you ask for by email and the bug reports you
+            send, and your browser&apos;s push service delivers the notifications you turn on in a browser.
           </li>
         </ul>
         <p>
@@ -156,7 +156,23 @@ export default function PrivacyPage() {
       <Section title="On your phone">
         <p>
           The Android app keeps a debug log on the phone to help fix bugs. It records what the app did, never your bookings
-          or addresses, and leaves the phone only if you share it from Settings.
+          or addresses, and leaves the phone only if you share it or send it with a bug report.
+        </p>
+      </Section>
+
+      <Section title="Bug reports you send">
+        <p>
+          When you report a bug from the web or the Android app, Travelmo emails the report to its maintainer, who reads it
+          only to fix the problem and replies to the address you sign in with. A report has what you wrote, the page or
+          screen you sent it from, the app&apos;s version and, on the web, your browser. From the Android app it also has
+          the app&apos;s debug log and a screenshot of the screen, which can show trips and names. Sent from a trip&apos;s
+          page, it always has that trip&apos;s bookings, including addresses, confirmation numbers and names, and never
+          another trip&apos;s. Travelmo keeps a copy of what you wrote, without the log, screenshot or bookings, until you
+          delete your account. The emailed report stays with the maintainer; to have it deleted, email{" "}
+          <a href={`mailto:${CONTACT}`} className="underline">
+            {CONTACT}
+          </a>
+          .
         </p>
       </Section>
 
@@ -176,7 +192,7 @@ export default function PrivacyPage() {
         <p>
           Your data stays until you delete it. Deleting a trip or booking removes it; disconnecting Gmail or Google Calendar
           removes Travelmo&apos;s access, and disconnecting Fastmail or another email account deletes its token or app password. Deleting your account in Settings removes your trips, bookings, travel profile,
-          reminders, connections and access record, and takes you off trips others shared with you; bookings you added to someone else&apos;s trip stay
+          reminders, connections, access record and the copies of bug reports you sent, and takes you off trips others shared with you; bookings you added to someone else&apos;s trip stay
           with that trip. Service logs are kept for 30 days.
         </p>
         <p>

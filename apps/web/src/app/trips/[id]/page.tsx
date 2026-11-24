@@ -25,6 +25,7 @@ import { usePeopleDocuments, useTripWarnings } from "@/lib/documents";
 import { useTravelProfile } from "@/lib/travelProfile";
 import { BeforeYouGo } from "@/components/Checklist";
 import { useTripChecklist } from "@/lib/checklist";
+import { useReportTrip } from "@/components/ReportBug";
 import { useAddresses, useNow, useProfile, useSegments, useSenderPatterns, useTrip, useTrips } from "@/lib/trips";
 import { flightLinesFor, useFlightRefresh, useFlightStatuses } from "@/lib/flightStatus";
 
@@ -283,6 +284,8 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   useSaveForOffline();
   const trip = useTrip(tripId);
   const segments = useSegments(tripId);
+  // A bug report sent from here carries this trip's bookings.
+  useReportTrip(trip, segments);
   const now = useNow();
   const flightStatuses = useFlightStatuses(segments, now);
   useFlightRefresh(user, tripId, segments, flightStatuses, now);
