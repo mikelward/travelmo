@@ -66,6 +66,11 @@ export function TripCard({
               {next.when}
             </p>
             {next.step && <p data-testid="trip-next-step">{next.step}</p>}
+            {next.then && (
+              <p className="text-muted" data-testid="trip-next-then">
+                {next.then}
+              </p>
+            )}
           </div>
         )}
       </Link>

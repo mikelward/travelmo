@@ -288,9 +288,20 @@ passed) the card turns to the arrival ("Arrives in 6 h 10 min · Tue 24 Nov
 and where the bags come out ("Terminal E · Gate B5 · Bags on carousel 7").
 A cancelled or diverted flight says so instead, and nothing known means no
 third line. A flight late leaving stays the next event past its booked
-time, counted to its estimate. The list reads the status of each card
-under way's next flight only, one listener each, while a trip page would
-show it.
+time, counted to its estimate, and a flight in the air stays the card's
+until it lands (the service's landing, else its estimate, else as booked),
+whatever was booked before then: a car booked for the scheduled landing
+waits for the real one. For an hour after a landing the card keeps to the
+flight ("Landed 12 min ago · Tue 24 Nov 20:30"), its arrival terminal, gate
+and carousel, and a fourth line, muted, says what comes next: first
+anything booked to start while it was in the air, which has not happened
+yet, else the next booking, with a flight's own gate ("Then Hertz at Boston
+Logan · Pick up Tue 24 Nov 20:15"; "Then B6 1 BOS to JFK · Departs in 38
+min · Tue 24 Nov 21:30 · Gate C22"). With no word from the service, nothing
+is known of the gate or carousel, and what was booked during the flight is
+the card's for that hour. The list reads the status of each card's next
+flight and of any flight booked to have left that may be under way, one
+listener each, while a trip page would show it.
 The same card names the stay under way and when it ends; and, for the next flight, when
 online check-in opens from a day before that, then that it is open, with
 the booking reference at hand (`packages/core/src/status.ts`). The window
