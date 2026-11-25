@@ -386,7 +386,7 @@ class TripsViewModel(
     val deletionUnfinished: StateFlow<Boolean> = _deletionUnfinished
 
     /** Works out [block] on [compute], when given, rather than on the main thread. */
-    private suspend fun <T> computed(block: () -> T): T = compute?.let { withContext(it) { block() } } ?: block()
+    suspend fun <T> computed(block: () -> T): T = compute?.let { withContext(it) { block() } } ?: block()
 
     init {
         // The tables the list's cards read (each trip's landmark, a missing journey's airports) are parsed on first
@@ -613,12 +613,20 @@ class TripsViewModel(
     // Trips whose flags are being repaired now: one repair at a time each.
     private val repairing = mutableSetOf<String>()
 
-    // Every trip's bookings, by trip, null until each has answered.
-    private fun allSegments(): Flow<List<TripWithSegments>?> = trips.flatMapLatest { list ->
-        when {
-            list == null -> flowOf(null)
-            list.isEmpty() -> flowOf(emptyList())
-            else -> combine(list.map { trip -> segments(trip.id).map { TripWithSegments(trip, it) } }) { it.toList() }
+    // Every trip's bookings, by trip, null until each has answered. Listened to again only when which trips they are
+    // changes: a change to a trip itself (its flags recorded, its dates widened) keeps every listener, where restarting
+    // them all made the reports wait for every trip's bookings again, and work everything out again, each time.
+    private fun allSegments(): Flow<List<TripWithSegments>?> {
+        val byTrip: Flow<Map<String, List<Segment>>?> = trips.map { list -> list?.map { it.id }?.sorted() }.distinctUntilChanged().flatMapLatest { ids ->
+            when {
+                ids == null -> flowOf(null)
+                ids.isEmpty() -> flowOf(emptyMap())
+                else -> combine(ids.map { id -> segments(id).map { id to it } }) { it.toMap() }
+            }
+        }
+        // A trip just added waits out of the list until its bookings answer.
+        return combine(trips, byTrip) { list, segments ->
+            if (list == null || segments == null) null else list.mapNotNull { trip -> segments[trip.id]?.let { TripWithSegments(trip, it) } }
         }
     }
 
@@ -867,14 +875,24 @@ class TripsViewModel(
      * Profile and the web's reports page work it out; null until both answer.
      */
     val reportHomes: StateFlow<List<HomePeriod>?> = combine(reportTrips, rideSettings) { trips, settings ->
-        if (trips == null || settings == null) {
-            null
-        } else {
-            // Each with its airports: those chosen on Profile, else those its round trips leave from.
-            val segments = trips.filter { it.trip.ownerUid == uid }.flatMap { it.segments }
-            withChosenAirports(withHomeAirports(effectiveHomes(homeTimeline(segments), settings.homes), segments), settings.homeAirports)
-        }
+        if (trips == null || settings == null) null else computed { homesOf(trips, settings) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /**
+     * [reportHomes] worked out now, from what the reports last read, for the trips download: home is worked out
+     * only for what asks for it, as it takes a while. Empty until the reports and the user document have answered.
+     */
+    fun reportHomesNow(): List<HomePeriod> {
+        val trips = reportTrips.value ?: return emptyList()
+        val settings = rideSettings.value ?: return emptyList()
+        return homesOf(trips, settings)
+    }
+
+    // Each with its airports: those chosen on Profile, else those its round trips leave from.
+    private fun homesOf(trips: List<TripWithSegments>, settings: RideSettings): List<HomePeriod> {
+        val segments = trips.filter { it.trip.ownerUid == uid }.flatMap { it.segments }
+        return withChosenAirports(withHomeAirports(effectiveHomes(homeTimeline(segments), settings.homes), segments), settings.homeAirports)
+    }
 
     /**
      * A trip's flights with no car or ride booked (SPEC "Car and ride

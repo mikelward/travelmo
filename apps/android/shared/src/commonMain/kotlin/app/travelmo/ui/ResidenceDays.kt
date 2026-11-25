@@ -93,7 +93,7 @@ import org.jetbrains.compose.resources.stringResource
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ResidenceDays(trips: List<TripWithSegments>, homes: List<HomePeriod>, today: String, titles: Map<String, String>, onOpenTrip: (String) -> Unit, modifier: Modifier = Modifier) {
+fun ResidenceDays(trips: List<TripWithSegments>, homes: List<HomePeriod>, today: String, titles: Map<String, String>, onOpenTrip: (String) -> Unit, modifier: Modifier = Modifier, showTitle: Boolean = true) {
     var setId by rememberSaveable { mutableStateOf(residenceRuleSets.first().id) }
     val set = residenceRuleSets.firstOrNull { it.id == setId } ?: residenceRuleSets.first()
     // The day to count to: today unless the user picks another, such as the day they mean to apply.
@@ -101,7 +101,8 @@ fun ResidenceDays(trips: List<TripWithSegments>, homes: List<HomePeriod>, today:
     val report = remember(trips, homes, set, date) { residenceReport(trips, homes, set, date) }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(modifier = modifier.fillMaxWidth()) {
-        Text(stringResource(Res.string.residence_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 8.dp))
+        // Without, when the reports' title that opens it stands above.
+        if (showTitle) Text(stringResource(Res.string.residence_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 8.dp))
         var open by remember { mutableStateOf(false) }
         ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }) {
             OutlinedTextField(

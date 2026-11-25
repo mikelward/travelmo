@@ -36,6 +36,13 @@ class ResidenceDaysTest {
     private fun show(store: FakeTripStore) {
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
         composeRule.setContent { TravelmoTheme { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = {}) } }
+        openSection("Residence and visa days")
+    }
+
+    /** Opens a section that is worked out only when opened. */
+    private fun openSection(title: String) {
+        composeRule.onNodeWithText(title, substring = true).performScrollTo().performClick()
+        composeRule.waitForIdle()
     }
 
     @Test
@@ -44,7 +51,7 @@ class ResidenceDaysTest {
         val store = FakeTripStore(trips = fixtureTrips.filter { it.id != "paris" })
         store.rides.value = RideSettings(homes = listOf(HomeCorrection("London", "GB", "2020-01-01")))
         show(store)
-        composeRule.onNodeWithText("Residence and visa days").performScrollTo()
+        composeRule.onNodeWithText("Residence and visa days", substring = true).performScrollTo()
         // A week in Lisbon: the days of leaving and coming back are not absences.
         composeRule.onNodeWithText("4 of 180 days · 176 days left").performScrollTo()
         composeRule.onNodeWithText("15–18 Sept 2026 · 4 days · Portugal · Lisbon").performScrollTo()
@@ -106,8 +113,13 @@ class ResidenceDaysTest {
 
     @Test
     fun `asks for home's country when nothing gives one`() {
+        val asked = "Days with no trip count as at home, but home has no country yet. Add one on your Profile."
         show(FakeTripStore())
-        // Here, and in Days in each country.
-        composeRule.onAllNodesWithText("Days with no trip count as at home, but home has no country yet. Add one on your Profile.").assertCountEquals(2)
+        // Here, and in Days in each country, each looked at on its own.
+        composeRule.onNodeWithText(asked).performScrollTo()
+        openSection("Residence and visa days")
+        composeRule.onNodeWithText(asked).assertDoesNotExist()
+        openSection("Days in each country")
+        composeRule.onNodeWithText(asked).performScrollTo()
     }
 }

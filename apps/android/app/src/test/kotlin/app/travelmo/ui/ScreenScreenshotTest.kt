@@ -651,6 +651,7 @@ class ScreenScreenshotTest {
         composeRule.setContent {
             TravelmoTheme(darkTheme = dark) { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.REPORTS) {} }) }
         }
+        composeRule.onNodeWithText("Days in each country", substring = true).performScrollTo().performClick()
         composeRule.onNodeWithText("Portugal").performScrollTo().performClick()
         composeRule.onNodeWithText("14–19 Sept 2026 · 6 days").performScrollTo()
         composeRule.waitForIdle()

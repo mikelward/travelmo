@@ -32,6 +32,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.flow.flowOf
+import androidx.compose.ui.semantics.stateDescription
+import app.travelmo.shared.reports_working
+import app.travelmo.shared.no_days_to_count
+import app.travelmo.shared.residence_title
+import app.travelmo.shared.section_closed
+import app.travelmo.shared.section_open
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -136,21 +144,36 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpenSettings: () -> Unit, bottomBar: @Composable () -> Unit) {
     val all by viewModel.reportTrips.collectAsStateWithLifecycle()
-    val homes by viewModel.reportHomes.collectAsStateWithLifecycle()
+    // The user's home corrections, for the trips download, which works home out when it is saved: offered only once
+    // they have answered, so "outside my home country" never takes a home not yet read for none.
+    val homeSettings by viewModel.rideSettings.collectAsStateWithLifecycle()
     var year by rememberSaveable { mutableStateOf<String?>(null) }
     val today = viewModel.today()
     val input = all
-    val whole = remember(input, today) { input?.let { travelReport(it, today) } }
-    val report = remember(input, today, year) { if (year == null) whole else input?.let { travelReport(it, today, year) } }
+    // The counts and the map come at once, worked out in the background (TripsViewModel.computed).
+    val whole by produceState<TravelReport?>(null, input, today) { value = input?.let { viewModel.computed { travelReport(it, today) } } }
+    val report by produceState<TravelReport?>(null, input, today, year, whole) {
+        value = if (year == null) whole else input?.let { trips -> viewModel.computed { travelReport(trips, today, year) } }
+    }
     val titles = remember(input) { displayTitles(input.orEmpty().map { it.trip }) }
+    // Days in each country and residence days take a while (home over time, then every day of every year), so each
+    // is worked out only once opened, and home only for them.
+    var countriesOpen by rememberSaveable { mutableStateOf(false) }
+    var residenceOpen by rememberSaveable { mutableStateOf(false) }
+    val homesFlow = remember(countriesOpen || residenceOpen) { if (countriesOpen || residenceOpen) viewModel.reportHomes else flowOf(null) }
+    val homes by homesFlow.collectAsStateWithLifecycle(null)
     // Where the user was each day, home included, by the year picked.
     val counting by viewModel.reportCounting.collectAsStateWithLifecycle()
-    val countries = remember(input, homes, today, year, counting) {
+    // Whether they have been worked out, and what came of it: none when no trip has begun.
+    val countries by produceState<Pair<Boolean, CountryDaysReport?>>(false to null, input, homes, today, year, counting, countriesOpen) {
         val periods = homes
-        if (input == null || periods == null) null else countryDaysRange(input, today, year)?.let { countryDays(input, periods, it, counting = counting) }
+        value = if (!countriesOpen || input == null || periods == null) false to null
+        else true to viewModel.computed { countryDaysRange(input, today, year)?.let { countryDays(input, periods, it, counting = counting) } }
     }
     val favorites = remember(input) { input?.let { trips -> favoritePlaces(trips.map { TripWithBookings(it.trip, it.segments) }) }.orEmpty() }
     Scaffold(topBar = { AppTopBar(stringResource(Res.string.reports_title), onOpenSettings = onOpenSettings) }, bottomBar = bottomBar) { padding ->
+        val whole = whole
+        val report = report
         if (whole == null || report == null) {
             Text(stringResource(Res.string.reports_loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp))
             return@Scaffold
@@ -162,8 +185,14 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
             item(key = "map") {
                 WorldMap(worldMap, visited = report.countries.map { it.country }.toSet(), airports = report.airports, places = report.places, modifier = Modifier.padding(top = 16.dp))
             }
-            countries?.let { days ->
-                item(key = "countries") { CountryDaysSection(days, counting, viewModel::setReportCounting, today, titles, onOpenTrip) }
+            item(key = "countries-title") { OnDemandTitle(stringResource(Res.string.days_in_each_country), countriesOpen) { countriesOpen = !countriesOpen } }
+            if (countriesOpen) {
+                val (done, days) = countries
+                when {
+                    !done -> item(key = "countries") { Working() }
+                    days == null -> item(key = "countries") { Working(stringResource(Res.string.no_days_to_count)) }
+                    else -> item(key = "countries") { CountryDaysSection(days, counting, viewModel::setReportCounting, today, titles, onOpenTrip) }
+                }
             }
             if (favorites.isNotEmpty()) {
                 item(key = "favorites") { SectionTitle(stringResource(Res.string.favorite_places)) }
@@ -171,8 +200,11 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
                     item(key = "favorite-${place.name}|${place.country ?: ""}") { Favorite(place, titles, onOpenTrip) }
                 }
             }
-            homes?.let { periods ->
-                item(key = "residence") { ResidenceDays(input.orEmpty(), periods, today, titles, onOpenTrip) }
+            item(key = "residence-title") { OnDemandTitle(stringResource(Res.string.residence_title), residenceOpen) { residenceOpen = !residenceOpen } }
+            if (residenceOpen) {
+                val periods = homes
+                if (periods == null) item(key = "residence") { Working() }
+                else item(key = "residence") { ResidenceDays(input.orEmpty(), periods, today, titles, onOpenTrip, showTitle = false) }
             }
             if (whole.years.isNotEmpty()) {
                 item(key = "years") {
@@ -184,9 +216,7 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
                     )
                 }
             }
-            homes?.let { periods ->
-                item(key = "download") { DownloadTrips(input.orEmpty(), periods, titles, today) }
-            }
+            if (homeSettings != null) item(key = "download") { DownloadTrips(input.orEmpty(), viewModel::reportHomesNow, titles, today) }
             if (whole.upcoming > 0) {
                 item(key = "upcoming") {
                     Text(pluralStringResource(Res.plurals.trips_ahead, whole.upcoming, whole.upcoming), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 24.dp))
@@ -256,7 +286,6 @@ private fun CountryDaysSection(report: CountryDaysReport, counting: CountryCount
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     var open by rememberSaveable { mutableStateOf<String?>(null) }
     val nights = counting == CountryCounting.NIGHTS
-    SectionTitle(stringResource(Res.string.days_in_each_country))
     CountingPicker(counting, onCounting)
     if (!report.homeCountryKnown) {
         Text(stringResource(Res.string.residence_no_home_country), style = MaterialTheme.typography.bodyLarge, color = muted)
@@ -307,6 +336,24 @@ private fun Summary(report: TravelReport) {
         pluralStringResource(Res.plurals.countries_count, report.countries.size, report.countries.size),
     ).joinToString(" · ")
     Text(line, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp))
+}
+
+/** A section's title that opens it, [open] or not, for a section worked out only when opened. */
+@Composable
+private fun OnDemandTitle(text: String, open: Boolean, onToggle: () -> Unit) {
+    val state = stringResource(if (open) Res.string.section_open else Res.string.section_closed)
+    Text(
+        (if (open) "▾ " else "▸ ") + text,
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onToggle).padding(top = 24.dp, bottom = 4.dp)
+            .semantics { stateDescription = state },
+    )
+}
+
+/** Said under an opened section while it is worked out, or [text] once it is, when it has nothing to show. */
+@Composable
+private fun Working(text: String = stringResource(Res.string.reports_working)) {
+    Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
 }
 
 @Composable
@@ -423,7 +470,7 @@ fun WorldMap(data: WorldMapData, visited: Set<String>, airports: List<AirportVis
  * abroad. The phone's file picker says where the file goes.
  */
 @Composable
-private fun DownloadTrips(trips: List<TripWithSegments>, periods: List<HomePeriod>, titles: Map<String, String>, today: String) {
+private fun DownloadTrips(trips: List<TripWithSegments>, homes: () -> List<HomePeriod>, titles: Map<String, String>, today: String) {
     var byPlace by rememberSaveable { mutableStateOf(false) }
     var international by rememberSaveable { mutableStateOf(false) }
     // The last start date to include: today unless the user picks another.
@@ -431,7 +478,8 @@ private fun DownloadTrips(trips: List<TripWithSegments>, periods: List<HomePerio
     var said by remember { mutableStateOf<StringResource?>(null) }
     val save = LocalAppChrome.current.rememberTextSaver(
         "text/csv",
-        text = { if (byPlace) placeRowsCsv(placeRows(trips, periods, until, international, titles)) else tripRowsCsv(tripRows(trips, periods, until, international, titles)) },
+        // Home is worked out only now, when the file is saved.
+        text = { homes().let { periods -> if (byPlace) placeRowsCsv(placeRows(trips, periods, until, international, titles)) else tripRowsCsv(tripRows(trips, periods, until, international, titles)) } },
     ) { saved -> said = if (saved) Res.string.trips_saved else Res.string.trips_save_failed }
     SectionTitle(stringResource(Res.string.download_trips))
     Text(stringResource(Res.string.download_trips_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)

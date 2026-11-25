@@ -516,6 +516,14 @@ counts and the map to one year; the trips-per-year table always shows every
 year. Trips still ahead are not counted, and a trip under way counts up to
 today.
 
+The counts and the map come at once; on Android they are worked out off the
+main thread, so the page never stops answering while they are. "Days in each
+country" and "Residence and visa days" take longer (home over time, then
+every day of every year), so each starts closed and is worked out only once
+its title is tapped, and home only for them or when the trips download is
+saved; every visit starts with both closed. Before any trip has begun,
+"Days in each country" says there are no days to count.
+
 "Days in each country" counts every day from the first trip (or of the year
 picked) to today, home included (`countryDays` in
 `packages/core/src/residence.ts`, the residence timeline below): a day with

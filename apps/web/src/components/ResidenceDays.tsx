@@ -147,10 +147,8 @@ export function ResidenceDays({
   const set = residenceRuleSets.find((s) => s.id === setId) ?? residenceRuleSets[0]!;
   const report = useMemo(() => residenceReport(trips, homes, set, date, lookup), [trips, homes, set, date, lookup]);
   return (
-    <section className="mt-8" aria-labelledby="residence-heading">
-      <h2 id="residence-heading" className="text-lg font-medium">
-        Residence and visa days
-      </h2>
+    // Under the reports' own title, which opens it.
+    <div>
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <select
           value={setId}
@@ -187,6 +185,6 @@ export function ResidenceDays({
       <p className="mt-2 text-muted">
         An estimate from the bookings Travelmo knows about, with days between trips counted at home. It isn&apos;t legal advice.
       </p>
-    </section>
+    </div>
   );
 }

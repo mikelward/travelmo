@@ -3,7 +3,7 @@
 import { countryDays, countryDaysRange, shiftDate, displayTitles, favoritePlaces, formatDateRange, placeRows, placeRowsCsv, travelReport, tripRows, watchedTrip, tripRowsCsv, type FavoritePlace, type CountryCounting, type CountryDaysReport, type HomePeriod, type PlaceLookup, type SummaryTrip, type TravelReport } from "@travelmo/core";
 import Link from "next/link";
 import type { User } from "firebase/auth";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ResidenceDays } from "@/components/ResidenceDays";
 import { SignInGate } from "@/components/SignInGate";
 import { WorldMap, type WorldMapData } from "@/components/WorldMap";
@@ -82,6 +82,26 @@ function useCounting(): [CountryCounting, (next: CountryCounting) => void] {
 // border crossing; each country opens to its stays, latest first, so a
 // surprising one can be found and fixed. Days nothing places come first,
 // to be given a place, and count nowhere until they are.
+// A section worked out only once opened, as it takes a while: Days in each country and Residence and visa days.
+function OnDemand({ id, title, open, onToggle, children }: { id: string; title: string; open: boolean; onToggle: () => void; children: ReactNode }) {
+  return (
+    <section className="mt-8" aria-labelledby={id}>
+      <h2 id={id} className="text-lg font-medium">
+        <button type="button" aria-expanded={open} onClick={onToggle} className="hover:underline">
+          <span aria-hidden="true">{open ? "▾ " : "▸ "}</span>
+          {title}
+        </button>
+      </h2>
+      {open && children}
+    </section>
+  );
+}
+
+// Said under an opened section while what it needs is still loading.
+function Working() {
+  return <p className="mt-2 text-muted">Working it out…</p>;
+}
+
 function Countries({
   report,
   counting,
@@ -100,8 +120,7 @@ function Countries({
   if (!report.countries.length && !report.unplaced.length && report.homeCountryKnown && counting === "part") return null;
   const nights = counting === "nights";
   return (
-    <section className="mt-8">
-      <h2 className="text-lg font-medium">Days in each country</h2>
+    <>
       <select
         value={counting}
         onChange={(e) => onCounting(e.target.value as CountryCounting)}
@@ -194,18 +213,19 @@ function Countries({
           ))}
         </tbody>
       </table>
-    </section>
+    </>
   );
 }
 
 // A summary of every trip to download, for visa and settlement forms: one
 // row per trip or per place, optionally only what was abroad.
-function DownloadTrips({ trips, homes, lookup, titles, today }: { trips: readonly SummaryTrip[]; homes?: readonly HomePeriod[]; lookup: PlaceLookup; titles: Map<string, string>; today: string }) {
+function DownloadTrips({ trips, homes, lookup, titles, today }: { trips: readonly SummaryTrip[]; homes: () => readonly HomePeriod[] | undefined; lookup: PlaceLookup; titles: Map<string, string>; today: string }) {
   const [byPlace, setByPlace] = useState(false);
   const [international, setInternational] = useState(false);
   const [until, setUntil] = useState(today);
   const download = () => {
-    const options = { periods: homes ?? [], lookup, international, titles, until: until || today };
+    // Home is worked out only now, when the file is made.
+    const options = { periods: homes() ?? [], lookup, international, titles, until: until || today };
     const text = byPlace ? placeRowsCsv(placeRows(trips, options)) : tripRowsCsv(tripRows(trips, options));
     const url = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
     const link = document.createElement("a");
@@ -357,19 +377,24 @@ function Report({ user }: { user: User }) {
     [all, tables, year, today],
   );
 
+  // Days in each country and residence days take a while (home over time, then every day of every year), so each
+  // is worked out only once opened, and home only for them or the download.
+  const [countriesOpen, setCountriesOpen] = useState(false);
+  const [residenceOpen, setResidenceOpen] = useState(false);
   // Home over time, for the days with no trip: from the viewer's own trips,
   // already read, with their corrections over it, as the Profile works it out.
-  const homes = useMemo(() => {
+  const homesOf = useCallback(() => {
     if (!trips || !segments || !travelers || !profile) return undefined;
     return deriveHomes(ownTripSegments(trips, segments.byTrip, user.uid, travelers), [], profile.homes ?? []).periods;
   }, [trips, segments, travelers, profile, user.uid]);
+  const homes = useMemo(() => (countriesOpen || residenceOpen ? homesOf() : undefined), [countriesOpen, residenceOpen, homesOf]);
   const titles = useMemo(() => displayTitles(trips ?? []), [trips]);
   const [counting, setCounting] = useCounting();
   const countries = useMemo(() => {
-    if (!all || !homes || !tables || tables instanceof Error) return undefined;
+    if (!countriesOpen || !all || !homes || !tables || tables instanceof Error) return undefined;
     const range = countryDaysRange(all.withSegments, today, year || undefined);
     return range && countryDays(all.withSegments, homes, range, tables.lookup, counting);
-  }, [all, homes, tables, today, year, counting]);
+  }, [countriesOpen, all, homes, tables, today, year, counting]);
 
   if (tables instanceof Error) return <p className="text-danger">The map couldn&apos;t be loaded: {tables.message}</p>;
   if (!report || !tables || !all || !segments) return <p className="text-muted">Loading reports…</p>;
@@ -407,11 +432,22 @@ function Report({ user }: { user: User }) {
         places={report.places}
         name={countryName}
       />
-      {countries && <Countries report={countries} counting={counting} onCounting={setCounting} titles={titles} today={today} />}
+      <OnDemand id="countries-heading" title="Days in each country" open={countriesOpen} onToggle={() => setCountriesOpen(!countriesOpen)}>
+        {countries ? (
+          <Countries report={countries} counting={counting} onCounting={setCounting} titles={titles} today={today} />
+        ) : homes ? (
+          <p className="mt-2 text-muted">No trip has begun yet, so there are no days to count.</p>
+        ) : (
+          <Working />
+        )}
+      </OnDemand>
       <Favorites places={favoritePlaces(all.withSegments)} titles={titles} />
-      {homes && <ResidenceDays trips={all.withSegments} homes={homes} lookup={tables.lookup} today={today} titles={titles} />}
+      <OnDemand id="residence-heading" title="Residence and visa days" open={residenceOpen} onToggle={() => setResidenceOpen(!residenceOpen)}>
+        {homes ? <ResidenceDays trips={all.withSegments} homes={homes} lookup={tables.lookup} today={today} titles={titles} /> : <Working />}
+      </OnDemand>
       <Years report={all.report} onPick={setYear} />
-      <DownloadTrips trips={all.withSegments} homes={homes} lookup={tables.lookup} titles={titles} today={today} />
+      {/* Once the profile has answered, so "outside my home country" never takes a home not yet read for none. */}
+      {profile && <DownloadTrips trips={all.withSegments} homes={() => homes ?? homesOf()} lookup={tables.lookup} titles={titles} today={today} />}
       {all.report.upcoming > 0 && (
         <p className="mt-6 text-muted">
           {plural(all.report.upcoming, "trip")} still ahead {all.report.upcoming === 1 ? "isn't" : "aren't"} counted.
