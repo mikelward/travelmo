@@ -325,20 +325,22 @@ fun TripDetailScreen(
                 viewModel.moveSegment("${prefix}segment/${segment.id}/move", tripId, segment.id, target.id)
             }
         }
+        // Watching it, what is the user's own leaves it out: warnings, check-in, rides and the checklist.
+        val onlyWatching = watching(tripTravelers(segments), travelers)
         when {
             current != null -> TripBody(
                 current, segments, shared = current.ownerUid != uid, errors = errors, busy = busy,
-                watching = watching(tripTravelers(segments), travelers),
-                warnings = tripWarnings(people, current, segments, viewModel.today()), today = viewModel.today(),
+                watching = onlyWatching,
+                warnings = if (onlyWatching) emptyList() else tripWarnings(people, current, segments, viewModel.today()), today = viewModel.today(),
                 flightLines = { segment -> viewModel.flightLines(segment, flightStatuses) },
                 checkIn = { segment ->
-                    checkedIn?.let { flightCheckInState(segment, it, viewModel.now()) }?.let { state ->
+                    checkedIn?.takeUnless { onlyWatching }?.let { flightCheckInState(segment, it, viewModel.now()) }?.let { state ->
                         SegmentCheckIn(state) { on -> viewModel.setCheckedIn("${prefix}checked-in/${segment.id}", tripId, segment.id, on) }
                     }
                 },
                 onOpenBooking = { onOpenBooking(it.id) },
                 rides = RideSuggestions(
-                    needs = viewModel.rideNeedsFor(segments, rideSettings).groupBy { it.segmentId },
+                    needs = if (onlyWatching) emptyMap() else viewModel.rideNeedsFor(segments, rideSettings).groupBy { it.segmentId },
                     companies = rideSettings?.companies.orEmpty(),
                     onHide = { need -> viewModel.hideRideNeed("${prefix}ride/${rideNeedKey(need)}", need) },
                 ),
@@ -367,7 +369,7 @@ fun TripDetailScreen(
                 },
                 tripActions = if (isOwner) actions else null,
                 // The viewer's own reminders before the trip, theirs alone, shared trip or not.
-                checklist = viewModel.checklistFor(current, segments, standingReminders, myChecklist, rideSettings)?.let { entries ->
+                checklist = viewModel.checklistFor(current, segments, standingReminders, myChecklist, rideSettings)?.takeUnless { onlyWatching }?.let { entries ->
                     Checklist(
                         entries = entries,
                         onTick = { entry, done -> viewModel.setReminderDone("${prefix}checklist/${entry.id}/done", tripId, entry.id, done) },

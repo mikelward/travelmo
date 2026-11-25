@@ -45,6 +45,14 @@ fun watching(travelers: List<String>?, people: List<Person>): Boolean {
 }
 
 /**
+ * Whether the user is only watching [trip]: by its bookings when they are read ([segments]), else by what the trip
+ * keeps of them. What is the user's own (warnings, reminders, check-in, rides, reports, residence, the download,
+ * working out home) leaves such a trip out (watchedTrip in listFilters.ts).
+ */
+fun watchedTrip(trip: Trip, segments: List<Segment>?, people: List<Person>): Boolean =
+    watching(segments?.let(::tripTravelers) ?: trip.travelers, people)
+
+/**
  * What the trip list's filters need of a trip's bookings, kept on the trip so the list filters without reading
  * them: the parser records it as it files bookings, and an app that sees a trip's bookings disagree with it puts it
  * right ([tripFlagsToWrite]), which also fills it in for trips from before it was kept. As listFilters.ts.

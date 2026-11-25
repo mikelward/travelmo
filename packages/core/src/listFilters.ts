@@ -45,6 +45,18 @@ export function watching(travelers: readonly string[] | undefined, people: reado
   return !travelers.some((t) => findPerson(people, t)?.id === me.id);
 }
 
+// Whether the user is only watching this trip: by its bookings when they
+// are read (`segments`), else by what the trip keeps of them. What is the
+// user's own (warnings, reminders, check-in, rides, reports, residence,
+// the download, working out home) leaves such a trip out.
+export function watchedTrip(
+  trip: { travelers?: readonly string[] | undefined },
+  segments: readonly ExtractedSegment[] | undefined,
+  people: readonly Known[],
+): boolean {
+  return watching(segments ? tripTravelers(segments) : trip.travelers, people);
+}
+
 // What the list's filters need to know of a trip's bookings, kept on the
 // trip (`allCancelled`, `localOnly`, `travelers`) so the list filters without reading
 // them: the parser records it as it files bookings, and an app that sees a

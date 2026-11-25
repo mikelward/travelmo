@@ -155,4 +155,8 @@ test("a trip none of whose travelers is the user says Watching, and the filter h
 
   await page.goto("/trips/e2e-mum");
   await expect(page.getByTestId("trip-watching")).toHaveText("Watching: you're not on this trip");
+  // What is the user's own leaves it out: no reminders before it, as their own trip has.
+  await expect(page.getByRole("heading", { name: "Before you go" })).toHaveCount(0);
+  await page.goto("/trips/e2e-mine");
+  await expect(page.getByRole("heading", { name: "Before you go" })).toBeVisible();
 });

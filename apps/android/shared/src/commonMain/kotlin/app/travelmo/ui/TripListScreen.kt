@@ -361,7 +361,7 @@ fun TripCard(
                 Text(missing, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.padding(top = 8.dp))
             }
             // A cancelled trip has nothing coming.
-            if (!cancelled && segments != null) StatusLines(segments, now, showNext, flightStatuses, checkedIn, onCheckedIn)
+            if (!cancelled && segments != null) StatusLines(segments, now, showNext, flightStatuses, checkedIn, onCheckedIn, offerCheckIn = !watching)
         }
     }
 }
@@ -381,6 +381,8 @@ private fun StatusLines(
     flightStatuses: Map<String, FlightStatus>,
     checkedIn: Set<String>,
     onCheckedIn: ((segmentId: String) -> Unit)?,
+    /** Whether to say the flight's check-in window: the traveler's to do, not someone watching the trip. */
+    offerCheckIn: Boolean = true,
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     if (!showNext) return
@@ -404,7 +406,7 @@ private fun StatusLines(
         next.then?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = muted) }
     }
     // Until the user says they checked in, which only an open window offers.
-    status.checkIn?.takeIf { it.segment.id !in checkedIn }?.let { checkIn ->
+    status.checkIn?.takeIf { offerCheckIn && it.segment.id !in checkedIn }?.let { checkIn ->
         Text(
             checkInLine(checkIn),
             style = MaterialTheme.typography.bodyLarge,

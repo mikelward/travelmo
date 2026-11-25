@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { contrastRatio, owner, signIn } from "./helpers";
-import { clearData, seedLisbonTrip, seedTrip, updateUser } from "./seed";
+import { clearData, seedLisbonTrip, seedPerson, seedTrip, updateUser } from "./seed";
 
 test.beforeEach(async () => {
   await clearData();
@@ -145,6 +145,16 @@ test("residence and visa days ask for home's country when nothing gives one", as
   const section = page.getByRole("region", { name: "Residence and visa days" });
   await expect(section.getByText("Days with no trip count as at home, but home has no country yet.")).toBeVisible();
   await expect(section.getByRole("link", { name: "Add one on your Profile" })).toHaveAttribute("href", "/profile");
+});
+
+test("leaves out a trip the user is only watching", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  // The user, named on mail sent straight to them, and their mum, whose trip to Lisbon it was.
+  await seedPerson(ownerUid, { id: "me", name: "Sam Example", bookings: 4, direct: 4 });
+  await seedPerson(ownerUid, { id: "mum", name: "Pat Example", bookings: 1, direct: 0 });
+  await seedLisbonTrip(ownerUid, "e2e-lisbon", { travelers: ["Pat Example"] });
+  await page.goto("/reports");
+  await expect(page.getByTestId("summary")).toHaveText("0 trips · 0 days away · 0 countries");
 });
 
 test("downloads a summary of trips as CSV, by trip or by place, optionally abroad only", async ({ page }) => {

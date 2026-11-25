@@ -94,10 +94,10 @@ export async function readCheckedIn(uid: string, tripId: string): Promise<unknow
 
 // An invented past week in Lisbon: flights known only by their airport
 // codes, and a stay that names its country and its spot.
-export async function seedLisbonTrip(ownerUid: string, tripId: string): Promise<Trip> {
+export async function seedLisbonTrip(ownerUid: string, tripId: string, segmentExtra: Partial<Segment> = {}): Promise<Trip> {
   const at = "2025-05-01T00:00:00Z";
   const trip: Trip = { id: tripId, title: "Lisbon", start: "2025-06-10", end: "2025-06-14", ownerUid, sharedWith: [], createdAt: at, updatedAt: at };
-  const base = { tripId, source: "manual" as const, gmailMessageIds: [], createdAt: at, updatedAt: at };
+  const base = { tripId, source: "manual" as const, gmailMessageIds: [], createdAt: at, updatedAt: at, ...segmentExtra };
   const segments: Segment[] = [
     {
       ...base,
