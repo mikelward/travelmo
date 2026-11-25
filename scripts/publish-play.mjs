@@ -1,17 +1,22 @@
 #!/usr/bin/env node
-// Checks or publishes the Play store listing kept in apps/android/play:
-// each language's texts, feature graphic and phone screenshots, plus the
-// shared 512 px icon. No dependencies: Node's own fetch and crypto talk to
-// the Play Developer API with the service account's key.
+// Checks the Play store listing kept in apps/android/play (each language's
+// texts, feature graphic and phone screenshots, plus the shared 512 px icon),
+// or publishes it together with the newest release bundle. No dependencies:
+// Node's own fetch and crypto talk to the Play Developer API with the service
+// account's key.
 //
-//   node scripts/publish-play-listing.mjs --check   # validate only (CI on every PR)
-//   PLAY_SERVICE_ACCOUNT_JSON=… node scripts/publish-play-listing.mjs
+//   node scripts/publish-play.mjs --check   # validate only (CI on every PR)
+//   PLAY_SERVICE_ACCOUNT_JSON=… [PLAY_RELEASES=releases.json PLAY_BUNDLE=x.aab] node scripts/publish-play.mjs
 //
-// Publishing opens one edit, compares each language's texts and images with
-// what Play already has, replaces only what differs and commits; with no
-// differences it commits nothing. So it can run on every push and still
-// catch up on a change an earlier, cancelled run never sent. On any failure
-// the edit is deleted, so Play never sees a half-updated listing.
+// Publishing opens one edit. With PLAY_BUNDLE, the newest GitHub release's
+// bundle, it puts that bundle on the internal track unless Play already has
+// it or a newer one, with "What's new" gathered from every release in
+// PLAY_RELEASES (GitHub's release list) since the one Play has. Then it
+// compares each language's texts and images with Play's, replaces only what
+// differs, and commits once; with nothing new it commits nothing. Play
+// limits how many edits an app may commit a day, so the play workflow runs
+// this hourly rather than on every push. On any failure the edit is deleted,
+// so Play never sees half a release.
 import { createHash, createSign } from "node:crypto";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -110,6 +115,27 @@ export function differences(listing, remote) {
   return { texts, images };
 }
 
+// Play's "What's new" takes 500 characters per language.
+export const NOTES_LIMIT = 500;
+
+// The release to put on Play's internal track, or undefined when Play already
+// has `bundleCode` or newer. `releases` is GitHub's list ({ tag_name, body }),
+// `playCodes` the versionCodes on the internal track. "What's new" is each
+// "• " line of every release after Play's newest up to the bundle's, oldest
+// first and each once, cut to Play's limit.
+export function playRelease(releases, playCodes, bundleCode) {
+  const onPlay = Math.max(0, ...playCodes.map(Number));
+  if (bundleCode <= onPlay) return undefined;
+  const lines = releases
+    .map(r => ({ code: /^v(\d+)$/.exec(r.tag_name ?? "")?.[1], body: r.body ?? "" }))
+    .filter(r => r.code && Number(r.code) > onPlay && Number(r.code) <= bundleCode)
+    .sort((a, b) => Number(a.code) - Number(b.code))
+    .flatMap(r => r.body.split("\n").map(l => l.trim()).filter(l => l.startsWith("• ")));
+  let notes = [...new Set(lines)].join("\n");
+  if ([...notes].length > NOTES_LIMIT) notes = [...notes].slice(0, NOTES_LIMIT - 1).join("") + "…";
+  return { versionCode: bundleCode, notes };
+}
+
 async function accessToken(key) {
   const now = Math.floor(Date.now() / 1000);
   const b64 = obj => Buffer.from(JSON.stringify(obj)).toString("base64url");
@@ -130,7 +156,7 @@ async function accessToken(key) {
   return (await res.json()).access_token;
 }
 
-async function publish(listings, key) {
+async function publish(listings, key, bundle) {
   const token = await accessToken(key);
   const call = async (method, url, body, contentType = "application/json", allowMissing = false) => {
     const res = await fetch(url, {
@@ -147,6 +173,29 @@ async function publish(listings, key) {
   console.log(`Opened edit ${id}`);
   try {
     let changed = false;
+    if (bundle) {
+      const track = await call("GET", `${app}/edits/${id}/tracks/internal`, undefined, undefined, true);
+      const playCodes = (track?.releases ?? []).flatMap(r => r.versionCodes ?? []);
+      const release = playRelease(bundle.releases, playCodes, bundle.versionCode);
+      if (!release) {
+        console.log(`Internal track: already has versionCode ${Math.max(...playCodes.map(Number))}`);
+      } else {
+        const uploaded = await call("POST", `${UPLOAD}/applications/${PACKAGE}/edits/${id}/bundles?uploadType=media`, bundle.bytes, "application/octet-stream");
+        if (Number(uploaded.versionCode) !== release.versionCode) {
+          throw new Error(`the bundle is versionCode ${uploaded.versionCode}, not ${release.versionCode} as its release is tagged`);
+        }
+        await call("PUT", `${app}/edits/${id}/tracks/internal`, {
+          track: "internal",
+          releases: [{
+            versionCodes: [String(release.versionCode)],
+            status: "completed",
+            ...(release.notes ? { releaseNotes: [{ language: "en-US", text: release.notes }] } : {}),
+          }],
+        });
+        console.log(`Internal track: versionCode ${release.versionCode}`);
+        changed = true;
+      }
+    }
     for (const l of listings) {
       const base = `${app}/edits/${id}/listings/${l.language}`;
       const texts = await call("GET", base, undefined, undefined, true);
@@ -172,11 +221,11 @@ async function publish(listings, key) {
     }
     if (!changed) {
       await call("DELETE", `${app}/edits/${id}`);
-      console.log("Play already has this listing; nothing committed");
+      console.log("Play already has this release and listing; nothing committed");
       return;
     }
     await call("POST", `${app}/edits/${id}:commit`);
-    console.log("Committed the listing");
+    console.log("Committed");
   } catch (err) {
     console.error(`Publishing failed; deleting edit ${id} so nothing half-done reaches Play`);
     await call("DELETE", `${app}/edits/${id}`).catch(cleanup => console.error(`Could not delete edit ${id}: ${cleanup.message}`));
@@ -186,7 +235,7 @@ async function publish(listings, key) {
 
 async function main() {
   const check = process.argv.includes("--check");
-  console.log(`Play listing: ${check ? "checking" : "publishing"} ${PLAY_DIR}`);
+  console.log(`Play: ${check ? "checking" : "publishing"} ${PLAY_DIR}`);
   const listings = readListings();
   const found = listings.flatMap(problems);
   if (listings.length === 0) found.push("no languages under apps/android/play/listings");
@@ -198,14 +247,23 @@ async function main() {
   if (check) return;
   const raw = process.env.PLAY_SERVICE_ACCOUNT_JSON;
   if (!raw) throw new Error("PLAY_SERVICE_ACCOUNT_JSON is not set");
-  await publish(listings, JSON.parse(raw));
+  const { PLAY_BUNDLE, PLAY_RELEASES } = process.env;
+  let bundle;
+  if (PLAY_BUNDLE) {
+    if (!PLAY_RELEASES) throw new Error("PLAY_BUNDLE is set without PLAY_RELEASES");
+    const versionCode = Number(/-(\d+)\.aab$/.exec(PLAY_BUNDLE)?.[1]);
+    if (!versionCode) throw new Error(`${PLAY_BUNDLE} does not end in -<versionCode>.aab`);
+    bundle = { versionCode, bytes: readFileSync(PLAY_BUNDLE), releases: JSON.parse(readFileSync(PLAY_RELEASES, "utf8")) };
+    console.log(`Newest release: versionCode ${versionCode}`);
+  }
+  await publish(listings, JSON.parse(raw), bundle);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   main().then(
-    () => console.log("Play listing: done"),
+    () => console.log("Play: done"),
     err => {
-      console.error(`Play listing: failed: ${err.message}`);
+      console.error(`Play: failed: ${err.message}`);
       process.exitCode = 1;
     },
   );

@@ -185,8 +185,14 @@ publishes it as a GitHub prerelease tagged `v<versionCode>` with the
 release-worthy commit subjects since the last published release as notes
 (`scripts/publish-github-release.sh`,
 shared byte for byte with the sibling apps and tested on every pull
-request), and uploads it to the Play internal testing track once a Play
-service account is configured. The secrets live in the repository's
+request). Once a Play service account is configured, the hourly `play`
+workflow (`.github/workflows/play.yml`) puts the newest prerelease's
+bundle on the Play internal testing track, with every release's notes
+since the one Play has as "What's new", and the listing below, in one
+edit; it commits nothing when Play is already current. Play limits how
+many edits an app may commit a day, and uploading on every push used that
+up on busy days ("Daily save quota exceeded"). To publish without waiting
+for the hour: Actions → play → Run workflow. The secrets live in the repository's
 `production` environment (Settings → Environments; limit its deployment
 branches to `main`):
 
@@ -213,9 +219,9 @@ descriptions (`title.txt`, `short-description.txt`,
 `pnpm --filter @travelmo/web play-graphics` renders the feature graphic
 and frames the screenshots from `apps/android/app/snapshots`, so rerun it
 after re-recording those. CI checks the listing against Play's limits on
-every pull request (`node scripts/publish-play-listing.mjs --check`), and
-once `PLAY_SERVICE_ACCOUNT_JSON` is set the `Publish` job compares it with
-Play's copy on every push to `main` and sends what differs in one edit. Play cannot take
+every pull request (`node scripts/publish-play.mjs --check`), and
+once `PLAY_SERVICE_ACCOUNT_JSON` is set the `play` workflow compares it with
+Play's copy hourly and sends what differs with the newest release. Play cannot take
 a listing before the app exists in Play Console; the content rating,
 target audience, data safety, app access and ads declarations stay in
 Play Console.

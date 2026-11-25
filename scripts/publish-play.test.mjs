@@ -1,11 +1,11 @@
-// node --test scripts/publish-play-listing.test.mjs
+// node --test scripts/publish-play.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import { differences, pngSize, problems, readListings } from "./publish-play-listing.mjs";
+import { NOTES_LIMIT, differences, playRelease, pngSize, problems, readListings } from "./publish-play.mjs";
 
 // A PNG header is all pngSize reads: signature, then IHDR's width and height.
 function png(width, height) {
@@ -109,4 +109,27 @@ test("finds which parts of a listing differ from Play's copy", () => {
     texts: true,
     images: ["icon", "featureGraphic", "phoneScreenshots"],
   });
+});
+
+const release = (code, ...lines) => ({ tag_name: `v${code}`, body: `${lines.join("\n")}\n\nversionCode ${code}, built from abc.\n` });
+
+test("puts the newest release on Play with every release's notes since Play's", () => {
+  const releases = [release(370, "• Fix Nice"), release(369, "• Add 48 cities"), release(368, "• Add 45 cities"), release(367, "• Older")];
+  assert.deepEqual(playRelease(releases, ["367"], 370), { versionCode: 370, notes: "• Add 45 cities\n• Add 48 cities\n• Fix Nice" });
+});
+
+test("leaves Play alone when it has the bundle or a newer one", () => {
+  assert.equal(playRelease([release(370, "• A")], ["370"], 370), undefined);
+  assert.equal(playRelease([release(370, "• A")], ["368", "371"], 370), undefined);
+});
+
+test("gathers notes from the first release when Play has none, each line once", () => {
+  const releases = [release(2, "• Same", "• New"), release(1, "• Same"), { tag_name: "nightly", body: "• Not a release" }];
+  assert.deepEqual(playRelease(releases, [], 2), { versionCode: 2, notes: "• Same\n• New" });
+});
+
+test("ignores releases newer than the bundle and cuts the notes to Play's limit", () => {
+  const long = "• " + "x".repeat(600);
+  assert.deepEqual(playRelease([release(3, "• Later"), release(2, long)], ["1"], 2).notes.length, NOTES_LIMIT);
+  assert.equal(playRelease([release(3, "• Later"), release(2, "• Mine")], ["1"], 2).notes, "• Mine");
 });

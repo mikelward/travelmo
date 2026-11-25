@@ -1314,8 +1314,9 @@ renders the PNGs from the SVGs in `apps/web/icons` with Playwright's
 Chromium; they are committed, as is the Play listing's 512 px icon
 (`apps/android/play/icon.svg`). The rest of the Play listing (texts,
 feature graphic, screenshots framed from the Android snapshots) lives
-beside it in `apps/android/play/listings`, and `scripts/publish-play-listing.mjs`
-sends it through the Play Developer API with no dependencies. Settings shows an Install button where the
+beside it in `apps/android/play/listings`, and `scripts/publish-play.mjs`
+sends it, with the newest release bundle, through the Play Developer API
+with no dependencies. Settings shows an Install button where the
 browser offers its install prompt (`beforeinstallprompt`), and on iPhone and
 iPad, where Safari has none, says how to add it to the Home Screen; neither
 shows once Travelmo runs installed.
