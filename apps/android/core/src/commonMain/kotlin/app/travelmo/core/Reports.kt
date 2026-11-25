@@ -106,7 +106,12 @@ fun reportBounds(trip: Trip, segments: List<Segment>): Pair<String, String>? = w
  * anywhere: only outings that name no place so far, no journey or stay (a
  * trip that is a class or a show near home), so they are at home.
  */
-data class TripDay(val countries: Set<String>, val inTransit: Boolean, val started: Boolean, val local: Boolean = false)
+/**
+ * [night]: the country the traveler ends the day in (sleeps in), if any booking says; null in the
+ * air or where nothing places them. [nightAt]: when the booking that left them there happened, so
+ * another trip's later booking that day can say where the night was instead.
+ */
+data class TripDay(val countries: Set<String>, val inTransit: Boolean, val started: Boolean, val local: Boolean = false, val night: String? = null, val nightAt: String? = null)
 
 fun tripDayPlaces(trip: Trip, segments: List<Segment>, today: String, lookup: (String) -> AirportPlace? = ::airportPlace): Map<String, TripDay> {
     // In the order they happened, which across the date line is not the
@@ -124,12 +129,19 @@ fun tripDayPlaces(trip: Trip, segments: List<Segment>, today: String, lookup: (S
         var transit = false
         var started = false
         var travelled = false
+        // Where the traveler is as the day ends: left by its latest moment.
+        var night: String? = null
+        var nightAt: String? = null
         val countries = mutableSetOf<String>()
         for (m in timeline) {
             val date = localDate(m.at)
             if (date <= day) {
                 started = true
                 if (m.moves || m.country != null) travelled = true
+                if (m.moves || m.then != null) {
+                    night = if (m.transit) null else m.then
+                    nightAt = m.at
+                }
             }
             // An outing that names no country leaves the traveler where they were.
             if (date < day && (m.moves || m.then != null)) {
@@ -141,7 +153,7 @@ fun tripDayPlaces(trip: Trip, segments: List<Segment>, today: String, lookup: (S
         }
         if (where != null) countries += where
         val inTransit = countries.isEmpty() && transit
-        days[day] = TripDay(countries, inTransit, started, local = countries.isEmpty() && !inTransit && !travelled)
+        days[day] = TripDay(countries, inTransit, started, local = countries.isEmpty() && !inTransit && !travelled, night = night, nightAt = nightAt)
         day = nextDay(day)
     }
     return days

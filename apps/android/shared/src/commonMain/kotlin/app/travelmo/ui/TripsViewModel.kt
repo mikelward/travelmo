@@ -68,9 +68,12 @@ import app.travelmo.core.isAdmin
 import app.travelmo.core.linkedEmails
 import app.travelmo.data.Seen
 import app.travelmo.data.InMemoryListFilterStore
+import app.travelmo.data.CountingStore
+import app.travelmo.data.InMemoryCountingStore
 import app.travelmo.data.ListFilterStore
 import app.travelmo.core.LinkCheck
 import app.travelmo.core.checkNewLink
+import app.travelmo.core.CountryCounting
 import app.travelmo.core.checklistShown
 import app.travelmo.core.myAddresses
 import app.travelmo.data.AccessCheck
@@ -258,6 +261,7 @@ class TripsViewModel(
     emailVerified: Boolean = true,
     /** Where the trip list's filters are kept; in memory by default. */
     private val listFilterStore: ListFilterStore = InMemoryListFilterStore(),
+    private val countingStore: CountingStore = InMemoryCountingStore(),
 ) : ViewModel() {
     /** The verified sign-in address, normalized, as access is decided on it; null when unverified. */
     val verifiedEmail: String? = emailAddressOf(email)?.takeIf { emailVerified }
@@ -511,6 +515,21 @@ class TripsViewModel(
         } catch (e: Exception) {
             // They still apply while the app runs.
             SharedLog.error(e, "Saving the trip list's filters failed")
+        }
+    }
+
+    private val _reportCounting = MutableStateFlow(countingStore.read())
+
+    /** How Reports counts days in each country, as set on this phone (SPEC "Reports"). */
+    val reportCounting: StateFlow<CountryCounting> = _reportCounting
+
+    fun setReportCounting(counting: CountryCounting) {
+        _reportCounting.value = counting
+        try {
+            countingStore.write(counting)
+        } catch (e: Exception) {
+            // It still applies while the app runs.
+            SharedLog.error(e, "Saving how Reports counts days failed")
         }
     }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { countryDays, countryDaysRange, displayTitles, favoritePlaces, formatDateRange, placeRows, placeRowsCsv, travelReport, tripRows, tripRowsCsv, type FavoritePlace, type CountryDaysReport, type HomePeriod, type PlaceLookup, type SummaryTrip, type TravelReport } from "@travelmo/core";
+import { countryDays, countryDaysRange, shiftDate, displayTitles, favoritePlaces, formatDateRange, placeRows, placeRowsCsv, travelReport, tripRows, tripRowsCsv, type FavoritePlace, type CountryCounting, type CountryDaysReport, type HomePeriod, type PlaceLookup, type SummaryTrip, type TravelReport } from "@travelmo/core";
 import Link from "next/link";
 import type { User } from "firebase/auth";
 import { Fragment, useEffect, useMemo, useState } from "react";
@@ -48,16 +48,69 @@ function Summary({ report }: { report: TravelReport }) {
 
 const days = (n: number) => plural(n, "day");
 
+// How days in each country count, kept in this browser (SPEC "Reports").
+const countingKey = "travelmo.countryCounting";
+const countings: readonly CountryCounting[] = ["part", "whole", "nights"];
+
+function useCounting(): [CountryCounting, (next: CountryCounting) => void] {
+  const [counting, setCounting] = useState<CountryCounting>("part");
+  // Read after the first render, so the page the server sent matches.
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(countingKey);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- browser storage is only there after hydration
+      if (countings.includes(stored as CountryCounting)) setCounting(stored as CountryCounting);
+    } catch (e) {
+      // Storage may be blocked (a private window): part days, the default.
+      console.debug("Reading how Reports counts days failed; counting part days", e);
+    }
+  }, []);
+  const update = (next: CountryCounting) => {
+    setCounting(next);
+    try {
+      localStorage.setItem(countingKey, next);
+    } catch (e) {
+      // It still applies for this visit.
+      console.debug("Saving how Reports counts days failed; it lasts this visit", e);
+    }
+  };
+  return [counting, update];
+}
+
 // Where the user was each day, home included, split into stays at each
 // border crossing; each country opens to its stays, latest first, so a
 // surprising one can be found and fixed. Days nothing places come first,
 // to be given a place, and count nowhere until they are.
-function Countries({ report, titles }: { report: CountryDaysReport; titles: Map<string, string> }) {
+function Countries({
+  report,
+  counting,
+  onCounting,
+  titles,
+  today,
+}: {
+  report: CountryDaysReport;
+  counting: CountryCounting;
+  onCounting: (next: CountryCounting) => void;
+  titles: Map<string, string>;
+  today: string;
+}) {
   const [open, setOpen] = useState<string>();
-  if (!report.countries.length && !report.unplaced.length && report.homeCountryKnown) return null;
+  // Kept up while another count is picked, even with no days to show, so it can be changed back.
+  if (!report.countries.length && !report.unplaced.length && report.homeCountryKnown && counting === "part") return null;
+  const nights = counting === "nights";
   return (
     <section className="mt-8">
       <h2 className="text-lg font-medium">Days in each country</h2>
+      <select
+        value={counting}
+        onChange={(e) => onCounting(e.target.value as CountryCounting)}
+        aria-label="Count"
+        className="mt-1 rounded-lg border border-field bg-background px-2 py-1"
+      >
+        <option value="part">Part days</option>
+        <option value="whole">Whole days</option>
+        <option value="nights">Nights</option>
+      </select>
       {!report.homeCountryKnown && (
         <p className="mt-1 text-muted">
           Days with no trip count as at home, but home has no country yet. Add one on your{" "}
@@ -94,7 +147,7 @@ function Countries({ report, titles }: { report: CountryDaysReport; titles: Map<
         <thead className="text-left text-muted">
           <tr>
             <th className="py-1 font-normal">Country</th>
-            <th className="py-1 text-right font-normal">Days</th>
+            <th className="py-1 text-right font-normal">{nights ? "Nights" : "Days"}</th>
           </tr>
         </thead>
         <tbody>
@@ -119,7 +172,8 @@ function Countries({ report, titles }: { report: CountryDaysReport; titles: Map<
                     <ul aria-label={`Stays in ${countryName(c.country)}`} className="ml-4">
                       {c.stays.map((s) => (
                         <li key={s.start}>
-                          {formatDateRange(s.start, s.end)} · {days(s.days)}
+                          {/* A run of nights reads as a hotel booking does, to the morning after the last (if it has come). */}
+                          {formatDateRange(s.start, nights && s.end < today ? shiftDate(s.end, { days: 1 }) : s.end)} · {nights ? plural(s.days, "night") : days(s.days)}
                           {s.home && " · Home"}
                           {s.tripIds.map((id) => (
                             <span key={id}>
@@ -309,11 +363,12 @@ function Report({ user }: { user: User }) {
     return deriveHomes(byTrip, [], profile.homes ?? []).periods;
   }, [trips, segments, profile, user.uid]);
   const titles = useMemo(() => displayTitles(trips ?? []), [trips]);
+  const [counting, setCounting] = useCounting();
   const countries = useMemo(() => {
     if (!all || !homes || !tables || tables instanceof Error) return undefined;
     const range = countryDaysRange(all.withSegments, today, year || undefined);
-    return range && countryDays(all.withSegments, homes, range, tables.lookup);
-  }, [all, homes, tables, today, year]);
+    return range && countryDays(all.withSegments, homes, range, tables.lookup, counting);
+  }, [all, homes, tables, today, year, counting]);
 
   if (tables instanceof Error) return <p className="text-danger">The map couldn&apos;t be loaded: {tables.message}</p>;
   if (!report || !tables || !all || !segments) return <p className="text-muted">Loading reports…</p>;
@@ -351,7 +406,7 @@ function Report({ user }: { user: User }) {
         places={report.places}
         name={countryName}
       />
-      {countries && <Countries report={countries} titles={titles} />}
+      {countries && <Countries report={countries} counting={counting} onCounting={setCounting} titles={titles} today={today} />}
       <Favorites places={favoritePlaces(all.withSegments)} titles={titles} />
       {homes && <ResidenceDays trips={all.withSegments} homes={homes} lookup={tables.lookup} today={today} titles={titles} />}
       <Years report={all.report} onPick={setYear} />

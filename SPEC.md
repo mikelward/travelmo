@@ -497,8 +497,13 @@ today.
 picked) to today, home included (`countryDays` in
 `packages/core/src/residence.ts`, the residence timeline below): a day with
 no trip, or only outings and trips that stay in one country, is in home's
-country as of that day, and a day crossing a border counts for both
-countries. Each country opens to its stays, latest first: runs of days from
+country as of that day. A "Count" dropdown says how a day counts, kept on
+the device (the web's `localStorage`, Android's preferences): "Part days"
+(the default), any part of a day there, so a day crossing a border counts
+for both countries; "Whole days", a day begun and ended in one country and
+spent nowhere else; "Nights", the country the day ended in, none for a
+night in the air, each run read as a hotel booking does ("24–30 Nov 2026 ·
+6 nights", to the morning after the last night, or today while it goes on). Each country opens to its stays, latest first: runs of days from
 arriving to leaving, "24–30 Nov 2026 · 7 days · Boston" with a link to the
 trip that took the viewer there, or "· Home" for a run at home, where the
 trips inside it are not listed (web and Android). Trip days whose bookings

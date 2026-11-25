@@ -112,7 +112,11 @@ export function reportBounds(
 // about those days), and whether, with no country, nothing has yet taken
 // them anywhere: only outings that name no place so far, no journey or stay
 // (a trip that is a class or a show near home), so they are at home.
-export type TripDay = { countries: Set<string>; inTransit: boolean; started: boolean; local: boolean };
+// `night`: the country the traveler ends the day in (sleeps in), if any
+// booking says; none in the air or where nothing places them. `nightAt`:
+// when the booking that left them there happened, so another trip's later
+// booking that day can say where the night was instead.
+export type TripDay = { countries: Set<string>; inTransit: boolean; started: boolean; local: boolean; night?: string; nightAt?: string };
 
 export function tripDayPlaces(
   trip: Pick<Trip, "start" | "end">,
@@ -138,12 +142,19 @@ export function tripDayPlaces(
     let transit = false;
     let started = false;
     let travelled = false;
+    // Where the traveler is as the day ends: left by its latest moment.
+    let night: string | undefined;
+    let nightAt: string | undefined;
     const countries = new Set<string>();
     for (const m of timeline) {
       const date = localDate(m.at);
       if (date <= day) {
         started = true;
         if (m.moves || m.country) travelled = true;
+        if (m.moves || m.then) {
+          night = m.transit ? undefined : m.then;
+          nightAt = m.at;
+        }
       }
       // An outing that names no country leaves the traveler where they were.
       if (date < day && (m.moves || m.then)) {
@@ -153,7 +164,7 @@ export function tripDayPlaces(
     }
     if (where) countries.add(where);
     const inTransit = !countries.size && transit;
-    days.set(day, { countries, inTransit, started, local: !countries.size && !inTransit && !travelled });
+    days.set(day, { countries, inTransit, started, local: !countries.size && !inTransit && !travelled, ...(night ? { night } : {}), ...(nightAt ? { nightAt } : {}) });
   }
   return days;
 }
