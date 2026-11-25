@@ -1664,7 +1664,11 @@ Gmail ─watch─▶ Pub/Sub ─push(OIDC)─▶ parser /internal/pubsub/gmail
 
 Cost control is the pre-filter plus the parsed-message record: an email is
 shown to the model at most once, and only when it carries a booking signal.
-The seed sender list is in `apps/parser/src/prefilter.ts`; users extend it
+The seed sender list is in `apps/parser/src/prefilter.ts`: booking sites,
+airlines, rail, bus and ferry companies, car rental companies, hotel groups
+and restaurant booking sites, each under any of its countries' domains
+(Qatar Airways writes from qatarairways.com.qa; a brand of two or three
+letters matches only its own domain). Users extend it
 from the Import review page (`/settings/review`, linked from Settings;
 Android's Settings opens the same screen, reading the same records and
 rules with `review.ts` and `senders.ts`'s Kotlin twins),

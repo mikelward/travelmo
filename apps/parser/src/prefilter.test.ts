@@ -60,6 +60,22 @@ describe("prefilter", () => {
     ).toMatchObject({ pass: true, reason: "sender airbnb.com allowed" });
   });
 
+  it("passes any non-promotional mail from a seed company under another of its countries' domains", () => {
+    for (const from of [
+      "Qatar Airways <email@qr.qatarairways.com>",
+      "QR ebooking <ebooking@qatarairways.com.qa>",
+      "Emirates <do-not-reply@emirates.email>",
+      "Air New Zealand <airnewzealand@airnz.co.nz>",
+      "TUI <email@customerservices.tui.co.uk>",
+      "Southwest Airlines <southwestairlines@luv.southwest.com>",
+      "OpenTable <no-reply@opentable.co.uk>",
+    ]) {
+      expect(prefilter({ from, subject: "Your flight to London is almost here" })).toMatchObject({ pass: true, reason: expect.stringMatching(/^sender .* allowed$/) });
+    }
+    // A short brand is no brand: two or three letters name many companies.
+    expect(prefilter({ from: "Shop <news@sj.example>", subject: "Hello" })).toMatchObject({ pass: false });
+  });
+
   it("drops promotional mail even from a seed domain", () => {
     expect(
       prefilter({ from: "easyJet <deals@easyjet.com>", subject: "Flash sale: 20% off flights" }),
