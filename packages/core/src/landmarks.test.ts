@@ -26,6 +26,11 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Angkor Wat").id).toBe("siem-reap");
     expect(tripLandmark("Bali").id).toBe("bali");
     expect(tripLandmark("Queenstown").id).toBe("queenstown");
+    expect(tripLandmark("Galway").id).toBe("galway");
+    expect(tripLandmark("Loch Ness").id).toBe("inverness");
+    expect(tripLandmark("Borobudur").id).toBe("yogyakarta");
+    expect(tripLandmark("Riyadh").id).toBe("riyadh");
+    expect(tripLandmark("Wellington").id).toBe("wellington");
   });
 
   it("ignores accents and case", () => {
@@ -41,6 +46,9 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Köln").id).toBe("cologne");
     expect(tripLandmark("Québec").id).toBe("quebec-city");
     expect(tripLandmark("Chichén Itzá").id).toBe("cancun");
+    expect(tripLandmark("São Paulo").id).toBe("sao-paulo");
+    expect(tripLandmark("Bogotá").id).toBe("bogota");
+    expect(tripLandmark("Torino").id).toBe("turin");
   });
 
   it("takes the city named first", () => {
@@ -73,6 +81,6 @@ describe("tripLandmark", () => {
         cities.add(city);
       }
     }
-    expect(LANDMARKS.length).toBe(143);
+    expect(LANDMARKS.length).toBe(191);
   });
 });
