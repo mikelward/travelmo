@@ -41,7 +41,8 @@ import app.travelmo.core.isCancelled
 import app.travelmo.core.loyaltyLine
 import app.travelmo.core.mapsUrl
 import app.travelmo.core.programsFor
-import app.travelmo.core.routeLine
+import app.travelmo.core.bookingHeading
+import app.travelmo.core.headedRouteLine
 import app.travelmo.core.sharedWithAny
 import app.travelmo.core.timesLine
 import app.travelmo.shared.Res
@@ -181,8 +182,9 @@ fun BookingDetails(
         if (segment.isCancelled) {
             Text(stringResource(Res.string.cancelled), style = body, color = MaterialTheme.colorScheme.error)
         }
-        Text(segment.title, style = MaterialTheme.typography.titleLarge, textDecoration = struck)
-        routeLine(segment)?.let { Text(it, style = body, color = muted) }
+        val heading = bookingHeading(segment)
+        Text(heading.headline, style = MaterialTheme.typography.titleLarge, textDecoration = struck)
+        headedRouteLine(segment, heading)?.let { Text(it, style = body, color = muted) }
         // The trip page's day heading isn't here, so the day the booking starts is.
         Text(formatDate(localDate(segment.start)), style = body, color = muted, textDecoration = struck)
         timesLine(segment)?.let { Text(it, style = body, color = muted) }

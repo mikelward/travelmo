@@ -41,4 +41,37 @@ class AirlinesTest {
             entry.site shouldMatch Regex("https://[a-z.]+/")
         }
     }
+
+    @Test
+    fun `heads a flight with its airline and leads the route with its flight number`() {
+        bookingHeading(flight("VS 11 LHR to BOS")) shouldBe BookingHeading("Virgin Atlantic", "VS", "VS 11")
+        bookingHeading(flight("FR1401 London (Stansted) to Stockholm (ARN)")) shouldBe BookingHeading("Ryanair", "FR", "FR 1401")
+    }
+
+    @Test
+    fun `names the airline flying a codeshare as its provider gives it`() {
+        bookingHeading(flight("VS4012 BOS to LHR").copy(provider = "Delta")) shouldBe BookingHeading("Delta Air Lines", "DL", "VS 4012")
+        bookingHeading(flight("Delta BOS to LHR").copy(provider = "Delta Air Lines")) shouldBe BookingHeading("Delta Air Lines", "DL")
+    }
+
+    @Test
+    fun `keeps the title of anything else`() {
+        bookingHeading(flight("Flight to Paris").copy(provider = "Expedia")) shouldBe BookingHeading("Flight to Paris")
+        bookingHeading(flight("ZZ 12 SYD to MEL")) shouldBe BookingHeading("ZZ 12 SYD to MEL")
+        bookingHeading(flight("Eurostar 9014").copy(type = SegmentType.TRAIN)) shouldBe BookingHeading("Eurostar 9014")
+    }
+
+    @Test
+    fun `takes a provider for an airline only when it names one`() {
+        airlineNamed("Aeromexico") shouldBe ("AM" to "Aeroméxico")
+        airlineNamed("Virgin").shouldBeNull()
+        airlineNamed("AirAsia X") shouldBe ("D7" to "AirAsia X")
+        airlineNamed("Transavia France") shouldBe ("TO" to "Transavia France")
+        for (code in airlineNames.keys) code shouldMatch Regex("[A-Z0-9]{2}")
+    }
+
+    @Test
+    fun `lists the same airlines as airlines ts`() {
+        airlineNames.size shouldBe 129
+    }
 }

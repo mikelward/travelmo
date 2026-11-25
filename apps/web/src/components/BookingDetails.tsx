@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { formatDate, isCancelled, localDate, loyaltyLine, mapsUrl, segmentSources, type Place, type ProfileEntry, type Segment } from "@travelmo/core";
+import { bookingHeading, formatDate, isCancelled, localDate, loyaltyLine, mapsUrl, segmentSources, type Place, type ProfileEntry, type Segment } from "@travelmo/core";
 import { Dialog, SourcesList } from "@/components/BookingMenu";
 import type { EmailLinks } from "@/lib/sourceLinks";
 
@@ -57,7 +57,7 @@ export function BookingDetailsDialog({
   const hasSources = segmentSources(segment).length > 0 || !!segment.sender;
   return (
     <Dialog
-      title={segment.title}
+      title={bookingHeading(segment).headline}
       onClose={onClose}
       actions={
         onEdit && (
