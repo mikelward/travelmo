@@ -248,7 +248,7 @@ fun BookingForm(
                 value = fields.notes, onValueChange = { fields = fields.copy(notes = it) },
                 label = { Text(stringResource(Res.string.field_notes)) }, minLines = 2, modifier = Modifier.fillMaxWidth(),
             )
-            error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) }
         }
     }
 }
@@ -290,7 +290,7 @@ private fun WhenFields(
 ) {
     var picking by remember { mutableStateOf<String?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             PickerField(
                 value = date.takeIf { it.isNotEmpty() }?.let { formatDateWithYear(it) } ?: "",

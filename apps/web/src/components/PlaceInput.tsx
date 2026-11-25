@@ -165,7 +165,7 @@ export function PlaceInput({
         <ul
           id={listId}
           role="listbox"
-          className="absolute left-0 right-0 z-10 mt-1 max-h-64 overflow-auto rounded-lg border border-zinc-300 bg-white text-sm shadow-lg dark:border-zinc-700 dark:bg-zinc-950"
+          className="absolute left-0 right-0 z-10 mt-1 max-h-64 overflow-auto rounded-lg border border-zinc-300 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-950"
         >
           {suggestions.map((s, i) => (
             <li
@@ -181,12 +181,12 @@ export function PlaceInput({
               className={`cursor-pointer px-3 py-2 ${i === active ? "bg-zinc-100 dark:bg-zinc-900" : ""}`}
             >
               <span className="block">{s.mainText}</span>
-              {s.secondaryText && <span className="block text-xs text-muted">{s.secondaryText}</span>}
+              {s.secondaryText && <span className="block text-muted">{s.secondaryText}</span>}
             </li>
           ))}
         </ul>
       )}
-      {error && <p className="mt-1 text-xs text-danger">{error}</p>}
+      {error && <p className="mt-1 text-danger">{error}</p>}
     </div>
   );
 }

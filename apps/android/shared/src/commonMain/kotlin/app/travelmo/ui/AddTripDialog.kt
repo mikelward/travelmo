@@ -53,7 +53,7 @@ fun AddTripDialog(busy: Boolean, problem: String?, onDismiss: () -> Unit, onAdd:
                     val e = end
                     Text(if (s != null && e != null) formatDateRange(s, e) else stringResource(Res.string.pick_dates))
                 }
-                problem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp)) }
+                problem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp)) }
             }
         },
         confirmButton = { TextButton(onClick = { onAdd(title, start, end) }, enabled = !busy) { Text(stringResource(Res.string.add)) } },

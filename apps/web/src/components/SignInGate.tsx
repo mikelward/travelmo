@@ -38,7 +38,7 @@ export function SignInGate({ children, whileWaiting = false }: { children: (user
         >
           Sign in with Google
         </button>
-        {error && <p className="mt-4 text-sm text-danger">{error}</p>}
+        {error && <p className="mt-4 text-danger">{error}</p>}
       </div>
     );
   }

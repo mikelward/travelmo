@@ -38,7 +38,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <OfflineBanner />
             <Nav />
             <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">{children}</main>
-            <footer className="mx-auto flex w-full max-w-3xl gap-4 px-4 pb-6 text-sm text-muted">
+            <footer className="mx-auto flex w-full max-w-3xl gap-4 px-4 pb-6 text-muted">
               <Link href="/privacy" className="hover:underline">
                 Privacy
               </Link>

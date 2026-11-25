@@ -130,8 +130,8 @@ fun PushSwitch(viewModel: TripsViewModel) {
             enabled = outcome !is Outcome.Busy,
         )
     }
-    if (blocked) Text(stringResource(Res.string.notifications_blocked), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+    if (blocked) Text(stringResource(Res.string.notifications_blocked), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
+    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) }
 }
 
 /**
@@ -147,10 +147,10 @@ fun TextSizeSection() {
     val scale = fontSize.scale
     val percent = stringResource(Res.string.text_size_value, fontScalePercent(scale))
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 4.dp)) {
-        Text(stringResource(Res.string.text_size), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-        Text(percent, style = MaterialTheme.typography.titleLarge)
+        Text(stringResource(Res.string.text_size), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        Text(percent, style = MaterialTheme.typography.titleMedium)
     }
-    Text(stringResource(Res.string.text_size_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(Res.string.text_size_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     // Where the drag last was, so the release saves exactly that: [scale]
     // comes back through recomposition, which a release in the same frame
     // as the last movement would beat.
@@ -207,7 +207,7 @@ fun TextSizeSection() {
         Text(stringResource(Res.string.pinch_to_resize), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Switch(checked = fontSize.pinchEnabled, onCheckedChange = fontSize::choosePinch)
     }
-    if (TextSizeSetting.saveFailed) Text(stringResource(Res.string.setting_not_saved), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+    if (TextSizeSetting.saveFailed) Text(stringResource(Res.string.setting_not_saved), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
 }
 
 /**
@@ -224,8 +224,8 @@ fun DebugLogSection(signedIn: Boolean) {
     var saveFailed by remember { mutableStateOf(false) }
     var sharing by remember { mutableStateOf(false) }
     var shareNote by remember { mutableStateOf<Int?>(null) }
-    Text(stringResource(Res.string.debug_log), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
-    Text(stringResource(Res.string.debug_log_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(Res.string.debug_log), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(Res.string.debug_log_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Text(stringResource(Res.string.debug_log_record), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Switch(
@@ -236,7 +236,7 @@ fun DebugLogSection(signedIn: Boolean) {
             },
         )
     }
-    if (saveFailed) Text(stringResource(Res.string.setting_not_saved), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+    if (saveFailed) Text(stringResource(Res.string.setting_not_saved), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
     OutlinedButton(
         onClick = {
             sharing = true
@@ -254,5 +254,5 @@ fun DebugLogSection(signedIn: Boolean) {
         enabled = !sharing,
         modifier = Modifier.padding(top = 8.dp),
     ) { Text(stringResource(if (sharing) Res.string.sharing else Res.string.share_debug_log)) }
-    shareNote?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+    shareNote?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) }
 }

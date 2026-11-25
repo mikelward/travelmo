@@ -112,7 +112,7 @@ fun ImportReviewScreen(viewModel: TripsViewModel, onBack: () -> Unit, zone: Stri
         ) {
             item(key = "intro") {
                 Column {
-                    Text(stringResource(Res.string.import_review_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(Res.string.import_review_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedTextField(
                         value = keyword,
                         onValueChange = { keyword = it },
@@ -227,7 +227,7 @@ private fun ReviewRow(
         Text(record.subject?.takeIf { it.isNotBlank() } ?: stringResource(Res.string.no_subject), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
         val line = listOf(reviewDate(record, zone), record.from ?: stringResource(Res.string.unknown_sender), recordSourceLabel(record.source), outcomeLabel(record.outcome)).joinToString(" · ") +
             (record.reason?.let { " ($it)" } ?: "")
-        Text(line, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(line, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
             if (fromMailbox && canReimport) OutlinedButton(onClick = onReimport, enabled = !busy) { Text(stringResource(Res.string.import_anyway)) }
             if (domain != null && decision != SenderList.ALLOW) {
@@ -238,6 +238,6 @@ private fun ReviewRow(
             }
             report?.let { OutlinedButton(onClick = { chrome.copyToClipboard("Import report", it) }) { Text(stringResource(Res.string.copy_report)) } }
         }
-        notice?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp)) }
+        notice?.let { Text(it, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 4.dp)) }
     }
 }

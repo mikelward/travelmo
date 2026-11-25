@@ -30,7 +30,7 @@ fun DocumentWarnings(warnings: List<PersonWarning>, today: String, modifier: Mod
         for (w in warnings) {
             Text(
                 warningText(w, today),
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyLarge,
                 color = if (w.warning.`when` == WarningWhen.BEFORE) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary,
             )
         }

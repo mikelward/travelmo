@@ -13,7 +13,7 @@ import { isFromMailbox, recordSourceLabels } from "@/lib/sourceLinks";
 import { useAllParsedMessages, useParsedMessages, useSenderPatterns } from "@/lib/trips";
 
 const buttonClass =
-  "rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
+  "rounded-lg border border-zinc-300 px-3 py-2  hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
 
 const fieldClass = "mt-1 rounded-lg border border-field bg-background px-3 py-2";
 
@@ -68,11 +68,11 @@ function ReviewList({ user }: { user: User }) {
 
   return (
     <section>
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="text-zinc-600 dark:text-zinc-400">
         Recent emails and other imports that did not become bookings. Teach the importer about a sender, or import one anyway.
       </p>
       {records === undefined && <p className="mt-3 text-muted">Loading…</p>}
-      <form role="search" className="mt-4 flex flex-wrap items-end gap-3 text-sm" onSubmit={(e) => e.preventDefault()}>
+      <form role="search" className="mt-4 flex flex-wrap items-end gap-3" onSubmit={(e) => e.preventDefault()}>
         <label className="flex flex-col">
           <span className="font-medium">Search</span>
           <input
@@ -97,7 +97,7 @@ function ReviewList({ user }: { user: User }) {
           </button>
         )}
       </form>
-      {records && shown.length === 0 && (!searching || all?.done) && <p className="mt-3 text-sm text-muted">{searching ? "Nothing matches." : "Nothing to review."}</p>}
+      {records && shown.length === 0 && (!searching || all?.done) && <p className="mt-3 text-muted">{searching ? "Nothing matches." : "Nothing to review."}</p>}
       <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
         {shown.map((record) => {
           // Records from other sources have no sender to teach and no email
@@ -106,7 +106,7 @@ function ReviewList({ user }: { user: User }) {
           const domain = fromMailbox && record.from ? domainOf(record.from) : undefined;
           const decision = domain ? effectiveDecision(patterns, domain) : undefined;
           return (
-            <li key={record.messageId} className="py-3 text-sm">
+            <li key={record.messageId} className="py-3">
               <p className="font-medium">{record.subject || "(no subject)"}</p>
               <p className="text-zinc-600 dark:text-zinc-400">
                 {reviewDate(record)} · {record.from || "unknown sender"} · {recordSourceLabels[record.source ?? "gmail"]} ·{" "}
@@ -162,9 +162,9 @@ function ReviewList({ user }: { user: User }) {
         })}
       </ul>
       {!searching && latest && latest.length === recent && (
-        <p className="mt-3 text-sm text-muted">Showing the {recent} most recent. Search to find older ones.</p>
+        <p className="mt-3 text-muted">Showing the {recent} most recent. Search to find older ones.</p>
       )}
-      {searching && all && !all.done && <p className="mt-3 text-sm text-muted">Searching…</p>}
+      {searching && all && !all.done && <p className="mt-3 text-muted">Searching…</p>}
     </section>
   );
 }
@@ -175,7 +175,7 @@ export default function ImportReviewPage() {
     <SignInGate>
       {(user) => (
         <>
-          <p className="mb-2 text-sm">
+          <p className="mb-2">
             <Link href="/settings" className="underline">
               Settings
             </Link>

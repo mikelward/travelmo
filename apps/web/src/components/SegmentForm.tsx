@@ -165,9 +165,9 @@ export function toExtracted(f: Fields, existing?: Segment): ExtractedSegment {
 
 // min-w-0: a grid or flex item is otherwise as wide as its longest option
 // (a time zone, a country), pushing the form past a phone's width.
-const fieldClass = "min-w-0 rounded-lg border border-field bg-background px-3 py-2 text-sm";
+const fieldClass = "min-w-0 rounded-lg border border-field bg-background px-3 py-2 text-foreground";
 const inputClass = `w-full ${fieldClass}`;
-const labelClass = "block text-xs font-medium uppercase tracking-wide text-muted";
+const labelClass = "block text-muted";
 
 // Whatever the field holds is always an option, so the select never shows a
 // zone other than the one that will be saved.
@@ -392,17 +392,17 @@ export function SegmentForm({
         Notes
         <textarea rows={2} value={fields.notes} onChange={set("notes")} className={inputClass} />
       </label>
-      {error && <p className="text-sm text-danger">{error}</p>}
+      {error && <p className="text-danger">{error}</p>}
       <div className="flex gap-2">
         <button
           type="submit"
           disabled={busy || pendingPlaces > 0}
           title={pendingPlaces > 0 ? "Looking up the place…" : undefined}
-          className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+          className="rounded-lg bg-zinc-900 px-3 py-2 font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
         >
           {segment ? "Save" : "Add"}
         </button>
-        <button type="button" onClick={onCancel} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700">
+        <button type="button" onClick={onCancel} className="rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-700">
           Cancel
         </button>
       </div>

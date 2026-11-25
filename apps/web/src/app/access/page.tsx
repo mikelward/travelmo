@@ -9,7 +9,7 @@ import { useAuth } from "@/lib/auth";
 import { firestore } from "@/lib/firebase";
 
 const buttonClass =
-  "rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
+  "rounded-lg border border-zinc-300 px-3 py-2  hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
 
 // Admins approve requests, invite addresses and revoke access (SPEC "Access").
 function AccessAdmin({ user, config }: { user: User; config: AccessConfig }) {
@@ -54,20 +54,20 @@ function AccessAdmin({ user, config }: { user: User; config: AccessConfig }) {
           onChange={(e) => setEmail(e.target.value)}
           placeholder="name@example.com"
           aria-label="Email address to invite"
-          className="min-w-0 flex-1 rounded-lg border border-field bg-background px-3 py-2 text-sm"
+          className="min-w-0 flex-1 rounded-lg border border-field bg-background px-3 py-2"
         />
         <button type="submit" disabled={busy !== undefined} className={buttonClass}>
           Invite
         </button>
       </form>
-      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      {error && <p className="mt-2 text-danger">{error}</p>}
 
       <section className="mt-10">
         <h2 className="text-lg font-medium">Approved</h2>
-        <p className="mt-2 text-sm text-muted">Everyone with an account from before approvals is in too, listed once they next sign in.</p>
+        <p className="mt-2 text-muted">Everyone with an account from before approvals is in too, listed once they next sign in.</p>
         <ul className="mt-2 divide-y divide-zinc-200 dark:divide-zinc-800">
           {approved.map((r) => (
-            <li key={r.email} className="flex items-center justify-between gap-3 py-2 text-sm">
+            <li key={r.email} className="flex items-center justify-between gap-3 py-2">
               <span className="break-all">{r.email}</span>
               {canRevoke(r.email, me, config) && (
                 <button type="button" disabled={busy === r.email} className={buttonClass} onClick={() => void decide(r.email, "declined")}>

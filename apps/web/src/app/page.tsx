@@ -88,7 +88,7 @@ function Section({
   if (trips.length === 0) return null;
   return (
     <section className="mt-8 first:mt-0">
-      <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted">{title}</h2>
+      <h2 className="mb-3 text-lg font-medium">{title}</h2>
       <div className="grid gap-3">
         {trips.map((trip) => (
           <TripCard
@@ -223,7 +223,7 @@ function Trips({ user }: { user: User }) {
       {head}
       {listed.length > 0 && (
         <ul
-          className="mb-8 space-y-1 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950"
+          className="mb-8 space-y-1 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950"
           aria-label="Document warnings"
         >
           {listed.map(({ trip, warning }, i) => (
@@ -235,9 +235,9 @@ function Trips({ user }: { user: User }) {
           ))}
         </ul>
       )}
-      {error && <p className="mb-4 text-sm text-danger">{error}</p>}
-      {searching && !all && <p className="mb-4 text-sm text-muted">Searching bookings…</p>}
-      {searching && all && all.failed.length > 0 && <p className="mb-4 text-sm text-danger">Some trips&apos; bookings couldn&apos;t be read, so they&apos;re searched by title and dates only.</p>}
+      {error && <p className="mb-4 text-danger">{error}</p>}
+      {searching && !all && <p className="mb-4 text-muted">Searching bookings…</p>}
+      {searching && all && all.failed.length > 0 && <p className="mb-4 text-danger">Some trips&apos; bookings couldn&apos;t be read, so they&apos;re searched by title and dates only.</p>}
       {searching && all && shown?.length === 0 && <p className="text-muted">No trips match.</p>}
       {!searching && filtering && all && shown?.length === 0 && <p className="text-muted">Every trip is hidden.</p>}
       <Section title="Now" trips={groups.current} showNext {...sectionProps} />

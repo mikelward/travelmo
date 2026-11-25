@@ -51,4 +51,10 @@ body {
     outline: 2px solid var(--foreground);
     outline-offset: 2px;
   }
+
+  /* Every button and menu item is an action: the body's size in medium weight (AGENTS.md "Type"). */
+  button,
+  [role="menuitem"] {
+    font-weight: 500;
+  }
 }

@@ -310,15 +310,15 @@ fun SettingsScreen(
             FeedsSection(viewModel)
             GoogleCalendarSection(viewModel)
             CalendarExportSection(viewModel)
-            Text(stringResource(Res.string.import_review), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
-            Text(stringResource(Res.string.import_review_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(Res.string.import_review), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+            Text(stringResource(Res.string.import_review_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedButton(onClick = onOpenReview, modifier = Modifier.padding(top = 8.dp)) { Text(stringResource(Res.string.open_import_review)) }
             SenderRulesSection(viewModel)
             RideCompaniesSection(viewModel)
             EmailAddressesSection(user, viewModel)
             ForwardSection(viewModel)
-            Text(stringResource(Res.string.reminders), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
-            Text(stringResource(Res.string.reminders_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(Res.string.reminders), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+            Text(stringResource(Res.string.reminders_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 Text(
                     if (user.email != null) stringResource(Res.string.email_me_to, user.email) else stringResource(Res.string.email_me),
@@ -334,14 +334,14 @@ fun SettingsScreen(
                     enabled = stored != null && outcome !is Outcome.Busy,
                 )
             }
-            (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+            (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) }
             chrome.PushSettings(viewModel)
             TripRemindersSection(viewModel)
             chrome.DeviceSettings()
             DeleteAccountSection(account, viewModel, SETTINGS_DELETE_ACCOUNT_TOKEN)
             Text(
                 stringResource(Res.string.version, chrome.versionName),
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 24.dp),
             )
@@ -371,8 +371,8 @@ private fun FeedsSection(viewModel: TripsViewModel) {
     }
     LaunchedEffect(removing) { if (removing is Outcome.Done) viewModel.outcomeSeen(REMOVE_FEED_TOKEN) }
     val list = feeds ?: return
-    Text(stringResource(Res.string.calendar_feeds), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
-    Text(stringResource(Res.string.calendar_feeds_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(Res.string.calendar_feeds), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(Res.string.calendar_feeds_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     for (feed in list) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
             Column(modifier = Modifier.weight(1f)) {
@@ -380,10 +380,10 @@ private fun FeedsSection(viewModel: TripsViewModel) {
                 val read = feed.lastFetchedAt?.let { stringResource(Res.string.feed_read_on, it.take(10)) } ?: stringResource(Res.string.feed_not_read)
                 Text(
                     listOfNotNull(read, feed.lastResult?.takeIf { feed.lastError == null }).joinToString(" · "),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                feed.lastError?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
+                feed.lastError?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error) }
             }
             if (viewModel.canEditFeeds) {
                 IconButton(onClick = { viewModel.removeFeed(REMOVE_FEED_TOKEN, feed.id) }, enabled = !busy) {
@@ -393,7 +393,7 @@ private fun FeedsSection(viewModel: TripsViewModel) {
         }
     }
     if (!viewModel.canEditFeeds) {
-        Text(stringResource(Res.string.feeds_on_web), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+        Text(stringResource(Res.string.feeds_on_web), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
         return
     }
     OutlinedTextField(
@@ -409,9 +409,9 @@ private fun FeedsSection(viewModel: TripsViewModel) {
     Button(onClick = { viewModel.addFeed(ADD_FEED_TOKEN, url) }, enabled = !busy && url.isNotBlank(), modifier = Modifier.padding(top = 8.dp)) {
         Text(stringResource(if (adding is Outcome.Busy) Res.string.reading else Res.string.add_feed))
     }
-    if (adding == null || adding is Outcome.Done) added?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp)) }
+    if (adding == null || adding is Outcome.Done) added?.let { Text(it, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 4.dp)) }
     for (outcome in listOf(adding, removing)) {
-        (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+        (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) }
     }
 }
 
@@ -446,11 +446,11 @@ private fun GoogleCalendarSection(viewModel: TripsViewModel) {
         }
     }
     val state = shown ?: return
-    Text(stringResource(Res.string.google_calendar), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
-    Text(stringResource(Res.string.google_calendar_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(Res.string.google_calendar), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(Res.string.google_calendar_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     val connection = state.connection
     if (!viewModel.canConnectCalendar) {
-        Text(stringResource(Res.string.google_calendar_on_web), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+        Text(stringResource(Res.string.google_calendar_on_web), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
         return
     }
     if (connection == null) {
@@ -473,11 +473,11 @@ private fun GoogleCalendarSection(viewModel: TripsViewModel) {
                     Column(modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp)) {
                         Text(calendar.summary, style = MaterialTheme.typography.bodyLarge)
                         if (calendar.selected) {
-                            calendar.lastError?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
+                            calendar.lastError?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error) }
                                 ?: calendar.lastReadAt?.let { read ->
                                     Text(
                                         listOfNotNull(stringResource(Res.string.feed_read_on, read.take(10)), calendar.lastResult).joinToString(" · "),
-                                        style = MaterialTheme.typography.bodyMedium,
+                                        style = MaterialTheme.typography.bodyLarge,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
@@ -492,9 +492,9 @@ private fun GoogleCalendarSection(viewModel: TripsViewModel) {
             }
             OutlinedButton(onClick = { draft = null; viewModel.disconnectCalendar(CALENDAR_TOKEN) }, enabled = !busy) { Text(stringResource(Res.string.disconnect)) }
         }
-        saved?.let { Text(stringResource(if (it) Res.string.calendars_saved_read else Res.string.saved), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp)) }
+        saved?.let { Text(stringResource(if (it) Res.string.calendars_saved_read else Res.string.saved), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 4.dp)) }
     }
-    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) }
 }
 
 /**
@@ -515,8 +515,8 @@ private fun CalendarExportSection(viewModel: TripsViewModel) {
     LaunchedEffect(outcome) { if (outcome is Outcome.Done) viewModel.outcomeSeen(EXPORT_TOKEN) }
     val shown = record ?: return
     if (!viewModel.canExport) return
-    Text(stringResource(Res.string.calendar_export), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
-    Text(stringResource(Res.string.calendar_export_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(Res.string.calendar_export), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(Res.string.calendar_export_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     val token = shown.token
     if (token == null) {
         Button(onClick = { viewModel.issueCalendarExport(EXPORT_TOKEN) }, enabled = !busy, modifier = Modifier.padding(top = 8.dp)) {
@@ -534,7 +534,7 @@ private fun CalendarExportSection(viewModel: TripsViewModel) {
             OutlinedButton(onClick = { confirming = false }, enabled = !busy) { Text(stringResource(Res.string.turn_off)) }
         }
     }
-    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) }
     confirming?.let { replace ->
         AppAlertDialog(
             onDismissRequest = { confirming = null },
@@ -571,8 +571,8 @@ private fun ForwardSection(viewModel: TripsViewModel) {
     LaunchedEffect(outcome) { if (outcome is Outcome.Done) viewModel.outcomeSeen(FORWARD_TOKEN) }
     val shown = forwarding ?: return
     if (!viewModel.canForward(shown)) return
-    Text(stringResource(Res.string.forward_by_email), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
-    Text(stringResource(Res.string.forward_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(Res.string.forward_by_email), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(Res.string.forward_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     val address = shown.address
     if (address == null) {
         Button(onClick = { viewModel.issueForward(FORWARD_TOKEN) }, enabled = !busy, modifier = Modifier.padding(top = 8.dp)) {
@@ -587,7 +587,7 @@ private fun ForwardSection(viewModel: TripsViewModel) {
             OutlinedButton(onClick = { confirming = false }, enabled = !busy) { Text(stringResource(Res.string.turn_off)) }
         }
     }
-    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) }
     confirming?.let { replace ->
         AppAlertDialog(
             onDismissRequest = { confirming = null },
@@ -644,8 +644,8 @@ private fun RideCompaniesSection(viewModel: TripsViewModel) {
     }
     LaunchedEffect(removing) { if (removing is Outcome.Done) viewModel.outcomeSeen(REMOVE_COMPANY_TOKEN) }
     val companies = settings?.companies ?: return
-    Text(stringResource(Res.string.ride_companies), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
-    Text(stringResource(Res.string.ride_companies_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(Res.string.ride_companies), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(Res.string.ride_companies_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     val nearLabel = { where: RideNear -> if (where == RideNear.HOME) Res.string.rides_home else Res.string.cars_anywhere }
     for (company in companies) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
@@ -657,7 +657,7 @@ private fun RideCompaniesSection(viewModel: TripsViewModel) {
                 )
                 Text(
                     (listOf(stringResource(nearLabel(company.near))) + company.countries.map(::countryName).joinToString(", ").ifEmpty { null }).filterNotNull().joinToString(" · "),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -720,9 +720,9 @@ private fun RideCompaniesSection(viewModel: TripsViewModel) {
         enabled = !busy && name.isNotBlank() && url.isNotBlank() && companies.size < MAX_RIDE_COMPANIES,
         modifier = Modifier.padding(top = 4.dp),
     ) { Text(stringResource(Res.string.add)) }
-    invalid?.let { Text(invalidText?.let { text -> stringResource(it.text, text) } ?: stringResource(it.text), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+    invalid?.let { Text(invalidText?.let { text -> stringResource(it.text, text) } ?: stringResource(it.text), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) }
     for (outcome in listOf(adding, removing)) {
-        (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+        (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) }
     }
 }
 
@@ -748,8 +748,8 @@ private fun SenderRulesSection(viewModel: TripsViewModel) {
         }
     }
     val stored = saved ?: return
-    Text(stringResource(Res.string.sender_rules), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
-    Text(stringResource(Res.string.sender_rules_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(Res.string.sender_rules), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(Res.string.sender_rules_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     OutlinedTextField(
         value = allow ?: stored.allow.joinToString("\n"),
         onValueChange = { allow = it; said = false },
@@ -776,9 +776,9 @@ private fun SenderRulesSection(viewModel: TripsViewModel) {
             onClick = { viewModel.saveSenderPatterns(SENDER_RULES_TOKEN, allow ?: stored.allow.joinToString("\n"), deny ?: stored.deny.joinToString("\n")) },
             enabled = (allow != null || deny != null) && outcome !is Outcome.Busy,
         ) { Text(stringResource(Res.string.save)) }
-        if (said) Text(stringResource(Res.string.saved), style = MaterialTheme.typography.bodyMedium)
+        if (said) Text(stringResource(Res.string.saved), style = MaterialTheme.typography.bodyLarge)
     }
-    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) }
 }
 
 
@@ -804,8 +804,8 @@ private fun EmailAddressesSection(user: SignedIn, viewModel: TripsViewModel) {
         }
     }
     LaunchedEffect(removing) { if (removing is Outcome.Done) viewModel.outcomeSeen(REMOVE_EMAIL_TOKEN) }
-    Text(stringResource(Res.string.email_addresses), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
-    Text(stringResource(Res.string.email_addresses_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(Res.string.email_addresses), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(Res.string.email_addresses_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     for (row in emailRows(user.email, holder, viewModel.now())) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
             Column(modifier = Modifier.weight(1f)) {
@@ -816,7 +816,7 @@ private fun EmailAddressesSection(user: SignedIn, viewModel: TripsViewModel) {
                     EmailRowKind.PENDING -> Res.string.email_pending
                     EmailRowKind.CONFIRMED -> null
                 }
-                note?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                note?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
             if (row.removable && viewModel.canLinkEmails) {
                 IconButton(onClick = { sentTo = null; viewModel.removeEmail(REMOVE_EMAIL_TOKEN, row.email) }, enabled = !busy) {
@@ -826,7 +826,7 @@ private fun EmailAddressesSection(user: SignedIn, viewModel: TripsViewModel) {
         }
     }
     if (!viewModel.canLinkEmails) {
-        Text(stringResource(Res.string.emails_on_web), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+        Text(stringResource(Res.string.emails_on_web), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
         return
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
@@ -846,9 +846,9 @@ private fun EmailAddressesSection(user: SignedIn, viewModel: TripsViewModel) {
             enabled = !busy && address.isNotBlank(),
         ) { Text(stringResource(Res.string.add)) }
     }
-    if (adding == null || adding is Outcome.Done) sentTo?.let { Text(stringResource(Res.string.email_link_sent, it), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp)) }
+    if (adding == null || adding is Outcome.Done) sentTo?.let { Text(stringResource(Res.string.email_link_sent, it), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 4.dp)) }
     for (outcome in listOf(adding, removing)) {
-        (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+        (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) }
     }
 }
 
@@ -873,21 +873,21 @@ private fun GmailSection(viewModel: TripsViewModel) {
         }
     }
     LaunchedEffect(outcome) { if (outcome is Outcome.Done) viewModel.outcomeSeen(GMAIL_TOKEN) }
-    Text(stringResource(Res.string.gmail), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(Res.string.gmail), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
     if (!viewModel.canUseGmail) {
-        Text(stringResource(Res.string.gmail_on_web), style = MaterialTheme.typography.bodyMedium)
+        Text(stringResource(Res.string.gmail_on_web), style = MaterialTheme.typography.bodyLarge)
         return
     }
     when (val state = gmail) {
-        TripsViewModel.GmailState.Loading -> Text(stringResource(Res.string.loading), style = MaterialTheme.typography.bodyMedium)
+        TripsViewModel.GmailState.Loading -> Text(stringResource(Res.string.loading), style = MaterialTheme.typography.bodyLarge)
         TripsViewModel.GmailState.NotConnected -> {
-            Text(stringResource(Res.string.gmail_connect_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(Res.string.gmail_connect_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedButton(onClick = { viewModel.connectGmail(GMAIL_TOKEN) }, enabled = !busy, modifier = Modifier.padding(top = 8.dp)) {
                 Text(stringResource(Res.string.connect_gmail))
             }
         }
         is TripsViewModel.GmailState.Connected -> {
-            Text(stringResource(Res.string.gmail_connected_hint), style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(Res.string.gmail_connected_hint), style = MaterialTheme.typography.bodyLarge)
             for (mailbox in state.mailboxes) {
                 val address = mailbox.emailAddress
                 MailboxRow(
@@ -905,7 +905,7 @@ private fun GmailSection(viewModel: TripsViewModel) {
             } else {
                 Text(
                     pluralStringResource(Res.plurals.gmail_limit, MAX_GMAIL_MAILBOXES, MAX_GMAIL_MAILBOXES),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 16.dp),
                 )
@@ -913,7 +913,7 @@ private fun GmailSection(viewModel: TripsViewModel) {
         }
     }
     (outcome as? Outcome.Failed)?.let {
-        Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+        Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
     }
 }
 
@@ -948,16 +948,16 @@ private fun FastmailSection(viewModel: TripsViewModel) {
             viewModel.outcomeSeen(FASTMAIL_DISCONNECT_TOKEN)
         }
     }
-    Text(stringResource(Res.string.fastmail), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(Res.string.fastmail), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
     if (!viewModel.canUseFastmail) {
-        Text(stringResource(Res.string.fastmail_on_web), style = MaterialTheme.typography.bodyMedium)
+        Text(stringResource(Res.string.fastmail_on_web), style = MaterialTheme.typography.bodyLarge)
         return
     }
     when (val state = fastmail) {
-        TripsViewModel.FastmailState.Loading -> Text(stringResource(Res.string.loading), style = MaterialTheme.typography.bodyMedium)
+        TripsViewModel.FastmailState.Loading -> Text(stringResource(Res.string.loading), style = MaterialTheme.typography.bodyLarge)
         TripsViewModel.FastmailState.NotConnected -> {
-            if (disconnected) Text(stringResource(Res.string.fastmail_disconnected), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(bottom = 8.dp))
-            Text(stringResource(Res.string.fastmail_connect_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (disconnected) Text(stringResource(Res.string.fastmail_disconnected), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(bottom = 8.dp))
+            Text(stringResource(Res.string.fastmail_connect_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             TextButton(onClick = { chrome.openLink(FASTMAIL_TOKENS_URL, "Fastmail API tokens") }) { Text(stringResource(Res.string.fastmail_tokens)) }
             OutlinedTextField(
                 value = apiToken,
@@ -980,7 +980,7 @@ private fun FastmailSection(viewModel: TripsViewModel) {
             }
         }
         is TripsViewModel.FastmailState.Connected -> {
-            Text(stringResource(Res.string.fastmail_connected_hint), style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(Res.string.fastmail_connected_hint), style = MaterialTheme.typography.bodyLarge)
             MailboxRow(
                 state.mailbox,
                 busy = busy,
@@ -991,12 +991,12 @@ private fun FastmailSection(viewModel: TripsViewModel) {
                     viewModel.disconnectFastmail(FASTMAIL_DISCONNECT_TOKEN)
                 },
             )
-            Text(stringResource(Res.string.fastmail_delete_token), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+            Text(stringResource(Res.string.fastmail_delete_token), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
         }
     }
     for (o in listOf(outcome, disconnecting)) {
         (o as? Outcome.Failed)?.let {
-            Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+            Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
         }
     }
 }
@@ -1038,13 +1038,13 @@ private fun ImapSection(viewModel: TripsViewModel) {
             viewModel.outcomeSeen(IMAP_DISCONNECT_TOKEN)
         }
     }
-    Text(stringResource(Res.string.imap), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(Res.string.imap), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
     if (!viewModel.canUseImap) {
-        Text(stringResource(Res.string.imap_on_web), style = MaterialTheme.typography.bodyMedium)
+        Text(stringResource(Res.string.imap_on_web), style = MaterialTheme.typography.bodyLarge)
         return
     }
     when (val state = imap) {
-        TripsViewModel.ImapState.Loading -> Text(stringResource(Res.string.loading), style = MaterialTheme.typography.bodyMedium)
+        TripsViewModel.ImapState.Loading -> Text(stringResource(Res.string.loading), style = MaterialTheme.typography.bodyLarge)
         is TripsViewModel.ImapState.Loaded -> {
             for (shown in state.mailboxes) {
                 val mailboxAddress = shown.mailbox.emailAddress
@@ -1060,13 +1060,13 @@ private fun ImapSection(viewModel: TripsViewModel) {
                     },
                 )
             }
-            if (disconnected) Text(stringResource(Res.string.imap_disconnected), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+            if (disconnected) Text(stringResource(Res.string.imap_disconnected), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
             // At the limit, the form still gives a connected mailbox a new
             // app password; the parser refuses only a new address.
             if (!state.canConnectMore) {
                 Text(
                     pluralStringResource(Res.plurals.imap_limit, MAX_IMAP_MAILBOXES, MAX_IMAP_MAILBOXES),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 16.dp),
                 )
@@ -1077,7 +1077,7 @@ private fun ImapSection(viewModel: TripsViewModel) {
                 val needsServer = typed.contains('@') && imapServerFor(typed) == ImapServerChoice.Other
                 Text(
                     stringResource(Res.string.imap_connect_hint),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = if (state.mailboxes.isEmpty()) 0.dp else 16.dp),
                 )
@@ -1093,7 +1093,7 @@ private fun ImapSection(viewModel: TripsViewModel) {
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, autoCorrectEnabled = false),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                redirect?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp)) }
+                redirect?.let { Text(it, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 4.dp)) }
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
@@ -1129,7 +1129,7 @@ private fun ImapSection(viewModel: TripsViewModel) {
     }
     for (o in listOf(connecting, reading, disconnecting)) {
         (o as? Outcome.Failed)?.let {
-            Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+            Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
         }
     }
 }
@@ -1151,8 +1151,8 @@ private fun MailboxRow(
     warning: String? = null,
 ) {
     val progress = mailbox.progress
-    Text(mailbox.emailAddress, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 16.dp))
-    warning?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp)) }
+    Text(mailbox.emailAddress, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
+    warning?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 4.dp)) }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
         if (mailbox.reading) {
             OutlinedButton(onClick = onStop, enabled = !busy) { Text(stringResource(Res.string.stop)) }
@@ -1172,10 +1172,10 @@ private fun MailboxRow(
         OutlinedButton(onClick = onDisconnect, enabled = !busy) { Text(stringResource(Res.string.disconnect)) }
     }
     progress?.let {
-        Text(describeBackfill(it, mailbox.reading), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+        Text(describeBackfill(it, mailbox.reading), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
     }
     pausedReason(progress, mailbox.reading)?.let {
-        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
+        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 4.dp))
     }
 }
 
@@ -1198,10 +1198,10 @@ private fun TripsSection(viewModel: TripsViewModel, onAddBooking: (defaultDate: 
     // A finished action is acknowledged so the next starts afresh; its line stays.
     LaunchedEffect(regrouping) { if (regrouping is Outcome.Done) viewModel.outcomeSeen(REGROUP_TOKEN) }
     LaunchedEffect(deleting) { if (deleting is Outcome.Done) viewModel.outcomeSeen(DELETE_TRIPS_TOKEN) }
-    Text(stringResource(Res.string.trips_section), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
-    Text(stringResource(Res.string.regroup_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(Res.string.trips_section), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(Res.string.regroup_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (!viewModel.canRunTripActions) {
-        Text(stringResource(Res.string.trips_on_web), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+        Text(stringResource(Res.string.trips_on_web), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
         return
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
@@ -1218,9 +1218,9 @@ private fun TripsSection(viewModel: TripsViewModel, onAddBooking: (defaultDate: 
             colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
         ) { Text(stringResource(if (deleting is Outcome.Busy) Res.string.deleting else Res.string.delete_all_trips)) }
     }
-    notice?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp)) }
+    notice?.let { Text(it, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp)) }
     listOf(regrouping, deleting).filterIsInstance<Outcome.Failed>().lastOrNull()?.let {
-        Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+        Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
     }
     RefreshFromEmail(viewModel, onAddBooking)
     if (confirming) {
@@ -1268,7 +1268,7 @@ private fun FailedEmails(
         for (id in ids) {
             val record = records[id]
             val gmail = record != null && (record.source ?: "gmail") == "gmail"
-            Text("• ${failedEmailLine(record)}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
+            Text("• ${failedEmailLine(record)}", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 4.dp))
             Row {
                 if (gmail) {
                     TextButton(onClick = { chrome.openLink(gmailSourceLink(id, mailboxes), "an email a refresh couldn't read") }) {
@@ -1280,7 +1280,7 @@ private fun FailedEmails(
                 }
             }
         }
-        more?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp)) }
+        more?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp)) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
             OutlinedButton(onClick = onTryAgain, enabled = !busy) { Text(stringResource(Res.string.try_again)) }
             chrome.ReportProblemButton(report)
@@ -1304,7 +1304,7 @@ private fun RefreshFromEmail(viewModel: TripsViewModel, onAddBooking: (defaultDa
     LaunchedEffect(starting) { if (starting is Outcome.Done) viewModel.outcomeSeen(REFRESH_TOKEN) }
     LaunchedEffect(stopping) { if (stopping is Outcome.Done) viewModel.outcomeSeen(REFRESH_STOP_TOKEN) }
     val progress = state.progress
-    Text(REFRESH_BLURB, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 16.dp))
+    Text(REFRESH_BLURB, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 16.dp))
     if (state.reading) {
         OutlinedButton(onClick = { viewModel.stopRefresh(REFRESH_STOP_TOKEN) }, enabled = !busy, modifier = Modifier.padding(top = 8.dp)) {
             Text(stringResource(Res.string.stop))
@@ -1320,7 +1320,7 @@ private fun RefreshFromEmail(viewModel: TripsViewModel, onAddBooking: (defaultDa
         ) { Text(refreshButton(progress)) }
     }
     progress?.let {
-        Text(describeRefresh(it, state.reading), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+        Text(describeRefresh(it, state.reading), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
     }
     val failedIds = if (state.reading) emptyList() else failedEmailIds(progress)
     if (progress != null && failedIds.isNotEmpty()) {
@@ -1338,7 +1338,7 @@ private fun RefreshFromEmail(viewModel: TripsViewModel, onAddBooking: (defaultDa
         )
     }
     listOf(starting, stopping).filterIsInstance<Outcome.Failed>().lastOrNull()?.let {
-        Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+        Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
     }
 }
 

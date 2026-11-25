@@ -155,22 +155,22 @@ private fun LibraryDialog(library: Library, onOpenLicenseUrl: (String) -> Unit, 
         text = {
             Column(modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
                 library.artifactVersion?.let {
-                    Text(stringResource(Res.string.version, it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(Res.string.version, it), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (authors.isNotEmpty()) {
-                    Text(stringResource(Res.string.licenses_by, authors), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(Res.string.licenses_by, authors), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 library.licenses.forEach { license ->
                     val url = license.url
                     if (!url.isNullOrEmpty()) {
                         Text(
                             text = license.name,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.fillMaxWidth().clickable { onOpenLicenseUrl(url) }.padding(vertical = 8.dp),
                         )
                     } else {
-                        Text(license.name, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+                        Text(license.name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
                     }
                 }
             }

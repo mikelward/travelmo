@@ -49,7 +49,7 @@ export function TripCard({
     >
       <Link href={`/trips/${trip.id}`} className="block p-4">
         <div className="flex items-baseline justify-between gap-4">
-          <h3 className={`truncate text-lg font-medium${cancelled ? " text-muted line-through" : ""}`}>
+          <h3 className={`truncate text-2xl font-semibold${cancelled ? " text-muted line-through" : ""}`}>
             {title}
             {cancelled && (
               <span className="sr-only" data-testid="trip-cancelled">
@@ -58,18 +58,18 @@ export function TripCard({
               </span>
             )}
           </h3>
-          {badge && <span className="shrink-0 text-xs uppercase tracking-wide text-muted">{badge}</span>}
+          {badge && <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-muted">{badge}</span>}
         </div>
-        <p className={`mt-1 text-sm text-zinc-600 dark:text-zinc-400${cancelled ? " line-through" : ""}`}>
+        <p className={`mt-1 text-zinc-600 dark:text-zinc-400${cancelled ? " line-through" : ""}`}>
           {formatDateRange(displayBounds(trip).start, displayBounds(trip).end)}
         </p>
         {missing && !cancelled && (
-          <p className="mt-2 text-sm text-amber-800 dark:text-amber-300" data-testid="trip-missing">
+          <p className="mt-2 text-amber-800 dark:text-amber-300" data-testid="trip-missing">
             {missing}
           </p>
         )}
         {stay && (
-          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="trip-stay">
+          <p className="mt-2 text-zinc-600 dark:text-zinc-400" data-testid="trip-stay">
             Staying at {stay.title}
             {stay.end && (
               <span className="text-muted">
@@ -79,7 +79,7 @@ export function TripCard({
           </p>
         )}
         {next && (
-          <div className="mt-2 text-sm" data-testid="trip-next">
+          <div className="mt-2" data-testid="trip-next">
             <p className="font-medium" data-testid="trip-next-title">
               {next.title}
             </p>
@@ -100,7 +100,7 @@ export function TripCard({
         )}
       </Link>
       {showCheckIn && (
-        <div className="-mt-3 flex flex-wrap items-baseline gap-x-3 px-4 pb-4 text-sm">
+        <div className="-mt-3 flex flex-wrap items-baseline gap-x-3 px-4 pb-4">
           <p className={checkIn.open ? "text-amber-800 dark:text-amber-300" : "text-muted"} data-testid="trip-checkin">
             {checkInLine(checkIn)}
           </p>

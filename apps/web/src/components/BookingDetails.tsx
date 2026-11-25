@@ -114,7 +114,7 @@ export function BookingDetailsDialog({
         {verdict}
         {hasSources && (
           <>
-            <h3 className="pt-4 font-medium">Sources</h3>
+            <h3 className="pt-4 text-lg font-medium">Sources</h3>
             <SourcesList
               segment={segment}
               {...(emailLinks ? { emailLinks } : {})}

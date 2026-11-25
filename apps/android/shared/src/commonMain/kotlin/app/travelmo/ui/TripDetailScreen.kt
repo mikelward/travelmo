@@ -457,10 +457,10 @@ private fun TripBody(
     LazyColumn(modifier = modifier.fillMaxSize().scrollEdgeCue(list, scrollCueColors()), state = list, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp)) {
         item(key = "dates") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(formatDateRange(trip.shownStart, trip.shownEnd), style = MaterialTheme.typography.bodyMedium, color = muted)
+                Text(formatDateRange(trip.shownStart, trip.shownEnd), style = MaterialTheme.typography.bodyLarge, color = muted)
                 if (shared) Text(stringResource(Res.string.badge_shared).uppercase(), style = MaterialTheme.typography.labelSmall, color = TravelmoTheme.colors.shared)
             }
-            if (watching) Text(stringResource(Res.string.watching_hint), style = MaterialTheme.typography.bodyMedium, color = muted)
+            if (watching) Text(stringResource(Res.string.watching_hint), style = MaterialTheme.typography.bodyLarge, color = muted)
             if (canManage && tripActions != null) {
                 // Fitting the dates sits by them, offered only when the bookings span less
                 // than the trip; Rename is in the ⋮ menu. Shifted by the button's own padding
@@ -478,7 +478,7 @@ private fun TripBody(
         if (trip.cancelledAt != null) {
             item(key = "cancelled") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-                    Text(stringResource(Res.string.trip_cancelled), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(Res.string.trip_cancelled), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
                     if (canManage && tripActions != null) {
                         TextButton(onClick = tripActions.restore, enabled = !busy) { Text(stringResource(Res.string.restore)) }
                     }
@@ -486,7 +486,7 @@ private fun TripBody(
             }
         }
         for ((token, message) in errors) {
-            item(key = "error-$token") { Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp)) }
+            item(key = "error-$token") { Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp)) }
         }
         if (warnings.isNotEmpty()) {
             item(key = "warnings") { DocumentWarnings(warnings, today) }
@@ -532,7 +532,7 @@ private fun TripBody(
         } else if (trip.sharedWith.isNotEmpty()) {
             item(key = "shared-with") {
                 SectionTitle(stringResource(Res.string.shared_with))
-                for (address in trip.sharedWith) Text(address, style = MaterialTheme.typography.bodyMedium)
+                for (address in trip.sharedWith) Text(address, style = MaterialTheme.typography.bodyLarge)
             }
         }
     }
@@ -556,7 +556,7 @@ private fun InterruptedDeletion(busy: Boolean, finish: () -> Unit) {
             .background(MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f))
             .padding(12.dp),
     ) {
-        Text(stringResource(Res.string.deleting_interrupted), style = MaterialTheme.typography.bodyMedium)
+        Text(stringResource(Res.string.deleting_interrupted), style = MaterialTheme.typography.bodyLarge)
         Button(onClick = finish, enabled = !busy, modifier = Modifier.padding(top = 8.dp)) { Text(stringResource(Res.string.finish_deleting)) }
     }
 }
@@ -568,11 +568,11 @@ private fun Sharing(trip: Trip, busy: Boolean, actions: TripActions) {
     Column {
         SectionTitle(stringResource(Res.string.shared_with))
         if (trip.sharedWith.isEmpty()) {
-            Text(stringResource(Res.string.only_you), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(Res.string.only_you), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         for (email in trip.sharedWith) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text(email, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                Text(email, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                 IconButton(onClick = { actions.unshare(email) }, enabled = !busy) {
                     Icon(Icons.Filled.Close, contentDescription = stringResource(Res.string.stop_sharing_with, email))
                 }
@@ -600,7 +600,7 @@ private fun MergeInto(targets: List<Trip>, titles: Map<String, String>, busy: Bo
     val target = targets.firstOrNull { it.id == targetId }
     Column {
         SectionTitle(stringResource(Res.string.merge_title))
-        Text(stringResource(Res.string.merge_text), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(Res.string.merge_text), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }, modifier = Modifier.padding(top = 8.dp)) {
             OutlinedTextField(
                 value = target?.let { tripChoice(it) } ?: "",
@@ -714,17 +714,17 @@ fun SegmentRow(
                     textDecoration = if (segment.isCancelled) TextDecoration.LineThrough else null,
                 )
             }
-            headedRouteLine(segment, heading)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = muted) }
-            timesLine(segment)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = muted) }
+            headedRouteLine(segment, heading)?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = muted) }
+            timesLine(segment)?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = muted) }
             if (flightLines.isNotEmpty()) {
-                Text(flightLines.joinToString(" · "), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.tertiary)
+                Text(flightLines.joinToString(" · "), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.tertiary)
             }
             when (checkIn?.state) {
                 FlightCheckIn.OFFER -> TextButton(onClick = { checkIn.onChange(true) }, modifier = Modifier.offset(x = -TextButtonInset)) {
                     Text(stringResource(Res.string.checked_in_action))
                 }
                 FlightCheckIn.DONE -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(stringResource(Res.string.checked_in), style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(Res.string.checked_in), style = MaterialTheme.typography.bodyLarge)
                     TextButton(onClick = { checkIn.onChange(false) }) { Text(stringResource(Res.string.undo)) }
                 }
                 null -> Unit
@@ -847,11 +847,11 @@ internal fun Verdict(segment: Segment) {
         if (rating > 0) {
             Text(
                 "★".repeat(rating) + "☆".repeat(5 - rating),
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.tertiary,
             )
         }
-        if (segment.favorite) Text("♥", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+        if (segment.favorite) Text("♥", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error)
     }
 }
 

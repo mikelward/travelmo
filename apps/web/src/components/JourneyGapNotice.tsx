@@ -6,7 +6,7 @@ import { gmailSearchUrl, journeyGapSearch, journeyGapText, type JourneyGap } fro
 export function JourneyGapNotice({ gap, onAdd, onOneWay }: { gap: JourneyGap; onAdd?: () => void; onOneWay: () => void }) {
   const link = "underline hover:no-underline";
   return (
-    <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950" data-testid="journey-gap">
+    <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950" data-testid="journey-gap">
       <p className="text-amber-800 dark:text-amber-300">{journeyGapText(gap)}</p>
       <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
         <a href={gmailSearchUrl(journeyGapSearch(gap))} target="_blank" rel="noreferrer" className={link}>

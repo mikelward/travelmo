@@ -10,7 +10,7 @@ import { useSaveForOffline } from "@/lib/offline";
 import { useTrips } from "@/lib/trips";
 
 const buttonClass =
-  "rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
+  "rounded-lg border border-zinc-300 px-3 py-1.5  hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
 
 const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -29,7 +29,7 @@ function Bar({ bar, title, uid }: { bar: TripBar; title: string; uid: string }) 
       aria-label={`${title}, ${formatDateRange(displayBounds(bar.trip).start, displayBounds(bar.trip).end)}`}
       style={{ gridColumn: `${bar.from + 1} / ${bar.to + 2}`, gridRow: bar.lane + 2 }}
       className={`${rounded} mx-px truncate px-1.5 py-0.5 text-xs text-white hover:opacity-90 ${
-        shared ? "bg-violet-600 dark:bg-violet-500" : "bg-sky-600 dark:bg-sky-500"
+ shared ? "bg-violet-600 dark:bg-violet-500" : "bg-sky-600 dark:bg-sky-500"
       } ${bar.trip.deleting ? "opacity-50" : ""}`}
     >
       {bar.continuesBefore ? "… " : ""}
@@ -128,7 +128,7 @@ function Calendar({ user }: { user: User }) {
         ))}
       </section>
       {inMonth.length === 0 && (
-        <p className="mt-4 text-sm text-muted" data-testid="no-trips">
+        <p className="mt-4 text-muted" data-testid="no-trips">
           No trips in {monthLabel(month)}.
         </p>
       )}

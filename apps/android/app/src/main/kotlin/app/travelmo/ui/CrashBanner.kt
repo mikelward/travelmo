@@ -131,8 +131,8 @@ fun CrashBanner(onShare: () -> Unit, onDismiss: () -> Unit, sharing: Boolean, sh
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(Res.string.crash_banner_title), style = MaterialTheme.typography.titleMedium)
-            Text(stringResource(Res.string.crash_banner_body), style = MaterialTheme.typography.bodyMedium)
-            if (shareFailed) Text(stringResource(R.string.debug_log_share_failed), style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(Res.string.crash_banner_body), style = MaterialTheme.typography.bodyLarge)
+            if (shareFailed) Text(stringResource(R.string.debug_log_share_failed), style = MaterialTheme.typography.bodyLarge)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
                 TextButton(onClick = onDismiss) { Text(stringResource(Res.string.crash_banner_dismiss)) }
                 Button(onClick = onShare, enabled = !sharing) {

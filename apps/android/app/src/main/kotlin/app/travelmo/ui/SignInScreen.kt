@@ -99,7 +99,7 @@ fun SignInScreen(
                     )
                 }
                 Image(painterResource(Res.drawable.logo), contentDescription = null, modifier = Modifier.size(96.dp).padding(bottom = 16.dp))
-                Text(stringResource(Res.string.app_name), style = MaterialTheme.typography.headlineMedium, fontFamily = Wordmark)
+                Text(stringResource(Res.string.app_name), style = MaterialTheme.typography.titleLarge, fontFamily = Wordmark)
                 Text(
                     stringResource(Res.string.sign_in_tagline),
                     style = MaterialTheme.typography.bodyLarge,
@@ -131,7 +131,7 @@ fun SignInScreen(
                 message?.let {
                     Text(
                         stringResource(it),
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.error,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(top = 16.dp),
@@ -158,7 +158,7 @@ fun SignInScreen(
                     shareNote?.let {
                         Text(
                             stringResource(it),
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.error,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(top = 8.dp),

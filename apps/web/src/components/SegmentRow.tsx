@@ -54,7 +54,7 @@ function Verdict({ segment, onRate, onFavorite }: { segment: Segment; onRate?: (
   if (!onRate && !onFavorite && !rating && !favorite) return null;
   const starClass = (n: number) => (n <= rating ? "text-amber-500" : "text-muted");
   return (
-    <p className="mt-1 flex items-center gap-1 text-sm" data-testid="segment-verdict">
+    <p className="mt-1 flex items-center gap-1" data-testid="segment-verdict">
       <span role="group" aria-label={rating ? `Rated ${plural(rating)}` : "Not rated"} className="flex">
         {[1, 2, 3, 4, 5].map((n) =>
           onRate ? (
@@ -186,22 +186,22 @@ export function SegmentRow({
             {heading.headline}
           </button>
         </p>
-        {route && <p className={`text-sm text-zinc-600 dark:text-zinc-400${cancelled ? " line-through" : ""}`}>{route}</p>}
-        {times && <p className={`text-sm text-zinc-600 dark:text-zinc-400${cancelled ? " line-through" : ""}`}>{times}</p>}
+        {route && <p className={`text-zinc-600 dark:text-zinc-400${cancelled ? " line-through" : ""}`}>{route}</p>}
+        {times && <p className={`text-zinc-600 dark:text-zinc-400${cancelled ? " line-through" : ""}`}>{times}</p>}
         {flightLines && flightLines.length > 0 && (
-          <p className="text-sm font-medium text-amber-800 dark:text-amber-300" data-testid="segment-flight-status">
+          <p className="font-medium text-amber-800 dark:text-amber-300" data-testid="segment-flight-status">
             {flightLines.join(" · ")}
           </p>
         )}
         {checkIn?.state === "offer" && (
-          <p className="mt-1 text-sm">
+          <p className="mt-1">
             <button type="button" onClick={() => checkIn.onChange(true)} className="font-medium underline hover:no-underline">
               I&rsquo;ve checked in
             </button>
           </p>
         )}
         {checkIn?.state === "done" && (
-          <p className="mt-1 flex gap-3 text-sm" data-testid="segment-checked-in">
+          <p className="mt-1 flex gap-3" data-testid="segment-checked-in">
             <span>Checked in</span>
             <button type="button" onClick={() => checkIn.onChange(false)} className="text-muted underline hover:no-underline">
               Undo

@@ -188,21 +188,21 @@ fun ProfileScreen(viewModel: TripsViewModel, onOpenSettings: () -> Unit, bottomB
             if (travelers.isNotEmpty()) {
                 item(key = "people-title") {
                     SectionTitle(stringResource(Res.string.people))
-                    Text(stringResource(Res.string.people_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(Res.string.people_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 val me = guessMe(travelers)
                 items(travelers, key = { "person-${it.id}" }) { person ->
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                         Text(person.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                         if (person.id == me?.id) {
-                            Text(stringResource(Res.string.you).uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(stringResource(Res.string.you).uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         } else {
                             TextButton(onClick = { viewModel.setMe(PEOPLE_TOKEN, person.id) }) { Text(stringResource(Res.string.this_is_me)) }
                         }
                     }
                 }
                 (outcomes[PEOPLE_TOKEN] as? Outcome.Failed)?.let { failed ->
-                    item(key = "people-error") { Text(failed.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+                    item(key = "people-error") { Text(failed.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) }
                 }
             }
             item(key = "home-title") { SectionTitle(stringResource(Res.string.home)) }
@@ -226,7 +226,7 @@ fun ProfileScreen(viewModel: TripsViewModel, onOpenSettings: () -> Unit, bottomB
                         Text(stringResource(Res.string.from_sender, p.ownerEmail ?: stringResource(Res.string.someone_who_trusts_you)), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 8.dp))
                     }
                     if (p.hasDetails) profileSections(p, prefix = p.ownerUid) else item(key = "nothing-${p.ownerUid}") {
-                        Text(stringResource(Res.string.profile_nothing_yet), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(Res.string.profile_nothing_yet), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -259,7 +259,7 @@ private fun LazyListScope.profileSections(
                         val name = group.person ?: stringResource(if (onWhose != null) Res.string.loyalty_you else Res.string.loyalty_theirs)
                         Text(
                             name,
-                            style = MaterialTheme.typography.titleSmall,
+                            style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 12.dp, bottom = 4.dp).semantics { heading() },
                         )
@@ -269,7 +269,7 @@ private fun LazyListScope.profileSections(
             }
         }
         whoseError?.let { message ->
-            item(key = "$prefix-whose-error") { Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+            item(key = "$prefix-whose-error") { Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) }
         }
     }
     if (onRemoveFound != null && profile.foundLoyalty.isNotEmpty()) {
@@ -278,7 +278,7 @@ private fun LazyListScope.profileSections(
             item(key = "$prefix-found-${found.program}-${found.number}") { FoundRow(found, onRemove = { onRemoveFound(found) }) }
         }
         removalError?.let { message ->
-            item(key = "$prefix-found-error") { Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+            item(key = "$prefix-found-error") { Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) }
         }
     }
     entries(stringResource = Res.string.loyalty_details, entries = loyalty, prefix = "$prefix-loy")
@@ -302,7 +302,7 @@ private fun FoundRow(found: FoundLoyalty, onRemove: () -> Unit) {
             Text("${found.program} · ${found.number}", style = MaterialTheme.typography.bodyLarge)
             Text(
                 stringResource(Res.string.found_from_email, found.label ?: stringResource(Res.string.a_booking_email)),
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -373,7 +373,7 @@ private fun Sharing(trusted: List<String>, busy: Boolean, error: String?, onSave
     var formError by rememberSaveable { mutableStateOf<String?>(null) }
     val notAnAddress = stringResource(Res.string.enter_email)
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text(stringResource(Res.string.share_profile_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(Res.string.share_profile_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (trusted.isEmpty()) {
             Text(stringResource(Res.string.only_you), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
         }
@@ -406,7 +406,7 @@ private fun Sharing(trusted: List<String>, busy: Boolean, error: String?, onSave
                 enabled = !busy && address.isNotBlank() && trusted.size < MAX_TRUSTED,
             ) { Text(stringResource(Res.string.share)) }
         }
-        (formError ?: error)?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp)) }
+        (formError ?: error)?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp)) }
     }
 }
 
@@ -445,11 +445,11 @@ private fun HomeSection(viewModel: TripsViewModel) {
     val corrections = settings?.homes
     Column(modifier = Modifier.fillMaxWidth()) {
         if (periods == null || corrections == null) {
-            Text(stringResource(Res.string.loading), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(Res.string.loading), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             return@Column
         }
         Text(homeLine(periods) ?: stringResource(Res.string.home_not_known), style = MaterialTheme.typography.bodyLarge)
-        Text(stringResource(Res.string.home_worked_out), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(Res.string.home_worked_out), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         for (c in corrections.sortedBy { it.from }) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(correctionText(c), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
@@ -481,7 +481,7 @@ private fun HomeSection(viewModel: TripsViewModel) {
             ) { Text(stringResource(Res.string.set)) }
         }
         (problem ?: (outcome as? Outcome.Failed)?.message)?.let {
-            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
         }
         HomeAirports(viewModel, periods)
     }
@@ -506,7 +506,7 @@ private fun HomeSection(viewModel: TripsViewModel) {
 
 @Composable
 private fun SectionTitle(text: String) {
-    Text(text, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
+    Text(text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
 }
 
 @Composable
@@ -524,8 +524,8 @@ private fun FoldingEntry(entry: ProfileEntry) {
         if (open) {
             for (field in entry.fields) {
                 Row(modifier = Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text(field.label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                    Text(field.value, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1.4f))
+                    Text(field.label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                    Text(field.value, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1.4f))
                 }
             }
         }
@@ -538,22 +538,22 @@ private fun LoyaltyTable(entries: List<ProfileEntry>, onWhose: ((program: String
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.padding(vertical = 4.dp)) {
-            Text(stringResource(Res.string.col_program), style = MaterialTheme.typography.labelLarge, color = muted, modifier = Modifier.weight(1.4f))
-            Text(stringResource(Res.string.col_account), style = MaterialTheme.typography.labelLarge, color = muted, modifier = Modifier.weight(1f))
-            Text(stringResource(Res.string.col_balance), style = MaterialTheme.typography.labelLarge, color = muted, textAlign = TextAlign.End, modifier = Modifier.weight(0.8f))
-            Text(stringResource(Res.string.col_status), style = MaterialTheme.typography.labelLarge, color = muted, modifier = Modifier.weight(0.9f).padding(start = 8.dp))
+            Text(stringResource(Res.string.col_program), style = MaterialTheme.typography.bodyLarge, color = muted, modifier = Modifier.weight(1.4f))
+            Text(stringResource(Res.string.col_account), style = MaterialTheme.typography.bodyLarge, color = muted, modifier = Modifier.weight(1f))
+            Text(stringResource(Res.string.col_balance), style = MaterialTheme.typography.bodyLarge, color = muted, textAlign = TextAlign.End, modifier = Modifier.weight(0.8f))
+            Text(stringResource(Res.string.col_status), style = MaterialTheme.typography.bodyLarge, color = muted, modifier = Modifier.weight(0.9f).padding(start = 8.dp))
             if (onWhose != null) Spacer(Modifier.width(40.dp))
         }
         for (entry in entries) {
             val s = loyaltySummary(entry)
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Row(modifier = Modifier.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(s.title, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1.4f))
-                Text(s.account ?: "", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                Text(s.balance ?: "", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.End, modifier = Modifier.weight(0.8f))
+                Text(s.title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1.4f))
+                Text(s.account ?: "", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Text(s.balance ?: "", style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.End, modifier = Modifier.weight(0.8f))
                 Text(
                     if (s.status != null && s.nextStatus != null) "${s.status} (next: ${s.nextStatus})" else s.status ?: "",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.weight(0.9f).padding(start = 8.dp),
                 )
                 if (onWhose != null) {
@@ -633,7 +633,7 @@ private fun HomeAirports(viewModel: TripsViewModel, periods: List<HomePeriod>) {
         }
     }
     (problem ?: (outcome as? Outcome.Failed)?.message)?.let {
-        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
     }
 }
 
