@@ -256,6 +256,16 @@ describe("sameBooking", () => {
     expect(sameBooking(car, { ...agreement, rentalStage: undefined })).toBe(false);
     expect(sameBooking(car, { ...agreement, provider: undefined })).toBe(false);
   });
+  it("keeps a leg's times when a reminder gives the whole trip it starts", () => {
+    const leg = { type: "flight" as const, title: "QR 915 ADL to DOH", start: "2026-01-10T22:00:00+10:30", end: "2026-01-11T04:00:00+03:00", provider: "Qatar Airways", confirmation: "9JRJRI", origin: { name: "Adelaide", code: "ADL" }, destination: { name: "Doha", code: "DOH" } };
+    const trip = { ...leg, title: "Adelaide to London", end: "2026-01-11T13:20:00+00:00", destination: { name: "London", code: "LHR" } };
+    // The same booking, so no second flight...
+    expect(sameBooking(leg, trip)).toBe(true);
+    // ...but the trip's arrival is London's, not the leg's.
+    expect(mergeDetails(leg, trip, { newer: true })).toMatchObject({ end: leg.end, destination: leg.destination });
+    // A schedule change on the same route still moves it.
+    expect(mergeDetails(leg, { ...leg, end: "2026-01-11T04:30:00+03:00" }, { newer: true }).end).toBe("2026-01-11T04:30:00+03:00");
+  });
   it("pairs a car's reservation and agreement once: the pair takes its own references, not another car's", () => {
     const car = { type: "car_rental" as const, title: "Avis Boston Logan Intl Airport", start: "2026-11-24T17:30:00-05:00", end: "2026-11-29T17:30:00-05:00", provider: "Avis", confirmation: "20874163US2", rentalStage: "reservation" as const };
     const agreement = { ...car, title: "Avis Car Rental East Boston", start: "2026-11-24T18:15:00-05:00", confirmation: "708843612", rentalStage: "agreement" as const };

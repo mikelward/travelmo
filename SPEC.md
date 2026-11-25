@@ -1795,7 +1795,9 @@ same type, the same local start minute for journeys and activities (or,
 for a journey moved by a schedule change, the same reference and service
 number, "UA 122" being "UA122", that day within six hours; the newest
 email by when it was sent sets the journey's times, unless the user edited
-it: `mergeDetails`) or the same
+it or the email's journey runs between other airports or stations, as a
+reminder's whole trip "ADL to LHR, 1 stop" does beside its first leg ADL to
+DOH: `mergeDetails`) or the same
 dates for stays and rentals, and then evidence of identity, since
 dropping a real booking loses it: equal confirmation numbers when both have
 one, otherwise agreeing codes at both ends of a journey, or a distinctive
