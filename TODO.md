@@ -37,6 +37,9 @@
   - [x] Web: the same, the details in a dialog over the trip page.
   - [ ] Later: drop Edit, Copy reference and Directions from a booking's ⋮
         menu, now on its details.
+- [ ] Several cars on one trip (maintainer, 2026-11-25): rentals from one
+      company with the same pick-up and return could show as one row ("Two
+      cars"), a tap showing each; discuss before building.
 - [ ] Loyalty and rewards (maintainer, 2026-11-25): think through how
       programs, points, status and rewards show up, kept apart from a
       booking's brand logo (the brand as the traveler knows it, never the
@@ -517,6 +520,12 @@ Kotlin Multiplatform, sharing the Android app's Kotlin (SPEC "iOS app").
 - [ ] TestFlight builds from CI (needs the Apple Developer Program).
 
 ## Decisions needing review
+
+- Car rentals (2026-11-25): a reservation and a rental agreement (or receipt)
+  from the same company, picked up and returned on the same days, are one
+  rental (`sameRental`); two agreements, or two reservations, stay two
+  rentals, and a rental that already has its agreement takes no other, so a
+  family's two cars stay two. Asked; the maintainer wasn't sure.
 
 Guesses made on autopilot; change any of them freely.
 

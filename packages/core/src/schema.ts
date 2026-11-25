@@ -48,6 +48,9 @@ export const ExtractedSegment = z.object({
   // the reader and as people write it once filed (canonicalName). Absent
   // when the email names nobody, and on bookings read before travelers were.
   travelers: z.array(z.string().min(1)).max(20).optional(),
+  // For a car rental, what the email is: a reservation made ahead, or the
+  // rental agreement or receipt given at pick-up or return (sameRental).
+  rentalStage: z.enum(["reservation", "agreement", "paired"]).optional(),
 });
 export type ExtractedSegment = z.infer<typeof ExtractedSegment>;
 

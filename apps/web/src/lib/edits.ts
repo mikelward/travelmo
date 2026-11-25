@@ -97,6 +97,7 @@ export async function saveSegment(db: Firestore, tripId: string, extracted: Extr
       if (current.data.userCancelled) saved.userCancelled = current.data.userCancelled;
       // Who it is for comes from its emails; the form doesn't edit it.
       if (current.data.travelers) saved.travelers = current.data.travelers;
+      if (current.data.rentalStage) saved.rentalStage = current.data.rentalStage;
     } else {
       // A booking added to a cancelled trip is cancelled with it.
       saved = inTrip(saved, trip, timestamp);

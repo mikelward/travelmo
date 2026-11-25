@@ -30,6 +30,12 @@ describe("parseExtraction", () => {
     expect(() => parseExtraction(JSON.stringify({ isBooking: true, segments: [], memberships: [{ program: "Example Air Club" }] }), "m2")).toThrow(/schema/);
   });
 
+  it("never takes a car rental an email gives as already paired", () => {
+    const car = { type: "car_rental", title: "Avis Boston", start: "2026-11-24T17:30:00-05:00", end: "2026-11-29T17:30:00-05:00", provider: "Avis" };
+    const booking = parseExtraction(JSON.stringify({ isBooking: true, segments: [{ ...car, rentalStage: "paired" }, { ...car, rentalStage: "agreement" }] }), "m1");
+    expect(booking.segments.map((s) => s.rentalStage)).toEqual([undefined, "agreement"]);
+  });
+
   it("accepts a valid booking", () => {
     const booking = parseExtraction(
       JSON.stringify({

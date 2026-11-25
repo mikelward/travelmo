@@ -1727,7 +1727,17 @@ provider, the same listing title (case, accents and punctuation aside) and
 the same check-in and check-out instants are one stay, whichever town or
 suburb each names (letters of every script count, so "東京" and "大阪"
 listings stay two), unless both carry references that differ or name
-different countries. A journey an email gives only the date of (local
+different countries. A car's reservation and its signed rental agreement
+(Avis sends both, under two references) are one rental: the reader says
+which each car rental's email is (`rentalStage`: a reservation made ahead,
+or the agreement or receipt given at pick-up or return), and one of each
+from the same rental company, picked up and returned on the same days,
+whatever the hours, is one (`sameRental`); the agreement sets its times,
+whichever email is read first (Refresh from email too), and the other
+reference goes in the notes. Two agreements, or two reservations, stay two
+rentals. A rental with both is `paired` and takes only emails of its own two
+references, so a family's two cars stay two whichever order their emails are
+read in. A journey an email gives only the date of (local
 midnight, no end, no service number: Delta's meal preselect email) is the
 one booked that day between the same airports or stations, whatever its
 reference, since a codeshare's operating airline and the airline it was

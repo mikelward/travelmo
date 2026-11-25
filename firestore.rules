@@ -184,7 +184,7 @@ service cloud.firestore {
         }
         function validSegment(segment) {
           return segment.keys().hasOnly(['id', 'tripId', 'type', 'title', 'provider', 'confirmation', 'start', 'end',
-              'origin', 'destination', 'notes', 'source', 'gmailMessageIds', 'sources', 'sender', 'rating', 'favorite',
+              'origin', 'destination', 'notes', 'rentalStage', 'source', 'gmailMessageIds', 'sources', 'sender', 'rating', 'favorite',
               'cancelledAt', 'cancelledBy', 'cancelledSentAt', 'restoredFrom', 'restoredAt', 'userCancelled', 'travelers', 'editedAt', 'mergedFrom', 'mergedBookings', 'createdAt', 'updatedAt'])
             && segment.id == segmentId && segment.tripId == tripId
             && segment.type in ['flight', 'train', 'bus', 'ferry', 'lodging', 'car_rental', 'activity', 'other']
@@ -206,6 +206,7 @@ service cloud.firestore {
             && (!('editedAt' in segment) || isInstant(segment.editedAt))
             && (!('mergedFrom' in segment) || (segment.mergedFrom is list && segment.mergedFrom.size() <= 50))
             && (!('mergedBookings' in segment) || (segment.mergedBookings is list && segment.mergedBookings.size() <= 50))
+            && (!('rentalStage' in segment) || segment.rentalStage in ['reservation', 'agreement', 'paired'])
             && segment.createdAt is string && segment.updatedAt is string;
         }
         // A change to a booking's details is a hand edit, which records when

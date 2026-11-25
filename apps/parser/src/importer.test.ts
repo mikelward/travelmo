@@ -1386,6 +1386,41 @@ describe("importTripIt", () => {
     expect([...store.segments.keys()]).toEqual([kept!.id]);
   });
 
+  it("files a car's rental agreement as the reservation it was picked up on, either order", async () => {
+    const car = (title: string, start: string, provider: string, confirmation: string, rentalStage: "reservation" | "agreement") => ({ type: "car_rental" as const, title, start, end: "2026-11-29T17:30:00-05:00", provider, confirmation, rentalStage });
+    const reservation: ExtractedBooking = { isBooking: true, segments: [car("Avis Boston Logan Intl Airport", "2026-11-24T17:30:00-05:00", "Avis", "20874163US2", "reservation")] };
+    const agreement: ExtractedBooking = { isBooking: true, segments: [car("Avis Car Rental East Boston", "2026-11-24T18:15:00-05:00", "Avis Rent A Car", "708843612", "agreement")] };
+    const first = email({ id: "m-res", subject: "Avis reservation confirmed", date: "Tue, 20 Oct 2026 10:00:00 +0000" });
+    const second = email({ id: "m-agree", subject: "Avis Rental Confirmation: 708843612", date: "Tue, 24 Nov 2026 20:12:50 +0000" });
+    for (const order of [[first, second], [second, first]]) {
+      const store = memoryStore();
+      for (const message of order) await importMessage("u1", message, deps(store, async () => (message === first ? reservation : agreement)));
+      const cars = [...store.segments.values()];
+      expect(cars).toHaveLength(1);
+      expect(cars[0]!.sources?.map((s) => s.id).sort()).toEqual(["m-agree", "m-res"]);
+      // The agreement, the newer, says when the car was picked up.
+      expect(cars[0]!.start).toBe("2026-11-24T18:15:00-05:00");
+    }
+
+    // Two cars for a family trip: two reservations, then two agreements, are two rentals.
+    const store = memoryStore();
+    const another = (booking: ExtractedBooking, confirmation: string): ExtractedBooking => ({ isBooking: true, segments: [{ ...booking.segments[0]!, confirmation }] });
+    const emails: [string, ExtractedBooking][] = [
+      ["m-res1", reservation],
+      ["m-res2", another(reservation, "20874164US2")],
+      ["m-agree1", agreement],
+      ["m-agree2", another(agreement, "708843613")],
+    ];
+    for (const [id, extracted] of emails) await importMessage("u1", email({ id, subject: "Avis Rental Confirmation" }), deps(store, async () => extracted));
+    expect([...store.segments.values()].map((s) => s.sources?.map((r) => r.id).sort())).toEqual([["m-agree1", "m-res1"], ["m-agree2", "m-res2"]]);
+
+    // Read newest first, the agreements before the reservations: still two, each one car's reservation and agreement.
+    const newest = memoryStore();
+    for (const [id, extracted] of [emails[2]!, emails[3]!, emails[0]!, emails[1]!]) await importMessage("u1", email({ id, subject: "Avis Rental Confirmation" }), deps(newest, async () => extracted));
+    const rentals = [...newest.segments.values()].map((s) => s.sources?.map((r) => r.id.replace(/\d$/, "")).sort());
+    expect(rentals).toEqual([["m-agree", "m-res"], ["m-agree", "m-res"]]);
+  });
+
   it("keeps the source of a booking dropped as a duplicate on the booking it matched", async () => {
     const store = memoryStore();
     await importMessage("u1", email({ id: "m2", subject: "Your Ryanair itinerary" }), deps(store, async () => flight));

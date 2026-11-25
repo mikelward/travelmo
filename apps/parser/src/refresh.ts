@@ -16,6 +16,7 @@ import {
   rebookedWithinDays,
   sameBooking,
   sameEvent,
+  sameRental,
   segmentDateRange,
   segmentSources,
   untimedMatchDays,
@@ -83,7 +84,7 @@ export function handEdited(segment: Pick<Segment, "editedAt" | "createdAt" | "up
 }
 
 // The fields extraction gives a booking.
-const detailKeys = ["type", "title", "provider", "confirmation", "start", "end", "origin", "destination", "notes", "travelers"] as const;
+const detailKeys = ["type", "title", "provider", "confirmation", "start", "end", "origin", "destination", "notes", "travelers", "rentalStage"] as const;
 
 // A detail as filed: travelers as people write their names (canonicalTravelers),
 // so a reading that names the same people the same way changes nothing.
@@ -143,9 +144,10 @@ const segmentKey = (segment: Pick<Segment, "tripId" | "id">) => `${segment.tripI
 
 // Two references that disagree are two bookings, however alike the rest,
 // unless one is a journey known only by its date (datedJourney): a
-// codeshare partner's reference for the flight booked.
+// codeshare partner's reference for the flight booked; or a car's
+// reservation and its rental agreement (sameRental).
 const twoReferences = (a: ExtractedSegment, b: ExtractedSegment) =>
-  !!a.confirmation && !!b.confirmation && normalizeReference(a.confirmation) !== normalizeReference(b.confirmation) && !datedJourney(a) && !datedJourney(b);
+  !!a.confirmation && !!b.confirmation && normalizeReference(a.confirmation) !== normalizeReference(b.confirmation) && !datedJourney(a) && !datedJourney(b) && !sameRental(a, b);
 
 // What refreshing one email did to the user's bookings.
 export type EmailRefresh = { updated: number; added: number; removed: number; merged: number; kept: number };

@@ -446,7 +446,7 @@ export function sameBooking(a: ExtractedSegment, b: ExtractedSegment): boolean {
     if (localDate(a.start) !== localDate(b.start)) return false;
     if (a.end && b.end && localDate(a.end) !== localDate(b.end)) return false;
   }
-  if (a.confirmation && b.confirmation) return normalizeReference(a.confirmation) === normalizeReference(b.confirmation);
+  if (a.confirmation && b.confirmation) return normalizeReference(a.confirmation) === normalizeReference(b.confirmation) || sameRental(a, b);
   if (sameListing(a, b)) return true;
   if (placesConflict(a, b)) return false;
   if (a.origin?.code && b.origin?.code && a.destination?.code && b.destination?.code) return true;
@@ -485,6 +485,37 @@ function sameDatedJourney(a: ExtractedSegment, b: ExtractedSegment): boolean {
   if (localDate(a.start) !== localDate(b.start)) return false;
   const code = (p?: Place) => p?.code?.toUpperCase();
   return !!code(a.origin) && code(a.origin) === code(b.origin) && !!code(a.destination) && code(a.destination) === code(b.destination);
+}
+
+// A car's reservation and its signed rental agreement, read from two emails
+// under two references (Avis's 20874163US2 and 708843612): one of each
+// (rentalStage), from the same rental company, picked up and returned on the
+// same days, whatever the hours (the car collected late or early, the
+// agreement's return its own estimate). Two agreements are two cars. Once
+// paired (mergeDetails), a rental takes only an email of one of its own
+// references (its confirmation, or the other in its notes), so a second
+// car's reservation stays apart whichever order the emails are read in.
+export function sameRental(a: ExtractedSegment, b: ExtractedSegment): boolean {
+  if (a.type !== "car_rental" || b.type !== "car_rental" || !a.end || !b.end || !a.provider || !b.provider) return false;
+  if (!a.rentalStage || !b.rentalStage) return false;
+  const company = (provider: string) => provider.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const [x, y] = [company(a.provider), company(b.provider)];
+  if (!x || !y || !(x === y || x.startsWith(`${y} `) || y.startsWith(`${x} `))) return false;
+  if (localDate(a.start) !== localDate(b.start) || localDate(a.end) !== localDate(b.end)) return false;
+  if (a.rentalStage === "paired" || b.rentalStage === "paired") {
+    const [pair, other] = a.rentalStage === "paired" ? [a, b] : [b, a];
+    return !!other.confirmation && rentalReferences(pair).has(normalizeReference(other.confirmation));
+  }
+  return a.rentalStage !== b.rentalStage;
+}
+// A paired rental's references: its confirmation, the other one the merge
+// recorded ("Other reference: ABCDEF"), and any number-like word its notes
+// give otherwise ("Rental agreement number: 708843612").
+function rentalReferences(s: ExtractedSegment): Set<string> {
+  const notes = s.notes ?? "";
+  const recorded = [...notes.matchAll(/^Other reference: (.+)$/gm)].map((m) => m[1]);
+  const worded = notes.split(/[^A-Za-z0-9-]+/).filter((word) => /[0-9]/.test(word));
+  return new Set([s.confirmation, ...recorded, ...worded].filter((r): r is string => !!r).map(normalizeReference));
 }
 
 // One journey moved by a schedule change: the same reference and service
@@ -689,7 +720,9 @@ export function mergeDetails<S extends ExtractedSegment>(existing: S, found: Ext
     merged.start = found.start;
     if (found.end !== undefined) merged.end = found.end;
     if (found.confirmation !== undefined) merged.confirmation = found.confirmation;
-  } else if (newer && !edited && journeyTypes.has(existing.type) && found.type === existing.type && !datedJourney(found)) {
+  } else if (!edited && (newer ? found.type === existing.type && (journeyTypes.has(existing.type) || agreementOf(existing, found)) && !datedJourney(found) : agreementOf(existing, found) && existing.rentalStage === "reservation")) {
+    // A car's rental agreement (sameRental) says when it was picked up and
+    // is due back, whichever email was read first; a later one corrects it.
     // A change that gives no arrival moves the old one with the departure,
     // keeping the journey's length, rather than leaving it before it.
     const moved = Date.parse(found.start) - Date.parse(existing.start);
@@ -707,6 +740,10 @@ export function mergeDetails<S extends ExtractedSegment>(existing: S, found: Ext
   if (merged.confirmation === undefined && found.confirmation !== undefined) merged.confirmation = found.confirmation;
   if (merged.end === undefined && found.end !== undefined) merged.end = found.end;
   if (merged.origin === undefined && found.origin !== undefined) merged.origin = found.origin;
+  // A reserved car with its agreement is paired: another car's emails stay
+  // apart. One filed before the reader told them apart learns which it is.
+  if (sameRental(existing, found)) merged.rentalStage = "paired";
+  else if (!existing.rentalStage && found.rentalStage && found.rentalStage !== "paired" && found.type === "car_rental") merged.rentalStage = found.rentalStage;
   if (merged.destination === undefined && found.destination !== undefined) merged.destination = found.destination;
   const notes = merged.notes?.trim() ? [merged.notes.trim()] : [];
   const has = (text: string) => notes.some((note) => note.toLowerCase().includes(text.toLowerCase()));
@@ -724,6 +761,11 @@ export function mergeDetails<S extends ExtractedSegment>(existing: S, found: Ext
   const travelers = canonicalTravelers([...(existing.travelers ?? []), ...(found.travelers ?? [])]);
   if (travelers) merged.travelers = travelers;
   return merged;
+}
+
+// The rental agreement of a car `existing` is, or was, reserved as.
+function agreementOf(existing: ExtractedSegment, found: ExtractedSegment): boolean {
+  return found.rentalStage === "agreement" && sameRental(existing, found);
 }
 
 // Places both sides know must agree: two stays on the same nights in

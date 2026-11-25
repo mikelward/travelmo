@@ -472,6 +472,25 @@ describe("refreshEmail", () => {
     expect([...w.memory.segments.keys()]).toEqual(["m1-0"]);
   });
 
+  it("merges a car's reservation and its rental agreement filed before as two", async () => {
+    const w = world();
+    const car = (title: string, start: string, confirmation: string, rentalStage: "reservation" | "agreement"): ExtractedSegment => ({ type: "car_rental", title, start, end: "2027-03-14T17:30:00-04:00", provider: "Avis", confirmation, rentalStage });
+    const reservation = car("Avis Boston Logan Intl Airport", "2027-03-12T17:30:00-04:00", "20874163US2", "reservation");
+    const agreement = car("Avis Car Rental East Boston", "2027-03-12T18:15:00-04:00", "708843612", "agreement");
+    w.put(trip("t1"), booking("m1-0", "t1", reservation), booking("m2-0", "t1", agreement));
+    w.memory.parsed.set(`${uid}/m2`, record("m2"));
+
+    expect(await w.refresh("m2", found(agreement))).toMatchObject({ merged: 1 });
+    expect(w.memory.segments.size).toBe(1);
+
+    // The reservation's email refreshed instead: the agreement's times win all the same.
+    const v = world();
+    v.put(trip("t1"), booking("m1-0", "t1", reservation), booking("m2-0", "t1", agreement));
+    v.memory.parsed.set(`${uid}/m1`, record("m1"));
+    expect(await v.refresh("m1", found(reservation))).toMatchObject({ merged: 1 });
+    expect([...v.memory.segments.values()].map((s) => [s.start, s.rentalStage])).toEqual([[agreement.start, "paired"]]);
+  });
+
   it("keeps what only the duplicate knew, its reference and provider, on the booking that stays", async () => {
     const room = { ...stay, confirmation: undefined };
     const w = world();
