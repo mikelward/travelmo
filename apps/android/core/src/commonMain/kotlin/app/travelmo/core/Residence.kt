@@ -33,8 +33,15 @@ private fun dates(from: String, to: String): Sequence<String> {
  * across the date line). No country and not in transit is a day nothing
  * places.
  */
-/** [tripCountries]: the countries each trip puts the traveler in that day. */
-data class DayPresence(val countries: Set<String>, val tripIds: Set<String>, val assumedHome: Boolean, val inTransit: Boolean, val tripCountries: Map<String, Set<String>> = emptyMap())
+/** [tripCountries]: the countries each trip puts the traveler in that day; [night]: the country they end it in, if known. */
+data class DayPresence(
+    val countries: Set<String>,
+    val tripIds: Set<String>,
+    val assumedHome: Boolean,
+    val inTransit: Boolean,
+    val tripCountries: Map<String, Set<String>> = emptyMap(),
+    val night: String? = null,
+)
 
 fun presenceTimeline(
     all: List<TripWithSegments>,
@@ -46,6 +53,8 @@ fun presenceTimeline(
     val countries = HashMap<String, MutableSet<String>>()
     val trips = HashMap<String, MutableSet<String>>()
     val tripCountries = HashMap<String, MutableMap<String, MutableSet<String>>>()
+    val nights = HashMap<String, String?>()
+    val nightAt = HashMap<String, String>()
     val transit = HashMap<String, Boolean>()
     for ((trip, segments) in all.associateBy { it.trip.id }.values) {
         val bounds = reportBounds(trip, segments) ?: continue
@@ -59,6 +68,12 @@ fun presenceTimeline(
             known += place.countries
             trips.getOrPut(day) { mutableSetOf() } += trip.id
             tripCountries.getOrPut(day) { mutableMapOf() }.getOrPut(trip.id) { mutableSetOf() } += place.countries
+            // The night is where the day's last booking, of any trip, left them.
+            val at = place.nightAt
+            if (at != null && nightAt[day].let { it == null || compareInstants(at, it) > 0 }) {
+                nightAt[day] = at
+                nights[day] = place.night
+            }
             transit[day] = known.isEmpty() && ((transit[day] ?: false) || place.inTransit)
         }
     }
@@ -66,12 +81,12 @@ fun presenceTimeline(
     for (day in dates(from, to)) {
         val known = countries[day]
         if (known != null) {
-            timeline[day] = DayPresence(known, trips[day].orEmpty(), assumedHome = false, inTransit = transit[day] ?: false, tripCountries = tripCountries[day].orEmpty())
+            timeline[day] = DayPresence(known, trips[day].orEmpty(), assumedHome = false, inTransit = transit[day] ?: false, tripCountries = tripCountries[day].orEmpty(), night = nights[day])
             continue
         }
         // As a code, however the home was written ("UK" is GB).
         val home = homeAt(homes, day)?.country?.let(::countryCode)
-        timeline[day] = DayPresence(setOfNotNull(home), emptySet(), assumedHome = true, inTransit = false)
+        timeline[day] = DayPresence(setOfNotNull(home), emptySet(), assumedHome = true, inTransit = false, night = home)
     }
     return timeline
 }
@@ -520,9 +535,36 @@ fun countryDaysRange(all: List<TripWithSegments>, today: String, year: String? =
     return DateRange(first, today)
 }
 
-/** Where the traveler was each day of [range], home included, as runs of days in each country. */
-fun countryDays(all: List<TripWithSegments>, homes: List<HomePeriod>, range: DateRange, lookup: (String) -> AirportPlace? = ::airportPlace): CountryDaysReport {
-    val timeline = presenceTimeline(all, homes, range.start, range.end, lookup)
+/**
+ * How a day counts for a country: [PART], any part of it spent there (a day crossing a border counts
+ * for both); [WHOLE], all of it (the day began and ended there, and went nowhere else); [NIGHTS],
+ * where it ended.
+ */
+enum class CountryCounting { PART, WHOLE, NIGHTS }
+
+/** The countries a day counts for, by [counting]; [before] is the day before. */
+private fun countedIn(d: DayPresence?, before: DayPresence?, counting: CountryCounting): Set<String> {
+    if (d == null) return emptySet()
+    return when (counting) {
+        CountryCounting.PART -> d.countries
+        CountryCounting.NIGHTS -> setOfNotNull(d.night)
+        CountryCounting.WHOLE -> {
+            val only = d.countries.singleOrNull()
+            if (only != null && d.night == only && before?.night == only) setOf(only) else emptySet()
+        }
+    }
+}
+
+/** Where the traveler was each day of [range], home included, as runs of days (or nights) in each country, counted by [counting]. */
+fun countryDays(
+    all: List<TripWithSegments>,
+    homes: List<HomePeriod>,
+    range: DateRange,
+    lookup: (String) -> AirportPlace? = ::airportPlace,
+    counting: CountryCounting = CountryCounting.PART,
+): CountryDaysReport {
+    // From the day before, to see where the first day began.
+    val timeline = presenceTimeline(all, homes, shiftDate(range.start, DateShift(days = -1)), range.end, lookup)
     class Run(val start: String, var end: String, var days: Int, val home: Boolean, val tripIds: MutableSet<String>)
     val open = LinkedHashMap<String, Run>()
     val stays = LinkedHashMap<String, MutableList<CountryStay>>()
@@ -532,7 +574,7 @@ fun countryDays(all: List<TripWithSegments>, homes: List<HomePeriod>, range: Dat
     }
     for (day in dates(range.start, range.end)) {
         val d = timeline[day]
-        val here = d?.countries.orEmpty()
+        val here = countedIn(d, timeline[shiftDate(day, DateShift(days = -1))], counting)
         val homeCountry = homeAt(homes, day)?.country?.let(::countryCode)
         // A stay ends when the traveler leaves, or when the country stops or starts being home (a
         // move abroad mid-stay starts a stay away).
@@ -552,6 +594,6 @@ fun countryDays(all: List<TripWithSegments>, homes: List<HomePeriod>, range: Dat
             .sortedWith(compareByDescending<CountryDays> { it.days }.thenBy { it.country }),
         // Home's missing country is one fix on the Profile, not a run of days.
         unplaced = stretches(timeline, range, { isUnknown(it) && it?.assumedHome != true }, emptySet(), false).reversed(),
-        homeCountryKnown = timeline.values.none { it.assumedHome && it.countries.isEmpty() },
+        homeCountryKnown = timeline.none { (day, d) -> day >= range.start && d.assumedHome && d.countries.isEmpty() },
     )
 }

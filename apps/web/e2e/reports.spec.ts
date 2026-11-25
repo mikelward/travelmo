@@ -30,7 +30,17 @@ test("reports count days in each country, trips per year, and mark the map", asy
     "14 Jun 2025 – 1 Nov 2026 · 506 days · Home",
     "10 Jun 2025 · 1 day · Home",
   ]);
+  await countries.getByRole("button", { name: "United Kingdom" }).click();
+  // Nights: where each day ended, read as a hotel booking does; the choice stays.
+  await page.getByRole("combobox", { name: "Count" }).selectOption("Nights");
+  await expect(countries.getByRole("row")).toHaveText(["CountryNights", "United Kingdom506", "Portugal4"]);
+  await page.reload();
+  await expect(page.getByRole("combobox", { name: "Count" })).toHaveValue("nights");
+  // A run of nights still going ends today, not on a morning still to come.
+  await countries.getByRole("button", { name: "United Kingdom" }).click();
+  await expect(page.getByRole("list", { name: "Stays in United Kingdom" }).getByRole("listitem")).toHaveText(["14 Jun 2025 – 1 Nov 2026 · 506 nights · Home"]);
   await countries.getByRole("button", { name: "Portugal" }).click();
+  await expect(page.getByRole("list", { name: "Stays in Portugal" }).getByRole("listitem")).toHaveText(["10–14 Jun 2025 · 4 nights · Lisbon"]);
   await page.getByRole("list", { name: "Stays in Portugal" }).getByRole("link", { name: "Lisbon" }).click();
   await expect(page).toHaveURL(/\/trips\/e2e-lisbon$/);
   await page.goBack();

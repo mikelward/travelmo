@@ -52,7 +52,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.core.AirportVisit
+import app.travelmo.core.CountryCounting
 import app.travelmo.core.CountryDaysReport
+import app.travelmo.core.DateShift
 import app.travelmo.core.FavoritePlace
 import app.travelmo.core.HomePeriod
 import app.travelmo.core.PlaceVisit
@@ -68,6 +70,7 @@ import app.travelmo.core.favoritePlaces
 import app.travelmo.core.formatDateRange
 import app.travelmo.core.formatDateWithYear
 import app.travelmo.core.placeRows
+import app.travelmo.core.shiftDate
 import app.travelmo.core.placeRowsCsv
 import app.travelmo.core.travelReport
 import app.travelmo.core.tripRows
@@ -79,6 +82,12 @@ import app.travelmo.shared.all_years
 import app.travelmo.shared.col_countries
 import app.travelmo.shared.col_country
 import app.travelmo.shared.col_days
+import app.travelmo.shared.col_nights
+import app.travelmo.shared.counting
+import app.travelmo.shared.counting_nights
+import app.travelmo.shared.counting_part
+import app.travelmo.shared.counting_whole
+import app.travelmo.shared.nights_count
 import app.travelmo.shared.col_trips
 import app.travelmo.shared.col_year
 import app.travelmo.shared.countries_count
@@ -135,9 +144,10 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
     val report = remember(input, today, year) { if (year == null) whole else input?.let { travelReport(it, today, year) } }
     val titles = remember(input) { displayTitles(input.orEmpty().map { it.trip }) }
     // Where the user was each day, home included, by the year picked.
-    val countries = remember(input, homes, today, year) {
+    val counting by viewModel.reportCounting.collectAsStateWithLifecycle()
+    val countries = remember(input, homes, today, year, counting) {
         val periods = homes
-        if (input == null || periods == null) null else countryDaysRange(input, today, year)?.let { countryDays(input, periods, it) }
+        if (input == null || periods == null) null else countryDaysRange(input, today, year)?.let { countryDays(input, periods, it, counting = counting) }
     }
     val favorites = remember(input) { input?.let { trips -> favoritePlaces(trips.map { TripWithBookings(it.trip, it.segments) }) }.orEmpty() }
     Scaffold(topBar = { AppTopBar(stringResource(Res.string.reports_title), onOpenSettings = onOpenSettings) }, bottomBar = bottomBar) { padding ->
@@ -153,7 +163,7 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
                 WorldMap(worldMap, visited = report.countries.map { it.country }.toSet(), airports = report.airports, places = report.places, modifier = Modifier.padding(top = 16.dp))
             }
             countries?.let { days ->
-                item(key = "countries") { CountryDaysSection(days, titles, onOpenTrip) }
+                item(key = "countries") { CountryDaysSection(days, counting, viewModel::setReportCounting, today, titles, onOpenTrip) }
             }
             if (favorites.isNotEmpty()) {
                 item(key = "favorites") { SectionTitle(stringResource(Res.string.favorite_places)) }
@@ -189,6 +199,31 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
     }
 }
 
+/** How days in each country count: any part of a day, whole days, or nights. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CountingPicker(counting: CountryCounting, onPick: (CountryCounting) -> Unit) {
+    val labels = mapOf(
+        CountryCounting.PART to stringResource(Res.string.counting_part),
+        CountryCounting.WHOLE to stringResource(Res.string.counting_whole),
+        CountryCounting.NIGHTS to stringResource(Res.string.counting_nights),
+    )
+    var open by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }, modifier = Modifier.padding(bottom = 8.dp)) {
+        OutlinedTextField(
+            value = labels.getValue(counting),
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(stringResource(Res.string.counting)) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
+            modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+        )
+        ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.pinchFontSizeHost()) {
+            for ((value, label) in labels) DropdownMenuItem(text = { Text(label) }, onClick = { onPick(value); open = false })
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun YearPicker(years: List<String>, year: String?, onPick: (String?) -> Unit) {
@@ -215,11 +250,14 @@ private fun YearPicker(years: List<String>, year: String?, onPick: (String?) -> 
  * come first, to be given a place, and count nowhere until they are.
  */
 @Composable
-private fun CountryDaysSection(report: CountryDaysReport, titles: Map<String, String>, onOpenTrip: (String) -> Unit) {
-    if (report.countries.isEmpty() && report.unplaced.isEmpty() && report.homeCountryKnown) return
+private fun CountryDaysSection(report: CountryDaysReport, counting: CountryCounting, onCounting: (CountryCounting) -> Unit, today: String, titles: Map<String, String>, onOpenTrip: (String) -> Unit) {
+    // Kept up while another count is picked, even with no days to show, so it can be changed back.
+    if (report.countries.isEmpty() && report.unplaced.isEmpty() && report.homeCountryKnown && counting == CountryCounting.PART) return
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     var open by rememberSaveable { mutableStateOf<String?>(null) }
+    val nights = counting == CountryCounting.NIGHTS
     SectionTitle(stringResource(Res.string.days_in_each_country))
+    CountingPicker(counting, onCounting)
     if (!report.homeCountryKnown) {
         Text(stringResource(Res.string.residence_no_home_country), style = MaterialTheme.typography.bodyLarge, color = muted)
     }
@@ -227,18 +265,21 @@ private fun CountryDaysSection(report: CountryDaysReport, titles: Map<String, St
         val total = report.unplaced.sumOf { it.days }
         Text(pluralStringResource(Res.plurals.uncounted_days, total, total), style = MaterialTheme.typography.bodyLarge, color = muted)
         for (s in report.unplaced) {
-            StayLine(formatDateRange(s.start, s.end), s.days, null, s.tripIds, titles, onOpenTrip)
+            StayLine(formatDateRange(s.start, s.end), pluralStringResource(Res.plurals.residence_days, s.days, s.days), null, s.tripIds, titles, onOpenTrip)
         }
     }
     Table(
-        header = listOf(stringResource(Res.string.col_country) to 2f, stringResource(Res.string.col_days) to 0.7f),
+        header = listOf(stringResource(Res.string.col_country) to 2f, stringResource(if (nights) Res.string.col_nights else Res.string.col_days) to 0.7f),
         rows = report.countries.map { listOf(countryName(it.country), it.days.toString()) },
         onRow = { r -> report.countries[r].country.let { open = if (open == it) null else it } },
         open = report.countries.indexOfFirst { it.country == open }.takeIf { it >= 0 },
         under = { r ->
             Column(modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)) {
                 for (s in report.countries[r].stays) {
-                    StayLine(formatDateRange(s.start, s.end), s.days, if (s.home) stringResource(Res.string.home_stay) else null, s.tripIds, titles, onOpenTrip)
+                    // A run of nights reads as a hotel booking does, to the morning after the last (if it has come).
+                    val dates = formatDateRange(s.start, if (nights && s.end < today) shiftDate(s.end, DateShift(days = 1)) else s.end)
+                    val count = if (nights) pluralStringResource(Res.plurals.nights_count, s.days, s.days) else pluralStringResource(Res.plurals.residence_days, s.days, s.days)
+                    StayLine(dates, count, if (s.home) stringResource(Res.string.home_stay) else null, s.tripIds, titles, onOpenTrip)
                 }
             }
         },
@@ -247,8 +288,8 @@ private fun CountryDaysSection(report: CountryDaysReport, titles: Map<String, St
 
 /** "24–30 Nov 2026 · 7 days · Boston": a run of days, each trip's title opening that trip. */
 @Composable
-private fun StayLine(dates: String, days: Int, label: String?, tripIds: List<String>, titles: Map<String, String>, onOpenTrip: (String) -> Unit) {
-    val text = listOfNotNull(dates, pluralStringResource(Res.plurals.residence_days, days, days), label).joinToString(" · ")
+private fun StayLine(dates: String, count: String, label: String?, tripIds: List<String>, titles: Map<String, String>, onOpenTrip: (String) -> Unit) {
+    val text = listOfNotNull(dates, count, label).joinToString(" · ")
     FlowRow(modifier = Modifier.padding(vertical = 4.dp)) {
         Text(text, style = MaterialTheme.typography.bodyLarge)
         for (id in tripIds) {

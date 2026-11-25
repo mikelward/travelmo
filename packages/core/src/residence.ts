@@ -1,3 +1,4 @@
+import { compareInstants } from "./instant";
 import { homeAt, type HomePeriod, countryCode } from "./home";
 import { reportBounds, tripDayPlaces, type PlaceLookup, type TripWithSegments } from "./reports";
 
@@ -44,8 +45,16 @@ function* dates(from: string, to: string): Generator<string> {
 // flight across the date line). No country and not in transit is a day
 // nothing places: a trip day whose bookings name no country, or a day at a
 // home with no country.
-// `tripCountries`: the countries each trip puts the traveler in that day.
-export type DayPresence = { countries: Set<string>; tripIds: Set<string>; assumedHome: boolean; inTransit: boolean; tripCountries?: Map<string, Set<string>> };
+// `tripCountries`: the countries each trip puts the traveler in that day;
+// `night`: the country they end it in, if known.
+export type DayPresence = {
+  countries: Set<string>;
+  tripIds: Set<string>;
+  assumedHome: boolean;
+  inTransit: boolean;
+  tripCountries?: Map<string, Set<string>>;
+  night?: string;
+};
 
 export function presenceTimeline(
   all: readonly TripWithSegments[],
@@ -55,6 +64,7 @@ export function presenceTimeline(
   lookup?: PlaceLookup,
 ): Map<string, DayPresence> {
   const days = new Map<string, DayPresence>();
+  const nightAt = new Map<string, string>();
   const byId = new Map(all.map((t) => [t.trip.id, t]));
   for (const { trip, segments } of byId.values()) {
     const bounds = reportBounds(trip, segments);
@@ -68,6 +78,13 @@ export function presenceTimeline(
       for (const c of place.countries) known.countries.add(c);
       known.tripIds.add(trip.id);
       known.tripCountries?.set(trip.id, new Set([...(known.tripCountries.get(trip.id) ?? []), ...place.countries]));
+      // The night is where the day's last booking, of any trip, left them.
+      const last = nightAt.get(day);
+      if (place.nightAt && (!last || compareInstants(place.nightAt, last) > 0)) {
+        nightAt.set(day, place.nightAt);
+        if (place.night) known.night = place.night;
+        else delete known.night;
+      }
       known.inTransit = !known.countries.size && (known.inTransit || place.inTransit);
       days.set(day, known);
     }
@@ -82,7 +99,7 @@ export function presenceTimeline(
     // As a code, however the home was written ("UK" is GB).
     const homeCountry = homeAt(homes, day)?.country;
     const home = homeCountry ? countryCode(homeCountry) : undefined;
-    timeline.set(day, { countries: new Set(home ? [home] : []), tripIds: new Set(), assumedHome: true, inTransit: false });
+    timeline.set(day, { countries: new Set(home ? [home] : []), tripIds: new Set(), assumedHome: true, inTransit: false, ...(home ? { night: home } : {}) });
   }
   return timeline;
 }
@@ -743,10 +760,31 @@ export function countryDaysRange(all: readonly TripWithSegments[], today: string
   return { start: starts.reduce((a, b) => (a < b ? a : b)), end: today };
 }
 
+// How a day counts for a country: "part", any part of it spent there (a
+// day crossing a border counts for both); "whole", all of it (the day began
+// and ended there, and went nowhere else); "nights", where it ended.
+export type CountryCounting = "part" | "whole" | "nights";
+
+// The countries a day counts for, by `counting`; `before` is the day before.
+function countedIn(d: DayPresence | undefined, before: DayPresence | undefined, counting: CountryCounting): Set<string> {
+  if (!d) return new Set();
+  if (counting === "part") return d.countries;
+  if (counting === "nights") return new Set(d.night ? [d.night] : []);
+  const [only] = d.countries;
+  return d.countries.size === 1 && only !== undefined && d.night === only && before?.night === only ? new Set([only]) : new Set();
+}
+
 // Where the traveler was each day of `range`, home included, as runs of days
-// in each country.
-export function countryDays(all: readonly TripWithSegments[], homes: readonly HomePeriod[], range: DateRange, lookup?: PlaceLookup): CountryDaysReport {
-  const timeline = presenceTimeline(all, homes, range.start, range.end, lookup);
+// (or nights) in each country, counted by `counting`.
+export function countryDays(
+  all: readonly TripWithSegments[],
+  homes: readonly HomePeriod[],
+  range: DateRange,
+  lookup?: PlaceLookup,
+  counting: CountryCounting = "part",
+): CountryDaysReport {
+  // From the day before, to see where the first day began.
+  const timeline = presenceTimeline(all, homes, shiftDate(range.start, { days: -1 }), range.end, lookup);
   const open = new Map<string, { start: string; end: string; days: number; home: boolean; tripIds: Set<string> }>();
   const stays = new Map<string, CountryStay[]>();
   const close = (country: string) => {
@@ -758,7 +796,7 @@ export function countryDays(all: readonly TripWithSegments[], homes: readonly Ho
   };
   for (const day of dates(range.start, range.end)) {
     const d = timeline.get(day);
-    const here = d?.countries ?? new Set<string>();
+    const here = countedIn(d, timeline.get(shiftDate(day, { days: -1 })), counting);
     const homeCountry = countryCode(homeAt(homes, day)?.country ?? "");
     // A stay ends when the traveler leaves, or when the country stops or
     // starts being home (a move abroad mid-stay starts a stay away).
@@ -780,6 +818,6 @@ export function countryDays(all: readonly TripWithSegments[], homes: readonly Ho
       .sort((a, b) => b.days - a.days || a.country.localeCompare(b.country)),
     // Home's missing country is one fix on the Profile, not a run of days.
     unplaced: stretches(timeline, range, (d) => isUnknown(d) && !d?.assumedHome, new Set(), false).reverse(),
-    homeCountryKnown: ![...timeline.values()].some((d) => d.assumedHome && !d.countries.size),
+    homeCountryKnown: ![...timeline].some(([day, d]) => day >= range.start && d.assumedHome && !d.countries.size),
   };
 }

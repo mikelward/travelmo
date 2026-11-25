@@ -331,6 +331,15 @@
     <string name="days_in_each_country">Days in each country</string>
     <string name="col_country">Country</string>
     <string name="col_days">Days</string>
+    <string name="col_nights">Nights</string>
+    <string name="counting">Count</string>
+    <string name="counting_part">Part days</string>
+    <string name="counting_whole">Whole days</string>
+    <string name="counting_nights">Nights</string>
+    <plurals name="nights_count">
+        <item quantity="one">%1$d night</item>
+        <item quantity="other">%1$d nights</item>
+    </plurals>
     <string name="col_trips">Trips</string>
     <string name="col_year">Year</string>
     <string name="col_countries">Countries</string>

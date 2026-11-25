@@ -481,6 +481,28 @@ class ResidenceTest {
     }
 
     @Test
+    fun `counts nights where each day ends and whole days spent in one country`() {
+        val all = listOf(bostonTrip, liverpool, nowhere)
+        val nights = countryDays(all, london, november, counting = CountryCounting.NIGHTS).countries
+        nights.map { Triple(it.country, it.days, it.stays.map { s -> "${s.start} ${s.end}" }) } shouldBe listOf(
+            Triple("GB", 23, listOf("2026-11-29 2026-11-30", "2026-11-17 2026-11-23", "2026-11-01 2026-11-14")),
+            Triple("US", 5, listOf("2026-11-24 2026-11-28")),
+        )
+        // A day of leaving or arriving is whole for neither country, nor is one begun somewhere unknown.
+        val whole = countryDays(all, london, november, counting = CountryCounting.WHOLE).countries
+        whole.map { Triple(it.country, it.days, it.stays.map { s -> "${s.start} ${s.end}" }) } shouldBe listOf(
+            Triple("GB", 21, listOf("2026-11-30 2026-11-30", "2026-11-18 2026-11-23", "2026-11-01 2026-11-14")),
+            Triple("US", 4, listOf("2026-11-25 2026-11-28")),
+        )
+    }
+
+    @Test
+    fun `counts no night for a day flying overnight`() {
+        val overnight = trip("sg", "2026-04-10", "2026-04-12", listOf(flight("LHR", "SIN", "2026-04-10T21:00:00+01:00", "2026-04-11T17:00:00+08:00")))
+        countryDays(listOf(overnight), london, DateRange("2026-04-10", "2026-04-12"), counting = CountryCounting.NIGHTS).countries.map { it.country to it.days } shouldBe listOf("SG" to 2)
+    }
+
+    @Test
     fun `links each stay to the trips that put the traveler in that country`() {
         val us = trip("us", "2026-11-01", "2026-11-03", listOf(Segment("u", "us", SegmentType.LODGING, "Desert Inn", "2026-11-01T15:00:00-05:00", "2026-11-03T11:00:00-05:00", destination = Place("Desert Inn", country = "US"))))
         val fr = trip("fr", "2026-11-03", "2026-11-05", listOf(Segment("f", "fr", SegmentType.LODGING, "Hôtel Exemple", "2026-11-03T15:00:00+01:00", "2026-11-05T11:00:00+01:00", destination = Place("Hôtel Exemple", country = "FR"))))
@@ -497,6 +519,16 @@ class ResidenceTest {
             CountryStay("2026-11-03", "2026-11-04", 2, home = false, tripIds = listOf("hotel")),
             CountryStay("2026-11-01", "2026-11-02", 2, home = true, tripIds = emptyList()),
         )
+    }
+
+    @Test
+    fun `puts a night where the day's last booking left the traveler whichever trip it is in`() {
+        val us = trip("us", "2026-11-01", "2026-11-03", listOf(Segment("u", "us", SegmentType.LODGING, "Desert Inn", "2026-11-01T15:00:00-05:00", "2026-11-03T11:00:00-05:00", destination = Place("Desert Inn", country = "US"))))
+        // Checked into France (19:00Z) after checking out of the US (16:00Z).
+        val fr = trip("fr", "2026-11-03", "2026-11-05", listOf(Segment("f", "fr", SegmentType.LODGING, "Hôtel Exemple", "2026-11-03T20:00:00+01:00", "2026-11-05T11:00:00+01:00", destination = Place("Hôtel Exemple", country = "FR"))))
+        for (trips in listOf(listOf(us, fr), listOf(fr, us))) {
+            countryDays(trips, london, DateRange("2026-11-01", "2026-11-04"), counting = CountryCounting.NIGHTS).countries.associate { it.country to it.days } shouldBe mapOf("US" to 2, "FR" to 2)
+        }
     }
 
     @Test

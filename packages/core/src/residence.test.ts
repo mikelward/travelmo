@@ -537,12 +537,42 @@ describe("countryDays", () => {
     ]);
   });
 
+  it("counts nights where each day ends, and whole days spent in one country", () => {
+    const nights = countryDays(all, london, { start: "2026-11-01", end: "2026-11-30" }, airportPlace, "nights").countries;
+    expect(nights.map((c) => [c.country, c.days, c.stays.map((s) => `${s.start} ${s.end}`)])).toEqual([
+      ["GB", 23, ["2026-11-29 2026-11-30", "2026-11-17 2026-11-23", "2026-11-01 2026-11-14"]],
+      ["US", 5, ["2026-11-24 2026-11-28"]],
+    ]);
+    // A day of leaving or arriving is whole for neither country, nor is one begun somewhere unknown.
+    const whole = countryDays(all, london, { start: "2026-11-01", end: "2026-11-30" }, airportPlace, "whole").countries;
+    expect(whole.map((c) => [c.country, c.days, c.stays.map((s) => `${s.start} ${s.end}`)])).toEqual([
+      ["GB", 21, ["2026-11-30 2026-11-30", "2026-11-18 2026-11-23", "2026-11-01 2026-11-14"]],
+      ["US", 4, ["2026-11-25 2026-11-28"]],
+    ]);
+  });
+
+  it("counts no night for a day flying overnight", () => {
+    const overnight = trip("sg", "2026-04-10", "2026-04-12", [flight("LHR", "SIN", "2026-04-10T21:00:00+01:00", "2026-04-11T17:00:00+08:00")]);
+    const nights = countryDays([overnight], london, { start: "2026-04-10", end: "2026-04-12" }, airportPlace, "nights").countries;
+    expect(nights.map((c) => [c.country, c.days])).toEqual([["SG", 2]]);
+  });
+
   it("links each stay to the trips that put the traveler in that country", () => {
     const us = trip("us", "2026-11-01", "2026-11-03", [stay("Desert Inn", "US", "2026-11-01T15:00:00-05:00", "2026-11-03T11:00:00-05:00")]);
     const fr = trip("fr", "2026-11-03", "2026-11-05", [stay("Hôtel Exemple", "FR", "2026-11-03T15:00:00+01:00", "2026-11-05T11:00:00+01:00")]);
     const stays = countryDays([us, fr], london, { start: "2026-11-01", end: "2026-11-06" }, airportPlace).countries;
     expect(stays.find((c) => c.country === "US")?.stays.map((s) => s.tripIds)).toEqual([["us"]]);
     expect(stays.find((c) => c.country === "FR")?.stays.map((s) => s.tripIds)).toEqual([["fr"]]);
+  });
+
+  it("puts a night where the day's last booking left the traveler, whichever trip it is in", () => {
+    const us = trip("us", "2026-11-01", "2026-11-03", [stay("Desert Inn", "US", "2026-11-01T15:00:00-05:00", "2026-11-03T11:00:00-05:00")]);
+    // Checked into France (19:00Z) after checking out of the US (16:00Z).
+    const fr = trip("fr", "2026-11-03", "2026-11-05", [stay("Hôtel Exemple", "FR", "2026-11-03T20:00:00+01:00", "2026-11-05T11:00:00+01:00")]);
+    for (const trips of [[us, fr], [fr, us]]) {
+      const nights = countryDays(trips, london, { start: "2026-11-01", end: "2026-11-04" }, airportPlace, "nights").countries;
+      expect(Object.fromEntries(nights.map((c) => [c.country, c.days]))).toEqual({ US: 2, FR: 2 });
+    }
   });
 
   it("starts a stay away when home moves to another country mid-stay", () => {

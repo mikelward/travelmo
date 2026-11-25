@@ -2,6 +2,7 @@ package app.travelmo.ui
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -11,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.travelmo.core.HomeCorrection
 import app.travelmo.core.Segment
@@ -61,7 +63,8 @@ class ResidenceDaysTest {
         )
         store.rides.value = RideSettings(homes = listOf(HomeCorrection("London", "GB", "2024-03-03")))
         show(store)
-        composeRule.onNodeWithText("Since you moved to the UK on 3 Mar 2024").performScrollTo()
+        // Further down than the first screenful, so not yet composed.
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Since you moved to the UK on 3 Mar 2024"))
         composeRule.onNodeWithText("Days we can't place").performScrollTo()
         // Listed there, and as time away.
         composeRule.onAllNodesWithText("9–11 Oct 2026 · 3 days · Weekend away").assertCountEquals(2)

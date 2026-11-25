@@ -12,7 +12,10 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.travelmo.core.CountryCounting
 import app.travelmo.core.HomeCorrection
+import app.travelmo.core.Place
+import app.travelmo.data.InMemoryCountingStore
 import app.travelmo.data.RideSettings
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentType
@@ -93,5 +96,34 @@ class ReportsScreenTest {
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
         composeRule.setContent { TravelmoTheme { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = {}) } }
         composeRule.onNodeWithText("Days in each country").performScrollTo()
+    }
+
+    @Test
+    fun `counts nights instead of part days when picked, and keeps the choice`() {
+        val counting = InMemoryCountingStore()
+        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, countingStore = counting)
+        composeRule.setContent { TravelmoTheme { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = {}) } }
+        composeRule.onNodeWithText("Part days").performScrollTo().performClick()
+        composeRule.onNodeWithText("Nights").performClick()
+        composeRule.onNodeWithText("Portugal").performScrollTo().performClick()
+        // Five nights in Lisbon, read as a hotel booking: to the morning after the last.
+        composeRule.onNodeWithText("14–19 Sept 2026 · 5 nights").performScrollTo()
+        counting.read() shouldBe CountryCounting.NIGHTS
+    }
+
+    @Test
+    fun `keeps the count picker when whole days leave nothing to show`() {
+        // Away and back over the last two days: both cross a border, so neither is a whole day.
+        val flight = { id: String, from: String, to: String, start: String, end: String ->
+            Segment(id, "paris", SegmentType.FLIGHT, "XX 1 $from to $to", start, end, origin = Place(from, code = from), destination = Place(to, code = to))
+        }
+        val store = FakeTripStore(
+            trips = listOf(Trip("paris", "Paris", "2026-10-31", "2026-11-01", OWNER)),
+            segments = mapOf("paris" to listOf(flight("out", "LHR", "CDG", "2026-10-31T09:00:00+00:00", "2026-10-31T11:20:00+01:00"), flight("back", "CDG", "LHR", "2026-11-01T08:00:00+01:00", "2026-11-01T08:20:00+00:00"))),
+        )
+        store.rides.value = RideSettings(homes = listOf(HomeCorrection("London", "GB", "2020-01-01")))
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, countingStore = InMemoryCountingStore(CountryCounting.WHOLE))
+        composeRule.setContent { TravelmoTheme { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = {}) } }
+        composeRule.onNodeWithText("Whole days").performScrollTo()
     }
 }
