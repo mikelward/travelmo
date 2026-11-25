@@ -6,6 +6,7 @@ import { BookingMenu } from "@/components/BookingMenu";
 import { BookingDetailsDialog } from "@/components/BookingDetails";
 import type { EmailLinks } from "@/lib/sourceLinks";
 import {
+  bookingHeading,
   formatDate,
   isUntimed,
   isCancelled,
@@ -138,7 +139,10 @@ export function SegmentRow({
 }) {
   const [details, setDetails] = useState(false);
   const cancelled = isCancelled(segment);
-  const route = [place(segment.origin), place(segment.destination)].filter(Boolean).join(" → ");
+  // A flight is headed by its airline, its flight number leading the route (bookingHeading).
+  const heading = bookingHeading(segment);
+  const places = [place(segment.origin), place(segment.destination)].filter(Boolean).join(" → ");
+  const route = [heading.flightNumber, places].filter(Boolean).join(" · ");
   // A tap anywhere on the row but its own controls opens the booking.
   const open = (e: MouseEvent) => {
     if ((e.target as HTMLElement).closest("button, a, input, [role=menu]")) return;
@@ -177,7 +181,7 @@ export function SegmentRow({
         )}
         <p className={`font-medium${cancelled ? " text-muted line-through" : ""}`}>
           <button type="button" onClick={() => setDetails(true)} className="block w-full text-left hover:underline">
-            {segment.title}
+            {heading.headline}
           </button>
         </p>
         {route && <p className={`text-sm text-zinc-600 dark:text-zinc-400${cancelled ? " line-through" : ""}`}>{route}</p>}

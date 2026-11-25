@@ -328,6 +328,17 @@ booking read again from another email gains whoever that one names
 The trip page shows them under each booking ("For John Smith, Jane
 Smith"), on the web and Android.
 
+A flight's row and page are headed by its airline ("Virgin Atlantic"), and
+its flight number leads the route line ("VS 11 · LHR London → BOS
+Boston"), written as the code, a space and the number (`bookingHeading` in
+`packages/core/src/airlines.ts`, mirrored in Android's `Airlines.kt`). The
+airline is the one the booking's provider names, so a codeshare is headed
+by the airline flying it ("Delta Air Lines" over "VS 4012"), else the one
+its flight number's code is, from a table of the airlines travelers book
+most. A provider names an airline only when it matches exactly one listed
+("Virgin" matches none; a booking site none). Any other booking, or a
+flight of an airline not listed, is headed by its title.
+
 Each import also keeps the user's people (`users/{uid}/people/{id}`,
 `PersonDoc`, the owner's alone to read): each traveler on a newly filed
 booking is someone already known (`findPerson`, by their name or any other

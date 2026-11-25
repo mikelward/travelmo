@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { airlineCheckIn, airlineCheckIns, airlineCode, checkInHoursBefore, defaultCheckInHours } from "./airlines";
+import { airlineCheckIn, airlineCheckIns, airlineCode, airlineNamed, airlineNames, bookingHeading, checkInHoursBefore, defaultCheckInHours } from "./airlines";
 
 const flight = (title: string) => ({ type: "flight" as const, title });
 
@@ -32,5 +32,31 @@ describe("airline check-in windows", () => {
       expect(new URL(site).protocol).toBe("https:");
       expect(new URL(site).pathname).toBe("/");
     }
+  });
+});
+
+describe("bookingHeading", () => {
+  it("heads a flight with its airline and leads the route with its flight number", () => {
+    expect(bookingHeading(flight("VS 11 LHR to BOS"))).toEqual({ headline: "Virgin Atlantic", airline: "VS", flightNumber: "VS 11" });
+    expect(bookingHeading(flight("FR1401 London (Stansted) to Stockholm (ARN)"))).toEqual({ headline: "Ryanair", airline: "FR", flightNumber: "FR 1401" });
+  });
+  it("names the airline flying a codeshare, as its provider gives it", () => {
+    expect(bookingHeading({ ...flight("VS4012 BOS to LHR"), provider: "Delta" })).toEqual({ headline: "Delta Air Lines", airline: "DL", flightNumber: "VS 4012" });
+  });
+  it("names the airline its provider gives when the title has no flight number", () => {
+    expect(bookingHeading({ ...flight("Delta BOS to LHR"), provider: "Delta Air Lines" })).toEqual({ headline: "Delta Air Lines", airline: "DL" });
+  });
+  it("keeps the title of anything else: a booking site, an airline not listed, a train", () => {
+    expect(bookingHeading({ ...flight("Flight to Paris"), provider: "Expedia" })).toEqual({ headline: "Flight to Paris" });
+    expect(bookingHeading(flight("ZZ 12 SYD to MEL"))).toEqual({ headline: "ZZ 12 SYD to MEL" });
+    expect(bookingHeading({ type: "train", title: "Eurostar 9014" })).toEqual({ headline: "Eurostar 9014" });
+  });
+  it("takes a provider for an airline only when it names one", () => {
+    expect(airlineNamed("Aeromexico")).toEqual({ code: "AM", name: "Aeroméxico" });
+    expect(airlineNamed("Virgin")).toBeUndefined();
+    expect(airlineNamed("AirAsia X")).toEqual({ code: "D7", name: "AirAsia X" });
+    expect(airlineNamed("Transavia France")).toEqual({ code: "TO", name: "Transavia France" });
+    expect(airlineNamed("Norwegian")).toEqual({ code: "D8", name: "Norwegian" });
+    for (const code of Object.keys(airlineNames)) expect(code).toMatch(/^[A-Z0-9]{2}$/);
   });
 });

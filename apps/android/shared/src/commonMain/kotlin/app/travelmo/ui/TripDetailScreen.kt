@@ -98,7 +98,8 @@ import app.travelmo.core.directionsUrl
 import app.travelmo.core.nearbyTrips
 import app.travelmo.core.otherTrips
 import app.travelmo.core.rideNeedKey
-import app.travelmo.core.routeLine
+import app.travelmo.core.bookingHeading
+import app.travelmo.core.headedRouteLine
 import app.travelmo.core.segmentsByDay
 import app.travelmo.core.sharedWithAny
 import app.travelmo.core.SenderCleanup
@@ -689,6 +690,7 @@ fun SegmentRow(
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     var menu by remember { mutableStateOf(false) }
     val reference = segment.confirmation?.trim()?.takeIf { it.isNotEmpty() }
+    val heading = bookingHeading(segment)
     val open = onOpen?.let { Modifier.clickable(onClickLabel = stringResource(Res.string.booking_details), onClick = it) } ?: Modifier
     Row(modifier = open.padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Icon(
@@ -702,13 +704,14 @@ fun SegmentRow(
             if (segment.isCancelled) {
                 Text(stringResource(Res.string.cancelled).uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
             }
+            // A flight is headed by its airline, its flight number leading the route (bookingHeading).
             Text(
-                segment.title,
+                heading.headline,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
                 textDecoration = if (segment.isCancelled) TextDecoration.LineThrough else null,
             )
-            routeLine(segment)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = muted) }
+            headedRouteLine(segment, heading)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = muted) }
             timesLine(segment)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = muted) }
             if (flightLines.isNotEmpty()) {
                 Text(flightLines.joinToString(" · "), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.tertiary)
