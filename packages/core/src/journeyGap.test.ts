@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gmailSearchUrl, journeyGapHomes, journeyGaps, journeyGapSearch, journeyGapText, withOneWay } from "./journeyGap";
+import { journeyGapHomes, journeyGaps, journeyGapSearch, journeyGapText, withOneWay } from "./journeyGap";
 import type { ExtractedSegment } from "./schema";
 
 // Invented, shaped like a London–Boston trip.
@@ -139,7 +139,6 @@ describe("journeyGapSearch", () => {
       '("Adelaide" OR ADL) ("London" OR LHR)',
     );
     expect(journeyGapSearch({ direction: "back", from: "Bath", to: 'Say "Hi"', mode: "journey", date: "2026-01-10" })).toBe('"Bath" "Say  Hi "');
-    expect(gmailSearchUrl('"Bath" "London"')).toBe("https://mail.google.com/mail/u/0/#search/%22Bath%22%20%22London%22");
   });
 });
 

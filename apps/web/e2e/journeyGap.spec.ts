@@ -9,14 +9,41 @@ test.beforeEach(async () => {
 const heathrow = { name: "London Heathrow", code: "LHR", city: "London", country: "GB" };
 const boston = { name: "Boston Logan", code: "BOS", city: "Boston", country: "US" };
 
-test("a trip with no flight back says so, finds it in Gmail, and stops once it's one way", async ({ page }) => {
+test("a trip with no flight back says so, looks for it, and stops once it's one way", async ({ page }) => {
   const uid = await signIn(page, owner);
   await seedTrip(uid, "e2e-boston", {}, { title: "Boston", start: "2026-12-12", end: "2026-12-12" });
   await seedFlight("e2e-boston", { id: "out", title: "XX 11 LHR to BOS", confirmation: "AB12CD", start: "2026-12-12T17:20:00+00:00", end: "2026-12-12T20:15:00-05:00", origin: heathrow, destination: boston });
   await page.goto("/trips/e2e-boston");
   const notice = page.getByTestId("journey-gap");
   await expect(notice).toContainText("No flight from Boston back to London found");
-  await expect(notice.getByRole("link", { name: "Find it in Gmail" })).toHaveAttribute("href", "https://mail.google.com/mail/u/0/#search/(%22Boston%22%20OR%20BOS)%20(%22London%22%20OR%20LHR)");
+  // Looking reads a few matching emails, and keeps looking from where it stopped.
+  const asked: unknown[] = [];
+  await page.route("http://localhost:8080/trips/look", async (route) => {
+    const body = route.request().postDataJSON() as { next?: number };
+    asked.push(body);
+    const json =
+      body.next === undefined
+        ? {
+            emails: [
+              { messageId: "m0", subject: "Your Example Air newsletter", from: "Example Air", sent: "2026-11-02T10:00:00Z", outcome: "not_booking", report: "Travelmo import report" },
+              // A booking that doesn't fill the gap: looking goes on.
+              { messageId: "m1", subject: "Your flight to Boston", from: "Example Air", sent: "2026-11-01T10:00:00Z", outcome: "imported" },
+            ],
+            next: 2,
+          }
+        : { emails: [{ messageId: "m2", subject: "Your e-ticket", from: "Example Air", sent: "2026-10-01T10:00:00Z", outcome: "imported" }] };
+    await route.fulfill({ json });
+  });
+  await notice.getByRole("button", { name: "Look for it" }).click();
+  await expect(notice).toContainText("Your Example Air newsletter · Not a booking");
+  await expect(notice).toContainText("Your flight to Boston · Added");
+  await notice.getByRole("button", { name: "Keep looking" }).click();
+  await expect(notice).toContainText("Your e-ticket · Added");
+  await expect(notice.getByRole("button", { name: "Keep looking" })).toHaveCount(0);
+  expect(asked).toEqual([
+    { from: "Boston", fromCode: "BOS", to: "London", toCode: "LHR", date: "2026-12-12" },
+    { from: "Boston", fromCode: "BOS", to: "London", toCode: "LHR", date: "2026-12-12", next: 2 },
+  ]);
   await notice.getByRole("button", { name: "Add it yourself" }).click();
   await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
@@ -37,7 +64,7 @@ test("a trip missing a flight between two lists it, and keeps it once one way", 
   const notice = page.getByTestId("journey-gap");
   await expect(notice).toContainText("No flight from Adelaide to London found between 2 Dec and 20 Jan");
   await expect(notice).toContainText("No flight from Boston back to Melbourne found");
-  await expect(notice.getByRole("link", { name: "Find it in Gmail" })).toHaveCount(2);
+  await expect(notice.getByRole("button", { name: "Look for it" })).toHaveCount(2);
 
   await notice.getByRole("button", { name: "This trip is one way" }).click();
   await expect(notice).not.toContainText("back to Melbourne");

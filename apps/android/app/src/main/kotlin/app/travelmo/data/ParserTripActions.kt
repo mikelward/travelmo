@@ -1,6 +1,10 @@
 package app.travelmo.data
 
 import app.travelmo.core.DELETE_ALL_TRIPS_PATH
+import app.travelmo.core.JourneyGap
+import app.travelmo.core.LOOK_PATH
+import app.travelmo.core.LookResult
+import app.travelmo.core.LookedEmail
 import app.travelmo.core.REFRESH_PATH
 import app.travelmo.core.REFRESH_STOP_PATH
 import app.travelmo.core.REGROUP_PATH
@@ -14,7 +18,7 @@ import kotlinx.coroutines.CancellationException
 import org.json.JSONException
 import org.json.JSONObject
 
-/** `POST /trips/regroup`, `/trips/refresh` and `/trips/delete-all` on the parser, as the web's api.ts sends them. */
+/** `POST /trips/regroup`, `/trips/refresh`, `/trips/delete-all` and `/trips/look` on the parser, as the web's api.ts sends them. */
 class ParserTripActions(private val client: ParserClient) : TripActions {
     override val available: Boolean
         get() = client.available
@@ -40,6 +44,28 @@ class ParserTripActions(private val client: ParserClient) : TripActions {
 
     override suspend fun stopRefresh() {
         call(REFRESH_STOP_PATH, "Stopping the refresh")
+    }
+
+    override suspend fun lookForJourney(gap: JourneyGap, next: Int?): LookResult {
+        val body = JSONObject().put("from", gap.from).put("to", gap.to).put("date", gap.date)
+        gap.until?.let { body.put("until", it) }
+        gap.fromCode?.let { body.put("fromCode", it) }
+        gap.toCode?.let { body.put("toCode", it) }
+        next?.let { body.put("next", it) }
+        val reply = call(LOOK_PATH, "Looking for a missing journey", body.toString())
+        val emails = reply.optJSONArray("emails")
+        return LookResult(
+            emails = (0 until (emails?.length() ?: 0)).mapNotNull { i ->
+                val email = emails?.optJSONObject(i) ?: return@mapNotNull null
+                LookedEmail(
+                    messageId = email.optString("messageId"),
+                    subject = email.optString("subject"),
+                    outcome = email.optString("outcome"),
+                    report = email.optString("report").takeIf { it.isNotEmpty() },
+                )
+            },
+            next = if (reply.has("next")) reply.optInt("next") else null,
+        )
     }
 
     private suspend fun call(path: String, what: String, json: String = "{}"): JSONObject {

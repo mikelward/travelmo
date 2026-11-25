@@ -10,6 +10,7 @@ import { SegmentForm } from "@/components/SegmentForm";
 import { RideSuggestion } from "@/components/RideSuggestion";
 import { SegmentRow } from "@/components/SegmentRow";
 import { Dialog } from "@/components/BookingMenu";
+import { api } from "@/lib/api";
 import { hideRideNeed, markOneWay } from "@/lib/rides";
 import { SignInGate } from "@/components/SignInGate";
 import { cancelSegment, cancelTrip, deleteSegment, deleteTrip, favoriteSegment, fitTripDates, mergeSegments, mergeTrips, moveSegment, moveSegmentToNewTrip, rateSegment, renameTrip, restoreSegment, restoreTrip, saveSegment } from "@/lib/edits";
@@ -529,6 +530,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
       {gaps.length > 0 && (
         <JourneyGapNotice
           gaps={gaps}
+          onLook={(gap, next) => api.lookForJourney(user, gap, next)}
           {...(canEdit ? { onAdd: (date: string) => setEditing({ kind: "add", date }) } : {})}
           onOneWay={() =>
             markOneWay(user.uid, tripId).catch((e: Error) => {

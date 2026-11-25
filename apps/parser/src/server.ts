@@ -28,6 +28,7 @@ import {
   bugReportLimits,
   bugReportPath,
   checkBugReport,
+  lookPath,
 } from "@travelmo/core";
 import { randomBytes } from "node:crypto";
 import { Hono, type Context } from "hono";
@@ -84,6 +85,7 @@ import { app as firebaseApp, auth, db } from "./firebase";
 import { getMessaging } from "firebase-admin/messaging";
 import {
   currentHistoryId,
+  fetchMessage,
   gmailFor,
   gmailPacer,
   gmailScopes,
@@ -96,9 +98,11 @@ import {
   type EmailMessage,
   type OAuthConfig,
   recordedAs,
+  searchMessagePage,
 } from "./gmail";
 import { importCalendar, importMessage, importMessages, importTripIt, type ImportDebug, type ImportDeps, type ImportOptions } from "./importer";
 import { importReport } from "./debugReport";
+import { lookForJourney, lookQuery, type LookMailbox } from "./findJourney";
 import { regroupTrips } from "./regroup";
 import { resetTrips } from "./tripsReset";
 import { loadChosenHomeAirports, loadHomeOverrides } from "./homeOverrides";
@@ -925,6 +929,45 @@ app.post("/gmail/reimport", async (c) => {
   // the reader is tuned; theirs alone, never stored or logged.
   const report = importReport(message, await deps.store.getParsed(uid, message.id), debug);
   return c.json({ outcome, report });
+});
+
+// "Look for it" on a journey a trip seems to be missing (findJourney.ts):
+// the user's Gmail searched for both its ends, a few matches read at a
+// time. `from` is the `next` of the look before, to keep looking.
+app.post(lookPath, async (c) => {
+  const uid = await requireUser(c);
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const place = (value: unknown) => (typeof value === "string" && value.trim() && value.length <= 100 ? value.trim() : undefined);
+  const code = (value: unknown) => (typeof value === "string" && /^[A-Za-z0-9]{3,5}$/.test(value) ? value : undefined);
+  const fromCity = place(body.from);
+  const toCity = place(body.to);
+  if (!fromCity || !toCity) throw new HTTPException(400, { message: "Missing from or to" });
+  const from = typeof body.next === "number" && Number.isInteger(body.next) && body.next >= 0 ? body.next : 0;
+  const fromCode = code(body.fromCode);
+  const toCode = code(body.toCode);
+  const day = (value: unknown) => (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)) ? value : undefined);
+  const date = day(body.date);
+  const until = day(body.until);
+  if (!date) throw new HTTPException(400, { message: "Missing date" });
+  const query = lookQuery({ from: fromCity, to: toCity, date, ...(until ? { until } : {}), ...(fromCode ? { fromCode } : {}), ...(toCode ? { toCode } : {}) });
+  const states = await loadMailboxes(db, uid);
+  if (states.length === 0) throw new HTTPException(409, { message: "Connect Gmail in Settings to look for it" });
+  const mailboxes: LookMailbox[] = states.map((state) => {
+    const gmail = gmailFor(oauth, state.refreshToken);
+    const prefix = state.idPrefix ?? "";
+    return {
+      search: async (q, max) => (await searchMessagePage(gmail, q, max)).ids.map((id) => `${prefix}${id}`),
+      fetch: recordedAs(state.idPrefix, (id) => fetchMessage(gmail, id.slice(prefix.length))),
+    };
+  });
+  const result = await lookForJourney(query, from, {
+    mailboxes,
+    record: (messageId) => deps.store.getParsed(uid, messageId),
+    read: (message, debug) => importMessage(uid, message, deps, { force: true, reclaim: true, source: "gmail", debug }),
+    isNotFound,
+  });
+  log("INFO", "journey_look", { uid, from, read: result.emails.length, found: result.emails.some((e) => e.outcome === "imported"), more: result.next !== undefined });
+  return c.json(result);
 });
 
 // "Refresh from email" (refresh.ts): the emails the user's bookings came
