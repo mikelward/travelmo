@@ -162,7 +162,7 @@ fun AndroidAppMenu(modifier: Modifier = Modifier, items: @Composable (close: () 
             items { expanded = false }
             openAccess?.let { open ->
                 DropdownMenuItem(
-                    text = { Text(stringResource(Res.string.access), style = MaterialTheme.typography.bodyLarge) },
+                    text = { Text(stringResource(Res.string.access)) },
                     onClick = {
                         expanded = false
                         open()
@@ -170,7 +170,7 @@ fun AndroidAppMenu(modifier: Modifier = Modifier, items: @Composable (close: () 
                 )
             }
             DropdownMenuItem(
-                text = { Text(stringResource(Res.string.report_a_bug), style = MaterialTheme.typography.bodyLarge) },
+                text = { Text(stringResource(Res.string.report_a_bug)) },
                 enabled = !sharing,
                 onClick = {
                     expanded = false
@@ -184,7 +184,7 @@ fun AndroidAppMenu(modifier: Modifier = Modifier, items: @Composable (close: () 
                 },
             )
             DropdownMenuItem(
-                text = { Text(stringResource(Res.string.about), style = MaterialTheme.typography.bodyLarge) },
+                text = { Text(stringResource(Res.string.about)) },
                 onClick = {
                     expanded = false
                     showAbout = true
@@ -193,7 +193,7 @@ fun AndroidAppMenu(modifier: Modifier = Modifier, items: @Composable (close: () 
             // Last, so the other items keep their places whether or not an update is out.
             if (updateAvailable) {
                 DropdownMenuItem(
-                    text = { Text(stringResource(Res.string.update_available), style = MaterialTheme.typography.bodyLarge) },
+                    text = { Text(stringResource(Res.string.update_available)) },
                     onClick = {
                         expanded = false
                         openPlayListing(context)

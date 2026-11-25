@@ -24,7 +24,7 @@ export default function PrivacyPage() {
   return (
     <article className="max-w-prose leading-relaxed">
       <h1 className="text-2xl font-semibold">Privacy</h1>
-      <p className="mt-2 text-sm text-muted">Last updated {UPDATED}</p>
+      <p className="mt-2 text-muted">Last updated {UPDATED}</p>
       <p className="mt-4 text-zinc-700 dark:text-zinc-300">
         Travelmo keeps your trips in one place, on the web and in the Android app. This page says what it stores, why,
         who else handles it, and how to remove it. Travelmo has no ads and never sells your data.

@@ -105,14 +105,14 @@ fun TripRemindersSection(viewModel: TripsViewModel) {
             viewModel.saveReminder(SAVE_TOKEN, null, saved)
         }
     }
-    Text(stringResource(Res.string.before_international_trips), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
-    Text(stringResource(Res.string.before_international_trips_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(Res.string.before_international_trips), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(Res.string.before_international_trips_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     val list = reminders.orEmpty()
     for (reminder in list) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(reminder.text, style = MaterialTheme.typography.bodyLarge)
-                Text(leadText(reminder.lead ?: DEFAULT_LEAD), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(leadText(reminder.lead ?: DEFAULT_LEAD), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             TextButton(onClick = { editing = reminder }, enabled = !busy) { Text(stringResource(Res.string.edit)) }
             IconButton(onClick = { viewModel.removeReminder(REMOVE_TOKEN, null, reminder.slot) }, enabled = !busy) {
@@ -126,7 +126,7 @@ fun TripRemindersSection(viewModel: TripsViewModel) {
         modifier = Modifier.padding(top = 8.dp),
     ) { Text(stringResource(Res.string.add_reminder)) }
     for (outcome in listOf(saving, removing)) {
-        (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+        (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) }
     }
 }
 
@@ -168,7 +168,7 @@ fun BeforeYouGo(checklist: Checklist, today: String) {
                 )
                 Text(
                     dueText(entry.due, today),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyLarge,
                     color = if (entry.done || entry.due > today) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
                 )
                 if (entry.oneOff) {
@@ -245,7 +245,7 @@ private fun ReminderDialog(title: String, initial: Reminder, dated: Boolean, onD
                         modifier = Modifier.width(160.dp),
                     )
                 }
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) }
             }
         },
         confirmButton = { TextButton(onClick = save, enabled = text.isNotBlank()) { Text(stringResource(Res.string.save)) } },

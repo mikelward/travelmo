@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 
 import { directionsUrl, formatDateRange, isCancelled, nearbyTrips, segmentSources, sourceSearch, type Segment, type SourceRef, type Trip } from "@travelmo/core";
 import { emailLinkFor, sourceKindLabels, type EmailLinks } from "@/lib/sourceLinks";
 
-const buttonClass = "rounded-lg border border-field px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-900";
+const buttonClass = "rounded-lg border border-field px-3 py-2  hover:bg-zinc-100 dark:hover:bg-zinc-900";
 
 // A modal on the browser's own <dialog>: it traps focus, closes on Escape
 // and hands focus back to whatever opened it.
@@ -161,7 +161,7 @@ function MoveDialog({
             t.id,
             <>
               {t.title}
-              <span className="block text-xs text-muted">{formatDateRange(t.start, t.end)}</span>
+              <span className="block text-muted">{formatDateRange(t.start, t.end)}</span>
             </>,
             () => onMove(t.id),
           ),
@@ -282,7 +282,7 @@ export function BookingMenu({
         setOpen(false);
         action();
       }}
-      className="block w-full px-4 py-2 text-left text-sm hover:bg-zinc-100 focus:bg-zinc-100 focus:outline-none dark:hover:bg-zinc-900 dark:focus:bg-zinc-900"
+      className="block w-full px-4 py-2 text-left hover:bg-zinc-100 focus:bg-zinc-100 focus:outline-none dark:hover:bg-zinc-900 dark:focus:bg-zinc-900"
     >
       {label}
     </button>
@@ -302,7 +302,7 @@ export function BookingMenu({
         ⋮
       </button>
       {status && (
-        <p role="status" className="absolute right-0 top-8 whitespace-nowrap text-xs text-muted">
+        <p role="status" className="absolute right-0 top-8 whitespace-nowrap text-muted">
           {status}
         </p>
       )}
@@ -321,7 +321,7 @@ export function BookingMenu({
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setOpen(false)}
-              className="block w-full px-4 py-2 text-left text-sm hover:bg-zinc-100 focus:bg-zinc-100 focus:outline-none dark:hover:bg-zinc-900 dark:focus:bg-zinc-900"
+              className="block w-full px-4 py-2 text-left hover:bg-zinc-100 focus:bg-zinc-100 focus:outline-none dark:hover:bg-zinc-900 dark:focus:bg-zinc-900"
             >
               Directions
             </a>

@@ -194,7 +194,7 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
                 if (result != null && result.bookingsSearched && nothingShown) item(key = "no-match") { Message(stringResource(Res.string.no_trips_match), Modifier) }
                 if (checkInFailed != null) {
                     item(key = "checked-in-failed") {
-                        Text(checkInFailed, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                        Text(checkInFailed, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
                     }
                 }
                 // Document warnings once, at the top, each for the earliest trip
@@ -246,7 +246,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.section(
     item(key = "section-$title") {
         Text(
             stringResource(title),
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(top = 8.dp),
         )
     }
@@ -313,7 +313,7 @@ fun TripCard(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            badge?.let { (text, color) -> Text(text.uppercase(), style = MaterialTheme.typography.labelMedium, color = color) }
+            badge?.let { (text, color) -> Text(text.uppercase(), style = MaterialTheme.typography.labelSmall, color = color) }
         }
         Text(
             formatDateRange(trip.shownStart, trip.shownEnd),

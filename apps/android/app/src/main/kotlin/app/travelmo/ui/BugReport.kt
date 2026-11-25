@@ -134,7 +134,7 @@ fun SendReportDialog(
                     minLines = 3,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Text(stringResource(if (onTrip) Res.string.report_disclosure_trip else Res.string.report_disclosure), style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(if (onTrip) Res.string.report_disclosure_trip else Res.string.report_disclosure), style = MaterialTheme.typography.bodyLarge)
                 when (state) {
                     SendState.Sending -> Text(stringResource(Res.string.report_sending))
                     SendState.Sent -> Text(stringResource(Res.string.report_sent))

@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 import { useProfile } from "@/lib/trips";
 
 const buttonClass =
-  "rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
+  "rounded-lg border border-zinc-300 px-3 py-2  hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
 
 const notes: Record<EmailRowKind, string | undefined> = {
   signIn: "Sign-in",
@@ -58,10 +58,10 @@ export function EmailAddressesSection({ user }: { user: User }) {
   return (
     <section className="mt-10">
       <h2 className="text-lg font-medium">Email addresses</h2>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">Trips and profiles shared with any of these come to you.</p>
+      <p className="mt-2 text-zinc-600 dark:text-zinc-400">Trips and profiles shared with any of these come to you.</p>
       <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
         {rows.map((row) => (
-          <li key={row.email} className="flex items-center justify-between gap-3 py-3 text-sm">
+          <li key={row.email} className="flex items-center justify-between gap-3 py-3">
             <div className="min-w-0">
               <p className="break-all">{row.email}</p>
               {notes[row.kind] && <p className="text-zinc-600 dark:text-zinc-400">{notes[row.kind]}</p>}
@@ -82,15 +82,15 @@ export function EmailAddressesSection({ user }: { user: User }) {
           onChange={(e) => setEmail(e.target.value)}
           placeholder="name@example.com"
           aria-label="Email address"
-          className="min-w-0 flex-1 rounded-lg border border-field bg-background px-3 py-2 text-sm"
+          className="min-w-0 flex-1 rounded-lg border border-field bg-background px-3 py-2"
         />
         {/* Named in full: Settings has other Add buttons. */}
         <button type="submit" disabled={busy || !email.trim()} aria-label="Add email address" className={buttonClass}>
           Add
         </button>
       </form>
-      {notice && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{notice}</p>}
-      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+      {notice && <p className="mt-3 text-green-700 dark:text-green-500">{notice}</p>}
+      {error && <p className="mt-3 text-danger">{error}</p>}
     </section>
   );
 }

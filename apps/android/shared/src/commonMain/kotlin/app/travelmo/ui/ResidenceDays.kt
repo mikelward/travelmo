@@ -101,7 +101,7 @@ fun ResidenceDays(trips: List<TripWithSegments>, homes: List<HomePeriod>, today:
     val report = remember(trips, homes, set, date) { residenceReport(trips, homes, set, date) }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(modifier = modifier.fillMaxWidth()) {
-        Text(stringResource(Res.string.residence_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 8.dp))
+        Text(stringResource(Res.string.residence_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 8.dp))
         var open by remember { mutableStateOf(false) }
         ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }) {
             OutlinedTextField(
@@ -123,10 +123,10 @@ fun ResidenceDays(trips: List<TripWithSegments>, homes: List<HomePeriod>, today:
             Modifier.padding(top = 8.dp),
         )
         if (!report.homeCountryKnown) {
-            Text(stringResource(Res.string.residence_no_home_country), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
+            Text(stringResource(Res.string.residence_no_home_country), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
         }
         for (result in report.results) Result(result, titles, onOpenTrip)
-        Text(stringResource(Res.string.residence_estimate), style = MaterialTheme.typography.bodyMedium, color = muted, modifier = Modifier.padding(top = 8.dp))
+        Text(stringResource(Res.string.residence_estimate), style = MaterialTheme.typography.bodyLarge, color = muted, modifier = Modifier.padding(top = 8.dp))
     }
 }
 
@@ -145,7 +145,7 @@ private fun Result(result: RuleResult, titles: Map<String, String>, onOpenTrip: 
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(bottom = 8.dp))
         Text(rule.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
         Text(countText(result), style = MaterialTheme.typography.bodyLarge)
-        Text(statusText(result), style = MaterialTheme.typography.bodyMedium, color = statusColor(result.status))
+        Text(statusText(result), style = MaterialTheme.typography.bodyLarge, color = statusColor(result.status))
         result.period?.let { period ->
             val moved = rule.areaName?.takeIf { period.moved }
             Text(
@@ -154,7 +154,7 @@ private fun Result(result: RuleResult, titles: Map<String, String>, onOpenTrip: 
                 } else {
                     stringResource(Res.string.residence_counted_over, formatDateRange(period.start, period.end))
                 },
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyLarge,
                 color = muted,
             )
         }
@@ -168,25 +168,25 @@ private fun Result(result: RuleResult, titles: Map<String, String>, onOpenTrip: 
             val current = result.current?.takeIf { rolling && it.window.start != result.window.start }?.let {
                 " · " + pluralStringResource(Res.plurals.residence_last, it.used, it.used, span)
             }.orEmpty()
-            Text(line + current, style = MaterialTheme.typography.bodyMedium, color = muted)
+            Text(line + current, style = MaterialTheme.typography.bodyLarge, color = muted)
         }
         if (result.unknownDays > 0) {
             Text(
                 pluralStringResource(if (stays) Res.plurals.residence_unknown_in else Res.plurals.residence_unknown_away, result.unknownDays, result.unknownDays),
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyLarge,
                 color = muted,
             )
         }
         if (result.unplaced.isNotEmpty()) {
             Stretches(stringResource(Res.string.residence_cant_place), result.unplaced, titles, onOpenTrip)
-            Text(stringResource(Res.string.residence_cant_place_hint), style = MaterialTheme.typography.bodyMedium, color = muted)
+            Text(stringResource(Res.string.residence_cant_place_hint), style = MaterialTheme.typography.bodyLarge, color = muted)
         }
         if (result.stretches.isNotEmpty()) {
             Stretches(stringResource(if (stays) Res.string.residence_stays else Res.string.residence_time_away), result.stretches, titles, onOpenTrip)
         }
         Text(
             stringResource(Res.string.residence_official_guidance),
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.clickable { uri.openUri(rule.source) }.padding(vertical = 4.dp),
         )
@@ -197,7 +197,7 @@ private fun Result(result: RuleResult, titles: Map<String, String>, onOpenTrip: 
 @Composable
 private fun Stretches(label: String, items: List<Stretch>, titles: Map<String, String>, onOpenTrip: (String) -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    Text(label, style = MaterialTheme.typography.labelLarge, color = muted, modifier = Modifier.padding(top = 4.dp))
+    Text(label, style = MaterialTheme.typography.bodyLarge, color = muted, modifier = Modifier.padding(top = 4.dp))
     var all by rememberSaveable { mutableStateOf(false) }
     for (s in items.reversed().let { if (all) it else it.take(SHOWN_STRETCHES) }) {
         val where = s.countries.joinToString(", ") { countryName(it) }
@@ -205,7 +205,7 @@ private fun Stretches(label: String, items: List<Stretch>, titles: Map<String, S
         val trip = s.tripIds.firstOrNull()
         Text(
             if (trip != null) "$text · ${titles[trip] ?: trip}" else text,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyLarge,
             modifier = if (trip != null) Modifier.clickable { onOpenTrip(trip) }.padding(vertical = 2.dp) else Modifier.padding(vertical = 2.dp),
         )
     }
@@ -213,7 +213,7 @@ private fun Stretches(label: String, items: List<Stretch>, titles: Map<String, S
     if (more > 0) {
         Text(
             if (all) stringResource(Res.string.residence_fewer) else pluralStringResource(Res.plurals.residence_more, more, more),
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.clickable { all = !all }.padding(vertical = 4.dp),
         )

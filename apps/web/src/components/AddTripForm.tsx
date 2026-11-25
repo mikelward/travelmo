@@ -7,7 +7,7 @@ import { createTrip } from "@/lib/edits";
 import { firestore } from "@/lib/firebase";
 
 const field = "rounded-lg border border-field bg-background px-3 py-2";
-const button = "rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
+const button = "rounded-lg border border-zinc-300 px-3 py-1.5  hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
 
 // Add a trip (SPEC "Adding a trip"): a name and its dates; saved, the new
 // trip opens, to add bookings to.
@@ -36,7 +36,7 @@ export function AddTripForm({ uid, onCancel }: { uid: string; onCancel: () => vo
   return (
     <form onSubmit={submit} aria-label="Add a trip" className="mb-6 space-y-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
       <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Name" aria-label="Name" className={`${field} w-full`} />
-      <div className="flex flex-wrap items-center gap-2 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-2">
           From
           <input
@@ -63,7 +63,7 @@ export function AddTripForm({ uid, onCancel }: { uid: string; onCancel: () => vo
         <button type="button" onClick={onCancel} disabled={busy} className={button}>
           Cancel
         </button>
-        {error && <span className="text-sm text-danger">{error}</span>}
+        {error && <span className="text-danger">{error}</span>}
       </div>
     </form>
   );

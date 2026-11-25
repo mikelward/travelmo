@@ -43,7 +43,7 @@ export default function ConfirmEmailPage() {
       {(user) => (
         <>
           {access.state === "approved" && (
-            <p className="mb-2 text-sm">
+            <p className="mb-2">
               <Link href="/settings" className="underline">
                 Settings
               </Link>

@@ -31,10 +31,10 @@ export function RideSuggestion({
   if (offers.length === 0) return null;
   return (
     <li className="py-3 pl-10" data-testid="ride-suggestion">
-      <div className="rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-800">
+      <div className="rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800">
         <div className="flex items-start justify-between gap-3">
           <p className="font-medium">{question(kind, flight)}</p>
-          <button type="button" onClick={onHide} className="shrink-0 text-xs text-muted hover:underline">
+          <button type="button" onClick={onHide} className="shrink-0 text-muted hover:underline">
             Hide
           </button>
         </div>

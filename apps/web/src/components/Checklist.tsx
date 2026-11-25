@@ -17,8 +17,8 @@ import { useState, type FormEvent } from "react";
 import { addOneOff, newReminderId, removeOneOff, removeStandingReminder, saveStandingReminder, setDone, useStandingReminders, type Slotted } from "@/lib/checklist";
 
 const buttonClass =
-  "rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
-const fieldClass = "rounded-lg border border-field bg-background px-3 py-2 text-sm";
+  "rounded-lg border border-zinc-300 px-3 py-1.5  hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
+const fieldClass = "rounded-lg border border-field bg-background px-3 py-2 ";
 
 type When = LeadUnit | "date";
 
@@ -111,7 +111,7 @@ function ReminderForm(props: {
           </button>
         )}
       </div>
-      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      {error && <p className="mt-2 text-danger">{error}</p>}
     </form>
   );
 }
@@ -135,7 +135,7 @@ export function TripRemindersSection({ uid }: { uid: string }) {
   return (
     <section className="mt-10">
       <h2 className="text-lg font-medium">Before international trips</h2>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="mt-2 text-zinc-600 dark:text-zinc-400">
         Things to do before every trip abroad. Prescriptions, phone plans, shopping, etc.
       </p>
       {list.length > 0 && (
@@ -155,7 +155,7 @@ export function TripRemindersSection({ uid }: { uid: string }) {
                 />
               </li>
             ) : (
-              <li key={r.slot} className="flex items-start justify-between gap-3 py-3 text-sm">
+              <li key={r.slot} className="flex items-start justify-between gap-3 py-3">
                 <div className="min-w-0">
                   <p className="font-medium">{r.text}</p>
                   <p className="text-zinc-600 dark:text-zinc-400">{leadText(r)}</p>
@@ -173,7 +173,7 @@ export function TripRemindersSection({ uid }: { uid: string }) {
           )}
         </ul>
       )}
-      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      {error && <p className="mt-2 text-danger">{error}</p>}
       <ReminderForm
         submitLabel="Add a reminder"
         disabled={!reminders || list.length >= maxStandingReminders}
@@ -231,7 +231,7 @@ export function BeforeYouGo(props: {
   const slotOf = (id: string) => props.added.find((r) => r.id === id)?.slot;
   return (
     <section className="mt-6" aria-labelledby="before-you-go">
-      <h2 id="before-you-go" className="text-sm font-medium uppercase tracking-wide text-muted">
+      <h2 id="before-you-go" className="text-lg font-medium">
         Before you go
       </h2>
       {props.entries.length > 0 && (
@@ -239,7 +239,7 @@ export function BeforeYouGo(props: {
           {props.entries.map((e) => {
             const done = isDone(e);
             return (
-              <li key={e.id} className="flex items-center gap-3 py-2 text-sm">
+              <li key={e.id} className="flex items-center gap-3 py-2">
                 <input type="checkbox" checked={done} aria-label={e.text} onChange={(ev) => tick(e, ev.target.checked)} />
                 <span className={`min-w-0 flex-1 ${done ? "text-muted line-through" : ""}`}>{e.text}</span>
                 <span className={done || e.due > props.today ? "text-muted" : "text-danger"}>{dueText(e.due, props.today)}</span>
@@ -258,7 +258,7 @@ export function BeforeYouGo(props: {
           })}
         </ul>
       )}
-      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      {error && <p className="mt-2 text-danger">{error}</p>}
       {adding ? (
         <ReminderForm
           dated

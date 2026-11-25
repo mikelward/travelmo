@@ -54,7 +54,7 @@ function Countries({ report, titles, trips }: { report: TravelReport; titles: Ma
   return (
     <section className="mt-8">
       <h2 className="text-lg font-medium">Days in each country</h2>
-      <table className="mt-2 w-full text-sm" aria-label="Days in each country">
+      <table className="mt-2 w-full" aria-label="Days in each country">
         <thead className="text-left text-muted">
           <tr>
             <th className="py-1 font-normal">Country</th>
@@ -127,11 +127,11 @@ function DownloadTrips({ trips, homes, lookup, titles, today }: { trips: readonl
       <h2 id="download-trips" className="text-lg font-medium">
         Download trips
       </h2>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="mt-2 text-zinc-600 dark:text-zinc-400">
         A spreadsheet of where you went and when, for visa and residence forms. Events, tickets and cancelled trips are left
         out.
       </p>
-      <fieldset className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+      <fieldset className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
         <legend className="sr-only">Rows</legend>
         <label className="flex items-center gap-2">
           <input type="radio" name="rows" checked={!byPlace} onChange={() => setByPlace(false)} /> One row per trip
@@ -140,10 +140,10 @@ function DownloadTrips({ trips, homes, lookup, titles, today }: { trips: readonl
           <input type="radio" name="rows" checked={byPlace} onChange={() => setByPlace(true)} /> One row per place
         </label>
       </fieldset>
-      <label className="mt-2 flex items-center gap-2 text-sm">
+      <label className="mt-2 flex items-center gap-2">
         <input type="checkbox" checked={international} onChange={(e) => setInternational(e.target.checked)} /> Outside my home country only
       </label>
-      <label className="mt-2 flex items-center gap-2 text-sm">
+      <label className="mt-2 flex items-center gap-2">
         Trips starting up to
         <input
           type="date"
@@ -156,7 +156,7 @@ function DownloadTrips({ trips, homes, lookup, titles, today }: { trips: readonl
         type="button"
         onClick={download}
         disabled={!homes}
-        className="mt-3 rounded-lg border border-field px-3 py-1.5 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:hover:bg-zinc-900"
+        className="mt-3 rounded-lg border border-field px-3 py-1.5 hover:bg-zinc-100 disabled:opacity-50 dark:hover:bg-zinc-900"
       >
         Download CSV
       </button>
@@ -173,7 +173,7 @@ function Favorites({ places, titles }: { places: readonly FavoritePlace[]; title
   return (
     <section className="mt-8">
       <h2 className="text-lg font-medium">Favorite places</h2>
-      <ul className="mt-2 divide-y divide-zinc-200 text-sm dark:divide-zinc-800" aria-label="Favorite places">
+      <ul className="mt-2 divide-y divide-zinc-200 dark:divide-zinc-800" aria-label="Favorite places">
         {places.map((p) => (
           <li key={`${p.name}|${p.country ?? ""}`} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2">
             <span className="font-medium">
@@ -212,7 +212,7 @@ function Years({ report, onPick }: { report: TravelReport; onPick: (year: string
   return (
     <section className="mt-8">
       <h2 className="text-lg font-medium">Trips per year</h2>
-      <table className="mt-2 w-full text-sm" aria-label="Trips per year">
+      <table className="mt-2 w-full" aria-label="Trips per year">
         <thead className="text-left text-muted">
           <tr>
             <th className="py-1 font-normal">Year</th>
@@ -286,7 +286,7 @@ function Report({ user }: { user: User }) {
             value={year}
             onChange={(e) => setYear(e.target.value)}
             aria-label="Year"
-            className="rounded-lg border border-field bg-background px-2 py-1 text-sm"
+            className="rounded-lg border border-field bg-background px-2 py-1"
           >
             <option value="">All years</option>
             {years.map((y) => (
@@ -298,7 +298,7 @@ function Report({ user }: { user: User }) {
       </div>
       <Summary report={report} />
       {segments.failed.length > 0 && (
-        <p className="mt-2 text-sm text-danger">
+        <p className="mt-2 text-danger">
           {plural(segments.failed.length, "trip")} couldn&apos;t be read, so {segments.failed.length === 1 ? "it isn't" : "they aren't"}{" "}
           counted. Reload to try again.
         </p>
@@ -311,7 +311,7 @@ function Report({ user }: { user: User }) {
         name={countryName}
       />
       {(report.unknownDays > 0 || report.unplaced > 0) && (
-        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="unplaced">
+        <p className="mt-2 text-zinc-600 dark:text-zinc-400" data-testid="unplaced">
           {[
             report.unknownDays > 0 && `${plural(report.unknownDays, "day")} away with no country known`,
             report.unplaced > 0 && `${plural(report.unplaced, "booking")} with no country`,
@@ -328,7 +328,7 @@ function Report({ user }: { user: User }) {
       <Years report={all.report} onPick={setYear} />
       <DownloadTrips trips={all.withSegments} homes={homes} lookup={tables.lookup} titles={titles} today={today} />
       {all.report.upcoming > 0 && (
-        <p className="mt-6 text-sm text-muted">
+        <p className="mt-6 text-muted">
           {plural(all.report.upcoming, "trip")} still ahead {all.report.upcoming === 1 ? "isn't" : "aren't"} counted.
         </p>
       )}

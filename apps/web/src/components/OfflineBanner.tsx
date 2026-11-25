@@ -26,7 +26,7 @@ export function OfflineBanner() {
   return (
     <div
       role="status"
-      className="bg-amber-100 px-4 py-2 text-center text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+      className="bg-amber-100 px-4 py-2 text-center text-amber-900 dark:bg-amber-950 dark:text-amber-200"
     >
       You&apos;re offline. Showing the trips saved on this device.
     </div>

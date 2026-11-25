@@ -173,6 +173,6 @@ val Wordmark: FontFamily
 @Composable
 fun TravelmoPalette(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalTravelmoColors provides if (darkTheme) DarkExtraColors else LightExtraColors) {
-        MaterialTheme(colorScheme = if (darkTheme) DarkScheme else LightScheme, content = content)
+        MaterialTheme(colorScheme = if (darkTheme) DarkScheme else LightScheme, typography = AppTypography, content = content)
     }
 }

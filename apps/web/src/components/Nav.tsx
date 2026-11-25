@@ -16,7 +16,7 @@ export function Nav() {
           Travelmo
         </Link>
         {user && approved && (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <Link href="/" className="hover:underline">
               Trips
             </Link>

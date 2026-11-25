@@ -140,7 +140,7 @@ private fun MonthGrid(month: String, trips: List<Trip>, titles: Map<String, Stri
             for (day in weekdays) {
                 Text(
                     day.uppercase(),
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.weight(1f),
@@ -167,7 +167,7 @@ private fun Week(week: List<String>, trips: List<Trip>, titles: Map<String, Stri
                 Box(modifier = Modifier.weight(1f).padding(start = 6.dp, top = 6.dp, bottom = 2.dp)) {
                     Text(
                         date.substring(8, 10).trimStart('0'),
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyLarge,
                         fontWeight = if (isToday) FontWeight.Medium else null,
                         color = when {
                             isToday -> MaterialTheme.colorScheme.onPrimary
@@ -212,7 +212,7 @@ private fun Bar(bar: TripBar, title: String, shared: Boolean, modifier: Modifier
     }
     Text(
         (if (bar.continuesBefore) "… " else "") + title,
-        style = MaterialTheme.typography.bodyMedium,
+        style = MaterialTheme.typography.bodyLarge,
         color = foreground,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,

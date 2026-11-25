@@ -56,7 +56,7 @@ fun RideSuggestion(kind: RideNeedKind, flight: Segment, companies: List<RideComp
     OutlinedCard(modifier = modifier.fillMaxWidth().padding(start = 40.dp, bottom = 12.dp)) {
         Column(modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(rideQuestion(kind, flight), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                Text(rideQuestion(kind, flight), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                 TextButton(onClick = onHide) { Text(stringResource(Res.string.hide)) }
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(0.dp)) {

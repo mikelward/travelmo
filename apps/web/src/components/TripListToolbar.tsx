@@ -45,7 +45,7 @@ function FilterButton({ filters, onFilters }: { filters: ListFilters; onFilters:
         <Icon path={on ? filterOnPath : filterOffPath} />
       </button>
       {open && (
-        <div className="absolute right-0 top-11 z-10 min-w-48 space-y-1 rounded-lg border border-zinc-200 bg-background p-3 text-sm shadow-lg dark:border-zinc-800">
+        <div className="absolute right-0 top-11 z-10 min-w-48 space-y-1 rounded-lg border border-zinc-200 bg-background p-3 shadow-lg dark:border-zinc-800">
           <label className="flex items-center gap-2 whitespace-nowrap">
             <input type="checkbox" checked={filters.hideCancelled} onChange={(e) => onFilters({ ...filters, hideCancelled: e.target.checked })} />
             Hide cancelled

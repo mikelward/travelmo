@@ -56,7 +56,7 @@ const tone = { ok: "", near: "text-amber-700 dark:text-amber-400", over: "text-d
 // Runs of days, latest first, each with its countries and trips.
 function Stretches({ label, items, titles, children }: { label: string; items: readonly Stretch[]; titles: Map<string, string>; children?: ReactNode }) {
   return (
-    <details className="mt-1 text-sm">
+    <details className="mt-1">
       <summary className="cursor-pointer text-muted">
         {label} ({items.length.toLocaleString("en-US")})
       </summary>
@@ -87,26 +87,26 @@ function Result({ result, titles }: { result: RuleResult; titles: Map<string, st
   const rolling = (rule.kind === "maxAbsent" || rule.kind === "maxPresent") && rule.rolling;
   return (
     <li className="py-3" data-testid="residence-rule">
-      <h3 className="font-medium">{rule.label}</h3>
+      <h3 className="text-lg font-medium">{rule.label}</h3>
       <p className="tabular-nums">{countText(result)}</p>
-      <p className={`text-sm ${tone[result.status]}`} data-status={result.status}>
+      <p className={tone[result.status]} data-status={result.status}>
         {statusText(result)}
       </p>
       {result.period && (
-        <p className="text-sm text-muted">
+        <p className="text-muted">
           {result.period.moved && rule.areaName
             ? `Since you moved to ${rule.areaName} on ${day(result.period.start)}`
             : `Counted over ${range(result.period)}`}
         </p>
       )}
       {rule.kind !== "longestAbsence" && !(result.period && result.window.start === result.period.start && result.window.end === result.period.end) && (
-        <p className="text-sm text-muted">
+        <p className="text-muted">
           {rolling ? `Worst ${spanText(rule.window)}: ${range(result.window)}` : range(result.window)}
           {result.current && rolling && result.current.window.start !== result.window.start && ` · Last ${spanText(rule.window)}: ${days(result.current.used)}`}
         </p>
       )}
       {result.unknownDays > 0 && (
-        <p className="text-sm text-muted">
+        <p className="text-muted">
           Includes {days(result.unknownDays)} we can&rsquo;t place in a country, counted {stays ? "as inside" : "as away"} to be safe.
         </p>
       )}
@@ -118,7 +118,7 @@ function Result({ result, titles }: { result: RuleResult; titles: Map<string, st
         </Stretches>
       )}
       {result.stretches.length > 0 && <Stretches label={stays ? "Stays" : "Time away"} items={result.stretches} titles={titles} />}
-      <a href={rule.source} className="text-sm text-muted underline" target="_blank" rel="noreferrer">
+      <a href={rule.source} className="text-muted underline" target="_blank" rel="noreferrer">
         Official guidance
       </a>
     </li>
@@ -151,7 +151,7 @@ export function ResidenceDays({
       <h2 id="residence-heading" className="text-lg font-medium">
         Residence and visa days
       </h2>
-      <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
+      <div className="mt-2 flex flex-wrap items-center gap-3">
         <select
           value={setId}
           onChange={(e) => setSetId(e.target.value)}
@@ -175,7 +175,7 @@ export function ResidenceDays({
         </label>
       </div>
       {!report.homeCountryKnown && (
-        <p className="mt-2 text-sm text-danger">
+        <p className="mt-2 text-danger">
           Days with no trip count as at home, but home has no country yet. <Link href="/profile" className="underline">Add one on your Profile</Link>.
         </p>
       )}
@@ -184,7 +184,7 @@ export function ResidenceDays({
           <Result key={r.rule.id} result={r} titles={titles} />
         ))}
       </ul>
-      <p className="mt-2 text-sm text-muted">
+      <p className="mt-2 text-muted">
         An estimate from the bookings Travelmo knows about, with days between trips counted at home. It isn&apos;t legal advice.
       </p>
     </section>

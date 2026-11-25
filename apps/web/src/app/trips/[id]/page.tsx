@@ -33,7 +33,7 @@ import { flightLinesFor, useFlightRefresh, useFlightStatuses } from "@/lib/fligh
 import { setCheckedIn, useCheckedIn, useCheckedInFromNotification } from "@/lib/checkedIn";
 
 const buttonClass =
-  "rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
+  "rounded-lg border border-zinc-300 px-3 py-1.5  hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
 
 function byDay(segments: Segment[]): [string, Segment[]][] {
   const days = new Map<string, Segment[]>();
@@ -78,7 +78,7 @@ function TripMenu({ onRename }: { onRename: () => void }) {
               setOpen(false);
               onRename();
             }}
-            className="block w-full px-4 py-2 text-left text-sm hover:bg-zinc-100 focus:bg-zinc-100 focus:outline-none dark:hover:bg-zinc-900 dark:focus:bg-zinc-900"
+            className="block w-full px-4 py-2 text-left hover:bg-zinc-100 focus:bg-zinc-100 focus:outline-none dark:hover:bg-zinc-900 dark:focus:bg-zinc-900"
           >
             Rename
           </button>
@@ -96,7 +96,7 @@ function Title({ trip, canEdit }: { trip: Trip; canEdit: boolean }) {
   if (!editing) {
     return (
       <div className="mt-2 flex items-start justify-between gap-3">
-        <h1 className="text-3xl font-semibold">{trip.title}</h1>
+        <h1 className="text-2xl font-semibold">{trip.title}</h1>
         {canEdit && (
           <TripMenu
             onRename={() => {
@@ -133,7 +133,7 @@ function Title({ trip, canEdit }: { trip: Trip; canEdit: boolean }) {
       <button type="button" onClick={() => setEditing(false)} className={buttonClass}>
         Cancel
       </button>
-      {error && <span className="text-sm text-danger">{error}</span>}
+      {error && <span className="text-danger">{error}</span>}
     </form>
   );
 }
@@ -151,11 +151,11 @@ function FitDates({ trip, segments }: { trip: Trip; segments: Segment[] }) {
       <button
         type="button"
         onClick={() => fitTripDates(firestore(), trip.id).catch((e: Error) => setError(e.message))}
-        className="text-sm text-muted hover:underline"
+        className="text-muted hover:underline"
       >
         Fit dates to bookings ({formatDateRange(range.start, range.end)})
       </button>
-      {error && <span className="ml-2 text-sm text-danger">{error}</span>}
+      {error && <span className="ml-2 text-danger">{error}</span>}
     </>
   );
 }
@@ -185,8 +185,8 @@ function Sharing({ trip, user }: { trip: Trip; user: User }) {
 
   return (
     <section className="mt-10">
-      <h2 className="text-sm font-medium uppercase tracking-wide text-muted">Shared with</h2>
-      <ul className="mt-2 space-y-1 text-sm">
+      <h2 className="text-lg font-medium">Shared with</h2>
+      <ul className="mt-2 space-y-1">
         {trip.sharedWith.length === 0 && <li className="text-muted">Only you</li>}
         {trip.sharedWith.map((address) => (
           <li key={address} className="flex items-center justify-between">
@@ -203,13 +203,13 @@ function Sharing({ trip, user }: { trip: Trip; user: User }) {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="partner@example.com"
-          className="flex-1 rounded-lg border border-field bg-background px-3 py-2 text-sm"
+          className="flex-1 rounded-lg border border-field bg-background px-3 py-2"
         />
         <button type="submit" className={buttonClass}>
           Share
         </button>
       </form>
-      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      {error && <p className="mt-2 text-danger">{error}</p>}
     </section>
   );
 }
@@ -233,8 +233,8 @@ function MergeInto({ trip, targets, titles }: { trip: Trip; targets: Trip[]; tit
   };
   return (
     <section className="mt-10">
-      <h2 className="text-sm font-medium uppercase tracking-wide text-muted">Merge into another trip</h2>
-      <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+      <h2 className="text-lg font-medium">Merge into another trip</h2>
+      <p className="mt-1 text-zinc-600 dark:text-zinc-400">
         Moves every booking here into the other trip and deletes this one. Who it is shared with stays as the other trip has it.
       </p>
       <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -242,7 +242,7 @@ function MergeInto({ trip, targets, titles }: { trip: Trip; targets: Trip[]; tit
           value={target?.id ?? ""}
           onChange={(e) => setTarget(targets.find((t) => t.id === e.target.value))}
           aria-label="Trip to merge into"
-          className="min-w-0 max-w-full rounded-lg border border-field bg-background px-3 py-2 text-sm"
+          className="min-w-0 max-w-full rounded-lg border border-field bg-background px-3 py-2"
         >
           <option value="">Choose a trip…</option>
           {targets.map((t) => (
@@ -255,7 +255,7 @@ function MergeInto({ trip, targets, titles }: { trip: Trip; targets: Trip[]; tit
           {busy ? "Merging…" : `Merge into ${target ? (titles.get(target.id) ?? target.title) : "…"}`}
         </button>
       </div>
-      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      {error && <p className="mt-2 text-danger">{error}</p>}
     </section>
   );
 }
@@ -285,7 +285,7 @@ function DangerZone({ trip }: { trip: Trip }) {
   };
   if (trip.deleting) {
     return (
-      <section className="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-700 dark:bg-amber-950">
+      <section className="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950">
         <p>Deleting this trip was interrupted. Its bookings can no longer be changed.</p>
         <button
           type="button"
@@ -302,11 +302,11 @@ function DangerZone({ trip }: { trip: Trip }) {
   return (
     <section className="mt-10 border-t border-zinc-200 pt-6 dark:border-zinc-800">
       {!confirming ? (
-        <button type="button" onClick={() => setConfirming(true)} className="text-sm text-danger hover:underline">
+        <button type="button" onClick={() => setConfirming(true)} className="text-danger hover:underline">
           Delete this trip
         </button>
       ) : (
-        <div className="flex flex-wrap items-center gap-3 text-sm">
+        <div className="flex flex-wrap items-center gap-3">
           <span>Delete “{trip.title}” and all its bookings? This cannot be undone.</span>
           <button type="button" disabled={busy} onClick={remove} className="rounded-lg bg-red-600 px-3 py-1.5 font-medium text-white disabled:opacity-50">
             {busy ? "Deleting…" : "Delete"}
@@ -316,7 +316,7 @@ function DangerZone({ trip }: { trip: Trip }) {
           </button>
         </div>
       )}
-      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      {error && <p className="mt-2 text-danger">{error}</p>}
     </section>
   );
 }
@@ -338,7 +338,7 @@ function TripCancelled({ trip, canManage }: { trip: Trip; canManage: boolean }) 
   };
   if (trip.cancelledAt) {
     return (
-      <section className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-zinc-300 p-3 text-sm dark:border-zinc-700" data-testid="trip-cancelled-banner">
+      <section className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-zinc-300 p-3 dark:border-zinc-700" data-testid="trip-cancelled-banner">
         <span className="font-medium text-danger">Trip cancelled</span>
         {canManage && (
           <button type="button" disabled={busy} onClick={() => run(restoreTrip, "Restoring a trip")} className={buttonClass}>
@@ -351,7 +351,7 @@ function TripCancelled({ trip, canManage }: { trip: Trip; canManage: boolean }) 
   }
   if (!canManage) return null;
   return (
-    <section className="mt-10 border-t border-zinc-200 pt-6 text-sm dark:border-zinc-800">
+    <section className="mt-10 border-t border-zinc-200 pt-6 dark:border-zinc-800">
       <button type="button" disabled={busy} onClick={() => run(cancelTrip, "Cancelling a trip")} className="hover:underline disabled:opacity-50">
         Mark trip cancelled
       </button>
@@ -440,10 +440,10 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   // that deleted this trip and then failed is still there to retry.
   const cleanupOffer = cleanup && (
     <Dialog title="Delete what it imported?" onClose={() => setCleanup(undefined)}>
-      <p className="text-sm">
+      <p className="">
         Mail from {cleanup.domain} won&rsquo;t be imported again. Delete {imported(cleanup.plan)} already imported from it?
       </p>
-      <button type="button" onClick={() => void clean()} className="mt-3 rounded-lg border border-field px-3 py-2 text-sm text-danger hover:bg-zinc-100 dark:hover:bg-zinc-900">
+      <button type="button" onClick={() => void clean()} className="mt-3 rounded-lg border border-field px-3 py-2 text-danger hover:bg-zinc-100 dark:hover:bg-zinc-900">
         Delete
       </button>
     </Dialog>
@@ -453,7 +453,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
     return (
       <>
         <p className="text-muted">This trip does not exist or is not shared with you.</p>
-        {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+        {error && <p className="mt-2 text-danger">{error}</p>}
         {cleanupOffer}
       </>
     );
@@ -502,7 +502,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
 
   return (
     <>
-      <Link href="/" className="text-sm text-muted hover:underline">
+      <Link href="/" className="text-muted hover:underline">
         ← All trips
       </Link>
       <Title trip={trip} canEdit={canManage} />
@@ -512,7 +512,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
       </p>
       {isOwner && trip.deleting && <DangerZone trip={trip} />}
       {onlyWatching && (
-        <p className="mt-1 text-sm text-muted" data-testid="trip-watching">
+        <p className="mt-1 text-muted" data-testid="trip-watching">
           Watching: you&apos;re not on this trip
         </p>
       )}
@@ -541,7 +541,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
       {editing?.kind === "add" && (
         <SegmentForm defaultDate={editing.date ?? trip.start} onSave={save} onCancel={() => setEditing(undefined)} />
       )}
-      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      {error && <p className="mt-2 text-danger">{error}</p>}
       {cleanupOffer}
 
       {!segments && <p className="mt-8 text-muted">Loading…</p>}
@@ -549,7 +549,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
       {segments &&
         byDay(segments).map(([day, items]) => (
           <section key={day} className="mt-8">
-            <h2 className="text-sm font-medium uppercase tracking-wide text-muted">{formatDate(day)}</h2>
+            <h2 className="text-lg font-medium">{formatDate(day)}</h2>
             <ul className="mt-1 divide-y divide-zinc-200 dark:divide-zinc-800">
               {items.map((segment) =>
                 editing?.kind === "edit" && editing.segment.id === segment.id ? (

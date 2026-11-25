@@ -109,7 +109,7 @@ fun InviteOnlyScreen(account: SignedInAccount, viewModel: TripsViewModel, status
             ) {
                 Column(modifier = Modifier.widthIn(max = 480.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Image(painterResource(Res.drawable.logo), contentDescription = null, modifier = Modifier.size(72.dp).padding(bottom = 16.dp))
-                    Text(stringResource(Res.string.invite_only), style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+                    Text(stringResource(Res.string.invite_only), style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
                     val said = when {
                         email == null -> stringResource(Res.string.invite_only_unverified)
                         status == AccountAccess.DECLINED -> stringResource(Res.string.invite_only_declined, email)
@@ -156,7 +156,7 @@ fun FinishDeletionScreen(account: SignedInAccount, viewModel: TripsViewModel) {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(stringResource(Res.string.deletion_unfinished), style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+            Text(stringResource(Res.string.deletion_unfinished), style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
             Text(
                 stringResource(Res.string.deletion_unfinished_hint),
                 style = MaterialTheme.typography.bodyLarge,
@@ -171,7 +171,7 @@ fun FinishDeletionScreen(account: SignedInAccount, viewModel: TripsViewModel) {
                 modifier = Modifier.padding(top = 24.dp),
             ) { Text(stringResource(if (outcome is Outcome.Busy) Res.string.deleting else Res.string.finish_deleting)) }
             (outcome as? Outcome.Failed)?.let {
-                Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
+                Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
             }
             TextButton(onClick = { scope.launch { account.signOut() } }, modifier = Modifier.padding(top = 16.dp)) {
                 Text(stringResource(Res.string.sign_out))
@@ -218,10 +218,10 @@ private fun InvitedElsewhere(viewModel: TripsViewModel) {
             ) { Text(stringResource(Res.string.send_link)) }
         }
         if (sending == null || sending is Outcome.Done) {
-            sentTo?.let { Text(stringResource(Res.string.email_link_sent, it), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp)) }
+            sentTo?.let { Text(stringResource(Res.string.email_link_sent, it), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp)) }
         }
         (sending as? Outcome.Failed)?.let {
-            Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+            Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
         }
     }
 }
@@ -291,15 +291,15 @@ private fun AccessAdmin(viewModel: TripsViewModel, config: AccessConfig) {
         ) { Text(stringResource(Res.string.invite)) }
     }
     (last?.let { outcomes[it] } as? Outcome.Failed)?.let {
-        Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+        Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
     }
     val current = lists
     if (current == null) {
         Text(stringResource(Res.string.loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 24.dp))
         return
     }
-    Text(stringResource(Res.string.access_approved), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 32.dp, bottom = 4.dp))
-    Text(stringResource(Res.string.access_approved_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(Res.string.access_approved), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 32.dp, bottom = 4.dp))
+    Text(stringResource(Res.string.access_approved_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     current.approved.forEachIndexed { index, record ->
         if (index > 0) HorizontalDivider()
         ApprovedRow(record) {
@@ -332,10 +332,10 @@ fun DeleteAccountSection(account: SignedInAccount, viewModel: TripsViewModel, to
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
     val outcome = outcomes[token]
     var confirming by remember { mutableStateOf(false) }
-    Text(stringResource(Res.string.delete_account), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
-    Text(stringResource(Res.string.delete_account_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(Res.string.delete_account), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(stringResource(Res.string.delete_account_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (!viewModel.canDeleteAccount) {
-        Text(stringResource(Res.string.delete_account_on_web), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+        Text(stringResource(Res.string.delete_account_on_web), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
         return
     }
     OutlinedButton(
@@ -344,7 +344,7 @@ fun DeleteAccountSection(account: SignedInAccount, viewModel: TripsViewModel, to
         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
         modifier = Modifier.padding(top = 8.dp),
     ) { Text(stringResource(if (outcome is Outcome.Busy) Res.string.deleting else Res.string.delete_account)) }
-    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) }
     if (confirming) {
         AppAlertDialog(
             onDismissRequest = { confirming = false },

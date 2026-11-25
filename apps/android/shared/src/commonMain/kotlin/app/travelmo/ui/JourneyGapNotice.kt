@@ -47,7 +47,7 @@ fun JourneyGapNotice(actions: JourneyGapActions, busy: Boolean, modifier: Modifi
             .background(MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f), shape)
             .padding(12.dp),
     ) {
-        Text(journeyGapText(actions.gap), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.tertiary)
+        Text(journeyGapText(actions.gap), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.tertiary)
         FlowRow(modifier = Modifier.offset(x = -TextButtonInset)) {
             TextButton(onClick = { chrome.openLink(gmailSearchUrl(journeyGapSearch(actions.gap)), "a search for a missing booking") }) {
                 Text(stringResource(Res.string.find_it_in_gmail))

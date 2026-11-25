@@ -28,7 +28,7 @@ import { countryName } from "@/lib/countries";
 import { addRideCompany, removeRideCompany } from "@/lib/rides";
 
 const buttonClass =
-  "rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
+  "rounded-lg border border-zinc-300 px-3 py-2  hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
 
 function GmailSection({ user }: { user: User }) {
   const profile = useProfile(user.uid);
@@ -84,7 +84,7 @@ function GmailSection({ user }: { user: User }) {
       {profile === undefined && <p className="mt-2 text-muted">Loading…</p>}
       {profile && mailboxes.length === 0 && (
         <>
-          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+          <p className="mt-2 text-zinc-600 dark:text-zinc-400">
             Travelmo reads booking confirmations from your inbox and turns them into trips. It asks for read-only
             access and only sends emails that look like bookings to the extraction model.
           </p>
@@ -95,7 +95,7 @@ function GmailSection({ user }: { user: User }) {
       )}
       {mailboxes.length > 0 && (
         <>
-          <p className="mt-2 text-sm">
+          <p className="mt-2">
             New bookings import automatically; past ones come in when you import them, as far back as each mailbox goes.
           </p>
           <ul className="mt-3 space-y-4">
@@ -108,14 +108,14 @@ function GmailSection({ user }: { user: User }) {
               Connect another Gmail account
             </button>
           ) : (
-            <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
+            <p className="mt-4 text-zinc-600 dark:text-zinc-400">
               You can connect up to {maxGmailMailboxes} Gmail accounts. Disconnect one to connect another.
             </p>
           )}
         </>
       )}
-      {notice && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{notice}</p>}
-      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+      {notice && <p className="mt-3 text-green-700 dark:text-green-500">{notice}</p>}
+      {error && <p className="mt-3 text-danger">{error}</p>}
     </section>
   );
 }
@@ -138,7 +138,7 @@ function MailboxRow({
   const address = mailbox.emailAddress;
   return (
     <li className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800" data-testid="gmail-mailbox">
-      <p className="text-sm font-medium">{address}</p>
+      <p className="font-medium">{address}</p>
       <PastBookings
         progress={mailbox.backfill}
         busy={busy}
@@ -196,11 +196,11 @@ function PastBookings({
         {children}
       </div>
       {progress && (
-        <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400" data-testid={testId}>
+        <p className="mt-3 text-zinc-600 dark:text-zinc-400" data-testid={testId}>
           {describeBackfill(progress, reading)}
         </p>
       )}
-      {paused && <p className="mt-3 text-sm text-danger">{paused}</p>}
+      {paused && <p className="mt-3 text-danger">{paused}</p>}
     </>
   );
 }
@@ -250,14 +250,14 @@ function FastmailSection({ user }: { user: User }) {
       {profile === undefined && <p className="mt-2 text-muted">Loading…</p>}
       {profile && !fastmail && (
         <form onSubmit={connect}>
-          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+          <p className="mt-2 text-zinc-600 dark:text-zinc-400">
             Imports booking confirmations from your Fastmail inbox, checking for new ones every few minutes.{" "}
             <a href={fastmailTokensUrl} target="_blank" rel="noreferrer" className="underline">
               Make a read-only API token
             </a>{" "}
             with Email access, then paste it here.
           </p>
-          <div className="mt-3 flex flex-wrap items-end gap-2 text-sm">
+          <div className="mt-3 flex flex-wrap items-end gap-2">
             <label className="flex flex-col">
               <span className="font-medium">API token</span>
               <input
@@ -277,7 +277,7 @@ function FastmailSection({ user }: { user: User }) {
       )}
       {fastmail && (
         <>
-          <p className="mt-2 text-sm">
+          <p className="mt-2">
             Connected as <span className="font-medium">{fastmail.emailAddress}</span>. New bookings import automatically;
             past ones come in when you import them, as far back as your mailbox goes.
           </p>
@@ -304,9 +304,9 @@ function FastmailSection({ user }: { user: User }) {
           </PastBookings>
         </>
       )}
-      {notice && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{notice}</p>}
+      {notice && <p className="mt-3 text-green-700 dark:text-green-500">{notice}</p>}
       {disconnected && (
-        <p className="mt-3 text-sm">
+        <p className="mt-3">
           Fastmail disconnected.{" "}
           <a href={fastmailTokensUrl} target="_blank" rel="noreferrer" className="underline">
             Delete the API token in Fastmail
@@ -314,7 +314,7 @@ function FastmailSection({ user }: { user: User }) {
           too, as Travelmo can&apos;t.
         </p>
       )}
-      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+      {error && <p className="mt-3 text-danger">{error}</p>}
     </section>
   );
 }
@@ -389,7 +389,7 @@ function ImapSection({ user }: { user: User }) {
         </ul>
       )}
       {profile && mailboxes.length >= maxImapMailboxes && (
-        <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="mt-4 text-zinc-600 dark:text-zinc-400">
           You can connect up to {maxImapMailboxes} mailboxes this way. To connect another, disconnect one; to give one a
           new app password, connect it again below.
         </p>
@@ -397,7 +397,7 @@ function ImapSection({ user }: { user: User }) {
       {/* At the limit, the form still gives a connected mailbox a new app password; the parser refuses only a new address. */}
       {profile && (
         <form onSubmit={connect} data-testid="imap-connect">
-          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+          <p className="mt-2 text-zinc-600 dark:text-zinc-400">
             Imports booking confirmations from another inbox, such as iCloud or Yahoo, checking for new ones every few
             minutes. Use an app password, not your usual one:{" "}
             <a href={icloudAppPasswords} target="_blank" rel="noreferrer" className="underline">
@@ -409,7 +409,7 @@ function ImapSection({ user }: { user: User }) {
             </a>
             .
           </p>
-          <div className="mt-3 flex flex-wrap items-end gap-2 text-sm">
+          <div className="mt-3 flex flex-wrap items-end gap-2">
             <label className="flex flex-col">
               <span className="font-medium">Email address</span>
               <input type="email" autoComplete="email" required value={address} onChange={(e) => setAddress(e.target.value)} className={field} />
@@ -443,12 +443,12 @@ function ImapSection({ user }: { user: User }) {
               {busy ? "Connecting…" : "Connect"}
             </button>
           </div>
-          {redirect && <p className="mt-2 text-sm">{redirect}</p>}
+          {redirect && <p className="mt-2">{redirect}</p>}
         </form>
       )}
-      {notice && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{notice}</p>}
-      {disconnected && <p className="mt-3 text-sm">Disconnected. Delete the app password with your email provider too.</p>}
-      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+      {notice && <p className="mt-3 text-green-700 dark:text-green-500">{notice}</p>}
+      {disconnected && <p className="mt-3">Disconnected. Delete the app password with your email provider too.</p>}
+      {error && <p className="mt-3 text-danger">{error}</p>}
     </section>
   );
 }
@@ -472,9 +472,9 @@ function ImapMailboxRow({
   const address = mailbox.emailAddress;
   return (
     <li className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800" data-testid="imap-mailbox">
-      <p className="text-sm font-medium">{address}</p>
+      <p className="font-medium">{address}</p>
       {mailbox.loginFailedAt && (
-        <p className="mt-1 text-sm text-danger">The server turned down the app password. Connect again with a new one.</p>
+        <p className="mt-1 text-danger">The server turned down the app password. Connect again with a new one.</p>
       )}
       <PastBookings
         progress={mailbox.backfill}
@@ -545,10 +545,10 @@ function RegroupSection({ user }: { user: User }) {
   return (
     <section className="mt-10">
       <h2 className="text-lg font-medium">Trips</h2>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="mt-2 text-zinc-600 dark:text-zinc-400">
         Rebuilds your trips from your bookings, keeping days out at home separate from trips away.
       </p>
-      <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+      <div className="mt-3 flex flex-wrap items-center gap-3">
         <button type="button" disabled={busy} className={buttonClass} onClick={() => void regroup()}>
           {busy && !confirming ? "Regrouping…" : "Regroup trips"}
         </button>
@@ -559,7 +559,7 @@ function RegroupSection({ user }: { user: User }) {
         )}
       </div>
       {confirming && (
-        <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+        <div className="mt-3 flex flex-wrap items-center gap-3">
           <span>
             Delete all your trips and their bookings? Your profile and connections stay. This cannot be undone.
           </span>
@@ -576,8 +576,8 @@ function RegroupSection({ user }: { user: User }) {
           </button>
         </div>
       )}
-      {result && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{result}</p>}
-      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+      {result && <p className="mt-3 text-green-700 dark:text-green-500">{result}</p>}
+      {error && <p className="mt-3 text-danger">{error}</p>}
       <RefreshFromEmail user={user} progress={profile?.refresh} mailboxes={profile ? gmailMailboxes(profile) : []} />
     </section>
   );
@@ -611,7 +611,7 @@ function RefreshFromEmail({ user, progress, mailboxes }: { user: User; progress:
   };
   return (
     <div className="mt-6" data-testid="refresh">
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">{refreshBlurb}</p>
+      <p className="text-zinc-600 dark:text-zinc-400">{refreshBlurb}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         {reading ? (
           <button type="button" disabled={busy} className={buttonClass} onClick={() => void run(() => api.stopRefresh(user), "Stopping the refresh")}>
@@ -629,7 +629,7 @@ function RefreshFromEmail({ user, progress, mailboxes }: { user: User; progress:
         )}
       </div>
       {progress && (
-        <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400" data-testid="refresh-progress">
+        <p className="mt-3 text-zinc-600 dark:text-zinc-400" data-testid="refresh-progress">
           {describeRefresh(progress, reading)}
         </p>
       )}
@@ -643,7 +643,7 @@ function RefreshFromEmail({ user, progress, mailboxes }: { user: User; progress:
           trips={trips}
         />
       )}
-      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+      {error && <p className="mt-3 text-danger">{error}</p>}
     </div>
   );
 }
@@ -688,7 +688,7 @@ function FailedEmails(props: {
   const more = moreFailedEmails(props.progress);
   return (
     <div className="mt-2" data-testid="refresh-failed">
-      <ul className="list-disc pl-5 text-sm">
+      <ul className="list-disc pl-5">
         {ids.map((id) => {
           const record = records.get(id);
           const gmail = record && isFromMailbox(record) && (record.source ?? "gmail") === "gmail";
@@ -736,7 +736,7 @@ function FailedEmails(props: {
           );
         })}
       </ul>
-      {more && <p className="mt-1 text-sm text-muted">{more}</p>}
+      {more && <p className="mt-1 text-muted">{more}</p>}
       <div className="mt-3 flex flex-wrap gap-2">
         <button type="button" disabled={props.busy} className={buttonClass} onClick={props.onTryAgain}>
           Try again
@@ -785,13 +785,13 @@ function FileImportSection(props: { title: string; blurb: string; accept: string
   return (
     <section className="mt-10">
       <h2 className="text-lg font-medium">{props.title}</h2>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{props.blurb}</p>
+      <p className="mt-2 text-zinc-600 dark:text-zinc-400">{props.blurb}</p>
       <input
         type="file"
         accept={props.accept}
         aria-label={props.label}
         disabled={busy}
-        className="mt-3 block text-sm"
+        className="mt-3 block"
         onChange={(e) => {
           const file = e.target.files?.[0];
           // Cleared so picking the same file again reads it again: a large
@@ -801,7 +801,7 @@ function FileImportSection(props: { title: string; blurb: string; accept: string
         }}
       />
       {preview && (
-        <div className="mt-3 text-sm">
+        <div className="mt-3">
           <p>{preview.text}</p>
           {preview.notImported && preview.notImported.length > 0 && (
             <details className="mt-2 text-zinc-600 dark:text-zinc-400">
@@ -830,8 +830,8 @@ function FileImportSection(props: { title: string; blurb: string; accept: string
           </button>
         </div>
       )}
-      {result && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{result}</p>}
-      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+      {result && <p className="mt-3 text-green-700 dark:text-green-500">{result}</p>}
+      {error && <p className="mt-3 text-danger">{error}</p>}
     </section>
   );
 }
@@ -942,7 +942,7 @@ function GoogleCalendarSection({ user }: { user: User }) {
   return (
     <section className="mt-10">
       <h2 className="text-lg font-medium">Google Calendar</h2>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="mt-2 text-zinc-600 dark:text-zinc-400">
         Travelmo reads the calendars you choose every day, like a calendar feed, with read-only access. Events Gmail
         added from your emails are skipped when Gmail is connected to the same account.
       </p>
@@ -963,12 +963,12 @@ function GoogleCalendarSection({ user }: { user: User }) {
       )}
       {connection && (
         <>
-          <p className="mt-2 text-sm">
+          <p className="mt-2">
             Connected as <span className="font-medium">{connection.emailAddress}</span>.
           </p>
           <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
             {connection.calendars.map((cal) => (
-              <li key={cal.id} className="py-2 text-sm">
+              <li key={cal.id} className="py-2">
                 <label className="flex items-center gap-2">
                   <input type="checkbox" checked={chosen.has(cal.id)} disabled={busy} onChange={() => toggle(cal.id)} />
                   <span className="font-medium">{cal.summary}</span>
@@ -1002,8 +1002,8 @@ function GoogleCalendarSection({ user }: { user: User }) {
           </div>
         </>
       )}
-      {notice && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{notice}</p>}
-      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+      {notice && <p className="mt-3 text-green-700 dark:text-green-500">{notice}</p>}
+      {error && <p className="mt-3 text-danger">{error}</p>}
     </section>
   );
 }
@@ -1042,7 +1042,7 @@ function FeedsSection({ user }: { user: User }) {
   return (
     <section className="mt-10">
       <h2 className="text-lg font-medium">Calendar feeds</h2>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="mt-2 text-zinc-600 dark:text-zinc-400">
         Paste a calendar subscription link, such as the one in TripIt&apos;s settings, and Travelmo reads it every day:
         new trips come in, and a cancelled event removes its booking unless you edited it or it also came from an
         email. Bookings stay when you remove a feed.
@@ -1055,18 +1055,18 @@ function FeedsSection({ user }: { user: User }) {
           onChange={(e) => setUrl(e.target.value)}
           placeholder="webcal://… or https://…"
           aria-label="Calendar feed link"
-          className="min-w-0 flex-1 rounded-lg border border-field bg-background px-3 py-2 text-sm"
+          className="min-w-0 flex-1 rounded-lg border border-field bg-background px-3 py-2"
         />
         <button type="submit" disabled={busy || !url.trim()} className={buttonClass}>
           {busy ? "Reading…" : "Add feed"}
         </button>
       </form>
-      {result && <p className="mt-3 text-sm text-green-700 dark:text-green-500">{result}</p>}
-      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+      {result && <p className="mt-3 text-green-700 dark:text-green-500">{result}</p>}
+      {error && <p className="mt-3 text-danger">{error}</p>}
       {feeds && feeds.length > 0 && (
         <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
           {feeds.map((feed) => (
-            <li key={feed.id} className="flex items-start justify-between gap-3 py-3 text-sm">
+            <li key={feed.id} className="flex items-start justify-between gap-3 py-3">
               <div className="min-w-0">
                 <p className="font-medium">{feed.label ?? feedHost(feed.url)}</p>
                 <p className="text-zinc-600 dark:text-zinc-400">
@@ -1135,7 +1135,7 @@ function RideCompaniesSection({ user }: { user: User }) {
   return (
     <section className="mt-10">
       <h2 className="text-lg font-medium">Car and ride companies</h2>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="mt-2 text-zinc-600 dark:text-zinc-400">
         Add your own airport transfer, taxi, and rental car companies.
       </p>
       <form onSubmit={add} className="mt-3 flex flex-wrap gap-2">
@@ -1144,7 +1144,7 @@ function RideCompaniesSection({ user }: { user: User }) {
           onChange={(e) => setName(e.target.value)}
           placeholder="Name"
           aria-label="Company name"
-          className="min-w-0 flex-1 basis-32 rounded-lg border border-field bg-background px-3 py-2 text-sm"
+          className="min-w-0 flex-1 basis-32 rounded-lg border border-field bg-background px-3 py-2"
         />
         <input
           type="url"
@@ -1152,13 +1152,13 @@ function RideCompaniesSection({ user }: { user: User }) {
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://…"
           aria-label="Booking page"
-          className="min-w-0 flex-[2] basis-48 rounded-lg border border-field bg-background px-3 py-2 text-sm"
+          className="min-w-0 flex-[2] basis-48 rounded-lg border border-field bg-background px-3 py-2"
         />
         <select
           value={near}
           onChange={(e) => setNear(e.target.value as RideCompany["near"])}
           aria-label="Suggest for"
-          className="rounded-lg border border-field bg-background px-3 py-2 text-sm"
+          className="rounded-lg border border-field bg-background px-3 py-2"
         >
           <option value="home">Rides to and from home</option>
           <option value="anywhere">Cars wherever I land</option>
@@ -1168,17 +1168,17 @@ function RideCompaniesSection({ user }: { user: User }) {
           onChange={(e) => setCountries(e.target.value)}
           placeholder="Countries (all if blank)"
           aria-label="Countries"
-          className="min-w-0 flex-1 basis-48 rounded-lg border border-field bg-background px-3 py-2 text-sm"
+          className="min-w-0 flex-1 basis-48 rounded-lg border border-field bg-background px-3 py-2"
         />
         <button type="submit" disabled={!name.trim() || !url.trim() || companies.length >= maxRideCompanies} className={buttonClass}>
           Add
         </button>
       </form>
-      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+      {error && <p className="mt-3 text-danger">{error}</p>}
       {companies.length > 0 && (
         <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800" aria-label="Your companies">
           {companies.map((c, i) => (
-            <li key={`${c.name}|${c.url}|${i}`} className="flex items-start justify-between gap-3 py-3 text-sm">
+            <li key={`${c.name}|${c.url}|${i}`} className="flex items-start justify-between gap-3 py-3">
               <div className="min-w-0">
                 <a href={c.url} target="_blank" rel="noreferrer" className="font-medium underline">
                   {c.name}
@@ -1217,14 +1217,14 @@ function PatternsSection({ user }: { user: User }) {
   };
 
   const field = (key: keyof SenderPatterns, label: string, hint: string) => (
-    <label className="block text-sm">
+    <label className="block">
       <span className="font-medium">{label}</span>
       <span className="ml-2 text-muted">{hint}</span>
       <textarea
         rows={3}
         value={(patterns?.[key] ?? []).join("\n")}
         onChange={(e) => setDraft({ allow: [], deny: [], ...patterns, [key]: e.target.value.split("\n") })}
-        className="mt-1 w-full rounded-lg border border-field bg-background px-3 py-2 font-mono text-sm"
+        className="mt-1 w-full rounded-lg border border-field bg-background px-3 py-2 font-mono"
       />
     </label>
   );
@@ -1232,7 +1232,7 @@ function PatternsSection({ user }: { user: User }) {
   return (
     <section className="mt-10">
       <h2 className="text-lg font-medium">Sender rules</h2>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="mt-2 text-zinc-600 dark:text-zinc-400">
         One domain per line. Always-import senders skip the subject check; never-import senders are dropped before
         anything is read.
       </p>
@@ -1244,7 +1244,7 @@ function PatternsSection({ user }: { user: User }) {
         <button type="button" disabled={!draft} className={buttonClass} onClick={save}>
           Save
         </button>
-        {status && <span className="text-sm text-muted">{status}</span>}
+        {status && <span className="text-muted">{status}</span>}
       </div>
     </section>
   );
@@ -1272,17 +1272,17 @@ function RemindersSection({ user }: { user: User }) {
   return (
     <section className="mt-10">
       <h2 className="text-lg font-medium">Reminders</h2>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="mt-2 text-zinc-600 dark:text-zinc-400">
         A month before a trip, and as things change, an email about passports or visas that run out too soon and what each
         country asks of your passport: the same warnings the trip page shows, each sent once.
       </p>
-      <label className="mt-3 flex items-center gap-2 text-sm">
+      <label className="mt-3 flex items-center gap-2">
         <input type="checkbox" checked={on} onChange={(e) => void toggle(e.target.checked)} />
         <span>
           Email me before a trip{user.email ? <span className="text-muted"> (to {user.email})</span> : null}
         </span>
       </label>
-      {status && <p className="mt-2 text-sm text-muted">{status}</p>}
+      {status && <p className="mt-2 text-muted">{status}</p>}
       <PushSwitch uid={user.uid} />
     </section>
   );
@@ -1313,11 +1313,11 @@ function PushSwitch({ uid }: { uid: string }) {
   };
   return (
     <>
-      <label className="mt-3 flex items-center gap-2 text-sm">
+      <label className="mt-3 flex items-center gap-2">
         <input type="checkbox" checked={current === "on"} onChange={(e) => void toggle(e.target.checked)} />
         <span>Notify me in this browser</span>
       </label>
-      {note && <p className="mt-2 text-sm text-muted">{note}</p>}
+      {note && <p className="mt-2 text-muted">{note}</p>}
     </>
   );
 }
@@ -1327,7 +1327,7 @@ function ReviewSection() {
   return (
     <section className="mt-10">
       <h2 className="text-lg font-medium">Import review</h2>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="mt-2 text-zinc-600 dark:text-zinc-400">
         Emails and other imports that did not become bookings.{" "}
         <Link href="/settings/review" className="underline">
           Review them
@@ -1346,7 +1346,7 @@ function InstallSection() {
       <h2 className="text-lg font-medium">Install Travelmo</h2>
       {hint === "prompt" ? (
         <>
-          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+          <p className="mt-2 text-zinc-600 dark:text-zinc-400">
             Add Travelmo to your home screen or desktop: it opens in its own window, and trips you have opened stay
             readable offline.
           </p>
@@ -1355,7 +1355,7 @@ function InstallSection() {
           </button>
         </>
       ) : (
-        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="mt-2 text-zinc-600 dark:text-zinc-400">
           To add Travelmo to your Home Screen, tap Share in Safari, then Add to Home Screen. It then opens on its own,
           and trips you have opened stay readable offline.
         </p>
@@ -1396,7 +1396,7 @@ function CalendarExportSection({ user }: { user: User }) {
   return (
     <section className="mt-10">
       <h2 className="text-lg font-medium">Calendar export</h2>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="mt-2 text-zinc-600 dark:text-zinc-400">
         Show your trips and bookings in Google Calendar, Apple Calendar or Outlook through a link they check for
         changes, a few times a day. Anyone with the link can see your trips, confirmation numbers included, so keep it
         to yourself; replacing it stops the old one working.
@@ -1413,7 +1413,7 @@ function CalendarExportSection({ user }: { user: User }) {
             value={links.https}
             aria-label="Calendar link"
             onFocus={(e) => e.target.select()}
-            className="mt-3 w-full rounded-lg border border-field bg-background px-3 py-2 text-sm"
+            className="mt-3 w-full rounded-lg border border-field bg-background px-3 py-2"
           />
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" className={buttonClass} onClick={copy}>
@@ -1450,7 +1450,7 @@ function CalendarExportSection({ user }: { user: User }) {
           </div>
         </>
       )}
-      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+      {error && <p className="mt-3 text-danger">{error}</p>}
     </section>
   );
 }
@@ -1491,7 +1491,7 @@ function ForwardSection({ user }: { user: User }) {
   return (
     <section className="mt-10">
       <h2 className="text-lg font-medium">Forward by email</h2>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="mt-2 text-zinc-600 dark:text-zinc-400">
         No Gmail, or a confirmation in another mailbox? Forward it to your own Travelmo address and it is read like any
         booking email, within a minute. The address is yours alone: anyone who has it can add bookings to your trips, so
         replace it if it gets out. Attachments are not read, so forward the email itself rather than a PDF.
@@ -1508,7 +1508,7 @@ function ForwardSection({ user }: { user: User }) {
             value={record.address}
             aria-label="Forwarding address"
             onFocus={(e) => e.target.select()}
-            className="mt-3 w-full rounded-lg border border-field bg-background px-3 py-2 text-sm"
+            className="mt-3 w-full rounded-lg border border-field bg-background px-3 py-2"
           />
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" className={buttonClass} onClick={copy}>
@@ -1537,7 +1537,7 @@ function ForwardSection({ user }: { user: User }) {
           </div>
         </>
       )}
-      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+      {error && <p className="mt-3 text-danger">{error}</p>}
     </section>
   );
 }
@@ -1559,7 +1559,7 @@ function SignOutSection() {
       <button type="button" onClick={() => void signOutNow()} className={buttonClass}>
         Sign out
       </button>
-      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      {error && <p className="mt-2 text-danger">{error}</p>}
     </section>
   );
 }

@@ -65,13 +65,13 @@ export function FinishDeletion({ user, onDeleted }: { user: User; onDeleted: () 
   };
   return (
     <div className="mx-auto mt-16 max-w-sm rounded-xl border border-zinc-200 p-8 text-center dark:border-zinc-800">
-      <h1 className="text-xl font-medium">Deleting your account didn&apos;t finish</h1>
+      <h1 className="text-2xl font-semibold">Deleting your account didn&apos;t finish</h1>
       <p className="mt-2 text-muted">Some of it may still be stored.</p>
       <button type="button" disabled={busy} onClick={finish} className="mt-6 w-full rounded-lg bg-red-600 px-4 py-2 font-medium text-white disabled:opacity-50">
         {busy ? "Deleting…" : "Finish deleting"}
       </button>
-      {error && <p className="mt-4 text-sm text-danger">{error}</p>}
-      <button type="button" onClick={() => void signOut()} className="mt-6 text-sm text-muted hover:underline">
+      {error && <p className="mt-4 text-danger">{error}</p>}
+      <button type="button" onClick={() => void signOut()} className="mt-6 text-muted hover:underline">
         Sign out
       </button>
     </div>
@@ -98,15 +98,15 @@ export function DeleteAccountSection({ user, onDeleted }: { user: User; onDelete
   return (
     <section className="mt-10 border-t border-zinc-200 pt-6 dark:border-zinc-800">
       <h2 className="text-lg font-medium">Delete account</h2>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="mt-2 text-zinc-600 dark:text-zinc-400">
         This deletes your trips, bookings, travel profile and connections, and people you shared trips with lose them.
       </p>
       {!confirming ? (
-        <button type="button" onClick={() => setConfirming(true)} className="mt-3 text-sm text-danger hover:underline">
+        <button type="button" onClick={() => setConfirming(true)} className="mt-3 text-danger hover:underline">
           Delete account
         </button>
       ) : (
-        <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+        <div className="mt-3 flex flex-wrap items-center gap-3">
           <span>Delete your account and everything in it? This cannot be undone.</span>
           <button type="button" disabled={busy} onClick={remove} className="rounded-lg bg-red-600 px-3 py-1.5 font-medium text-white disabled:opacity-50">
             {busy ? "Deleting…" : "Delete"}
@@ -115,13 +115,13 @@ export function DeleteAccountSection({ user, onDeleted }: { user: User; onDelete
             type="button"
             disabled={busy}
             onClick={() => setConfirming(false)}
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+            className="rounded-lg border border-zinc-300 px-3 py-2 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
           >
             Keep
           </button>
         </div>
       )}
-      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      {error && <p className="mt-2 text-danger">{error}</p>}
     </section>
   );
 }

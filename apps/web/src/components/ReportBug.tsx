@@ -42,8 +42,8 @@ function reportedTrip({ trip, segments }: TripOnPage): ReportedTrip {
 
 type Sending = { state: "idle" } | { state: "sending" } | { state: "sent" } | { state: "failed"; reason: string };
 
-const buttonClass = "rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700";
-const primaryClass = "rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900";
+const buttonClass = "rounded-lg border border-zinc-300 px-3 py-2  dark:border-zinc-700";
+const primaryClass = "rounded-lg bg-zinc-900 px-3 py-2  font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900";
 
 // The dialog, from the footer's link or a page's own "Report a problem"
 // (`initialText`: what the page knows went wrong, which the user can add to).
@@ -88,7 +88,7 @@ export function ReportDialog({ onClose, initialText = "" }: { onClose: () => voi
     >
       <form onSubmit={send} className="flex flex-col gap-3 p-5">
         <h2 className="text-lg font-medium">Report a bug</h2>
-        <label className="flex flex-col gap-1 text-sm">
+        <label className="flex flex-col gap-1">
           What went wrong?
           <textarea
             rows={4}
@@ -97,18 +97,18 @@ export function ReportDialog({ onClose, initialText = "" }: { onClose: () => voi
             value={text}
             disabled={sending.state === "sending" || sent}
             onChange={(e) => setText(e.target.value)}
-            className="w-full rounded-lg border border-field bg-background px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-field bg-background px-3 py-2"
           />
         </label>
-        <p className="text-sm text-muted">
+        <p className="text-muted">
           {onTrip
             ? "We'll see this trip's bookings, including addresses, confirmation numbers and names, plus this page's address and your browser."
             : "We'll see this page's address and your browser."}{" "}
           We use them only to fix the problem.
         </p>
-        {sending.state === "sending" && <p className="text-sm">Sending…</p>}
-        {sent && <p className="text-sm">Sent. We&apos;ll reply by email.</p>}
-        {sending.state === "failed" && <p className="text-sm text-danger">Couldn&apos;t send the report. {sending.reason}</p>}
+        {sending.state === "sending" && <p className="">Sending…</p>}
+        {sent && <p className="">Sent. We&apos;ll reply by email.</p>}
+        {sending.state === "failed" && <p className="text-danger">Couldn&apos;t send the report. {sending.reason}</p>}
         <div className="flex justify-end gap-2">
           {sent ? (
             <button type="button" onClick={onClose} className={buttonClass}>

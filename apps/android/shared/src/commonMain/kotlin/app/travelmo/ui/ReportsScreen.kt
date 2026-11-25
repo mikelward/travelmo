@@ -149,7 +149,7 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
                         report.unknownDays.takeIf { it > 0 }?.let { pluralStringResource(Res.plurals.unknown_days, it, it) },
                         report.unplaced.takeIf { it > 0 }?.let { pluralStringResource(Res.plurals.unplaced_bookings, it, it) },
                     )
-                    Text(stringResource(Res.string.unplaced_hint, parts.joinToString("; ")), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+                    Text(stringResource(Res.string.unplaced_hint, parts.joinToString("; ")), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
                 }
             }
             if (report.countries.isNotEmpty()) {
@@ -169,7 +169,7 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
                                     val trip = trips[id]
                                     Text(
                                         listOfNotNull(titles[id] ?: trip?.title, trip?.let { formatDateRange(it.start, it.end) }).joinToString(" · "),
-                                        style = MaterialTheme.typography.bodyMedium,
+                                        style = MaterialTheme.typography.bodyLarge,
                                         color = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.clickable { onOpenTrip(id) }.padding(vertical = 4.dp),
                                     )
@@ -203,7 +203,7 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
             }
             if (whole.upcoming > 0) {
                 item(key = "upcoming") {
-                    Text(pluralStringResource(Res.plurals.trips_ahead, whole.upcoming, whole.upcoming), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 24.dp))
+                    Text(pluralStringResource(Res.plurals.trips_ahead, whole.upcoming, whole.upcoming), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 24.dp))
                 }
             }
             if (whole.trips == 0 && whole.upcoming == 0) {
@@ -245,7 +245,7 @@ private fun Summary(report: TravelReport) {
 
 @Composable
 private fun SectionTitle(text: String) {
-    Text(text, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+    Text(text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
 }
 
 /** A small table: a muted header, then rows divided by hairlines; numbers right-aligned. */
@@ -262,7 +262,7 @@ private fun Table(
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.padding(vertical = 4.dp)) {
             for ((i, column) in header.withIndex()) {
-                Text(column.first, style = MaterialTheme.typography.labelLarge, color = muted, textAlign = if (i == 0) TextAlign.Start else TextAlign.End, modifier = Modifier.weight(column.second))
+                Text(column.first, style = MaterialTheme.typography.bodyLarge, color = muted, textAlign = if (i == 0) TextAlign.Start else TextAlign.End, modifier = Modifier.weight(column.second))
             }
         }
         for ((r, row) in rows.withIndex()) {
@@ -270,7 +270,7 @@ private fun Table(
             val rowModifier = if (onRow != null) Modifier.clickable { onRow(r) } else Modifier
             Row(modifier = rowModifier.padding(vertical = 6.dp)) {
                 for ((i, cell) in row.withIndex()) {
-                    Text(cell, style = MaterialTheme.typography.bodyMedium, textAlign = if (i == 0) TextAlign.Start else TextAlign.End, modifier = Modifier.weight(header[i].second))
+                    Text(cell, style = MaterialTheme.typography.bodyLarge, textAlign = if (i == 0) TextAlign.Start else TextAlign.End, modifier = Modifier.weight(header[i].second))
                 }
             }
             if (open == r) under(r)
@@ -290,11 +290,11 @@ private fun Favorite(place: FavoritePlace, titles: Map<String, String>, onOpenTr
             place.rating?.let { Text("★".repeat(it) + "☆".repeat(5 - it), color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodyLarge) }
         }
         val where = listOfNotNull(place.city, place.country?.let { countryName(it) }).joinToString(", ")
-        if (where.isNotEmpty()) Text(where, style = MaterialTheme.typography.bodyMedium, color = muted)
+        if (where.isNotEmpty()) Text(where, style = MaterialTheme.typography.bodyLarge, color = muted)
         // A place on many trips wraps its links onto more lines rather than running off the screen.
         FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             for (trip in place.trips) {
-                Text(titles[trip.id] ?: trip.title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { onOpenTrip(trip.id) }.padding(vertical = 2.dp))
+                Text(titles[trip.id] ?: trip.title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { onOpenTrip(trip.id) }.padding(vertical = 2.dp))
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(top = 8.dp))
@@ -368,7 +368,7 @@ private fun DownloadTrips(trips: List<TripWithSegments>, periods: List<HomePerio
         text = { if (byPlace) placeRowsCsv(placeRows(trips, periods, until, international, titles)) else tripRowsCsv(tripRows(trips, periods, until, international, titles)) },
     ) { saved -> said = if (saved) Res.string.trips_saved else Res.string.trips_save_failed }
     SectionTitle(stringResource(Res.string.download_trips))
-    Text(stringResource(Res.string.download_trips_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(Res.string.download_trips_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Column(modifier = Modifier.selectableGroup().padding(top = 4.dp)) {
         for ((place, label) in listOf(false to Res.string.row_per_trip, true to Res.string.row_per_place)) {
             Row(
@@ -391,5 +391,5 @@ private fun DownloadTrips(trips: List<TripWithSegments>, periods: List<HomePerio
     OutlinedButton(onClick = { said = null; save(if (byPlace) "travelmo-places.csv" else "travelmo-trips.csv") }, modifier = Modifier.padding(top = 4.dp)) {
         Text(stringResource(Res.string.download_csv))
     }
-    said?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp)) }
+    said?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 4.dp)) }
 }

@@ -13,7 +13,7 @@ import { setMe, usePeople } from "@/lib/people";
 import { maxTrusted, removeFoundLoyalty, saveTrusted, setLoyaltyPerson, useSharedProfiles, useTravelProfile } from "@/lib/travelProfile";
 
 const buttonClass =
-  "rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
+  "rounded-lg border border-zinc-300 px-3 py-2  hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
 
 // Each entry folds away; documents start folded, so a passport number is
 // not on screen until asked for.
@@ -21,13 +21,13 @@ function Entries({ title, entries, open }: { title: string; entries: ProfileEntr
   if (!entries.length) return null;
   return (
     <section className="mt-6">
-      <h3 className="font-medium">{title}</h3>
+      <h3 className="text-lg font-medium">{title}</h3>
       <ul className="mt-2 space-y-2">
         {entries.map((entry, i) => (
           <li key={`${entry.title}-${i}`}>
             <details open={open} className="rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800">
-              <summary className="cursor-pointer text-sm font-medium">{entry.title}</summary>
-              <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+              <summary className="cursor-pointer font-medium">{entry.title}</summary>
+              <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
                 {entry.fields.map((field, j) => (
                   <div key={`${field.label}-${j}`} className="contents">
                     <dt className="text-zinc-600 dark:text-zinc-400">{field.label}</dt>
@@ -93,7 +93,7 @@ function PersonDialog({
           onChange={(e) => setName(e.target.value)}
           placeholder="Someone else"
           aria-label="Someone else's name"
-          className="min-w-0 flex-1 rounded-lg border border-field bg-background px-3 py-2 text-sm"
+          className="min-w-0 flex-1 rounded-lg border border-field bg-background px-3 py-2"
         />
         <button type="submit" disabled={!name.trim()} className={buttonClass}>
           Save
@@ -125,15 +125,15 @@ function LoyaltyTable({ entries, ownUid }: { entries: ProfileEntry[]; ownUid?: s
   };
   return (
     <section className="mt-6">
-      <h3 className="font-medium">Loyalty programs</h3>
+      <h3 className="text-lg font-medium">Loyalty programs</h3>
       {groups.map((group) => {
         const name = group.person ?? (ownUid ? "You" : "Theirs");
         // Named whenever any is someone else's.
         const named = groups.length > 1 || !!group.person;
         return (
           <div key={group.person ?? ""}>
-            {named && <h4 className="mt-4 text-sm font-medium text-muted">{name}</h4>}
-            <table className="mt-2 w-full text-sm" aria-label={named ? `Loyalty programs: ${name}` : "Loyalty programs"}>
+            {named && <h4 className="mt-4 text-lg font-medium">{name}</h4>}
+            <table className="mt-2 w-full" aria-label={named ? `Loyalty programs: ${name}` : "Loyalty programs"}>
               <thead className="text-left text-muted">
                 <tr>
                   <th className="py-1 pr-2 font-normal">Program</th>
@@ -172,7 +172,7 @@ function LoyaltyTable({ entries, ownUid }: { entries: ProfileEntry[]; ownUid?: s
           </div>
         );
       })}
-      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      {error && <p className="mt-2 text-danger">{error}</p>}
       {editing && (
         <PersonDialog program={editing.program} number={editing.number} people={people} onPick={(p) => void pick(p)} onClose={() => setEditing(undefined)} />
       )}
@@ -196,10 +196,10 @@ function FoundInEmails({ uid, found }: { uid: string; found: FoundLoyalty[] }) {
   };
   return (
     <section className="mt-6">
-      <h3 className="font-medium">Found in your emails</h3>
+      <h3 className="text-lg font-medium">Found in your emails</h3>
       <ul className="mt-2 divide-y divide-zinc-200 dark:divide-zinc-800" aria-label="Found in your emails">
         {found.map((f) => (
-          <li key={`${f.program}|${f.number}`} className="flex items-start justify-between gap-3 py-2 text-sm">
+          <li key={`${f.program}|${f.number}`} className="flex items-start justify-between gap-3 py-2">
             <div className="min-w-0">
               <p>
                 {f.program} · <span className="break-all">{f.number}</span>
@@ -212,7 +212,7 @@ function FoundInEmails({ uid, found }: { uid: string; found: FoundLoyalty[] }) {
           </li>
         ))}
       </ul>
-      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      {error && <p className="mt-2 text-danger">{error}</p>}
     </section>
   );
 }
@@ -255,14 +255,14 @@ function SharingSection({ user, profile }: { user: User; profile: TravelProfile 
   return (
     <section className="mt-10">
       <h2 className="text-lg font-medium">Shared with</h2>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="mt-2 text-zinc-600 dark:text-zinc-400">
         People you trust, such as a partner, can see everything on this page, documents included, when signed in with
         that email address. They can&apos;t change it.
       </p>
       {trusted.length > 0 && (
         <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
           {trusted.map((t) => (
-            <li key={t} className="flex items-center justify-between gap-3 py-2 text-sm">
+            <li key={t} className="flex items-center justify-between gap-3 py-2">
               <span className="break-all">{t}</span>
               <button type="button" disabled={busy} className={buttonClass} onClick={() => save(trusted.filter((x) => x !== t))}>
                 Remove
@@ -285,13 +285,13 @@ function SharingSection({ user, profile }: { user: User; profile: TravelProfile 
           onChange={(e) => setEmail(e.target.value)}
           placeholder="name@example.com"
           aria-label="Email address to share with"
-          className="min-w-0 flex-1 rounded-lg border border-field bg-background px-3 py-2 text-sm"
+          className="min-w-0 flex-1 rounded-lg border border-field bg-background px-3 py-2"
         />
         <button type="submit" disabled={busy || !email.trim() || trusted.length >= maxTrusted} className={buttonClass}>
           Share
         </button>
       </form>
-      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+      {error && <p className="mt-3 text-danger">{error}</p>}
     </section>
   );
 }
@@ -334,18 +334,18 @@ function HomeSection({ user }: { user: User }) {
     <section className="mt-10">
       <h2 className="text-lg font-medium">Home</h2>
       {homes === undefined ? (
-        <p className="mt-2 text-sm text-muted">Loading…</p>
+        <p className="mt-2 text-muted">Loading…</p>
       ) : (
         <>
-          <p className="mt-2 text-sm" data-testid="home-line">
+          <p className="mt-2" data-testid="home-line">
             {line ?? "Not known yet."}
           </p>
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Worked out from your trips.</p>
-          {homes.failed > 0 && <p className="mt-2 text-sm text-danger">{failedReadsText(homes.failed)}</p>}
+          <p className="mt-1 text-zinc-600 dark:text-zinc-400">Worked out from your trips.</p>
+          {homes.failed > 0 && <p className="mt-2 text-danger">{failedReadsText(homes.failed)}</p>}
           {homes.corrections.length > 0 && (
             <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
               {homes.corrections.map((c) => (
-                <li key={c.from} className="flex items-center justify-between gap-3 py-2 text-sm">
+                <li key={c.from} className="flex items-center justify-between gap-3 py-2">
                   <span>{correctionText(c)}</span>
                   <button
                     type="button"
@@ -361,7 +361,7 @@ function HomeSection({ user }: { user: User }) {
           )}
           <HomeAirports user={user} homes={homes} />
           <form
-            className="mt-3 flex flex-wrap items-center gap-2 text-sm"
+            className="mt-3 flex flex-wrap items-center gap-2"
             onSubmit={(e) => {
               e.preventDefault();
               void add();
@@ -394,7 +394,7 @@ function HomeSection({ user }: { user: User }) {
               Set
             </button>
           </form>
-          {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+          {error && <p className="mt-3 text-danger">{error}</p>}
         </>
       )}
     </section>
@@ -429,7 +429,7 @@ function HomeAirports({ user, homes }: { user: User; homes: Homes }) {
   };
   return (
     <div className="mt-3">
-      <ul aria-label="Home airports" className="divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
+      <ul aria-label="Home airports" className="divide-y divide-zinc-200 dark:divide-zinc-800">
         {[...towns].map(([key, period]) => {
           const shown = airportCodes(period);
           return (
@@ -480,7 +480,7 @@ function HomeAirports({ user, homes }: { user: User; homes: Homes }) {
           );
         })}
       </ul>
-      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      {error && <p className="mt-2 text-danger">{error}</p>}
     </div>
   );
 }
@@ -493,8 +493,8 @@ function SharedWithYou({ user }: { user: User }) {
       <h2 className="text-lg font-medium">Shared with you</h2>
       {shared.map((p) => (
         <div key={p.ownerUid} className="mt-4">
-          <p className="text-sm font-medium">From {p.ownerEmail ?? "someone who trusts you"}</p>
-          {hasDetails(p) ? <ProfileSections profile={p} /> : <p className="mt-2 text-sm text-muted">Nothing in it yet.</p>}
+          <p className="font-medium">From {p.ownerEmail ?? "someone who trusts you"}</p>
+          {hasDetails(p) ? <ProfileSections profile={p} /> : <p className="mt-2 text-muted">Nothing in it yet.</p>}
         </div>
       ))}
     </section>
@@ -511,7 +511,7 @@ function PeopleSection({ user }: { user: User }) {
   return (
     <section className="mt-10">
       <h2 className="text-lg font-medium">People</h2>
-      <p className="mt-1 text-sm text-muted">Who your bookings are for.</p>
+      <p className="mt-1 text-muted">Who your bookings are for.</p>
       <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800" aria-label="People">
         {people.map((person) => (
           <li key={person.id} className="flex items-baseline justify-between gap-3 py-2">
@@ -522,7 +522,7 @@ function PeopleSection({ user }: { user: User }) {
             {person.id !== me?.id && (
               <button
                 type="button"
-                className="text-sm text-muted hover:underline"
+                className="text-muted hover:underline"
                 onClick={() =>
                   setMe(firestore(), user.uid, people, person.id).catch((e: Error) => {
                     console.error("Saving who the user is failed", e);
@@ -536,7 +536,7 @@ function PeopleSection({ user }: { user: User }) {
           </li>
         ))}
       </ul>
-      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      {error && <p className="mt-2 text-danger">{error}</p>}
     </section>
   );
 }
@@ -548,7 +548,7 @@ function ProfilePage({ user }: { user: User }) {
       <h1 className="mb-2 text-2xl font-semibold">Travel profile</h1>
       {profile === undefined && <p className="text-muted">Loading…</p>}
       {profile !== undefined && (!profile || !hasDetails(profile)) && (
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="text-zinc-600 dark:text-zinc-400">
           Nothing imported yet. Upload a TripIt export in <Link href="/settings" className="underline">Settings</Link> to
           bring in your documents, loyalty programs and fellow travelers.
         </p>

@@ -8,8 +8,8 @@ const monthYear = (date: string) => new Intl.DateTimeFormat("en-GB", { month: "l
 export function EntryRequirements({ entries, fetched }: { entries: readonly PersonEntry[]; fetched: VisaTable["fetched"] }) {
   if (!entries.length) return null;
   return (
-    <section className="mt-4 rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-800" aria-label="Entry requirements">
-      <h2 className="font-medium">Entry requirements</h2>
+    <section className="mt-4 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800" aria-label="Entry requirements">
+      <h2 className="text-lg font-medium">Entry requirements</h2>
       {entries.map(({ person, entry }) => (
         <ul key={person.uid} className="mt-2 space-y-1">
           {entry.needs.map((need) => {
@@ -27,7 +27,7 @@ export function EntryRequirements({ entries, fetched }: { entries: readonly Pers
           })}
         </ul>
       ))}
-      <p className="mt-2 text-xs text-muted">
+      <p className="mt-2 text-muted">
         From Passport Index data as of {monthYear(fetched)}. Rules change and depend on the purpose and length of the stay: check with the embassy
         before you travel.
       </p>
