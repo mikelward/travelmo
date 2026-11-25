@@ -268,17 +268,17 @@ private fun androidx.compose.foundation.lazy.LazyListScope.section(
 }
 
 /**
- * This trip's part of its section's card: the card's rounded top if [first], its rounded bottom if [last], its sides,
- * and the rule above it otherwise. The rule is the top edge, so the one below a trip is the next trip's.
+ * This row's part of its section or day card: the card's rounded top if [first], its rounded bottom if [last], its
+ * sides, and the rule above it otherwise. The rule is the top edge, so the one below a row is the next row's.
  */
-private fun Modifier.sectionPart(first: Boolean, last: Boolean, color: Color): Modifier {
+internal fun Modifier.sectionPart(first: Boolean, last: Boolean, color: Color): Modifier {
     val radius = 12.dp
     val shape = RoundedCornerShape(topStart = if (first) radius else 0.dp, topEnd = if (first) radius else 0.dp, bottomStart = if (last) radius else 0.dp, bottomEnd = if (last) radius else 0.dp)
     return clip(shape).drawWithContent {
         drawContent()
         val stroke = 1.dp.toPx()
-        // Only the last trip draws a bottom edge: above another trip, the outline runs past the bottom, where the clip
-        // hides it, and the next trip's top edge is the rule between them.
+        // Only the last row draws a bottom edge: above another row, the outline runs past the bottom, where the clip
+        // hides it, and the next row's top edge is the rule between them.
         val height = if (last) size.height - stroke else size.height + stroke
         translate(stroke / 2, stroke / 2) {
             drawOutline(shape.createOutline(Size(size.width - stroke, height), layoutDirection, this), color, style = Stroke(stroke))

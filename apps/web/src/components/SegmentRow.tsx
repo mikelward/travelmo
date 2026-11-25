@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type MouseEvent } from "react";
+import { useState, type MouseEvent, type ReactNode } from "react";
 import { SegmentIcon } from "@/components/SegmentIcon";
 import { BookingLogo } from "@/components/BookingLogo";
 import { BookingMenu } from "@/components/BookingMenu";
@@ -115,6 +115,7 @@ export function SegmentRow({
   checkIn,
   onRestore,
   onMarkCancelled,
+  children,
 }: {
   segment: Segment;
   onEdit?: () => void;
@@ -141,6 +142,9 @@ export function SegmentRow({
   onRestore?: () => void;
   // Says the booking didn't happen; offered only on one still booked.
   onMarkCancelled?: () => void;
+  // Suggestions belonging to this booking (e.g. rides under a flight), kept
+  // inside its row so no rule divides them.
+  children?: ReactNode;
 }) {
   const [details, setDetails] = useState(false);
   const cancelled = isCancelled(segment);
@@ -162,73 +166,76 @@ export function SegmentRow({
       ? `Check-in ${localTime(segment.start)}${end ? ` · Check-out ${end}` : ""}`
       : `${localTime(segment.start)}${end ? ` – ${end}` : ""}`;
   return (
-    <li className="flex gap-4 py-3">
-      {details && (
-        <BookingDetailsDialog
+    <li className="px-4 py-3">
+      <div className="flex gap-4">
+        {details && (
+          <BookingDetailsDialog
+            segment={segment}
+            route={route || undefined}
+            times={times}
+            verdict={verdict}
+            programs={programs}
+            emailLinks={emailLinks}
+            onEdit={onEdit}
+            onLearnSender={onLearnSender}
+            onNeverSender={onNeverSender}
+            onClose={() => setDetails(false)}
+          />
+        )}
+        {/* The kind of booking, and below it its brand's logo (BookingLogo), centred under it. */}
+        <div className="mt-0.5 flex w-5 shrink-0 flex-col items-center gap-2">
+          <SegmentIcon type={segment.type} label={labels[segment.type]} className="text-muted" />
+          <BookingLogo segment={segment} heading={heading} size={20} />
+        </div>
+        <div className="min-w-0 flex-1 cursor-pointer" onClick={open}>
+          {cancelled && (
+            <p className="text-xs font-medium uppercase tracking-wide text-danger" data-testid="segment-cancelled">
+              Cancelled
+            </p>
+          )}
+          <p className={`font-medium${cancelled ? " text-muted line-through" : ""}`}>
+            <button type="button" onClick={() => setDetails(true)} className="block w-full text-left hover:underline">
+              {heading.headline}
+            </button>
+          </p>
+          {route && <p className={`text-zinc-600 dark:text-zinc-400${cancelled ? " line-through" : ""}`}>{route}</p>}
+          {times && <p className={`text-zinc-600 dark:text-zinc-400${cancelled ? " line-through" : ""}`}>{times}</p>}
+          {flightLines && flightLines.length > 0 && (
+            <p className="font-medium text-amber-800 dark:text-amber-300" data-testid="segment-flight-status">
+              {flightLines.join(" · ")}
+            </p>
+          )}
+          {checkIn?.state === "offer" && (
+            <p className="mt-1">
+              <button type="button" onClick={() => checkIn.onChange(true)} className="font-medium underline hover:no-underline">
+                I&rsquo;ve checked in
+              </button>
+            </p>
+          )}
+          {checkIn?.state === "done" && (
+            <p className="mt-1 flex gap-3" data-testid="segment-checked-in">
+              <span>Checked in</span>
+              <button type="button" onClick={() => checkIn.onChange(false)} className="text-muted underline hover:no-underline">
+                Undo
+              </button>
+            </p>
+          )}
+          {verdict}
+        </div>
+        <BookingMenu
           segment={segment}
-          route={route || undefined}
-          times={times}
-          verdict={verdict}
-          programs={programs}
-          emailLinks={emailLinks}
-          onEdit={onEdit}
-          onLearnSender={onLearnSender}
-          onNeverSender={onNeverSender}
-          onClose={() => setDetails(false)}
+          {...(onEdit ? { onEdit } : {})}
+          {...(cancelled && onRestore ? { onRestore } : {})}
+          {...(!cancelled && onMarkCancelled ? { onMarkCancelled } : {})}
+          {...(onDelete ? { onDelete } : {})}
+          {...(moveTargets ? { moveTargets } : {})}
+          {...(mergeTargets ? { mergeTargets } : {})}
+          {...(onMerge ? { onMerge } : {})}
+          {...(onMove ? { onMove } : {})}
+          {...(onMoveToNew ? { onMoveToNew } : {})}
         />
-      )}
-      {/* The kind of booking, and below it its brand's logo (BookingLogo), centred under it. */}
-      <div className="mt-0.5 flex w-5 shrink-0 flex-col items-center gap-2">
-        <SegmentIcon type={segment.type} label={labels[segment.type]} className="text-muted" />
-        <BookingLogo segment={segment} heading={heading} size={20} />
       </div>
-      <div className="min-w-0 flex-1 cursor-pointer" onClick={open}>
-        {cancelled && (
-          <p className="text-xs font-medium uppercase tracking-wide text-danger" data-testid="segment-cancelled">
-            Cancelled
-          </p>
-        )}
-        <p className={`font-medium${cancelled ? " text-muted line-through" : ""}`}>
-          <button type="button" onClick={() => setDetails(true)} className="block w-full text-left hover:underline">
-            {heading.headline}
-          </button>
-        </p>
-        {route && <p className={`text-zinc-600 dark:text-zinc-400${cancelled ? " line-through" : ""}`}>{route}</p>}
-        {times && <p className={`text-zinc-600 dark:text-zinc-400${cancelled ? " line-through" : ""}`}>{times}</p>}
-        {flightLines && flightLines.length > 0 && (
-          <p className="font-medium text-amber-800 dark:text-amber-300" data-testid="segment-flight-status">
-            {flightLines.join(" · ")}
-          </p>
-        )}
-        {checkIn?.state === "offer" && (
-          <p className="mt-1">
-            <button type="button" onClick={() => checkIn.onChange(true)} className="font-medium underline hover:no-underline">
-              I&rsquo;ve checked in
-            </button>
-          </p>
-        )}
-        {checkIn?.state === "done" && (
-          <p className="mt-1 flex gap-3" data-testid="segment-checked-in">
-            <span>Checked in</span>
-            <button type="button" onClick={() => checkIn.onChange(false)} className="text-muted underline hover:no-underline">
-              Undo
-            </button>
-          </p>
-        )}
-        {verdict}
-      </div>
-      <BookingMenu
-        segment={segment}
-        {...(onEdit ? { onEdit } : {})}
-        {...(cancelled && onRestore ? { onRestore } : {})}
-        {...(!cancelled && onMarkCancelled ? { onMarkCancelled } : {})}
-        {...(onDelete ? { onDelete } : {})}
-        {...(moveTargets ? { moveTargets } : {})}
-        {...(mergeTargets ? { mergeTargets } : {})}
-        {...(onMerge ? { onMerge } : {})}
-        {...(onMove ? { onMove } : {})}
-        {...(onMoveToNew ? { onMoveToNew } : {})}
-      />
+      {children}
     </li>
   );
 }

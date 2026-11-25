@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -48,7 +49,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -530,14 +530,20 @@ private fun TripBody(
         }
         for ((date, items) in days) {
             item(key = "day-$date") {
-                Text(formatDate(date), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 20.dp, bottom = 4.dp))
+                Text(formatDate(date), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 20.dp, bottom = 12.dp))
             }
-            items(items, key = { it.id }) { segment ->
-                SegmentRow(segment, bookingActions, flightLines = flightLines(segment), checkIn = checkIn(segment), onOpen = { onOpenBooking(segment) })
-                for (need in rides.needs[segment.id].orEmpty()) {
-                    RideSuggestion(need.kind, segment, rides.companies, onHide = { rides.onHide(need) })
+            // One card per day, a rule between its bookings: each booking draws its part of the card.
+            itemsIndexed(items, key = { _, it -> it.id }) { index, segment ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .sectionPart(first = index == 0, last = index == items.lastIndex, color = MaterialTheme.colorScheme.outlineVariant),
+                ) {
+                    SegmentRow(segment, bookingActions, flightLines = flightLines(segment), checkIn = checkIn(segment), onOpen = { onOpenBooking(segment) })
+                    for (need in rides.needs[segment.id].orEmpty()) {
+                        RideSuggestion(need.kind, segment, rides.companies, onHide = { rides.onHide(need) }, modifier = Modifier.padding(horizontal = 16.dp))
+                    }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
         }
         if (canManage && tripActions != null) {
@@ -736,6 +742,7 @@ fun SegmentRow(
     flightLines: List<String> = emptyList(),
     checkIn: SegmentCheckIn? = null,
     onOpen: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
 ) {
     val chrome = LocalAppChrome.current
     val referenceLabel = stringResource(Res.string.booking_reference)
@@ -744,7 +751,7 @@ fun SegmentRow(
     val reference = segment.confirmation?.trim()?.takeIf { it.isNotEmpty() }
     val heading = bookingHeading(segment)
     val open = onOpen?.let { Modifier.clickable(onClickLabel = stringResource(Res.string.booking_details), onClick = it) } ?: Modifier
-    Row(modifier = open.padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+    Row(modifier = modifier.fillMaxWidth().then(open).padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         // The kind of booking, and below it its brand's logo (BookingLogo), centred under it.
         Column(modifier = Modifier.padding(top = 2.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(

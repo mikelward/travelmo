@@ -18,7 +18,7 @@
 
 ## Product
 
-- [ ] Trip landmarks (maintainer, 2026-11-25): each trip in the list shows
+- [x] Trip landmarks (maintainer, 2026-11-25): each trip in the list shows
       its city's landmark as a line drawing, in one card per section.
   - [x] Boston, Las Vegas, Liverpool, Paris, Edinburgh, Lisbon and Dublin,
         on Android and the web.
@@ -29,7 +29,7 @@
         drawing for 221 beach destinations, including the original seven
         redone plus Sydney, Dubai, Singapore, Barcelona, London,
         Amsterdam, Rome, New York, San Francisco, Tokyo and 191 others).
-  - [ ] The trip page's days in the same style: one card per day, a rule
+  - [x] The trip page's days in the same style: one card per day, a rule
         between its bookings.
 
 - [ ] Booking details (maintainer, 2026-11-25): a tap on a booking opens

@@ -3347,7 +3347,8 @@ profiles shared with the viewer, and shares it as the web does), and the
 same document warnings as the web stand in one card at the top of the trip
 list and on trip pages, from the same logic in `:core` with the
 airport-country table read as a resource; as on the web, an upcoming card is
-its title and dates. A booking row shows its title, route, times, a
+its title and dates. On a trip page, each day's bookings sit in one card with
+a rule between them, as the trip list's sections do. A booking row shows its title, route, times, a
 flight's gates and check-in, and its stars; a tap opens the booking's
 details (`BookingDetailScreen`), which carry the rest: the day it starts
 (the trip page's day heading isn't there), each place, named
