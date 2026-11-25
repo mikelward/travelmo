@@ -41,6 +41,7 @@ kotlin {
             api(libs.androidx.navigation3.runtime)
             api(libs.navigation3.ui.mp)
             api(libs.kotlinx.serialization.core)
+            implementation(libs.kotlinx.serialization.json)
         }
         androidMain.dependencies {
             // The fleet's shared text size: Android's screens zoom with a pinch (SPEC "Text size").

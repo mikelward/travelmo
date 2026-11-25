@@ -75,10 +75,15 @@ import app.travelmo.data.Seen
 import app.travelmo.data.InMemoryListFilterStore
 import app.travelmo.data.CountingStore
 import app.travelmo.data.InMemoryCountingStore
+import app.travelmo.data.InMemoryReportSnapshotStore
 import app.travelmo.data.ListFilterStore
+import app.travelmo.data.ReportSnapshotStore
+import app.travelmo.data.decodeReportSnapshot
+import app.travelmo.data.encodeReportSnapshot
 import app.travelmo.core.LinkCheck
 import app.travelmo.core.checkNewLink
 import app.travelmo.core.CountryCounting
+import app.travelmo.core.TravelReport
 import app.travelmo.core.checklistShown
 import app.travelmo.core.myAddresses
 import app.travelmo.data.AccessCheck
@@ -273,6 +278,8 @@ class TripsViewModel(
     /** Where the trip list's filters are kept; in memory by default. */
     private val listFilterStore: ListFilterStore = InMemoryListFilterStore(),
     private val countingStore: CountingStore = InMemoryCountingStore(),
+    /** Where Reports' last counts and map are kept, to draw at once next time; in memory by default. */
+    private val reportSnapshotStore: ReportSnapshotStore = InMemoryReportSnapshotStore(),
     /**
      * Where the trip list's state is worked out: the app passes Dispatchers.Default, so the main thread only draws.
      * Null works it out where the flows run, on the main thread, as tests want for a frame they can wait for.
@@ -556,6 +563,38 @@ class TripsViewModel(
         } catch (e: Exception) {
             // They still apply while the app runs.
             SharedLog.error(e, "Saving the trip list's filters failed")
+        }
+    }
+
+    /**
+     * Reports' counts and map for every year as last worked out on this phone, for the user signed in now: drawn
+     * while the bookings are read (SPEC "Reports"). Null when there are none, or they can't be read.
+     */
+    val reportSnapshot: StateFlow<TravelReport?> = flow {
+        emit(
+            computed {
+                try {
+                    decodeReportSnapshot(reportSnapshotStore.read(), uid)
+                } catch (e: Exception) {
+                    // Worked out again from the bookings in a moment; the next one saved replaces it.
+                    SharedLog.error(e, "Reading Reports' last counts failed")
+                    null
+                }
+            },
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Keeps [report], every year's counts and map, for the next visit to Reports. */
+    fun saveReportSnapshot(report: TravelReport) {
+        viewModelScope.launch {
+            try {
+                computed { reportSnapshotStore.write(encodeReportSnapshot(uid, report)) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // The next visit works them out again before drawing, as before.
+                SharedLog.error(e, "Saving Reports' counts for next time failed")
+            }
         }
     }
 

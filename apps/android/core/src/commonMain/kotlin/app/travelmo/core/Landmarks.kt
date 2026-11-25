@@ -107,11 +107,13 @@ fun tripLandmark(title: String): Landmark {
 }
 
 /**
- * Parses the tables the trip list reads (the landmarks, and the airports a missing journey is told by), each read on
- * first use: a few hundred milliseconds on a phone, so the app calls this off the main thread before the list draws.
+ * Parses the tables the trip list reads (the landmarks, and the airports a missing journey is told by), then
+ * Reports' map, each read on first use: a few hundred milliseconds on a phone, so the app calls this off the main
+ * thread before the list draws.
  */
 fun warmTables() {
     landmarks.size
     airportPlace("LHR")
     airportZone("LHR")
+    worldMap.countries.size
 }

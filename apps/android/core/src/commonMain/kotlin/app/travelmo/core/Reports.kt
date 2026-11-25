@@ -3,6 +3,7 @@ package app.travelmo.core
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.plus
+import kotlinx.serialization.Serializable
 
 // Where the user has been, worked out from their trips' bookings alone, as
 // packages/core/src/reports.ts: a place is known by the country its booking
@@ -163,15 +164,20 @@ fun tripDays(trip: Trip, segments: List<Segment>, today: String, lookup: (String
     tripDayPlaces(trip, segments, today, lookup).mapValues { it.value.countries }
 
 /** [tripIds]: the trips with days there, latest first, for listing them. */
+@Serializable
 data class CountryReport(val country: String, val days: Int, val trips: Int, val tripIds: List<String> = emptyList())
 
+@Serializable
 data class YearReport(val year: String, val trips: Int, val days: Int, val countries: Int)
 
+@Serializable
 data class AirportVisit(val code: String, val country: String, val lat: Double, val lon: Double)
 
 /** A place other than an airport whose booking says where it is. */
+@Serializable
 data class PlaceVisit(val name: String, val city: String?, val country: String?, val lat: Double, val lon: Double)
 
+@Serializable
 data class TravelReport(
     /** Trips begun by today, in the year asked for (or ever). */
     val trips: Int,
@@ -293,3 +299,10 @@ fun travelReport(all: List<TripWithSegments>, today: String, year: String? = nul
         upcoming = upcoming,
     )
 }
+
+/**
+ * Reports' counts and map for every year as last worked out, kept on the phone so the next visit
+ * draws them at once, before the bookings have answered (SPEC "Reports"); [uid] says whose they are.
+ */
+@Serializable
+data class ReportSnapshot(val uid: String, val report: TravelReport)

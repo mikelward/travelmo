@@ -8,6 +8,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -24,6 +25,14 @@ import kotlinx.coroutines.flow.filterNotNull
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentType
 import app.travelmo.core.Trip
+import app.travelmo.core.CountryReport
+import app.travelmo.core.TravelReport
+import app.travelmo.core.YearReport
+import app.travelmo.data.InMemoryReportSnapshotStore
+import app.travelmo.data.decodeReportSnapshot
+import app.travelmo.data.encodeReportSnapshot
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.flow
 import app.travelmo.ui.theme.TravelmoTheme
 import io.kotest.matchers.shouldBe
 import kotlin.time.Instant
@@ -178,5 +187,32 @@ class ReportsScreenTest {
         composeRule.setContent { TravelmoTheme { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = {}) } }
         openSection("Days in each country")
         composeRule.onNodeWithText("Whole days").performScrollTo()
+    }
+
+    @Test
+    fun `draws the last counts and map at once, before the bookings answer`() {
+        // Bookings that never answer, and counts saved on an earlier visit.
+        val store = object : TripStore by FakeTripStore() {
+            override fun segments(tripId: String): Flow<List<Segment>> = flow { awaitCancellation() }
+        }
+        val last = TravelReport(7, 30, listOf(CountryReport("PT", 20, 5), CountryReport("FR", 8, 2)), listOf(YearReport("2026", 7, 30, 2)), emptyList(), emptyList(), 0, 0, 0)
+        val snapshots = InMemoryReportSnapshotStore(encodeReportSnapshot(OWNER, last))
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, reportSnapshotStore = snapshots)
+        composeRule.setContent { TravelmoTheme { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = {}) } }
+        composeRule.onNodeWithText("7 trips · 30 days away · 2 countries").assertExists()
+        // Another year, and the trips download, wait for the bookings.
+        composeRule.onNodeWithText("All years").assertIsNotEnabled()
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Trips per year"))
+        composeRule.onNodeWithText("Download CSV").assertDoesNotExist()
+    }
+
+    @Test
+    fun `keeps the counts and map worked out for the next visit`() {
+        val snapshots = InMemoryReportSnapshotStore()
+        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, reportSnapshotStore = snapshots)
+        composeRule.setContent { TravelmoTheme { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = {}) } }
+        composeRule.onNodeWithText("4 trips · 16 days away · 3 countries").assertExists()
+        composeRule.waitForIdle()
+        decodeReportSnapshot(snapshots.read(), OWNER)?.trips shouldBe 4
     }
 }

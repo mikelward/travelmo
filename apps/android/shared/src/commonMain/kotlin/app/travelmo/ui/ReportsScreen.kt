@@ -30,6 +30,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -155,7 +156,11 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
     val report by produceState<TravelReport?>(null, input, today, year, whole) {
         value = if (year == null) whole else input?.let { trips -> viewModel.computed { travelReport(trips, today, year) } }
     }
-    val titles = remember(input) { displayTitles(input.orEmpty().map { it.trip }) }
+    // Until they come, every year's counts and map as last worked out here, drawn at once; saved again once fresh.
+    val snapshot by viewModel.reportSnapshot.collectAsStateWithLifecycle()
+    LaunchedEffect(whole) { whole?.let(viewModel::saveReportSnapshot) }
+    val tripList by viewModel.trips.collectAsStateWithLifecycle()
+    val titles = remember(input, tripList) { displayTitles(input?.map { it.trip } ?: tripList.orEmpty()) }
     // Days in each country and residence days take a while (home over time, then every day of every year), so each
     // is worked out only once opened, and home only for them.
     var countriesOpen by rememberSaveable { mutableStateOf(false) }
@@ -172,15 +177,17 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
     }
     val favorites = remember(input) { input?.let { trips -> favoritePlaces(trips.map { TripWithBookings(it.trip, it.segments) }) }.orEmpty() }
     Scaffold(topBar = { AppTopBar(stringResource(Res.string.reports_title), onOpenSettings = onOpenSettings) }, bottomBar = bottomBar) { padding ->
-        val whole = whole
-        val report = report
+        val whole = whole ?: snapshot
+        val report = report ?: snapshot?.takeIf { year == null }
         if (whole == null || report == null) {
             Text(stringResource(Res.string.reports_loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp))
             return@Scaffold
         }
         val list = rememberLazyListState()
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).scrollEdgeCue(list, scrollCueColors()), state = list, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
-            item(key = "year") { YearPicker(whole.years.map { it.year }, year) { year = it } }
+            // Another year is worked out from the bookings, so it can be picked only once they are read: until then the
+            // saved counts stand, and picking one would leave nothing to show.
+            item(key = "year") { YearPicker(whole.years.map { it.year }, year, enabled = input != null) { year = it } }
             item(key = "summary") { Summary(report) }
             item(key = "map") {
                 WorldMap(worldMap, visited = report.countries.map { it.country }.toSet(), airports = report.airports, places = report.places, modifier = Modifier.padding(top = 16.dp))
@@ -212,11 +219,12 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
                     Table(
                         header = listOf(stringResource(Res.string.col_year) to 1f, stringResource(Res.string.col_trips) to 0.7f, stringResource(Res.string.col_days) to 0.7f, stringResource(Res.string.col_countries) to 1f),
                         rows = whole.years.map { listOf(it.year, it.trips.toString(), it.days.toString(), it.countries.toString()) },
-                        onRow = { row -> year = whole.years[row].year },
+                        onRow = if (input != null) { row -> year = whole.years[row].year } else null,
                     )
                 }
             }
-            if (homeSettings != null) item(key = "download") { DownloadTrips(input.orEmpty(), viewModel::reportHomesNow, titles, today) }
+            // Not from the saved counts: a download is every trip's bookings, so it waits for them.
+            if (homeSettings != null && input != null) item(key = "download") { DownloadTrips(input.orEmpty(), viewModel::reportHomesNow, titles, today) }
             if (whole.upcoming > 0) {
                 item(key = "upcoming") {
                     Text(pluralStringResource(Res.plurals.trips_ahead, whole.upcoming, whole.upcoming), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 24.dp))
@@ -256,18 +264,19 @@ private fun CountingPicker(counting: CountryCounting, onPick: (CountryCounting) 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun YearPicker(years: List<String>, year: String?, onPick: (String?) -> Unit) {
+private fun YearPicker(years: List<String>, year: String?, enabled: Boolean, onPick: (String?) -> Unit) {
     var open by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }) {
+    ExposedDropdownMenuBox(expanded = open && enabled, onExpandedChange = { open = it && enabled }) {
         OutlinedTextField(
             value = year ?: stringResource(Res.string.all_years),
             onValueChange = {},
             readOnly = true,
+            enabled = enabled,
             label = { Text(stringResource(Res.string.year)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
             modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
         )
-        ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.pinchFontSizeHost()) {
+        ExposedDropdownMenu(expanded = open && enabled, onDismissRequest = { open = false }, modifier = Modifier.pinchFontSizeHost()) {
             DropdownMenuItem(text = { Text(stringResource(Res.string.all_years)) }, onClick = { onPick(null); open = false })
             for (y in years) DropdownMenuItem(text = { Text(y) }, onClick = { onPick(y); open = false })
         }

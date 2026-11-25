@@ -4,6 +4,7 @@ import org.gradle.api.artifacts.result.UnresolvedDependencyResult
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 // The airport tables (IATA code to time zone and to country and place) are
@@ -79,6 +80,8 @@ kotlin {
             kotlin.srcDir(generateCoreData)
             dependencies {
                 api(libs.kotlinx.datetime)
+                // Reports' last results are kept on the phone as JSON (ReportSnapshot).
+                api(libs.kotlinx.serialization.core)
             }
         }
         commonTest.dependencies {
