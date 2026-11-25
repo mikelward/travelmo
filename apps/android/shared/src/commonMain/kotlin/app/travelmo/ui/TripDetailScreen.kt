@@ -100,6 +100,7 @@ import app.travelmo.core.formatDate
 import app.travelmo.core.formatDateRange
 import app.travelmo.core.isCancelled
 import app.travelmo.core.loyaltyLine
+import app.travelmo.core.directionsUrl
 import app.travelmo.core.nearbyTrips
 import app.travelmo.core.otherTrips
 import app.travelmo.core.programsFor
@@ -142,6 +143,7 @@ import app.travelmo.shared.mark_trip_cancelled
 import app.travelmo.shared.merge_into
 import app.travelmo.shared.merge_text
 import app.travelmo.shared.merge_title
+import app.travelmo.shared.directions
 import app.travelmo.shared.more_trips
 import app.travelmo.shared.move_booking_title
 import app.travelmo.shared.new_trip
@@ -769,12 +771,16 @@ fun SegmentRow(
             segment.notes?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp)) }
             Verdict(segment)
         }
-        if (actions != null || hasSources || reference != null) {
+        val directions = directionsUrl(segment)
+        if (actions != null || hasSources || reference != null || directions != null) {
             Box {
                 IconButton(onClick = { menu = true }, modifier = Modifier.size(32.dp)) {
                     Icon(Icons.Filled.MoreVert, contentDescription = stringResource(Res.string.booking_actions), tint = muted)
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, modifier = Modifier.pinchFontSizeHost()) {
+                    directions?.let { url ->
+                        DropdownMenuItem(text = { Text(stringResource(Res.string.directions)) }, onClick = { menu = false; chrome.openLink(url, "directions") })
+                    }
                     reference?.let { ref ->
                         DropdownMenuItem(text = { Text(stringResource(Res.string.copy_reference)) }, onClick = { menu = false; chrome.copyToClipboard(referenceLabel, ref) })
                     }
