@@ -31,6 +31,7 @@ import {
   type ExtractedCancellation,
   homeTimeline,
   homesWithAirports,
+  homeBookings,
   rebookedFlights,
   type ChosenHomeAirports,
   type HomePeriod,
@@ -1075,12 +1076,15 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     const segmentsOf = (tripId: string) => segmentsByTrip.get(tripId) ?? [];
     // Home as worked out and as corrected, each with the airports its round
     // trips leave from (withHomeAirports).
+    // Whom the user's bookings name: read here, before any write, for the
+    // trips they're only watching, which say nothing of where home is
+    // (homeBookings), and to note the people this booking names.
+    const people = await tx.listPeople(uid);
     const homes = (segments: readonly ExtractedSegment[]) => homesWithAirports(segments, corrections, chosen);
-    let { periods, overrides } = homes([...[...segmentsByTrip.values()].flat(), ...booking.segments]);
+    let { periods, overrides } = homes([...homeBookings(segmentsByTrip.values(), people), ...homeBookings([booking.segments], people)]);
     // Cancellations read before this booking was (the mailbox is read newest
     // first); read here, before any write, as a transaction requires.
     const pending = await tx.listPendingCancellations(uid);
-    const people = await tx.listPeople(uid);
     // Who the bookings this email writes are for, matched to the user's
     // people or added: once for each booking that newly names them.
     const notePeopleIn = (bookings: NamedBooking[]) => {
@@ -1415,7 +1419,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     };
     // Where home was, by what this booking still books (a journey filed
     // cancelled was never travelled).
-    ({ periods, overrides } = homes([...[...segmentsByTrip.values()].flat(), ...deciding]));
+    ({ periods, overrides } = homes([...homeBookings(segmentsByTrip.values(), people), ...homeBookings([deciding], people)]));
     const journey = (s: ExtractedSegment) => journeyTypes.has(s.type);
     const earliest = <S extends ExtractedSegment>(segments: readonly S[]) => segments.reduce((a, b) => (compareInstants(b.start, a.start) < 0 ? b : a));
     const latest = <S extends ExtractedSegment>(segments: readonly S[]) => segments.reduce((a, b) => (compareInstants(b.start, a.start) > 0 ? b : a));

@@ -21,7 +21,7 @@ const train = (tripId: string, id: string): Segment => ({
   updatedAt: at,
 });
 
-const reads = new Set<keyof TripTx>(["listTrips", "listSegments", "getSegment", "listParsedIds", "connectedMailboxes", "listPendingCancellations"]);
+const reads = new Set<keyof TripTx>(["listTrips", "listSegments", "getSegment", "listParsedIds", "connectedMailboxes", "listPendingCancellations", "listPeople"]);
 
 describe("placeBookings", () => {
   it("reads every booking before writing any, as a Firestore transaction requires, over passes", async () => {

@@ -1,4 +1,4 @@
-import type { ReminderNotification, ReminderSettings, Segment, Trip } from "@travelmo/core";
+import type { PersonDoc, ReminderNotification, ReminderSettings, Segment, Trip } from "@travelmo/core";
 import { describe, expect, it } from "vitest";
 import { checkInMaxAttempts, checkInMarkerId, sendCheckInReminders, type CheckInIo, type CheckInMarker, type CheckInOptions } from "./checkIn";
 import type { StoredDevice, StoredSubscription } from "./reminders";
@@ -46,6 +46,8 @@ function setup(
     mailFails?: boolean;
     // The bookings each person marked "I've checked in", by uid and trip.
     checkedIn?: Record<string, Record<string, string[]>>;
+    // The people each person's bookings name.
+    people?: Record<string, PersonDoc[]>;
   } = {},
 ) {
   const segments = options.segments ?? [booking("t1"), booking("t2", { confirmation: "EK5678" })];
@@ -69,6 +71,7 @@ function setup(
     settings: async (uid) => settings.get(uid),
     verifiedEmail: async (uid) => `${uid}@example.com`,
     checkedIn: async (uid, tripId) => options.checkedIn?.[uid]?.[tripId] ?? [],
+    travelers: async (uid) => options.people?.[uid] ?? [],
     pushSubscriptions: async (uid) => subscriptions.get(uid) ?? [],
     removePushSubscription: async () => {},
     devices: async (uid) => devices.get(uid) ?? [],
@@ -153,6 +156,20 @@ describe("sendCheckInReminders", () => {
     expect(logs).toContain("check_in_skipped_checked_in");
     // Done for the booking: a later run tells nobody, the partner included.
     expect(markers.get(checkInMarkerId("owner", booking("t1").id))).toMatchObject({ sent: ["owner"], done: true });
+  });
+
+  it("skips someone only watching the trip the flight is on, and only them", async () => {
+    // The friend's trip is their mum's: none of its travelers is the friend.
+    const person = (id: string, name: string, direct: number): PersonDoc => ({ id, name, aliases: [], bookings: 1, direct, createdAt: at, updatedAt: at });
+    const { io, optionsAt, sent, logs } = setup({
+      trips: [trip("t1", "owner", ["partner@example.com"]), { ...trip("t2", "friend"), travelers: ["Pat Example"] }],
+      people: { friend: [person("me", "Sam Example", 3), person("mum", "Pat Example", 0)] },
+    });
+    const run = await sendCheckInReminders(io, optionsAt(opens));
+    expect(run).toMatchObject({ due: 2, failed: 0 });
+    expect(sent.map(({ to }) => to)).not.toContain("friend@example.com");
+    expect(sent.map(({ to }) => to)).toContain("owner@example.com");
+    expect(logs).toContain("check_in_skipped_watching");
   });
 
   it("still skips them when another booking of the flight arrives later", async () => {

@@ -405,9 +405,15 @@ go"; and the reports, residence days, the trips download and working out
 home (Profile, the reports) count none of it. Its flights' live status
 still shows.
 
-Still to come (TODO.md): the same for the parser's reminders, check-in
-alerts, calendar feed and working out home; travelers editable on the
-trip page; and renaming and merging people.
+The parser leaves it out too: no document reminders and no "Before you
+go" reminders for it, no check-in alert to someone only watching every
+trip the flight is on (by what the trip keeps; when their people can't be
+read they're told, as before), no events on the calendar feed, and its
+bookings say nothing of where home is when importing, refreshing or
+regrouping (`homeBookings`).
+
+Still to come (TODO.md): travelers editable on the trip page; and renaming
+and merging people.
 
 ### Adding a trip
 

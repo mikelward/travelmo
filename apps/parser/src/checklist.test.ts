@@ -1,4 +1,4 @@
-import type { OneOffReminder, ReminderNotification, Segment, StandingReminder, Trip } from "@travelmo/core";
+import type { OneOffReminder, PersonDoc, ReminderNotification, Segment, StandingReminder, Trip } from "@travelmo/core";
 import { describe, expect, it } from "vitest";
 import { checklistMaxAttempts, checklistMarkerId, sendChecklistReminders, type ChecklistIo, type ChecklistMarker, type ChecklistUser } from "./checklist";
 import type { ReminderChannels, StoredDevice, StoredSubscription } from "./reminders";
@@ -43,6 +43,8 @@ function setup(
     mine?: Record<string, { done: string[]; added: OneOffReminder[] }>;
     mailFails?: boolean;
     verified?: boolean;
+    // The people the user's bookings name.
+    people?: PersonDoc[];
   } = {},
 ) {
   const users = options.users ?? [{ uid: "owner", settings: { email: true, push: true }, homes: [] }];
@@ -68,6 +70,7 @@ function setup(
       return segments[tripId] ?? [];
     },
     standing: async () => options.standing ?? [visa, adapter],
+    travelers: async () => options.people ?? [],
     mine: async (_uid, tripId) => options.mine?.[tripId] ?? { done: [], added: [] },
     markers: async (ids) => new Map(ids.flatMap((id) => (markers.has(id) ? [[id, markers.get(id)!] as const] : []))),
     claim: async (base, now) => {
@@ -160,6 +163,15 @@ describe("sendChecklistReminders", () => {
     expect(await corrected.run("2026-11-12T06:07:00Z")).toMatchObject({ due: 1, sent: 1 });
     const cancelled = setup({ segments: { t1: abroad("t1", { cancelledAt: at }) } });
     expect(await cancelled.run("2026-11-12T06:07:00Z")).toMatchObject({ due: 0 });
+  });
+
+  it("sends nothing for a trip the user is only watching", async () => {
+    const person = (id: string, name: string, direct: number): PersonDoc => ({ id, name, aliases: [], bookings: 1, direct, createdAt: at, updatedAt: at });
+    const people = [person("me", "Sam Example", 3), person("mum", "Pat Example", 0)];
+    const mums = setup({ segments: { t1: abroad("t1", { travelers: ["Pat Example"] }) }, people });
+    expect(await mums.run("2026-11-12T06:07:00Z")).toMatchObject({ due: 0 });
+    const ours = setup({ segments: { t1: abroad("t1", { travelers: ["Pat Example", "Sam Example"] }) }, people });
+    expect(await ours.run("2026-11-12T06:07:00Z")).toMatchObject({ due: 1, sent: 1 });
   });
 
   it("skips someone with nowhere to send before reading their trips", async () => {

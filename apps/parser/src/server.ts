@@ -1723,6 +1723,7 @@ const checkInIo = firestoreCheckInIo(db, {
   trip: flightIo.trip,
   uidForEmail: flightIo.uidForEmail,
   verifiedEmail,
+  travelers: reminderIo.travelers,
   pushSubscriptions: reminderIo.pushSubscriptions,
   removePushSubscription: reminderIo.removePushSubscription,
   devices: reminderIo.devices,

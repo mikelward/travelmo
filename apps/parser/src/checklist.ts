@@ -20,6 +20,7 @@ import {
   type ReminderSettings,
   type Segment,
   type Trip,
+  watchedTrip,
 } from "@travelmo/core";
 import { Filter, type Firestore } from "firebase-admin/firestore";
 import { z } from "zod";
@@ -53,7 +54,7 @@ export type ChecklistUser = { uid: string; settings: ReminderSettings; homes: Ho
 
 export type ChecklistIo = Pick<
   ReminderIo,
-  "verifiedEmail" | "addresses" | "pushSubscriptions" | "removePushSubscription" | "devices" | "removeDevice" | "trips" | "segments"
+  "verifiedEmail" | "addresses" | "pushSubscriptions" | "removePushSubscription" | "devices" | "removeDevice" | "trips" | "segments" | "travelers"
 > & {
   // Users with reminders on, by email or push, with their corrections to where home was.
   users(): Promise<ChecklistUser[]>;
@@ -138,7 +139,7 @@ async function remindUser(
     outcome.skipped += 1;
     return outcome;
   }
-  const standing = await io.standing(uid);
+  const [standing, travelers] = await Promise.all([io.standing(uid), io.travelers(uid)]);
   const trips = (await io.trips(uid, await io.addresses(uid), today)).filter((t) => !t.deleting && displayBounds(t).start >= today);
   const due: Due[] = [];
   for (const trip of trips) {
@@ -147,8 +148,9 @@ async function remindUser(
     // standing reminders as if the trip went abroad.
     if (!dueEntries(trip, tripChecklist(trip, standing, mine, true), today).length) continue;
     const segments: Segment[] = await io.segments(trip.id);
-    // A trip cancelled, or whose every booking was, isn't happening.
-    if (tripCancelled(trip, segments)) continue;
+    // A trip cancelled, or whose every booking was, isn't happening; one
+    // the user is only watching isn't theirs to get ready for.
+    if (tripCancelled(trip, segments) || watchedTrip(trip, segments, travelers)) continue;
     const international = isInternational(trip, segments, homes, options.lookup);
     for (const entry of dueEntries(trip, tripChecklist(trip, standing, mine, international), today)) due.push({ trip, entry });
   }

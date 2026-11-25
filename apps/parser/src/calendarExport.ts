@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
-import { exportCalendar, paths, queryAddresses, Segment, Trip, type CalendarExport } from "@travelmo/core";
+import { exportCalendar, paths, queryAddresses, Segment, Trip, watchedTrip, type CalendarExport, type PersonDoc } from "@travelmo/core";
 import type { Firestore } from "firebase-admin/firestore";
 import { refuseIfDeleted } from "./deleted";
+import { readPeople } from "./people";
 
 // The subscribable calendar of a user's trips. Its link carries a random
 // token; only the token's hash is stored as a key, so the lookup collection
@@ -25,6 +26,8 @@ export type ExportIo = {
   addresses: (uid: string) => Promise<string[]>;
   trips: (uid: string, addresses: readonly string[], endsOnOrAfter: string) => Promise<Trip[]>;
   segments: (tripId: string) => Promise<Segment[]>;
+  // The people the user's bookings name, for the trips they're only watching.
+  travelers: (uid: string) => Promise<PersonDoc[]>;
 };
 
 export const validToken = (token: string) => /^[A-Za-z0-9_-]{20,64}$/.test(token);
@@ -49,8 +52,9 @@ export async function calendarForToken(
   if (!(await io.approved(uid))) return undefined;
   const addresses = await io.addresses(uid);
   const trips = (await io.trips(uid, addresses, daysBefore(options.now, exportHistoryDays))).filter((t) => !t.deleting);
-  const items = await Promise.all(trips.map(async (trip) => ({ trip, segments: await io.segments(trip.id) })));
-  return exportCalendar(items, { stamp: options.now, tripUrl: options.tripUrl });
+  const [items, travelers] = await Promise.all([Promise.all(trips.map(async (trip) => ({ trip, segments: await io.segments(trip.id) }))), io.travelers(uid)]);
+  // A trip the user is only watching isn't on their calendar.
+  return exportCalendar(items.filter(({ trip, segments }) => !watchedTrip(trip, segments, travelers)), { stamp: options.now, tripUrl: options.tripUrl });
 }
 
 export function firestoreExportIo(
@@ -70,6 +74,7 @@ export function firestoreExportIo(
     },
     approved,
     addresses,
+    travelers: (uid) => readPeople(db, uid),
     trips: async (uid, addresses, endsOnOrAfter) => {
       const queries = [db.collection(paths.trips()).where("ownerUid", "==", uid).where("end", ">=", endsOnOrAfter).get()];
       if (addresses.length) {

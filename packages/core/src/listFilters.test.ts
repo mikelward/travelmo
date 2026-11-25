@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { flagsUnknown, hiddenFromList, localOnly, noListFilters, tripFlagsToWrite, tripTravelers, watchedTrip, watching } from "./listFilters";
+import { flagsUnknown, hiddenFromList, homeBookings, localOnly, noListFilters, tripFlagsToWrite, tripTravelers, watchedTrip, watching } from "./listFilters";
 import type { ExtractedSegment } from "./schema";
 
 // Invented bookings: a show and a class in town, a hire car returned where
@@ -138,5 +138,14 @@ describe("watchedTrip", () => {
     expect(watchedTrip({ travelers: ["Pat Example"] }, undefined, [sam, pat])).toBe(true);
     expect(watchedTrip({ travelers: ["Pat Example"] }, [{ ...flight, travelers: ["Sam Example"] }], [sam, pat])).toBe(false);
     expect(watchedTrip({}, undefined, [sam, pat])).toBe(false);
+  });
+});
+
+describe("homeBookings", () => {
+  it("is every trip's bookings but those of trips the user is only watching", () => {
+    const mine = [{ ...flight, travelers: ["Sam Example"] }];
+    const mums = [{ ...stay, travelers: ["Pat Example"] }];
+    expect(homeBookings([mine, mums, [show]], [sam, pat])).toEqual([...mine, show]);
+    expect(homeBookings([mine, mums], [])).toEqual([...mine, ...mums]);
   });
 });

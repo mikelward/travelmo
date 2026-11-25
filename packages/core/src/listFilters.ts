@@ -57,6 +57,13 @@ export function watchedTrip(
   return watching(segments ? tripTravelers(segments) : trip.travelers, people);
 }
 
+// The bookings home is worked out from (homeTimeline): every trip's, by
+// trip, but those the user is only watching (a parent's flights from their
+// own home say nothing of the user's).
+export function homeBookings<S extends ExtractedSegment>(byTrip: Iterable<readonly S[]>, people: readonly Known[]): S[] {
+  return [...byTrip].filter((segments) => !watching(tripTravelers(segments), people)).flat();
+}
+
 // What the list's filters need to know of a trip's bookings, kept on the
 // trip (`allCancelled`, `localOnly`, `travelers`) so the list filters without reading
 // them: the parser records it as it files bookings, and an app that sees a
