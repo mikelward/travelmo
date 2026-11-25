@@ -145,6 +145,13 @@ class LandmarksTest {
         assertEquals("split", tripLandmark("Split, Croatia").id)
         assertEquals("split", tripLandmark("Week in Split").id)
         assertEquals("trip", tripLandmark("Split stay").id)
+        assertEquals("orange", tripLandmark("Orange, CA").id)
+        assertEquals("orange", tripLandmark("Weekend in Orange").id)
+        assertEquals("trip", tripLandmark("Orange juice").id)
+        assertEquals("strawberry", tripLandmark("Strawberry").id)
+        assertEquals("trip", tripLandmark("Strawberry picking").id)
+        assertEquals("eagle", tripLandmark("Eagle, CO").id)
+        assertEquals("trip", tripLandmark("Eagle watching").id)
     }
 
     @Test
@@ -155,6 +162,7 @@ class LandmarksTest {
         assertEquals("lake", tripLandmark("Lake Victoria").id)
         assertEquals("lake", tripLandmark("Lake Victoria holiday").id)
         assertEquals("victoria", tripLandmark("Lake Victoria, then Victoria").id)
+        assertEquals("lake", tripLandmark("Milford Sound").id)
         assertEquals("trip", tripLandmark("Rio Grande").id)
         assertEquals("trip", tripLandmark("Washington State").id)
         assertEquals("road-trip", tripLandmark("Washington State road trip").id)
@@ -163,6 +171,36 @@ class LandmarksTest {
         assertEquals("santiago", tripLandmark("Santiago").id)
         assertEquals("washington", tripLandmark("Washington, DC").id)
         assertEquals("rio-de-janeiro", tripLandmark("Rio Grande, then Rio").id)
+    }
+
+    @Test
+    fun givesPlacesNamedAfterARealWorldNounAMatchingDrawing() {
+        assertEquals("rose", tripLandmark("Roseville").id)
+        assertEquals("rose", tripLandmark("Santa Rosa").id)
+        assertEquals("acorn", tripLandmark("Fair Oaks").id)
+        assertEquals("acorn", tripLandmark("Oakland").id)
+        assertEquals("apple", tripLandmark("Appleton").id)
+        assertEquals("orange", tripLandmark("Orangevale").id)
+        assertEquals("cherry", tripLandmark("Cherry Hill").id)
+        assertEquals("peach", tripLandmark("Peachtree City").id)
+        assertEquals("lemon", tripLandmark("Lemon Grove").id)
+        assertEquals("strawberry", tripLandmark("Strawberry Plains").id)
+        assertEquals("clover", tripLandmark("Cloverdale").id)
+        assertEquals("sunflower", tripLandmark("Sunnyvale").id)
+        assertEquals("anchor", tripLandmark("Anchorage").id)
+        assertEquals("bell", tripLandmark("Bellevue").id)
+        assertEquals("crown", tripLandmark("Coronado").id)
+        assertEquals("diamond", tripLandmark("Diamond Bar").id)
+        assertEquals("bear", tripLandmark("Big Bear").id)
+        assertEquals("swan", tripLandmark("Swansea").id)
+        assertEquals("fox", tripLandmark("Foxborough").id)
+        assertEquals("stag", tripLandmark("Elk Grove").id)
+        assertEquals("butterfly", tripLandmark("Mariposa").id)
+        assertEquals("windmill", tripLandmark("Mill Valley").id)
+        assertEquals("whale", tripLandmark("Orcas Island").id)
+        assertEquals("eagle", tripLandmark("Eagle River").id)
+        assertEquals("shell", tripLandmark("Shell Beach").id)
+        assertEquals("star", tripLandmark("Northstar").id)
     }
 
     @Test
@@ -240,7 +278,7 @@ class LandmarksTest {
     fun readsEveryLandmarkTheWebHas() {
         val rawEntries = landmarksJson.lines().count { it.startsWith("{\"id\":") }
         assertEquals(rawEntries, landmarks.size)
-        assertEquals(275, landmarks.size)
+        assertEquals(299, landmarks.size)
         assertEquals(landmarks.size, landmarks.map { it.id }.toSet().size)
         val seenCities = mutableSetOf<String>()
         val seenFallbacks = mutableSetOf<String>()
