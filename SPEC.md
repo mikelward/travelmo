@@ -3192,7 +3192,11 @@ from the same dialog as the web's. Every write runs in the
 ViewModel under a token, so a rotation keeps its outcome. A screen closes
 only itself, and only while it is on top (`close`): a Back tapped again
 while it slides away, or a late signal from it, leaves the screen under it
-alone and never empties the back stack. The Profile tab
+alone and never empties the back stack. The trip list's data (its trips' bookings,
+warnings, live flights and filters) is listened to while any signed-in page
+is in front (`KeepTripListLive`), not only the list, and each trip's
+bookings again only when which trips the cards show changes: Back to the
+list then finds it as it was, rather than rebuilding it under the gesture. The Profile tab
 shows the travel profile as `/profile` does (documents and travelers folded,
 the loyalty programs at a glance and in full, who it is shared with, and the
 profiles shared with the viewer, and shares it as the web does), and the

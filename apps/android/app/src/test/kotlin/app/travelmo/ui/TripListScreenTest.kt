@@ -27,6 +27,11 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.travelmo.ui.theme.TravelmoTheme
 import kotlin.time.Instant
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import org.robolectric.shadows.ShadowLooper
+import java.util.concurrent.TimeUnit
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -264,5 +269,32 @@ class TripListScreenTest {
         search.performTextInput("madrid")
         composeRule.waitForIdle()
         composeRule.onNodeWithText("No trips match.").assertExists()
+    }
+
+    @Test
+    fun `back to the list after a while on a trip finds its bookings still listened to, not listened to again`() {
+        val store = FakeTripStore()
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        var showList by mutableStateOf(true)
+        composeRule.setContent {
+            TravelmoTheme {
+                KeepTripListLive(viewModel)
+                if (showList) TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {})
+            }
+        }
+        composeRule.waitForIdle()
+        // Paris is under way, so its card listens to its bookings.
+        val listened = store.segmentListens.getValue("paris")
+        // The list's clock moves on each minute; the same trips keep the same listeners.
+        ShadowLooper.idleMainLooper(61, TimeUnit.SECONDS)
+        composeRule.waitForIdle()
+        store.segmentListens["paris"] shouldBe listened
+        // Off to a trip for longer than the list's own listeners outlast it, and back.
+        showList = false
+        composeRule.waitForIdle()
+        ShadowLooper.idleMainLooper(10, TimeUnit.SECONDS)
+        showList = true
+        composeRule.waitForIdle()
+        store.segmentListens["paris"] shouldBe listened
     }
 }

@@ -2,6 +2,7 @@ package app.travelmo.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -9,6 +10,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
@@ -16,6 +20,7 @@ import androidx.navigation3.ui.NavDisplay
 import app.travelmo.auth.SignedIn
 import app.travelmo.core.TripWithSegments
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 
@@ -92,8 +97,30 @@ fun <T : Any> MutableList<T>.close(key: T): Boolean {
     return true
 }
 
+/**
+ * Keeps the trip list's data (its trips' bookings, warnings, live flights,
+ * filters) listened to while any signed-in page is in front, not only the
+ * list: else, after a few seconds on a trip, Back to the list re-attaches a
+ * listener per trip and rebuilds the list under the gesture, its cards
+ * growing as each answers, so the swipe stutters and a tap on a moving card
+ * is lost. It stops, as the list's own would, once the app is in the
+ * background.
+ */
+@Composable
+fun KeepTripListLive(viewModel: TripsViewModel) {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(viewModel, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            launch { viewModel.state.collect {} }
+            launch { viewModel.hiddenTrips.collect {} }
+            launch { viewModel.watchingTrips.collect {} }
+        }
+    }
+}
+
 @Composable
 fun SignedInNavigation(user: SignedIn, viewModel: TripsViewModel, backStack: NavBackStack<NavKey>, account: SignedInAccount) {
+    KeepTripListLive(viewModel)
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     NavDisplay(
         backStack = backStack,

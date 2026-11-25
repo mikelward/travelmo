@@ -69,6 +69,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 
 // The invented trips of design/android's boards, as the screenshot tests
@@ -460,7 +461,10 @@ class FakeTripStore(
     var failSegments = false
     /** The bookings as a screen sees them: a deletion takes one away. */
     private val liveSegments = MutableStateFlow(segments)
-    override fun segments(tripId: String): Flow<List<Segment>> = liveSegments.map { it[tripId].orEmpty() }
+    /** How many times each trip's bookings were listened to. */
+    val segmentListens = mutableMapOf<String, Int>()
+    override fun segments(tripId: String): Flow<List<Segment>> =
+        liveSegments.map { it[tripId].orEmpty() }.onStart { segmentListens[tripId] = (segmentListens[tripId] ?: 0) + 1 }
     override suspend fun serverOwnTrips(uid: String): List<Trip> {
         if (failSegments) throw IllegalStateException("offline")
         return trips.filter { it.ownerUid == uid }
