@@ -78,6 +78,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.travelmo.core.tripTravelers
+import app.travelmo.core.watching
 import androidx.lifecycle.repeatOnLifecycle
 import app.travelmo.core.MAX_TRIP_REMINDERS
 import app.travelmo.core.PersonWarning
@@ -117,6 +119,7 @@ import app.travelmo.shared.Res
 import app.travelmo.shared.add_booking
 import app.travelmo.shared.back
 import app.travelmo.shared.badge_shared
+import app.travelmo.shared.watching_hint
 import app.travelmo.shared.booking_actions
 import app.travelmo.shared.booking_for
 import app.travelmo.shared.cancel
@@ -214,6 +217,7 @@ fun TripDetailScreen(
     }
     val loaded by viewModel.state.collectAsStateWithLifecycle()
     val people by viewModel.people.collectAsStateWithLifecycle()
+    val travelers by viewModel.travelers.collectAsStateWithLifecycle()
     val ownProfile by viewModel.ownProfile.collectAsStateWithLifecycle()
     val gmailMailboxes by viewModel.gmailMailboxes.collectAsStateWithLifecycle()
     val rideSettings by viewModel.rideSettings.collectAsStateWithLifecycle()
@@ -326,6 +330,7 @@ fun TripDetailScreen(
         when {
             current != null -> TripBody(
                 current, segments, shared = current.ownerUid != uid, errors = errors, busy = busy,
+                watching = watching(tripTravelers(segments), travelers),
                 warnings = tripWarnings(people, current, segments, viewModel.today()), today = viewModel.today(),
                 programsFor = { provider -> programsFor(provider, ownProfile?.let(::allLoyalty).orEmpty()) },
                 flightLines = { segment -> viewModel.flightLines(segment, flightStatuses) },
@@ -431,6 +436,8 @@ private fun TripBody(
     trip: Trip,
     segments: List<Segment>,
     shared: Boolean,
+    /** Whether the user is only watching this trip: none of its travelers is them. */
+    watching: Boolean = false,
     /** What failed, by its write's token, so two alike messages still get their own rows. */
     errors: List<Pair<String, String>>,
     busy: Boolean,
@@ -486,6 +493,7 @@ private fun TripBody(
                 Text(formatDateRange(trip.shownStart, trip.shownEnd), style = MaterialTheme.typography.bodyMedium, color = muted)
                 if (shared) Text(stringResource(Res.string.badge_shared).uppercase(), style = MaterialTheme.typography.labelSmall, color = TravelmoTheme.colors.shared)
             }
+            if (watching) Text(stringResource(Res.string.watching_hint), style = MaterialTheme.typography.bodyMedium, color = muted)
             if (canManage && tripActions != null) {
                 // Renaming and fitting the dates sit by the dates, as on the web;
                 // fitting is offered only when the bookings span less than the trip.

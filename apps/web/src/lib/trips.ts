@@ -315,7 +315,7 @@ export function useSenderPatterns(uid: string): SenderPatterns | undefined {
 }
 
 // Keeps the flags the trip list filters by (`allCancelled`, `localOnly`,
-// listFilters.ts) true to the bookings just read: after an edit, and for a
+// `travelers`, listFilters.ts) true to the bookings just read: after an edit, and for a
 // trip from before they were kept. Only a trip the viewer may write (theirs
 // or shared with them) and not being deleted; a refusal is logged, and the
 // list reads the bookings instead. Bookings read once (`once`, a search's
@@ -329,11 +329,11 @@ export function useKeepTripFlags(
   // The trips whose bookings disagree with their flags, with the flags they have.
   const due = (trips ?? []).flatMap((trip) => {
     const segments = trip.deleting || (once && !flagsUnknown(trip)) ? undefined : segmentsOf(trip.id);
-    return segments && tripFlagsToWrite(trip, segments) ? [{ id: trip.id, allCancelled: trip.allCancelled, localOnly: trip.localOnly }] : [];
+    return segments && tripFlagsToWrite(trip, segments) ? [{ id: trip.id, allCancelled: trip.allCancelled, localOnly: trip.localOnly, travelers: trip.travelers }] : [];
   });
   const key = JSON.stringify(due);
   useEffect(() => {
-    for (const { id, ...kept } of JSON.parse(key) as { id: string; allCancelled?: boolean; localOnly?: boolean }[]) {
+    for (const { id, ...kept } of JSON.parse(key) as { id: string; allCancelled?: boolean; localOnly?: boolean; travelers?: string[] }[]) {
       repairTripFlags(id, kept).catch((error: unknown) => console.warn(`Keeping trip ${id}'s list flags failed`, error));
     }
   }, [key]);
@@ -343,7 +343,7 @@ export function useKeepTripFlags(
 // written only from the server's whole answer, not while offline, and only
 // if no booking changed meanwhile (the trip's `updatedAt` moved); a change
 // then is left to be read again.
-async function repairTripFlags(id: string, kept: { allCancelled?: boolean; localOnly?: boolean }): Promise<void> {
+async function repairTripFlags(id: string, kept: { allCancelled?: boolean; localOnly?: boolean; travelers?: string[] }): Promise<void> {
   const db = firestore();
   const tripRef = doc(db, paths.trip(id));
   const revision = (await getDocFromServer(tripRef)).get("updatedAt") as unknown;

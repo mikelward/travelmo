@@ -91,10 +91,10 @@ fun sameTraveler(a: String, b: String): Boolean {
 }
 
 /** A booking's travelers as filed: each name once, in order, at most [MAX_TRAVELERS]; null when none is a name. */
-fun canonicalTravelers(raw: List<String>): List<String>? {
+fun canonicalTravelers(raw: List<String>, limit: Int = MAX_TRAVELERS): List<String>? {
     val names = mutableListOf<String>()
     for (each in raw) {
-        if (names.size == MAX_TRAVELERS) break
+        if (names.size == limit) break
         val name = canonicalName(each) ?: continue
         // One name for each person, the fuller spelling kept: "John Smith" takes "J Smith"'s place.
         val i = names.indexOfFirst { sameTraveler(it, name) }

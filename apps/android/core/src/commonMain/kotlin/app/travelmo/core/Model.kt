@@ -116,6 +116,8 @@ data class Trip(
     /** What the list's filters need of its bookings ([TripFlags]); null on a trip from before they were kept. */
     val allCancelled: Boolean? = null,
     val localOnly: Boolean? = null,
+    /** Whom its bookings are for ([tripTravelers]); null on a trip from before it was kept. */
+    val travelers: List<String>? = null,
 )
 
 /**

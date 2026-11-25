@@ -138,6 +138,11 @@ describe("trips", () => {
     await assertFails(updateDoc(doc(as(owner), paths.trip(trip.id)), { allCancelled: "yes" }));
     await assertFails(updateDoc(doc(as(partner), paths.trip(trip.id)), { localOnly: 1 }));
     await assertFails(updateDoc(doc(as(stranger), paths.trip(trip.id)), { allCancelled: true }));
+    // And whom its bookings are for, a list of at most a hundred.
+    await assertSucceeds(updateDoc(doc(as(owner), paths.trip(trip.id)), { travelers: ["Sam Example"] }));
+    await assertSucceeds(updateDoc(doc(as(partner), paths.trip(trip.id)), { travelers: [] }));
+    await assertFails(updateDoc(doc(as(partner), paths.trip(trip.id)), { travelers: "Sam Example" }));
+    await assertFails(updateDoc(doc(as(owner), paths.trip(trip.id)), { travelers: Array.from({ length: 101 }, (_, i) => `Person${i} Example`) }));
   });
 
   it("lets only the owner mark a trip cancelled, with a time", async () => {

@@ -189,10 +189,11 @@ export const Trip = z.object({
   // filed or moved into it later too, until Restore takes it off.
   cancelledAt: isoDateTime.optional(),
   // What the trip list's filters need of its bookings (listFilters.ts):
-  // every one cancelled, or only local outings. Absent on a trip from
-  // before they were kept, until an app reads its bookings.
+  // every one cancelled, only local outings, and whom they're for. Absent
+  // on a trip from before they were kept, until an app reads its bookings.
   allCancelled: z.boolean().optional(),
   localOnly: z.boolean().optional(),
+  travelers: z.array(z.string().min(1)).max(100).optional(),
   createdAt: isoDateTime,
   updatedAt: isoDateTime,
 });

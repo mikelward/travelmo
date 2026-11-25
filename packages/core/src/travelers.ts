@@ -146,10 +146,10 @@ export const maxTravelers = 20;
 // A booking's travelers as filed: each name as people write it, once
 // (sameTraveler), in the email's order, the first `maxTravelers` of them
 // (several emails' together can name more); undefined when none is a name.
-export function canonicalTravelers(raw: readonly string[] | undefined): string[] | undefined {
+export function canonicalTravelers(raw: readonly string[] | undefined, limit = maxTravelers): string[] | undefined {
   const names: string[] = [];
   for (const each of raw ?? []) {
-    if (names.length === maxTravelers) break;
+    if (names.length === limit) break;
     const name = canonicalName(each);
     if (!name) continue;
     // One name for each person, the fuller spelling kept: "John Smith"

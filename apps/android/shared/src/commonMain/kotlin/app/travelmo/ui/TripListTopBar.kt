@@ -40,6 +40,7 @@ import app.travelmo.shared.clear_search
 import app.travelmo.shared.filters
 import app.travelmo.shared.hide_cancelled
 import app.travelmo.shared.hide_local_events
+import app.travelmo.shared.hide_watching
 import app.travelmo.shared.ic_filter_off
 import app.travelmo.shared.ic_filter_on
 import app.travelmo.shared.search_trips
@@ -119,7 +120,7 @@ fun TripListTopBar(
     }
 }
 
-/** The funnel, filled while a filter is on, opening the two switches (SPEC "Filtering the trip list"). */
+/** The funnel, filled while a filter is on, opening the switches (SPEC "Filtering the trip list"). */
 @Composable
 private fun FilterButton(filters: ListFilters, onFilters: (ListFilters) -> Unit) {
     var open by remember { mutableStateOf(false) }
@@ -131,6 +132,7 @@ private fun FilterButton(filters: ListFilters, onFilters: (ListFilters) -> Unit)
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             FilterItem(stringResource(Res.string.hide_cancelled), filters.hideCancelled) { onFilters(filters.copy(hideCancelled = it)) }
             FilterItem(stringResource(Res.string.hide_local_events), filters.hideLocal) { onFilters(filters.copy(hideLocal = it)) }
+            FilterItem(stringResource(Res.string.hide_watching), filters.hideWatching) { onFilters(filters.copy(hideWatching = it)) }
         }
     }
 }

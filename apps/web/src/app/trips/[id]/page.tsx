@@ -1,6 +1,6 @@
 "use client";
 
-import { allLoyalty, bookedDateRange, flightCheckInState, displayBounds, effectiveHomes, homeTimeline, journeyGap, journeyGapHomes, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, gmailMailboxes, localDate, normalizeEmail, paths, programsFor, sharedWithAny, type Segment, type SenderCleanup, type Trip } from "@travelmo/core";
+import { allLoyalty, bookedDateRange, flightCheckInState, displayBounds, effectiveHomes, homeTimeline, journeyGap, journeyGapHomes, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, gmailMailboxes, localDate, normalizeEmail, paths, programsFor, sharedWithAny, tripTravelers, watching, type Segment, type SenderCleanup, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { arrayRemove, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -23,6 +23,7 @@ import { EntryRequirements } from "@/components/EntryRequirements";
 import { useEntryRequirements } from "@/lib/visas";
 import { localToday } from "@/lib/dates";
 import { usePeopleDocuments, useTripWarnings } from "@/lib/documents";
+import { usePeople } from "@/lib/people";
 import { useTravelProfile } from "@/lib/travelProfile";
 import { BeforeYouGo } from "@/components/Checklist";
 import { useTripChecklist } from "@/lib/checklist";
@@ -336,6 +337,9 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   const profile = useProfile(user.uid);
   const addresses = useAddresses(user);
   const people = usePeopleDocuments(user);
+  // Whom the user's bookings name, and so whether they're only watching this trip.
+  const travelers = usePeople(user.uid);
+  const onlyWatching = !!segments && watching(tripTravelers(segments), travelers ?? []);
   // The viewer's own programs, for the number at check-in; a fellow
   // traveler's are theirs.
   const ownTravelProfile = useTravelProfile(user.uid);
@@ -467,6 +471,11 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
         {canManage && segments && <FitDates trip={trip} segments={segments} />}
       </p>
       {isOwner && trip.deleting && <DangerZone trip={trip} />}
+      {onlyWatching && (
+        <p className="mt-1 text-sm text-muted" data-testid="trip-watching">
+          Watching: you&apos;re not on this trip
+        </p>
+      )}
       {trip.cancelledAt && <TripCancelled trip={trip} canManage={canManage} />}
       <DocumentWarnings warnings={warnings} today={today} />
       {gap && (
