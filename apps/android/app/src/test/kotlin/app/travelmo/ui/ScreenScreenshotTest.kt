@@ -394,6 +394,18 @@ class ScreenScreenshotTest {
     }
 
     @Test
+    fun booking_detail() {
+        val viewModel = viewModel()
+        capture("booking_detail") { BookingDetailScreen(viewModel = viewModel, tripId = "liverpool", segmentId = "l-stay", uid = OWNER, onBack = {}, onEdit = {}, onTripGone = {}) }
+    }
+
+    @Test
+    fun booking_detail_dark() {
+        val viewModel = viewModel()
+        capture("booking_detail_dark", dark = true) { BookingDetailScreen(viewModel = viewModel, tripId = "liverpool", segmentId = "l-stay", uid = OWNER, onBack = {}, onEdit = {}, onTripGone = {}) }
+    }
+
+    @Test
     fun trip_detail() {
         val viewModel = viewModel()
         capture("trip_detail") { TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
@@ -451,24 +463,6 @@ class ScreenScreenshotTest {
     fun trip_detail_shared_dark() {
         val viewModel = viewModel()
         capture("trip_detail_shared_dark", dark = true) { TripDetailScreen(viewModel = viewModel, tripId = "paris", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
-    }
-
-    // The stay's Sources, from its ⋮ menu: the owner's own emails link into
-    // Gmail, the partner's reminder doesn't. A dialog, so the whole screen.
-    @Test
-    fun trip_detail_sources() {
-        val viewModel = viewModel()
-        val fontSize = FontSizeState(FontSizeSettings(scale = 1f), onScaleSettled = {}, onPinchEnabledChange = {})
-        composeRule.setContent {
-            TravelmoTheme(fontSize = fontSize) {
-                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
-            }
-        }
-        composeRule.onAllNodesWithContentDescription("Booking actions")[1].performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithText("Sources").performClick()
-        composeRule.waitForIdle()
-        captureScreenRoboImage(filePath = "$outputDir/trip_detail_sources.png")
     }
 
     @Test

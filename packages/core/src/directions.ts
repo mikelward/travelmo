@@ -27,3 +27,9 @@ export function directionsUrl(segment: ExtractedSegment): string | undefined {
   const place = directionsPlace(segment);
   return place ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(directionsQuery(place))}` : undefined;
 }
+
+// Google Maps showing a place (found as directionsQuery finds it), not the
+// way there: what tapping a booking's address opens.
+export function mapsUrl(place: Place): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(directionsQuery(place))}`;
+}

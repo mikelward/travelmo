@@ -277,6 +277,10 @@
     <string name="move_booking_title">Move %1$s to</string>
     <string name="new_trip">New trip</string>
     <string name="directions">Directions</string>
+    <string name="booking_details">Open booking</string>
+    <string name="show_in_maps">Show in Maps</string>
+    <string name="ref_value">Ref %1$s</string>
+    <string name="booking_gone">This booking is no longer in this trip.</string>
     <string name="more_trips">More…</string>
 
     <!-- The owner's trip edits. -->

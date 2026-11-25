@@ -19,8 +19,6 @@ import app.travelmo.shared.sender_cleanup_title
 import app.travelmo.shared.this_and_that
 import app.travelmo.shared.bookings_count
 import app.travelmo.shared.trips_count
-import app.travelmo.core.effectiveDecision
-import app.travelmo.core.SenderList
 import org.jetbrains.compose.resources.StringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -39,9 +37,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
@@ -83,7 +79,6 @@ import app.travelmo.core.watching
 import androidx.lifecycle.repeatOnLifecycle
 import app.travelmo.core.MAX_TRIP_REMINDERS
 import app.travelmo.core.PersonWarning
-import app.travelmo.core.ProfileEntry
 import app.travelmo.core.RideCompany
 import app.travelmo.core.RideNeed
 import app.travelmo.core.Segment
@@ -93,24 +88,20 @@ import app.travelmo.core.SegmentType
 import app.travelmo.core.SourceKind
 import app.travelmo.core.SourceRef
 import app.travelmo.core.Trip
-import app.travelmo.core.allLoyalty
 import app.travelmo.core.displayTitles
-import app.travelmo.core.emailLinkFor
 import app.travelmo.core.sourceSearch
 import app.travelmo.core.fittedRange
 import app.travelmo.core.formatDate
 import app.travelmo.core.formatDateRange
 import app.travelmo.core.isCancelled
-import app.travelmo.core.loyaltyLine
 import app.travelmo.core.directionsUrl
 import app.travelmo.core.nearbyTrips
 import app.travelmo.core.otherTrips
-import app.travelmo.core.programsFor
-import app.travelmo.core.referenceLine
 import app.travelmo.core.rideNeedKey
 import app.travelmo.core.routeLine
 import app.travelmo.core.segmentsByDay
 import app.travelmo.core.sharedWithAny
+import app.travelmo.core.SenderCleanup
 import app.travelmo.core.shownEnd
 import app.travelmo.core.shownStart
 import app.travelmo.core.timesLine
@@ -121,7 +112,6 @@ import app.travelmo.shared.back
 import app.travelmo.shared.badge_shared
 import app.travelmo.shared.watching_hint
 import app.travelmo.shared.booking_actions
-import app.travelmo.shared.booking_for
 import app.travelmo.shared.cancel
 import app.travelmo.shared.cancelled
 import app.travelmo.shared.checked_in
@@ -148,6 +138,7 @@ import app.travelmo.shared.merge_into
 import app.travelmo.shared.merge_text
 import app.travelmo.shared.merge_title
 import app.travelmo.shared.directions
+import app.travelmo.shared.booking_details
 import app.travelmo.shared.more_trips
 import app.travelmo.shared.move_booking_title
 import app.travelmo.shared.new_trip
@@ -194,6 +185,7 @@ fun TripDetailScreen(
     onAddBooking: (defaultDate: String) -> Unit,
     onEditBooking: (segmentId: String) -> Unit,
     onMerged: (targetId: String) -> Unit,
+    onOpenBooking: (segmentId: String) -> Unit = {},
 ) {
     val tripFlow = remember(tripId) { viewModel.trip(tripId) }
     val segmentsFlow = remember(tripId) { viewModel.segments(tripId) }
@@ -218,18 +210,16 @@ fun TripDetailScreen(
     val loaded by viewModel.state.collectAsStateWithLifecycle()
     val people by viewModel.people.collectAsStateWithLifecycle()
     val travelers by viewModel.travelers.collectAsStateWithLifecycle()
-    val ownProfile by viewModel.ownProfile.collectAsStateWithLifecycle()
-    val gmailMailboxes by viewModel.gmailMailboxes.collectAsStateWithLifecycle()
     val rideSettings by viewModel.rideSettings.collectAsStateWithLifecycle()
     val standingReminders by viewModel.standingReminders.collectAsStateWithLifecycle()
     val myChecklistFlow = remember(tripId) { viewModel.myChecklist(tripId) }
     val myChecklist by myChecklistFlow.collectAsStateWithLifecycle(initialValue = null)
     val addresses by viewModel.addresses.collectAsStateWithLifecycle()
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
-    val patterns by viewModel.senderPatterns.collectAsStateWithLifecycle()
     val cleanup by viewModel.senderCleanup.collectAsStateWithLifecycle()
     var deleting by remember { mutableStateOf<Segment?>(null) }
     var moving by remember { mutableStateOf<Segment?>(null) }
+    var renaming by rememberSaveable { mutableStateOf(false) }
     val current = trip
     val isOwner = current != null && current.ownerUid == uid
     val canEdit = current != null && !current.deleting && (isOwner || sharedWithAny(current.sharedWith, addresses))
@@ -273,10 +263,19 @@ fun TripDetailScreen(
                     current?.takeIf { canEdit }?.let { editable ->
                         DropdownMenuItem(text = { Text(stringResource(Res.string.add_booking)) }, onClick = { close(); onAddBooking(editable.start) })
                     }
+                    if (canManage) {
+                        DropdownMenuItem(text = { Text(stringResource(Res.string.rename)) }, enabled = !busy, onClick = { close(); renaming = true })
+                    }
                 },
             )
         },
     ) { padding ->
+        if (renaming && current != null) {
+            RenameDialog(current.title, onDismiss = { renaming = false }) { title ->
+                renaming = false
+                actions.rename(title)
+            }
+        }
         deleting?.let { segment ->
             AppAlertDialog(
                 onDismissRequest = { deleting = null },
@@ -291,23 +290,9 @@ fun TripDetailScreen(
                 dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(Res.string.keep)) } },
             )
         }
-        cleanup?.let { (domain, plan) ->
-            // "2 trips and 1 booking": trips go whole.
-            val trips = plan.trips.size.takeIf { it > 0 }?.let { pluralStringResource(Res.plurals.trips_count, it, it) }
-            val bookings = plan.segments.size.takeIf { it > 0 }?.let { pluralStringResource(Res.plurals.bookings_count, it, it) }
-            val what = if (trips != null && bookings != null) stringResource(Res.string.this_and_that, trips, bookings) else trips ?: bookings.orEmpty()
-            AppAlertDialog(
-                onDismissRequest = { viewModel.keepSenderBookings() },
-                title = { Text(stringResource(Res.string.sender_cleanup_title)) },
-                text = { Text(stringResource(Res.string.sender_cleanup_text, domain, what)) },
-                confirmButton = {
-                    TextButton(onClick = {
-                        val leave = if (plan.trips.any { it.id == tripId }) "leave" else "stay"
-                        viewModel.removeSenderBookings("${prefix}sender-cleanup/$leave")
-                    }) { Text(stringResource(Res.string.delete)) }
-                },
-                dismissButton = { TextButton(onClick = { viewModel.keepSenderBookings() }) { Text(stringResource(Res.string.keep)) } },
-            )
+        SenderCleanupDialog(viewModel, cleanup) { plan ->
+            val leave = if (plan.trips.any { it.id == tripId }) "leave" else "stay"
+            viewModel.removeSenderBookings("${prefix}sender-cleanup/$leave")
         }
         moving?.let { segment ->
             MoveDialog(
@@ -332,14 +317,13 @@ fun TripDetailScreen(
                 current, segments, shared = current.ownerUid != uid, errors = errors, busy = busy,
                 watching = watching(tripTravelers(segments), travelers),
                 warnings = tripWarnings(people, current, segments, viewModel.today()), today = viewModel.today(),
-                programsFor = { provider -> programsFor(provider, ownProfile?.let(::allLoyalty).orEmpty()) },
                 flightLines = { segment -> viewModel.flightLines(segment, flightStatuses) },
                 checkIn = { segment ->
                     checkedIn?.let { flightCheckInState(segment, it, viewModel.now()) }?.let { state ->
                         SegmentCheckIn(state) { on -> viewModel.setCheckedIn("${prefix}checked-in/${segment.id}", tripId, segment.id, on) }
                     }
                 },
-                emailLink = { source -> emailLinkFor(source, uid, ownsTrip = isOwner, mailboxes = gmailMailboxes) },
+                onOpenBooking = { onOpenBooking(it.id) },
                 rides = RideSuggestions(
                     needs = viewModel.rideNeedsFor(segments, rideSettings).groupBy { it.segmentId },
                     companies = rideSettings?.companies.orEmpty(),
@@ -367,16 +351,6 @@ fun TripDetailScreen(
                     null
                 },
                 tripActions = if (isOwner) actions else null,
-                // Sender rules are the viewer's own, so the offers stand for the owner only: the import ran against their mailbox.
-                senderOffers = { segment ->
-                    segment.sender?.takeIf { isOwner }?.let { domain ->
-                        val decision = effectiveDecision(patterns, domain)
-                        SenderOffers(
-                            always = if (decision != SenderList.ALLOW) { { viewModel.alwaysImportSender("${prefix}sender/always", domain) } } else null,
-                            never = if (decision != SenderList.DENY) { { viewModel.neverImportSender("${prefix}sender/never", domain) } } else null,
-                        )
-                    }
-                },
                 // The viewer's own reminders before the trip, theirs alone, shared trip or not.
                 checklist = viewModel.checklistFor(current, segments, standingReminders, myChecklist, rideSettings)?.let { entries ->
                     Checklist(
@@ -443,18 +417,17 @@ private fun TripBody(
     busy: Boolean,
     warnings: List<PersonWarning>,
     today: String,
-    programsFor: (String?) -> List<ProfileEntry>,
     /** A flight's live gates and carousel. */
     flightLines: (Segment) -> List<String>,
     /** A flight's "I've checked in", the viewer's own: offered, or marked with an undo. */
     checkIn: (Segment) -> SegmentCheckIn? = { null },
     bookingActions: BookingActions?,
-    emailLink: (SourceRef) -> String?,
+    /** Opens a booking's details. */
+    onOpenBooking: (Segment) -> Unit,
     rides: RideSuggestions,
     /** A journey the trip seems to be missing; null when nothing is. */
     journeyGap: JourneyGapActions? = null,
     tripActions: TripActions?,
-    senderOffers: (Segment) -> SenderOffers?,
     checklist: Checklist?,
     canManage: Boolean,
     targets: List<Trip>,
@@ -464,14 +437,7 @@ private fun TripBody(
 ) {
     val days = segmentsByDay(segments)
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    var renaming by rememberSaveable { mutableStateOf(false) }
     var confirmingDelete by rememberSaveable { mutableStateOf(false) }
-    if (renaming && tripActions != null) {
-        RenameDialog(trip.title, onDismiss = { renaming = false }) { title ->
-            renaming = false
-            tripActions.rename(title)
-        }
-    }
     if (confirmingDelete && tripActions != null) {
         AppAlertDialog(
             onDismissRequest = { confirmingDelete = false },
@@ -495,17 +461,12 @@ private fun TripBody(
             }
             if (watching) Text(stringResource(Res.string.watching_hint), style = MaterialTheme.typography.bodyMedium, color = muted)
             if (canManage && tripActions != null) {
-                // Renaming and fitting the dates sit by the dates, as on the web;
-                // fitting is offered only when the bookings span less than the trip.
-                // Shifted by the buttons' own padding so their labels line up with the dates.
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.offset(x = -TextButtonInset),
-                ) {
-                    TextButton(onClick = { renaming = true }, enabled = !busy) { Text(stringResource(Res.string.rename)) }
-                    fittedRange(trip, segments)?.let { range ->
-                        TextButton(onClick = tripActions.fit, enabled = !busy) { Text(stringResource(Res.string.fit_dates, formatDateRange(range.first, range.second))) }
+                // Fitting the dates sits by them, offered only when the bookings span less
+                // than the trip; Rename is in the ⋮ menu. Shifted by the button's own padding
+                // so its label lines up with the dates.
+                fittedRange(trip, segments)?.let { range ->
+                    TextButton(onClick = tripActions.fit, enabled = !busy, modifier = Modifier.offset(x = -TextButtonInset)) {
+                        Text(stringResource(Res.string.fit_dates, formatDateRange(range.first, range.second)))
                     }
                 }
             }
@@ -543,7 +504,7 @@ private fun TripBody(
                 Text(formatDate(date), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 20.dp, bottom = 4.dp))
             }
             items(items, key = { it.id }) { segment ->
-                SegmentRow(segment, bookingActions, programs = programsFor(segment.provider), emailLink = emailLink, flightLines = flightLines(segment), checkIn = checkIn(segment), senderOffers = senderOffers(segment))
+                SegmentRow(segment, bookingActions, flightLines = flightLines(segment), checkIn = checkIn(segment), onOpen = { onOpenBooking(segment) })
                 for (need in rides.needs[segment.id].orEmpty()) {
                     RideSuggestion(need.kind, segment, rides.companies, onHide = { rides.onHide(need) })
                 }
@@ -706,36 +667,30 @@ private fun MoveDialog(segment: Segment, targets: List<Trip>, onDismiss: () -> U
     )
 }
 
-/**
- * One booking: its kind, title, route, times, reference and verdict, and a ⋮
- * menu: copying the reference and the sources for anyone, the actions when
- * the viewer may edit. [emailLink] is the Gmail link of a source the viewer
- * imported, else null.
- */
 /** A flight's "I've checked in" as its row shows it, and the change a tap asks for. */
 class SegmentCheckIn(val state: FlightCheckIn, val onChange: (checkedIn: Boolean) -> Unit)
 
+/**
+ * One booking: its kind, title, route, times, a flight's gates and check-in,
+ * and its verdict; a tap opens its details ([onOpen]), which carry the rest.
+ * The ⋮ menu has Directions and Copy reference for anyone, the actions when
+ * the viewer may edit.
+ */
 @Composable
 fun SegmentRow(
     segment: Segment,
     actions: BookingActions? = null,
-    programs: List<ProfileEntry> = emptyList(),
-    emailLink: (SourceRef) -> String? = { null },
     flightLines: List<String> = emptyList(),
     checkIn: SegmentCheckIn? = null,
-    senderOffers: SenderOffers? = null,
+    onOpen: (() -> Unit)? = null,
 ) {
     val chrome = LocalAppChrome.current
     val referenceLabel = stringResource(Res.string.booking_reference)
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     var menu by remember { mutableStateOf(false) }
-    var showingSources by rememberSaveable(segment.id) { mutableStateOf(false) }
-    val hasSources = segment.sources.isNotEmpty() || segment.sender != null
     val reference = segment.confirmation?.trim()?.takeIf { it.isNotEmpty() }
-    if (showingSources && hasSources) {
-        SourcesDialog(segment, emailLink, senderOffers, onDismiss = { showingSources = false })
-    }
-    Row(modifier = Modifier.padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+    val open = onOpen?.let { Modifier.clickable(onClickLabel = stringResource(Res.string.booking_details), onClick = it) } ?: Modifier
+    Row(modifier = open.padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Icon(
             painterResource(segmentIcon(segment.type)),
             contentDescription = segment.type.label,
@@ -768,23 +723,10 @@ fun SegmentRow(
                 }
                 null -> Unit
             }
-            if (segment.travelers.isNotEmpty()) {
-                Text(stringResource(Res.string.booking_for, segment.travelers.joinToString(", ")), style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp))
-            }
-            referenceLine(segment)?.let { line ->
-                // A long press on the line copies the reference too, as ⋮ does.
-                val copy = reference?.let { ref -> Modifier.longPressUnlessPinch(stringResource(Res.string.copy_reference)) { chrome.copyToClipboard(referenceLabel, ref) } } ?: Modifier
-                Text(line, style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp).then(copy))
-            }
-            // One program a line, so whose each number is stays plain.
-            if (programs.isNotEmpty()) {
-                Text(programs.joinToString("\n", transform = ::loyaltyLine), style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp))
-            }
-            segment.notes?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp)) }
             Verdict(segment)
         }
         val directions = directionsUrl(segment)
-        if (actions != null || hasSources || reference != null || directions != null) {
+        if (actions != null || reference != null || directions != null) {
             Box {
                 IconButton(onClick = { menu = true }, modifier = Modifier.size(32.dp)) {
                     Icon(Icons.Filled.MoreVert, contentDescription = stringResource(Res.string.booking_actions), tint = muted)
@@ -795,9 +737,6 @@ fun SegmentRow(
                     }
                     reference?.let { ref ->
                         DropdownMenuItem(text = { Text(stringResource(Res.string.copy_reference)) }, onClick = { menu = false; chrome.copyToClipboard(referenceLabel, ref) })
-                    }
-                    if (hasSources) {
-                        DropdownMenuItem(text = { Text(stringResource(Res.string.sources)) }, onClick = { menu = false; showingSources = true })
                     }
                     if (actions != null) {
                         DropdownMenuItem(text = { Text(stringResource(Res.string.edit)) }, onClick = { menu = false; actions.onEdit(segment) })
@@ -823,52 +762,64 @@ fun SegmentRow(
 
 /**
  * Every email, TripIt trip or calendar event the booking was read from, as
- * the web's trip page lists them, then the sender. A Gmail email the viewer
- * imported opens in Gmail; others' are in a mailbox the viewer can't open,
- * and Fastmail and IMAP mailboxes have no link to a message.
+ * the web lists them, then the sender with the owner's offers. A Gmail email
+ * the viewer imported opens in Gmail; others' are in a mailbox the viewer
+ * can't open, and Fastmail and IMAP mailboxes have no link to a message.
  */
 @Composable
-private fun SourcesDialog(segment: Segment, emailLink: (SourceRef) -> String?, senderOffers: SenderOffers?, onDismiss: () -> Unit) {
+internal fun SourcesList(segment: Segment, emailLink: (SourceRef) -> String?, senderOffers: SenderOffers?) {
     val chrome = LocalAppChrome.current
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val openLabel = stringResource(Res.string.open_in_gmail)
-    AppAlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(Res.string.sources)) },
-        text = {
-            Column(modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
-                for (source in segment.sources) {
-                    val kind = stringResource(sourceKindLabel(source.kind))
-                    val link = emailLink(source)
-                    val open = if (link != null) {
-                        Modifier.clickable(onClickLabel = openLabel, role = Role.Button) {
-                            chrome.openGmailSearch(sourceSearch(segment, source), link)
-                        }
-                    } else {
-                        Modifier
-                    }
-                    Column(modifier = Modifier.fillMaxWidth().then(open).padding(vertical = 8.dp)) {
-                        Text(
-                            source.label ?: kind,
-                            style = MaterialTheme.typography.bodyLarge,
-                            // Underlined as a link: the theme's primary is near-black, as on the web.
-                            textDecoration = if (link != null) TextDecoration.Underline else null,
-                        )
-                        if (source.label != null) Text(kind, style = MaterialTheme.typography.bodySmall, color = muted)
-                    }
+    Column {
+        for (source in segment.sources) {
+            val kind = stringResource(sourceKindLabel(source.kind))
+            val link = emailLink(source)
+            val open = if (link != null) {
+                Modifier.clickable(onClickLabel = openLabel, role = Role.Button) {
+                    chrome.openGmailSearch(sourceSearch(segment, source), link)
                 }
-                segment.sender?.let {
-                    Text(stringResource(Res.string.from_sender, it), style = MaterialTheme.typography.bodyMedium, color = muted, modifier = Modifier.padding(vertical = 8.dp))
-                    senderOffers?.always?.let { always ->
-                        TextButton(onClick = { always(); onDismiss() }) { Text(stringResource(Res.string.always_import_sender)) }
-                    }
-                    senderOffers?.never?.let { never ->
-                        TextButton(onClick = { never(); onDismiss() }) { Text(stringResource(Res.string.never_import_sender)) }
-                    }
-                }
+            } else {
+                Modifier
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.close)) } },
+            Column(modifier = Modifier.fillMaxWidth().then(open).padding(vertical = 8.dp)) {
+                Text(
+                    source.label ?: kind,
+                    style = MaterialTheme.typography.bodyLarge,
+                    // Underlined as a link: the theme's primary is near-black, as on the web.
+                    textDecoration = if (link != null) TextDecoration.Underline else null,
+                )
+                if (source.label != null) Text(kind, style = MaterialTheme.typography.bodyMedium, color = muted)
+            }
+        }
+        segment.sender?.let {
+            Text(stringResource(Res.string.from_sender, it), style = MaterialTheme.typography.bodyMedium, color = muted, modifier = Modifier.padding(vertical = 8.dp))
+            Row(modifier = Modifier.offset(x = -TextButtonInset)) {
+                senderOffers?.always?.let { always -> TextButton(onClick = always) { Text(stringResource(Res.string.always_import_sender)) } }
+                senderOffers?.never?.let { never -> TextButton(onClick = never) { Text(stringResource(Res.string.never_import_sender)) } }
+            }
+        }
+    }
+}
+
+/**
+ * After "Never import this sender": offers to delete what it already
+ * imported ([plan]), or keep it. [remove] runs the deletion under the
+ * screen's own token.
+ */
+@Composable
+internal fun SenderCleanupDialog(viewModel: TripsViewModel, cleanup: Pair<String, SenderCleanup>?, remove: (SenderCleanup) -> Unit) {
+    val (domain, plan) = cleanup ?: return
+    // "2 trips and 1 booking": trips go whole.
+    val trips = plan.trips.size.takeIf { it > 0 }?.let { pluralStringResource(Res.plurals.trips_count, it, it) }
+    val bookings = plan.segments.size.takeIf { it > 0 }?.let { pluralStringResource(Res.plurals.bookings_count, it, it) }
+    val what = if (trips != null && bookings != null) stringResource(Res.string.this_and_that, trips, bookings) else trips ?: bookings.orEmpty()
+    AppAlertDialog(
+        onDismissRequest = { viewModel.keepSenderBookings() },
+        title = { Text(stringResource(Res.string.sender_cleanup_title)) },
+        text = { Text(stringResource(Res.string.sender_cleanup_text, domain, what)) },
+        confirmButton = { TextButton(onClick = { remove(plan) }) { Text(stringResource(Res.string.delete)) } },
+        dismissButton = { TextButton(onClick = { viewModel.keepSenderBookings() }) { Text(stringResource(Res.string.keep)) } },
     )
 }
 
@@ -883,7 +834,7 @@ private fun sourceKindLabel(kind: SourceKind): StringResource = when (kind) {
 
 /** The traveler's stars and heart, shown when there are any. */
 @Composable
-private fun Verdict(segment: Segment) {
+internal fun Verdict(segment: Segment) {
     val rating = segment.rating ?: 0
     if (rating == 0 && !segment.favorite) return
     Row(modifier = Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { directionsUrl } from "./directions";
+import { directionsUrl, mapsUrl } from "./directions";
 import type { ExtractedSegment } from "./schema";
 
 const stay: ExtractedSegment = {
@@ -41,5 +41,11 @@ describe("directionsUrl", () => {
   it("offers none for a cancelled booking or one with no place", () => {
     expect(directionsUrl({ ...stay, cancelledAt: "2026-11-01T00:00:00Z" } as ExtractedSegment)).toBeUndefined();
     expect(directionsUrl({ type: "other", title: "Note", start: "2026-12-12T09:00:00+00:00" })).toBeUndefined();
+  });
+});
+
+describe("mapsUrl", () => {
+  it("shows the place in Google Maps, found as directions find it", () => {
+    expect(mapsUrl(stay.destination!)).toBe("https://www.google.com/maps/search/?api=1&query=Motel%20Example%2C%20123%20Example%20Blvd%2C%20Las%20Vegas%2C%20NV%2089101");
   });
 });

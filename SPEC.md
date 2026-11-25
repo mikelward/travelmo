@@ -3169,7 +3169,7 @@ sender, rating, favorite, a place's city and spot while its name holds)
 survives, and widens the trip's dates to hold the booking. A delete asks
 first, since a phone has no undo. A known airport code sets its end's zone,
 from the web's generated airport table read as a resource. The owner's
-powers over a trip are the web page's, in its places: Rename and Fit dates
+powers over a trip are the web page's: Rename in the trip's ⋮ menu, Fit dates
 to bookings by the dates, and at the foot who it is shared with (each
 removable, an address to add), Merge into another trip and Delete this trip
 (asking first; an interrupted deletion offers to finish), each write the
@@ -3183,14 +3183,20 @@ profiles shared with the viewer, and shares it as the web does), and the
 same document warnings as the web stand in one card at the top of the trip
 list and on trip pages, from the same logic in `:core` with the
 airport-country table read as a resource; as on the web, an upcoming card is
-its title and dates; a booking row carries the viewer's matching loyalty
-programs. A booking's ⋮ menu, for anyone who sees the trip, starts with
-Directions (when it has a place), "Copy reference" (when it has one) and "Sources" (when it has sources or a
-sender), then Edit, Move to and Delete for those who may edit, as on the web. Copy
-reference puts the reference alone on the clipboard, with no toast since
-Android (13 and later, all the app runs on) confirms a copy itself; a long
-press on the reference line does the same (TalkBack offers it as the
-long-click action). Sources opens a dialog listing them as the web's does (each source's label and kind, then "From" the sender), the same
+its title and dates. A booking row shows its title, route, times, a
+flight's gates and check-in, and its stars; a tap opens the booking's
+details (`BookingDetailScreen`), which carry the rest: the day it starts
+(the trip page's day heading isn't there), each place, named
+with its address or town (a tap shows it in Google Maps, `mapsUrl`), the
+provider, "Ref …" (a tap copies it), who it is for, the viewer's matching
+loyalty programs, the notes, and the sources; a ✎ in its bar edits it for
+those who may. A booking's ⋮ menu, for anyone who sees the trip, starts with
+Directions (when it has a place) and "Copy reference" (when it has one),
+then Edit, Move to and Delete for those who may edit. Copying puts the
+reference alone on the clipboard, with no toast since Android (13 and later,
+all the app runs on) confirms a copy itself. The details list the sources as
+the web's Sources dialog does (each source's label and kind, then "From" the
+sender, with the owner's Always and Never import), the same
 `segmentSources` in `:core`; an email the viewer imported, by the source's
 `uid` or as the trip's owner for one without, opens in Gmail. The Gmail
 app takes no link to a message, and a browser sends one to Gmail's
