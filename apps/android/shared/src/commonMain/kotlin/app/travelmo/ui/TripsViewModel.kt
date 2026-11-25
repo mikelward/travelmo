@@ -300,14 +300,19 @@ class TripsViewModel(
 
     private val groups: Flow<TripGroups?> = combine(trips, now) { trips, _ -> trips?.let { groupTrips(it, today()) } }
 
-    private val details: Flow<Map<String, List<Segment>>> = groups.flatMapLatest { groups ->
-        val wanted = groups?.let { it.current + it.upcoming.take(UPCOMING_WITH_DETAILS) }.orEmpty()
-        if (wanted.isEmpty()) {
-            flowOf(emptyMap())
-        } else {
-            combine(wanted.map { trip -> store.segments(trip.id).map { trip.id to it } }) { it.toMap() }
+    // Listened to again only when which trips they are changes: the groups are
+    // worked out afresh each minute and on every change to any trip, and
+    // re-attaching every listener then rebuilt the cards under the user's finger.
+    private val details: Flow<Map<String, List<Segment>>> = groups
+        .map { groups -> groups?.let { it.current + it.upcoming.take(UPCOMING_WITH_DETAILS) }.orEmpty().map { it.id } }
+        .distinctUntilChanged()
+        .flatMapLatest { wanted ->
+            if (wanted.isEmpty()) {
+                flowOf(emptyMap())
+            } else {
+                combine(wanted.map { id -> store.segments(id).map { id to it } }) { it.toMap() }
+            }
         }
-    }
 
     /** The profile document's answer; null until it has answered once. */
     private val ownProfileAnswer: StateFlow<OwnProfile?> = accessSettled.flatMapLatest { store.ownProfile(uid) }.map<OwnProfile, OwnProfile?> { it }
