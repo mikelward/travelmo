@@ -12,6 +12,10 @@ import app.travelmo.core.tripMatches
 import app.travelmo.core.parseTripQuery
 import app.travelmo.core.ListFilters
 import app.travelmo.core.hiddenFromList
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.shareIn
+import app.travelmo.core.tripTravelers
+import app.travelmo.core.watching
 import app.travelmo.core.tripDraftProblem
 import app.travelmo.core.senderCleanup
 import app.travelmo.core.SenderCleanup
@@ -504,20 +508,34 @@ class TripsViewModel(
         }
     }
 
+    /** The people the user's bookings name, most often named first (SPEC "Travelers"). */
+    val travelers: StateFlow<List<Person>> = accessSettled.flatMapLatest { store.people(uid) }.map(::peopleInOrder)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     /**
-     * The trips the filters leave out, by each trip's own flags (TripFlags), at once. Only trips that don't yet say
-     * (flagsUnknown: from before the flags were kept, or edited since) have their bookings listened to, each counting
-     * as it answers, and their flags are then recorded so they are read no more.
+     * The bookings of trips that don't yet say what the list needs (flagsUnknown: from before the flags were kept,
+     * or edited since), while a filter is on or the user is known (for Watching): each listened to, counting as it
+     * answers, and its flags then recorded so it is read no more.
      */
-    val hiddenTrips: StateFlow<Set<String>> = _listFilters.map { it.any }.distinctUntilChanged().flatMapLatest { on ->
-        if (!on) flowOf(emptyMap())
-        // The trips that don't yet say, as they turn up so (a later snapshot, an edit that took the flags off).
-        else trips.filterNotNull().map { all -> all.filter(::flagsUnknown).map { it.id } }.distinctUntilChanged().flatMapLatest(::segmentsAsTheyAnswer)
-    }.let { read ->
-        combine(trips, _listFilters, read) { trips, filters, segments ->
-            if (!filters.any) emptySet()
-            else trips.orEmpty().filter { hiddenFromList(it, segments[it.id], filters) }.map { it.id }.toSet()
-        }
+    private val unknownSegments: Flow<Map<String, List<Segment>>> =
+        combine(_listFilters.map { it.any }, travelers.map { it.isNotEmpty() }) { filtering, known -> filtering || known }
+            .distinctUntilChanged()
+            .flatMapLatest { on ->
+                if (!on) flowOf(emptyMap())
+                // The trips that don't yet say, as they turn up so (a later snapshot, an edit that took the flags off).
+                else trips.filterNotNull().map { all -> all.filter(::flagsUnknown).map { it.id } }.distinctUntilChanged().flatMapLatest(::segmentsAsTheyAnswer)
+            }
+            .shareIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
+
+    /** The trips the filters leave out, by each trip's own flags (TripFlags) at once, else by its bookings once read. */
+    val hiddenTrips: StateFlow<Set<String>> = combine(trips, _listFilters, unknownSegments.onStart { emit(emptyMap()) }, travelers) { trips, filters, segments, people ->
+        if (!filters.any) emptySet()
+        else trips.orEmpty().filter { hiddenFromList(it, segments[it.id], filters, people) }.map { it.id }.toSet()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
+    /** The trips the user is only watching: none of their travelers is the user (watching). */
+    val watchingTrips: StateFlow<Set<String>> = combine(trips, unknownSegments.onStart { emit(emptyMap()) }, travelers) { trips, segments, people ->
+        trips.orEmpty().filter { watching(it.travelers ?: segments[it.id]?.let(::tripTravelers), people) }.map { it.id }.toSet()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
     // These trips' bookings by trip, each as it answers, its flags recorded on its trip.
@@ -677,10 +695,6 @@ class TripsViewModel(
     fun deleteSegment(token: String, tripId: String, segmentId: String) = run(token, "deleteSegment") { store.deleteSegment(tripId, segmentId) }
 
     fun restoreSegment(token: String, tripId: String, segmentId: String) = run(token, "restoreSegment") { store.restoreSegment(tripId, segmentId) }
-
-    /** The people the user's bookings name, most often named first (SPEC "Travelers"). */
-    val travelers: StateFlow<List<Person>> = accessSettled.flatMapLatest { store.people(uid) }.map(::peopleInOrder)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun setMe(token: String, personId: String) = run(token, "setMe") { store.setMe(uid, travelers.value, personId) }
 

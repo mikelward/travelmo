@@ -70,6 +70,7 @@ import app.travelmo.shared.Res
 import app.travelmo.shared.all_trips_hidden
 import app.travelmo.shared.badge_deleting
 import app.travelmo.shared.badge_shared
+import app.travelmo.shared.badge_watching
 import app.travelmo.shared.checked_in_action
 import app.travelmo.shared.no_trips_match
 import app.travelmo.shared.searching_bookings
@@ -94,6 +95,7 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
     val found by viewModel.searchResult.collectAsStateWithLifecycle()
     val filters by viewModel.listFilters.collectAsStateWithLifecycle()
     val hidden by viewModel.hiddenTrips.collectAsStateWithLifecycle()
+    val watching by viewModel.watchingTrips.collectAsStateWithLifecycle()
     val rideSettings by viewModel.rideSettings.collectAsStateWithLifecycle()
     // A journey a trip seems to be missing, for the cards whose bookings are read, as its page says it.
     val missingOf = { trip: Trip -> state.segmentsByTrip[trip.id]?.let { viewModel.journeyGapFor(trip, it, rideSettings) }?.let(::journeyGapText) }
@@ -205,9 +207,9 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
                 // What comes next is said only for a trip under way; an upcoming
                 // trip's card is its title and dates.
                 val onCheckedIn = { tripId: String, segmentId: String -> viewModel.setCheckedIn("$CHECKED_IN_TOKEN$tripId/$segmentId", tripId, segmentId, true) }
-                section(Res.string.section_now, shown.current, titles, state, uid, showNext = true, onOpenTrip, onCheckedIn, missingOf)
-                section(Res.string.section_upcoming, shown.upcoming, titles, state, uid, showNext = false, onOpenTrip, onCheckedIn, missingOf)
-                section(Res.string.section_past, shown.past, titles, state, uid, showNext = false, onOpenTrip, onCheckedIn, missingOf)
+                section(Res.string.section_now, shown.current, titles, state, uid, showNext = true, onOpenTrip, onCheckedIn, missingOf, watching)
+                section(Res.string.section_upcoming, shown.upcoming, titles, state, uid, showNext = false, onOpenTrip, onCheckedIn, missingOf, watching)
+                section(Res.string.section_past, shown.past, titles, state, uid, showNext = false, onOpenTrip, onCheckedIn, missingOf, watching)
             }
         }
     }
@@ -237,6 +239,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.section(
     onOpenTrip: (String) -> Unit,
     onCheckedIn: (tripId: String, segmentId: String) -> Unit,
     missingOf: (Trip) -> String?,
+    /** The trips the user is only watching. */
+    watching: Set<String>,
 ) {
     if (trips.isEmpty()) return
     item(key = "section-$title") {
@@ -252,6 +256,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.section(
             flightStatuses = state.flightStatuses, checkedIn = state.checkedIn[trip.id].orEmpty(),
             onCheckedIn = { segmentId -> onCheckedIn(trip.id, segmentId) },
             missing = missingOf(trip),
+            watching = trip.id in watching,
             onClick = { onOpenTrip(trip.id) },
         )
     }
@@ -275,10 +280,13 @@ fun TripCard(
     onCheckedIn: ((segmentId: String) -> Unit)? = null,
     /** "No flight back to London found", for a trip that seems to miss one (journeyGap). */
     missing: String? = null,
+    /** Whether the user is only watching it: none of its travelers is them. */
+    watching: Boolean = false,
     onClick: () -> Unit,
 ) {
     val badge = when {
         trip.deleting -> stringResource(Res.string.badge_deleting) to MaterialTheme.colorScheme.onSurfaceVariant
+        watching -> stringResource(Res.string.badge_watching) to MaterialTheme.colorScheme.onSurfaceVariant
         shared -> stringResource(Res.string.badge_shared) to TravelmoTheme.colors.shared
         else -> null
     }

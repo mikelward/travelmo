@@ -1,6 +1,6 @@
 "use client";
 
-import type { ListFilters } from "@travelmo/core";
+import { filtering, type ListFilters } from "@travelmo/core";
 import { useEffect, useRef, useState } from "react";
 
 // Material Icons paths (Apache License 2.0), as Android draws them: search,
@@ -24,7 +24,7 @@ function Icon({ path }: { path: string }) {
   );
 }
 
-// The funnel, filled while a filter is on, opening the two switches (SPEC
+// The funnel, filled while a filter is on, opening the switches (SPEC
 // "Filtering the trip list"); they stay open while flipped, and a click
 // elsewhere or Escape closes them.
 function FilterButton({ filters, onFilters }: { filters: ListFilters; onFilters: (next: ListFilters) => void }) {
@@ -38,7 +38,7 @@ function FilterButton({ filters, onFilters }: { filters: ListFilters; onFilters:
     document.addEventListener("pointerdown", away);
     return () => document.removeEventListener("pointerdown", away);
   }, [open]);
-  const on = filters.hideCancelled || filters.hideLocal;
+  const on = filtering(filters);
   return (
     <div ref={wrapper} className="relative" onKeyDown={(e) => e.key === "Escape" && setOpen(false)}>
       <button type="button" aria-label="Filters" aria-expanded={open} onClick={() => setOpen((o) => !o)} className={iconButton}>
@@ -53,6 +53,10 @@ function FilterButton({ filters, onFilters }: { filters: ListFilters; onFilters:
           <label className="flex items-center gap-2 whitespace-nowrap">
             <input type="checkbox" checked={filters.hideLocal} onChange={(e) => onFilters({ ...filters, hideLocal: e.target.checked })} />
             Hide local events
+          </label>
+          <label className="flex items-center gap-2 whitespace-nowrap">
+            <input type="checkbox" checked={filters.hideWatching} onChange={(e) => onFilters({ ...filters, hideWatching: e.target.checked })} />
+            Hide trips I&apos;m not on
           </label>
         </div>
       )}

@@ -31,6 +31,8 @@
     <string name="section_past">Past</string>
     <string name="badge_shared">Shared</string>
     <string name="badge_deleting">Deleting</string>
+    <string name="badge_watching">Watching</string>
+    <string name="watching_hint">Watching: you’re not on this trip</string>
     <string name="staying_at">Staying at %1$s</string>
     <string name="settings">Settings</string>
 
@@ -263,6 +265,7 @@
     <string name="clear_search">Clear search</string>
     <string name="hide_cancelled">Hide cancelled</string>
     <string name="hide_local_events">Hide local events</string>
+    <string name="hide_watching">Hide trips I’m not on</string>
     <string name="all_trips_hidden">Every trip is hidden.</string>
     <string name="mark_trip_cancelled">Mark trip cancelled</string>
     <string name="mark_cancelled">Mark cancelled</string>

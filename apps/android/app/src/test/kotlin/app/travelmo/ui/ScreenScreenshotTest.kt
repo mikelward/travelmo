@@ -342,6 +342,20 @@ class ScreenScreenshotTest {
         capture("profile_dark", dark = true) { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.PROFILE) {} }) }
     }
 
+    // The list with a trip the user is only watching: none of its travelers is them.
+    @Test
+    fun trip_list_watching() {
+        val store = FakeTripStore(
+            trips = fixtureTrips + fixtureFlightTrip.copy(title = "Mum's trip", travelers = listOf("Pat Example")),
+            people = listOf(
+                app.travelmo.core.Person("me", "Sam Example", bookings = 4, direct = 4),
+                app.travelmo.core.Person("mum", "Pat Example", bookings = 1),
+            ),
+        )
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        capture("trip_list_watching") { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) }
+    }
+
     // The Profile scrolled to the people the user's bookings name, one taken to be the user.
     @Test
     fun profile_people() {

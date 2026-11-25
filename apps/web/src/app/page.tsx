@@ -1,6 +1,6 @@
 "use client";
 
-import { displayTitles, flagsUnknown, groupTrips, hiddenFromList, journeyGap, journeyGapHomes, journeyGapText, isEmptyQuery, listWarnings, nextUpFlightKeys, noListFilters, parseTripQuery, tripMatches, type FlightStatus, type ListFilters, type Segment, type Trip } from "@travelmo/core";
+import { displayTitles, filtering as filtersOn, flagsUnknown, groupTrips, hiddenFromList, tripTravelers, watching, journeyGap, journeyGapHomes, journeyGapText, isEmptyQuery, listWarnings, nextUpFlightKeys, noListFilters, parseTripQuery, tripMatches, type FlightStatus, type ListFilters, type Segment, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -10,6 +10,7 @@ import { AddTripForm } from "@/components/AddTripForm";
 import { TripListToolbar } from "@/components/TripListToolbar";
 import { localToday } from "@/lib/dates";
 import { usePeopleDocuments, useTripWarnings, warningText } from "@/lib/documents";
+import { usePeople } from "@/lib/people";
 import { setCheckedIn, useCheckedIn } from "@/lib/checkedIn";
 import { useFlightStatusesOf } from "@/lib/flightStatus";
 import { useSaveForOffline } from "@/lib/offline";
@@ -30,9 +31,9 @@ function useListFilters(): [ListFilters, (next: ListFilters) => void] {
     try {
       const stored: unknown = JSON.parse(localStorage.getItem(listFiltersKey) ?? "null");
       if (stored && typeof stored === "object") {
-        const { hideCancelled, hideLocal } = stored as Record<string, unknown>;
+        const { hideCancelled, hideLocal, hideWatching } = stored as Record<string, unknown>;
         // eslint-disable-next-line react-hooks/set-state-in-effect -- browser storage is only there after hydration
-        setFilters({ hideCancelled: hideCancelled === true, hideLocal: hideLocal === true });
+        setFilters({ hideCancelled: hideCancelled === true, hideLocal: hideLocal === true, hideWatching: hideWatching === true });
       }
     } catch (e) {
       // Storage may be blocked (a private window): everything shows.
@@ -63,6 +64,7 @@ function Section({
   onCheckedIn,
   showNext,
   missingOf,
+  watchingOf,
 }: {
   title: string;
   trips: Trip[];
@@ -80,6 +82,8 @@ function Section({
   showNext: boolean;
   // What a trip whose bookings are loaded seems to be missing (journeyGap).
   missingOf: (trip: Trip) => string | undefined;
+  // Whether the viewer is only watching a trip (watching).
+  watchingOf: (trip: Trip) => boolean;
 }) {
   if (trips.length === 0) return null;
   return (
@@ -96,6 +100,7 @@ function Section({
             {...(showNext ? { now, flightStatuses, onCheckedIn: (segmentId: string) => onCheckedIn(trip.id, segmentId) } : {})}
             {...(checkedIn[trip.id] ? { checkedIn: checkedIn[trip.id] } : {})}
             {...(missingOf(trip) ? { missing: missingOf(trip) } : {})}
+            watching={watchingOf(trip)}
           />
         ))}
       </div>
@@ -115,17 +120,25 @@ function Trips({ user }: { user: User }) {
   const searching = !isEmptyQuery(query);
   const [filters, setFilters] = useListFilters();
   const [addingTrip, setAddingTrip] = useState(false);
-  const filtering = filters.hideCancelled || filters.hideLocal;
+  const filtering = filtersOn(filters);
+  // Whom the user's bookings name, and so which trips they're only watching.
+  const travelers = usePeople(user.uid);
   // Every trip's bookings, read once a search starts (SPEC "Searching trips").
   const all = useAllSegments(trips && searched ? trips.map((t) => t.id) : undefined);
   // While a filter is on, only the bookings of trips that don't yet say what
   // the filters need (flagsUnknown), each read once per version of the trip,
   // whenever it turns up so (a later snapshot, an edit), and its flags kept.
-  const unknown = useSegmentsOnce(filtering && trips ? trips.filter(flagsUnknown) : undefined);
+  // Read too, once, while the user is known, so a trip from before its
+  // travelers were kept can say it's one they're only watching.
+  const unknown = useSegmentsOnce((filtering || !!travelers?.length) && trips ? trips.filter(flagsUnknown) : undefined);
   const bookingsOf = (id: string) => all?.byTrip[id] ?? unknown[id];
   useKeepTripFlags(trips, bookingsOf, true);
   const titles = displayTitles(trips ?? []);
-  const kept = trips?.filter((t) => !hiddenFromList(t, bookingsOf(t.id), filters));
+  const kept = trips?.filter((t) => !hiddenFromList(t, bookingsOf(t.id), filters, travelers ?? []));
+  const watchingOf = (trip: Trip) => {
+    const read = bookingsOf(trip.id);
+    return watching(trip.travelers ?? (read ? tripTravelers(read) : undefined), travelers ?? []);
+  };
   const shown = kept && searching ? kept.filter((t) => tripMatches(query, t, titles.get(t.id) ?? t.title, all?.byTrip[t.id] ?? [])) : kept;
   // Listeners follow every trip, searched or not; the sections show what a search found.
   const everything = trips ? groupTrips(trips, today) : undefined;
@@ -201,7 +214,7 @@ function Trips({ user }: { user: User }) {
     const gap = journeyGap(segments, journeyGapHomes(profile.homes ?? [], profile.homeAirports ?? []));
     return gap ? journeyGapText(gap) : undefined;
   };
-  const sectionProps = { uid: user.uid, titles, segmentsByTrip, now, flightStatuses, checkedIn, onCheckedIn, missingOf };
+  const sectionProps = { uid: user.uid, titles, segmentsByTrip, now, flightStatuses, checkedIn, onCheckedIn, missingOf, watchingOf };
   // Document warnings once, at the top, each for the earliest trip it bears
   // on and linking to it, rather than repeated on every card.
   const listed = listWarnings(warnings, trips);

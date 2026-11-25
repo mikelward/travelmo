@@ -72,12 +72,63 @@ class ListFiltersTest {
     }
 
     @Test
-    fun `the flags are unknown until both are kept and written only when the bookings disagree`() {
+    fun `the flags are unknown until all are kept and written only when the bookings disagree`() {
         flagsUnknown(trip) shouldBe true
         flagsUnknown(trip.copy(allCancelled = false)) shouldBe true
-        flagsUnknown(trip.copy(allCancelled = false, localOnly = false)) shouldBe false
-        tripFlagsToWrite(trip, listOf(show)) shouldBe TripFlags(allCancelled = false, localOnly = true)
-        tripFlagsToWrite(trip.copy(allCancelled = false, localOnly = true), listOf(show)) shouldBe null
-        tripFlagsToWrite(trip.copy(allCancelled = false, localOnly = true), listOf(cancelled(show))) shouldBe TripFlags(allCancelled = true, localOnly = false)
+        flagsUnknown(trip.copy(allCancelled = false, localOnly = false)) shouldBe true
+        flagsUnknown(trip.copy(allCancelled = false, localOnly = false, travelers = emptyList())) shouldBe false
+        tripFlagsToWrite(trip, listOf(show)) shouldBe TripFlags(allCancelled = false, localOnly = true, travelers = emptyList())
+        tripFlagsToWrite(trip.copy(allCancelled = false, localOnly = true, travelers = emptyList()), listOf(show)) shouldBe null
+        tripFlagsToWrite(trip.copy(allCancelled = false, localOnly = true, travelers = emptyList()), listOf(cancelled(show))) shouldBe
+            TripFlags(allCancelled = true, localOnly = false, travelers = emptyList())
+        tripFlagsToWrite(trip.copy(allCancelled = false, localOnly = true, travelers = emptyList()), listOf(show.copy(travelers = listOf("Sam Example")))) shouldBe
+            TripFlags(allCancelled = false, localOnly = true, travelers = listOf("Sam Example"))
+    }
+
+    // Invented people, as in listFilters.test.ts: the user, whom mail sent straight to them names most, and their mum.
+    private val sam = Person("sam", "Sam Example", listOf("EXAMPLE/SAM MR"), bookings = 5, direct = 5)
+    private val pat = Person("pat", "Pat Example", bookings = 2)
+
+    @Test
+    fun `a trip's travelers are everyone its bookings name each once going by what is still booked`() {
+        tripTravelers(listOf(flight.copy(travelers = listOf("Sam Example", "Pat Example")), stay.copy(travelers = listOf("EXAMPLE/SAM MR")))) shouldBe listOf("Sam Example", "Pat Example")
+        tripTravelers(listOf(cancelled(flight.copy(travelers = listOf("Pat Example"))), stay.copy(travelers = listOf("Sam Example")))) shouldBe listOf("Sam Example")
+        tripTravelers(listOf(cancelled(flight.copy(travelers = listOf("Pat Example"))))) shouldBe listOf("Pat Example")
+        tripTravelers(listOf(flight)) shouldBe emptyList()
+        // Each spelling once, but two that may be two people both kept: the user's people tell them apart.
+        val smiths = listOf(flight.copy(travelers = listOf("John Smith")), stay.copy(travelers = listOf("J Smith")))
+        tripTravelers(smiths) shouldBe listOf("John Smith", "J Smith")
+        watching(tripTravelers(smiths), listOf(Person("me", "J Smith", listOf("Jane Smith"), bookings = 3, direct = 3), Person("john", "John Smith", bookings = 1))) shouldBe false
+    }
+
+    @Test
+    fun `a trip keeps a group's hundred and more than that as none never dropping the user's name for want of room`() {
+        fun group(n: Int) = (0 until n).map { "Person${'A' + it % 26}${'A' + it / 26} Example" }
+        val twenty = tripTravelers(listOf(flight.copy(travelers = group(20)), stay.copy(travelers = listOf("Sam Example"))))
+        twenty.size shouldBe 21
+        ("Sam Example" in twenty) shouldBe true
+        tripTravelers(listOf(flight.copy(travelers = group(100)), stay.copy(travelers = listOf("Sam Example")))) shouldBe emptyList()
+    }
+
+    @Test
+    fun `watching is a trip whose bookings name travelers none of them the user`() {
+        watching(listOf("Pat Example"), listOf(sam, pat)) shouldBe true
+        watching(listOf("Pat Example", "SAM EXAMPLE"), listOf(sam, pat)) shouldBe false
+        watching(listOf("Alex Other"), listOf(sam, pat)) shouldBe true
+        watching(listOf("Pat Example"), emptyList()) shouldBe false
+        watching(emptyList(), listOf(sam, pat)) shouldBe false
+        watching(null, listOf(sam, pat)) shouldBe false
+        watching(listOf("Pat Example"), listOf(sam, pat.copy(me = true))) shouldBe false
+        watching(listOf("Sam Example"), listOf(sam, pat.copy(me = true))) shouldBe true
+    }
+
+    @Test
+    fun `hiding trips the user is not on goes by the trip's flag or its bookings`() {
+        val filters = ListFilters(hideWatching = true)
+        hiddenFromList(trip.copy(travelers = listOf("Pat Example")), null, filters, listOf(sam, pat)) shouldBe true
+        hiddenFromList(trip.copy(travelers = listOf("Pat Example")), null, ListFilters(), listOf(sam, pat)) shouldBe false
+        hiddenFromList(trip, listOf(flight.copy(travelers = listOf("Pat Example"))), filters, listOf(sam, pat)) shouldBe true
+        hiddenFromList(trip, listOf(flight.copy(travelers = listOf("Sam Example"))), filters, listOf(sam, pat)) shouldBe false
+        hiddenFromList(trip, null, filters, listOf(sam, pat)) shouldBe false
     }
 }

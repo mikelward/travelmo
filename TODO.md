@@ -31,12 +31,16 @@
         that weren't forwarded; "This is me" on Profile.
   - [ ] Use a recipient's display name, and the Google account's name before
         any booking names anyone, toward the guess.
-  - [ ] Watching: a trip none of whose travelers is the user shows
-        "Watching", keeps flight status and alerts, and leaves out the user's
-        document and visa warnings, reminders, check-in prompts, ride
+  - [x] Watching: a trip none of whose travelers is the user says
+        "Watching" on its card and page; "Hide trips I'm not on" in the
+        funnel.
+  - [ ] A watched trip keeps flight status and alerts, and leaves out the
+        user's document and visa warnings, reminders, check-in prompts, ride
         suggestions, reports, residence days, the trips download and working
-        out home; travelers editable on the trip page; "Hide trips I'm not
-        on" in the funnel.
+        out home.
+  - [ ] Travelers editable on the trip page.
+  - [ ] "This is me" from two devices at once can leave two people marked
+        until the next tap; a single selected-person field would stop it.
 
 - [x] Add and edit segments by hand; delete a trip; rename a trip.
 - [x] Let sharees add, edit and delete segments.

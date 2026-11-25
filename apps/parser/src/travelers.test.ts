@@ -35,6 +35,8 @@ describe("travelers", () => {
     const store = memoryStore();
     expect(await importMessage("u1", email("m1"), deps(store, flight(["SMITH/JOHN MR", "SMITH/JANE MRS", "Smith, John"])))).toBe("imported");
     expect([...store.segments.values()][0]?.travelers).toEqual(["John Smith", "Jane Smith"]);
+    // And kept on the trip, for whether the user is only watching it.
+    expect([...store.trips.values()][0]?.travelers).toEqual(["John Smith", "Jane Smith"]);
   });
 
   it("gain whoever a later email about the booking names", async () => {

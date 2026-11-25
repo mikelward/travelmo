@@ -7,19 +7,26 @@ import app.travelmo.data.ListFilterStore
 
 /**
  * The trip list's filters, in their own SharedPreferences file on this
- * phone, like the text size: two switches about what the list shows, not
+ * phone, like the text size: switches about what the list shows, not
  * synced (SPEC "Filtering the trip list").
  */
 class ListFilterPrefs(context: Context) : ListFilterStore {
     private val prefs = context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
-    override fun read(): ListFilters = ListFilters(hideCancelled = prefs.getBoolean(KEY_CANCELLED, false), hideLocal = prefs.getBoolean(KEY_LOCAL, false))
+    override fun read(): ListFilters = ListFilters(
+        hideCancelled = prefs.getBoolean(KEY_CANCELLED, false),
+        hideLocal = prefs.getBoolean(KEY_LOCAL, false),
+        hideWatching = prefs.getBoolean(KEY_WATCHING, false),
+    )
 
-    override fun write(filters: ListFilters) = prefs.edit { putBoolean(KEY_CANCELLED, filters.hideCancelled).putBoolean(KEY_LOCAL, filters.hideLocal) }
+    override fun write(filters: ListFilters) = prefs.edit {
+        putBoolean(KEY_CANCELLED, filters.hideCancelled).putBoolean(KEY_LOCAL, filters.hideLocal).putBoolean(KEY_WATCHING, filters.hideWatching)
+    }
 
     private companion object {
         const val FILE = "list_filters"
         const val KEY_CANCELLED = "hide_cancelled"
         const val KEY_LOCAL = "hide_local"
+        const val KEY_WATCHING = "hide_watching"
     }
 }

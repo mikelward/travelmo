@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { owner, signIn } from "./helpers";
-import { clearData, forgetTripFlags, readTrip, seedTrip } from "./seed";
+import { clearData, forgetTripFlags, readTrip, seedPerson, seedTrip } from "./seed";
 
 test.beforeEach(async () => {
   await clearData();
@@ -133,4 +133,26 @@ test("the first trip added keeps its form, filled in and busy, until its write i
   await expect(form.getByRole("button", { name: "Cancel" })).toBeDisabled();
   release!();
   await expect(page.getByRole("heading", { name: "Weekend away" })).toBeVisible();
+});
+
+test("a trip none of whose travelers is the user says Watching, and the filter hides it", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  // The user, named on mail sent straight to them, and their mum.
+  await seedPerson(ownerUid, { id: "me", name: "Sam Example", bookings: 4, direct: 4 });
+  await seedPerson(ownerUid, { id: "mum", name: "Pat Example", bookings: 1, direct: 0 });
+  await seedTrip(ownerUid, "e2e-mine", { travelers: ["Sam Example", "Pat Example"] }, { title: "Our trip" });
+  await seedTrip(ownerUid, "e2e-mum", { travelers: ["Pat Example"] }, { title: "Mum's trip" });
+  const cards = page.getByTestId("trip-card");
+  await expect(cards.filter({ hasText: "Mum's trip" })).toContainText("Watching");
+  await expect(cards.filter({ hasText: "Our trip" })).not.toContainText("Watching");
+  // Whom each trip's bookings are for is recorded on it, once read.
+  await expect.poll(async () => (await readTrip("e2e-mum"))?.travelers).toEqual(["Pat Example"]);
+
+  await page.getByRole("button", { name: "Filters" }).click();
+  await page.getByRole("checkbox", { name: "Hide trips I'm not on" }).check();
+  await expect(cards).toHaveCount(1);
+  await expect(cards.first()).toContainText("Our trip");
+
+  await page.goto("/trips/e2e-mum");
+  await expect(page.getByTestId("trip-watching")).toHaveText("Watching: you're not on this trip");
 });

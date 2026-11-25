@@ -17,6 +17,7 @@ export function TripCard({
   checkedIn,
   onCheckedIn,
   missing,
+  watching = false,
 }: {
   trip: Trip;
   title?: string;
@@ -29,8 +30,10 @@ export function TripCard({
   onCheckedIn?: (segmentId: string) => void;
   // "No flight back to London found", for a trip that seems to miss one.
   missing?: string;
+  // Whether the viewer is only watching it: none of its travelers is them.
+  watching?: boolean;
 }) {
-  const badge = trip.deleting ? "Deleting" : shared ? "Shared" : undefined;
+  const badge = trip.deleting ? "Deleting" : watching ? "Watching" : shared ? "Shared" : undefined;
   // A cancelled trip (by hand, or every booking) is struck through, as a
   // cancelled booking is, and has nothing coming.
   const cancelled = tripCancelled(trip, segments);

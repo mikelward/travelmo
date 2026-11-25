@@ -349,7 +349,23 @@ user "You", and offers "This is me" on the others (one batch, so only one
 is marked); the rules let the owner change only a person's name, other
 spellings and that mark.
 
-Still to come (TODO.md): trips the user is watching but not on, and
+**Watching.** A trip whose bookings name travelers, none of them the user
+(`watching` in `listFilters.ts`, mirrored in `ListFilters.kt`: each name
+resolved with `findPerson`, the user with `guessMe`), is one the user is
+only watching: a parent's forwarded itinerary, a child's school trip. Its
+card says "Watching" (in place of "Shared"), and its page "Watching:
+you're not on this trip", on the web and Android. A trip whose bookings
+name no one, or any while no booking has named anyone, isn't. Whom a
+trip's bookings are for is kept on the trip (`travelers`, every name its
+live bookings give, each spelling once, so "J Smith" stays beside "John
+Smith" for the user's people to tell apart, and none past a hundred, so a
+big group never drops the user's name; `tripTravelers`) with the list's other
+flags (see "Filtering the trip list"); a trip from before it was kept has
+its bookings read once, while the user is known, to fill it in.
+
+Still to come (TODO.md): leaving watched trips out of the user's own
+warnings, reminders, check-in, rides, reports, residence days, the trips
+download and working out home; travelers editable on the trip page; and
 renaming and merging people.
 
 ### Adding a trip
@@ -394,7 +410,7 @@ only, and the web says so. With no match the list says "No trips match."
 ### Filtering the trip list
 
 The funnel in the trip list's top bar, on the web and Android, outlined
-while no filter is on and filled while one is, opens two switches that
+while no filter is on and filled while one is, opens switches that
 narrow the list:
 **Hide cancelled** leaves out a trip its owner cancelled and one whose every
 booking was cancelled (`tripCancelled`), and **Hide local events** leaves out
@@ -402,19 +418,21 @@ a trip of outings alone: everything still booked in it is an activity, an
 "other" booking or a car hired and returned in one place, with no journey,
 stay or ride to somewhere else (`localOnly` in
 `packages/core/src/listFilters.ts`, mirrored in `ListFilters.kt`). A trip
-with nothing booked is neither. Both are off until the person turns them
+with nothing booked is neither. **Hide trips I'm not on** leaves out a
+trip the user is only watching (see "Travelers"). All are off until the person turns them
 on, and are kept on that device (the browser's local storage; Android's
 own preferences file), not synced: they are about how this screen reads.
 They filter at once, from the trip documents the list already has: each
-trip keeps what they need of its bookings (`allCancelled`, `localOnly`;
-`tripFlags`). The parser records them whenever it files, cancels or
+trip keeps what they need of its bookings (`allCancelled`, `localOnly`,
+`travelers`; `tripFlags`). The parser records them whenever it files, cancels or
 regroups bookings (`settlingTripDates`). An app's own edit to a trip's
 bookings (adding, editing, cancelling, restoring, deleting, moving or
 merging) takes the flags off that trip and any other it touched, so they
 are unknown rather than wrong; an app that then reads a trip's bookings
 live (its page, a search or reports on Android) and finds them disagreeing
 with the trip writes them, the owner or a sharee alike
-(`tripFlagsToWrite`; the rules allow both, as booleans), computed from the
+(`tripFlagsToWrite`; the rules allow both, as booleans and a list of at
+most a hundred names), computed from the
 server's bookings rather than the cache's and written only if the trip's
 `updatedAt` hasn't moved since (a booking changed meanwhile is read again
 later). Bookings read

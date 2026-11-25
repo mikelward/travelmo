@@ -69,6 +69,7 @@ fun tripFromDocument(id: String, data: Map<String, Any?>): Trip? {
         cancelledAt = data.text("cancelledAt"),
         allCancelled = data["allCancelled"] as? Boolean,
         localOnly = data["localOnly"] as? Boolean,
+        travelers = (data["travelers"] as? List<*>)?.filterIsInstance<String>(),
     )
 }
 
