@@ -80,12 +80,24 @@ private val HomeTab.reportPage: String
         HomeTab.PROFILE -> "Profile"
     }
 
+/**
+ * Closes [key]'s screen, only while it is the one on top and never the last:
+ * a screen's Back, tapped again while it slides away, or a late signal from
+ * it, would otherwise close the screen under it, or empty the stack (which
+ * NavDisplay can't show). True when it closed.
+ */
+fun <T : Any> MutableList<T>.close(key: T): Boolean {
+    if (size < 2 || lastOrNull() != key) return false
+    removeAt(lastIndex)
+    return true
+}
+
 @Composable
 fun SignedInNavigation(user: SignedIn, viewModel: TripsViewModel, backStack: NavBackStack<NavKey>, account: SignedInAccount) {
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     NavDisplay(
         backStack = backStack,
-        onBack = { backStack.removeLastOrNull() },
+        onBack = { backStack.lastOrNull()?.let { backStack.close(it) } },
         transitionSpec = { pageOpens(rtl) },
         popTransitionSpec = { pageCloses(rtl) },
         predictivePopTransitionSpec = { pageCloses(rtl) },
@@ -127,14 +139,13 @@ fun SignedInNavigation(user: SignedIn, viewModel: TripsViewModel, backStack: Nav
                     viewModel = viewModel,
                     tripId = key.tripId,
                     uid = user.uid,
-                    onBack = { backStack.removeLastOrNull() },
+                    onBack = { backStack.close(key) },
                     onAddBooking = { defaultDate -> backStack.add(BookingForm(key.tripId, null, defaultDate)) },
                     onEditBooking = { segmentId -> backStack.add(BookingForm(key.tripId, segmentId, "")) },
                     onOpenBooking = { segmentId -> backStack.add(BookingDetail(key.tripId, segmentId)) },
                     // A merge lands on the trip the bookings went to, in place of the one that is gone.
                     onMerged = { targetId ->
-                        backStack.removeLastOrNull()
-                        backStack.add(TripDetail(targetId))
+                        if (backStack.close(key)) backStack.add(TripDetail(targetId))
                     },
                 )
                 }
@@ -146,19 +157,18 @@ fun SignedInNavigation(user: SignedIn, viewModel: TripsViewModel, backStack: Nav
                         tripId = key.tripId,
                         segmentId = key.segmentId,
                         uid = user.uid,
-                        onBack = { backStack.removeLastOrNull() },
+                        onBack = { backStack.close(key) },
                         onEdit = { backStack.add(BookingForm(key.tripId, key.segmentId, "")) },
                         // Off the booking and its trip, both gone, to wherever the trip was opened from.
                         onTripGone = {
-                            backStack.removeLastOrNull()
-                            if (backStack.lastOrNull() is TripDetail) backStack.removeLastOrNull()
+                            if (backStack.close(key)) backStack.close(TripDetail(key.tripId))
                         },
                     )
                 }
             }
             entry<BookingForm> { key ->
                 CompositionLocalProvider(LocalReportScreen provides tripReportScreen("Booking form", viewModel, key.tripId)) {
-                    BookingFormScreen(viewModel = viewModel, tripId = key.tripId, segmentId = key.segmentId, defaultDate = key.defaultDate, onDone = { backStack.removeLastOrNull() })
+                    BookingFormScreen(viewModel = viewModel, tripId = key.tripId, segmentId = key.segmentId, defaultDate = key.defaultDate, onDone = { backStack.close(key) })
                 }
             }
             entry<NewBooking> { key ->
@@ -168,11 +178,10 @@ fun SignedInNavigation(user: SignedIn, viewModel: TripsViewModel, backStack: Nav
                         tripId = null,
                         segmentId = null,
                         defaultDate = key.defaultDate,
-                        onDone = { backStack.removeLastOrNull() },
+                        onDone = { backStack.close(key) },
                         // On to the trip it went into, Back returning to where it was added from.
                         onAdded = { tripId ->
-                            backStack.removeLastOrNull()
-                            backStack.add(TripDetail(tripId))
+                            if (backStack.close(key)) backStack.add(TripDetail(tripId))
                         },
                     )
                 }
@@ -183,7 +192,7 @@ fun SignedInNavigation(user: SignedIn, viewModel: TripsViewModel, backStack: Nav
                         account = account,
                         user = user,
                         viewModel = viewModel,
-                        onBack = { backStack.removeLastOrNull() },
+                        onBack = { backStack.close(Settings) },
                         onOpenReview = { backStack.add(ImportReview) },
                         onAddBooking = { backStack.add(NewBooking(it)) },
                     )
@@ -191,13 +200,13 @@ fun SignedInNavigation(user: SignedIn, viewModel: TripsViewModel, backStack: Nav
             }
             entry<ImportReview> {
                 CompositionLocalProvider(LocalReportScreen provides ReportScreen("Import review")) {
-                    ImportReviewScreen(viewModel = viewModel, onBack = { backStack.removeLastOrNull() })
+                    ImportReviewScreen(viewModel = viewModel, onBack = { backStack.close(ImportReview) })
                 }
             }
             entry<AccessPage> {
                 // Not offered again from its own menu.
                 CompositionLocalProvider(LocalOpenAccess provides null, LocalReportScreen provides ReportScreen("Access")) {
-                    AccessScreen(viewModel = viewModel, onBack = { backStack.removeLastOrNull() })
+                    AccessScreen(viewModel = viewModel, onBack = { backStack.close(AccessPage) })
                 }
             }
         },
