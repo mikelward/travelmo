@@ -704,13 +704,16 @@ fun SegmentRow(
             if (segment.isCancelled) {
                 Text(stringResource(Res.string.cancelled).uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
             }
-            // A flight is headed by its airline, its flight number leading the route (bookingHeading).
-            Text(
-                heading.headline,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                textDecoration = if (segment.isCancelled) TextDecoration.LineThrough else null,
-            )
+            // A flight is headed by its airline and its logo, its flight number leading the route (bookingHeading).
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                AirlineLogo(heading.airline, 18.dp)
+                Text(
+                    heading.headline,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    textDecoration = if (segment.isCancelled) TextDecoration.LineThrough else null,
+                )
+            }
             headedRouteLine(segment, heading)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = muted) }
             timesLine(segment)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = muted) }
             if (flightLines.isNotEmpty()) {

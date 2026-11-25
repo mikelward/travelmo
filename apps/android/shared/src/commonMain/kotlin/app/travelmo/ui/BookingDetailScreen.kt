@@ -1,5 +1,7 @@
 package app.travelmo.ui
 
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -183,7 +185,10 @@ fun BookingDetails(
             Text(stringResource(Res.string.cancelled), style = body, color = MaterialTheme.colorScheme.error)
         }
         val heading = bookingHeading(segment)
-        Text(heading.headline, style = MaterialTheme.typography.titleLarge, textDecoration = struck)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            AirlineLogo(heading.airline, 24.dp)
+            Text(heading.headline, style = MaterialTheme.typography.titleLarge, textDecoration = struck)
+        }
         headedRouteLine(segment, heading)?.let { Text(it, style = body, color = muted) }
         // The trip page's day heading isn't here, so the day the booking starts is.
         Text(formatDate(localDate(segment.start)), style = body, color = muted, textDecoration = struck)

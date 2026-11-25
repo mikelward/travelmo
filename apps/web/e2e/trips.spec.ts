@@ -185,6 +185,7 @@ test("the owner sees an imported trip, shares it, and the partner can add a book
   await page.getByRole("button", { name: "Add", exact: true }).click();
   // A flight is headed by its airline, its flight number leading the route.
   await expect(page.getByRole("button", { name: "Ryanair", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Ryanair", exact: true }).getByTestId("airline-logo")).toBeVisible();
   await expect(page.getByText("FR 123", { exact: true })).toBeVisible();
   await expect(page.getByTestId("trip-dates")).toContainText("12–15 Dec 2026");
 });
