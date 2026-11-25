@@ -125,13 +125,32 @@ export const seedSenderDomains = [
 ] as const;
 
 // Whether an email comes from a travel company (a seed sender or a travel
-// program's domain) or a sender the user always imports, and not one they
-// never import: whose emails "Refresh from email" reads again once the
-// email reader improves (refresh.ts `readAgain`).
+// program's domain, under any of its countries' domains: Qantas writes from
+// qantas.com.au, easyJet from easyjet.co.uk) or a sender the user always
+// imports, and not one they never import: whose emails "Refresh from email"
+// reads again once the email reader improves (refresh.ts `readAgain`).
 export function travelSender(from: string | undefined, patterns: SenderPatterns): boolean {
   const domain = from ? senderDomain(from) : undefined;
   if (domain === undefined || patterns.deny.some((p) => domainMatches(domain, p))) return false;
-  return [...seedSenderDomains, ...travelLoyaltyDomains, ...patterns.allow].some((p) => domainMatches(domain, p));
+  if (patterns.allow.some((p) => domainMatches(domain, p))) return true;
+  const brand = brandOf(domain);
+  return [...seedSenderDomains, ...travelLoyaltyDomains].some((p) => domainMatches(domain, p) || (brand !== undefined && brandOf(p) === brand));
+}
+
+// Second-level suffixes countries register companies under (co.uk, com.au):
+// the brand is the label before them, not before the country code alone.
+const secondLevel = new Set(["co", "com", "net", "org", "ac", "gov", "ne", "or"]);
+
+// A domain's brand, the label a company registers in each country
+// ("qantas" in mail.qantas.com.au and qantas.com), when it is long enough
+// to say who it is: two or three letters (aa, ba) name many companies.
+export function brandOf(domain: string): string | undefined {
+  const labels = domain.toLowerCase().split(".").filter(Boolean);
+  if (labels.length < 2) return undefined;
+  const countryTld = labels[labels.length - 1]!.length === 2;
+  const suffix = countryTld && labels.length >= 3 && secondLevel.has(labels[labels.length - 2]!) ? 2 : 1;
+  const brand = labels[labels.length - 1 - suffix];
+  return brand && brand.length >= 4 ? brand : undefined;
 }
 
 export function senderDomain(from: string): string | undefined {

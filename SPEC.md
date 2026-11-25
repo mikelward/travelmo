@@ -1976,8 +1976,10 @@ calendar events or forwards, which cannot be fetched again), never a
 mailbox search. It also reads again, as "Import anyway" does
 (`importAgain`), each email an older email reader found no booking in
 (`not_booking`, its `readerVersion` older than the parser's, or none
-recorded) from a travel sender: a seed sender, a travel program's domain
-or one the user always imports, never one they never import
+recorded) from a travel sender: a seed sender or a travel program's domain,
+under any of its countries' domains (qantas.com.au for qantas.com, by the
+label before the country's suffix, four letters or more), or one the user
+always imports, never one they never import
 (`readAgain`). The reader's version goes up with any change to how an
 email becomes the model's text, the instructions or the model that could
 find a booking it missed (Virgin Atlantic's e-tickets, read while only their
