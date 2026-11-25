@@ -106,7 +106,8 @@ describe("tripLandmark", () => {
   it("leaves out a longer name that begins with a city's", () => {
     expect(tripLandmark("Santiago de Compostela").id).toBe("trip");
     expect(tripLandmark("Rio Grande").id).toBe("trip");
-    expect(tripLandmark("Washington State road trip").id).toBe("trip");
+    expect(tripLandmark("Washington State").id).toBe("trip");
+    expect(tripLandmark("Washington State road trip").id).toBe("road-trip");
     expect(tripLandmark("Canton, Ohio").id).toBe("trip");
     expect(tripLandmark("Santa Cruz de la Sierra").id).toBe("trip");
     expect(tripLandmark("Santiago").id).toBe("santiago");
@@ -124,6 +125,25 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Lake house").id).toBe("lake");
     expect(tripLandmark("Farm stay").id).toBe("farm");
     expect(tripLandmark("Beach week").id).toBe("beach");
+    expect(tripLandmark("City break").id).toBe("city");
+    expect(tripLandmark("Kansas City").id).toBe("city");
+    expect(tripLandmark("Old town weekend").id).toBe("town");
+    expect(tripLandmark("Camping trip").id).toBe("camp");
+    expect(tripLandmark("Cotswolds").id).toBe("countryside");
+    expect(tripLandmark("Countryside cottage").id).toBe("countryside");
+    expect(tripLandmark("Grand Canyon").id).toBe("desert");
+    expect(tripLandmark("Desert dunes").id).toBe("desert");
+    expect(tripLandmark("Napa Valley").id).toBe("wine");
+    expect(tripLandmark("Winery weekend").id).toBe("wine");
+    expect(tripLandmark("Pacific Coast Highway").id).toBe("road-trip");
+    expect(tripLandmark("Serengeti").id).toBe("safari");
+    expect(tripLandmark("Safari week").id).toBe("safari");
+    expect(tripLandmark("Disneyland").id).toBe("theme-park");
+    expect(tripLandmark("Theme park trip").id).toBe("theme-park");
+    expect(tripLandmark("Wedding weekend").id).toBe("celebration");
+    expect(tripLandmark("Honeymoon").id).toBe("celebration");
+    expect(tripLandmark("Neuschwanstein").id).toBe("castle");
+    expect(tripLandmark("Medieval castle tour").id).toBe("castle");
     expect(tripLandmark("Summer vacation").id).toBe("summer");
     expect(tripLandmark("Autumn foliage").id).toBe("autumn");
     expect(tripLandmark("Fall break").id).toBe("autumn");
@@ -148,6 +168,8 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Summer in the Alps").id).toBe("mountains");
     expect(tripLandmark("Fall in Yosemite").id).toBe("forest");
     expect(tripLandmark("Summer at Lake Como").id).toBe("lake");
+    expect(tripLandmark("Wedding in Tuscany").id).toBe("wine");
+    expect(tripLandmark("Road trip to Sedona").id).toBe("desert");
     expect(tripLandmark("Ski trip to Banff").id).toBe("banff");
     expect(tripLandmark("Summer holiday").id).toBe("summer");
     expect(tripLandmark("Christmas holiday").id).toBe("christmas");
@@ -187,6 +209,6 @@ describe("tripLandmark", () => {
         fallbacks.add(word);
       }
     }
-    expect(LANDMARKS.length).toBe(225);
+    expect(LANDMARKS.length).toBe(236);
   });
 });
