@@ -27,6 +27,12 @@
   - [x] Web: the same, the details in a dialog over the trip page.
   - [ ] Later: drop Edit, Copy reference and Directions from a booking's ⋮
         menu, now on its details.
+- [ ] Loyalty and rewards (maintainer, 2026-11-25): think through how
+      programs, points, status and rewards show up, kept apart from a
+      booking's brand logo (the brand as the traveler knows it, never the
+      loyalty chain): on Reports (balances over time? nights and flights
+      toward status?), Profile, and a booking's details page, which already
+      list programs and numbers.
 - [ ] Travelers and watching (maintainer, 2026-11-25): who each booking is
       for, and trips the user watches but isn't on (a parent's forwarded
       itinerary, a child's school trip).

@@ -338,12 +338,11 @@ its flight number's code is, from a table of the airlines travelers book
 most. A provider names an airline only when it matches exactly one listed
 ("Virgin" matches none; a booking site none). Any other booking, or a
 flight of an airline not listed, is headed by its title. The airline's
-logo sits beside its name, a version drawn for a dark background in dark
-mode, for the 91 listed airlines in the Soaring Symbols collection
+logo sits below the row's plane icon (beside the name on the booking's
+own page), a version drawn for a dark background in dark mode, for the 91 listed airlines in the Soaring Symbols collection
 (`apps/web/public/airlines/`, Android's `airline_*.png`; trademarks of the
 airlines, shown only to identify them, see `NOTICE.md` there); others show
-the name alone. The plane icon stays, so every row still says what kind of
-booking it is.
+the plane alone, so every row still says what kind of booking it is.
 
 Each import also keeps the user's people (`users/{uid}/people/{id}`,
 `PersonDoc`, the owner's alone to read): each traveler on a newly filed

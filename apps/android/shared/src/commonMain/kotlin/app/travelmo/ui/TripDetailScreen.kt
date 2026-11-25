@@ -693,27 +693,28 @@ fun SegmentRow(
     val heading = bookingHeading(segment)
     val open = onOpen?.let { Modifier.clickable(onClickLabel = stringResource(Res.string.booking_details), onClick = it) } ?: Modifier
     Row(modifier = open.padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        Icon(
-            painterResource(segmentIcon(segment.type)),
-            contentDescription = segment.type.label,
-            tint = muted,
-            modifier = Modifier.padding(top = 2.dp).size(24.dp),
-        )
+        // The kind of booking, and below it the brand's logo (an airline's), centred under it.
+        Column(modifier = Modifier.padding(top = 2.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(
+                painterResource(segmentIcon(segment.type)),
+                contentDescription = segment.type.label,
+                tint = muted,
+                modifier = Modifier.size(24.dp),
+            )
+            AirlineLogo(heading.airline, 24.dp)
+        }
         Column(modifier = Modifier.weight(1f)) {
             // As on the web: a cancelled booking stays listed, struck through.
             if (segment.isCancelled) {
                 Text(stringResource(Res.string.cancelled).uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
             }
-            // A flight is headed by its airline and its logo, its flight number leading the route (bookingHeading).
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                AirlineLogo(heading.airline, 18.dp)
-                Text(
-                    heading.headline,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    textDecoration = if (segment.isCancelled) TextDecoration.LineThrough else null,
-                )
-            }
+            // A flight is headed by its airline, its flight number leading the route (bookingHeading).
+            Text(
+                heading.headline,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                textDecoration = if (segment.isCancelled) TextDecoration.LineThrough else null,
+            )
             headedRouteLine(segment, heading)?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = muted) }
             timesLine(segment)?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = muted) }
             if (flightLines.isNotEmpty()) {
