@@ -28,6 +28,11 @@ class LandmarksTest {
         assertEquals("siem-reap", tripLandmark("Angkor Wat").id)
         assertEquals("bali", tripLandmark("Bali").id)
         assertEquals("queenstown", tripLandmark("Queenstown").id)
+        assertEquals("galway", tripLandmark("Galway").id)
+        assertEquals("inverness", tripLandmark("Loch Ness").id)
+        assertEquals("yogyakarta", tripLandmark("Borobudur").id)
+        assertEquals("riyadh", tripLandmark("Riyadh").id)
+        assertEquals("wellington", tripLandmark("Wellington").id)
     }
 
     @Test
@@ -44,6 +49,9 @@ class LandmarksTest {
         assertEquals("cologne", tripLandmark("Köln").id)
         assertEquals("quebec-city", tripLandmark("Québec").id)
         assertEquals("cancun", tripLandmark("Chichén Itzá").id)
+        assertEquals("sao-paulo", tripLandmark("São Paulo").id)
+        assertEquals("bogota", tripLandmark("Bogotá").id)
+        assertEquals("turin", tripLandmark("Torino").id)
     }
 
     @Test
@@ -70,7 +78,7 @@ class LandmarksTest {
     fun readsEveryLandmarkTheWebHas() {
         val rawEntries = landmarksJson.lines().count { it.startsWith("{\"id\":") }
         assertEquals(rawEntries, landmarks.size)
-        assertEquals(143, landmarks.size)
+        assertEquals(191, landmarks.size)
         assertEquals(landmarks.size, landmarks.map { it.id }.toSet().size)
         val seenCities = mutableSetOf<String>()
         for (landmark in landmarks) {
