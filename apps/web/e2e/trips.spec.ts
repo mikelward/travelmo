@@ -131,7 +131,7 @@ test("the owner sees an imported trip, shares it, and the partner can add a book
   // With no reference and no other trip, the menu leaves those out.
   await partnerSources.getByRole("button", { name: "Close" }).click();
   await page.getByRole("button", { name: "Booking actions" }).first().click();
-  await expect(page.getByRole("menuitem")).toHaveText(["Sources", "Edit", "Mark cancelled", "Delete"]);
+  await expect(page.getByRole("menuitem")).toHaveText(["Directions", "Sources", "Edit", "Mark cancelled", "Delete"]);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu")).toHaveCount(0);
   await page.getByRole("button", { name: "Add a booking" }).click();
@@ -186,7 +186,11 @@ test("a booking's menu copies its reference and moves it to another trip", async
   await expect(page.getByText("Cove Liverpool", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Booking actions" }).click();
-  await expect(page.getByRole("menuitem")).toHaveText(["Copy reference", "Sources", "Edit", "Mark cancelled", "Move to another trip…", "Delete"]);
+  await expect(page.getByRole("menuitem")).toHaveText(["Directions", "Copy reference", "Sources", "Edit", "Mark cancelled", "Move to another trip…", "Delete"]);
+  // Directions open Google Maps to the stay, in a new tab.
+  const directions = page.getByRole("menuitem", { name: "Directions" });
+  await expect(directions).toHaveAttribute("href", "https://www.google.com/maps/dir/?api=1&destination=Cove%20Liverpool");
+  await expect(directions).toHaveAttribute("target", "_blank");
   await page.getByRole("menuitem", { name: "Copy reference" }).click();
   await expect(page.getByRole("status")).toHaveText("Copied");
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("CV1234");

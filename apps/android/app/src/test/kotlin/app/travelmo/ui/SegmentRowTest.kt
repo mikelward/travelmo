@@ -100,12 +100,20 @@ class SegmentRowTest {
     fun `an editor gets Sources and the actions`() {
         composeRule.setContent { TravelmoTheme { SegmentRow(stay, editor) } }
         composeRule.onNodeWithContentDescription("Booking actions").performClick()
-        for (item in listOf("Sources", "Edit", "Move to another trip…", "Delete")) composeRule.onNodeWithText(item).assertExists()
+        for (item in listOf("Directions", "Sources", "Edit", "Move to another trip…", "Delete")) composeRule.onNodeWithText(item).assertExists()
     }
 
     @Test
-    fun `a booking with no sources, sender or reference has no menu for a viewer`() {
-        composeRule.setContent { TravelmoTheme { SegmentRow(fixtureUntimedActivity) } }
+    fun `Directions opens Google Maps to the stay for anyone who sees it`() {
+        composeRule.setContent { TravelmoTheme { SegmentRow(stay) } }
+        composeRule.onNodeWithContentDescription("Booking actions").performClick()
+        composeRule.onNodeWithText("Directions").performClick()
+        shadowOf(composeRule.activity).nextStartedActivity.dataString shouldBe "https://www.google.com/maps/dir/?api=1&destination=Cove%20Liverpool"
+    }
+
+    @Test
+    fun `a booking with no sources, sender, reference or place has no menu for a viewer`() {
+        composeRule.setContent { TravelmoTheme { SegmentRow(fixtureUntimedActivity.copy(destination = null)) } }
         composeRule.onNodeWithContentDescription("Booking actions").assertDoesNotExist()
     }
 

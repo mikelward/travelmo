@@ -945,7 +945,11 @@ more until the next.
 
 The owner and anyone the trip is shared with can add, edit and delete
 segments on a trip page; only the owner renames, shares or deletes the trip.
-Each booking has a ⋮ menu, the same as the Android app's: "Copy reference"
+Each booking has a ⋮ menu, the same as the Android app's: "Directions"
+(`directionsUrl`: Google Maps' directions, which a phone opens in the Maps
+app, to a journey's or car rental's start or any other booking's place, by
+its name and street address, else its spot on the map, else its name and
+town; not for a cancelled booking or one with no place), "Copy reference"
 (when it has one) and "Sources" (when it has sources or a sender) for
 everyone who sees the trip, then Edit, "Move to another trip…" and Delete for
 those who may edit. Sources opens a dialog listing each source's label and
@@ -3118,7 +3122,7 @@ list and on trip pages, from the same logic in `:core` with the
 airport-country table read as a resource; as on the web, an upcoming card is
 its title and dates; a booking row carries the viewer's matching loyalty
 programs. A booking's ⋮ menu, for anyone who sees the trip, starts with
-"Copy reference" (when it has one) and "Sources" (when it has sources or a
+Directions (when it has a place), "Copy reference" (when it has one) and "Sources" (when it has sources or a
 sender), then Edit, Move to and Delete for those who may edit, as on the web. Copy
 reference puts the reference alone on the clipboard, with no toast since
 Android (13 and later, all the app runs on) confirms a copy itself; a long

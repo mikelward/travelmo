@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { formatDateRange, isCancelled, nearbyTrips, segmentSources, sourceSearch, type Segment, type SourceRef, type Trip } from "@travelmo/core";
+import { directionsUrl, formatDateRange, isCancelled, nearbyTrips, segmentSources, sourceSearch, type Segment, type SourceRef, type Trip } from "@travelmo/core";
 import { emailLinkFor, sourceKindLabels, type EmailLinks } from "@/lib/sourceLinks";
 
 const buttonClass = "rounded-lg border border-field px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-900";
@@ -182,8 +182,8 @@ function MoveDialog({
 }
 
 /**
- * A booking's ⋮ menu, in the order Android's has: Copy reference (when it
- * has one) and Sources (when it has sources or a sender) for anyone who sees
+ * A booking's ⋮ menu, in the order Android's has: Directions (to where it
+ * leads, directionsUrl), Copy reference (when it has one) and Sources (when it has sources or a sender) for anyone who sees
  * the trip, then Edit, Mark cancelled (for a booking still booked) or Restore
  * (for a cancelled one), Move to and Delete
  * for those who may edit.
@@ -225,6 +225,7 @@ export function BookingMenu({
 
   const reference = segment.confirmation?.trim() || undefined;
   const hasSources = segmentSources(segment).length > 0 || !!segment.sender;
+  const directions = directionsUrl(segment);
   const canMove = !!onMove && ((moveTargets?.length ?? 0) > 0 || !!onMoveToNew);
   const canRestore = !!onRestore && isCancelled(segment);
   const canMarkCancelled = !!onMarkCancelled && !isCancelled(segment);
@@ -258,7 +259,7 @@ export function BookingMenu({
     return () => clearTimeout(timer);
   }, [status]);
 
-  if (!reference && !hasSources && !onEdit && !canRestore && !canMarkCancelled && !onDelete && !canMove) return null;
+  if (!directions && !reference && !hasSources && !onEdit && !canRestore && !canMarkCancelled && !onDelete && !canMove) return null;
 
   const copy = async (text: string) => {
     try {
@@ -325,6 +326,18 @@ export function BookingMenu({
           onKeyDown={keys}
           className="absolute right-0 top-8 z-10 min-w-48 rounded-lg border border-zinc-200 bg-background py-1 shadow-lg dark:border-zinc-800"
         >
+          {directions && (
+            <a
+              role="menuitem"
+              href={directions}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setOpen(false)}
+              className="block w-full px-4 py-2 text-left text-sm hover:bg-zinc-100 focus:bg-zinc-100 focus:outline-none dark:hover:bg-zinc-900 dark:focus:bg-zinc-900"
+            >
+              Directions
+            </a>
+          )}
           {reference && item("Copy reference", () => void copy(reference))}
           {hasSources && item("Sources", () => setDialog("sources"))}
           {onEdit && item("Edit", onEdit)}
