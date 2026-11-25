@@ -369,6 +369,21 @@ describe("refreshEmail", () => {
     expect([...w.memory.segments.values()].filter((s) => s.cancelledBy).map((s) => [s.id, s.cancelledBy])).toEqual([["m1-1", "m2"]]);
   });
 
+  it("merges a flight an email gave only the date of, under a codeshare partner's reference, into the flight booked", async () => {
+    const w = world();
+    const bos = { name: "Boston Logan International Airport", code: "BOS", city: "Boston", country: "US" };
+    const lhr = { name: "London Heathrow", code: "LHR", city: "London", country: "GB" };
+    const ticket: ExtractedSegment = { type: "flight", title: "VS4012 BOS to LHR", start: "2027-03-12T19:15:00-05:00", end: "2027-03-13T06:50:00+00:00", origin: bos, destination: lhr, confirmation: "E5WSJI" };
+    const menu: ExtractedSegment = { type: "flight", title: "Delta BOS to LHR", start: "2027-03-12T00:00:00-05:00", origin: bos, destination: lhr, confirmation: "GPJIZU" };
+    w.put(trip("t1"), booking("m1-0", "t1", ticket), booking("m2-0", "t1", menu));
+    w.memory.parsed.set(`${uid}/m2`, record("m2"));
+
+    expect(await w.refresh("m2", found(menu))).toMatchObject({ merged: 1 });
+    const flights = [...w.memory.segments.values()];
+    expect(flights.map((s) => [s.title, s.start, s.end, s.confirmation])).toEqual([["VS4012 BOS to LHR", ticket.start, ticket.end, "E5WSJI"]]);
+    expect(flights[0]!.sources?.map((r) => r.id).sort()).toEqual(["m1", "m2"]);
+  });
+
   it("keeps what only the duplicate knew, its reference and provider, on the booking that stays", async () => {
     const room = { ...stay, confirmation: undefined };
     const w = world();

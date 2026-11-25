@@ -1661,7 +1661,14 @@ provider, the same listing title (case, accents and punctuation aside) and
 the same check-in and check-out instants are one stay, whichever town or
 suburb each names (letters of every script count, so "東京" and "大阪"
 listings stay two), unless both carry references that differ or name
-different countries. In doubt, both are kept. One
+different countries. A journey an email gives only the date of (local
+midnight, no end, no service number: Delta's meal preselect email) is the
+one booked that day between the same airports or stations, whatever its
+reference, since a codeshare's operating airline and the airline it was
+booked with give one flight different references; it never changes that
+journey's times, and a timed email gives a date-only one its service,
+times and reference (`datedJourney`). Refresh from email merges ones filed
+before this. In doubt, both are kept. One
 event confirmed by two emails under two references (a cinema's booking
 confirmation and its reservation email) is one booking too (`sameEvent`):
 two activities at the same local minute from the same seller, by a shared

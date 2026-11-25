@@ -1291,6 +1291,24 @@ describe("importTripIt", () => {
     }
   });
 
+  it("files an email giving only the date of a codeshare flight under the partner's reference as a source of the flight booked", async () => {
+    const bos = { name: "Boston Logan International Airport", code: "BOS", city: "Boston", country: "US" };
+    const lhr = { name: "London Heathrow", code: "LHR", city: "London", country: "GB" };
+    const ticket: ExtractedBooking = { isBooking: true, segments: [{ type: "flight", title: "VS4012 BOS to LHR", start: "2026-11-29T19:15:00-05:00", end: "2026-11-30T06:50:00+00:00", origin: bos, destination: lhr, confirmation: "E5WSJI" }] };
+    const menu: ExtractedBooking = { isBooking: true, segments: [{ type: "flight", title: "Delta BOS to LHR", start: "2026-11-29T00:00:00-05:00", origin: bos, destination: { ...lhr, name: "London Heathrow Airport" }, confirmation: "GPJIZU" }] };
+    const first = email({ id: "m-ticket", subject: "Virgin Atlantic Airways e-Ticket E5WSJI", date: "Tue, 20 Oct 2026 10:00:00 +0000" });
+    const second = email({ id: "m-menu", subject: "Your Menu For Your Delta Flight Has Landed", date: "Mon, 23 Nov 2026 00:17:50 +0000" });
+    for (const order of [[first, second], [second, first]]) {
+      const store = memoryStore();
+      for (const message of order) await importMessage("u1", message, deps(store, async () => (message === first ? ticket : menu)));
+      const flights = [...store.segments.values()];
+      expect(flights.map((s) => [s.title, s.start, s.confirmation])).toEqual([["VS4012 BOS to LHR", "2026-11-29T19:15:00-05:00", "E5WSJI"]]);
+      expect(flights[0]!.sources?.map((r) => r.id).sort()).toEqual(["m-menu", "m-ticket"]);
+      // Delta's reference is kept too, for managing the booking with the airline flying it.
+      expect(flights[0]!.notes).toContain("Other reference: GPJIZU");
+    }
+  });
+
   it("keeps the source of a booking dropped as a duplicate on the booking it matched", async () => {
     const store = memoryStore();
     await importMessage("u1", email({ id: "m2", subject: "Your Ryanair itinerary" }), deps(store, async () => flight));
