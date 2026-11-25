@@ -17,9 +17,11 @@ class DirectionsTest {
     }
 
     @Test
-    fun `without an address the spot on the map else the name and town`() {
-        directionsQuery(Place("Motel Example", city = "Las Vegas", lat = 36.17, lon = -115.14)) shouldBe "36.17,-115.14"
-        directionsQuery(Place("Motel Example", city = "Las Vegas")) shouldBe "Motel Example, Las Vegas"
+    fun `without an address the name and town else the spot on the map`() {
+        // A geocoded spot may be only the town's middle: the name finds the motel.
+        directionsQuery(Place("Motel Example", city = "Las Vegas", lat = 36.17, lon = -115.14)) shouldBe "Motel Example, Las Vegas"
+        directionsQuery(Place("Motel Example", lat = 36.17, lon = -115.14)) shouldBe "36.17,-115.14"
+        directionsQuery(Place("Motel Example")) shouldBe "Motel Example"
         directionsQuery(Place("Las Vegas Motel", city = "Las Vegas")) shouldBe "Las Vegas Motel"
     }
 

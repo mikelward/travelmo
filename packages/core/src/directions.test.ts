@@ -18,9 +18,11 @@ describe("directionsUrl", () => {
     expect(destination(url)).toBe("Motel Example, 123 Example Blvd, Las Vegas, NV 89101");
   });
 
-  it("uses the spot on the map without an address, else the name and town", () => {
-    expect(destination(directionsUrl({ ...stay, destination: { name: "Motel Example", city: "Las Vegas", lat: 36.17, lon: -115.14 } }))).toBe("36.17,-115.14");
-    expect(destination(directionsUrl({ ...stay, destination: { name: "Motel Example", city: "Las Vegas" } }))).toBe("Motel Example, Las Vegas");
+  it("searches the name and town without an address, else the spot on the map", () => {
+    // A geocoded spot may be only the town's middle: the name finds the motel.
+    expect(destination(directionsUrl({ ...stay, destination: { name: "Motel Example", city: "Las Vegas", lat: 36.17, lon: -115.14 } }))).toBe("Motel Example, Las Vegas");
+    expect(destination(directionsUrl({ ...stay, destination: { name: "Motel Example", lat: 36.17, lon: -115.14 } }))).toBe("36.17,-115.14");
+    expect(destination(directionsUrl({ ...stay, destination: { name: "Motel Example" } }))).toBe("Motel Example");
     expect(destination(directionsUrl({ ...stay, destination: { name: "Las Vegas Motel", city: "Las Vegas" } }))).toBe("Las Vegas Motel");
   });
 

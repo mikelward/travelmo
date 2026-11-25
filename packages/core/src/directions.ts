@@ -11,12 +11,14 @@ export function directionsPlace(segment: ExtractedSegment): Place | undefined {
 }
 
 // What Maps is asked to find: the place's name with its address, else its
-// spot on the map, else its name with its town.
+// name with its town (Maps finds a hotel by name better than a geocoded
+// spot, which may be only the town's middle), else its spot on the map,
+// else its name.
 export function directionsQuery(place: Place): string {
-  const withName = (rest: string) => (rest.toLowerCase().includes(place.name.toLowerCase()) ? rest : `${place.name}, ${rest}`);
-  if (place.address) return withName(place.address);
+  if (place.address) return place.address.toLowerCase().includes(place.name.toLowerCase()) ? place.address : `${place.name}, ${place.address}`;
+  if (place.city) return place.name.toLowerCase().includes(place.city.toLowerCase()) ? place.name : `${place.name}, ${place.city}`;
   if (place.lat !== undefined && place.lon !== undefined) return `${place.lat},${place.lon}`;
-  return place.city && !place.name.toLowerCase().includes(place.city.toLowerCase()) ? `${place.name}, ${place.city}` : place.name;
+  return place.name;
 }
 
 // Google Maps' directions to a booking's place, which phones open in the

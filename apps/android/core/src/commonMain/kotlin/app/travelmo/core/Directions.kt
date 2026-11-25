@@ -12,13 +12,18 @@ fun directionsPlace(segment: Segment): Place? {
     return if (fromStart) segment.origin ?: segment.destination else segment.destination ?: segment.origin
 }
 
-/** What Maps is asked to find: the place's name with its address, else its spot on the map, else its name with its town. */
+/**
+ * What Maps is asked to find, as packages/core's directionsQuery: the place's name with its address, else its
+ * name with its town (Maps finds a hotel by name better than a geocoded spot, which may be only the town's
+ * middle), else its spot on the map, else its name.
+ */
 fun directionsQuery(place: Place): String {
     val address = place.address
     if (address != null) return if (address.contains(place.name, ignoreCase = true)) address else "${place.name}, $address"
-    if (place.lat != null && place.lon != null) return "${formatCoordinate(place.lat)},${formatCoordinate(place.lon)}"
     val city = place.city
-    return if (city != null && !place.name.contains(city, ignoreCase = true)) "${place.name}, $city" else place.name
+    if (city != null) return if (place.name.contains(city, ignoreCase = true)) place.name else "${place.name}, $city"
+    if (place.lat != null && place.lon != null) return "${formatCoordinate(place.lat)},${formatCoordinate(place.lon)}"
+    return place.name
 }
 
 /** Google Maps' directions to a booking's place, which phones open in the Maps app; null when it has none. */
