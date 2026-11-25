@@ -951,8 +951,8 @@ segments on a trip page; only the owner renames, shares or deletes the trip.
 Each booking has a ⋮ menu, the same as the Android app's: "Directions"
 (`directionsUrl`: Google Maps' directions, which a phone opens in the Maps
 app, to a journey's or car rental's start or any other booking's place, by
-its name and street address, else its spot on the map, else its name and
-town; not for a cancelled booking or one with no place), "Copy reference"
+its name and street address, else its name and town (a geocoded spot may be
+only the town's middle), else its spot on the map; not for a cancelled booking or one with no place), "Copy reference"
 (when it has one) and "Sources" (when it has sources or a sender) for
 everyone who sees the trip, then Edit, "Move to another trip…" and Delete for
 those who may edit. Sources opens a dialog listing each source's label and
