@@ -20,6 +20,12 @@ export const segmentTypes = [
 export const SegmentType = z.enum(segmentTypes);
 export type SegmentType = z.infer<typeof SegmentType>;
 
+// The kind of place a stay or outing is in, for a trip's picture where its
+// city has no landmark drawn (tripPicture): a big city, a small town or
+// village, a beach, the mountains, a lake, or the countryside.
+export const PlaceSetting = z.enum(["city", "town", "beach", "mountains", "lake", "countryside"]);
+export type PlaceSetting = z.infer<typeof PlaceSetting>;
+
 export const Place = z.object({
   name: z.string().min(1),
   code: z.string().min(1).optional(),
@@ -31,6 +37,8 @@ export const Place = z.object({
   // geocoder; always both or neither.
   lat: z.number().min(-90).max(90).optional(),
   lon: z.number().min(-180).max(180).optional(),
+  // What kind of place it is, as the email shows or the reader knows it.
+  setting: PlaceSetting.optional(),
 });
 export type Place = z.infer<typeof Place>;
 
@@ -203,6 +211,10 @@ export const Trip = z.object({
   allCancelled: z.boolean().optional(),
   localOnly: z.boolean().optional(),
   travelers: z.array(z.string().min(1)).max(100).optional(),
+  // What kind of place it goes to, for its picture (tripSetting), kept with
+  // the flags above: "none" when its bookings don't say. Absent on a trip
+  // from before it was kept, until an app reads its bookings.
+  setting: z.union([PlaceSetting, z.literal("none")]).optional(),
   createdAt: isoDateTime,
   updatedAt: isoDateTime,
 });

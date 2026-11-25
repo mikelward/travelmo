@@ -124,7 +124,7 @@ class TripListScreenTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Flagged off").assertDoesNotExist()
         // The trips without flags had their bookings read, and their flags recorded.
-        fake.flagsSet["liverpool"] shouldBe app.travelmo.core.TripFlags(allCancelled = false, localOnly = false, travelers = listOf("Sam Example", "Alex Example"))
+        fake.flagsSet["liverpool"] shouldBe app.travelmo.core.TripFlags(allCancelled = false, localOnly = false, travelers = listOf("Sam Example", "Alex Example"), setting = "city")
         fake.flagsSet.keys shouldNotContain fixtureFlightTrip.id
         // Each trip read once for it, however the others' repairs came and went.
         fake.repairs.groupingBy { it }.eachCount().values.all { it == 1 } shouldBe true

@@ -9,7 +9,7 @@ plugins {
 
 // The airport tables (IATA code to time zone and to country and place) are
 // the web's generated packages/core/src/airports.json and airportPlaces.json,
-// the trip list's landmark drawings its landmarks.json, and the world map its apps/web/src/lib/worldMap.json, read from there
+// the trip list's pictures its landmarks.json and bigCities.json, and the world map its apps/web/src/lib/worldMap.json, read from there
 // rather than copied, so `pnpm --filter @travelmo/core airports` refreshes
 // every app. They are compiled in as string constants, since iOS has no
 // class-path resources.
@@ -58,6 +58,7 @@ val generateCoreData = tasks.register<GenerateCoreData>("generateCoreData") {
         rootProject.file("../../packages/core/src/airports.json"),
         rootProject.file("../../packages/core/src/airportPlaces.json"),
         rootProject.file("../../packages/core/src/landmarks.json"),
+        rootProject.file("../../packages/core/src/bigCities.json"),
         rootProject.file("../web/src/lib/worldMap.json"),
     )
     outputDir = layout.buildDirectory.dir("generated/coreData")

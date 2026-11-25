@@ -1,10 +1,16 @@
+import big from "./bigCities.json";
 import table from "./landmarks.json";
+import { cityKey } from "./cityKey";
+import { compareInstants } from "./instant";
+import type { ExtractedSegment, Place, PlaceSetting, Trip } from "./schema";
+import { liveSegments } from "./trips";
 
 // A trip's picture in the trip list: an outline of the best-known landmark
 // of the city its title names, or a matching place kind, season, holiday or
 // vacation drawing when no city is named, drawn in a 48-unit square as one
 // SVG path for a 1.5-unit round-capped stroke (landmarks.json, which the
-// Android app compiles in too). Anything else gets the suitcase.
+// Android app compiles in too). Anything else gets the drawing of the kind
+// of place it goes to (tripPicture), else the suitcase.
 export interface Landmark {
   id: string;
   // What it shows, for whoever maintains the drawings.
@@ -77,4 +83,53 @@ export function tripLandmark(title: string): Landmark {
     }) ??
     SUITCASE
   );
+}
+
+const byId = new Map(LANDMARKS.map((l) => [l.id, l]));
+
+// A trip's picture: what its title names (tripLandmark), else the drawing of
+// the kind of place it goes to (the trip's `setting`), else the suitcase.
+export function tripPicture(title: string, setting?: Trip["setting"]): Landmark {
+  const named = tripLandmark(title);
+  return named !== SUITCASE ? named : ((setting && byId.get(setting)) ?? SUITCASE);
+}
+
+const bigCities = big as Record<string, readonly string[]>;
+
+// What kind of place a booking's place is: what the email or the reader
+// said, else by its town's size: a city of 250,000 people or more in its
+// country (bigCities.json) is a city, any other named town a town.
+// Undefined for a place with neither, such as an airport the source gave no
+// town for.
+export function placeSetting(place: Place | undefined): PlaceSetting | undefined {
+  if (place?.setting) return place.setting;
+  if (!place?.city) return undefined;
+  const countries = bigCities[cityKey(place.city)];
+  return countries && (!place.country || countries.includes(place.country)) ? "city" : "town";
+}
+
+const journey = new Set(["flight", "train", "bus", "ferry"]);
+const length = (s: ExtractedSegment) => (s.end ? Date.parse(s.end) - Date.parse(s.start) : 0);
+// Earliest first, then by title, so every app picks the same booking.
+const inOrder = (a: ExtractedSegment, b: ExtractedSegment) => compareInstants(a.start, b.start) || (a.title < b.title ? -1 : a.title > b.title ? 1 : 0);
+
+// What kind of place a trip goes to, for its picture: that of its longest
+// stay, else of its first outing, else of where its first journey arrives;
+// "none" when none of them says. Goes by what is still booked unless
+// nothing is.
+export function tripSetting(segments: readonly ExtractedSegment[]): PlaceSetting | "none" {
+  const live = liveSegments(segments);
+  const from = live.length > 0 ? live : [...segments];
+  const stays = from.filter((s) => s.type === "lodging").sort((a, b) => length(b) - length(a) || inOrder(a, b));
+  const outings = from.filter((s) => s.type !== "lodging" && !journey.has(s.type)).sort(inOrder);
+  const journeys = from.filter((s) => journey.has(s.type)).sort(inOrder);
+  for (const s of [...stays, ...outings]) {
+    const setting = placeSetting(s.destination ?? s.origin);
+    if (setting) return setting;
+  }
+  for (const s of journeys) {
+    const setting = placeSetting(s.destination);
+    if (setting) return setting;
+  }
+  return "none";
 }

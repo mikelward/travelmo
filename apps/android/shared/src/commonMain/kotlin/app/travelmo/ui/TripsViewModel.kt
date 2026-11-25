@@ -615,17 +615,12 @@ class TripsViewModel(
 
     /**
      * The bookings of trips that don't yet say what the list needs (flagsUnknown: from before the flags were kept,
-     * or edited since), while a filter is on or the user is known (for Watching): each listened to, counting as it
-     * answers, and its flags then recorded so it is read no more.
+     * or edited since), for its filters, Watching and pictures: each listened to, counting as it answers, and its
+     * flags then recorded so it is read no more.
      */
     private val unknownSegments: Flow<Map<String, List<Segment>>> =
-        combine(_listFilters.map { it.any }, travelers.map { it.isNotEmpty() }) { filtering, known -> filtering || known }
-            .distinctUntilChanged()
-            .flatMapLatest { on ->
-                if (!on) flowOf(emptyMap())
-                // The trips that don't yet say, as they turn up so (a later snapshot, an edit that took the flags off).
-                else trips.filterNotNull().map { all -> all.filter(::flagsUnknown).map { it.id } }.distinctUntilChanged().flatMapLatest(::segmentsAsTheyAnswer)
-            }
+        // The trips that don't yet say, as they turn up so (a later snapshot, an edit that took the flags off).
+        trips.filterNotNull().map { all -> all.filter(::flagsUnknown).map { it.id } }.distinctUntilChanged().flatMapLatest(::segmentsAsTheyAnswer)
             .shareIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
 
     /** The trips the filters leave out, by each trip's own flags (TripFlags) at once, else by its bookings once read. */

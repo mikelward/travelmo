@@ -299,4 +299,60 @@ class LandmarksTest {
             }
         }
     }
+
+    @Test
+    fun tripPictureGoesByTheTitleThenTheKindOfPlaceElseTheSuitcase() {
+        assertEquals("paris", tripPicture("Paris", "town").id)
+        assertEquals("town", tripPicture("Woburn", "town").id)
+        assertEquals("beach", tripPicture("Cornwall", "beach").id)
+        assertEquals("trip", tripPicture("Woburn", "none").id)
+        assertEquals("trip", tripPicture("Woburn").id)
+        for (setting in PLACE_SETTINGS) assertEquals(setting, tripPicture("Somewhere", setting).id)
+    }
+
+    @Test
+    fun placeSettingTakesWhatTheReaderSaidElseTheTownsSize() {
+        assertEquals("beach", placeSetting(Place("Sea View", city = "Boston", setting = "beach")))
+        assertEquals("city", placeSetting(Place("Hotel", city = "Boston", country = "US")))
+        assertEquals("town", placeSetting(Place("Hotel", city = "Woburn", country = "US")))
+        assertEquals("city", placeSetting(Place("Hotel", city = "São Paulo")))
+        // A city in Canada, a town in England.
+        assertEquals("city", placeSetting(Place("Hotel", city = "Windsor", country = "CA")))
+        assertEquals("town", placeSetting(Place("Hotel", city = "Windsor", country = "GB")))
+        assertEquals(null, placeSetting(Place("Terminal 5")))
+        assertEquals(null, placeSetting(null))
+    }
+
+    private fun stay(id: String, place: Place, start: String = "2026-12-12T15:00:00Z", end: String? = "2026-12-14T11:00:00Z", cancelledAt: String? = null) =
+        Segment(id, "t", SegmentType.LODGING, "Stay", start, end, destination = place, cancelledAt = cancelledAt)
+
+    @Test
+    fun tripSettingGoesByTheLongestStay() {
+        val short = stay("a", Place("Airport Inn", city = "Boston", country = "US"), end = "2026-12-13T11:00:00Z")
+        val long = stay("b", Place("Beach House", city = "Truro", setting = "beach"), start = "2026-12-13T15:00:00Z", end = "2026-12-20T11:00:00Z")
+        assertEquals("beach", tripSetting(listOf(short, long)))
+        assertEquals("beach", tripSetting(listOf(long, short)))
+    }
+
+    @Test
+    fun tripSettingGoesByAnOutingElseWhereTheFirstJourneyArrives() {
+        val show = Segment("s", "t", SegmentType.ACTIVITY, "Show", "2026-12-12T19:00:00Z", destination = Place("Theatre", city = "Woburn", country = "US"))
+        val out = Segment("o", "t", SegmentType.FLIGHT, "XX 1 LHR to BOS", "2026-12-12T09:00:00Z", destination = Place("Logan", city = "Boston", country = "US"))
+        val back = Segment("r", "t", SegmentType.FLIGHT, "XX 2 BOS to LHR", "2026-12-19T21:00:00Z", destination = Place("Heathrow", city = "London", country = "GB"))
+        assertEquals("town", tripSetting(listOf(back, out, show)))
+        assertEquals("city", tripSetting(listOf(back, out)))
+    }
+
+    @Test
+    fun tripSettingGoesByWhatIsStillBooked() {
+        val cancelled = stay("a", Place("Ski Lodge", city = "Zermatt", setting = "mountains"), cancelledAt = "2026-12-01T00:00:00Z")
+        val kept = stay("b", Place("Inn", city = "Woburn"), end = "2026-12-13T11:00:00Z")
+        assertEquals("town", tripSetting(listOf(cancelled, kept)))
+    }
+
+    @Test
+    fun tripSettingIsNoneWhenNoBookingSays() {
+        assertEquals("none", tripSetting(emptyList()))
+        assertEquals("none", tripSetting(listOf(stay("a", Place("Somewhere")))))
+    }
 }

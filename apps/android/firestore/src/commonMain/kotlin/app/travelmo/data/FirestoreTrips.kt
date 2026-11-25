@@ -1004,7 +1004,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         val written = db.runTransaction { t ->
             // A booking changed since the bookings were read: it is read again next time.
             if (t.get(ref).getString("updatedAt") != revision) return@runTransaction false
-            t.updateData(ref, mapOf("allCancelled" to flags.allCancelled, "localOnly" to flags.localOnly, "travelers" to flags.travelers))
+            t.updateData(ref, mapOf("allCancelled" to flags.allCancelled, "localOnly" to flags.localOnly, "travelers" to flags.travelers, "setting" to flags.setting))
             true
         }.await()
         if (!written) SharedLog.info("A trip's bookings changed while its list flags were read; left for the next read")
@@ -1142,7 +1142,7 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
      * from the bookings the next time the app reads them (TripsViewModel.keepTripFlags), rather than stand wrong for
      * a trip whose screen isn't open. As the web's edits.ts.
      */
-    private val FLAGS_UNKNOWN: Map<String, Any> = mapOf("allCancelled" to FieldValue.delete(), "localOnly" to FieldValue.delete(), "travelers" to FieldValue.delete())
+    private val FLAGS_UNKNOWN: Map<String, Any> = mapOf("allCancelled" to FieldValue.delete(), "localOnly" to FieldValue.delete(), "travelers" to FieldValue.delete(), "setting" to FieldValue.delete())
 
     /** The update that widens a trip's dates to hold a span, as a booking write does. */
     /** The trip's dates widened to hold bookings (widenedFor), as a Firestore update. */

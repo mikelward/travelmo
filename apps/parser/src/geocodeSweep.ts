@@ -1,4 +1,4 @@
-import { enrichSegments, fillAirports, fillCities, needsGeocoding, paths, type GeocodeLookup, type Segment, type Trip } from "@travelmo/core";
+import { enrichSegments, fillAirports, fillCities, needsGeocoding, paths, tripFlags, type GeocodeLookup, type Segment, type Trip } from "@travelmo/core";
 import { airportPlace } from "@travelmo/core/airportPlaces";
 import { cityCountry } from "@travelmo/core/cityCountries";
 import { FieldPath, type Firestore } from "firebase-admin/firestore";
@@ -153,11 +153,16 @@ export async function sweepGeocodeRetries(deps: ImportDeps, limit = defaultSweep
       const written = await store.withUserLock(entry.uid, async (tx) => {
         const current = await tx.getSegment(tripId, entry.segmentId);
         if (!current || current.updatedAt !== segment.updatedAt) return false;
-        tx.putSegment({
+        // Read before any write, as a transaction must.
+        const others = (await tx.listSegments(tripId)).filter((s) => s.id !== current.id);
+        const placed = {
           ...current,
           ...(enriched.origin ? { origin: enriched.origin } : {}),
           ...(enriched.destination ? { destination: enriched.destination } : {}),
-        });
+        };
+        tx.putSegment(placed);
+        // A town now known can change what kind of place the trip goes to (tripSetting).
+        tx.setTripFlags(tripId, tripFlags([...others, placed]));
         // A fresh revision per write: a client editing the trip between two
         // writes to it must see it move twice.
         tx.touchTrip(tripId, deps.now());

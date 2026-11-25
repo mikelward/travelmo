@@ -70,6 +70,7 @@ fun tripFromDocument(id: String, data: Map<String, Any?>): Trip? {
         allCancelled = data["allCancelled"] as? Boolean,
         localOnly = data["localOnly"] as? Boolean,
         travelers = (data["travelers"] as? List<*>)?.filterIsInstance<String>(),
+        setting = data.text("setting"),
     )
 }
 
@@ -90,7 +91,7 @@ fun placeFromDocument(data: Map<String, Any?>?): Place? {
     val name = data?.text("name") ?: return null
     return Place(
         name, code = data.text("code"), city = data.text("city"), country = data.text("country"), address = data.text("address"),
-        lat = (data["lat"] as? Number)?.toDouble(), lon = (data["lon"] as? Number)?.toDouble(),
+        lat = (data["lat"] as? Number)?.toDouble(), lon = (data["lon"] as? Number)?.toDouble(), setting = data.text("setting"),
     )
 }
 

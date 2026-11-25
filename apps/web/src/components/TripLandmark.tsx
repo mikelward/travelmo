@@ -1,9 +1,10 @@
-import { tripLandmark } from "@travelmo/core";
+import { tripPicture, type Trip } from "@travelmo/core";
 
-// The outline of the landmark of the city a trip's title names
-// (tripLandmark), else a suitcase; decoration, since the title says where.
-export function TripLandmark({ title }: { title: string }) {
-  const landmark = tripLandmark(title);
+// A trip's picture (tripPicture): the outline of the landmark of the city
+// its title names, else of the kind of place it goes to, else a suitcase;
+// decoration, since the title says where.
+export function TripLandmark({ title, setting }: { title: string; setting?: Trip["setting"] }) {
+  const picture = tripPicture(title, setting);
   return (
     <svg
       viewBox="0 0 48 48"
@@ -15,10 +16,10 @@ export function TripLandmark({ title }: { title: string }) {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
-      data-landmark={landmark.id}
+      data-landmark={picture.id}
       className="shrink-0 text-muted"
     >
-      <path d={landmark.d} />
+      <path d={picture.d} />
     </svg>
   );
 }

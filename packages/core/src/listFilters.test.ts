@@ -66,15 +66,20 @@ describe("hiddenFromList", () => {
 });
 
 describe("the trip's flags", () => {
-  it("are unknown until both are kept, and written only when the bookings disagree", () => {
+  it("are unknown until all are kept, and written only when the bookings disagree", () => {
     expect(flagsUnknown({})).toBe(true);
     expect(flagsUnknown({ allCancelled: false })).toBe(true);
     expect(flagsUnknown({ allCancelled: false, localOnly: false })).toBe(true);
-    expect(flagsUnknown({ allCancelled: false, localOnly: false, travelers: [] })).toBe(false);
-    expect(tripFlagsToWrite({}, [show])).toEqual({ allCancelled: false, localOnly: true, travelers: [] });
-    expect(tripFlagsToWrite({ allCancelled: false, localOnly: true, travelers: [] }, [show])).toBeUndefined();
-    expect(tripFlagsToWrite({ allCancelled: false, localOnly: true, travelers: [] }, [cancelled(show)])).toEqual({ allCancelled: true, localOnly: false, travelers: [] });
-    expect(tripFlagsToWrite({ allCancelled: false, localOnly: true, travelers: [] }, [{ ...show, travelers: ["Sam Example"] }])).toEqual({ allCancelled: false, localOnly: true, travelers: ["Sam Example"] });
+    expect(flagsUnknown({ allCancelled: false, localOnly: false, travelers: [] })).toBe(true);
+    expect(tripFlagsToWrite({}, [show])).toEqual({ allCancelled: false, localOnly: true, travelers: [], setting: "city" });
+    const kept = { allCancelled: false, localOnly: true, travelers: [], setting: "city" } as const;
+    expect(tripFlagsToWrite(kept, [show])).toBeUndefined();
+    expect(tripFlagsToWrite(kept, [cancelled(show)])).toEqual({ allCancelled: true, localOnly: false, travelers: [], setting: "city" });
+    expect(tripFlagsToWrite(kept, [{ ...show, travelers: ["Sam Example"] }])).toEqual({ allCancelled: false, localOnly: true, travelers: ["Sam Example"], setting: "city" });
+    // A trip from before its setting was kept gets it, though its filters are known.
+    expect(tripFlagsToWrite({ allCancelled: false, localOnly: true, travelers: [] }, [show])).toEqual(kept);
+    expect(flagsUnknown({ allCancelled: false, localOnly: true, travelers: [] })).toBe(true);
+    expect(flagsUnknown(kept)).toBe(false);
   });
 });
 

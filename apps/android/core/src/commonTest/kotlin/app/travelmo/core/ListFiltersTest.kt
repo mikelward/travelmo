@@ -76,13 +76,16 @@ class ListFiltersTest {
         flagsUnknown(trip) shouldBe true
         flagsUnknown(trip.copy(allCancelled = false)) shouldBe true
         flagsUnknown(trip.copy(allCancelled = false, localOnly = false)) shouldBe true
-        flagsUnknown(trip.copy(allCancelled = false, localOnly = false, travelers = emptyList())) shouldBe false
-        tripFlagsToWrite(trip, listOf(show)) shouldBe TripFlags(allCancelled = false, localOnly = true, travelers = emptyList())
-        tripFlagsToWrite(trip.copy(allCancelled = false, localOnly = true, travelers = emptyList()), listOf(show)) shouldBe null
-        tripFlagsToWrite(trip.copy(allCancelled = false, localOnly = true, travelers = emptyList()), listOf(cancelled(show))) shouldBe
-            TripFlags(allCancelled = true, localOnly = false, travelers = emptyList())
-        tripFlagsToWrite(trip.copy(allCancelled = false, localOnly = true, travelers = emptyList()), listOf(show.copy(travelers = listOf("Sam Example")))) shouldBe
-            TripFlags(allCancelled = false, localOnly = true, travelers = listOf("Sam Example"))
+        flagsUnknown(trip.copy(allCancelled = false, localOnly = false, travelers = emptyList())) shouldBe true
+        tripFlagsToWrite(trip, listOf(show)) shouldBe TripFlags(allCancelled = false, localOnly = true, travelers = emptyList(), setting = "city")
+        val kept = trip.copy(allCancelled = false, localOnly = true, travelers = emptyList(), setting = "city")
+        flagsUnknown(kept) shouldBe false
+        tripFlagsToWrite(kept, listOf(show)) shouldBe null
+        tripFlagsToWrite(kept, listOf(cancelled(show))) shouldBe TripFlags(allCancelled = true, localOnly = false, travelers = emptyList(), setting = "city")
+        tripFlagsToWrite(kept, listOf(show.copy(travelers = listOf("Sam Example")))) shouldBe
+            TripFlags(allCancelled = false, localOnly = true, travelers = listOf("Sam Example"), setting = "city")
+        // A trip from before its setting was kept gets it, though its filters are known.
+        tripFlagsToWrite(kept.copy(setting = null), listOf(show)) shouldBe TripFlags(allCancelled = false, localOnly = true, travelers = emptyList(), setting = "city")
     }
 
     // Invented people, as in listFilters.test.ts: the user, whom mail sent straight to them names most, and their mum.

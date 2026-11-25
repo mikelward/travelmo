@@ -186,15 +186,12 @@ function Trips({ user }: { user: User }) {
   const all = useAllSegments(
     trips && searched ? trips.map((t) => t.id) : undefined,
   );
-  // While a filter is on, only the bookings of trips that don't yet say what
-  // the filters need (flagsUnknown), each read once per version of the trip,
-  // whenever it turns up so (a later snapshot, an edit), and its flags kept.
-  // Read too, once, while the user is known, so a trip from before its
-  // travelers were kept can say it's one they're only watching.
+  // The bookings of trips that don't yet say what the filters and their
+  // picture need (flagsUnknown), each read once per version of the trip,
+  // whenever it turns up so (a later snapshot, an edit), and its flags kept,
+  // so each is read once and never again.
   const unknown = useSegmentsOnce(
-    (filtering || !!travelers?.length) && trips
-      ? trips.filter(flagsUnknown)
-      : undefined,
+    trips ? trips.filter(flagsUnknown) : undefined,
   );
   const bookingsOf = (id: string) => all?.byTrip[id] ?? unknown[id];
   useKeepTripFlags(trips, bookingsOf, true);

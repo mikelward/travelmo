@@ -79,12 +79,20 @@ describe("attached PDFs", () => {
 });
 
 describe("importMessage", () => {
+  it("keeps the kind of place the reader saw the stay in, for the trip's picture", async () => {
+    const store = memoryStore();
+    const beach = { ...lodging, segments: [{ ...lodging.segments[0]!, destination: { name: "Sea View", city: "Woburn", setting: "beach" as const } }] };
+    await importMessage("u1", email(), deps(store, async () => beach));
+    expect([...store.trips.values()][0]).toMatchObject({ setting: "beach" });
+  });
+
   it("creates a trip and segment from a booking email", async () => {
     const store = memoryStore();
     const outcome = await importMessage("u1", email(), deps(store, async () => lodging));
     expect(outcome).toBe("imported");
     const trip = [...store.trips.values()][0]!;
-    expect(trip).toMatchObject({ title: "Liverpool", start: "2026-12-12", end: "2026-12-14", ownerUid: "u1" });
+    // With the kind of place it goes to, for its picture in the list.
+    expect(trip).toMatchObject({ title: "Liverpool", start: "2026-12-12", end: "2026-12-14", ownerUid: "u1", setting: "city" });
     expect([...store.segments.values()][0]).toMatchObject({
       id: "m1-0",
       tripId: trip.id,

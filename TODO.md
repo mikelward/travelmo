@@ -24,7 +24,9 @@
         on Android and the web.
   - [x] Better than the suitcase for a place with no landmark drawn: the
         kind of place (beach, mountains, forest, lake, farm), season,
-        holiday or vacation.
+        holiday or vacation; else the kind of place the trip goes to
+        (city, small town, beach, mountains, lake, countryside), read by
+        the parser, else by the town's size.
   - [x] More cities' landmarks (208 cities total plus a shared beach
         drawing for 221 beach destinations, including the original seven
         redone plus Sydney, Dubai, Singapore, Barcelona, London,
@@ -526,6 +528,10 @@ Kotlin Multiplatform, sharing the Android app's Kotlin (SPEC "iOS app").
 - [ ] TestFlight builds from CI (needs the Apple Developer Program).
 
 ## Decisions needing review
+
+- A trip's picture (2026-11-25): a kind-of-place, season or holiday word in
+  its title ("Summer vacation", "Christmas") wins over the kind of place
+  its bookings go to, since the person chose the title.
 
 - Car rentals (2026-11-25): a reservation and a rental agreement (or receipt)
   from the same company, picked up and returned on the same days, are one

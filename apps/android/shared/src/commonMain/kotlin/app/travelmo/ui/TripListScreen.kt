@@ -60,6 +60,7 @@ import app.travelmo.core.Trip
 import app.travelmo.core.TripGroups
 import app.travelmo.core.WarningWhen
 import app.travelmo.core.tripCancelled
+import app.travelmo.core.tripSetting
 import app.travelmo.core.checkInLine
 import app.travelmo.core.displayTitles
 import app.travelmo.core.formatDate
@@ -330,7 +331,8 @@ fun TripCard(
     ) {
         // The landmark beside the title and dates; what comes next runs below, in line with the title.
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TripLandmark(title)
+            // Until the trip says what kind of place it goes to, its bookings do, where the list has them.
+            TripLandmark(title, trip.setting ?: segments?.let(::tripSetting))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text(
