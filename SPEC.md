@@ -265,9 +265,12 @@ that a name that is also a word counts only capitalized and not opening the
 title unless alone or before punctuation, so "Nice, France" is Nice and
 "Nice weekend" is not, and a longer name beginning with a city's is not that
 city: "Santiago de Compostela", "Rio Grande", "Washington State"), else a
-suitcase (`tripLandmark` in `packages/core/src/landmarks.ts`, mirrored in
-the Android app's core; the drawings are `landmarks.json`, one SVG path in
-a 48-unit square stroked 1.5 wide, which both apps draw). Trips under
+matching kind of place (beach, mountains, forest, lake, farm), season,
+holiday or vacation word when no city is named ("Summer in Paris" is Paris;
+"Summer vacation" is a sun), else a suitcase (`tripLandmark` in
+`packages/core/src/landmarks.ts`, mirrored in the Android app's core; the
+drawings are `landmarks.json`, one SVG path in a 48-unit square stroked 1.5
+wide, which both apps draw). Trips under
 way also show what comes next — the soonest booking start still ahead, or
 the end of one under way (check-out, arrival, car return) — read from their
 segments with one listener each; the next three upcoming trips get a

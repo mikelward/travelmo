@@ -114,14 +114,57 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Rio Grande, then Rio").id).toBe("rio-de-janeiro");
   });
 
+  it("falls back to place kind, season, holiday or vacation when no city is named", () => {
+    expect(tripLandmark("Alps").id).toBe("mountains");
+    expect(tripLandmark("Whistler").id).toBe("mountains");
+    expect(tripLandmark("Mountain getaway").id).toBe("mountains");
+    expect(tripLandmark("Yosemite").id).toBe("forest");
+    expect(tripLandmark("Forest cabin").id).toBe("forest");
+    expect(tripLandmark("Lake Como").id).toBe("lake");
+    expect(tripLandmark("Lake house").id).toBe("lake");
+    expect(tripLandmark("Farm stay").id).toBe("farm");
+    expect(tripLandmark("Beach week").id).toBe("beach");
+    expect(tripLandmark("Summer vacation").id).toBe("summer");
+    expect(tripLandmark("Autumn foliage").id).toBe("autumn");
+    expect(tripLandmark("Fall break").id).toBe("autumn");
+    expect(tripLandmark("Winter getaway").id).toBe("winter");
+    expect(tripLandmark("Spring break").id).toBe("spring");
+    expect(tripLandmark("Thanksgiving").id).toBe("thanksgiving");
+    expect(tripLandmark("Christmas break").id).toBe("christmas");
+    expect(tripLandmark("New Year's Eve").id).toBe("new-year");
+    expect(tripLandmark("Lunar New Year").id).toBe("new-year");
+    expect(tripLandmark("Easter weekend").id).toBe("easter");
+    expect(tripLandmark("Halloween").id).toBe("halloween");
+    expect(tripLandmark("Caribbean cruise").id).toBe("cruise");
+    expect(tripLandmark("Family holiday").id).toBe("vacation");
+    expect(tripLandmark("Passover").id).toBe("vacation");
+  });
+
+  it("prefers a named place over an earlier season, holiday or theme word", () => {
+    expect(tripLandmark("Summer in Paris").id).toBe("paris");
+    expect(tripLandmark("Thanksgiving in Boston").id).toBe("boston");
+    expect(tripLandmark("Beach trip to Sydney").id).toBe("sydney");
+    expect(tripLandmark("Christmas in Kihei").id).toBe("beach");
+    expect(tripLandmark("Summer in the Alps").id).toBe("mountains");
+    expect(tripLandmark("Fall in Yosemite").id).toBe("forest");
+    expect(tripLandmark("Summer at Lake Como").id).toBe("lake");
+    expect(tripLandmark("Ski trip to Banff").id).toBe("banff");
+    expect(tripLandmark("Summer holiday").id).toBe("summer");
+    expect(tripLandmark("Christmas holiday").id).toBe("christmas");
+  });
+
   it("gives a place with no landmark the suitcase", () => {
     expect(tripLandmark("Woburn").id).toBe("trip");
+    expect(tripLandmark("Niagara Falls").id).toBe("trip");
+    expect(tripLandmark("Springfield").id).toBe("trip");
+    expect(tripLandmark("Cornwall").id).toBe("trip");
     expect(tripLandmark("").id).toBe("trip");
   });
 
-  it("keeps every id and city unique, folded, and backed by a path", () => {
+  it("keeps every id, city and fallback unique, folded, and backed by a path", () => {
     const ids = new Set<string>();
     const cities = new Set<string>();
+    const fallbacks = new Set<string>();
     for (const landmark of LANDMARKS) {
       expect(ids.has(landmark.id)).toBe(false);
       ids.add(landmark.id);
@@ -138,7 +181,12 @@ describe("tripLandmark", () => {
         cities.add(foldText(name));
       }
       for (const name of landmark.not ?? []) expect(foldText(name)).toBe(name);
+      for (const word of landmark.fallback ?? []) {
+        expect(foldText(word)).toBe(word);
+        expect(fallbacks.has(word)).toBe(false);
+        fallbacks.add(word);
+      }
     }
-    expect(LANDMARKS.length).toBe(210);
+    expect(LANDMARKS.length).toBe(225);
   });
 });
