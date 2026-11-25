@@ -3,6 +3,7 @@ import {
   flightCheckDue,
   flightCheckInterval,
   flightDesignator,
+  flightNextStep,
   flightRefreshDue,
   flightStatusLines,
   flightStatusNews,
@@ -152,6 +153,18 @@ describe("flightStatusLines", () => {
     expect(flightStatusLines(status({ actualOut: "2026-12-12T22:05:00Z", estimatedIn: "2026-12-13T07:10:00Z", actualIn: "2026-12-13T07:10:00Z" }), flight, "2026-12-13T08:00:00Z")).toEqual([]);
     // Its expected departure passed with no word: taken off.
     expect(flightStatusLines(status({ departureGate: "8", baggageClaim: "16" }), flight, "2026-12-12T22:01:00Z")).toEqual(["Bags on carousel 16"]);
+  });
+
+  it("stops saying where it arrived an hour after it lands", () => {
+    const landed = status({ actualOut: "2026-12-12T22:05:00Z", actualIn: "2026-12-13T07:10:00Z", arrivalGate: "D46", arrivalTerminal: "3", baggageClaim: "16" });
+    expect(flightStatusLines(landed, flight, "2026-12-13T08:09:00Z")).toEqual(["Arrives at terminal 3, gate D46", "Bags on carousel 16"]);
+    expect(flightStatusLines(landed, flight, "2026-12-13T08:10:00Z")).toEqual([]);
+    expect(flightNextStep(landed, flight, "2026-12-13T08:09:00Z")).toBe("Terminal 3 · Gate D46 · Bags on carousel 16");
+    expect(flightNextStep(landed, flight, "2026-12-13T08:10:00Z")).toBeUndefined();
+    // With no landing time from the service, it goes by the booked one (07:30Z).
+    const unsure = status({ baggageClaim: "16" });
+    expect(flightStatusLines(unsure, flight, "2026-12-13T08:29:00Z")).toEqual(["Bags on carousel 16"]);
+    expect(flightStatusLines(unsure, flight, "2026-12-13T08:30:00Z")).toEqual([]);
   });
 
   it("says how late the flight leaves, by the airport's clock", () => {

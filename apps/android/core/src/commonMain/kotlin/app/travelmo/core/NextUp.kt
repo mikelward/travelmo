@@ -68,7 +68,7 @@ private fun heldEvent(segments: List<Segment>, now: String, statuses: Map<String
         .minByOrNull { instantMillis(it.segment.start) }
 
 /** How long after landing the card keeps to it: what waited on the landing, and the gate and carousel. */
-private const val AFTER_LANDING = 60 * 60_000L
+private const val AFTER_LANDING = SHOWN_AFTER_LANDING
 
 private class CardEvent(val event: UpcomingEvent, val then: UpcomingEvent? = null)
 

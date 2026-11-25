@@ -129,6 +129,19 @@ class FlightStatusTest {
     }
 
     @Test
+    fun stopsSayingWhereItArrivedAnHourAfterItLands() {
+        val landed = status(actualOut = "2026-12-12T22:05:00Z", actualIn = "2026-12-13T07:10:00Z", arrivalGate = "D46", arrivalTerminal = "3", baggageClaim = "16")
+        flightStatusLines(landed, flight, "2026-12-13T08:09:00Z") shouldBe listOf("Arrives at terminal 3, gate D46", "Bags on carousel 16")
+        flightStatusLines(landed, flight, "2026-12-13T08:10:00Z") shouldBe emptyList<String>()
+        flightNextStep(landed, flight, "2026-12-13T08:09:00Z") shouldBe "Terminal 3 · Gate D46 · Bags on carousel 16"
+        flightNextStep(landed, flight, "2026-12-13T08:10:00Z").shouldBeNull()
+        // With no landing time from the service, it goes by the booked one (07:30Z).
+        val unsure = status(baggageClaim = "16")
+        flightStatusLines(unsure, flight, "2026-12-13T08:29:00Z") shouldBe listOf("Bags on carousel 16")
+        flightStatusLines(unsure, flight, "2026-12-13T08:30:00Z") shouldBe emptyList<String>()
+    }
+
+    @Test
     fun saysHowLateTheFlightLeavesByTheAirportsClock() {
         val late = status(estimatedOut = "2026-12-12T22:40:00Z", estimatedIn = "2026-12-13T07:10:00Z", departureGate = "8")
         flightStatusLines(late, flight, "2026-12-12T21:00:00Z") shouldBe listOf("Leaves 40 min late, at 09:40", "Departs from gate 8")

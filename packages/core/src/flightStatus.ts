@@ -81,6 +81,9 @@ export const refreshIntervalMs = minute;
 // However late a flight runs, nobody looks after this long past its booked
 // departure.
 export const giveUpAfterMs = 30 * hour;
+// How long after landing a trip page and card still say where the flight
+// arrived and where its bags come out.
+export const shownAfterLandingMs = hour;
 // A scheduler's minute is not exact: a check this much early still counts.
 const slackMs = 15_000;
 
@@ -216,6 +219,13 @@ export function flightDeparted(booked: Pick<ExtractedSegment, "start">, status: 
   return Date.parse(at) >= Date.parse(booked.start);
 }
 
+// Whether the flight landed more than shownAfterLandingMs before `at`: the
+// service's landing, else its estimate, else the schedule, else as booked.
+function longLanded(status: FlightStatus, booked: Pick<ExtractedSegment, "end"> | undefined, at: string): boolean {
+  const lands = status.actualIn ?? status.estimatedIn ?? status.scheduledIn ?? booked?.end;
+  return lands !== undefined && Date.parse(at) >= Date.parse(lands) + shownAfterLandingMs;
+}
+
 // "Terminal 3 · Gate 12", "Terminal E · Bags on carousel 7": what is known.
 function listed(parts: readonly (string | false | undefined)[]): string | undefined {
   const known = parts.filter((p): p is string => Boolean(p));
@@ -225,8 +235,8 @@ function listed(parts: readonly (string | false | undefined)[]): string | undefi
 // The next thing to do for a flight, for a trip card's last line: before
 // takeoff, how late it leaves when it is late, else the terminal and gate
 // it leaves from; after, the terminal and gate it arrives at and where the
-// bags come out. A cancelled or diverted flight says that instead.
-// Nothing when nothing is known.
+// bags come out, for an hour after it lands. A cancelled or diverted flight
+// says that instead. Nothing when nothing is known.
 export function flightNextStep(status: FlightStatus | undefined, booked: Booked, now: string): string | undefined {
   if (!status?.found) return undefined;
   if (status.cancelled) return "Flight cancelled";
@@ -234,6 +244,7 @@ export function flightNextStep(status: FlightStatus | undefined, booked: Booked,
     if (leavesLate(status)) return `Leaves ${timing(status.scheduledOut!, status.estimatedOut!, booked.start)}`;
     return listed([status.departureTerminal && `Terminal ${status.departureTerminal}`, status.departureGate && `Gate ${status.departureGate}`]);
   }
+  if (longLanded(status, booked, now)) return undefined;
   if (status.diverted) return divertedLine(status, booked);
   return listed([
     status.arrivalTerminal && `Terminal ${status.arrivalTerminal}`,
@@ -268,14 +279,16 @@ function staged(status: FlightStatus, departed: boolean): FlightStatus {
 // time when not given): whether it is cancelled or diverted; before
 // takeoff, how late it leaves, where it leaves from and the arrival
 // terminal; after, when it lands, where it arrives and where the bags come
-// out. Times read as the airports' clocks do when the booking is given; a
+// out, until an hour after it lands, when it says nothing. Times read as the airports' clocks do when the booking is given; a
 // cancelled flight says only that. A departure back on time after news of
 // a delay still says so (it has a noticedOut), on the card and in a
 // retried notification.
 export function flightStatusLines(status: FlightStatus | undefined, booked?: Booked, now?: string): string[] {
   if (!status?.found) return [];
   if (status.cancelled) return ["Flight cancelled"];
-  const departed = departedAt(status, booked, now ?? status.checkedAt);
+  const at = now ?? status.checkedAt;
+  const departed = departedAt(status, booked, at);
+  if (departed && longLanded(status, booked, at)) return [];
   const { departure, arrival, bags } = places(staged(status, departed));
   const leaves = !departed && leavesLate(status);
   const lands = departed && !status.actualIn && status.scheduledIn !== undefined && status.estimatedIn !== undefined;

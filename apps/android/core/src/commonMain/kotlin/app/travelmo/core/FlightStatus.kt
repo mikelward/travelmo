@@ -51,11 +51,11 @@ private const val FAST_BEFORE_DEPARTURE = 2 * HOUR
 private const val FAST_BEFORE_ARRIVAL = 30 * MINUTE
 private const val AFTER_ARRIVAL = 45 * MINUTE
 /**
- * How long after landing the Live Update stays, with the last carousel the parser gave: longer
- * than it looks ([AFTER_ARRIVAL]), since immigration can take an hour and the carousel rarely
- * changes by then, and every look costs a call.
+ * How long after landing the Live Update, trip page and card still say where the flight arrived,
+ * with the last carousel the parser gave: longer than it looks ([AFTER_ARRIVAL]), since
+ * immigration can take an hour and the carousel rarely changes by then, and every look costs a call.
  */
-private const val SHOWN_AFTER_LANDING = 60 * MINUTE
+internal const val SHOWN_AFTER_LANDING = 60 * MINUTE
 private const val FAST_INTERVAL = MINUTE
 private const val SLOW_INTERVAL = 15 * MINUTE
 private const val REFRESH_BEFORE_DEPARTURE = 6 * HOUR
@@ -164,11 +164,17 @@ fun flightDeparted(booked: Segment, status: FlightStatus?, at: String): Boolean 
 /** "Terminal 3 · Gate 12", "Terminal E · Bags on carousel 7": what is known; null when nothing is. */
 private fun listed(vararg parts: String?): String? = parts.filterNotNull().takeIf { it.isNotEmpty() }?.joinToString(" · ")
 
+/** Whether the flight landed more than [SHOWN_AFTER_LANDING] before [at]: the service's landing, else its estimate, else the schedule, else as booked. */
+private fun longLanded(status: FlightStatus, booked: Segment?, at: String): Boolean {
+    val lands = status.actualIn ?: status.estimatedIn ?: status.scheduledIn ?: booked?.end ?: return false
+    return instantMillis(at) >= instantMillis(lands) + SHOWN_AFTER_LANDING
+}
+
 /**
  * The next thing to do for a flight, for a trip card's last line: before takeoff, how late it
  * leaves when it is late, else the terminal and gate it leaves from; after, the terminal and gate
- * it arrives at and where the bags come out. A cancelled or diverted flight says that instead.
- * Null when nothing is known.
+ * it arrives at and where the bags come out, for an hour after it lands. A cancelled or diverted
+ * flight says that instead. Null when nothing is known.
  */
 fun flightNextStep(status: FlightStatus?, booked: Segment, now: String): String? {
     if (status == null || !status.found) return null
@@ -177,6 +183,7 @@ fun flightNextStep(status: FlightStatus?, booked: Segment, now: String): String?
         if (leavesLate(status)) return "Leaves ${timing(status.scheduledOut!!, status.estimatedOut!!, booked.start)}"
         return listed(status.departureTerminal?.let { "Terminal $it" }, status.departureGate?.let { "Gate $it" })
     }
+    if (longLanded(status, booked, now)) return null
     if (status.diverted) return divertedLine(status, booked)
     return listed(
         status.arrivalTerminal?.let { "Terminal $it" },
@@ -198,14 +205,16 @@ private fun departedAt(status: FlightStatus, booked: Segment?, at: String): Bool
  * What the flight's card says, by its stage as of [now] (the look's own time when null): whether it
  * is cancelled or diverted; before takeoff, how late it leaves, where it leaves from and the arrival
  * terminal (no arrival gate or carousel); after, when it lands, where it arrives and where the bags
- * come out (not where it left from). Times read as the airports' clocks do when the booking is
+ * come out (not where it left from), until an hour after it lands, when it says nothing. Times read as the airports' clocks do when the booking is
  * given; a cancelled flight says only that. A departure back on time after news of a delay still
  * says so (it has a noticedOut).
  */
 fun flightStatusLines(status: FlightStatus?, booked: Segment? = null, now: String? = null): List<String> {
     if (status == null || !status.found) return emptyList()
     if (status.cancelled) return listOf("Flight cancelled")
-    val departed = departedAt(status, booked, now ?: status.checkedAt)
+    val at = now ?: status.checkedAt
+    val departed = departedAt(status, booked, at)
+    if (departed && longLanded(status, booked, at)) return emptyList()
     val diverted = if (status.diverted) divertedLine(status, booked) else null
     val leaves = !departed && leavesLate(status)
     val scheduledIn = status.scheduledIn
