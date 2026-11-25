@@ -25,6 +25,7 @@ export * from "./reminders";
 export * from "./status";
 export * from "./nextUp";
 export * from "./airlines";
+export * from "./brands";
 export * from "./checkIn";
 export * from "./forward";
 export * from "./review";

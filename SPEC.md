@@ -343,6 +343,18 @@ own page), a version drawn for a dark background in dark mode, for the 91 listed
 (`apps/web/public/airlines/`, Android's `airline_*.png`; trademarks of the
 airlines, shown only to identify them, see `NOTICE.md` there); others show
 the plane alone, so every row still says what kind of booking it is.
+Any other booking shows the logo of the brand it names, as the traveler
+knows it (`bookingBrand` in `packages/core/src/brands.ts`, mirrored in
+Android's `Brands.kt`): the brand whose name or alias its title or provider
+says as whole words, the longest (Hampton by Hilton, not Hilton), only
+among brands of its kind (a hotel brand never names a flight), a booking
+site (Booking.com, Airbnb) only when nothing else is named. A hotel brand
+without a logo of its own shows its parent's (Holiday Inn Express shows
+IHG's); loyalty programs are shown apart, never as the logo. The logos
+(Simple Icons and SVG Logos, CC0, in brand colours; Arcticons, CC BY-SA
+4.0, as line icons) are bundled with each app (`apps/web/public/brands/`,
+Android's `brand_*.png`), and Settings credits them, as Arcticons' licence
+asks.
 
 Each import also keeps the user's people (`users/{uid}/people/{id}`,
 `PersonDoc`, the owner's alone to read): each traveler on a newly filed

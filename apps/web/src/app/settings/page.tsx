@@ -1596,6 +1596,10 @@ export default function SettingsPage() {
           <ReviewSection />
           <DeleteAccountSection user={user} onDeleted={onDeleted} />
           <SignOutSection />
+          {/* Credit for the bundled logos, as Arcticons' licence asks; as on Android. */}
+          <p className="text-muted">
+            Logos from Soaring Symbols, Simple Icons, SVG Logos and Arcticons (CC BY-SA 4.0). They’re trademarks of their owners.
+          </p>
         </>
       )}
     </SignInGate>

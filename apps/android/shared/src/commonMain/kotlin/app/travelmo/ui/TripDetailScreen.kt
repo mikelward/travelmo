@@ -693,7 +693,7 @@ fun SegmentRow(
     val heading = bookingHeading(segment)
     val open = onOpen?.let { Modifier.clickable(onClickLabel = stringResource(Res.string.booking_details), onClick = it) } ?: Modifier
     Row(modifier = open.padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        // The kind of booking, and below it the brand's logo (an airline's), centred under it.
+        // The kind of booking, and below it its brand's logo (BookingLogo), centred under it.
         Column(modifier = Modifier.padding(top = 2.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(
                 painterResource(segmentIcon(segment.type)),
@@ -701,7 +701,7 @@ fun SegmentRow(
                 tint = muted,
                 modifier = Modifier.size(24.dp),
             )
-            AirlineLogo(heading.airline, 24.dp)
+            BookingLogo(segment, heading, 24.dp)
         }
         Column(modifier = Modifier.weight(1f)) {
             // As on the web: a cancelled booking stays listed, struck through.

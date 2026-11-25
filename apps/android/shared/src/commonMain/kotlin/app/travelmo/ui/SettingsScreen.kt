@@ -228,6 +228,7 @@ import app.travelmo.shared.trips_section
 import app.travelmo.shared.turn_off
 import app.travelmo.shared.use_https_link
 import app.travelmo.shared.version
+import app.travelmo.shared.logo_credits
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
@@ -344,6 +345,13 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 24.dp),
+            )
+            // Credit for the bundled logos, as Arcticons' licence asks; as on the web.
+            Text(
+                stringResource(Res.string.logo_credits),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
             )
         }
     }

@@ -552,4 +552,5 @@
     <string name="home_airports_label">%1$s airports</string>
     <string name="home_airports_none">none yet</string>
     <string name="edit_home_airports">Edit %1$s airports</string>
+    <string name="logo_credits">Logos from Soaring Symbols, Simple Icons, SVG Logos and Arcticons (CC BY-SA 4.0). They’re trademarks of their owners.</string>
 </resources>

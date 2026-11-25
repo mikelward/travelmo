@@ -186,7 +186,7 @@ fun BookingDetails(
         }
         val heading = bookingHeading(segment)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AirlineLogo(heading.airline, 24.dp)
+            BookingLogo(segment, heading, 24.dp)
             Text(heading.headline, style = MaterialTheme.typography.titleLarge, textDecoration = struck)
         }
         headedRouteLine(segment, heading)?.let { Text(it, style = body, color = muted) }
