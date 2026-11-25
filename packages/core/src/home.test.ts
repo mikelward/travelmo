@@ -292,6 +292,35 @@ describe("findTripForBooking", () => {
     expect(findTripForBooking([awayTrip, clubTrip], of, [hotel], periods)?.id).toBe("liverpool");
   });
 
+  it("starts another trip at a journey from home after the trip was last seen away, its flight home missing", () => {
+    const london = [{ city: "London", country: "GB" }];
+    const flight = (title: string, start: string, end: string, from: string, to: string, fromCity: string, toCity: string, fromCountry: string, toCountry: string): ExtractedSegment => ({
+      type: "flight",
+      title,
+      start,
+      end,
+      origin: { name: from, code: from, city: fromCity, country: fromCountry },
+      destination: { name: to, code: to, city: toCity, country: toCountry },
+    });
+    // Australia in January, the flight home never found; a trip the dates of
+    // which, bloated by a later booking, reach past February.
+    const australia = trip("australia", "2025-01-02", "2026-01-11");
+    const there = {
+      australia: [
+        flight("VA 847", "2025-01-02T13:30:00+11:00", "2025-01-02T14:55:00+11:00", "MEL", "SYD", "Melbourne", "Sydney", "AU", "AU"),
+        flight("VA 418", "2025-01-09T12:15:00+11:00", "2025-01-09T13:55:00+10:30", "SYD", "ADL", "Sydney", "Adelaide", "AU", "AU"),
+      ],
+    } as Record<string, ExtractedSegment[]>;
+    const ofThere = (id: string) => there[id] ?? [];
+    const hurghada = flight("TOM440", "2025-02-15T13:00:00+00:00", "2025-02-15T20:15:00+02:00", "LGW", "HRG", "London", "Hurghada", "GB", "EG");
+    expect(findTripForBooking([australia], ofThere, [hurghada], london)).toBeUndefined();
+    // A journey on from where the trip was is still part of it.
+    const onward = flight("VA 419", "2025-01-12T09:00:00+10:30", "2025-01-12T11:00:00+11:00", "ADL", "SYD", "Adelaide", "Sydney", "AU", "AU");
+    expect(findTripForBooking([australia], ofThere, [onward], london)?.id).toBe("australia");
+    // Home unknown: nothing says the person came home.
+    expect(findTripForBooking([australia], ofThere, [hurghada], [])?.id).toBe("australia");
+  });
+
   it("keeps a trip away out of a nearby day out even when home is unknown", () => {
     expect(findTripForBooking([clubTrip], of, [out, back], [])).toBeUndefined();
     expect(findTripForBooking([awayTrip], of, [out], [])?.id).toBe("liverpool");

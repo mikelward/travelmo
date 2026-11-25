@@ -613,6 +613,32 @@ function homeBetween(
   return later.every((s) => compareInstants(s.start, back) > 0);
 }
 
+// Whether `later` leaves from home after `earlier` was last seen away: its
+// first journey leaves the home of its day (or one of its airports) once
+// everything in `earlier` is over, and `earlier`'s last journey landed away
+// from home. The journey home is missing (an email the import never read),
+// but the person came home all the same, so `later` is another trip: without
+// this, a trip whose flight home went missing took in everything after it
+// that fell within its dates.
+function homeLeftAfter(
+  earlier: readonly Grouped[],
+  later: readonly Grouped[],
+  periods: readonly HomePeriod[],
+  overrides: readonly HomePeriod[],
+): boolean {
+  const journeysOf = (segments: readonly Grouped[]) => liveSegments(segments).filter((s) => journeyTypes.has(s.type));
+  const before = journeysOf(earlier);
+  const after = journeysOf(later);
+  if (before.length === 0 || after.length === 0) return false;
+  const last = before.reduce((a, b) => (compareInstants(finishes(b), finishes(a)) > 0 ? b : a));
+  const first = after.reduce((a, b) => (compareInstants(a.start, b.start) <= 0 ? a : b));
+  const landed = finishes(last);
+  if (compareInstants(first.start, landed) <= 0) return false;
+  if (!earlier.every((s) => compareInstants(finishes(s), first.start) <= 0)) return false;
+  if (journeyHome(last.destination, localDate(landed), periods, overrides)) return false;
+  return journeyHome(first.origin, localDate(first.start), periods, overrides);
+}
+
 // How far apart one city's airports or stations can be: JFK and Newark,
 // Heathrow and Gatwick, Narita and Haneda.
 export const areaKm = 80;
@@ -756,7 +782,9 @@ export function opensTrip(
 // home known, it and another outing within two days are both away in one
 // town. A journey, even one leaving from home, is never at home. Nothing
 // joins a trip across a journey home (homeBetween): once a trip has come
-// home, what starts after that is another trip, however soon. Before any
+// home, what starts after that is another trip, however soon; nor across a
+// journey from home after the trip was last seen away (homeLeftAfter), as
+// when its flight home is missing. Before any
 // of that, a transfer joins the trip of the flight or train it meets
 // (connects), and a journey the trip of a transfer that meets it, whichever
 // came in first.
@@ -791,6 +819,7 @@ export function findTripForBooking(
   return trips.find((trip) => {
     const segments = segmentsOf(trip.id);
     if (homeBetween(segments, booking, periods, overrides) || homeBetween(booking, segments, periods, overrides)) return false;
+    if (homeLeftAfter(segments, booking, periods, overrides) || homeLeftAfter(booking, segments, periods, overrides)) return false;
     if (!allOutings(booking) && !allOutings(segments)) return near(trip, 2);
     if (!near(trip, 2)) return false;
     const theirs = segments.filter(isOuting);

@@ -2052,7 +2052,11 @@ are never at home). Travel joins travel within two days, but never across a
 journey home: once a trip's last journey has brought someone home, what
 starts after it is another trip, however soon (`homeBetween`), so a flight
 to Boston two days after the flight back from Sweden starts a trip of its
-own. A journey ends at home when it lands in the home town, or at one of
+own. Nor does it join across a journey that leaves from home after the
+trip's last journey landed away (`homeLeftAfter`): the flight home is
+missing, but the person came home, so a trip whose flight home an import
+never found doesn't take in everything later that falls within its dates.
+A journey ends at home when it lands in the home town, or at one of
 home's airports or stations (`journeyHome`): those that two or more round
 trips leave from or come back into while home is there
 (`withHomeAirports`), however far from the town, counting only round trips
