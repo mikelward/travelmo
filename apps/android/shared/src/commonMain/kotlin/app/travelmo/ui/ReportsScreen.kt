@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.core.AirportVisit
+import app.travelmo.core.CountryDaysReport
 import app.travelmo.core.FavoritePlace
 import app.travelmo.core.HomePeriod
 import app.travelmo.core.PlaceVisit
@@ -59,6 +60,8 @@ import app.travelmo.core.TravelReport
 import app.travelmo.core.TripWithBookings
 import app.travelmo.core.TripWithSegments
 import app.travelmo.core.WorldMapData
+import app.travelmo.core.countryDays
+import app.travelmo.core.countryDaysRange
 import app.travelmo.core.countryName
 import app.travelmo.core.displayTitles
 import app.travelmo.core.favoritePlaces
@@ -81,6 +84,9 @@ import app.travelmo.shared.col_year
 import app.travelmo.shared.countries_count
 import app.travelmo.shared.days_away
 import app.travelmo.shared.days_in_each_country
+import app.travelmo.shared.home_stay
+import app.travelmo.shared.residence_days
+import app.travelmo.shared.residence_no_home_country
 import app.travelmo.shared.download_csv
 import app.travelmo.shared.download_trips
 import app.travelmo.shared.download_trips_hint
@@ -99,9 +105,7 @@ import app.travelmo.shared.trips_per_year
 import app.travelmo.shared.trips_save_failed
 import app.travelmo.shared.trips_saved
 import app.travelmo.shared.trips_up_to
-import app.travelmo.shared.unknown_days
-import app.travelmo.shared.unplaced_bookings
-import app.travelmo.shared.unplaced_hint
+import app.travelmo.shared.uncounted_days
 import app.travelmo.shared.year
 import app.travelmo.ui.theme.TravelmoTheme
 import kotlinx.coroutines.Dispatchers
@@ -130,6 +134,11 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
     val whole = remember(input, today) { input?.let { travelReport(it, today) } }
     val report = remember(input, today, year) { if (year == null) whole else input?.let { travelReport(it, today, year) } }
     val titles = remember(input) { displayTitles(input.orEmpty().map { it.trip }) }
+    // Where the user was each day, home included, by the year picked.
+    val countries = remember(input, homes, today, year) {
+        val periods = homes
+        if (input == null || periods == null) null else countryDaysRange(input, today, year)?.let { countryDays(input, periods, it) }
+    }
     val favorites = remember(input) { input?.let { trips -> favoritePlaces(trips.map { TripWithBookings(it.trip, it.segments) }) }.orEmpty() }
     Scaffold(topBar = { AppTopBar(stringResource(Res.string.reports_title), onOpenSettings = onOpenSettings) }, bottomBar = bottomBar) { padding ->
         if (whole == null || report == null) {
@@ -143,41 +152,8 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
             item(key = "map") {
                 WorldMap(worldMap, visited = report.countries.map { it.country }.toSet(), airports = report.airports, places = report.places, modifier = Modifier.padding(top = 16.dp))
             }
-            if (report.unknownDays > 0 || report.unplaced > 0) {
-                item(key = "unplaced") {
-                    val parts = listOfNotNull(
-                        report.unknownDays.takeIf { it > 0 }?.let { pluralStringResource(Res.plurals.unknown_days, it, it) },
-                        report.unplaced.takeIf { it > 0 }?.let { pluralStringResource(Res.plurals.unplaced_bookings, it, it) },
-                    )
-                    Text(stringResource(Res.string.unplaced_hint, parts.joinToString("; ")), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
-                }
-            }
-            if (report.countries.isNotEmpty()) {
-                item(key = "countries") {
-                    // Each country opens to the trips with days there, so a surprising one can be found.
-                    var open by rememberSaveable { mutableStateOf<String?>(null) }
-                    val trips = remember(input) { input.orEmpty().associate { it.trip.id to it.trip } }
-                    SectionTitle(stringResource(Res.string.days_in_each_country))
-                    Table(
-                        header = listOf(stringResource(Res.string.col_country) to 2f, stringResource(Res.string.col_days) to 0.7f, stringResource(Res.string.col_trips) to 0.7f),
-                        rows = report.countries.map { listOf(countryName(it.country), it.days.toString(), it.trips.toString()) },
-                        onRow = { r -> report.countries[r].country.let { open = if (open == it) null else it } },
-                        open = report.countries.indexOfFirst { it.country == open }.takeIf { it >= 0 },
-                        under = { r ->
-                            Column(modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)) {
-                                for (id in report.countries[r].tripIds) {
-                                    val trip = trips[id]
-                                    Text(
-                                        listOfNotNull(titles[id] ?: trip?.title, trip?.let { formatDateRange(it.start, it.end) }).joinToString(" · "),
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.clickable { onOpenTrip(id) }.padding(vertical = 4.dp),
-                                    )
-                                }
-                            }
-                        },
-                    )
-                }
+            countries?.let { days ->
+                item(key = "countries") { CountryDaysSection(days, titles, onOpenTrip) }
             }
             if (favorites.isNotEmpty()) {
                 item(key = "favorites") { SectionTitle(stringResource(Res.string.favorite_places)) }
@@ -229,6 +205,55 @@ private fun YearPicker(years: List<String>, year: String?, onPick: (String?) -> 
         ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.pinchFontSizeHost()) {
             DropdownMenuItem(text = { Text(stringResource(Res.string.all_years)) }, onClick = { onPick(null); open = false })
             for (y in years) DropdownMenuItem(text = { Text(y) }, onClick = { onPick(y); open = false })
+        }
+    }
+}
+
+/**
+ * Days in each country, home included, split into stays at each border crossing; each country
+ * opens to its stays, latest first, so a surprising one can be found and fixed. Days nothing places
+ * come first, to be given a place, and count nowhere until they are.
+ */
+@Composable
+private fun CountryDaysSection(report: CountryDaysReport, titles: Map<String, String>, onOpenTrip: (String) -> Unit) {
+    if (report.countries.isEmpty() && report.unplaced.isEmpty() && report.homeCountryKnown) return
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    var open by rememberSaveable { mutableStateOf<String?>(null) }
+    SectionTitle(stringResource(Res.string.days_in_each_country))
+    if (!report.homeCountryKnown) {
+        Text(stringResource(Res.string.residence_no_home_country), style = MaterialTheme.typography.bodyLarge, color = muted)
+    }
+    if (report.unplaced.isNotEmpty()) {
+        val total = report.unplaced.sumOf { it.days }
+        Text(pluralStringResource(Res.plurals.uncounted_days, total, total), style = MaterialTheme.typography.bodyLarge, color = muted)
+        for (s in report.unplaced) {
+            StayLine(formatDateRange(s.start, s.end), s.days, null, s.tripIds, titles, onOpenTrip)
+        }
+    }
+    Table(
+        header = listOf(stringResource(Res.string.col_country) to 2f, stringResource(Res.string.col_days) to 0.7f),
+        rows = report.countries.map { listOf(countryName(it.country), it.days.toString()) },
+        onRow = { r -> report.countries[r].country.let { open = if (open == it) null else it } },
+        open = report.countries.indexOfFirst { it.country == open }.takeIf { it >= 0 },
+        under = { r ->
+            Column(modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)) {
+                for (s in report.countries[r].stays) {
+                    StayLine(formatDateRange(s.start, s.end), s.days, if (s.home) stringResource(Res.string.home_stay) else null, s.tripIds, titles, onOpenTrip)
+                }
+            }
+        },
+    )
+}
+
+/** "24–30 Nov 2026 · 7 days · Boston": a run of days, each trip's title opening that trip. */
+@Composable
+private fun StayLine(dates: String, days: Int, label: String?, tripIds: List<String>, titles: Map<String, String>, onOpenTrip: (String) -> Unit) {
+    val text = listOfNotNull(dates, pluralStringResource(Res.plurals.residence_days, days, days), label).joinToString(" · ")
+    FlowRow(modifier = Modifier.padding(vertical = 4.dp)) {
+        Text(text, style = MaterialTheme.typography.bodyLarge)
+        for (id in tripIds) {
+            Text(" · ", style = MaterialTheme.typography.bodyLarge)
+            Text(titles[id] ?: id, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { onOpenTrip(id) })
         }
     }
 }

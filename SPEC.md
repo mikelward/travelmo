@@ -491,9 +491,20 @@ place (a stay, a station, a restaurant) whose booking knows its coordinates.
 A year picker narrows the
 counts and the map to one year; the trips-per-year table always shows every
 year. Trips still ahead are not counted, and a trip under way counts up to
-today. Each country in the days table opens to the trips with days there,
-latest first, each linking to its trip (web and Android), so a country
-that looks wrong can be traced to the booking that put it there.
+today.
+
+"Days in each country" counts every day from the first trip (or of the year
+picked) to today, home included (`countryDays` in
+`packages/core/src/residence.ts`, the residence timeline below): a day with
+no trip, or only outings and trips that stay in one country, is in home's
+country as of that day, and a day crossing a border counts for both
+countries. Each country opens to its stays, latest first: runs of days from
+arriving to leaving, "24–30 Nov 2026 · 7 days · Boston" with a link to the
+trip that took the viewer there, or "· Home" for a run at home, where the
+trips inside it are not listed (web and Android). Trip days whose bookings
+place them in no country are left out of every country and listed above the
+table with their trips, to be given a country (or a flight its airport code);
+when home has no country, the table says to add one on Profile instead.
 
 A place's country is the one its booking names, and its spot (`lat`, `lon`)
 the one its booking carries. Imports fill both in when the source gave none:

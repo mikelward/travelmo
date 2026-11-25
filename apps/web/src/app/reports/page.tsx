@@ -1,6 +1,6 @@
 "use client";
 
-import { displayTitles, favoritePlaces, formatDateRange, placeRows, placeRowsCsv, travelReport, tripRows, tripRowsCsv, type FavoritePlace, type HomePeriod, type PlaceLookup, type SummaryTrip, type TravelReport, type Trip } from "@travelmo/core";
+import { countryDays, countryDaysRange, displayTitles, favoritePlaces, formatDateRange, placeRows, placeRowsCsv, travelReport, tripRows, tripRowsCsv, type FavoritePlace, type CountryDaysReport, type HomePeriod, type PlaceLookup, type SummaryTrip, type TravelReport } from "@travelmo/core";
 import Link from "next/link";
 import type { User } from "firebase/auth";
 import { Fragment, useEffect, useMemo, useState } from "react";
@@ -46,20 +46,55 @@ function Summary({ report }: { report: TravelReport }) {
   );
 }
 
-// Each country opens to the trips with days there, so a surprising one can
-// be found and fixed.
-function Countries({ report, titles, trips }: { report: TravelReport; titles: Map<string, string>; trips: ReadonlyMap<string, Trip> }) {
+const days = (n: number) => plural(n, "day");
+
+// Where the user was each day, home included, split into stays at each
+// border crossing; each country opens to its stays, latest first, so a
+// surprising one can be found and fixed. Days nothing places come first,
+// to be given a place, and count nowhere until they are.
+function Countries({ report, titles }: { report: CountryDaysReport; titles: Map<string, string> }) {
   const [open, setOpen] = useState<string>();
-  if (!report.countries.length) return null;
+  if (!report.countries.length && !report.unplaced.length && report.homeCountryKnown) return null;
   return (
     <section className="mt-8">
       <h2 className="text-lg font-medium">Days in each country</h2>
+      {!report.homeCountryKnown && (
+        <p className="mt-1 text-muted">
+          Days with no trip count as at home, but home has no country yet. Add one on your{" "}
+          <Link href="/profile" className="underline">
+            Profile
+          </Link>
+          .
+        </p>
+      )}
+      {report.unplaced.length > 0 && (
+        <div className="mt-1" data-testid="unplaced">
+          <p className="text-muted">
+            {days(report.unplaced.reduce((n, s) => n + s.days, 0))} we can&rsquo;t place aren&rsquo;t counted. Give these trips&rsquo; bookings a
+            country, or a flight its airport code.
+          </p>
+          <ul className="mt-1 space-y-1" aria-label="Days we can't place">
+            {report.unplaced.map((s) => (
+              <li key={s.start}>
+                {formatDateRange(s.start, s.end)} · {days(s.days)}
+                {s.tripIds.map((id) => (
+                  <span key={id}>
+                    {" · "}
+                    <Link href={`/trips/${id}`} className="hover:underline">
+                      {titles.get(id) ?? "Trip"}
+                    </Link>
+                  </span>
+                ))}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <table className="mt-2 w-full" aria-label="Days in each country">
         <thead className="text-left text-muted">
           <tr>
             <th className="py-1 font-normal">Country</th>
             <th className="py-1 text-right font-normal">Days</th>
-            <th className="py-1 text-right font-normal">Trips</th>
           </tr>
         </thead>
         <tbody>
@@ -76,24 +111,26 @@ function Countries({ report, titles, trips }: { report: TravelReport; titles: Ma
                     {countryName(c.country)}
                   </button>
                 </td>
-                <td className="py-1 text-right tabular-nums">{c.days}</td>
-                <td className="py-1 text-right tabular-nums">{c.trips}</td>
+                <td className="py-1 text-right tabular-nums">{c.days.toLocaleString("en-US")}</td>
               </tr>
               {open === c.country && (
                 <tr>
-                  <td colSpan={3} className="pb-2">
-                    <ul aria-label={`Trips in ${countryName(c.country)}`} className="ml-4">
-                      {c.tripIds.map((id) => {
-                        const trip = trips.get(id);
-                        return (
-                          <li key={id}>
-                            <Link href={`/trips/${id}`} className="hover:underline">
-                              {titles.get(id) ?? trip?.title ?? "A trip"}
-                            </Link>
-                            {trip && <span className="text-muted"> · {formatDateRange(trip.start, trip.end)}</span>}
-                          </li>
-                        );
-                      })}
+                  <td colSpan={2} className="pb-2">
+                    <ul aria-label={`Stays in ${countryName(c.country)}`} className="ml-4">
+                      {c.stays.map((s) => (
+                        <li key={s.start}>
+                          {formatDateRange(s.start, s.end)} · {days(s.days)}
+                          {s.home && " · Home"}
+                          {s.tripIds.map((id) => (
+                            <span key={id}>
+                              {" · "}
+                              <Link href={`/trips/${id}`} className="hover:underline">
+                                {titles.get(id) ?? "Trip"}
+                              </Link>
+                            </span>
+                          ))}
+                        </li>
+                      ))}
                     </ul>
                   </td>
                 </tr>
@@ -272,7 +309,11 @@ function Report({ user }: { user: User }) {
     return deriveHomes(byTrip, [], profile.homes ?? []).periods;
   }, [trips, segments, profile, user.uid]);
   const titles = useMemo(() => displayTitles(trips ?? []), [trips]);
-  const tripsById = useMemo(() => new Map((trips ?? []).map((t) => [t.id, t])), [trips]);
+  const countries = useMemo(() => {
+    if (!all || !homes || !tables || tables instanceof Error) return undefined;
+    const range = countryDaysRange(all.withSegments, today, year || undefined);
+    return range && countryDays(all.withSegments, homes, range, tables.lookup);
+  }, [all, homes, tables, today, year]);
 
   if (tables instanceof Error) return <p className="text-danger">The map couldn&apos;t be loaded: {tables.message}</p>;
   if (!report || !tables || !all || !segments) return <p className="text-muted">Loading reports…</p>;
@@ -310,19 +351,7 @@ function Report({ user }: { user: User }) {
         places={report.places}
         name={countryName}
       />
-      {(report.unknownDays > 0 || report.unplaced > 0) && (
-        <p className="mt-2 text-zinc-600 dark:text-zinc-400" data-testid="unplaced">
-          {[
-            report.unknownDays > 0 && `${plural(report.unknownDays, "day")} away with no country known`,
-            report.unplaced > 0 && `${plural(report.unplaced, "booking")} with no country`,
-          ]
-            .filter(Boolean)
-            .join("; ")}
-          : bookings say where they are by their country, or for a flight its airport code; the map shows the places that know their
-          spot.
-        </p>
-      )}
-      <Countries report={report} titles={titles} trips={tripsById} />
+      {countries && <Countries report={countries} titles={titles} />}
       <Favorites places={favoritePlaces(all.withSegments)} titles={titles} />
       {homes && <ResidenceDays trips={all.withSegments} homes={homes} lookup={tables.lookup} today={today} titles={titles} />}
       <Years report={all.report} onPick={setYear} />

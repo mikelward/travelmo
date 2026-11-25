@@ -44,7 +44,8 @@ function* dates(from: string, to: string): Generator<string> {
 // flight across the date line). No country and not in transit is a day
 // nothing places: a trip day whose bookings name no country, or a day at a
 // home with no country.
-export type DayPresence = { countries: Set<string>; tripIds: Set<string>; assumedHome: boolean; inTransit: boolean };
+// `tripCountries`: the countries each trip puts the traveler in that day.
+export type DayPresence = { countries: Set<string>; tripIds: Set<string>; assumedHome: boolean; inTransit: boolean; tripCountries?: Map<string, Set<string>> };
 
 export function presenceTimeline(
   all: readonly TripWithSegments[],
@@ -63,9 +64,10 @@ export function presenceTimeline(
       // days, and a day of outings near home that name no place puts the
       // traveler nowhere new: both are at home.
       if (day < from || !place.started || place.local) continue;
-      const known = days.get(day) ?? { countries: new Set<string>(), tripIds: new Set<string>(), assumedHome: false, inTransit: false };
+      const known = days.get(day) ?? { countries: new Set<string>(), tripIds: new Set<string>(), assumedHome: false, inTransit: false, tripCountries: new Map<string, Set<string>>() };
       for (const c of place.countries) known.countries.add(c);
       known.tripIds.add(trip.id);
+      known.tripCountries?.set(trip.id, new Set([...(known.tripCountries.get(trip.id) ?? []), ...place.countries]));
       known.inTransit = !known.countries.size && (known.inTransit || place.inTransit);
       days.set(day, known);
     }
@@ -707,5 +709,77 @@ export function residenceReport(
   return {
     results: set.rules.map((rule) => evaluateRule(rule, timeline, date, homes)),
     homeCountryKnown: homes.some((h) => Boolean(h.country)),
+  };
+}
+
+// ---- Days in each country ----
+
+// A run of days in one country, from the day of arriving to the day of
+// leaving (a day crossing a border counts for both countries): at home, or
+// on the trips that took the traveler there. A trip that stays in the
+// country is part of the run, not a run of its own.
+export type CountryStay = { start: string; end: string; days: number; home: boolean; tripIds: string[] };
+
+// Stays latest first.
+export type CountryDays = { country: string; days: number; stays: CountryStay[] };
+
+export type CountryDaysReport = {
+  // Most days first.
+  countries: CountryDays[];
+  // Runs of trip days nothing places, with the trips whose bookings to give
+  // a place, latest first; counted in no country until they have one.
+  unplaced: Stretch[];
+  // Whether every day with no trip has a home country to be in.
+  homeCountryKnown: boolean;
+};
+
+// The days a report on `year` (or every year, when none) covers: that year
+// up to `today`, or from the first trip begun to `today`. None before any
+// trip has begun.
+export function countryDaysRange(all: readonly TripWithSegments[], today: string, year?: string): DateRange | undefined {
+  if (year) return year > today.slice(0, 4) ? undefined : { start: `${year}-01-01`, end: `${year}-12-31` < today ? `${year}-12-31` : today };
+  const starts = all.flatMap(({ trip, segments }) => reportBounds(trip, segments)?.start ?? []).filter((s) => s <= today);
+  if (!starts.length) return undefined;
+  return { start: starts.reduce((a, b) => (a < b ? a : b)), end: today };
+}
+
+// Where the traveler was each day of `range`, home included, as runs of days
+// in each country.
+export function countryDays(all: readonly TripWithSegments[], homes: readonly HomePeriod[], range: DateRange, lookup?: PlaceLookup): CountryDaysReport {
+  const timeline = presenceTimeline(all, homes, range.start, range.end, lookup);
+  const open = new Map<string, { start: string; end: string; days: number; home: boolean; tripIds: Set<string> }>();
+  const stays = new Map<string, CountryStay[]>();
+  const close = (country: string) => {
+    const run = open.get(country);
+    if (!run) return;
+    open.delete(country);
+    const stay = { start: run.start, end: run.end, days: run.days, home: run.home, tripIds: run.home ? [] : [...run.tripIds].sort() };
+    stays.set(country, [...(stays.get(country) ?? []), stay]);
+  };
+  for (const day of dates(range.start, range.end)) {
+    const d = timeline.get(day);
+    const here = d?.countries ?? new Set<string>();
+    const homeCountry = countryCode(homeAt(homes, day)?.country ?? "");
+    // A stay ends when the traveler leaves, or when the country stops or
+    // starts being home (a move abroad mid-stay starts a stay away).
+    for (const c of [...open.keys()]) if (!here.has(c) || open.get(c)!.home !== (c === homeCountry)) close(c);
+    for (const c of here) {
+      const run = open.get(c) ?? { start: day, end: day, days: 0, home: c === homeCountry, tripIds: new Set<string>() };
+      run.end = day;
+      run.days += 1;
+      // Only the trips that put the traveler in this country: two trips
+      // sharing a day in different countries each link to their own.
+      for (const [t, there] of d?.tripCountries ?? []) if (there.has(c)) run.tripIds.add(t);
+      open.set(c, run);
+    }
+  }
+  for (const c of [...open.keys()]) close(c);
+  return {
+    countries: [...stays]
+      .map(([country, runs]) => ({ country, days: runs.reduce((n, r) => n + r.days, 0), stays: [...runs].reverse() }))
+      .sort((a, b) => b.days - a.days || a.country.localeCompare(b.country)),
+    // Home's missing country is one fix on the Profile, not a run of days.
+    unplaced: stretches(timeline, range, (d) => isUnknown(d) && !d?.assumedHome, new Set(), false).reverse(),
+    homeCountryKnown: ![...timeline.values()].some((d) => d.assumedHome && !d.countries.size),
   };
 }

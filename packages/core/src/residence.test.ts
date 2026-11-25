@@ -3,6 +3,8 @@ import { airportPlace } from "./airportPlaces";
 import type { HomePeriod } from "./home";
 import type { TripWithSegments } from "./reports";
 import {
+  countryDays,
+  countryDaysRange,
   evaluateRule,
   presenceTimeline,
   residenceReport,
@@ -508,5 +510,70 @@ describe("residenceReport", () => {
       expect(set.rules.length).toBeGreaterThan(0);
       for (const r of set.rules) expect(r.source).toMatch(/^https:\/\/(www\.gov\.uk|home-affairs\.ec\.europa\.eu|www\.uscis\.gov|www\.irs\.gov|www\.canada\.ca|immi\.homeaffairs\.gov\.au)\//);
     }
+  });
+});
+
+describe("countryDays", () => {
+  const boston = roundTrip("boston", "2026-11-24", "2026-11-29", "LHR", "BOS");
+  const liverpool = trip("liverpool", "2026-11-10", "2026-11-12", [stay("Dock Hotel", "GB", "2026-11-10T15:00:00+00:00", "2026-11-12T11:00:00+00:00")]);
+  const nowhere = trip("nowhere", "2026-11-15", "2026-11-16", [
+    { type: "lodging", title: "Somewhere", start: "2026-11-15T15:00:00+00:00", end: "2026-11-16T11:00:00+00:00", destination: { name: "Somewhere" } },
+  ]);
+  const all = [boston, liverpool, nowhere];
+  const report = countryDays(all, london, { start: "2026-11-01", end: "2026-11-30" }, airportPlace);
+
+  it("splits the days into stays between border crossings, home included, a crossing day counting for both", () => {
+    expect(report.countries).toEqual([
+      {
+        country: "GB",
+        days: 24,
+        stays: [
+          { start: "2026-11-29", end: "2026-11-30", days: 2, home: true, tripIds: [] },
+          { start: "2026-11-17", end: "2026-11-24", days: 8, home: true, tripIds: [] },
+          { start: "2026-11-01", end: "2026-11-14", days: 14, home: true, tripIds: [] },
+        ],
+      },
+      { country: "US", days: 6, stays: [{ start: "2026-11-24", end: "2026-11-29", days: 6, home: false, tripIds: ["boston"] }] },
+    ]);
+  });
+
+  it("links each stay to the trips that put the traveler in that country", () => {
+    const us = trip("us", "2026-11-01", "2026-11-03", [stay("Desert Inn", "US", "2026-11-01T15:00:00-05:00", "2026-11-03T11:00:00-05:00")]);
+    const fr = trip("fr", "2026-11-03", "2026-11-05", [stay("Hôtel Exemple", "FR", "2026-11-03T15:00:00+01:00", "2026-11-05T11:00:00+01:00")]);
+    const stays = countryDays([us, fr], london, { start: "2026-11-01", end: "2026-11-06" }, airportPlace).countries;
+    expect(stays.find((c) => c.country === "US")?.stays.map((s) => s.tripIds)).toEqual([["us"]]);
+    expect(stays.find((c) => c.country === "FR")?.stays.map((s) => s.tripIds)).toEqual([["fr"]]);
+  });
+
+  it("starts a stay away when home moves to another country mid-stay", () => {
+    const hotel = trip("hotel", "2026-11-03", "2026-11-04", [stay("Example Hotel", "GB", "2026-11-03T15:00:00+00:00", "2026-11-04T11:00:00+00:00")]);
+    const moved = [
+      { city: "London", country: "GB", until: "2026-11-02" },
+      { city: "Boston", country: "US", from: "2026-11-03" },
+    ];
+    expect(countryDays([hotel], moved, { start: "2026-11-01", end: "2026-11-04" }, airportPlace).countries.find((c) => c.country === "GB")?.stays).toEqual([
+      { start: "2026-11-03", end: "2026-11-04", days: 2, home: false, tripIds: ["hotel"] },
+      { start: "2026-11-01", end: "2026-11-02", days: 2, home: true, tripIds: [] },
+    ]);
+  });
+
+  it("leaves days nothing places out of every country, with the trips to give a place", () => {
+    expect(report.unplaced).toEqual([{ start: "2026-11-15", end: "2026-11-16", days: 2, countries: [], tripIds: ["nowhere"] }]);
+    expect(report.homeCountryKnown).toBe(true);
+    const homeless = countryDays(all, [{ city: "London" }], { start: "2026-11-01", end: "2026-11-30" }, airportPlace);
+    expect(homeless.homeCountryKnown).toBe(false);
+    // Days at a home with no country are for the Profile to fix, not listed.
+    expect(homeless.unplaced.map((s) => s.tripIds)).toEqual([["nowhere"]]);
+    // A home with a country later on does not cover the days before it.
+    const movedIn = [{ city: "Somewhere", until: "2026-11-19" }, { city: "London", country: "GB", from: "2026-11-20" }];
+    expect(countryDays(all, movedIn, { start: "2026-11-01", end: "2026-11-30" }, airportPlace).homeCountryKnown).toBe(false);
+    expect(countryDays(all, movedIn, { start: "2026-11-20", end: "2026-11-30" }, airportPlace).homeCountryKnown).toBe(true);
+  });
+
+  it("covers a year up to today, or everything from the first trip", () => {
+    expect(countryDaysRange(all, "2026-11-30", "2026")).toEqual({ start: "2026-01-01", end: "2026-11-30" });
+    expect(countryDaysRange(all, "2026-11-30", "2025")).toEqual({ start: "2025-01-01", end: "2025-12-31" });
+    expect(countryDaysRange(all, "2026-11-30")).toEqual({ start: "2026-11-10", end: "2026-11-30" });
+    expect(countryDaysRange([], "2026-11-30")).toBeUndefined();
   });
 });

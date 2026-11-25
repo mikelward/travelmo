@@ -104,6 +104,7 @@ class ResidenceDaysTest {
     @Test
     fun `asks for home's country when nothing gives one`() {
         show(FakeTripStore())
-        composeRule.onNodeWithText("Days with no trip count as at home, but home has no country yet. Add one on your Profile.").performScrollTo()
+        // Here, and in Days in each country.
+        composeRule.onAllNodesWithText("Days with no trip count as at home, but home has no country yet. Add one on your Profile.").assertCountEquals(2)
     }
 }

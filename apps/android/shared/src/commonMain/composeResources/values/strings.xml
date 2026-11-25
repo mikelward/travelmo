@@ -321,15 +321,11 @@
         <item quantity="one">%1$d country</item>
         <item quantity="other">%1$d countries</item>
     </plurals>
-    <plurals name="unknown_days">
-        <item quantity="one">%1$d day away with no country known</item>
-        <item quantity="other">%1$d days away with no country known</item>
+    <plurals name="uncounted_days">
+        <item quantity="one">%1$d day we can't place isn't counted. Give these trips' bookings a country, or a flight its airport code.</item>
+        <item quantity="other">%1$d days we can't place aren't counted. Give these trips' bookings a country, or a flight its airport code.</item>
     </plurals>
-    <plurals name="unplaced_bookings">
-        <item quantity="one">%1$d booking with no country</item>
-        <item quantity="other">%1$d bookings with no country</item>
-    </plurals>
-    <string name="unplaced_hint">%1$s: bookings say where they are by their country, or for a flight its airport code; the map shows the places that know their spot.</string>
+    <string name="home_stay">Home</string>
     <string name="map_description">Map of the world with %1$s marked</string>
     <string name="map_empty">Map of the world, with nowhere marked yet</string>
     <string name="days_in_each_country">Days in each country</string>
