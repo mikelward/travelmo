@@ -24,7 +24,7 @@
   - [x] Android: the details page (✎ edits, a tap on the reference copies
         it, a tap on a place shows it in Maps), the rows without the small
         print, Rename in the ⋮ menu.
-  - [ ] Web: the same.
+  - [x] Web: the same, the details in a dialog over the trip page.
   - [ ] Later: drop Edit, Copy reference and Directions from a booking's ⋮
         menu, now on its details.
 - [ ] Travelers and watching (maintainer, 2026-11-25): who each booking is

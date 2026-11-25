@@ -8,7 +8,7 @@ const buttonClass = "rounded-lg border border-field px-3 py-2 text-sm hover:bg-z
 
 // A modal on the browser's own <dialog>: it traps focus, closes on Escape
 // and hands focus back to whatever opened it.
-export function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Dialog({ title, onClose, children, actions }: { title: string; onClose: () => void; children: ReactNode; actions?: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const dialog = ref.current;
@@ -24,7 +24,10 @@ export function Dialog({ title, onClose, children }: { title: string; onClose: (
       className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-xl border border-zinc-200 bg-background p-0 text-foreground backdrop:bg-black/40 dark:border-zinc-800"
     >
       <div className="p-5">
-        <h2 className="text-lg font-medium">{title}</h2>
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="text-lg font-medium">{title}</h2>
+          {actions}
+        </div>
         <div className="mt-3 max-h-[60vh] overflow-y-auto">{children}</div>
         <div className="mt-4 flex justify-end">
           <button type="button" onClick={onClose} className={buttonClass}>
@@ -38,19 +41,17 @@ export function Dialog({ title, onClose, children }: { title: string; onClose: (
 
 // Every email, TripIt trip or calendar event the booking was read from,
 // including ones dropped as duplicates of it, then the sender, as Android's
-// Sources dialog lists them. An email the viewer imported opens in Gmail.
-function SourcesDialog({
+// booking details list them. An email the viewer imported opens in Gmail.
+export function SourcesList({
   segment,
   emailLinks,
   onLearnSender,
   onNeverSender,
-  onClose,
 }: {
   segment: Segment;
   emailLinks?: EmailLinks;
   onLearnSender?: () => void;
   onNeverSender?: () => void;
-  onClose: () => void;
 }) {
   const sources = segmentSources(segment);
   const [copied, setCopied] = useState(false);
@@ -65,7 +66,7 @@ function SourcesDialog({
     );
   };
   return (
-    <Dialog title="Sources" onClose={onClose}>
+    <>
       {copied && <p className="pb-2 text-sm">Search copied. Paste it in Gmail&apos;s search.</p>}
       <ul data-testid="segment-sources">
         {sources.map((source) => {
@@ -94,10 +95,7 @@ function SourcesDialog({
               {" · "}
               <button
                 type="button"
-                onClick={() => {
-                  onLearnSender();
-                  onClose();
-                }}
+                onClick={onLearnSender}
                 className="underline"
               >
                 Always import this sender
@@ -109,10 +107,7 @@ function SourcesDialog({
               {" · "}
               <button
                 type="button"
-                onClick={() => {
-                  onNeverSender();
-                  onClose();
-                }}
+                onClick={onNeverSender}
                 className="underline"
               >
                 Never import this sender
@@ -121,7 +116,7 @@ function SourcesDialog({
           )}
         </p>
       )}
-    </Dialog>
+    </>
   );
 }
 
@@ -183,8 +178,8 @@ function MoveDialog({
 
 /**
  * A booking's ⋮ menu, in the order Android's has: Directions (to where it
- * leads, directionsUrl), Copy reference (when it has one) and Sources (when it has sources or a sender) for anyone who sees
- * the trip, then Edit, Mark cancelled (for a booking still booked) or Restore
+ * leads, directionsUrl) and Copy reference (when it has one) for anyone who
+ * sees the trip (the sources are on the booking's details), then Edit, Mark cancelled (for a booking still booked) or Restore
  * (for a cancelled one), Move to and Delete
  * for those who may edit.
  */
@@ -197,9 +192,6 @@ export function BookingMenu({
   moveTargets,
   onMove,
   onMoveToNew,
-  emailLinks,
-  onLearnSender,
-  onNeverSender,
 }: {
   segment: Segment;
   onEdit?: () => void;
@@ -212,19 +204,15 @@ export function BookingMenu({
   onMove?: (tripId: string) => void;
   // Moves the booking into a trip made for it.
   onMoveToNew?: () => void;
-  emailLinks?: EmailLinks;
-  onLearnSender?: () => void;
-  onNeverSender?: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [dialog, setDialog] = useState<"sources" | "move">();
+  const [dialog, setDialog] = useState<"move">();
   const [status, setStatus] = useState<string>();
   const wrapper = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
 
   const reference = segment.confirmation?.trim() || undefined;
-  const hasSources = segmentSources(segment).length > 0 || !!segment.sender;
   const directions = directionsUrl(segment);
   const canMove = !!onMove && ((moveTargets?.length ?? 0) > 0 || !!onMoveToNew);
   const canRestore = !!onRestore && isCancelled(segment);
@@ -259,7 +247,7 @@ export function BookingMenu({
     return () => clearTimeout(timer);
   }, [status]);
 
-  if (!directions && !reference && !hasSources && !onEdit && !canRestore && !canMarkCancelled && !onDelete && !canMove) return null;
+  if (!directions && !reference && !onEdit && !canRestore && !canMarkCancelled && !onDelete && !canMove) return null;
 
   const copy = async (text: string) => {
     try {
@@ -339,22 +327,12 @@ export function BookingMenu({
             </a>
           )}
           {reference && item("Copy reference", () => void copy(reference))}
-          {hasSources && item("Sources", () => setDialog("sources"))}
           {onEdit && item("Edit", onEdit)}
           {canMarkCancelled && onMarkCancelled && item("Mark cancelled", onMarkCancelled)}
           {canRestore && onRestore && item("Restore", onRestore)}
           {canMove && item("Move to another trip…", () => setDialog("move"))}
           {onDelete && item("Delete", onDelete)}
         </div>
-      )}
-      {dialog === "sources" && (
-        <SourcesDialog
-          segment={segment}
-          {...(emailLinks ? { emailLinks } : {})}
-          {...(onLearnSender ? { onLearnSender } : {})}
-          {...(onNeverSender ? { onNeverSender } : {})}
-          onClose={closeDialog}
-        />
       )}
       {dialog === "move" && onMove && (
         <MoveDialog segment={segment} targets={moveTargets ?? []} onMove={onMove} {...(onMoveToNew ? { onMoveToNew } : {})} onClose={closeDialog} />

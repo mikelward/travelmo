@@ -1012,16 +1012,21 @@ Each booking has a ⋮ menu, the same as the Android app's: "Directions"
 (`directionsUrl`: Google Maps' directions, which a phone opens in the Maps
 app, to a journey's or car rental's start or any other booking's place, by
 its name and street address, else its name and town (a geocoded spot may be
-only the town's middle), else its spot on the map; not for a cancelled booking or one with no place), "Copy reference"
-(when it has one) and "Sources" (when it has sources or a sender) for
-everyone who sees the trip, then Edit, "Move to another trip…" and Delete for
-those who may edit. Sources opens a dialog listing each source's label and
-kind (an email the viewer imported links to Gmail), then "From" the sender
-with "Always import this sender" and "Never import this sender" for the owner
-(each where it isn't already the rule); Move to another trip… opens a dialog of
+only the town's middle), else its spot on the map; not for a cancelled booking or one with no place) and "Copy reference"
+(when it has one) for everyone who sees the trip, then Edit, "Move to another
+trip…" and Delete for those who may edit. Move to another trip… opens a dialog of
 "New trip" (the owner only), then the viewer's other trips within two weeks of
-the booking's dates (`nearbyTrips`), the rest behind "More…". The row itself
-shows only the booking.
+the booking's dates (`nearbyTrips`), the rest behind "More…". The row shows
+the booking's title, route, times, a flight's gates and check-in, and its
+stars; a tap on it opens the booking's details (`BookingDetailsDialog`, as
+Android's details page): the day it starts, each place named with its address
+or town (a link that shows it in Google Maps, `mapsUrl`), the provider,
+"Ref …" (a tap copies it), who it is for, the viewer's matching loyalty
+programs, the notes, and the sources: each source's label and kind (an email
+the viewer imported links to Gmail), then "From" the sender with "Always
+import this sender" and "Never import this sender" for the owner (each where
+it isn't already the rule). A ✎ beside its title edits it, for those who may.
+Rename is in the trip's own ⋮ menu beside its name, for the owner.
 The same people can rate a booking one to five stars and mark it a favorite
 (`rating`, `favorite` on the segment; tapping the current star clears the
 rating): a write like any other, moving the booking's revision

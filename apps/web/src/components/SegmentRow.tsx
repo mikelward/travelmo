@@ -1,5 +1,9 @@
+"use client";
+
+import { useState, type MouseEvent } from "react";
 import { SegmentIcon } from "@/components/SegmentIcon";
 import { BookingMenu } from "@/components/BookingMenu";
+import { BookingDetailsDialog } from "@/components/BookingDetails";
 import type { EmailLinks } from "@/lib/sourceLinks";
 import {
   formatDate,
@@ -7,7 +11,6 @@ import {
   isCancelled,
   localDate,
   localTime,
-  loyaltyLine,
   type ProfileEntry,
   type Segment,
   type SegmentType,
@@ -133,10 +136,15 @@ export function SegmentRow({
   // Says the booking didn't happen; offered only on one still booked.
   onMarkCancelled?: () => void;
 }) {
+  const [details, setDetails] = useState(false);
   const cancelled = isCancelled(segment);
   const route = [place(segment.origin), place(segment.destination)].filter(Boolean).join(" → ");
-  // Addresses an address pick recorded, under the route they belong to.
-  const addresses = [segment.origin?.address, segment.destination?.address].filter(Boolean).join(" → ");
+  // A tap anywhere on the row but its own controls opens the booking.
+  const open = (e: MouseEvent) => {
+    if ((e.target as HTMLElement).closest("button, a, input, [role=menu]")) return;
+    setDetails(true);
+  };
+  const verdict = <Verdict segment={segment} {...(onRate ? { onRate } : {})} {...(onFavorite ? { onFavorite } : {})} />;
   const end = endLabel(segment);
   // A day out with no time of its own shows none, not 00:00.
   const times = isUntimed(segment)
@@ -146,14 +154,32 @@ export function SegmentRow({
       : `${localTime(segment.start)}${end ? ` – ${end}` : ""}`;
   return (
     <li className="flex gap-4 py-3">
+      {details && (
+        <BookingDetailsDialog
+          segment={segment}
+          route={route || undefined}
+          times={times}
+          verdict={verdict}
+          programs={programs}
+          emailLinks={emailLinks}
+          onEdit={onEdit}
+          onLearnSender={onLearnSender}
+          onNeverSender={onNeverSender}
+          onClose={() => setDetails(false)}
+        />
+      )}
       <SegmentIcon type={segment.type} label={labels[segment.type]} className="mt-0.5 shrink-0 text-muted" />
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 cursor-pointer" onClick={open}>
         {cancelled && (
           <p className="text-xs font-medium uppercase tracking-wide text-danger" data-testid="segment-cancelled">
             Cancelled
           </p>
         )}
-        <p className={`font-medium${cancelled ? " text-muted line-through" : ""}`}>{segment.title}</p>
+        <p className={`font-medium${cancelled ? " text-muted line-through" : ""}`}>
+          <button type="button" onClick={() => setDetails(true)} className="block w-full text-left hover:underline">
+            {segment.title}
+          </button>
+        </p>
         {route && <p className={`text-sm text-zinc-600 dark:text-zinc-400${cancelled ? " line-through" : ""}`}>{route}</p>}
         {times && <p className={`text-sm text-zinc-600 dark:text-zinc-400${cancelled ? " line-through" : ""}`}>{times}</p>}
         {flightLines && flightLines.length > 0 && (
@@ -176,27 +202,7 @@ export function SegmentRow({
             </button>
           </p>
         )}
-        {addresses && <p className="mt-1 text-xs text-muted">{addresses}</p>}
-        {segment.travelers && segment.travelers.length > 0 && (
-          <p className="mt-1 text-xs text-muted" data-testid="segment-travelers">
-            For {segment.travelers.join(", ")}
-          </p>
-        )}
-        {(segment.confirmation || segment.provider) && (
-          <p className="mt-1 text-xs text-muted">
-            {[segment.provider, segment.confirmation && `Ref ${segment.confirmation}`].filter(Boolean).join(" · ")}
-          </p>
-        )}
-        {programs && programs.length > 0 && (
-          // One program a line, so whose each number is stays plain.
-          <ul className="mt-1 text-xs text-muted" data-testid="segment-loyalty">
-            {programs.map((p, i) => (
-              <li key={`${p.title}-${i}`}>{loyaltyLine(p)}</li>
-            ))}
-          </ul>
-        )}
-        {segment.notes && <p className="mt-1 whitespace-pre-line text-xs text-muted">{segment.notes}</p>}
-        <Verdict segment={segment} {...(onRate ? { onRate } : {})} {...(onFavorite ? { onFavorite } : {})} />
+        {verdict}
       </div>
       <BookingMenu
         segment={segment}
@@ -207,9 +213,6 @@ export function SegmentRow({
         {...(moveTargets ? { moveTargets } : {})}
         {...(onMove ? { onMove } : {})}
         {...(onMoveToNew ? { onMoveToNew } : {})}
-        {...(emailLinks ? { emailLinks } : {})}
-        {...(onLearnSender ? { onLearnSender } : {})}
-        {...(onNeverSender ? { onNeverSender } : {})}
       />
     </li>
   );

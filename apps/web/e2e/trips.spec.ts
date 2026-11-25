@@ -1,5 +1,5 @@
 import { devices, expect, test } from "@playwright/test";
-import { bookingAction, owner, partner, signIn, signOut } from "./helpers";
+import { bookingAction, openBooking, owner, partner, signIn, signOut } from "./helpers";
 import { gmailIdPrefix } from "@travelmo/core";
 import { clearData, deleteTripDoc, readSegments, readSenderPatterns, seedFlight, seedGmail, seedTrip, readTrip } from "./seed";
 
@@ -20,8 +20,7 @@ test("an imported email opens in the Gmail account it came from", async ({ page 
   });
   await page.goto("/trips/e2e-trip");
   await expect(page.getByText("Cove Liverpool", { exact: true })).toBeVisible();
-  await bookingAction(page, "Sources");
-  const sources = page.getByRole("dialog", { name: "Sources" });
+  const sources = await openBooking(page, "Cove Liverpool");
   await expect(sources.getByRole("link", { name: "Your stay at Cove" })).toHaveAttribute(
     "href",
     "https://mail.google.com/mail/u/?authuser=owner.mail%40example.com#all/m1",
@@ -76,12 +75,53 @@ test.describe("on a phone", () => {
       sources: [{ kind: "gmail", id: "m1", label: "Your stay at Cove", uid: ownerUid, at: "2026-11-01T09:00:00Z", sentAt: "2026-10-31T23:00:00Z" }],
     });
     await page.goto("/trips/e2e-trip");
-    await bookingAction(page, "Sources");
-    const sources = page.getByRole("dialog", { name: "Sources" });
+    const sources = await openBooking(page, "Cove Liverpool");
     await sources.getByRole("link", { name: "Your stay at Cove" }).click();
     await expect(sources.getByText("Search copied. Paste it in Gmail's search.")).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('from:cove.example subject:"Your stay at Cove" after:2026/10/30 before:2026/11/02');
   });
+});
+
+test("a tap on a booking opens its details: the small print, its place in Maps, the reference to copy and a pencil to edit", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const ownerUid = await signIn(page, owner);
+  await seedTrip(ownerUid, "e2e-trip", {
+    confirmation: "CV1234",
+    provider: "Cove",
+    notes: "Late check-in after 22:00",
+    destination: { name: "Cove Liverpool", city: "Liverpool", country: "GB", address: "4 Hope Street, Liverpool L1 9AB" },
+  });
+  await page.goto("/trips/e2e-trip");
+  // The row keeps only what tells the bookings apart.
+  await expect(page.getByText("Ref CV1234", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("Late check-in after 22:00")).toHaveCount(0);
+  // A tap anywhere on the row opens it, not only on the title.
+  await page.getByText("Check-in 15:00", { exact: false }).click();
+  const details = page.getByRole("dialog", { name: "Cove Liverpool" });
+  await expect(details).toContainText("Sat 12 Dec");
+  await expect(details).toContainText("Late check-in after 22:00");
+  await expect(details.getByRole("link", { name: /Cove Liverpool/ })).toHaveAttribute(
+    "href",
+    "https://www.google.com/maps/search/?api=1&query=Cove%20Liverpool%2C%204%20Hope%20Street%2C%20Liverpool%20L1%209AB",
+  );
+  await details.getByRole("button", { name: "Ref CV1234" }).click();
+  await expect(details.getByRole("status")).toHaveText("Copied");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("CV1234");
+  await details.getByRole("button", { name: "Edit" }).click();
+  await expect(details).toBeHidden();
+  await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+});
+
+test("the owner renames a trip from its menu", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  await seedTrip(ownerUid, "e2e-trip");
+  await page.goto("/trips/e2e-trip");
+  await expect(page.getByRole("button", { name: "Rename" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Trip actions" }).click();
+  await page.getByRole("menuitem", { name: "Rename" }).click();
+  await page.getByRole("textbox").first().fill("Liverpool weekend");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Liverpool weekend" })).toBeVisible();
 });
 
 test("the owner sees an imported trip, shares it, and the partner can add a booking", async ({ page }) => {
@@ -101,15 +141,14 @@ test("the owner sees an imported trip, shares it, and the partner can add a book
   await expect(page.getByRole("img", { name: "Stay", exact: true })).toBeVisible();
   // Every source of the booking, kept out of the row, the email opening in Gmail for the owner.
   await expect(page.getByText("Your stay at Cove")).toHaveCount(0);
-  await bookingAction(page, "Sources");
-  const sources = page.getByRole("dialog", { name: "Sources" });
+  const sources = await openBooking(page, "Cove Liverpool");
   await expect(sources.getByTestId("segment-sources")).toHaveText("Your stay at CoveEmailLiverpool weekendTripIt");
   await expect(sources).toContainText("From cove.example · Always import this sender · Never import this sender");
   await expect(sources.getByRole("link", { name: "Your stay at Cove" })).toHaveAttribute("href", /^https:\/\/mail\.google\.com\/mail\/u\/0\/#all\/m1$/);
-  // Closing it puts focus back on the booking's menu button.
+  // Closing it puts focus back on the booking that opened it.
   await page.keyboard.press("Escape");
   await expect(sources).toBeHidden();
-  await expect(page.getByRole("button", { name: "Booking actions" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "Cove Liverpool", exact: true })).toBeFocused();
 
   await page.getByPlaceholder("partner@example.com").fill(partner);
   await page.getByRole("button", { name: "Share" }).click();
@@ -122,16 +161,15 @@ test("the owner sees an imported trip, shares it, and the partner can add a book
   await expect(card.getByText("Shared")).toBeVisible();
   await card.click();
 
-  await expect(page.getByRole("button", { name: "Rename" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Trip actions" })).toHaveCount(0);
   // The email is in the owner's mailbox, so a partner sees it named, not linked.
-  await bookingAction(page, "Sources");
-  const partnerSources = page.getByRole("dialog", { name: "Sources" });
+  const partnerSources = await openBooking(page, "Cove Liverpool");
   await expect(partnerSources.getByTestId("segment-sources")).toContainText("Your stay at Cove");
-  await expect(partnerSources.getByRole("link")).toHaveCount(0);
+  await expect(partnerSources.getByTestId("segment-sources").getByRole("link")).toHaveCount(0);
   // With no reference and no other trip, the menu leaves those out.
   await partnerSources.getByRole("button", { name: "Close" }).click();
   await page.getByRole("button", { name: "Booking actions" }).first().click();
-  await expect(page.getByRole("menuitem")).toHaveText(["Directions", "Sources", "Edit", "Mark cancelled", "Delete"]);
+  await expect(page.getByRole("menuitem")).toHaveText(["Directions", "Edit", "Mark cancelled", "Delete"]);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu")).toHaveCount(0);
   await page.getByRole("button", { name: "Add a booking" }).click();
@@ -186,7 +224,7 @@ test("a booking's menu copies its reference and moves it to another trip", async
   await expect(page.getByText("Cove Liverpool", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Booking actions" }).click();
-  await expect(page.getByRole("menuitem")).toHaveText(["Directions", "Copy reference", "Sources", "Edit", "Mark cancelled", "Move to another trip…", "Delete"]);
+  await expect(page.getByRole("menuitem")).toHaveText(["Directions", "Copy reference", "Edit", "Mark cancelled", "Move to another trip…", "Delete"]);
   // Directions open Google Maps to the stay, in a new tab.
   const directions = page.getByRole("menuitem", { name: "Directions" });
   await expect(directions).toHaveAttribute("href", "https://www.google.com/maps/dir/?api=1&destination=Cove%20Liverpool");
@@ -231,8 +269,7 @@ test("never importing a sender offers to delete what it already imported", async
   await seedTrip(ownerUid, "e2e-class", {}, { title: "Class", start: "2026-12-19", end: "2026-12-20" });
   await page.goto("/trips/e2e-trip");
   await expect(page.getByRole("heading", { level: 1, name: "Liverpool" })).toBeVisible();
-  await bookingAction(page, "Sources");
-  await page.getByRole("dialog", { name: "Sources" }).getByRole("button", { name: "Never import this sender" }).click();
+  await (await openBooking(page, "Cove Liverpool")).getByRole("button", { name: "Never import this sender" }).click();
   const confirm = page.getByRole("dialog", { name: "Delete what it imported?" });
   await expect(confirm).toContainText("Mail from cove.example won’t be imported again. Delete 1 trip and 1 booking already imported from it?");
   await expect.poll(async () => (await readSenderPatterns(ownerUid))?.deny).toEqual(["cove.example"]);
@@ -247,8 +284,7 @@ test("a booking that arrives while the offer is open keeps its trip", async ({ p
   await seedTrip(ownerUid, "e2e-trip");
   await seedTrip(ownerUid, "e2e-class", {}, { title: "Class", start: "2026-12-19", end: "2026-12-20" });
   await page.goto("/trips/e2e-trip");
-  await bookingAction(page, "Sources");
-  await page.getByRole("dialog", { name: "Sources" }).getByRole("button", { name: "Never import this sender" }).click();
+  await (await openBooking(page, "Cove Liverpool")).getByRole("button", { name: "Never import this sender" }).click();
   const confirm = page.getByRole("dialog", { name: "Delete what it imported?" });
   await expect(confirm).toContainText("Delete 2 trips already imported from it?");
   // Another sender's booking lands in the class trip before the answer.
@@ -265,8 +301,7 @@ test("a cleanup that deleted this trip and then failed is still there to retry",
   await seedTrip(ownerUid, "e2e-other", {}, { title: "Other", start: "2026-12-19", end: "2026-12-20" });
   await seedFlight("e2e-other");
   await page.goto("/trips/e2e-trip");
-  await bookingAction(page, "Sources");
-  await page.getByRole("dialog", { name: "Sources" }).getByRole("button", { name: "Never import this sender" }).click();
+  await (await openBooking(page, "Cove Liverpool")).getByRole("button", { name: "Never import this sender" }).click();
   const confirm = page.getByRole("dialog", { name: "Delete what it imported?" });
   await expect(confirm).toContainText("Delete 1 trip and 1 booking already imported from it?");
   // The other trip goes elsewhere, so deleting its stay fails after this trip is gone.
