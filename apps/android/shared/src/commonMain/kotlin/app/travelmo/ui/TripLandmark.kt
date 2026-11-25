@@ -14,12 +14,15 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.unit.dp
 import app.travelmo.core.Landmark
-import app.travelmo.core.tripLandmark
+import app.travelmo.core.tripPicture
 
-/** The outline of the landmark of the city [title] names (tripLandmark), else a suitcase; decoration, since the title says where. */
+/**
+ * A trip's picture ([tripPicture]): the outline of the landmark of the city [title] names, else of the kind of place
+ * it goes to ([setting]), else a suitcase; decoration, since the title says where.
+ */
 @Composable
-fun TripLandmark(title: String, modifier: Modifier = Modifier) {
-    val vector = remember(title) { landmarkVector(tripLandmark(title)) }
+fun TripLandmark(title: String, setting: String?, modifier: Modifier = Modifier) {
+    val vector = remember(title, setting) { landmarkVector(tripPicture(title, setting)) }
     Icon(vector, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier.size(40.dp))
 }
 

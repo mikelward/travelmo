@@ -5,7 +5,7 @@ package app.travelmo.core
 // matching place kind, season, holiday or vacation drawing when no city is
 // named, drawn in a 48-unit square as one SVG path for a 1.5-unit round-capped
 // stroke (packages/core/src/landmarks.json, compiled in). Anything else gets
-// the suitcase.
+// the drawing of the kind of place it goes to ([tripPicture]), else the suitcase.
 
 data class Landmark(
     val id: String,
@@ -116,4 +116,58 @@ fun warmTables() {
     airportPlace("LHR")
     airportZone("LHR")
     worldMap.countries.size
+}
+
+/** The kinds of place a stay or outing is in: a big city, a small town or village, a beach, the mountains, a lake, the countryside. */
+val PLACE_SETTINGS = listOf("city", "town", "beach", "mountains", "lake", "countryside")
+
+/** A trip's picture: what its title names ([tripLandmark]), else the drawing of the kind of place it goes to ([setting]), else the suitcase. */
+fun tripPicture(title: String, setting: String? = null): Landmark {
+    val named = tripLandmark(title)
+    if (named.id != "trip") return named
+    return landmarks.firstOrNull { setting != null && setting in PLACE_SETTINGS && it.id == setting } ?: named
+}
+
+private val bigCityEntry = Regex(""""([^"]+)":\[([^\]]*)]""")
+
+/** Each name some city of at least 250,000 people has, with the countries it is that big in (bigCities.json). */
+private val bigCities: Map<String, List<String>> by lazy {
+    bigCityEntry.findAll(bigCitiesJson).associate { m ->
+        m.groupValues[1] to Regex(""""([A-Z]{2})"""").findAll(m.groupValues[2]).map { it.groupValues[1] }.toList()
+    }
+}
+
+/**
+ * What kind of place a booking's place is: what the email or the reader said, else by its town's size: a city of
+ * 250,000 people or more in its country is a city, any other named town a town. Null for a place with neither.
+ */
+fun placeSetting(place: Place?): String? {
+    place?.setting?.takeIf { it in PLACE_SETTINGS }?.let { return it }
+    val city = place?.city ?: return null
+    val countries = bigCities[foldText(city)]
+    return if (countries != null && (place.country == null || place.country in countries)) "city" else "town"
+}
+
+private val JOURNEYS = setOf(SegmentType.FLIGHT, SegmentType.TRAIN, SegmentType.BUS, SegmentType.FERRY)
+
+// A booking's instants are checked where they are written (the rules' isInstant), so one that doesn't parse
+// throws here, as everywhere else they are read (compareInstants), rather than order the bookings quietly wrong.
+private fun lengthOf(s: Segment): Long = s.end?.let { end -> instantMillis(end) - instantMillis(s.start) } ?: 0L
+
+/** Earliest first, then by title, so every app picks the same booking. */
+private val inOrder = Comparator<Segment> { a, b -> compareInstants(a.start, b.start).takeIf { it != 0 } ?: a.title.compareTo(b.title) }
+
+/**
+ * What kind of place a trip goes to, for its picture: that of its longest stay, else of its first outing, else of
+ * where its first journey arrives; "none" when none of them says. Goes by what is still booked unless nothing is.
+ */
+fun tripSetting(segments: List<Segment>): String {
+    val live = liveSegments(segments)
+    val from = live.ifEmpty { segments }
+    val stays = from.filter { it.type == SegmentType.LODGING }.sortedWith(compareByDescending<Segment> { lengthOf(it) }.then(inOrder))
+    val outings = from.filter { it.type != SegmentType.LODGING && it.type !in JOURNEYS }.sortedWith(inOrder)
+    val journeys = from.filter { it.type in JOURNEYS }.sortedWith(inOrder)
+    for (s in stays + outings) placeSetting(s.destination ?: s.origin)?.let { return it }
+    for (s in journeys) placeSetting(s.destination)?.let { return it }
+    return "none"
 }

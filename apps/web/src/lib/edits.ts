@@ -21,7 +21,7 @@ const now = () => new Date().toISOString();
 // flags off (listFilters.ts): unknown again, they are recomputed from the
 // bookings the next time an app reads them (useKeepTripFlags), rather than
 // stand wrong for a trip whose page isn't open.
-const flagsUnknown = () => ({ allCancelled: deleteField(), localOnly: deleteField(), travelers: deleteField() });
+const flagsUnknown = () => ({ allCancelled: deleteField(), localOnly: deleteField(), travelers: deleteField(), setting: deleteField() });
 
 const min = (a: string, b: string) => (a < b ? a : b);
 const max = (a: string, b: string) => (a > b ? a : b);

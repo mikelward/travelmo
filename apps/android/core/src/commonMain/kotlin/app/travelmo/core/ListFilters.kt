@@ -53,22 +53,24 @@ fun watchedTrip(trip: Trip, segments: List<Segment>?, people: List<Person>): Boo
     watching(segments?.let(::tripTravelers) ?: trip.travelers, people)
 
 /**
- * What the trip list's filters need of a trip's bookings, kept on the trip so the list filters without reading
- * them: the parser records it as it files bookings, and an app that sees a trip's bookings disagree with it puts it
- * right ([tripFlagsToWrite]), which also fills it in for trips from before it was kept. As listFilters.ts.
+ * What the trip list needs of a trip's bookings (for its filters, and [setting] for its picture), kept on the trip
+ * so the list goes without reading them: the parser records it as it files bookings, and an app that sees a trip's
+ * bookings disagree with it puts it right ([tripFlagsToWrite]), which also fills it in for trips from before it was
+ * kept. As listFilters.ts.
  */
-data class TripFlags(val allCancelled: Boolean, val localOnly: Boolean, val travelers: List<String>)
+data class TripFlags(val allCancelled: Boolean, val localOnly: Boolean, val travelers: List<String>, val setting: String)
 
-fun tripFlags(segments: List<Segment>): TripFlags = TripFlags(allCancelled(segments), localOnly(segments), tripTravelers(segments))
+fun tripFlags(segments: List<Segment>): TripFlags = TripFlags(allCancelled(segments), localOnly(segments), tripTravelers(segments), tripSetting(segments))
 
 /** The flags to write on a trip whose bookings have just been read, or null when the trip already says so. */
 fun tripFlagsToWrite(trip: Trip, segments: List<Segment>): TripFlags? {
     val flags = tripFlags(segments)
-    return if (trip.allCancelled == flags.allCancelled && trip.localOnly == flags.localOnly && trip.travelers == flags.travelers) null else flags
+    val same = trip.allCancelled == flags.allCancelled && trip.localOnly == flags.localOnly && trip.travelers == flags.travelers && trip.setting == flags.setting
+    return if (same) null else flags
 }
 
-/** Whether the list needs a trip's bookings to filter it: only while the trip doesn't yet say. */
-fun flagsUnknown(trip: Trip): Boolean = trip.allCancelled == null || trip.localOnly == null || trip.travelers == null
+/** Whether the list needs a trip's bookings to filter it or draw it: only while the trip doesn't yet say. */
+fun flagsUnknown(trip: Trip): Boolean = trip.allCancelled == null || trip.localOnly == null || trip.travelers == null || trip.setting == null
 
 /**
  * Whether the list leaves a trip out: by its own cancellation and flags, else, for a trip from before the flags

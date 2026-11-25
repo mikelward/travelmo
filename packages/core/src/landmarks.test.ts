@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { LANDMARKS, tripLandmark } from "./landmarks";
+import { LANDMARKS, placeSetting, tripLandmark, tripPicture, tripSetting } from "./landmarks";
+import { PlaceSetting, type ExtractedSegment } from "./schema";
 import { foldText } from "./tripSearch";
 
 describe("tripLandmark", () => {
@@ -290,5 +291,69 @@ describe("tripLandmark", () => {
       }
     }
     expect(LANDMARKS.length).toBe(299);
+  });
+});
+
+describe("tripPicture", () => {
+  it("goes by the title first, then the kind of place the trip goes to, else the suitcase", () => {
+    expect(tripPicture("Paris", "town").id).toBe("paris");
+    expect(tripPicture("Woburn", "town").id).toBe("town");
+    expect(tripPicture("Cornwall", "beach").id).toBe("beach");
+    expect(tripPicture("Woburn", "none").id).toBe("trip");
+    expect(tripPicture("Woburn").id).toBe("trip");
+  });
+
+  it("draws every kind of place", () => {
+    for (const setting of PlaceSetting.options) expect(tripPicture("Somewhere", setting).id).toBe(setting);
+  });
+});
+
+const stay = (over: Partial<ExtractedSegment>): ExtractedSegment => ({ type: "lodging", title: "Stay", start: "2026-12-12T15:00:00Z", end: "2026-12-14T11:00:00Z", ...over });
+
+describe("placeSetting", () => {
+  it("takes what the email or the reader said", () => {
+    expect(placeSetting({ name: "Sea View", city: "Boston", setting: "beach" })).toBe("beach");
+  });
+
+  it("tells a city from a town by its size, in its country", () => {
+    expect(placeSetting({ name: "Hotel", city: "Boston", country: "US" })).toBe("city");
+    expect(placeSetting({ name: "Hotel", city: "Woburn", country: "US" })).toBe("town");
+    expect(placeSetting({ name: "Hotel", city: "São Paulo" })).toBe("city");
+    // A city in Canada, a town in England.
+    expect(placeSetting({ name: "Hotel", city: "Windsor", country: "CA" })).toBe("city");
+    expect(placeSetting({ name: "Hotel", city: "Windsor", country: "GB" })).toBe("town");
+  });
+
+  it("says nothing of a place with no town", () => {
+    expect(placeSetting({ name: "Terminal 5" })).toBeUndefined();
+    expect(placeSetting(undefined)).toBeUndefined();
+  });
+});
+
+describe("tripSetting", () => {
+  it("goes by the longest stay", () => {
+    const short = stay({ destination: { name: "Airport Inn", city: "Boston", country: "US" }, end: "2026-12-13T11:00:00Z" });
+    const long = stay({ destination: { name: "Beach House", city: "Truro", setting: "beach" }, start: "2026-12-13T15:00:00Z", end: "2026-12-20T11:00:00Z" });
+    expect(tripSetting([short, long])).toBe("beach");
+    expect(tripSetting([long, short])).toBe("beach");
+  });
+
+  it("goes by an outing, else where the first journey arrives", () => {
+    const show = { type: "activity", title: "Show", start: "2026-12-12T19:00:00Z", destination: { name: "Theatre", city: "Woburn", country: "US" } } as const;
+    const out = { type: "flight", title: "XX 1 LHR to BOS", start: "2026-12-12T09:00:00Z", destination: { name: "Logan", city: "Boston", country: "US" } } as const;
+    const back = { type: "flight", title: "XX 2 BOS to LHR", start: "2026-12-19T21:00:00Z", destination: { name: "Heathrow", city: "London", country: "GB" } } as const;
+    expect(tripSetting([back, out, show])).toBe("town");
+    expect(tripSetting([back, out])).toBe("city");
+  });
+
+  it("goes by what is still booked", () => {
+    const cancelled = stay({ destination: { name: "Ski Lodge", city: "Zermatt", setting: "mountains" }, cancelledAt: "2026-12-01T00:00:00Z" } as Partial<ExtractedSegment>);
+    const kept = stay({ destination: { name: "Inn", city: "Woburn" }, end: "2026-12-13T11:00:00Z" });
+    expect(tripSetting([cancelled, kept])).toBe("town");
+  });
+
+  it("is none when no booking says", () => {
+    expect(tripSetting([])).toBe("none");
+    expect(tripSetting([stay({ destination: { name: "Somewhere" } })])).toBe("none");
   });
 });

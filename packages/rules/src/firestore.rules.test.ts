@@ -143,6 +143,11 @@ describe("trips", () => {
     await assertSucceeds(updateDoc(doc(as(partner), paths.trip(trip.id)), { travelers: [] }));
     await assertFails(updateDoc(doc(as(partner), paths.trip(trip.id)), { travelers: "Sam Example" }));
     await assertFails(updateDoc(doc(as(owner), paths.trip(trip.id)), { travelers: Array.from({ length: 101 }, (_, i) => `Person${i} Example`) }));
+    // And what kind of place it goes to, one of a few.
+    await assertSucceeds(updateDoc(doc(as(owner), paths.trip(trip.id)), { setting: "beach" }));
+    await assertSucceeds(updateDoc(doc(as(partner), paths.trip(trip.id)), { setting: "none" }));
+    await assertFails(updateDoc(doc(as(partner), paths.trip(trip.id)), { setting: "moon" }));
+    await assertFails(updateDoc(doc(as(stranger), paths.trip(trip.id)), { setting: "town" }));
   });
 
   it("lets only the owner mark a trip cancelled, with a time", async () => {

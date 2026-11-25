@@ -30,6 +30,8 @@ data class Place(
     /** The spot on the map, when the booking's source or a geocode gave one. */
     val lat: Double? = null,
     val lon: Double? = null,
+    /** What kind of place it is ([PLACE_SETTINGS]), as the email showed or the reader knew. */
+    val setting: String? = null,
 )
 
 data class Segment(
@@ -118,6 +120,8 @@ data class Trip(
     val localOnly: Boolean? = null,
     /** Whom its bookings are for ([tripTravelers]); null on a trip from before it was kept. */
     val travelers: List<String>? = null,
+    /** What kind of place it goes to, for its picture ([tripSetting]): one of [PLACE_SETTINGS] or "none"; null on a trip from before it was kept. */
+    val setting: String? = null,
 )
 
 /**

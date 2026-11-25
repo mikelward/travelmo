@@ -1,6 +1,8 @@
 import { isOuting } from "./home";
 import type { ExtractedSegment, Trip } from "./schema";
 import { canonicalName, findPerson, guessMe, type Person } from "./travelers";
+import { tripSetting } from "./landmarks";
+import type { PlaceSetting } from "./schema";
 import { allCancelled, liveSegments } from "./trips";
 
 // What the trip list leaves out (SPEC "Filtering the trip list"), as the
@@ -64,17 +66,23 @@ export function homeBookings<S extends ExtractedSegment>(byTrip: Iterable<readon
   return [...byTrip].filter((segments) => !watching(tripTravelers(segments), people)).flat();
 }
 
-// What the list's filters need to know of a trip's bookings, kept on the
-// trip (`allCancelled`, `localOnly`, `travelers`) so the list filters without reading
-// them: the parser records it as it files bookings, and an app that sees a
-// trip's bookings disagree with it puts it right (tripFlagsToWrite), which
-// also fills it in for trips from before it was kept.
-export type TripFlags = { allCancelled: boolean; localOnly: boolean; travelers: string[] };
+// What the list needs to know of a trip's bookings, kept on the trip
+// (`allCancelled`, `localOnly`, `travelers` for its filters, `setting` for
+// its picture) so the list goes without reading them: the parser records it
+// as it files bookings, and an app that sees a trip's bookings disagree with
+// it puts it right (tripFlagsToWrite), which also fills it in for trips from
+// before it was kept.
+export type TripFlags = { allCancelled: boolean; localOnly: boolean; travelers: string[]; setting: PlaceSetting | "none" };
 // As a trip has them: any may be missing.
-type KeptFlags = { allCancelled?: boolean | undefined; localOnly?: boolean | undefined; travelers?: readonly string[] | undefined };
+type KeptFlags = {
+  allCancelled?: boolean | undefined;
+  localOnly?: boolean | undefined;
+  travelers?: readonly string[] | undefined;
+  setting?: PlaceSetting | "none" | undefined;
+};
 
 export function tripFlags(segments: readonly ExtractedSegment[]): TripFlags {
-  return { allCancelled: allCancelled(segments), localOnly: localOnly(segments), travelers: tripTravelers(segments) };
+  return { allCancelled: allCancelled(segments), localOnly: localOnly(segments), travelers: tripTravelers(segments), setting: tripSetting(segments) };
 }
 
 const sameList = (a: readonly string[] | undefined, b: readonly string[]) => !!a && a.length === b.length && a.every((x, i) => x === b[i]);
@@ -83,13 +91,14 @@ const sameList = (a: readonly string[] | undefined, b: readonly string[]) => !!a
 // undefined when the trip already says so.
 export function tripFlagsToWrite(trip: KeptFlags, segments: readonly ExtractedSegment[]): TripFlags | undefined {
   const flags = tripFlags(segments);
-  return trip.allCancelled === flags.allCancelled && trip.localOnly === flags.localOnly && sameList(trip.travelers, flags.travelers) ? undefined : flags;
+  const same = trip.allCancelled === flags.allCancelled && trip.localOnly === flags.localOnly && sameList(trip.travelers, flags.travelers) && trip.setting === flags.setting;
+  return same ? undefined : flags;
 }
 
-// Whether the list needs a trip's bookings to filter it: only while the
-// trip doesn't yet say.
+// Whether the list needs a trip's bookings to filter it or draw it: only
+// while the trip doesn't yet say.
 export function flagsUnknown(trip: KeptFlags): boolean {
-  return trip.allCancelled === undefined || trip.localOnly === undefined || trip.travelers === undefined;
+  return trip.allCancelled === undefined || trip.localOnly === undefined || trip.travelers === undefined || trip.setting === undefined;
 }
 
 // Whether the list leaves a trip out: by its own cancellation and flags,

@@ -7,6 +7,7 @@ import {
   localDate,
   localTime,
   tripNextUp,
+  tripSetting,
   tripStatus,
   type FlightStatus,
   type Segment,
@@ -15,7 +16,7 @@ import {
 import Link from "next/link";
 import { TripLandmark } from "@/components/TripLandmark";
 
-// A trip in its section's card: the landmark of its city (TripLandmark), the title (as displayTitles shows it among the list), its
+// A trip in its section's card: its picture (TripLandmark), the title (as displayTitles shows it among the list), its
 // dates, both struck through once it was cancelled, and given the time now (for a
 // trip under way) what comes next (tripNextUp), with the live status of its
 // next flight, and the flight's online check-in until the viewer says they
@@ -72,7 +73,11 @@ export function TripCard({
       <Link href={`/trips/${trip.id}`} className="block px-4 py-3">
         {/* The landmark beside the title and dates; what comes next runs below, in line with the title. */}
         <div className="flex items-center gap-3">
-          <TripLandmark title={title} />
+          {/* Until the trip says what kind of place it goes to, its bookings do, where the list has them. */}
+          <TripLandmark
+            title={title}
+            setting={trip.setting ?? (segments && tripSetting(segments))}
+          />
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline justify-between gap-4">
               <h3

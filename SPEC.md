@@ -270,10 +270,20 @@ and a longer name containing a city's is not that city: "Santiago de Cuba",
 matching kind of place or trip (beach, mountains, forest, lake, farm, city,
 town, camp, countryside, desert, wine country, road trip, safari, theme
 park, celebration, castle), season, holiday or vacation word when no city is
-named ("Summer in Paris" is Paris; "Summer vacation" is a sun), else a
-suitcase (`tripLandmark` in `packages/core/src/landmarks.ts`, mirrored in
-the Android app's core; the drawings are `landmarks.json`, one SVG path in a
-48-unit square stroked 1.5 wide, which both apps draw). Trips under
+named ("Summer in Paris" is Paris; "Summer vacation" is a sun), else the
+kind of place the trip goes to, else a suitcase (`tripLandmark` and
+`tripPicture` in `packages/core/src/landmarks.ts`, mirrored in the Android
+app's core; the drawings are `landmarks.json`, one SVG path in a 48-unit
+square stroked 1.5 wide, which both apps draw).
+The kind of place a trip goes to is the trip's `setting` (`tripSetting`):
+a city, a small town, a beach, the mountains, a lake or the countryside,
+as the parser read it from the booking or knew of the town (a place's
+`setting`), else by the town's size, a city being one of 250,000 people or
+more in its country (`bigCities.json`, from GeoNames). It goes by the
+longest stay, else the first outing, else where the first journey arrives.
+It is kept with the list's filter flags and repaired the same way (the
+geocode sweep too, once it learns a booking's town); until a trip has it,
+the list reads the trip's bookings once. Trips under
 way also show what comes next — the soonest booking start still ahead, or
 the end of one under way (check-out, arrival, car return) — read from their
 segments with one listener each; the next three upcoming trips get a

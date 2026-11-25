@@ -66,6 +66,14 @@ describe("sweepGeocodeRetries", () => {
     expect(logs).toEqual(["geocode_swept"]);
   });
 
+  it("puts right what kind of place the trip goes to once a booking's town is known", async () => {
+    const { store, retries, deps } = setup({ "Hotel Example": spot }, stay("s1", { destination: { name: "Hotel Example" } }));
+    store.trips.set(trip.id, { ...trip, setting: "none" });
+    await retries.put({ uid: "u1", tripId: "t1", segmentId: "s1", at });
+    await sweepGeocodeRetries(deps);
+    expect(store.trips.get("t1")?.setting).toBe("town");
+  });
+
   it("drops an entry whose booking is gone, already placed, or answered with nothing", async () => {
     const placed = stay("s2", { destination: { name: "Hotel Sample", country: "FR", lat: 1, lon: 2 } });
     const { store, retries, deps, asked } = setup({}, placed, stay("s3", { destination: { name: "Nowhere Special" } }));
