@@ -431,6 +431,9 @@ dots never crowds out the countries the reports need. A name Google cannot
 place stays as it was, and a hand-entered booking is not geocoded (the
 client writes it), though an address pick in the form sets the spot. A
 place's own coordinates (TripIt's, or a pick's) are never overwritten.
+The email reader also takes a stay's, venue's or rental desk's street
+address when the email gives one (`address`, for Directions); "Refresh from
+email" fills it in on bookings imported before it did, unless edited by hand.
 A booking the spent budget put off is queued in `geocodeRetries` and asked
 about again by the daily sweep (`/internal/geocode-sweep`, from Cloud
 Scheduler early in the UTC day, `apps/parser/src/geocodeSweep.ts`): oldest
