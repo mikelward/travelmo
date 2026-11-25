@@ -44,6 +44,10 @@ export const ExtractedSegment = z.object({
   origin: Place.optional(),
   destination: Place.optional(),
   notes: z.string().optional(),
+  // Who it is for: each passenger or guest the email names, as written by
+  // the reader and as people write it once filed (canonicalName). Absent
+  // when the email names nobody, and on bookings read before travelers were.
+  travelers: z.array(z.string().min(1)).max(20).optional(),
 });
 export type ExtractedSegment = z.infer<typeof ExtractedSegment>;
 

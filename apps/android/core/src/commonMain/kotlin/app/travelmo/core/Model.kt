@@ -64,6 +64,8 @@ data class Segment(
      * cancelled. No email revives it; only Restore does.
      */
     val userCancelled: String? = null,
+    /** Who it is for, as people write their names (SPEC "Travelers"); empty when its emails named nobody. */
+    val travelers: List<String> = emptyList(),
 )
 
 val Segment.isCancelled: Boolean get() = cancelledAt != null

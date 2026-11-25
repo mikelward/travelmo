@@ -176,7 +176,7 @@ val fixtureSegments: Map<String, List<Segment>> = mapOf(
         Segment(
             "l-stay", "liverpool", SegmentType.LODGING, "Cove Liverpool", "2026-12-12T15:00:00+00:00", "2026-12-13T11:00:00+00:00",
             provider = "Cove", confirmation = "CV-55120", notes = "Late check-in after 22:00: call reception", sender = "cove.example", sources = fixtureStaySources, rating = 4, favorite = true,
-            destination = Place("Cove Liverpool", city = "Liverpool", country = "GB"),
+            destination = Place("Cove Liverpool", city = "Liverpool", country = "GB"), travelers = listOf("Sam Example", "Alex Example"),
         ),
         Segment("l-tour", "liverpool", SegmentType.ACTIVITY, "Anfield stadium tour", "2026-12-13T14:00:00+00:00", "2026-12-13T15:30:00+00:00", provider = "Liverpool FC", confirmation = "LFC-4471"),
     ),

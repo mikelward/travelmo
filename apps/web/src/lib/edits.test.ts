@@ -139,6 +139,15 @@ describe("saveSegment", () => {
     expect(stored).toMatchObject({ title: "Renamed", sources: [added], gmailMessageIds: ["m1"] });
   });
 
+  it("keeps who the booking is for, which the form doesn't edit", async () => {
+    await updateDoc(doc(asOwner(), paths.segment(trip.id, imported.id)), { travelers: ["John Smith"] });
+    // The form gives the booking without them.
+    const { travelers: _none, ...fromForm } = { ...imported, travelers: undefined };
+    await saveSegment(asOwner(), trip.id, { ...fromForm, title: "Renamed" }, imported);
+    const stored = (await getDoc(doc(asOwner(), paths.segment(trip.id, imported.id)))).data();
+    expect(stored).toMatchObject({ title: "Renamed", travelers: ["John Smith"] });
+  });
+
   it("counts two concurrent saves from the same stale view", async () => {
     await Promise.all([
       saveSegment(asOwner(), trip.id, flight("2026-12-18")),

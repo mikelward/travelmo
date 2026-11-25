@@ -104,6 +104,7 @@ fun segmentFromDocument(id: String, tripId: String, data: Map<String, Any?>): Se
         cancelledAt = data.text("cancelledAt"),
         cancelledBy = data.text("cancelledBy"),
         userCancelled = data.text("userCancelled")?.takeIf { it == "booking" || it == "trip" },
+        travelers = data.strings("travelers"),
     )
 }
 

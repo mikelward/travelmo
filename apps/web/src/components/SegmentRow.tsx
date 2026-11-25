@@ -177,6 +177,11 @@ export function SegmentRow({
           </p>
         )}
         {addresses && <p className="mt-1 text-xs text-muted">{addresses}</p>}
+        {segment.travelers && segment.travelers.length > 0 && (
+          <p className="mt-1 text-xs text-muted" data-testid="segment-travelers">
+            For {segment.travelers.join(", ")}
+          </p>
+        )}
         {(segment.confirmation || segment.provider) && (
           <p className="mt-1 text-xs text-muted">
             {[segment.provider, segment.confirmation && `Ref ${segment.confirmation}`].filter(Boolean).join(" · ")}

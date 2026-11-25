@@ -448,6 +448,13 @@ describe("refreshEmail", () => {
     expect(w.memory.parsed.get(`${uid}/m1`)!.segmentIds.sort()).toEqual(["m1-0", "m1-1"]);
   });
 
+  it("files the travelers of a booking it adds as an import does, each once", async () => {
+    const w = world();
+    w.put(trip("t1"), booking("m1-0", "t1", stay));
+    await w.refresh("m1", found(stay, { ...show, travelers: ["SMITH/JOHN MR", "Smith, John"] }));
+    expect(w.memory.segments.get("m1-1")?.travelers).toEqual(["John Smith"]);
+  });
+
   it("changes nothing when the model now finds no booking in the email", async () => {
     const w = world();
     w.put(trip("t1"), booking("m1-0", "t1", stay));
