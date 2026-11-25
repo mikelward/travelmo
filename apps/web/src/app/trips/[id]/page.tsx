@@ -1,6 +1,6 @@
 "use client";
 
-import { allLoyalty, bookedDateRange, flightCheckInState, displayBounds, effectiveHomes, homeTimeline, journeyGap, journeyGapHomes, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, gmailMailboxes, localDate, normalizeEmail, paths, programsFor, sharedWithAny, watchedTrip, type Segment, type SenderCleanup, type Trip } from "@travelmo/core";
+import { allLoyalty, bookedDateRange, flightCheckInState, displayBounds, effectiveHomes, homeTimeline, journeyGapHomes, journeyGaps, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, gmailMailboxes, localDate, normalizeEmail, paths, programsFor, sharedWithAny, watchedTrip, type Segment, type SenderCleanup, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { arrayRemove, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -399,12 +399,13 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
     const periods = effectiveHomes(homeTimeline(segments), profile.homes ?? []);
     return rideNeeds(segments, { periods, hidden: profile.hiddenRideNeeds ?? [], now });
   }, [segments, profile, now, onlyWatching]);
-  // A journey the trip seems to be missing (no flight back), unless the
-  // viewer said it goes one way. Home is only what they set on Profile, as
-  // a one-way trip has no round trip to work it out from.
-  const gap = useMemo(() => {
-    if (!segments || !profile || !trip || trip.cancelledAt || trip.deleting || (profile.oneWayTrips ?? []).includes(tripId)) return undefined;
-    return journeyGap(segments, journeyGapHomes(profile.homes ?? [], profile.homeAirports ?? []));
+  // The journeys the trip seems to be missing (no flight back, or none
+  // between two far apart), the trip's ends left out once the viewer said
+  // it goes one way. Home is only what they set on Profile, as a one-way
+  // trip has no round trip to work it out from.
+  const gaps = useMemo(() => {
+    if (!segments || !profile || !trip || trip.cancelledAt || trip.deleting) return [];
+    return journeyGaps(segments, journeyGapHomes(profile.homes ?? [], profile.homeAirports ?? []), (profile.oneWayTrips ?? []).includes(tripId));
   }, [segments, profile, trip, tripId]);
   // The viewer's own reminders before the trip, theirs alone, shared trip or not.
   const checklist = useTripChecklist(user.uid, tripId, trip, segments, profile ? (profile.homes ?? []) : undefined, today);
@@ -525,10 +526,10 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
       )}
       {trip.cancelledAt && <TripCancelled trip={trip} canManage={canManage} />}
       <DocumentWarnings warnings={warnings} today={today} />
-      {gap && (
+      {gaps.length > 0 && (
         <JourneyGapNotice
-          gap={gap}
-          {...(canEdit ? { onAdd: () => setEditing({ kind: "add", date: gap.date }) } : {})}
+          gaps={gaps}
+          {...(canEdit ? { onAdd: (date: string) => setEditing({ kind: "add", date }) } : {})}
           onOneWay={() =>
             markOneWay(user.uid, tripId).catch((e: Error) => {
               console.error("Marking a trip one way failed", e);

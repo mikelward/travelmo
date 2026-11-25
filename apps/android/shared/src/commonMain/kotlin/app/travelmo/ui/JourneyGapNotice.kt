@@ -26,11 +26,11 @@ import app.travelmo.shared.trip_is_one_way
 import app.travelmo.ui.theme.TextButtonInset
 import org.jetbrains.compose.resources.stringResource
 
-/** A journey the trip seems to be missing, and what can be done about it: as the web's JourneyGapNotice. */
+/** The journeys the trip seems to be missing, and what can be done about them: as the web's JourneyGapNotice. */
 class JourneyGapActions(
-    val gap: JourneyGap,
-    /** Adds it by hand from the day it would be; null for a viewer who can't edit. */
-    val onAdd: (() -> Unit)?,
+    val gaps: List<JourneyGap>,
+    /** Adds one by hand from the day it would be; null for a viewer who can't edit. */
+    val onAdd: ((date: String) -> Unit)?,
     val onOneWay: () -> Unit,
 )
 
@@ -47,13 +47,24 @@ fun JourneyGapNotice(actions: JourneyGapActions, busy: Boolean, modifier: Modifi
             .background(MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f), shape)
             .padding(12.dp),
     ) {
-        Text(journeyGapText(actions.gap), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.tertiary)
-        FlowRow(modifier = Modifier.offset(x = -TextButtonInset)) {
-            TextButton(onClick = { chrome.openLink(gmailSearchUrl(journeyGapSearch(actions.gap)), "a search for a missing booking") }) {
-                Text(stringResource(Res.string.find_it_in_gmail))
+        actions.gaps.forEachIndexed { i, gap ->
+            Text(
+                journeyGapText(gap),
+                modifier = if (i > 0) Modifier.padding(top = 8.dp) else Modifier,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
+            FlowRow(modifier = Modifier.offset(x = -TextButtonInset)) {
+                TextButton(onClick = { chrome.openLink(gmailSearchUrl(journeyGapSearch(gap)), "a search for a missing booking") }) {
+                    Text(stringResource(Res.string.find_it_in_gmail))
+                }
+                actions.onAdd?.let { add -> TextButton(onClick = { add(gap.date) }, enabled = !busy) { Text(stringResource(Res.string.add_it_yourself)) } }
             }
-            actions.onAdd?.let { add -> TextButton(onClick = add, enabled = !busy) { Text(stringResource(Res.string.add_it_yourself)) } }
-            TextButton(onClick = actions.onOneWay, enabled = !busy) { Text(stringResource(Res.string.trip_is_one_way)) }
+        }
+        if (actions.gaps.any { it.direction != "between" }) {
+            TextButton(onClick = actions.onOneWay, enabled = !busy, modifier = Modifier.offset(x = -TextButtonInset)) {
+                Text(stringResource(Res.string.trip_is_one_way))
+            }
         }
     }
 }

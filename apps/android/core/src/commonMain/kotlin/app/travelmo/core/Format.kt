@@ -14,7 +14,7 @@ private val monthNames = listOf("January", "February", "March", "April", "May", 
 fun formatWeekday(date: String): String = weekdayNames[LocalDate.parse(date).dayOfWeek.ordinal]
 
 /** "12 Dec". */
-private fun dayMonth(date: String): String = LocalDate.parse(date).let { "${it.day} ${shortMonthNames[it.month.ordinal]}" }
+internal fun dayMonth(date: String): String = LocalDate.parse(date).let { "${it.day} ${shortMonthNames[it.month.ordinal]}" }
 
 /** "12 Dec 2026". */
 internal fun formatDayMonthYear(date: String): String = "${dayMonth(date)} ${date.substring(0, 4)}"

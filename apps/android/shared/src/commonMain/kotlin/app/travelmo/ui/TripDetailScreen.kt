@@ -344,10 +344,10 @@ fun TripDetailScreen(
                     companies = rideSettings?.companies.orEmpty(),
                     onHide = { need -> viewModel.hideRideNeed("${prefix}ride/${rideNeedKey(need)}", need) },
                 ),
-                journeyGap = viewModel.journeyGapFor(current, segments, rideSettings)?.let { gap ->
+                journeyGap = viewModel.journeyGapsFor(current, segments, rideSettings).takeIf { it.isNotEmpty() }?.let { gaps ->
                     JourneyGapActions(
-                        gap,
-                        onAdd = if (canEdit) { { onAddBooking(gap.date) } } else null,
+                        gaps,
+                        onAdd = if (canEdit) onAddBooking else null,
                         onOneWay = { viewModel.markOneWay("${prefix}one-way", tripId) },
                     )
                 },

@@ -662,6 +662,20 @@ export function sameArea(a: Place | undefined, b: Place | undefined): boolean {
   return located(x) && located(y) && distanceKm(x, y) <= areaKm;
 }
 
+// How far a person might drive between journeys, as from landing at one
+// airport to flying out of another: past it, a journey is missing.
+export const driveKm = 300;
+
+// Whether getting from `a` to `b` takes a journey of its own (a flight or a
+// train, not a drive): they are over driveKm apart or, where either's point
+// is unknown, in different countries.
+export function farApart(a: Place | undefined, b: Place | undefined): boolean {
+  const [x, y] = [located_(a), located_(b)];
+  if (!x || !y || sameTown(x, y)) return false;
+  if (located(x) && located(y)) return distanceKm(x, y) > driveKm;
+  return !!x.country && !!y.country && countryCode(x.country) !== countryCode(y.country);
+}
+
 // Whether a journey's end (`place`, on `date`) is home: in the home of its
 // day, or one of that home's airports or stations (withHomeAirports), so
 // landing at SFO is coming home to Mountain View. Only for journeys: a hotel

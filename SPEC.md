@@ -1199,23 +1199,34 @@ re-reads if the source's `updatedAt` moved in between.
 ### A journey missing
 
 A trip whose journeys (flights, trains, buses and ferries still booked, with
-both ends known, in order) don't come back to the city they left from
-(another of its airports counts, `sameArea`) seems to be missing one: the
+both ends known, in order) don't join up seems to be missing some: the
 flight home an email the import never read, or read wrong, would have
-given (`journeyGap`, in `packages/core` and `:core`). Its page says "No
-flight back to London found" ("journey" when not every journey flies),
-with Find it in Gmail (a search for the trip's booking references, else the
-city), Add it yourself (for those who may edit, the booking form starting on
-the day the last journey lands) and This trip is one way, which adds the
-trip to the viewer's `oneWayTrips` on their user document (at most two
-hundred, the newest kept) and stops it saying so, for them alone. A trip
-that ends at a home the viewer set on Profile but leaves from elsewhere says
-the journey out is missing instead ("No flight to Boston found"; one of the
-airports chosen for that home counts as home); home is
-otherwise not worked out, as a one-way trip has no round trip to work it
-from, and a trip is taken to start at home. The list's cards say the same,
-on the web and Android, for the trips whose bookings the list reads (those
-under way and the next few); a cancelled or deleting trip says nothing.
+given, or a flight in the middle (`journeyGaps`, in `packages/core` and
+`:core`). It lists each in order:
+
+- **Back**: the journeys don't come back to the city they left from
+  (another of its airports counts, `sameArea`): "No flight from Boston back
+  to London found".
+- **Out**: the trip ends at a home the viewer set on Profile but leaves from
+  elsewhere (one of the airports chosen for that home counts as home): "No
+  flight from London to Boston found". Home is otherwise not worked out, as
+  a one-way trip has no round trip to work it from, and a trip is taken to
+  start at home.
+- **Between**: one journey lands far from where the next leaves (`farApart`:
+  over 300 km, or in different countries where either's point is unknown; a
+  drive between them is not missing): "No flight from Adelaide to London
+  found between 10 Jan and 15 Feb".
+
+Each says "journey" when not every journey on the trip flies, and has Find
+it in Gmail (a search for both its ends, each by city or code: `("Adelaide"
+OR ADL) ("London" OR LHR)`, with no dates, as the email came long before)
+and Add it yourself (for those who may edit, the booking form starting on
+the first day it could be). When one is out or back, This trip is one way
+adds the trip to the viewer's `oneWayTrips` on their user document (at most
+two hundred, the newest kept), and the trip stops saying those, for them
+alone; one between stays. The list's cards name the first, on the web and
+Android, for the trips whose bookings the list reads (those under way and
+the next few); a cancelled or deleting trip says nothing.
 
 ### Sender counts
 

@@ -34,6 +34,7 @@ import app.travelmo.core.SenderPatterns
 import app.travelmo.core.rideNeedKey
 import kotlin.time.Instant
 import kotlinx.coroutines.flow.first
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldNotContain
@@ -236,13 +237,13 @@ class TripsViewModelTest {
         val store = FakeTripStore()
         val viewModel = TripsViewModel(store, OWNER, null, clock = { Instant.parse(FROZEN_NOW) })
         val out = fixtureBostonSegments.filter { it.id == "b-out" }
-        viewModel.journeyGapFor(fixtureBostonTrip, out, RideSettings())?.let(::journeyGapText) shouldBe "No flight back to London found"
-        viewModel.journeyGapFor(fixtureBostonTrip, fixtureBostonSegments, RideSettings()) shouldBe null
-        viewModel.journeyGapFor(fixtureBostonTrip, out, null) shouldBe null
+        viewModel.journeyGapsFor(fixtureBostonTrip, out, RideSettings()).map(::journeyGapText) shouldBe listOf("No flight from Boston back to London found")
+        viewModel.journeyGapsFor(fixtureBostonTrip, fixtureBostonSegments, RideSettings()).shouldBeEmpty()
+        viewModel.journeyGapsFor(fixtureBostonTrip, out, null).shouldBeEmpty()
         viewModel.markOneWay("one-way", "boston")
         viewModel.outcomes.value shouldBe mapOf("one-way" to Outcome.Done)
         store.rides.value.oneWayTrips shouldBe listOf("boston")
-        viewModel.journeyGapFor(fixtureBostonTrip, out, store.rides.value) shouldBe null
+        viewModel.journeyGapsFor(fixtureBostonTrip, out, store.rides.value).shouldBeEmpty()
     }
 
     @Test
@@ -884,6 +885,6 @@ class TripsViewModelTest {
             withTimeout(10_000) { viewModel.state.first { it.groups != null && it.missing.isNotEmpty() } }
         }
         state.titles.values shouldContain "Paris"
-        state.missing.values.any { it.startsWith("No flight back to") } shouldBe true
+        state.missing.values.any { it.startsWith("No flight from") } shouldBe true
     }
 }
