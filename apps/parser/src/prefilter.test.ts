@@ -1,4 +1,4 @@
-import { calendarPrefilter, prefilter, senderDomain, travelSender } from "./prefilter";
+import { brandOf, calendarPrefilter, prefilter, senderDomain, travelSender } from "./prefilter";
 
 describe("travelSender", () => {
   const none = { allow: [], deny: [] };
@@ -9,6 +9,27 @@ describe("travelSender", () => {
     expect(travelSender("Shop <orders@shop.example>", { allow: ["shop.example"], deny: [] })).toBe(true);
     expect(travelSender("Virgin Atlantic <booking@service.virginatlantic.com>", { allow: [], deny: ["virginatlantic.com"] })).toBe(false);
     expect(travelSender(undefined, none)).toBe(false);
+  });
+
+  it("is a travel company writing from another of its countries' domains", () => {
+    expect(travelSender("Qantas <documents@yourbooking.qantas.com.au>", none)).toBe(true);
+    expect(travelSender("easyJet <donotreply@easyjet.co.uk>", none)).toBe(true);
+    expect(travelSender("Lufthansa <info@lufthansa.de>", none)).toBe(true);
+    // Short brands name many companies; a lookalike is no brand.
+    expect(travelSender("AA <help@aa.co.uk>", none)).toBe(false);
+    expect(travelSender("Shop <orders@qantasshop.example>", none)).toBe(false);
+    expect(travelSender("Qantas <documents@yourbooking.qantas.com.au>", { allow: [], deny: ["qantas.com.au"] })).toBe(false);
+  });
+});
+
+describe("brandOf", () => {
+  it("is the label before the country's suffix", () => {
+    expect(brandOf("yourbooking.qantas.com.au")).toBe("qantas");
+    expect(brandOf("qantas.com")).toBe("qantas");
+    expect(brandOf("easyjet.co.uk")).toBe("easyjet");
+    expect(brandOf("lufthansa.de")).toBe("lufthansa");
+    expect(brandOf("ba.com")).toBeUndefined();
+    expect(brandOf("localhost")).toBeUndefined();
   });
 });
 
