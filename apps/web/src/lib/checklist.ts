@@ -5,7 +5,6 @@ import {
   StandingReminder,
   TripChecklist,
   bySlot,
-  displayBounds,
   isInternational,
   maxStandingReminders,
   maxTripReminders,
@@ -13,6 +12,7 @@ import {
   paths,
   standingSlotPrefix,
   tripChecklist,
+  checklistShown,
   withDone,
   type ChecklistEntry,
   type HomeCorrection,
@@ -133,7 +133,7 @@ export async function setDone(uid: string, tripId: string, id: string, done: boo
 // trip goes abroad (from home on its first day, as ride suggestions work
 // home out, with their corrections from Profile), and their one-offs. The
 // airport table loads only when there are standing reminders to place.
-// Undefined while loading, and for a trip that is over.
+// Undefined while loading, and once the trip has started (checklistShown).
 export function useTripChecklist(
   uid: string,
   tripId: string,
@@ -144,7 +144,7 @@ export function useTripChecklist(
 ): { entries: ChecklistEntry[]; added: Slotted<OneOffReminder>[] } | undefined {
   const standing = useStandingReminders(uid);
   const mine = useMyChecklist(uid, tripId);
-  const wanted = !!trip && displayBounds(trip).end >= today && !!standing?.length && !!segments?.length;
+  const wanted = !!trip && checklistShown(trip, today) && !!standing?.length && !!segments?.length;
   const [lookup, setLookup] = useState<{ place: PlaceLookup } | Error>();
   useEffect(() => {
     if (!wanted) return;
@@ -161,7 +161,7 @@ export function useTripChecklist(
     };
   }, [wanted]);
   return useMemo(() => {
-    if (!trip || !standing || !mine || !segments || !corrections || displayBounds(trip).end < today) return undefined;
+    if (!trip || !standing || !mine || !segments || !corrections || !checklistShown(trip, today)) return undefined;
     if (wanted && !lookup) return undefined;
     const international = isInternational(trip, segments, corrections, lookup instanceof Error ? undefined : lookup?.place);
     return { entries: tripChecklist(trip, standing, mine, international), added: mine.added };

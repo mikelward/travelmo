@@ -71,6 +71,7 @@ import app.travelmo.data.InMemoryListFilterStore
 import app.travelmo.data.ListFilterStore
 import app.travelmo.core.LinkCheck
 import app.travelmo.core.checkNewLink
+import app.travelmo.core.checklistShown
 import app.travelmo.core.myAddresses
 import app.travelmo.data.AccessCheck
 import app.travelmo.data.AccountDeletionUnfinished
@@ -842,10 +843,10 @@ class TripsViewModel(
      * standing reminders when the trip goes abroad from home on its first
      * day (the trip's own round trip unless they corrected home, as ride
      * suggestions work it out), and their one-offs. Null while anything
-     * loads, and for a trip that is over or being deleted.
+     * loads, once the trip has started ([checklistShown]), and while it is being deleted.
      */
     fun checklistFor(trip: Trip, segments: List<Segment>, standing: List<Reminder>?, mine: MyChecklist?, settings: RideSettings?): List<ChecklistEntry>? {
-        if (standing == null || mine == null || settings == null || trip.deleting || trip.shownEnd < today()) return null
+        if (standing == null || mine == null || settings == null || trip.deleting || !checklistShown(trip, today())) return null
         val international = standing.isNotEmpty() && isInternational(trip, segments, settings.homes)
         return tripChecklist(trip, standing, mine.done, mine.added, international)
     }

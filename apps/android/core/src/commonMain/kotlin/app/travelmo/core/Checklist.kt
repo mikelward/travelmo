@@ -121,9 +121,12 @@ fun tripChecklist(trip: Trip, standing: List<Reminder>, done: List<String>, adde
         .sortedWith(compareBy<ChecklistEntry> { it.due }.thenBy { it.text })
 }
 
+/** Whether a trip still has "Before you go": until the end of its first day. */
+fun checklistShown(trip: Trip, today: String): Boolean = trip.shownStart >= today
+
 /** What is due and not ticked off, for a trip not yet started. */
 fun dueEntries(trip: Trip, entries: List<ChecklistEntry>, today: String): List<ChecklistEntry> =
-    if (trip.shownStart < today) emptyList() else entries.filter { !it.done && it.due <= today }
+    if (!checklistShown(trip, today)) emptyList() else entries.filter { !it.done && it.due <= today }
 
 /** "By Thu 12 Nov", or "Today" on the day. */
 fun dueText(due: String, today: String): String = if (due == today) "Today" else "By ${formatDate(due)}"

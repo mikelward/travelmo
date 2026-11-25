@@ -823,8 +823,9 @@ home is. Reading every trip to work out home, as Profile does, would cost
 a read of each on every visit and in every daily run.
 
 The trip page, on the web and in the Android app, has "Before you go" for
-a trip not yet over: the person's standing reminders when the trip is
-international, and the one-offs they added to it, whatever the trip (a
+a trip until the end of its first day: the person's standing reminders
+when the trip is international, and the one-offs they added to it,
+whatever the trip (a
 date, or how long before), soonest due first, each with its day ("By Thu
 12 Nov", red once it is due and not done). Ticking one off, adding and
 removing a one-off are the viewer's own: a trip shared with someone shows
