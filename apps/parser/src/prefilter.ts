@@ -122,6 +122,72 @@ export const seedSenderDomains = [
   "viator.com",
   "ticketmaster.com",
   "ticketmaster.co.uk",
+  // Airlines, each under every one of its countries' domains (brandOf):
+  // Qatar Airways writes from qatarairways.com.qa, Air New Zealand from
+  // airnz.co.nz, Emirates from emirates.email.
+  "qatarairways.com",
+  "emirates.com",
+  "etihad.com",
+  "singaporeair.com",
+  "cathaypacific.com",
+  "airnz.com",
+  "airnewzealand.com",
+  "virginaustralia.com",
+  "jetstar.com",
+  "fijiairways.com",
+  "southwest.com",
+  "alaskaair.com",
+  "hawaiianairlines.com",
+  "jetblue.com",
+  "aircanada.com",
+  "westjet.com",
+  "swiss.com",
+  "turkishairlines.com",
+  "aerlingus.com",
+  "iberia.com",
+  "finnair.com",
+  "icelandair.com",
+  "airserbia.com",
+  "flynorse.com",
+  "jet2.com",
+  "jet2holidays.com",
+  "tui.com",
+  "tui.co.uk",
+  // Trains, buses and ferries.
+  "amtrak.com",
+  "lner.co.uk",
+  "trenitalia.com",
+  "oebb.at",
+  "sj.se",
+  "sncf-connect.com",
+  "bahn.de",
+  "raileurope.com",
+  "omio.com",
+  "flixbus.com",
+  "nationalexpress.com",
+  "directferries.com",
+  // Car rental.
+  "nationalcar.com",
+  "alamo.com",
+  "budget.com",
+  "rentalcars.com",
+  // Travel agencies and package holidays.
+  "priceline.com",
+  "kayak.com",
+  "trip.com",
+  "webjet.com.au",
+  "southwestvacations.com",
+  "hrs.com",
+  "hostelworld.com",
+  // Hotel groups.
+  "wyndhamhotels.com",
+  "choicehotels.com",
+  "bestwestern.com",
+  "radissonhotels.com",
+  "premierinn.com",
+  // Restaurant bookings.
+  "opentable.com",
+  "thefork.com",
 ] as const;
 
 // Whether an email comes from a travel company (a seed sender or a travel
@@ -135,6 +201,13 @@ export function travelSender(from: string | undefined, patterns: SenderPatterns)
   if (patterns.allow.some((p) => domainMatches(domain, p))) return true;
   const brand = brandOf(domain);
   return [...seedSenderDomains, ...travelLoyaltyDomains].some((p) => domainMatches(domain, p) || (brand !== undefined && brandOf(p) === brand));
+}
+
+// A seed sender, under any of its countries' domains (Qatar Airways writes
+// from qatarairways.com.qa, Qantas from qantas.com.au).
+function seedSender(domain: string): boolean {
+  const brand = brandOf(domain);
+  return seedSenderDomains.some((p) => domainMatches(domain, p) || (brand !== undefined && brandOf(p) === brand));
 }
 
 // Second-level suffixes countries register companies under (co.uk, com.au):
@@ -187,9 +260,7 @@ export function prefilter(
     return { pass: false, reason: `sender ${domain} denied` };
   }
   if (isTravelStatement(message, patterns)) return { pass: true, reason: statementReason };
-  const allowed =
-    domain !== undefined &&
-    [...seedSenderDomains, ...patterns.allow].some((p) => domainMatches(domain, p));
+  const allowed = domain !== undefined && (patterns.allow.some((p) => domainMatches(domain, p)) || seedSender(domain));
   const keyword = subjectKeywords.test(message.subject);
   const noise = subjectNoise.test(message.subject);
 
