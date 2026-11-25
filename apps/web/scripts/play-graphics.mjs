@@ -4,7 +4,7 @@
 // the Android app's recorded snapshots (apps/android/app/snapshots), so
 // rerun this after re-recording them; the PNGs are committed.
 import { chromium } from "@playwright/test";
-import { readFile, mkdir } from "node:fs/promises";
+import { readFile, mkdir, readdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -30,7 +30,8 @@ const fontFaces = (
 
 // Snapshot, caption: the order they appear in on Play.
 const SCREENSHOTS = [
-  ["trip_list", "Every trip, now and next"],
+  // Its own snapshot, so the first screenshot shows off the landmarks rather than warnings.
+  ["trip_list_cities", "Every trip, now and next"],
   ["trip_detail", "Bookings arrive from your inbox"],
   ["trip_detail_shared", "Share a trip by email"],
   ["calendar", "Your travel, month by month"],
@@ -77,10 +78,19 @@ console.log("play-graphics: rendering the Play listing graphics");
 const browser = await chromium.launch();
 try {
   await render(browser, featureGraphic, 1024, 500, join(out, "feature-graphic.png"));
+  const made = new Set();
   for (const [i, [name, caption]] of SCREENSHOTS.entries()) {
     const png = await readFile(join(snapshots, `${name}.png`));
     const file = `${String(i + 1).padStart(2, "0")}-${name.replaceAll("_", "-")}.png`;
     await render(browser, screenshot(png, caption), 1080, 2160, join(out, "phone-screenshots", file));
+    made.add(file);
+  }
+  // A screenshot no longer in the list goes, or Play would be sent it too.
+  for (const file of await readdir(join(out, "phone-screenshots"))) {
+    if (file.endsWith(".png") && !made.has(file)) {
+      await rm(join(out, "phone-screenshots", file));
+      console.log(`play-graphics: removed ${file}`);
+    }
   }
 } finally {
   await browser.close();

@@ -217,8 +217,9 @@ descriptions (`title.txt`, `short-description.txt`,
 `full-description.txt`), `feature-graphic.png` (1024 × 500) and
 `phone-screenshots/` (2 to 8, sorted by name).
 `pnpm --filter @travelmo/web play-graphics` renders the feature graphic
-and frames the screenshots from `apps/android/app/snapshots`, so rerun it
-after re-recording those. CI checks the listing against Play's limits on
+and frames the screenshots from `apps/android/app/snapshots` (the first from
+`trip_list_cities`, a list of trips to cities with landmarks recorded for
+it), removing any it no longer makes, so rerun it after re-recording those. CI checks the listing against Play's limits on
 every pull request (`node scripts/publish-play.mjs --check`), and
 once `PLAY_SERVICE_ACCOUNT_JSON` is set the `play` workflow compares it with
 Play's copy hourly and sends what differs with the newest release. Play cannot take
