@@ -58,6 +58,39 @@ class LandmarksTest {
         assertEquals("beach", tripLandmark("Bora Bora").id)
         assertEquals("beach", tripLandmark("Santa Cruz").id)
         assertEquals("tenerife", tripLandmark("Santa Cruz de Tenerife").id)
+        assertEquals("salt-lake-city", tripLandmark("Salt Lake City").id)
+        assertEquals("santa-fe", tripLandmark("Santa Fe").id)
+        assertEquals("pittsburgh", tripLandmark("Pittsburgh").id)
+        assertEquals("memphis", tripLandmark("Memphis").id)
+        assertEquals("halifax", tripLandmark("Halifax").id)
+        assertEquals("victoria", tripLandmark("Victoria, BC").id)
+        assertEquals("oaxaca", tripLandmark("Oaxaca").id)
+        assertEquals("guadalajara", tripLandmark("Guadalajara").id)
+        assertEquals("mont-saint-michel", tripLandmark("Mont Saint-Michel").id)
+        assertEquals("santiago-de-compostela", tripLandmark("Santiago de Compostela").id)
+        assertEquals("heidelberg", tripLandmark("Heidelberg").id)
+        assertEquals("innsbruck", tripLandmark("Innsbruck").id)
+        assertEquals("utrecht", tripLandmark("Utrecht").id)
+        assertEquals("newcastle", tripLandmark("Newcastle").id)
+        assertEquals("thessaloniki", tripLandmark("Thessaloniki").id)
+        assertEquals("bucharest", tripLandmark("Bucharest").id)
+        assertEquals("belgrade", tripLandmark("Belgrade").id)
+        assertEquals("xian", tripLandmark("Xi'an").id)
+        assertEquals("chengdu", tripLandmark("Chengdu").id)
+        assertEquals("hangzhou", tripLandmark("Hangzhou").id)
+        assertEquals("nara", tripLandmark("Nara").id)
+        assertEquals("kolkata", tripLandmark("Kolkata").id)
+        assertEquals("hyderabad", tripLandmark("Hyderabad").id)
+        assertEquals("amritsar", tripLandmark("Amritsar").id)
+        assertEquals("udaipur", tripLandmark("Udaipur").id)
+        assertEquals("samarkand", tripLandmark("Samarkand").id)
+        assertEquals("tbilisi", tripLandmark("Tbilisi").id)
+        assertEquals("baku", tripLandmark("Baku").id)
+        assertEquals("hobart", tripLandmark("Hobart").id)
+        assertEquals("christchurch", tripLandmark("Christchurch").id)
+        assertEquals("fez", tripLandmark("Fez").id)
+        assertEquals("quito", tripLandmark("Quito").id)
+        assertEquals("montevideo", tripLandmark("Montevideo").id)
     }
 
     @Test
@@ -77,6 +110,11 @@ class LandmarksTest {
         assertEquals("sao-paulo", tripLandmark("São Paulo").id)
         assertEquals("bogota", tripLandmark("Bogotá").id)
         assertEquals("turin", tripLandmark("Torino").id)
+        assertEquals("cordoba", tripLandmark("Córdoba").id)
+        assertEquals("gdansk", tripLandmark("Gdańsk").id)
+        assertEquals("tromso", tripLandmark("Tromsø").id)
+        assertEquals("malmo", tripLandmark("Malmö").id)
+        assertEquals("medellin", tripLandmark("Medellín").id)
     }
 
     @Test
@@ -110,8 +148,13 @@ class LandmarksTest {
     }
 
     @Test
-    fun leavesOutALongerNameThatBeginsWithACitys() {
-        assertEquals("trip", tripLandmark("Santiago de Compostela").id)
+    fun leavesOutALongerNameContainingACitys() {
+        assertEquals("trip", tripLandmark("Santiago de Cuba").id)
+        assertEquals("santiago-de-compostela", tripLandmark("Santiago de Compostela").id)
+        assertEquals("trip", tripLandmark("Victoria Falls").id)
+        assertEquals("lake", tripLandmark("Lake Victoria").id)
+        assertEquals("lake", tripLandmark("Lake Victoria holiday").id)
+        assertEquals("victoria", tripLandmark("Lake Victoria, then Victoria").id)
         assertEquals("trip", tripLandmark("Rio Grande").id)
         assertEquals("trip", tripLandmark("Washington State").id)
         assertEquals("road-trip", tripLandmark("Washington State road trip").id)
@@ -197,7 +240,7 @@ class LandmarksTest {
     fun readsEveryLandmarkTheWebHas() {
         val rawEntries = landmarksJson.lines().count { it.startsWith("{\"id\":") }
         assertEquals(rawEntries, landmarks.size)
-        assertEquals(236, landmarks.size)
+        assertEquals(275, landmarks.size)
         assertEquals(landmarks.size, landmarks.map { it.id }.toSet().size)
         val seenCities = mutableSetOf<String>()
         val seenFallbacks = mutableSetOf<String>()

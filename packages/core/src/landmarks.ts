@@ -17,7 +17,8 @@ export interface Landmark {
   // so "Nice weekend" and "Bath time" are nobody.
   capitalized?: readonly string[];
   // Longer names, folded, that a match of `cities` or `fallback` is not when
-  // it begins one: "santiago de compostela" is not Santiago.
+  // it is part of one: "santiago de compostela" is not Santiago, and
+  // "lake victoria" is not Victoria.
   not?: readonly string[];
   // Kind-of-place, season, holiday or vacation words, folded: matched only
   // when the title names no place from `cities` or `capitalized`, so
@@ -56,16 +57,23 @@ export function tripLandmark(title: string): Landmark {
     }
     return best?.landmark;
   };
-  const notExcluded = (not: readonly string[]) => (at: number) => !not.some((n) => words.startsWith(` ${n} `, at));
+  const notExcluded = (not: readonly string[], name: string) => (at: number) =>
+    !not.some((n) => {
+      const padded = ` ${n} `;
+      for (let off = padded.indexOf(` ${name} `); off >= 0; off = padded.indexOf(` ${name} `, off + 1)) {
+        if (at >= off && words.startsWith(padded, at - off)) return true;
+      }
+      return false;
+    });
   return (
     pick((landmark, consider) => {
-      const ok = notExcluded(landmark.not ?? []);
-      for (const city of landmark.cities) consider(firstAt(words, city, ok));
+      const not = landmark.not ?? [];
+      for (const city of landmark.cities) consider(firstAt(words, city, notExcluded(not, city)));
       for (const name of landmark.capitalized ?? []) consider(firstAt(kept, name, (at) => at > 0 || opensTitle(name)));
     }) ??
     pick((landmark, consider) => {
-      const ok = notExcluded(landmark.not ?? []);
-      for (const word of landmark.fallback ?? []) consider(firstAt(words, word, ok));
+      const not = landmark.not ?? [];
+      for (const word of landmark.fallback ?? []) consider(firstAt(words, word, notExcluded(not, word)));
     }) ??
     SUITCASE
   );

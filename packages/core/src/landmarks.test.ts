@@ -56,6 +56,39 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Bora Bora").id).toBe("beach");
     expect(tripLandmark("Santa Cruz").id).toBe("beach");
     expect(tripLandmark("Santa Cruz de Tenerife").id).toBe("tenerife");
+    expect(tripLandmark("Salt Lake City").id).toBe("salt-lake-city");
+    expect(tripLandmark("Santa Fe").id).toBe("santa-fe");
+    expect(tripLandmark("Pittsburgh").id).toBe("pittsburgh");
+    expect(tripLandmark("Memphis").id).toBe("memphis");
+    expect(tripLandmark("Halifax").id).toBe("halifax");
+    expect(tripLandmark("Victoria, BC").id).toBe("victoria");
+    expect(tripLandmark("Oaxaca").id).toBe("oaxaca");
+    expect(tripLandmark("Guadalajara").id).toBe("guadalajara");
+    expect(tripLandmark("Mont Saint-Michel").id).toBe("mont-saint-michel");
+    expect(tripLandmark("Santiago de Compostela").id).toBe("santiago-de-compostela");
+    expect(tripLandmark("Heidelberg").id).toBe("heidelberg");
+    expect(tripLandmark("Innsbruck").id).toBe("innsbruck");
+    expect(tripLandmark("Utrecht").id).toBe("utrecht");
+    expect(tripLandmark("Newcastle").id).toBe("newcastle");
+    expect(tripLandmark("Thessaloniki").id).toBe("thessaloniki");
+    expect(tripLandmark("Bucharest").id).toBe("bucharest");
+    expect(tripLandmark("Belgrade").id).toBe("belgrade");
+    expect(tripLandmark("Xi'an").id).toBe("xian");
+    expect(tripLandmark("Chengdu").id).toBe("chengdu");
+    expect(tripLandmark("Hangzhou").id).toBe("hangzhou");
+    expect(tripLandmark("Nara").id).toBe("nara");
+    expect(tripLandmark("Kolkata").id).toBe("kolkata");
+    expect(tripLandmark("Hyderabad").id).toBe("hyderabad");
+    expect(tripLandmark("Amritsar").id).toBe("amritsar");
+    expect(tripLandmark("Udaipur").id).toBe("udaipur");
+    expect(tripLandmark("Samarkand").id).toBe("samarkand");
+    expect(tripLandmark("Tbilisi").id).toBe("tbilisi");
+    expect(tripLandmark("Baku").id).toBe("baku");
+    expect(tripLandmark("Hobart").id).toBe("hobart");
+    expect(tripLandmark("Christchurch").id).toBe("christchurch");
+    expect(tripLandmark("Fez").id).toBe("fez");
+    expect(tripLandmark("Quito").id).toBe("quito");
+    expect(tripLandmark("Montevideo").id).toBe("montevideo");
   });
 
   it("ignores accents and case", () => {
@@ -74,6 +107,11 @@ describe("tripLandmark", () => {
     expect(tripLandmark("São Paulo").id).toBe("sao-paulo");
     expect(tripLandmark("Bogotá").id).toBe("bogota");
     expect(tripLandmark("Torino").id).toBe("turin");
+    expect(tripLandmark("Córdoba").id).toBe("cordoba");
+    expect(tripLandmark("Gdańsk").id).toBe("gdansk");
+    expect(tripLandmark("Tromsø").id).toBe("tromso");
+    expect(tripLandmark("Malmö").id).toBe("malmo");
+    expect(tripLandmark("Medellín").id).toBe("medellin");
   });
 
   it("takes the city named first", () => {
@@ -103,8 +141,13 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Split stay").id).toBe("trip");
   });
 
-  it("leaves out a longer name that begins with a city's", () => {
-    expect(tripLandmark("Santiago de Compostela").id).toBe("trip");
+  it("leaves out a longer name containing a city's", () => {
+    expect(tripLandmark("Santiago de Cuba").id).toBe("trip");
+    expect(tripLandmark("Santiago de Compostela").id).toBe("santiago-de-compostela");
+    expect(tripLandmark("Victoria Falls").id).toBe("trip");
+    expect(tripLandmark("Lake Victoria").id).toBe("lake");
+    expect(tripLandmark("Lake Victoria holiday").id).toBe("lake");
+    expect(tripLandmark("Lake Victoria, then Victoria").id).toBe("victoria");
     expect(tripLandmark("Rio Grande").id).toBe("trip");
     expect(tripLandmark("Washington State").id).toBe("trip");
     expect(tripLandmark("Washington State road trip").id).toBe("road-trip");
@@ -209,6 +252,6 @@ describe("tripLandmark", () => {
         fallbacks.add(word);
       }
     }
-    expect(LANDMARKS.length).toBe(236);
+    expect(LANDMARKS.length).toBe(275);
   });
 });

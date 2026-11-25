@@ -20,7 +20,7 @@ data class Landmark(
      * so "Nice weekend" and "Bath time" are nobody.
      */
     val capitalized: List<String> = emptyList(),
-    /** Longer names, folded, that a match of [cities] or [fallback] is not when it begins one: "santiago de compostela" is not Santiago. */
+    /** Longer names, folded, that a match of [cities] or [fallback] is not when it is part of one: "santiago de compostela" is not Santiago, and "lake victoria" is not Victoria. */
     val not: List<String> = emptyList(),
     /**
      * Kind-of-place, season, holiday or vacation words, folded: matched only when the title names no place from
@@ -83,15 +83,25 @@ fun tripLandmark(title: String): Landmark {
         }
         return best?.second
     }
+    fun notExcluded(not: List<String>, name: String): (Int) -> Boolean = { at ->
+        not.none { n ->
+            val padded = " $n "
+            var off = padded.indexOf(" $name ")
+            var hit = false
+            while (off >= 0 && !hit) {
+                if (at >= off && words.startsWith(padded, at - off)) hit = true
+                off = padded.indexOf(" $name ", off + 1)
+            }
+            hit
+        }
+    }
     val place = pick { landmark, consider ->
-        val ok: (Int) -> Boolean = { at -> landmark.not.none { words.startsWith(" $it ", at) } }
-        for (city in landmark.cities) consider(firstAt(words, city, ok))
+        for (city in landmark.cities) consider(firstAt(words, city, notExcluded(landmark.not, city)))
         for (name in landmark.capitalized) consider(firstAt(kept, name) { at -> at > 0 || opensTitle(name) })
     }
     if (place != null) return place
     val theme = pick { landmark, consider ->
-        val ok: (Int) -> Boolean = { at -> landmark.not.none { words.startsWith(" $it ", at) } }
-        for (word in landmark.fallback) consider(firstAt(words, word, ok))
+        for (word in landmark.fallback) consider(firstAt(words, word, notExcluded(landmark.not, word)))
     }
     return theme ?: landmarks.first { it.id == "trip" }
 }
