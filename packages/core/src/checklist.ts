@@ -106,10 +106,15 @@ export function tripChecklist(
     .sort((a, b) => a.due.localeCompare(b.due) || a.text.localeCompare(b.text));
 }
 
+// Whether a trip still has "Before you go": until the end of its first day.
+export function checklistShown(trip: Pick<Trip, "start" | "end" | "liveStart" | "liveEnd">, today: string): boolean {
+  return displayBounds(trip).start >= today;
+}
+
 // The entries to send today: not ticked off, due by today, for a trip that
 // has not started yet (a trip booked after a reminder's day gets it at once).
 export function dueEntries(trip: Pick<Trip, "start" | "end" | "liveStart" | "liveEnd">, entries: readonly ChecklistEntry[], today: string): ChecklistEntry[] {
-  if (displayBounds(trip).start < today) return [];
+  if (!checklistShown(trip, today)) return [];
   return entries.filter((e) => !e.done && e.due <= today);
 }
 

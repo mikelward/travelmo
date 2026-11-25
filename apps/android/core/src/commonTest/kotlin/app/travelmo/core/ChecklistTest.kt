@@ -99,6 +99,13 @@ class ChecklistTest {
     }
 
     @Test
+    fun `shows Before you go until the end of the trip's first day`() {
+        checklistShown(trip, "2026-12-12") shouldBe true
+        checklistShown(trip, "2026-12-13") shouldBe false
+        checklistShown(trip.copy(liveStart = "2026-12-14", liveEnd = "2026-12-19"), "2026-12-14") shouldBe true
+    }
+
+    @Test
     fun `sends what is due and not ticked off at once for a trip booked late and nothing once it started`() {
         val list = tripChecklist(trip, listOf(meds, visa), listOf("meds"), listOf(adapter), international = true)
         dueEntries(trip, list, "2026-11-11") shouldBe emptyList()

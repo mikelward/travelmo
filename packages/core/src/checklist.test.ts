@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  checklistShown,
   checklistEmail,
   checklistNotification,
   dueEntries,
@@ -120,6 +121,12 @@ describe("tripChecklist", () => {
   it("dates from when the person travels, not the trip's own dates", () => {
     const moved = { ...trip, liveStart: "2026-12-14", liveEnd: "2026-12-19" };
     expect(tripChecklist(moved, [visa], { done: [], added: [] }, true)[0]!.due).toBe("2026-11-14");
+  });
+
+  it("shows Before you go until the end of the trip's first day", () => {
+    expect(checklistShown(trip, "2026-12-12")).toBe(true);
+    expect(checklistShown(trip, "2026-12-13")).toBe(false);
+    expect(checklistShown({ ...trip, liveStart: "2026-12-14", liveEnd: "2026-12-19" }, "2026-12-14")).toBe(true);
   });
 
   it("sends what is due and not ticked off, at once for a trip booked late, and nothing once it started", () => {
