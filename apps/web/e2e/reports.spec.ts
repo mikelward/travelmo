@@ -9,6 +9,7 @@ test.beforeEach(async () => {
 test("reports count days in each country, trips per year, and mark the map", async ({ page }) => {
   const ownerUid = await signIn(page, owner);
   await seedLisbonTrip(ownerUid, "e2e-lisbon");
+  await updateUser(ownerUid, { homes: [{ city: "London", country: "GB", from: "2020-01-01" }] });
   // Still ahead on the frozen date, so not counted.
   await seedTrip(ownerUid, "e2e-liverpool");
 
@@ -17,12 +18,20 @@ test("reports count days in each country, trips per year, and mark the map", asy
   await expect(page.getByTestId("summary")).toHaveText("1 trip · 5 days away · 2 countries");
 
   const countries = page.getByRole("table", { name: "Days in each country" });
-  await expect(countries.getByRole("row")).toHaveText(["CountryDaysTrips", "Portugal51", "United Kingdom21"]);
-  // A country opens to the trips with days there.
+  // From the first trip to the frozen date, home included; the days of
+  // leaving and coming back count for both countries.
+  await expect(countries.getByRole("row")).toHaveText(["CountryDays", "United Kingdom507", "Portugal5"]);
+  // A country opens to its stays, each with the trip that took the user there.
   await countries.getByRole("button", { name: "Portugal" }).click();
-  const inPortugal = page.getByRole("list", { name: "Trips in Portugal" });
-  await expect(inPortugal.getByRole("listitem")).toHaveCount(1);
-  await inPortugal.getByRole("link").click();
+  const inPortugal = page.getByRole("list", { name: "Stays in Portugal" });
+  await expect(inPortugal.getByRole("listitem")).toHaveText(["10–14 Jun 2025 · 5 days · Lisbon"]);
+  await countries.getByRole("button", { name: "United Kingdom" }).click();
+  await expect(page.getByRole("list", { name: "Stays in United Kingdom" }).getByRole("listitem")).toHaveText([
+    "14 Jun 2025 – 1 Nov 2026 · 506 days · Home",
+    "10 Jun 2025 · 1 day · Home",
+  ]);
+  await countries.getByRole("button", { name: "Portugal" }).click();
+  await page.getByRole("list", { name: "Stays in Portugal" }).getByRole("link", { name: "Lisbon" }).click();
   await expect(page).toHaveURL(/\/trips\/e2e-lisbon$/);
   await page.goBack();
   const years = page.getByRole("table", { name: "Trips per year" });
@@ -111,6 +120,10 @@ test("UK settlement counts from the move to the UK and lists the days it can't p
   await rule.getByText("Days we can't place (1)").click();
   const unplaced = rule.getByRole("list", { name: "Days we can't place" });
   await expect(unplaced.getByRole("listitem")).toHaveText([/Give these trips’ bookings a place/, "1–3 Apr 2026 · 3 days · Mystery"]);
+  // Days in each country leaves them out until they have one.
+  const countries = page.getByTestId("unplaced");
+  await expect(countries).toContainText("3 days we can’t place aren’t counted.");
+  await expect(countries.getByRole("listitem")).toHaveText(["1–3 Apr 2026 · 3 days · Mystery"]);
   await unplaced.getByRole("link", { name: "Mystery" }).click();
   await expect(page).toHaveURL(/\/trips\/e2e-mystery$/);
 });

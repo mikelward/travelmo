@@ -627,7 +627,7 @@ class ScreenScreenshotTest {
             TravelmoTheme(darkTheme = dark) { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.REPORTS) {} }) }
         }
         composeRule.onNodeWithText("Portugal").performScrollTo().performClick()
-        composeRule.onNodeWithText("Lisbon · ", substring = true).performScrollTo()
+        composeRule.onNodeWithText("14–19 Sept 2026 · 6 days").performScrollTo()
         composeRule.waitForIdle()
         composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
     }

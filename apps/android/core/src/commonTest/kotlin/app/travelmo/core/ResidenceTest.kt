@@ -459,4 +459,67 @@ class ResidenceTest {
         )
         for (set in residenceRuleSets) for (r in set.rules) official.containsMatchIn(r.source) shouldBe true
     }
+
+    private val bostonTrip = roundTrip("boston", "2026-11-24", "2026-11-29", "LHR", "BOS")
+    private val liverpool = trip("liverpool", "2026-11-10", "2026-11-12", listOf(Segment("dock", "t", SegmentType.LODGING, "Dock Hotel", "2026-11-10T15:00:00+00:00", "2026-11-12T11:00:00+00:00", destination = Place("Dock Hotel", country = "GB"))))
+    private val nowhere = trip("nowhere", "2026-11-15", "2026-11-16", listOf(Segment("s", "t", SegmentType.LODGING, "Somewhere", "2026-11-15T15:00:00+00:00", "2026-11-16T11:00:00+00:00", destination = Place("Somewhere"))))
+    private val november = DateRange("2026-11-01", "2026-11-30")
+
+    @Test
+    fun `splits the days into stays between border crossings home included a crossing day counting for both`() {
+        countryDays(listOf(bostonTrip, liverpool, nowhere), london, november).countries shouldBe listOf(
+            CountryDays(
+                "GB", 24,
+                listOf(
+                    CountryStay("2026-11-29", "2026-11-30", 2, home = true, tripIds = emptyList()),
+                    CountryStay("2026-11-17", "2026-11-24", 8, home = true, tripIds = emptyList()),
+                    CountryStay("2026-11-01", "2026-11-14", 14, home = true, tripIds = emptyList()),
+                ),
+            ),
+            CountryDays("US", 6, listOf(CountryStay("2026-11-24", "2026-11-29", 6, home = false, tripIds = listOf("boston")))),
+        )
+    }
+
+    @Test
+    fun `links each stay to the trips that put the traveler in that country`() {
+        val us = trip("us", "2026-11-01", "2026-11-03", listOf(Segment("u", "us", SegmentType.LODGING, "Desert Inn", "2026-11-01T15:00:00-05:00", "2026-11-03T11:00:00-05:00", destination = Place("Desert Inn", country = "US"))))
+        val fr = trip("fr", "2026-11-03", "2026-11-05", listOf(Segment("f", "fr", SegmentType.LODGING, "Hôtel Exemple", "2026-11-03T15:00:00+01:00", "2026-11-05T11:00:00+01:00", destination = Place("Hôtel Exemple", country = "FR"))))
+        val countries = countryDays(listOf(us, fr), london, DateRange("2026-11-01", "2026-11-06")).countries
+        countries.first { it.country == "US" }.stays.map { it.tripIds } shouldBe listOf(listOf("us"))
+        countries.first { it.country == "FR" }.stays.map { it.tripIds } shouldBe listOf(listOf("fr"))
+    }
+
+    @Test
+    fun `starts a stay away when home moves to another country mid-stay`() {
+        val hotel = trip("hotel", "2026-11-03", "2026-11-04", listOf(Segment("h", "hotel", SegmentType.LODGING, "Example Hotel", "2026-11-03T15:00:00+00:00", "2026-11-04T11:00:00+00:00", destination = Place("Example Hotel", country = "GB"))))
+        val moved = listOf(HomePeriod("London", "GB", until = "2026-11-02"), HomePeriod("Boston", "US", from = "2026-11-03"))
+        countryDays(listOf(hotel), moved, DateRange("2026-11-01", "2026-11-04")).countries.first { it.country == "GB" }.stays shouldBe listOf(
+            CountryStay("2026-11-03", "2026-11-04", 2, home = false, tripIds = listOf("hotel")),
+            CountryStay("2026-11-01", "2026-11-02", 2, home = true, tripIds = emptyList()),
+        )
+    }
+
+    @Test
+    fun `leaves days nothing places out of every country with the trips to give a place`() {
+        val report = countryDays(listOf(bostonTrip, liverpool, nowhere), london, november)
+        report.unplaced shouldBe listOf(Stretch("2026-11-15", "2026-11-16", 2, emptyList(), listOf("nowhere")))
+        report.homeCountryKnown shouldBe true
+        val homeless = countryDays(listOf(bostonTrip, liverpool, nowhere), listOf(HomePeriod("London")), november)
+        homeless.homeCountryKnown shouldBe false
+        // Days at a home with no country are for the Profile to fix, not listed.
+        homeless.unplaced.map { it.tripIds } shouldBe listOf(listOf("nowhere"))
+        // A home with a country later on does not cover the days before it.
+        val movedIn = listOf(HomePeriod("Somewhere", until = "2026-11-19"), HomePeriod("London", "GB", "2026-11-20"))
+        countryDays(listOf(bostonTrip, liverpool, nowhere), movedIn, november).homeCountryKnown shouldBe false
+        countryDays(listOf(bostonTrip, liverpool, nowhere), movedIn, DateRange("2026-11-20", "2026-11-30")).homeCountryKnown shouldBe true
+    }
+
+    @Test
+    fun `covers a year up to today or everything from the first trip`() {
+        val all = listOf(bostonTrip, liverpool, nowhere)
+        countryDaysRange(all, "2026-11-30", "2026") shouldBe DateRange("2026-01-01", "2026-11-30")
+        countryDaysRange(all, "2026-11-30", "2025") shouldBe DateRange("2025-01-01", "2025-12-31")
+        countryDaysRange(all, "2026-11-30") shouldBe DateRange("2026-11-10", "2026-11-30")
+        countryDaysRange(emptyList(), "2026-11-30") shouldBe null
+    }
 }
