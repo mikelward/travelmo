@@ -306,7 +306,7 @@ export function SegmentForm({
     <label className={labelClass}>
       {label}
       {/* On a phone the zone takes its own line, so the date keeps room. */}
-      <div className="grid grid-cols-[1fr_9rem] gap-2 sm:grid-cols-[1fr_9rem_minmax(10rem,1.2fr)]">
+      <div className="grid grid-cols-[1fr_10rem] gap-2 sm:grid-cols-[1fr_10rem_minmax(10rem,1.2fr)]">
         <input type="date" required={required} value={fields[date]} onChange={set(date)} className={inputClass} />
         <input type="time" value={fields[time]} onChange={set(time)} className={inputClass} />
         <div className="col-span-2 sm:col-span-1">
