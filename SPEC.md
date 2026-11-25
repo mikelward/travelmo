@@ -1217,11 +1217,21 @@ given, or a flight in the middle (`journeyGaps`, in `packages/core` and
   drive between them is not missing): "No flight from Adelaide to London
   found between 10 Jan and 15 Feb".
 
-Each says "journey" when not every journey on the trip flies, and has Find
-it in Gmail (a search for both its ends, each by city or code: `("Adelaide"
-OR ADL) ("London" OR LHR)`, with no dates, as the email came long before)
-and Add it yourself (for those who may edit, the booking form starting on
-the first day it could be). When one is out or back, This trip is one way
+Each says "journey" when not every journey on the trip flies, and has Look
+for it and Add it yourself (for those who may edit, the booking form
+starting on the first day it could be). Look for it (`POST /trips/look`, the
+parser's `findJourney.ts`) searches the viewer's connected Gmail for both
+its ends, each by city or code (`("Adelaide" OR ADL) ("London" OR LHR)`), in
+emails sent from six months before its first day until the day after the
+next journey leaves (or its own day, for one out or back), outside spam,
+trash and the promotions and social tabs. Newest first, it reads up to five
+matches as Import anyway does (no pre-filter, an earlier "not a booking" no
+obstacle; one already imported is listed, not read again), stopping at the
+first booking, which is filed like any import. Each email shows what came of
+it, with its import report to copy where it wasn't added; Keep looking reads
+the next five while there are more (a booking that fills the gap takes the
+gap away; one that doesn't, such as the journey out, leaves it). Each read is a call to the model, made only when asked.
+Fastmail and IMAP mailboxes are not searched yet. When one is out or back, This trip is one way
 adds the trip to the viewer's `oneWayTrips` on their user document (at most
 two hundred, the newest kept), and the trip stops saying those, for them
 alone; one between stays. The list's cards name the first, on the web and

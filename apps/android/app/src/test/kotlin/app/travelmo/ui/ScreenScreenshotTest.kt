@@ -85,7 +85,7 @@ class ScreenScreenshotTest {
         TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
     }
 
-    private fun viewModel() = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+    private fun viewModel() = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, tripActions = FakeTripActions())
 
     private val user = SignedIn(OWNER, OWNER_EMAIL)
 

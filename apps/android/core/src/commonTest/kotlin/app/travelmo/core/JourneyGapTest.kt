@@ -111,7 +111,6 @@ class JourneyGapTest {
     fun `searches for both ends by city or code and keeps the newest one-way trips`() {
         journeyGapSearch(JourneyGap("back", "Adelaide", "London", "flight", "2026-01-10", fromCode = "ADL", toCode = "LHR")) shouldBe "(\"Adelaide\" OR ADL) (\"London\" OR LHR)"
         journeyGapSearch(JourneyGap("back", "Bath", "Say \"Hi\"", "journey", "2026-01-10")) shouldBe "\"Bath\" \"Say  Hi \""
-        gmailSearchUrl("\"Bath\" \"London\"") shouldBe "https://mail.google.com/mail/u/0/#search/%22Bath%22%20%22London%22"
         withOneWay(listOf("t1", "t2"), "t1") shouldBe listOf("t2", "t1")
         withOneWay(List(200) { "t$it" }, "new") shouldHaveSize 200
     }

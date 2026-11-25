@@ -61,7 +61,16 @@
     <string name="open_in_gmail">Open in Gmail</string>
     <string name="try_again">Try again</string>
     <string name="add_it_yourself">Add it yourself</string>
-    <string name="find_it_in_gmail">Find it in Gmail</string>
+    <string name="look_for_it">Look for it</string>
+    <string name="keep_looking">Keep looking</string>
+    <string name="looking">Looking…</string>
+    <string name="no_emails_mention">No emails mention %1$s and %2$s</string>
+    <string name="looked_imported">Added</string>
+    <string name="looked_cancellation">A cancellation, applied</string>
+    <string name="looked_already">Already in Travelmo</string>
+    <string name="looked_not_booking">Not a booking</string>
+    <string name="looked_failed">Couldn't be read</string>
+    <string name="looked_busy">Being imported now</string>
     <string name="trip_is_one_way">This trip is one way</string>
     <string name="copy_report">Copy report</string>
     <string name="report_a_problem">Report a problem</string>

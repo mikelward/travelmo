@@ -104,9 +104,9 @@ export function journeyGapText(gap: JourneyGap): string {
   return gap.until === gap.date ? `${what} on ${dayMonth(gap.date)}` : `${what} between ${dayMonth(gap.date)} and ${dayMonth(gap.until)}`;
 }
 
-// A Gmail search for the missing booking's email: both its ends, each by
-// city or code, as a booking email names them: (Adelaide OR ADL) (London
-// OR LHR). No dates: the email was sent long before the journey.
+// The places in a mailbox search for the missing booking's email (the
+// parser's lookQuery adds the dates): both its ends, each by city or code,
+// as a booking email names them: ("Adelaide" OR ADL) ("London" OR LHR).
 export function journeyGapSearch(gap: JourneyGap): string {
   const term = (city: string, code: string | undefined) => {
     const name = `"${city.replaceAll('"', " ")}"`;
@@ -115,11 +115,27 @@ export function journeyGapSearch(gap: JourneyGap): string {
   return `${term(gap.from, gap.fromCode)} ${term(gap.to, gap.toCode)}`;
 }
 
-// That search in Gmail's web app, in whichever account the browser has open
-// first.
-export function gmailSearchUrl(query: string): string {
-  return `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(query)}`;
-}
+// "Look for it" (the parser's findJourney.ts): the person's mailbox searched
+// for a gap's emails, a few read at a time.
+export const lookPath = "/trips/look";
+
+// What came of one email a look found: read now ("imported", a
+// "cancellation", "not_booking", "filtered" or "failed"), "already"
+// imported before (its bookings are in Travelmo, perhaps on another trip),
+// or "busy" being imported right now. `report`, for one read now, is Import
+// anyway's, to copy.
+export type LookedEmail = {
+  messageId: string;
+  subject: string;
+  from: string;
+  sent: string;
+  outcome: "imported" | "cancellation" | "not_booking" | "filtered" | "failed" | "already" | "busy";
+  report?: string;
+};
+
+// A look's emails, and `next`, where to keep looking from, while there are
+// more.
+export type LookResult = { emails: LookedEmail[]; next?: number };
 
 // The list with one more trip, the newest kept when it is full.
 export function withOneWay(trips: readonly string[], tripId: string): string[] {

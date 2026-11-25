@@ -1,6 +1,8 @@
 package app.travelmo.ui
 
 import app.travelmo.core.JourneyGap
+import app.travelmo.core.LookResult
+import app.travelmo.core.journeyGapKey
 import app.travelmo.core.journeyGaps
 import app.travelmo.core.journeyGapHomes
 import app.travelmo.core.displayTitles
@@ -1216,6 +1218,25 @@ class TripsViewModel(
     fun removeRideCompany(token: String, company: RideCompany) = run(token, "removeRideCompany") { store.removeRideCompany(uid, company) }
 
     fun hideRideNeed(token: String, need: RideNeed) = run(token, "hideRideNeed") { store.hideRideNeed(uid, rideNeedKey(need)) }
+
+    private val _looks = MutableStateFlow<Map<String, LookResult>>(emptyMap())
+
+    /** What looking for each missing journey found (by [journeyGapKey]): every email so far, and where to keep looking from. */
+    val looks: StateFlow<Map<String, LookResult>> = _looks.asStateFlow()
+
+    /** Whether this build can look for a missing journey: it has a parser to ask. */
+    val canLook: Boolean
+        get() = tripActions.available
+
+    /** The token a look for [gap] runs under, for its outcome. */
+    fun lookToken(tripId: String, gap: JourneyGap): String = "look/${journeyGapKey(tripId, gap)}"
+
+    /** Searches the user's Gmail for a missing journey's emails and reads a few, carrying on from the look before. */
+    fun lookForJourney(tripId: String, gap: JourneyGap) = run(lookToken(tripId, gap), "lookForJourney") {
+        val key = journeyGapKey(tripId, gap)
+        val result = tripActions.lookForJourney(gap, _looks.value[key]?.next)
+        _looks.update { it + (key to LookResult(it[key]?.emails.orEmpty() + result.emails, result.next)) }
+    }
 
     /** Says a trip goes one way, so it no longer says a journey back is missing. */
     fun markOneWay(token: String, tripId: String) = run(token, "markOneWay") { store.markOneWay(uid, tripId) }

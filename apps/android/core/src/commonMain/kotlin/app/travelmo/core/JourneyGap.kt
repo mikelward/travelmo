@@ -73,7 +73,7 @@ fun journeyGapText(gap: JourneyGap): String {
     return if (until == gap.date) "$what on ${dayMonth(gap.date)}" else "$what between ${dayMonth(gap.date)} and ${dayMonth(until)}"
 }
 
-/** A Gmail search for the missing booking's email: both its ends, each by city or code, as `("Adelaide" OR ADL) ("London" OR LHR)`. */
+/** The places in a mailbox search for the missing booking's email (the parser adds the dates): both its ends, each by city or code, as `("Adelaide" OR ADL) ("London" OR LHR)`. */
 fun journeyGapSearch(gap: JourneyGap): String {
     fun term(city: String, code: String?): String {
         val name = "\"${city.replace('"', ' ')}\""
@@ -82,8 +82,21 @@ fun journeyGapSearch(gap: JourneyGap): String {
     return "${term(gap.from, gap.fromCode)} ${term(gap.to, gap.toCode)}"
 }
 
-/** That search in Gmail's web app, in whichever account the browser has open first. */
-fun gmailSearchUrl(query: String): String = "https://mail.google.com/mail/u/0/#search/${encodeUriComponent(query)}"
+/** "Look for it" on the parser (its findJourney.ts): the person's mailbox searched for a gap's emails, a few read at a time. */
+const val LOOK_PATH = "/trips/look"
+
+/**
+ * What came of one email a look found, as journeyGap.ts's LookedEmail: read now ("imported", "cancellation",
+ * "not_booking", "filtered" or "failed"), "already" imported before, or "busy" being imported right now. [report], for
+ * one read now, is Import anyway's, to copy.
+ */
+data class LookedEmail(val messageId: String, val subject: String, val outcome: String, val report: String? = null)
+
+/** A look's emails, and [next], where to keep looking from, while there are more. */
+data class LookResult(val emails: List<LookedEmail>, val next: Int? = null)
+
+/** A key for one gap of a trip, to keep what looking for it found. */
+fun journeyGapKey(tripId: String, gap: JourneyGap): String = "$tripId/${gap.direction}/${gap.date}/${gap.from}/${gap.to}"
 
 /** The trips a person said go one way; past this many the oldest is dropped. */
 const val MAX_ONE_WAY_TRIPS = 200

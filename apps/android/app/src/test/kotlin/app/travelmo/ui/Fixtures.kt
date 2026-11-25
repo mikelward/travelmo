@@ -643,6 +643,13 @@ class FakeTripActions(private val failure: String? = null) : TripActions {
         calls += "stopRefresh"
         failure?.let { throw TripActionFailed(it) }
     }
+    /** What looking for a missing journey answers, a page a call; the next page after each. */
+    var looks: List<app.travelmo.core.LookResult> = emptyList()
+    override suspend fun lookForJourney(gap: app.travelmo.core.JourneyGap, next: Int?): app.travelmo.core.LookResult {
+        calls += "look ${gap.from} to ${gap.to}${next?.let { " from $it" } ?: ""}"
+        failure?.let { throw TripActionFailed(it) }
+        return looks[calls.count { it.startsWith("look ") } - 1]
+    }
 }
 
 /**

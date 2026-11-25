@@ -1,5 +1,5 @@
 import type { User } from "firebase/auth";
-import { accountDeletePath, bugReportFailure, bugReportPath, type BugReport, backfillStartPath, backfillStopPath, calendarConnectPath, calendarDisconnectPath, calendarExportIssuePath, calendarSelectPath, calendarExportStopPath, deleteAllTripsPath, fastmailBackfillStartPath, fastmailBackfillStopPath, fastmailConnectPath, fastmailDisconnectPath, feedAddPath, imapBackfillStartPath, imapBackfillStopPath, imapConnectPath, imapDisconnectPath, feedRemovePath, forwardIssuePath, forwardStopPath, gmailConnectPath, gmailDisconnectPath, isDeletionUnfinished, linkRefusalText, refusalOf, refreshPath, refreshStopPath, regroupPath, type AccountAccess, type CalendarExport, type ForwardAddress, type RegroupResult } from "@travelmo/core";
+import { accountDeletePath, bugReportFailure, bugReportPath, type BugReport, backfillStartPath, backfillStopPath, calendarConnectPath, calendarDisconnectPath, calendarExportIssuePath, calendarSelectPath, calendarExportStopPath, deleteAllTripsPath, fastmailBackfillStartPath, fastmailBackfillStopPath, fastmailConnectPath, fastmailDisconnectPath, feedAddPath, imapBackfillStartPath, imapBackfillStopPath, imapConnectPath, imapDisconnectPath, feedRemovePath, forwardIssuePath, forwardStopPath, gmailConnectPath, gmailDisconnectPath, isDeletionUnfinished, linkRefusalText, refusalOf, refreshPath, refreshStopPath, regroupPath, lookPath, type AccountAccess, type JourneyGap, type LookResult, type CalendarExport, type ForwardAddress, type RegroupResult } from "@travelmo/core";
 import type { CalendarResult } from "./ics";
 import type { TripItResult } from "./tripit";
 
@@ -112,6 +112,18 @@ export const api = {
   stopImapBackfill: (user: User, emailAddress: string) => post<void>(user, imapBackfillStopPath, { emailAddress }),
   // `report`: what was read and what the model said, to copy (debugReport.ts).
   reimport: (user: User, messageId: string) => post<{ outcome: string; report?: string }>(user, "/gmail/reimport", { messageId }),
+  // "Look for it" on a journey a trip seems to be missing: emails read, and
+  // `next` to keep looking from (findJourney.ts).
+  lookForJourney: (user: User, gap: JourneyGap, next?: number) =>
+    post<LookResult>(user, lookPath, {
+      from: gap.from,
+      to: gap.to,
+      date: gap.date,
+      ...(gap.until ? { until: gap.until } : {}),
+      ...(gap.fromCode ? { fromCode: gap.fromCode } : {}),
+      ...(gap.toCode ? { toCode: gap.toCode } : {}),
+      ...(next !== undefined ? { next } : {}),
+    }),
   importTripIt: (user: User, exported: unknown) => post<TripItResult>(user, "/import/tripit", { export: exported }),
   importIcs: (user: User, text: string) => post<CalendarResult>(user, "/import/ics", { text }),
   addFeed: (user: User, url: string, label?: string) =>

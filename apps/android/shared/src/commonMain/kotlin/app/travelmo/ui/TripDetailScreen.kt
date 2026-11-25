@@ -74,6 +74,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.travelmo.core.journeyGapKey
 import app.travelmo.core.tripTravelers
 import app.travelmo.core.watching
 import androidx.lifecycle.repeatOnLifecycle
@@ -222,6 +223,7 @@ fun TripDetailScreen(
     val myChecklist by myChecklistFlow.collectAsStateWithLifecycle(initialValue = null)
     val addresses by viewModel.addresses.collectAsStateWithLifecycle()
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val looks by viewModel.looks.collectAsStateWithLifecycle()
     val cleanup by viewModel.senderCleanup.collectAsStateWithLifecycle()
     var deleting by remember { mutableStateOf<Segment?>(null) }
     var moving by remember { mutableStateOf<Segment?>(null) }
@@ -347,6 +349,13 @@ fun TripDetailScreen(
                 journeyGap = viewModel.journeyGapsFor(current, segments, rideSettings).takeIf { it.isNotEmpty() }?.let { gaps ->
                     JourneyGapActions(
                         gaps,
+                        lookOf = { gap ->
+                            GapLook(
+                                found = looks[journeyGapKey(tripId, gap)],
+                                outcome = outcomes[viewModel.lookToken(tripId, gap)],
+                            )
+                        },
+                        onLook = if (viewModel.canLook) { gap -> viewModel.lookForJourney(tripId, gap) } else null,
                         onAdd = if (canEdit) onAddBooking else null,
                         onOneWay = { viewModel.markOneWay("${prefix}one-way", tripId) },
                     )

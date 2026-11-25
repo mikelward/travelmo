@@ -1,5 +1,8 @@
 package app.travelmo.data
 
+import app.travelmo.core.JourneyGap
+import app.travelmo.core.LookResult
+
 
 
 /** Settings' "Regroup trips", "Refresh from email" and "Delete all trips"; the parser in the app, a fake in tests. */
@@ -22,6 +25,9 @@ interface TripActions {
 
     /** Stops the refresh under way; the batch reading saves its place. Throws [TripActionFailed]. */
     suspend fun stopRefresh()
+
+    /** Searches the user's Gmail for a missing journey's emails and reads a few, from [next] on. Throws [TripActionFailed]. */
+    suspend fun lookForJourney(gap: JourneyGap, next: Int?): LookResult
 }
 
 /** A trip action that did not go through, with the words Settings shows. */
@@ -34,6 +40,7 @@ object NoTripActions : TripActions {
     override suspend fun deleteAll(): String = throw TripActionFailed(ON_WEB)
     override suspend fun refresh(restart: Boolean, retryFailed: Boolean): Unit = throw TripActionFailed(ON_WEB)
     override suspend fun stopRefresh(): Unit = throw TripActionFailed(ON_WEB)
+    override suspend fun lookForJourney(gap: JourneyGap, next: Int?): LookResult = throw TripActionFailed(ON_WEB)
 }
 
 private const val ON_WEB = "Use Settings on the web for this."
