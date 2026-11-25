@@ -998,7 +998,8 @@ says then, so a retry never gives a gate a later look has replaced; a
 retry changes or drops its entry only while it is the one it read, so it
 never discards a newer one a later failure left.
 The page shows a status from a day before departure until the looks stop,
-with a listener per flight only for those flights. `AEROAPI_KEY` turns it
+saying nothing once the flight has been down an hour, with a listener per
+flight only for those flights. `AEROAPI_KEY` turns it
 on; `FLIGHT_STATUS_DAILY_LIMIT` (default 1,000 calls) caps every user's
 calls together, and a capped day logs `flight_status_capped` and looks no
 more until the next.

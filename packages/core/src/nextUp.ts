@@ -1,5 +1,5 @@
 import { formatDate, localTime } from "./format";
-import { flightDeparted, flightNextStep, flightStatusKey, flightStatusShown, type FlightStatus } from "./flightStatus";
+import { flightDeparted, flightNextStep, flightStatusKey, flightStatusShown, shownAfterLandingMs, type FlightStatus } from "./flightStatus";
 import type { ExtractedSegment } from "./schema";
 import { relativeTime, shiftInstant } from "./status";
 import { eventVerb, isCancelled, localDate, nextEvent, type UpcomingEvent } from "./trips";
@@ -90,7 +90,7 @@ function heldEvent<S extends ExtractedSegment>(segments: readonly S[], now: stri
 
 // How long after landing the card keeps to it: what waited on the landing,
 // and the carousel.
-export const afterLandingMs = 60 * 60_000;
+export const afterLandingMs = shownAfterLandingMs;
 
 type CardEvent<S extends ExtractedSegment> = { event: UpcomingEvent<S>; then?: UpcomingEvent<S> };
 
