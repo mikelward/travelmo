@@ -69,6 +69,30 @@ class LandmarksTest {
     }
 
     @Test
+    fun takesANameThatIsAlsoAWordOnlyAsAPlace() {
+        assertEquals("nice", tripLandmark("Nice").id)
+        assertEquals("nice", tripLandmark("Nice, France").id)
+        assertEquals("nice", tripLandmark("Weekend in Nice").id)
+        assertEquals("trip", tripLandmark("Nice weekend").id)
+        assertEquals("trip", tripLandmark("A nice break").id)
+        assertEquals("trip", tripLandmark("NICE").id)
+        assertEquals("bath", tripLandmark("Bath").id)
+        assertEquals("trip", tripLandmark("Bath time").id)
+        assertEquals("bath", tripLandmark("Nice weekend in Bath").id)
+    }
+
+    @Test
+    fun leavesOutALongerNameThatBeginsWithACitys() {
+        assertEquals("trip", tripLandmark("Santiago de Compostela").id)
+        assertEquals("trip", tripLandmark("Rio Grande").id)
+        assertEquals("trip", tripLandmark("Washington State road trip").id)
+        assertEquals("trip", tripLandmark("Canton, Ohio").id)
+        assertEquals("santiago", tripLandmark("Santiago").id)
+        assertEquals("washington", tripLandmark("Washington, DC").id)
+        assertEquals("rio-de-janeiro", tripLandmark("Rio Grande, then Rio").id)
+    }
+
+    @Test
     fun givesAPlaceWithNoLandmarkTheSuitcase() {
         assertEquals("trip", tripLandmark("Woburn").id)
         assertEquals("trip", tripLandmark("").id)
@@ -86,6 +110,12 @@ class LandmarksTest {
                 assertEquals(city, foldText(city))
                 assertEquals(true, seenCities.add(city))
             }
+            for (name in landmark.capitalized) {
+                assertEquals(name.lowercase(), foldText(name))
+                assertEquals(true, name.first().isUpperCase())
+                assertEquals(true, seenCities.add(foldText(name)))
+            }
+            for (name in landmark.not) assertEquals(name, foldText(name))
         }
     }
 }
