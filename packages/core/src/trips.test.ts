@@ -241,6 +241,49 @@ describe("sameBooking", () => {
     expect(sameBooking({ ...menu, destination: { name: "London", code: "LGW" } }, booked)).toBe(false);
     expect(sameBooking({ ...menu, title: "DL 1 BOS to LHR" }, booked)).toBe(false);
   });
+  it("matches a car's reservation and its rental agreement: one company, picked up and returned on the same days", () => {
+    const car = { type: "car_rental" as const, title: "Avis Boston Logan Intl Airport", start: "2026-11-24T17:30:00-05:00", end: "2026-11-29T17:30:00-05:00", provider: "Avis", confirmation: "20874163US2", rentalStage: "reservation" as const };
+    const agreement = { ...car, title: "Avis Car Rental East Boston", start: "2026-11-24T18:15:00-05:00", provider: "Avis Rent A Car", confirmation: "708843612", rentalStage: "agreement" as const };
+    expect(sameBooking(car, agreement)).toBe(true);
+    expect(sameBooking(agreement, car)).toBe(true);
+    // Whatever the hours; not another day's, or another company's.
+    expect(sameBooking(car, { ...agreement, start: "2026-11-24T22:45:00-05:00", end: "2026-11-29T12:00:00-05:00" })).toBe(true);
+    expect(sameBooking(car, { ...agreement, end: "2026-11-30T09:00:00-05:00" })).toBe(false);
+    expect(sameBooking(car, { ...agreement, provider: "Hertz" })).toBe(false);
+    // Two agreements are two cars, as are two reservations, and one not known to be either is apart.
+    expect(sameBooking(agreement, { ...agreement, confirmation: "708843613" })).toBe(false);
+    expect(sameBooking(car, { ...car, confirmation: "20874164US2" })).toBe(false);
+    expect(sameBooking(car, { ...agreement, rentalStage: undefined })).toBe(false);
+    expect(sameBooking(car, { ...agreement, provider: undefined })).toBe(false);
+  });
+  it("pairs a car's reservation and agreement once: the pair takes its own references, not another car's", () => {
+    const car = { type: "car_rental" as const, title: "Avis Boston Logan Intl Airport", start: "2026-11-24T17:30:00-05:00", end: "2026-11-29T17:30:00-05:00", provider: "Avis", confirmation: "20874163US2", rentalStage: "reservation" as const };
+    const agreement = { ...car, title: "Avis Car Rental East Boston", start: "2026-11-24T18:15:00-05:00", confirmation: "708843612", rentalStage: "agreement" as const };
+    for (const pair of [mergeDetails(car, agreement), mergeDetails(agreement, car)]) {
+      expect(pair.rentalStage).toBe("paired");
+      // The agreement's times, whichever email was read first.
+      expect(pair.start).toBe(agreement.start);
+      // Its own emails again, by either reference.
+      expect(sameBooking(pair, car)).toBe(true);
+      expect(sameBooking(pair, agreement)).toBe(true);
+      // Another car's reservation or agreement stays apart.
+      expect(sameBooking(pair, { ...car, confirmation: "20874164US2" })).toBe(false);
+      expect(sameBooking({ ...agreement, confirmation: "708843613" }, pair)).toBe(false);
+    }
+    // A hand-set time stays.
+    expect(mergeDetails(car, agreement, { edited: true }).start).toBe(car.start);
+    // Its other reference however the notes put it.
+    const worded = mergeDetails(car, { ...agreement, notes: "Rental agreement number: 708843612" });
+    expect((worded as ExtractedSegment).notes).toBe("Rental agreement number: 708843612");
+    expect(sameBooking(worded, agreement)).toBe(true);
+    // And a reference of letters alone, recorded by the merge.
+    const lettered = mergeDetails(agreement, { ...car, confirmation: "ABCDEF" });
+    expect(sameBooking(lettered, { ...car, confirmation: "ABCDEF" })).toBe(true);
+    // A rental filed before stages were read learns its stage, and then pairs.
+    const filed = mergeDetails({ ...car, rentalStage: undefined }, car);
+    expect(filed.rentalStage).toBe("reservation");
+    expect(mergeDetails(filed, agreement).rentalStage).toBe("paired");
+  });
   it("matches a journey moved by a schedule change: the same reference and service that day", () => {
     const ua = { ...flight, title: "UA122 EWR to LHR", start: "2026-04-11T09:10:00-04:00", confirmation: "B0ECXM", origin: { name: "New York/Newark", code: "EWR" }, destination: { name: "London", code: "LHR" } };
     const moved = { ...ua, title: "UA 122 EWR to LHR", start: "2026-04-11T09:20:00-04:00", origin: { name: "Newark", code: "EWR" } };

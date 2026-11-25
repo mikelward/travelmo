@@ -228,6 +228,12 @@ describe("segments", () => {
     await assertFails(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { mergedBookings: "Cove", editedAt: "2026-11-05T09:00:00Z" }));
   });
 
+  it("lets a car rental say whether it is a reservation, an agreement or both paired, and nothing else", async () => {
+    await assertSucceeds(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { rentalStage: "agreement" }));
+    await assertSucceeds(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { rentalStage: "paired" }));
+    await assertFails(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { rentalStage: "receipt" }));
+  });
+
   it("keeps a booking's cancellation well formed, and lets an editor take it back", async () => {
     const cancelled = { cancelledAt: "2026-11-05T09:00:00Z", cancelledBy: "m2", cancelledSentAt: "2026-11-04T08:00:00Z" };
     await assertSucceeds(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), cancelled));
