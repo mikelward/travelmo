@@ -4,6 +4,7 @@ import {
   findTripForBooking,
   homeTimeline,
   homesWithAirports,
+  homeBookings,
   canonicalTravelers,
   notePeople,
   inTrip,
@@ -401,7 +402,8 @@ export async function refreshEmail(
     const added: Segment[] = [];
     if (unmatched.length) {
       const segments = unmatched.map((u) => u.segment);
-      const { periods, overrides: homeOverrides } = homesWithAirports([...all, ...segments], overrides, chosen);
+      // Trips the user is only watching say nothing of where home is (homeBookings).
+      const { periods, overrides: homeOverrides } = homesWithAirports([...homeBookings(segmentsByTrip.values(), people), ...homeBookings([segments], people)], overrides, chosen);
       const remaining = (tripId: string) => (segmentsByTrip.get(tripId) ?? []).filter((s) => !deletes.has(segmentKey(s)));
       const filable = read.filter((trip) => !trip.id.startsWith(sourceTripPrefix));
       let tripId =

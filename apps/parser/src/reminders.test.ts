@@ -1,4 +1,4 @@
-import type { Segment, TravelProfile, Trip } from "@travelmo/core";
+import type { PersonDoc, Segment, TravelProfile, Trip } from "@travelmo/core";
 import { visaTable } from "@travelmo/core/visaRules";
 import { airportPlace } from "@travelmo/core/airportPlaces";
 import { describe, expect, it } from "vitest";
@@ -57,6 +57,8 @@ function setup(
     users?: (string | ReminderUser)[];
     subscriptions?: Record<string, StoredSubscription[]>;
     devices?: Record<string, StoredDevice[]>;
+    // The people each user's bookings name.
+    people?: Record<string, PersonDoc[]>;
     push?: PushSender;
     fcm?: DeviceSender;
   } = {},
@@ -87,6 +89,7 @@ function setup(
     ownProfile: async (uid) => options.profiles?.[uid],
     sharedProfiles: async (addresses) => Object.values(options.profiles ?? {}).filter((p) => p.trustedEmails.some((e) => addresses.includes(e))),
     sentLines: async (uid, tripId) => sent.get(`${uid}/${tripId}`) ?? [],
+    travelers: async (uid) => options.people?.[uid] ?? [],
     markSent: async (uid, tripId, lines) => {
       sent.set(`${uid}/${tripId}`, [...(sent.get(`${uid}/${tripId}`) ?? []), ...lines]);
     },
@@ -143,6 +146,19 @@ describe("sendReminders", () => {
     expect((await run()).mailed).toBe(1);
     expect(mails[0]!.to).toBe("traveler@example");
     expect(mails[0]!.text).toContain("https://travelmo.example/trips/Dubai");
+  });
+
+  it("sends nothing for a trip the user is only watching", async () => {
+    const person = (id: string, name: string, direct: number): PersonDoc => ({ id, name, aliases: [], bookings: 1, direct, createdAt: at, updatedAt: at });
+    const { mails, run } = setup({
+      trips: [trip("Dubai", "u1", "2026-11-20", "2026-11-25")],
+      // Mum's flight: the user is someone else.
+      segments: [{ ...flight("Dubai", "DXB", "AE"), travelers: ["Pat Example"] }],
+      profiles: { u1: profile("u1", "2026-12-30") },
+      people: { u1: [person("me", "Sam Example", 3), person("mum", "Pat Example", 0)] },
+    });
+    expect(await run()).toMatchObject({ mailed: 0, lines: 0 });
+    expect(mails).toHaveLength(0);
   });
 
   it("sends nothing for a trip whose every booking was cancelled", async () => {

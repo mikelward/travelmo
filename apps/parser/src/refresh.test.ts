@@ -25,7 +25,7 @@ const now = "2027-02-01T12:00:00Z";
 
 // Firestore refuses a read after a write in one transaction; the memory
 // store does not, so every transaction here throws on one.
-const reads = new Set<string>(["listTrips", "listSegments", "getSegment", "listParsedIds", "listPendingCancellations", "connectedMailboxes"]);
+const reads = new Set<string>(["listTrips", "listSegments", "getSegment", "listParsedIds", "listPendingCancellations", "listPeople", "connectedMailboxes"]);
 function readsFirst(store: Memory): Memory {
   const withUserLock: Memory["withUserLock"] = (owner, fn) =>
     store.withUserLock(owner, (tx) => {

@@ -21,6 +21,7 @@ const io = firestoreChecklistIo(
     removeDevice: async () => {},
     trips: none,
     segments: none,
+    travelers: none,
   },
   (_level, event) => logs.push(event),
 );

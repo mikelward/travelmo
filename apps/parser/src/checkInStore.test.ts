@@ -14,6 +14,7 @@ const io = firestoreCheckInIo(db, {
   trip: async () => undefined,
   uidForEmail: async () => undefined,
   verifiedEmail: async () => undefined,
+  travelers: none,
   pushSubscriptions: none,
   removePushSubscription: async () => {},
   devices: none,

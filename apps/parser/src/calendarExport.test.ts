@@ -1,4 +1,4 @@
-import type { Segment, Trip } from "@travelmo/core";
+import type { PersonDoc, Segment, Trip } from "@travelmo/core";
 import { describe, expect, it } from "vitest";
 import { calendarForToken, hashToken, newToken, validToken, type ExportIo } from "./calendarExport";
 
@@ -27,7 +27,7 @@ const segment: Segment = {
   updatedAt: "2026-11-01T00:00:00Z",
 };
 
-function io(token: string, calls: string[] = [], approved = true): ExportIo {
+function io(token: string, calls: string[] = [], approved = true, people: PersonDoc[] = []): ExportIo {
   return {
     uidForToken: async (h) => (h === hashToken(token) ? "u1" : undefined),
     approved: async (uid) => uid === "u1" && approved,
@@ -37,6 +37,7 @@ function io(token: string, calls: string[] = [], approved = true): ExportIo {
       return [trip("a"), trip("gone", { deleting: true })];
     },
     segments: async (id) => (id === "a" ? [segment] : []),
+    travelers: async () => people,
   };
 }
 
@@ -51,6 +52,19 @@ describe("calendarForToken", () => {
     expect(text).toContain("SUMMARY:Trip a");
     expect(text).toContain("SUMMARY:XX 100 MAN to DXB");
     expect(text).not.toContain("Trip gone");
+  });
+
+  it("leaves out a trip the user is only watching", async () => {
+    const token = newToken();
+    const at = "2026-11-01T00:00:00Z";
+    const people = [
+      { id: "me", name: "Sam Example", aliases: [], bookings: 3, direct: 3, createdAt: at, updatedAt: at },
+      { id: "mum", name: "Pat Example", aliases: [], bookings: 1, direct: 0, createdAt: at, updatedAt: at },
+    ];
+    const watched: ExportIo = { ...io(token, [], true, people), segments: async (id) => (id === "a" ? [{ ...segment, travelers: ["Pat Example"] }] : []) };
+    const text = await calendarForToken(token, watched, options);
+    expect(text).not.toContain("SUMMARY:Trip a");
+    expect(text).not.toContain("SUMMARY:XX 100 MAN to DXB");
   });
 
   it("serves nothing for a link that is nobody's or malformed", async () => {

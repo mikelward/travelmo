@@ -16,11 +16,14 @@ import {
   type ReminderLookups,
   type ReminderSettings,
   type TripReminder,
+  type PersonDoc,
+  watchedTrip,
 } from "@travelmo/core";
 import { Filter, type Firestore } from "firebase-admin/firestore";
 import { refuseIfDeleted } from "./deleted";
 import type { DeviceSender } from "./fcm";
 import type { Mailer } from "./mail";
+import { readPeople } from "./people";
 import type { PushSender } from "./push";
 
 // The daily reminder run: for everyone who turned reminders on, the
@@ -52,6 +55,8 @@ export type ReminderIo = {
   ownProfile(uid: string): Promise<TravelProfile | undefined>;
   sharedProfiles(addresses: readonly string[]): Promise<TravelProfile[]>;
   sentLines(uid: string, tripId: string): Promise<string[]>;
+  // The people the user's bookings name, for the trips they're only watching.
+  travelers(uid: string): Promise<PersonDoc[]>;
   markSent(uid: string, tripId: string, lines: readonly string[], at: string): Promise<void>;
 };
 
@@ -87,14 +92,15 @@ export async function sendReminders(io: ReminderIo, channels: ReminderChannels, 
       // The trips shared with the person are found by any of their
       // addresses, whether or not they want mail.
       const addresses = await io.addresses(uid);
-      const [own, shared, trips] = await Promise.all([io.ownProfile(uid), io.sharedProfiles(addresses), io.trips(uid, addresses, today)]);
+      const [own, shared, trips, travelers] = await Promise.all([io.ownProfile(uid), io.sharedProfiles(addresses), io.trips(uid, addresses, today), io.travelers(uid)]);
       const people = peopleDocuments(own, shared, uid);
       if (!people.length) continue;
       const reminders: TripReminder[] = [];
       for (const trip of dueForReminders(trips, today)) {
         const [segments, sent] = await Promise.all([io.segments(trip.id), io.sentLines(uid, trip.id)]);
-        // A trip cancelled, or whose every booking was, isn't happening.
-        if (tripCancelled(trip, segments)) continue;
+        // A trip cancelled, or whose every booking was, isn't happening;
+        // one the user is only watching isn't theirs to be reminded of.
+        if (tripCancelled(trip, segments) || watchedTrip(trip, segments, travelers)) continue;
         const lines = newLines(reminderLines(people, trip, segments, today, options.lookups), sent);
         if (lines.length) reminders.push({ trip, lines });
       }
@@ -205,6 +211,7 @@ export function firestoreReminderIo(
       const snap = await db.collectionGroup("travelProfile").where("trustedEmails", "array-contains-any", queryAddresses(addresses)).get();
       return snap.docs.flatMap((d) => parse(TravelProfile, d.data()));
     },
+    travelers: (uid) => readPeople(db, uid),
     async sentLines(uid, tripId) {
       const snap = await db.doc(paths.reminderLog(uid, tripId)).get();
       const sent = snap.get("sent");

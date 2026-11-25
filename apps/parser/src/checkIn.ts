@@ -8,8 +8,10 @@ import {
   flightStatusKey,
   paths,
   ReminderSettings,
+  type PersonDoc,
   type Segment,
   type Trip,
+  watchedTrip,
 } from "@travelmo/core";
 import type { Firestore } from "firebase-admin/firestore";
 import type { DeviceSender } from "./fcm";
@@ -49,6 +51,8 @@ export type CheckInIo = Pick<
   // The person's reminder settings, or nothing without a user document.
   settings(uid: string): Promise<ReminderSettings | undefined>;
   verifiedEmail(uid: string): Promise<string | undefined>;
+  // The people a person's bookings name, for the trips they're only watching.
+  travelers(uid: string): Promise<PersonDoc[]>;
   // The bookings on a trip the person marked "I've checked in" (checkedIn.ts).
   checkedIn(uid: string, tripId: string): Promise<readonly string[]>;
   markers(ids: readonly string[]): Promise<Map<string, CheckInMarker>>;
@@ -221,6 +225,9 @@ async function remindFlight(
   for (const [uid, { entries, own }] of people) {
     if (!(await mayUse(options, uid))) continue;
     if (await checkedInFor(io, options, uid, seen.get(uid) ?? [])) continue;
+    // Check-in is the traveler's to do, not someone only watching the trip
+    // (by what each trip keeps of whom its bookings are for).
+    if (await onlyWatching(io, options, uid, entries.map((entry) => entry.trip))) continue;
     const { segment } = own ?? entries[0]!;
     let outcome: Awaited<ReturnType<typeof deliver>>;
     try {
@@ -265,6 +272,20 @@ async function mayUse(options: CheckInOptions, uid: string): Promise<boolean> {
 // Whether the person marked any of their bookings of the flight "I've
 // checked in": they need no reminder. A mark that can't be read is taken
 // as none, so a reminder too many goes rather than one missed.
+// Whether the person is only watching every trip they'd be told of this
+// flight for; when their people can't be read, they're told, as before.
+async function onlyWatching(io: CheckInIo, options: CheckInOptions, uid: string, trips: readonly Trip[]): Promise<boolean> {
+  try {
+    const travelers = await io.travelers(uid);
+    const watching = trips.every((trip) => watchedTrip(trip, undefined, travelers));
+    if (watching) options.log("INFO", "check_in_skipped_watching", { uid, tripIds: trips.map((t) => t.id) });
+    return watching;
+  } catch (error) {
+    options.log("WARNING", "check_in_people_unreadable", { uid, reason: (error as Error).message });
+    return false;
+  }
+}
+
 async function checkedInFor(io: CheckInIo, options: CheckInOptions, uid: string, segments: readonly Segment[]): Promise<boolean> {
   for (const tripId of new Set(segments.map((s) => s.tripId))) {
     let marked: readonly string[];
