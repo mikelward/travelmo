@@ -4,6 +4,8 @@ import app.travelmo.core.JourneyGap
 import app.travelmo.core.journeyGap
 import app.travelmo.core.journeyGapHomes
 import app.travelmo.core.displayTitles
+import app.travelmo.core.journeyGapText
+import app.travelmo.core.warmTables
 import app.travelmo.core.homeTownKey
 import app.travelmo.core.ChosenHomeAirports
 import app.travelmo.core.withHomeAirports
@@ -144,6 +146,8 @@ import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -177,6 +181,10 @@ data class TripListState(
     val flightStatuses: Map<String, FlightStatus> = emptyMap(),
     /** The bookings the user marked "I've checked in" on each trip under way, by trip; a trip still loading has none. */
     val checkedIn: Map<String, Set<String>> = emptyMap(),
+    /** Each trip's title as the list shows it ([displayTitles]), by trip. */
+    val titles: Map<String, String> = emptyMap(),
+    /** The journey each trip whose bookings are read seems to be missing, said ("No flight back to London found"), by trip. */
+    val missing: Map<String, String> = emptyMap(),
 )
 
 /** How a write asked for by a screen is going, as that screen sees it. */
@@ -263,6 +271,11 @@ class TripsViewModel(
     /** Where the trip list's filters are kept; in memory by default. */
     private val listFilterStore: ListFilterStore = InMemoryListFilterStore(),
     private val countingStore: CountingStore = InMemoryCountingStore(),
+    /**
+     * Where the trip list's state is worked out: the app passes Dispatchers.Default, so the main thread only draws.
+     * Null works it out where the flows run, on the main thread, as tests want for a frame they can wait for.
+     */
+    private val compute: CoroutineDispatcher? = null,
 ) : ViewModel() {
     /** The verified sign-in address, normalized, as access is decided on it; null when unverified. */
     val verifiedEmail: String? = emailAddressOf(email)?.takeIf { emailVerified }
@@ -372,7 +385,14 @@ class TripsViewModel(
      */
     val deletionUnfinished: StateFlow<Boolean> = _deletionUnfinished
 
+    /** Works out [block] on [compute], when given, rather than on the main thread. */
+    private suspend fun <T> computed(block: () -> T): T = compute?.let { withContext(it) { block() } } ?: block()
+
     init {
+        // The tables the list's cards read (each trip's landmark, a missing journey's airports) are parsed on first
+        // use, a few hundred milliseconds on a phone: parsed here instead, before the trips answer, rather than on
+        // the main thread as the first cards draw.
+        compute?.let { viewModelScope.launch(it) { warmTables() } }
         // Once per signed-in view model (SPEC "Access"): the parser lets in
         // an account from before approvals that the rules cannot tell is
         // one, and tells the admins of a request they have not heard of. The
@@ -455,19 +475,27 @@ class TripsViewModel(
             }
         }
 
+    /** The user's ride companies, hidden suggestions and home corrections; null until the user document answers. */
+    val rideSettings: StateFlow<RideSettings?> = accessSettled.flatMapLatest { store.rideSettings(uid) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     /** The people the user's bookings name, most often named first (SPEC "Travelers"). */
     val travelers: StateFlow<List<Person>> = accessSettled.flatMapLatest { store.people(uid) }.map(::peopleInOrder)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val state: StateFlow<TripListState> = combine(
-        groups, details, now, combine(people, travelers, ::Pair), combine(listFlightStatuses, listCheckedIn, ::Pair),
-    ) { groups, details, now, (people, travelers), (statuses, checkedIn) ->
-        val today = today()
-        val trips = groups?.let { it.current + it.upcoming + it.past }.orEmpty()
-        // A trip the user is only watching warns of no one's documents.
-        val byTrip = trips.filter { it.id in details && !watchedTrip(it, details[it.id], travelers) }
-            .associate { trip -> trip.id to tripWarnings(people, trip, details[trip.id], today) }
-        TripListState(groups, details, now, listWarnings(byTrip, trips), statuses, checkedIn)
+        groups, combine(details, rideSettings, ::Pair), now, combine(people, travelers, ::Pair), combine(listFlightStatuses, listCheckedIn, ::Pair),
+    ) { groups, (details, settings), now, (people, travelers), (statuses, checkedIn) ->
+        computed {
+            val today = today()
+            val trips = groups?.let { it.current + it.upcoming + it.past }.orEmpty()
+            // A trip the user is only watching warns of no one's documents.
+            val byTrip = trips.filter { it.id in details && !watchedTrip(it, details[it.id], travelers) }
+                .associate { trip -> trip.id to tripWarnings(people, trip, details[trip.id], today) }
+            // A journey a trip seems to be missing, for the cards whose bookings are read, as its page says it.
+            val missing = trips.mapNotNull { trip -> details[trip.id]?.let { journeyGapFor(trip, it, settings) }?.let { trip.id to journeyGapText(it) } }.toMap()
+            TripListState(groups, details, now, listWarnings(byTrip, trips), statuses, checkedIn, displayTitles(trips), missing)
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TripListState(null, emptyMap(), clock().toString()))
 
 
@@ -562,12 +590,12 @@ class TripsViewModel(
     /** The trips the filters leave out, by each trip's own flags (TripFlags) at once, else by its bookings once read. */
     val hiddenTrips: StateFlow<Set<String>> = combine(trips, _listFilters, unknownSegments.onStart { emit(emptyMap()) }, travelers) { trips, filters, segments, people ->
         if (!filters.any) emptySet()
-        else trips.orEmpty().filter { hiddenFromList(it, segments[it.id], filters, people) }.map { it.id }.toSet()
+        else computed { trips.orEmpty().filter { hiddenFromList(it, segments[it.id], filters, people) }.map { it.id }.toSet() }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
     /** The trips the user is only watching: none of their travelers is the user (watching). */
     val watchingTrips: StateFlow<Set<String>> = combine(trips, unknownSegments.onStart { emit(emptyMap()) }, travelers) { trips, segments, people ->
-        trips.orEmpty().filter { watching(it.travelers ?: segments[it.id]?.let(::tripTravelers), people) }.map { it.id }.toSet()
+        computed { trips.orEmpty().filter { watching(it.travelers ?: segments[it.id]?.let(::tripTravelers), people) }.map { it.id }.toSet() }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
     // These trips' bookings by trip, each as it answers, its flags recorded on its trip.
@@ -832,10 +860,6 @@ class TripsViewModel(
     val reminderEmail: StateFlow<Boolean?> = store.reminderEmail(uid).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun setReminderEmail(token: String, on: Boolean) = run(token, "setReminderEmail") { store.setReminderEmail(uid, on) }
-
-    /** The user's ride companies, hidden suggestions and home corrections; null until the user document answers. */
-    val rideSettings: StateFlow<RideSettings?> = accessSettled.flatMapLatest { store.rideSettings(uid) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /**
      * Home over time for the reports' residence and visa days: worked out
