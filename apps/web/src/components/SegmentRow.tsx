@@ -173,7 +173,11 @@ export function SegmentRow({
           onClose={() => setDetails(false)}
         />
       )}
-      <SegmentIcon type={segment.type} label={labels[segment.type]} className="mt-0.5 shrink-0 text-muted" />
+      {/* The kind of booking, and below it the brand's logo (an airline's), centred under it. */}
+      <div className="mt-0.5 flex w-5 shrink-0 flex-col items-center gap-2">
+        <SegmentIcon type={segment.type} label={labels[segment.type]} className="text-muted" />
+        <AirlineLogo code={heading.airline} size={20} />
+      </div>
       <div className="min-w-0 flex-1 cursor-pointer" onClick={open}>
         {cancelled && (
           <p className="text-xs font-medium uppercase tracking-wide text-danger" data-testid="segment-cancelled">
@@ -181,8 +185,7 @@ export function SegmentRow({
           </p>
         )}
         <p className={`font-medium${cancelled ? " text-muted line-through" : ""}`}>
-          <button type="button" onClick={() => setDetails(true)} className="flex w-full items-center gap-1.5 text-left hover:underline">
-            <AirlineLogo code={heading.airline} />
+          <button type="button" onClick={() => setDetails(true)} className="block w-full text-left hover:underline">
             {heading.headline}
           </button>
         </p>
