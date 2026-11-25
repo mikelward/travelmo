@@ -139,6 +139,30 @@ class ScreenScreenshotTest {
         }
     }
 
+    // For the Play listing: a trip under way and the next few, each with its city's landmark, and no warnings.
+    @Test
+    fun trip_list_cities() {
+        val trips = listOf(
+            Trip("tokyo", "Tokyo", "2026-10-29", "2026-11-04", OWNER),
+            Trip("new-york", "New York", "2026-11-20", "2026-11-24", OWNER),
+            Trip("london", "London for Christmas", "2026-12-18", "2026-12-27", OWNER),
+            Trip("rome", "Rome", "2027-01-15", "2027-01-19", OWNER),
+            Trip("barcelona", "Barcelona", "2027-02-12", "2027-02-16", OWNER),
+            Trip("sydney", "Sydney", "2027-03-05", "2027-03-14", OWNER),
+            Trip("istanbul", "Istanbul", "2027-04-09", "2027-04-12", OWNER),
+        )
+        val segments = mapOf(
+            "tokyo" to listOf(
+                Segment("t-hotel", "tokyo", SegmentType.LODGING, "Example Hotel Shinjuku", "2026-10-30T15:00:00+09:00", "2026-11-04T11:00:00+09:00", destination = Place("Example Hotel Shinjuku", city = "Tokyo", country = "JP")),
+                Segment("t-dinner", "tokyo", SegmentType.ACTIVITY, "Dinner at Example Sushi", "2026-11-02T19:30:00+09:00", destination = Place("Example Sushi", city = "Tokyo", country = "JP")),
+            ),
+        )
+        val viewModel = TripsViewModel(FakeTripStore(trips = trips, segments = segments, profile = null, shared = emptyList()), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        capture("trip_list_cities") {
+            TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.TRIPS) {} })
+        }
+    }
+
     @Test
     fun trip_list_dark() {
         val viewModel = viewModel()
