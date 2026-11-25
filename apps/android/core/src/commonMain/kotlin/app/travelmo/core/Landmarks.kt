@@ -1,10 +1,11 @@
 package app.travelmo.core
 
 // Mirrors packages/core/src/landmarks.ts: a trip's picture in the trip list,
-// an outline of the best-known landmark of the city its title names, drawn
-// in a 48-unit square as one SVG path for a 1.5-unit round-capped stroke
-// (packages/core/src/landmarks.json, compiled in). A title naming no city
-// with a landmark gets the suitcase.
+// an outline of the best-known landmark of the city its title names, or a
+// matching place kind, season, holiday or vacation drawing when no city is
+// named, drawn in a 48-unit square as one SVG path for a 1.5-unit round-capped
+// stroke (packages/core/src/landmarks.json, compiled in). Anything else gets
+// the suitcase.
 
 data class Landmark(
     val id: String,
@@ -19,19 +20,32 @@ data class Landmark(
      * so "Nice weekend" and "Bath time" are nobody.
      */
     val capitalized: List<String> = emptyList(),
-    /** Longer names, folded, that a match of [cities] is not when it begins one: "santiago de compostela" is not Santiago. */
+    /** Longer names, folded, that a match of [cities] or [fallback] is not when it begins one: "santiago de compostela" is not Santiago. */
     val not: List<String> = emptyList(),
+    /**
+     * Kind-of-place, season, holiday or vacation words, folded: matched only when the title names no place from
+     * [cities] or [capitalized], so "Summer in Paris" is Paris and "Summer vacation" is Summer.
+     */
+    val fallback: List<String> = emptyList(),
 )
 
 private val landmarkEntry = Regex(
-    """"id":"([^"]+)","name":"([^"]*)","cities":\[([^\]]*)](?:,"capitalized":\[([^\]]*)])?(?:,"not":\[([^\]]*)])?,"d":"([^"]+)"""",
+    """"id":"([^"]+)","name":"([^"]*)","cities":\[([^\]]*)](?:,"capitalized":\[([^\]]*)])?(?:,"not":\[([^\]]*)])?(?:,"fallback":\[([^\]]*)])?,"d":"([^"]+)"""",
 )
 private val quoted = Regex(""""([^"]+)"""")
 
 val landmarks: List<Landmark> by lazy {
     landmarkEntry.findAll(landmarksJson).map { m ->
         fun list(group: Int) = quoted.findAll(m.groupValues[group]).map { it.groupValues[1] }.toList()
-        Landmark(m.groupValues[1], m.groupValues[2], list(3), m.groupValues[6], capitalized = list(4), not = list(5))
+        Landmark(
+            m.groupValues[1],
+            m.groupValues[2],
+            list(3),
+            m.groupValues[7],
+            capitalized = list(4),
+            not = list(5),
+            fallback = list(6),
+        )
     }.toList().also { check(it.any { l -> l.id == "trip" }) { "landmarks.json has no suitcase" } }
 }
 
@@ -50,9 +64,9 @@ private fun firstAt(text: String, name: String, ok: (Int) -> Boolean): Int {
 }
 
 /**
- * The landmark of the city named first in [title] ("Paris and Lyon" is Paris), else the suitcase.
- * Names match as whole words, accents and case ignored, so "Lisboa" is Lisbon and "Parisian" is nobody;
- * a capitalized name keeps its case.
+ * The landmark of the city named first in [title] ("Paris and Lyon" is Paris), else the first matching place kind,
+ * season, holiday or vacation word ([Landmark.fallback]), else the suitcase. Names match as whole words, accents and
+ * case ignored, so "Lisboa" is Lisbon and "Parisian" is nobody; a capitalized name keeps its case.
  */
 fun tripLandmark(title: String): Landmark {
     val plain = decomposed(title).replace(marks, "").trim()
@@ -60,17 +74,26 @@ fun tripLandmark(title: String): Landmark {
     val kept = " ${plain.replace(notLetters, " ").trim()} "
     val words = kept.lowercase()
     fun opensTitle(name: String) = plain == name || punctuationNext.containsMatchIn(plain.drop(name.length))
-    var best: Pair<Int, Landmark>? = null
-    fun consider(at: Int, landmark: Landmark) {
-        if (at >= 0 && (best == null || at < best!!.first)) best = at to landmark
-    }
-    for (landmark in landmarks) {
-        for (city in landmark.cities) {
-            consider(firstAt(words, city) { at -> landmark.not.none { words.startsWith(" $it ", at) } }, landmark)
+    fun pick(match: (Landmark, (Int) -> Unit) -> Unit): Landmark? {
+        var best: Pair<Int, Landmark>? = null
+        for (landmark in landmarks) {
+            match(landmark) { at ->
+                if (at >= 0 && (best == null || at < best!!.first)) best = at to landmark
+            }
         }
-        for (name in landmark.capitalized) consider(firstAt(kept, name) { at -> at > 0 || opensTitle(name) }, landmark)
+        return best?.second
     }
-    return best?.second ?: landmarks.first { it.id == "trip" }
+    val place = pick { landmark, consider ->
+        val ok: (Int) -> Boolean = { at -> landmark.not.none { words.startsWith(" $it ", at) } }
+        for (city in landmark.cities) consider(firstAt(words, city, ok))
+        for (name in landmark.capitalized) consider(firstAt(kept, name) { at -> at > 0 || opensTitle(name) })
+    }
+    if (place != null) return place
+    val theme = pick { landmark, consider ->
+        val ok: (Int) -> Boolean = { at -> landmark.not.none { words.startsWith(" $it ", at) } }
+        for (word in landmark.fallback) consider(firstAt(words, word, ok))
+    }
+    return theme ?: landmarks.first { it.id == "trip" }
 }
 
 /**

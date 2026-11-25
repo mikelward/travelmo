@@ -22,9 +22,9 @@
       its city's landmark as a line drawing, in one card per section.
   - [x] Boston, Las Vegas, Liverpool, Paris, Edinburgh, Lisbon and Dublin,
         on Android and the web.
-  - [ ] Better than the suitcase for a place with no landmark drawn: the
-        kind of place (small town, beach [done for 221 beach destinations],
-        mountains, forest), or a letter.
+  - [x] Better than the suitcase for a place with no landmark drawn: the
+        kind of place (beach, mountains, forest, lake, farm), season,
+        holiday or vacation.
   - [x] More cities' landmarks (208 cities total plus a shared beach
         drawing for 221 beach destinations, including the original seven
         redone plus Sydney, Dubai, Singapore, Barcelona, London,

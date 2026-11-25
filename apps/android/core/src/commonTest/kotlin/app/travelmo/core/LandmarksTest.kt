@@ -122,8 +122,52 @@ class LandmarksTest {
     }
 
     @Test
+    fun fallsBackToPlaceKindSeasonHolidayOrVacationWhenNoCityIsNamed() {
+        assertEquals("mountains", tripLandmark("Alps").id)
+        assertEquals("mountains", tripLandmark("Whistler").id)
+        assertEquals("mountains", tripLandmark("Mountain getaway").id)
+        assertEquals("forest", tripLandmark("Yosemite").id)
+        assertEquals("forest", tripLandmark("Forest cabin").id)
+        assertEquals("lake", tripLandmark("Lake Como").id)
+        assertEquals("lake", tripLandmark("Lake house").id)
+        assertEquals("farm", tripLandmark("Farm stay").id)
+        assertEquals("beach", tripLandmark("Beach week").id)
+        assertEquals("summer", tripLandmark("Summer vacation").id)
+        assertEquals("autumn", tripLandmark("Autumn foliage").id)
+        assertEquals("autumn", tripLandmark("Fall break").id)
+        assertEquals("winter", tripLandmark("Winter getaway").id)
+        assertEquals("spring", tripLandmark("Spring break").id)
+        assertEquals("thanksgiving", tripLandmark("Thanksgiving").id)
+        assertEquals("christmas", tripLandmark("Christmas break").id)
+        assertEquals("new-year", tripLandmark("New Year's Eve").id)
+        assertEquals("new-year", tripLandmark("Lunar New Year").id)
+        assertEquals("easter", tripLandmark("Easter weekend").id)
+        assertEquals("halloween", tripLandmark("Halloween").id)
+        assertEquals("cruise", tripLandmark("Caribbean cruise").id)
+        assertEquals("vacation", tripLandmark("Family holiday").id)
+        assertEquals("vacation", tripLandmark("Passover").id)
+    }
+
+    @Test
+    fun prefersANamedPlaceOverAnEarlierSeasonHolidayOrThemeWord() {
+        assertEquals("paris", tripLandmark("Summer in Paris").id)
+        assertEquals("boston", tripLandmark("Thanksgiving in Boston").id)
+        assertEquals("sydney", tripLandmark("Beach trip to Sydney").id)
+        assertEquals("beach", tripLandmark("Christmas in Kihei").id)
+        assertEquals("mountains", tripLandmark("Summer in the Alps").id)
+        assertEquals("forest", tripLandmark("Fall in Yosemite").id)
+        assertEquals("lake", tripLandmark("Summer at Lake Como").id)
+        assertEquals("banff", tripLandmark("Ski trip to Banff").id)
+        assertEquals("summer", tripLandmark("Summer holiday").id)
+        assertEquals("christmas", tripLandmark("Christmas holiday").id)
+    }
+
+    @Test
     fun givesAPlaceWithNoLandmarkTheSuitcase() {
         assertEquals("trip", tripLandmark("Woburn").id)
+        assertEquals("trip", tripLandmark("Niagara Falls").id)
+        assertEquals("trip", tripLandmark("Springfield").id)
+        assertEquals("trip", tripLandmark("Cornwall").id)
         assertEquals("trip", tripLandmark("").id)
     }
 
@@ -131,9 +175,10 @@ class LandmarksTest {
     fun readsEveryLandmarkTheWebHas() {
         val rawEntries = landmarksJson.lines().count { it.startsWith("{\"id\":") }
         assertEquals(rawEntries, landmarks.size)
-        assertEquals(210, landmarks.size)
+        assertEquals(225, landmarks.size)
         assertEquals(landmarks.size, landmarks.map { it.id }.toSet().size)
         val seenCities = mutableSetOf<String>()
+        val seenFallbacks = mutableSetOf<String>()
         for (landmark in landmarks) {
             for (city in landmark.cities) {
                 assertEquals(city, foldText(city))
@@ -145,6 +190,10 @@ class LandmarksTest {
                 assertEquals(true, seenCities.add(foldText(name)))
             }
             for (name in landmark.not) assertEquals(name, foldText(name))
+            for (word in landmark.fallback) {
+                assertEquals(word, foldText(word))
+                assertEquals(true, seenFallbacks.add(word))
+            }
         }
     }
 }
