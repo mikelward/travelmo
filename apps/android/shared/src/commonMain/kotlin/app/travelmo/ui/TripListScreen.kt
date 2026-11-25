@@ -302,7 +302,7 @@ fun TripCard(
     flightStatuses: Map<String, FlightStatus> = emptyMap(),
     checkedIn: Set<String> = emptySet(),
     onCheckedIn: ((segmentId: String) -> Unit)? = null,
-    /** "No flight back to London found", for a trip that seems to miss one (journeyGap). */
+    /** "No flight from Boston back to London found", the first journey a trip seems to miss (journeyGaps). */
     missing: String? = null,
     /** Whether the user is only watching it: none of its travelers is them. */
     watching: Boolean = false,

@@ -36,14 +36,14 @@ class JourneyGapTest {
                 TripDetailScreen(viewModel = viewModel, tripId = "boston", uid = OWNER, onBack = {}, onAddBooking = { added = it }, onEditBooking = {}, onMerged = {})
             }
         }
-        composeRule.onNodeWithText("No flight back to London found").performScrollTo()
+        composeRule.onNodeWithText("No flight from Boston back to London found").performScrollTo()
         composeRule.onNodeWithText("Find it in Gmail").performClick()
-        shadowOf(composeRule.activity).nextStartedActivity.dataString shouldBe "https://mail.google.com/mail/u/0/#search/E5WSJI"
+        shadowOf(composeRule.activity).nextStartedActivity.dataString shouldBe "https://mail.google.com/mail/u/0/#search/(%22Boston%22%20OR%20BOS)%20(%22London%22%20OR%20LHR)"
         composeRule.onNodeWithText("Add it yourself").performClick()
         added shouldBe "2026-11-24"
         composeRule.onNodeWithText("This trip is one way").performClick()
         composeRule.waitForIdle()
         store.rides.value.oneWayTrips shouldBe listOf("boston")
-        composeRule.onNodeWithText("No flight back to London found").assertDoesNotExist()
+        composeRule.onNodeWithText("No flight from Boston back to London found").assertDoesNotExist()
     }
 }

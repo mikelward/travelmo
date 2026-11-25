@@ -9,8 +9,8 @@ import {
   tripTravelers,
   watchedTrip,
   watching,
-  journeyGap,
   journeyGapHomes,
+  journeyGaps,
   journeyGapText,
   isEmptyQuery,
   listWarnings,
@@ -129,7 +129,7 @@ function Section({
   // Whether the cards say what comes next: only a trip under way does. A
   // card whose bookings are loaded says they were all cancelled either way.
   showNext: boolean;
-  // What a trip whose bookings are loaded seems to be missing (journeyGap).
+  // What a trip whose bookings are loaded seems to be missing (journeyGaps).
   missingOf: (trip: Trip) => string | undefined;
   // Whether the viewer is only watching a trip (watching).
   watchingOf: (trip: Trip) => boolean;
@@ -306,16 +306,11 @@ function Trips({ user }: { user: User }) {
   // read (those under way and the next few), as the trip's page says it.
   const missingOf = (trip: Trip) => {
     const segments = segmentsByTrip[trip.id];
-    if (
-      !segments ||
-      !profile ||
-      trip.deleting ||
-      (profile.oneWayTrips ?? []).includes(trip.id)
-    )
-      return undefined;
-    const gap = journeyGap(
+    if (!segments || !profile || trip.deleting) return undefined;
+    const [gap] = journeyGaps(
       segments,
       journeyGapHomes(profile.homes ?? [], profile.homeAirports ?? []),
+      (profile.oneWayTrips ?? []).includes(trip.id),
     );
     return gap ? journeyGapText(gap) : undefined;
   };

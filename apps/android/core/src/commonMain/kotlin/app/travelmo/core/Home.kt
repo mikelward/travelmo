@@ -394,6 +394,22 @@ private fun locatedTown(place: Place?): Town? {
     return t.copy(lat = airport.lat, lon = airport.lon)
 }
 
+/** How far a person might drive between journeys, in kilometers, as home.ts: past it, a journey is missing. */
+const val DRIVE_KM = 300.0
+
+/**
+ * Whether getting from [a] to [b] takes a journey of its own (a flight or a
+ * train, not a drive): over DRIVE_KM apart or, where either's point is
+ * unknown, in different countries. As home.ts's farApart.
+ */
+fun farApart(a: Place?, b: Place?): Boolean {
+    val x = locatedTown(a) ?: return false
+    val y = locatedTown(b) ?: return false
+    if (sameTown(x, y)) return false
+    if (x.lat != null && x.lon != null && y.lat != null && y.lon != null) return distanceKm(x.lat, x.lon, y.lat, y.lon) > DRIVE_KM
+    return x.country != null && y.country != null && countryCode(x.country) != countryCode(y.country)
+}
+
 // Whether two places are one city's, as far as its airports and stations go: the same town, or within AREA_KM in one country.
 fun sameArea(a: Place?, b: Place?): Boolean {
     val x = locatedTown(a) ?: return false

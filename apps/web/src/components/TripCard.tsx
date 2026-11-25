@@ -20,7 +20,7 @@ import { TripLandmark } from "@/components/TripLandmark";
 // trip under way) what comes next (tripNextUp), with the live status of its
 // next flight, and the flight's online check-in until the viewer says they
 // checked in, and a journey it seems to be missing (`missing`, from
-// journeyGap). The list's top carries the document warnings.
+// journeyGaps). The list's top carries the document warnings.
 export function TripCard({
   trip,
   title = trip.title,
@@ -42,7 +42,8 @@ export function TripCard({
   // The bookings on this trip the viewer marked "I've checked in".
   checkedIn?: ReadonlySet<string>;
   onCheckedIn?: (segmentId: string) => void;
-  // "No flight back to London found", for a trip that seems to miss one.
+  // "No flight from Boston back to London found", the first journey a trip
+  // seems to miss.
   missing?: string;
   // Whether the viewer is only watching it: none of its travelers is them.
   watching?: boolean;

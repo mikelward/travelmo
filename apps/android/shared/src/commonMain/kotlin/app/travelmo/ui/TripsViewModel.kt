@@ -1,7 +1,7 @@
 package app.travelmo.ui
 
 import app.travelmo.core.JourneyGap
-import app.travelmo.core.journeyGap
+import app.travelmo.core.journeyGaps
 import app.travelmo.core.journeyGapHomes
 import app.travelmo.core.displayTitles
 import app.travelmo.core.journeyGapText
@@ -183,7 +183,7 @@ data class TripListState(
     val checkedIn: Map<String, Set<String>> = emptyMap(),
     /** Each trip's title as the list shows it ([displayTitles]), by trip. */
     val titles: Map<String, String> = emptyMap(),
-    /** The journey each trip whose bookings are read seems to be missing, said ("No flight back to London found"), by trip. */
+    /** The journey each trip whose bookings are read seems to be missing, said ("No flight from Boston back to London found"), by trip. */
     val missing: Map<String, String> = emptyMap(),
 )
 
@@ -493,7 +493,7 @@ class TripsViewModel(
             val byTrip = trips.filter { it.id in details && !watchedTrip(it, details[it.id], travelers) }
                 .associate { trip -> trip.id to tripWarnings(people, trip, details[trip.id], today) }
             // A journey a trip seems to be missing, for the cards whose bookings are read, as its page says it.
-            val missing = trips.mapNotNull { trip -> details[trip.id]?.let { journeyGapFor(trip, it, settings) }?.let { trip.id to journeyGapText(it) } }.toMap()
+            val missing = trips.mapNotNull { trip -> details[trip.id]?.let { journeyGapsFor(trip, it, settings).firstOrNull() }?.let { trip.id to journeyGapText(it) } }.toMap()
             TripListState(groups, details, now, listWarnings(byTrip, trips), statuses, checkedIn, displayTitles(trips), missing)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TripListState(null, emptyMap(), clock().toString()))
@@ -1221,13 +1221,13 @@ class TripsViewModel(
     fun markOneWay(token: String, tripId: String) = run(token, "markOneWay") { store.markOneWay(uid, tripId) }
 
     /**
-     * The journey a trip seems to be missing (journeyGap), unless the viewer
-     * said it goes one way, or it was cancelled or is being deleted. Home is
-     * only what they set on Profile, as on the web.
+     * The journeys a trip seems to be missing (journeyGaps), none once it was
+     * cancelled or is being deleted, and none at its ends once the viewer
+     * said it goes one way. Home is only what they set on Profile, as on the web.
      */
-    fun journeyGapFor(trip: Trip, segments: List<Segment>, settings: RideSettings?): JourneyGap? {
-        if (settings == null || trip.cancelledAt != null || trip.deleting || trip.id in settings.oneWayTrips) return null
-        return journeyGap(segments, journeyGapHomes(settings.homes, settings.homeAirports))
+    fun journeyGapsFor(trip: Trip, segments: List<Segment>, settings: RideSettings?): List<JourneyGap> {
+        if (settings == null || trip.cancelledAt != null || trip.deleting) return emptyList()
+        return journeyGaps(segments, journeyGapHomes(settings.homes, settings.homeAirports), trip.id in settings.oneWayTrips)
     }
 
     /** Removes a loyalty number found in the user's emails from their profile. */
