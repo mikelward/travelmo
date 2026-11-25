@@ -216,14 +216,20 @@ service cloud.firestore {
               'start', 'end', 'origin', 'destination', 'notes'])
             || request.resource.data.diff(resource.data).affectedKeys().hasAny(['editedAt']);
         }
-        function canEdit() {
-          return approved() && (isOwner(trip()) || isSharee(trip()));
+        function editor() {
+          return isOwner(trip()) || isSharee(trip());
         }
+        function canEdit() {
+          return approved() && editor();
+        }
+        // member() already checks approval: checking it again in canEdit()
+        // would spend twice the expressions a request may evaluate (1,000)
+        // on an account with linked addresses.
         allow read: if canEdit();
-        allow create: if member() && canEdit()
+        allow create: if member() && editor()
           && trip().get('deleting', false) == false
           && validSegment(request.resource.data);
-        allow update: if member() && canEdit()
+        allow update: if member() && editor()
           && trip().get('deleting', false) == false
           && validSegment(request.resource.data)
           && recordsEdit();
