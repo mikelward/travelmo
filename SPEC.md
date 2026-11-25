@@ -259,13 +259,14 @@ schemes.
 
 Trips are grouped into now, upcoming and past by calendar date, each group
 one card with a rule between its trips. Each trip shows a line drawing of
-the best-known landmark of the city its title names, the first one named
-("Paris and Lyon" is Paris; whole words, accents and case ignored, except
-that a name that is also a word counts only capitalized and not opening the
-title unless alone or before punctuation, so "Nice, France" is Nice and
-"Nice weekend" is not, and a longer name containing a city's is not that
-city: "Santiago de Cuba", "Victoria Falls", "Lake Victoria", "Rio Grande",
-"Washington State"), else a
+the best-known landmark of the city its title names (or a matching object
+when a place is named after one — a rose for Roseville, an acorn for Fair
+Oaks or Oakland, a bear for Big Bear), the first one named ("Paris and Lyon"
+is Paris; whole words, accents and case ignored, except that a name that is
+also a word counts only capitalized and not opening the title unless alone
+or before punctuation, so "Nice, France" is Nice and "Nice weekend" is not,
+and a longer name containing a city's is not that city: "Santiago de Cuba",
+"Victoria Falls", "Lake Victoria", "Rio Grande", "Washington State"), else a
 matching kind of place or trip (beach, mountains, forest, lake, farm, city,
 town, camp, countryside, desert, wine country, road trip, safari, theme
 park, celebration, castle), season, holiday or vacation word when no city is

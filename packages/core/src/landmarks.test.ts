@@ -139,6 +139,13 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Split, Croatia").id).toBe("split");
     expect(tripLandmark("Week in Split").id).toBe("split");
     expect(tripLandmark("Split stay").id).toBe("trip");
+    expect(tripLandmark("Orange, CA").id).toBe("orange");
+    expect(tripLandmark("Weekend in Orange").id).toBe("orange");
+    expect(tripLandmark("Orange juice").id).toBe("trip");
+    expect(tripLandmark("Strawberry").id).toBe("strawberry");
+    expect(tripLandmark("Strawberry picking").id).toBe("trip");
+    expect(tripLandmark("Eagle, CO").id).toBe("eagle");
+    expect(tripLandmark("Eagle watching").id).toBe("trip");
   });
 
   it("leaves out a longer name containing a city's", () => {
@@ -148,6 +155,7 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Lake Victoria").id).toBe("lake");
     expect(tripLandmark("Lake Victoria holiday").id).toBe("lake");
     expect(tripLandmark("Lake Victoria, then Victoria").id).toBe("victoria");
+    expect(tripLandmark("Milford Sound").id).toBe("lake");
     expect(tripLandmark("Rio Grande").id).toBe("trip");
     expect(tripLandmark("Washington State").id).toBe("trip");
     expect(tripLandmark("Washington State road trip").id).toBe("road-trip");
@@ -156,6 +164,35 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Santiago").id).toBe("santiago");
     expect(tripLandmark("Washington, DC").id).toBe("washington");
     expect(tripLandmark("Rio Grande, then Rio").id).toBe("rio-de-janeiro");
+  });
+
+  it("gives places named after a real-world noun a matching drawing", () => {
+    expect(tripLandmark("Roseville").id).toBe("rose");
+    expect(tripLandmark("Santa Rosa").id).toBe("rose");
+    expect(tripLandmark("Fair Oaks").id).toBe("acorn");
+    expect(tripLandmark("Oakland").id).toBe("acorn");
+    expect(tripLandmark("Appleton").id).toBe("apple");
+    expect(tripLandmark("Orangevale").id).toBe("orange");
+    expect(tripLandmark("Cherry Hill").id).toBe("cherry");
+    expect(tripLandmark("Peachtree City").id).toBe("peach");
+    expect(tripLandmark("Lemon Grove").id).toBe("lemon");
+    expect(tripLandmark("Strawberry Plains").id).toBe("strawberry");
+    expect(tripLandmark("Cloverdale").id).toBe("clover");
+    expect(tripLandmark("Sunnyvale").id).toBe("sunflower");
+    expect(tripLandmark("Anchorage").id).toBe("anchor");
+    expect(tripLandmark("Bellevue").id).toBe("bell");
+    expect(tripLandmark("Coronado").id).toBe("crown");
+    expect(tripLandmark("Diamond Bar").id).toBe("diamond");
+    expect(tripLandmark("Big Bear").id).toBe("bear");
+    expect(tripLandmark("Swansea").id).toBe("swan");
+    expect(tripLandmark("Foxborough").id).toBe("fox");
+    expect(tripLandmark("Elk Grove").id).toBe("stag");
+    expect(tripLandmark("Mariposa").id).toBe("butterfly");
+    expect(tripLandmark("Mill Valley").id).toBe("windmill");
+    expect(tripLandmark("Orcas Island").id).toBe("whale");
+    expect(tripLandmark("Eagle River").id).toBe("eagle");
+    expect(tripLandmark("Shell Beach").id).toBe("shell");
+    expect(tripLandmark("Northstar").id).toBe("star");
   });
 
   it("falls back to place kind, season, holiday or vacation when no city is named", () => {
@@ -252,6 +289,6 @@ describe("tripLandmark", () => {
         fallbacks.add(word);
       }
     }
-    expect(LANDMARKS.length).toBe(275);
+    expect(LANDMARKS.length).toBe(299);
   });
 });
