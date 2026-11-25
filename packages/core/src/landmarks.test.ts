@@ -63,6 +63,28 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Romanian coast").id).toBe("trip");
   });
 
+  it("takes a name that is also a word only as a place", () => {
+    expect(tripLandmark("Nice").id).toBe("nice");
+    expect(tripLandmark("Nice, France").id).toBe("nice");
+    expect(tripLandmark("Weekend in Nice").id).toBe("nice");
+    expect(tripLandmark("Nice weekend").id).toBe("trip");
+    expect(tripLandmark("A nice break").id).toBe("trip");
+    expect(tripLandmark("NICE").id).toBe("trip");
+    expect(tripLandmark("Bath").id).toBe("bath");
+    expect(tripLandmark("Bath time").id).toBe("trip");
+    expect(tripLandmark("Nice weekend in Bath").id).toBe("bath");
+  });
+
+  it("leaves out a longer name that begins with a city's", () => {
+    expect(tripLandmark("Santiago de Compostela").id).toBe("trip");
+    expect(tripLandmark("Rio Grande").id).toBe("trip");
+    expect(tripLandmark("Washington State road trip").id).toBe("trip");
+    expect(tripLandmark("Canton, Ohio").id).toBe("trip");
+    expect(tripLandmark("Santiago").id).toBe("santiago");
+    expect(tripLandmark("Washington, DC").id).toBe("washington");
+    expect(tripLandmark("Rio Grande, then Rio").id).toBe("rio-de-janeiro");
+  });
+
   it("gives a place with no landmark the suitcase", () => {
     expect(tripLandmark("Woburn").id).toBe("trip");
     expect(tripLandmark("").id).toBe("trip");
@@ -80,6 +102,13 @@ describe("tripLandmark", () => {
         expect(cities.has(city)).toBe(false);
         cities.add(city);
       }
+      for (const name of landmark.capitalized ?? []) {
+        expect(foldText(name)).toBe(name.toLowerCase());
+        expect(name.charAt(0)).toBe(name.charAt(0).toUpperCase());
+        expect(cities.has(foldText(name))).toBe(false);
+        cities.add(foldText(name));
+      }
+      for (const name of landmark.not ?? []) expect(foldText(name)).toBe(name);
     }
     expect(LANDMARKS.length).toBe(191);
   });
