@@ -439,6 +439,7 @@ export function sameBooking(a: ExtractedSegment, b: ExtractedSegment): boolean {
   if (a.type !== b.type) return false;
   const wall = (instant: string) => instant.slice(0, 16);
   if ((isPaymentReceipt(a) || isPaymentReceipt(b)) && wall(a.start) !== wall(b.start)) return sameUntimed(a, b);
+  if (datedJourney(a) !== datedJourney(b)) return sameDatedJourney(a, b);
   if (timedTypes.has(a.type)) {
     if (wall(a.start) !== wall(b.start) && !retimed(a, b) && !timeLearned(a, b)) return false;
   } else {
@@ -469,6 +470,21 @@ export function sameBooking(a: ExtractedSegment, b: ExtractedSegment): boolean {
   }
   for (const word of ours) if (theirs.has(word)) return true;
   return false;
+}
+
+// A journey an email gives only the date of (local midnight, no end, no
+// service number): a meal or upgrade offer, a lounge invitation, naming the
+// day and the route. It is the journey booked that day between the same
+// airports or stations, whatever its reference: a codeshare's operating
+// airline (Delta) and the airline it was booked with (Virgin Atlantic)
+// give the same flight different ones.
+export function datedJourney(s: ExtractedSegment): boolean {
+  return journeyTypes.has(s.type) && !s.end && s.start.slice(11, 16) === "00:00" && serviceNumbers(s.title, true).size === 0;
+}
+function sameDatedJourney(a: ExtractedSegment, b: ExtractedSegment): boolean {
+  if (localDate(a.start) !== localDate(b.start)) return false;
+  const code = (p?: Place) => p?.code?.toUpperCase();
+  return !!code(a.origin) && code(a.origin) === code(b.origin) && !!code(a.destination) && code(a.destination) === code(b.destination);
 }
 
 // One journey moved by a schedule change: the same reference and service
@@ -665,7 +681,15 @@ function shifted(instant: string, ms: number): string {
 // flight; times the user set by hand stay.
 export function mergeDetails<S extends ExtractedSegment>(existing: S, found: ExtractedSegment, { edited = false, newer = false }: { edited?: boolean; newer?: boolean } = {}): S {
   const merged: S = { ...existing };
-  if (newer && !edited && journeyTypes.has(existing.type) && found.type === existing.type) {
+  // A journey known only by its date (datedJourney) becomes the one booked:
+  // its service, times and reference. One that gives only the date changes
+  // no times.
+  if (!edited && found.type === existing.type && datedJourney(existing) && !datedJourney(found)) {
+    merged.title = found.title;
+    merged.start = found.start;
+    if (found.end !== undefined) merged.end = found.end;
+    if (found.confirmation !== undefined) merged.confirmation = found.confirmation;
+  } else if (newer && !edited && journeyTypes.has(existing.type) && found.type === existing.type && !datedJourney(found)) {
     // A change that gives no arrival moves the old one with the departure,
     // keeping the journey's length, rather than leaving it before it.
     const moved = Date.parse(found.start) - Date.parse(existing.start);
@@ -688,9 +712,12 @@ export function mergeDetails<S extends ExtractedSegment>(existing: S, found: Ext
   const has = (text: string) => notes.some((note) => note.toLowerCase().includes(text.toLowerCase()));
   const extra = found.notes?.trim();
   if (extra && !has(extra)) notes.push(extra);
-  const other = found.confirmation;
-  if (other && merged.confirmation && normalizeReference(other) !== normalizeReference(merged.confirmation) && !has(other)) {
-    notes.push(`Other reference: ${other}`);
+  // The reference either gave that the booking doesn't keep (a codeshare
+  // partner's), whichever came first.
+  for (const other of [found.confirmation, existing.confirmation]) {
+    if (other && merged.confirmation && normalizeReference(other) !== normalizeReference(merged.confirmation) && !has(other)) {
+      notes.push(`Other reference: ${other}`);
+    }
   }
   if (notes.length) merged.notes = notes.join("\n");
   // Everyone either email names, each once.

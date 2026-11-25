@@ -1,5 +1,6 @@
 import {
   bookedDateRange,
+  datedJourney,
   findTripForBooking,
   homeTimeline,
   homesWithAirports,
@@ -139,9 +140,11 @@ const shareKey = (trip: Pick<Trip, "sharedWith">) => [...new Set(trip.sharedWith
 
 const segmentKey = (segment: Pick<Segment, "tripId" | "id">) => `${segment.tripId}/${segment.id}`;
 
-// Two references that disagree are two bookings, however alike the rest.
+// Two references that disagree are two bookings, however alike the rest,
+// unless one is a journey known only by its date (datedJourney): a
+// codeshare partner's reference for the flight booked.
 const twoReferences = (a: ExtractedSegment, b: ExtractedSegment) =>
-  !!a.confirmation && !!b.confirmation && normalizeReference(a.confirmation) !== normalizeReference(b.confirmation);
+  !!a.confirmation && !!b.confirmation && normalizeReference(a.confirmation) !== normalizeReference(b.confirmation) && !datedJourney(a) && !datedJourney(b);
 
 // What refreshing one email did to the user's bookings.
 export type EmailRefresh = { updated: number; added: number; removed: number; merged: number; kept: number };

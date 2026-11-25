@@ -231,6 +231,16 @@ describe("sameBooking", () => {
     expect(sameBooking(flight, { ...flight, destination: { name: "Orly", code: "ORY" } })).toBe(false);
     expect(sameBooking(flight, { ...flight, type: "train" })).toBe(false);
   });
+  it("matches a journey an email gives only the date of to the one booked that day on the route, whatever its reference", () => {
+    const booked = { ...flight, title: "VS4012 BOS to LHR", start: "2026-11-29T19:15:00-05:00", end: "2026-11-30T06:50:00+00:00", confirmation: "E5WSJI", origin: { name: "Boston", code: "BOS" }, destination: { name: "London", code: "LHR" } };
+    const menu = { ...booked, title: "Delta BOS to LHR", start: "2026-11-29T00:00:00-05:00", end: undefined, confirmation: "GPJIZU" };
+    expect(sameBooking(menu, booked)).toBe(true);
+    expect(sameBooking(booked, menu)).toBe(true);
+    // Not another day's or another route's, nor a flight that leaves at midnight.
+    expect(sameBooking({ ...menu, start: "2026-11-30T00:00:00-05:00" }, booked)).toBe(false);
+    expect(sameBooking({ ...menu, destination: { name: "London", code: "LGW" } }, booked)).toBe(false);
+    expect(sameBooking({ ...menu, title: "DL 1 BOS to LHR" }, booked)).toBe(false);
+  });
   it("matches a journey moved by a schedule change: the same reference and service that day", () => {
     const ua = { ...flight, title: "UA122 EWR to LHR", start: "2026-04-11T09:10:00-04:00", confirmation: "B0ECXM", origin: { name: "New York/Newark", code: "EWR" }, destination: { name: "London", code: "LHR" } };
     const moved = { ...ua, title: "UA 122 EWR to LHR", start: "2026-04-11T09:20:00-04:00", origin: { name: "Newark", code: "EWR" } };
