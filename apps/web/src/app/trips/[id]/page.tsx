@@ -5,7 +5,7 @@ import type { User } from "firebase/auth";
 import { arrayRemove, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Fragment, Suspense, use, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { SegmentForm } from "@/components/SegmentForm";
 import { RideSuggestion } from "@/components/RideSuggestion";
 import { SegmentRow } from "@/components/SegmentRow";
@@ -559,11 +559,12 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
       {segments &&
         byDay(segments).map(([day, items]) => (
           <section key={day} className="mt-8">
-            <h2 className="text-lg font-medium">{formatDate(day)}</h2>
-            <ul className="mt-1 divide-y divide-zinc-200 dark:divide-zinc-800">
+            <h2 className="mb-3 text-lg font-medium">{formatDate(day)}</h2>
+            {/* One card per day, a rule between its bookings. No overflow-hidden so a row's ⋮ menu isn't clipped. */}
+            <ul className="divide-y divide-zinc-200 rounded-xl border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
               {items.map((segment) =>
                 editing?.kind === "edit" && editing.segment.id === segment.id ? (
-                  <li key={segment.id} className="py-3">
+                  <li key={segment.id} className="px-4 py-3">
                     <SegmentForm
                       segment={segment}
                       defaultDate={trip.start}
@@ -572,53 +573,53 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
                     />
                   </li>
                 ) : (
-                  <Fragment key={segment.id}>
-                    <SegmentRow
-                      segment={segment}
-                      {...(canEdit
-                        ? {
-                            onEdit: () => setEditing({ kind: "edit", segment }),
-                            onDelete: () => remove(segment),
-                            moveTargets: otherTrips,
-                            onMove: (toTripId: string) => move(segment, toTripId),
-                            mergeTargets: segments.filter((other) => other.id !== segment.id && other.type === segment.type),
-                            onMerge: (otherId: string) => merge(segment, otherId),
-                            // Only the owner: a sharee's new trip would take the booking from the owner's sight.
-                            ...(isOwner ? { onMoveToNew: () => void moveToNew(segment) } : {}),
-                          }
-                        : {})}
-                      {...(learn(segment) ? { onLearnSender: learn(segment) } : {})}
-                      {...(never(segment) ? { onNeverSender: never(segment) } : {})}
-                      // Each email links for whoever imported it, from their mailbox.
-                      emailLinks={{ uid: user.uid, mailboxes: gmailMailboxes(profile), ownsTrip: isOwner }}
-                      programs={programsFor(segment.provider, loyalty)}
-                      flightLines={flightLinesFor(segment, flightStatuses, now)}
-                      {...(() => {
-                        const state = checkedIn && !onlyWatching && flightCheckInState(segment, checkedIn, now);
-                        return state ? { checkIn: { state, onChange: (on: boolean) => void markCheckedIn(segment.id, on) } } : {};
-                      })()}
-                      {...(canEdit
-                        ? {
-                            onRate: (rating: number | null) => rateSegment(firestore(), trip.id, segment.id, rating).catch((e: Error) => setError(e.message)),
-                            onFavorite: (favorite: boolean) => favoriteSegment(firestore(), trip.id, segment.id, favorite).catch((e: Error) => setError(e.message)),
-                            onMarkCancelled: () =>
-                              cancelSegment(firestore(), trip.id, segment.id).catch((e: Error) => {
-                                console.error("Marking a booking cancelled failed", e);
-                                setError(e.message);
+                  <SegmentRow
+                    key={segment.id}
+                    segment={segment}
+                    {...(canEdit
+                      ? {
+                          onEdit: () => setEditing({ kind: "edit", segment }),
+                          onDelete: () => remove(segment),
+                          moveTargets: otherTrips,
+                          onMove: (toTripId: string) => move(segment, toTripId),
+                          mergeTargets: segments.filter((other) => other.id !== segment.id && other.type === segment.type),
+                          onMerge: (otherId: string) => merge(segment, otherId),
+                          // Only the owner: a sharee's new trip would take the booking from the owner's sight.
+                          ...(isOwner ? { onMoveToNew: () => void moveToNew(segment) } : {}),
+                        }
+                      : {})}
+                    {...(learn(segment) ? { onLearnSender: learn(segment) } : {})}
+                    {...(never(segment) ? { onNeverSender: never(segment) } : {})}
+                    // Each email links for whoever imported it, from their mailbox.
+                    emailLinks={{ uid: user.uid, mailboxes: gmailMailboxes(profile), ownsTrip: isOwner }}
+                    programs={programsFor(segment.provider, loyalty)}
+                    flightLines={flightLinesFor(segment, flightStatuses, now)}
+                    {...(() => {
+                      const state = checkedIn && !onlyWatching && flightCheckInState(segment, checkedIn, now);
+                      return state ? { checkIn: { state, onChange: (on: boolean) => void markCheckedIn(segment.id, on) } } : {};
+                    })()}
+                    {...(canEdit
+                      ? {
+                          onRate: (rating: number | null) => rateSegment(firestore(), trip.id, segment.id, rating).catch((e: Error) => setError(e.message)),
+                          onFavorite: (favorite: boolean) => favoriteSegment(firestore(), trip.id, segment.id, favorite).catch((e: Error) => setError(e.message)),
+                          onMarkCancelled: () =>
+                            cancelSegment(firestore(), trip.id, segment.id).catch((e: Error) => {
+                              console.error("Marking a booking cancelled failed", e);
+                              setError(e.message);
+                            }),
+                          // One cancelled with its trip comes back with the trip.
+                          ...(trip.cancelledAt && segment.userCancelled === "trip"
+                            ? {}
+                            : {
+                                onRestore: () =>
+                                  restoreSegment(firestore(), trip.id, segment.id).catch((e: Error) => {
+                                    console.error("Restoring a cancelled booking failed", e);
+                                    setError(e.message);
+                                  }),
                               }),
-                            // One cancelled with its trip comes back with the trip.
-                            ...(trip.cancelledAt && segment.userCancelled === "trip"
-                              ? {}
-                              : {
-                                  onRestore: () =>
-                                    restoreSegment(firestore(), trip.id, segment.id).catch((e: Error) => {
-                                      console.error("Restoring a cancelled booking failed", e);
-                                      setError(e.message);
-                                    }),
-                                }),
-                          }
-                        : {})}
-                    />
+                        }
+                      : {})}
+                  >
                     {needs
                       .filter((n) => n.segmentId === segment.id)
                       .map((n) => (
@@ -635,7 +636,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
                           }
                         />
                       ))}
-                  </Fragment>
+                  </SegmentRow>
                 ),
               )}
             </ul>
