@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { owner, partner, signIn, signOut } from "./helpers";
+import { openBooking, owner, partner, signIn, signOut } from "./helpers";
 import { clearData, readTravelProfile, readUser, seedFlight, seedTravelProfile, seedTrip } from "./seed";
 
 test.beforeEach(async () => {
@@ -83,7 +83,7 @@ test("a booking shows the viewer's program its provider belongs to, with the num
     travelers: [],
   });
   await page.getByRole("link", { name: /Liverpool/ }).click();
-  await expect(page.getByTestId("segment-loyalty")).toHaveText("Example Air Miles · EA123 · Gold");
+  await expect((await openBooking(page, "Cove Liverpool")).getByTestId("segment-loyalty")).toHaveText("Example Air Miles · EA123 · Gold");
 });
 
 test("loyalty numbers found in booking emails join the table and the booking line, and the owner can remove them", async ({ page }) => {
@@ -94,7 +94,7 @@ test("loyalty numbers found in booking emails join the table and the booking lin
   await seedTravelProfile(ownerUid, { ownerEmail: owner, trustedEmails: [], documents: [], loyalty: [], travelers: [], foundLoyalty: [found, air] });
 
   await page.getByRole("link", { name: /Liverpool/ }).click();
-  await expect(page.getByTestId("segment-loyalty")).toHaveText("Cove Club · CC 4455 · Member");
+  await expect((await openBooking(page, "Cove Liverpool")).getByTestId("segment-loyalty")).toHaveText("Cove Club · CC 4455 · Member");
 
   await page.goto("/profile");
   await expect(page.getByRole("table", { name: "Loyalty programs" }).getByRole("row")).toHaveText([
@@ -117,7 +117,7 @@ test("each loyalty number is shown under whose it is, on the profile and on a bo
   await seedTravelProfile(ownerUid, { ownerEmail: owner, trustedEmails: [], documents: [], loyalty: [], travelers: [], foundLoyalty: [theirs, mine] });
 
   await page.getByRole("link", { name: /Liverpool/ }).click();
-  await expect(page.getByTestId("segment-loyalty").getByRole("listitem")).toHaveText(["Example Air Club · EA 123", "Example Air Club · EA 999 · Alex Sample"]);
+  await expect((await openBooking(page, "Cove Liverpool")).getByTestId("segment-loyalty").getByRole("listitem")).toHaveText(["Example Air Club · EA 123", "Example Air Club · EA 999 · Alex Sample"]);
 
   await page.goto("/profile");
   await expect(page.getByRole("table", { name: "Loyalty programs: You" })).toContainText("EA 123");

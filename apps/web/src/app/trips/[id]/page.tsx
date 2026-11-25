@@ -5,7 +5,7 @@ import type { User } from "firebase/auth";
 import { arrayRemove, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Fragment, Suspense, use, useCallback, useMemo, useState, type FormEvent } from "react";
+import { Fragment, Suspense, use, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { SegmentForm } from "@/components/SegmentForm";
 import { RideSuggestion } from "@/components/RideSuggestion";
 import { SegmentRow } from "@/components/SegmentRow";
@@ -44,6 +44,50 @@ function byDay(segments: Segment[]): [string, Segment[]][] {
   return [...days.entries()].sort(([a], [b]) => a.localeCompare(b));
 }
 
+// The trip's own ⋮ menu, as Android's top bar has it: Rename, for the owner.
+function TripMenu({ onRename }: { onRename: () => void }) {
+  const [open, setOpen] = useState(false);
+  const wrapper = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => {
+      if (!wrapper.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", away);
+    wrapper.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    return () => document.removeEventListener("pointerdown", away);
+  }, [open]);
+  return (
+    <div ref={wrapper} className="relative mt-1 shrink-0" onKeyDown={(e) => e.key === "Escape" && setOpen(false)}>
+      <button
+        type="button"
+        aria-label="Trip actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="rounded-full px-2 py-1 text-xl leading-none text-muted hover:bg-zinc-100 dark:hover:bg-zinc-900"
+      >
+        ⋮
+      </button>
+      {open && (
+        <div role="menu" aria-label="Trip actions" className="absolute right-0 top-9 z-10 min-w-40 rounded-lg border border-zinc-200 bg-background py-1 shadow-lg dark:border-zinc-800">
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onRename();
+            }}
+            className="block w-full px-4 py-2 text-left text-sm hover:bg-zinc-100 focus:bg-zinc-100 focus:outline-none dark:hover:bg-zinc-900 dark:focus:bg-zinc-900"
+          >
+            Rename
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Title({ trip, canEdit }: { trip: Trip; canEdit: boolean }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(trip.title);
@@ -51,19 +95,15 @@ function Title({ trip, canEdit }: { trip: Trip; canEdit: boolean }) {
 
   if (!editing) {
     return (
-      <div className="mt-2 flex items-baseline gap-3">
+      <div className="mt-2 flex items-start justify-between gap-3">
         <h1 className="text-3xl font-semibold">{trip.title}</h1>
         {canEdit && (
-          <button
-            type="button"
-            onClick={() => {
+          <TripMenu
+            onRename={() => {
               setTitle(trip.title);
               setEditing(true);
             }}
-            className="text-sm text-muted hover:underline"
-          >
-            Rename
-          </button>
+          />
         )}
       </div>
     );

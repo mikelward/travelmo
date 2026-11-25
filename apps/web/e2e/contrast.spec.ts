@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-import { contrastRatio, owner, partner, signIn } from "./helpers";
+import { contrastRatio, openBooking, owner, partner, signIn } from "./helpers";
 import { clearData, seedFeed, seedFlight, seedGmail, seedLisbonTrip, seedTravelProfile, seedTrip } from "./seed";
 
 test.beforeEach(async () => {
@@ -82,8 +82,8 @@ for (const colorScheme of ["light", "dark"] as const) {
     await page.getByRole("button", { name: "Booking actions" }).first().click();
     await expect(page.getByRole("menu")).toBeVisible();
     await expectReadable(page);
-    await page.getByRole("menuitem", { name: "Sources" }).click();
-    const sources = page.getByRole("dialog", { name: "Sources" });
+    await page.keyboard.press("Escape");
+    const sources = await openBooking(page, "Cove Liverpool");
     await expect(sources).toBeVisible();
     await expectReadable(page);
     await sources.getByRole("button", { name: "Close" }).click();

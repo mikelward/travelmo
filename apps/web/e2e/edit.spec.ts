@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { bookingAction, owner, signIn } from "./helpers";
+import { bookingAction, openBooking, owner, signIn } from "./helpers";
 import { clearData, readSegments, seedFlight, seedTrip } from "./seed";
 
 test.beforeEach(async () => {
@@ -114,7 +114,9 @@ test("typing the start of an address offers places, and picking one fills city, 
   expect(detailed).toEqual([`https://places.googleapis.com/v1/places/p1?sessionToken=${first.body.sessionToken}`]);
 
   await page.getByRole("button", { name: "Add", exact: true }).click();
-  await expect(page.getByText("10 Example Street, Exampleville EX1 2MP, UK")).toBeVisible();
+  // The address is on the booking's details.
+  await expect((await openBooking(page, "Example stay")).getByText("10 Example Street, Exampleville EX1 2MP, UK")).toBeVisible();
+  await page.keyboard.press("Escape");
   // The pick's spot is stored with the place, for the map.
   const stored = (await readSegments("e2e-address")).find((s) => s.title === "Example stay");
   expect(stored?.destination).toMatchObject({ name: "10 Example Street", city: "Exampleville", country: "GB", lat: 53.41, lon: -2.98 });

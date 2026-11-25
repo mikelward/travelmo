@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { approve } from "./seed";
 
 export const owner = "owner@example.com";
@@ -45,4 +45,12 @@ export function contrastRatio(a: string, b: string): number {
 export async function bookingAction(page: Page, name: string, index = 0): Promise<void> {
   await page.getByRole("button", { name: "Booking actions" }).nth(index).click();
   await page.getByRole("menuitem", { name }).click();
+}
+
+// Opens the details of the trip page's booking titled [title] (the nth, when several are) and returns its dialog.
+export async function openBooking(page: Page, title: string, index = 0): Promise<Locator> {
+  await page.getByRole("button", { name: title, exact: true }).nth(index).click();
+  const dialog = page.getByRole("dialog", { name: title });
+  await expect(dialog).toBeVisible();
+  return dialog;
 }
