@@ -1,5 +1,7 @@
 package app.travelmo.ui
 
+import app.travelmo.core.BookingHeading
+import app.travelmo.core.Segment
 import app.travelmo.shared.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.size
@@ -109,10 +111,13 @@ internal val airlineLogos: Map<String, Pair<DrawableResource, DrawableResource?>
     "ZH" to (Res.drawable.airline_zh to Res.drawable.airline_zh_dark),
 )
 
-/** The airline's logo beside its name, as the trip page and a booking's page head a flight; nothing for an airline without one. */
+/**
+ * A booking's logo: a flight's airline's (bookingHeading), else the brand it names or its parent's (brandLogo);
+ * nothing when there is none. The version for a dark background on a dark surface.
+ */
 @Composable
-internal fun AirlineLogo(code: String?, size: Dp) {
-    val (light, dark) = code?.let { airlineLogos[it] } ?: return
+internal fun BookingLogo(segment: Segment, heading: BookingHeading, size: Dp) {
+    val (light, dark) = heading.airline?.let { airlineLogos[it] } ?: brandLogo(segment) ?: return
     val onDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     Image(painterResource(if (onDark) dark ?: light else light), contentDescription = null, modifier = Modifier.size(size))
 }

@@ -2,7 +2,7 @@
 
 import { useState, type MouseEvent } from "react";
 import { SegmentIcon } from "@/components/SegmentIcon";
-import { AirlineLogo } from "@/components/AirlineLogo";
+import { BookingLogo } from "@/components/BookingLogo";
 import { BookingMenu } from "@/components/BookingMenu";
 import { BookingDetailsDialog } from "@/components/BookingDetails";
 import type { EmailLinks } from "@/lib/sourceLinks";
@@ -173,10 +173,10 @@ export function SegmentRow({
           onClose={() => setDetails(false)}
         />
       )}
-      {/* The kind of booking, and below it the brand's logo (an airline's), centred under it. */}
+      {/* The kind of booking, and below it its brand's logo (BookingLogo), centred under it. */}
       <div className="mt-0.5 flex w-5 shrink-0 flex-col items-center gap-2">
         <SegmentIcon type={segment.type} label={labels[segment.type]} className="text-muted" />
-        <AirlineLogo code={heading.airline} size={20} />
+        <BookingLogo segment={segment} heading={heading} size={20} />
       </div>
       <div className="min-w-0 flex-1 cursor-pointer" onClick={open}>
         {cancelled && (
