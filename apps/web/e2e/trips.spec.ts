@@ -183,7 +183,9 @@ test("the owner sees an imported trip, shares it, and the partner can add a book
   await page.getByPlaceholder("JFK", { exact: true }).fill("DUB");
   await expect(zone.nth(1)).toHaveValue("Europe/Dublin");
   await page.getByRole("button", { name: "Add", exact: true }).click();
-  await expect(page.getByText("FR 123 MAN to DUB", { exact: true })).toBeVisible();
+  // A flight is headed by its airline, its flight number leading the route.
+  await expect(page.getByRole("button", { name: "Ryanair", exact: true })).toBeVisible();
+  await expect(page.getByText("FR 123", { exact: true })).toBeVisible();
   await expect(page.getByTestId("trip-dates")).toContainText("12–15 Dec 2026");
 });
 
