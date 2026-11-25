@@ -77,15 +77,15 @@ export function BookingDetailsDialog({
       }
     >
       <div className="space-y-1" data-testid="booking-details">
-        {cancelled && <p className="text-xs font-medium uppercase tracking-wide text-danger">Cancelled</p>}
+        {cancelled && <p className="text-danger">Cancelled</p>}
         {route && <p className="text-muted">{route}</p>}
         {/* The trip page's day heading isn't here, so the day the booking starts is. */}
         <p className="text-muted">{formatDate(localDate(segment.start))}</p>
         {times && <p className="text-muted">{times}</p>}
         {places.map((place) => (
           <a key={JSON.stringify(place)} href={mapsUrl(place)} target="_blank" rel="noopener noreferrer" className="block py-1" title="Show in Maps">
-            <span className="font-medium underline">{place.name}</span>
-            {(place.address ?? place.city) && <span className="block text-sm text-muted">{place.address ?? place.city}</span>}
+            <span className="underline">{place.name}</span>
+            {(place.address ?? place.city) && <span className="block text-muted">{place.address ?? place.city}</span>}
           </a>
         ))}
         {segment.provider && <p className="pt-2">{segment.provider}</p>}
@@ -95,7 +95,7 @@ export function BookingDetailsDialog({
               Ref {reference}
             </button>
             {status && (
-              <span role="status" className="ml-2 text-sm text-muted">
+              <span role="status" className="ml-2 text-muted">
                 {status}
               </span>
             )}
@@ -104,13 +104,13 @@ export function BookingDetailsDialog({
         {segment.travelers && segment.travelers.length > 0 && <p data-testid="segment-travelers">For {segment.travelers.join(", ")}</p>}
         {programs && programs.length > 0 && (
           // One program a line, so whose each number is stays plain.
-          <ul className="text-sm text-muted" data-testid="segment-loyalty">
+          <ul className="text-muted" data-testid="segment-loyalty">
             {programs.map((p, i) => (
               <li key={`${p.title}-${i}`}>{loyaltyLine(p)}</li>
             ))}
           </ul>
         )}
-        {segment.notes && <p className="whitespace-pre-line pt-2 text-sm">{segment.notes}</p>}
+        {segment.notes && <p className="whitespace-pre-line pt-2">{segment.notes}</p>}
         {verdict}
         {hasSources && (
           <>

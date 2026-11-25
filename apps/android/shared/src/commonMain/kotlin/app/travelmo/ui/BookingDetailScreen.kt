@@ -24,7 +24,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -172,39 +171,41 @@ fun BookingDetails(
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val referenceLabel = stringResource(Res.string.booking_reference)
     val struck = if (segment.isCancelled) TextDecoration.LineThrough else null
+    // One size for everything but the title and the Sources heading.
+    val body = MaterialTheme.typography.bodyLarge
     Column(
         modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         for (error in errors) Text(error, color = MaterialTheme.colorScheme.error)
         if (segment.isCancelled) {
-            Text(stringResource(Res.string.cancelled).uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+            Text(stringResource(Res.string.cancelled), style = body, color = MaterialTheme.colorScheme.error)
         }
         Text(segment.title, style = MaterialTheme.typography.titleLarge, textDecoration = struck)
-        routeLine(segment)?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = muted) }
+        routeLine(segment)?.let { Text(it, style = body, color = muted) }
         // The trip page's day heading isn't here, so the day the booking starts is.
-        Text(formatDate(localDate(segment.start)), style = MaterialTheme.typography.bodyLarge, color = muted, textDecoration = struck)
-        timesLine(segment)?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = muted) }
+        Text(formatDate(localDate(segment.start)), style = body, color = muted, textDecoration = struck)
+        timesLine(segment)?.let { Text(it, style = body, color = muted) }
         // Both ends, unless they are the same place: a one-way rental's two desks share a name, not an address.
         for (place in listOfNotNull(segment.origin, segment.destination).distinct()) {
             PlaceLink(place) { chrome.openLink(mapsUrl(place), "a booking's place") }
         }
-        segment.provider?.let { Text(it, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp)) }
+        segment.provider?.let { Text(it, style = body, modifier = Modifier.padding(top = 8.dp)) }
         segment.confirmation?.trim()?.takeIf { it.isNotEmpty() }?.let { ref ->
             Text(
                 stringResource(Res.string.ref_value, ref),
-                style = MaterialTheme.typography.bodyLarge,
+                style = body,
                 modifier = Modifier.fillMaxWidth()
                     .clickable(onClickLabel = stringResource(Res.string.copy_reference), role = Role.Button) { chrome.copyToClipboard(referenceLabel, ref) }
                     .padding(vertical = 8.dp),
             )
         }
         if (segment.travelers.isNotEmpty()) {
-            Text(stringResource(Res.string.booking_for, segment.travelers.joinToString(", ")), style = MaterialTheme.typography.bodyLarge)
+            Text(stringResource(Res.string.booking_for, segment.travelers.joinToString(", ")), style = body)
         }
         // One program a line, so whose each number is stays plain.
-        for (program in programs) Text(loyaltyLine(program), style = MaterialTheme.typography.bodyMedium, color = muted)
-        segment.notes?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp)) }
+        for (program in programs) Text(loyaltyLine(program), style = body, color = muted)
+        segment.notes?.let { Text(it, style = body, modifier = Modifier.padding(top = 8.dp)) }
         Verdict(segment)
         if (segment.sources.isNotEmpty() || segment.sender != null) {
             Text(stringResource(Res.string.sources), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
@@ -216,10 +217,11 @@ fun BookingDetails(
 /** A booking's place, named with its address (else its town); a tap shows it in Maps. */
 @Composable
 private fun PlaceLink(place: Place, open: () -> Unit) {
+    val body = MaterialTheme.typography.bodyLarge
     Column(
         modifier = Modifier.fillMaxWidth().clickable(onClickLabel = stringResource(Res.string.show_in_maps), role = Role.Button, onClick = open).padding(vertical = 8.dp),
     ) {
-        Text(place.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, textDecoration = TextDecoration.Underline)
-        (place.address ?: place.city)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        Text(place.name, style = body, textDecoration = TextDecoration.Underline)
+        (place.address ?: place.city)?.let { Text(it, style = body, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }

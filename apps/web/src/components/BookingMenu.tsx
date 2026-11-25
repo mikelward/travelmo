@@ -67,7 +67,7 @@ export function SourcesList({
   };
   return (
     <>
-      {copied && <p className="pb-2 text-sm">Search copied. Paste it in Gmail&apos;s search.</p>}
+      {copied && <p className="pb-2">Search copied. Paste it in Gmail&apos;s search.</p>}
       <ul data-testid="segment-sources">
         {sources.map((source) => {
           const kind = sourceKindLabels[source.kind];
@@ -82,13 +82,13 @@ export function SourcesList({
               ) : (
                 <p>{name}</p>
               )}
-              {source.label && <p className="text-xs text-muted">{kind}</p>}
+              {source.label && <p className="text-muted">{kind}</p>}
             </li>
           );
         })}
       </ul>
       {segment.sender && (
-        <p className="py-2 text-sm text-muted">
+        <p className="py-2 text-muted">
           From {segment.sender}
           {onLearnSender && (
             <>

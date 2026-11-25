@@ -1025,7 +1025,8 @@ or town (a link that shows it in Google Maps, `mapsUrl`), the provider,
 programs, the notes, and the sources: each source's label and kind (an email
 the viewer imported links to Gmail), then "From" the sender with "Always
 import this sender" and "Never import this sender" for the owner (each where
-it isn't already the rule). A ✎ beside its title edits it, for those who may.
+it isn't already the rule), all in the page's body size. A ✎ beside its title
+edits it, for those who may.
 Rename is in the trip's own ⋮ menu beside its name, for the owner.
 The same people can rate a booking one to five stars and mark it a favorite
 (`rating`, `favorite` on the segment; tapping the current star clears the
@@ -3181,7 +3182,10 @@ removable, an address to add), Merge into another trip and Delete this trip
 web's transaction with the trip's `updatedAt` as a revision; anyone who may
 edit can move a booking to another trip they see, and the owner to a new one,
 from the same dialog as the web's. Every write runs in the
-ViewModel under a token, so a rotation keeps its outcome. The Profile tab
+ViewModel under a token, so a rotation keeps its outcome. A screen closes
+only itself, and only while it is on top (`close`): a Back tapped again
+while it slides away, or a late signal from it, leaves the screen under it
+alone and never empties the back stack. The Profile tab
 shows the travel profile as `/profile` does (documents and travelers folded,
 the loyalty programs at a glance and in full, who it is shared with, and the
 profiles shared with the viewer, and shares it as the web does), and the
@@ -3195,7 +3199,8 @@ details (`BookingDetailScreen`), which carry the rest: the day it starts
 with its address or town (a tap shows it in Google Maps, `mapsUrl`), the
 provider, "Ref …" (a tap copies it), who it is for, the viewer's matching
 loyalty programs, the notes, and the sources; a ✎ in its bar edits it for
-those who may. A booking's ⋮ menu, for anyone who sees the trip, starts with
+those who may; all of it in one body size, but for the title and the Sources
+heading. A booking's ⋮ menu, for anyone who sees the trip, starts with
 Directions (when it has a place) and "Copy reference" (when it has one),
 then Edit, Move to and Delete for those who may edit. Copying puts the
 reference alone on the clipboard, with no toast since Android (13 and later,

@@ -789,11 +789,11 @@ internal fun SourcesList(segment: Segment, emailLink: (SourceRef) -> String?, se
                     // Underlined as a link: the theme's primary is near-black, as on the web.
                     textDecoration = if (link != null) TextDecoration.Underline else null,
                 )
-                if (source.label != null) Text(kind, style = MaterialTheme.typography.bodyMedium, color = muted)
+                if (source.label != null) Text(kind, style = MaterialTheme.typography.bodyLarge, color = muted)
             }
         }
         segment.sender?.let {
-            Text(stringResource(Res.string.from_sender, it), style = MaterialTheme.typography.bodyMedium, color = muted, modifier = Modifier.padding(vertical = 8.dp))
+            Text(stringResource(Res.string.from_sender, it), style = MaterialTheme.typography.bodyLarge, color = muted, modifier = Modifier.padding(vertical = 8.dp))
             Row(modifier = Modifier.offset(x = -TextButtonInset)) {
                 senderOffers?.always?.let { always -> TextButton(onClick = always) { Text(stringResource(Res.string.always_import_sender)) } }
                 senderOffers?.never?.let { never -> TextButton(onClick = never) { Text(stringResource(Res.string.never_import_sender)) } }
