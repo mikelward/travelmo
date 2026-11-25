@@ -12,6 +12,7 @@ import app.travelmo.core.tripMatches
 import app.travelmo.core.parseTripQuery
 import app.travelmo.core.ListFilters
 import app.travelmo.core.hiddenFromList
+import app.travelmo.core.watchedTrip
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.shareIn
 import app.travelmo.core.tripTravelers
@@ -454,12 +455,18 @@ class TripsViewModel(
             }
         }
 
+    /** The people the user's bookings name, most often named first (SPEC "Travelers"). */
+    val travelers: StateFlow<List<Person>> = accessSettled.flatMapLatest { store.people(uid) }.map(::peopleInOrder)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     val state: StateFlow<TripListState> = combine(
-        groups, details, now, people, combine(listFlightStatuses, listCheckedIn, ::Pair),
-    ) { groups, details, now, people, (statuses, checkedIn) ->
+        groups, details, now, combine(people, travelers, ::Pair), combine(listFlightStatuses, listCheckedIn, ::Pair),
+    ) { groups, details, now, (people, travelers), (statuses, checkedIn) ->
         val today = today()
         val trips = groups?.let { it.current + it.upcoming + it.past }.orEmpty()
-        val byTrip = trips.filter { it.id in details }.associate { trip -> trip.id to tripWarnings(people, trip, details[trip.id], today) }
+        // A trip the user is only watching warns of no one's documents.
+        val byTrip = trips.filter { it.id in details && !watchedTrip(it, details[it.id], travelers) }
+            .associate { trip -> trip.id to tripWarnings(people, trip, details[trip.id], today) }
         TripListState(groups, details, now, listWarnings(byTrip, trips), statuses, checkedIn)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TripListState(null, emptyMap(), clock().toString()))
 
@@ -467,9 +474,13 @@ class TripsViewModel(
     /**
      * Every trip the viewer sees with its bookings, for the reports: one
      * listener per trip, as the web's reports page keeps; null until the
-     * trips and each one's bookings have answered.
+     * trips, each one's bookings and the user's people have answered. A trip
+     * the user is only watching (watchedTrip) isn't theirs to count: not in
+     * the reports, residence days, the download or working out home.
      */
-    val reportTrips: StateFlow<List<TripWithSegments>?> = allSegments().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    val reportTrips: StateFlow<List<TripWithSegments>?> = combine(allSegments(), accessSettled.flatMapLatest { store.people(uid) }) { all, people ->
+        all?.filterNot { watchedTrip(it.trip, it.segments, people) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val _searchText = MutableStateFlow("")
 
@@ -532,10 +543,6 @@ class TripsViewModel(
             SharedLog.error(e, "Saving how Reports counts days failed")
         }
     }
-
-    /** The people the user's bookings name, most often named first (SPEC "Travelers"). */
-    val travelers: StateFlow<List<Person>> = accessSettled.flatMapLatest { store.people(uid) }.map(::peopleInOrder)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
      * The bookings of trips that don't yet say what the list needs (flagsUnknown: from before the flags were kept,

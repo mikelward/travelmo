@@ -217,6 +217,23 @@ class TripListScreenTest {
     }
 
     @Test
+    fun `a trip under way the user is only watching offers no check-in`() {
+        val store = FakeTripStore(
+            trips = fixtureTrips + fixtureFlightTrip,
+            segments = fixtureSegments + ("sydney" to listOf(fixtureNextFlight.copy(travelers = listOf("Pat Example")))),
+            flightStatuses = mapOf("XX100_2026-11-02_SYD" to fixtureNextFlightStatus),
+            people = listOf(
+                app.travelmo.core.Person("me", "Sam Example", bookings = 4, direct = 4),
+                app.travelmo.core.Person("mum", "Pat Example", bookings = 1),
+            ),
+        )
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }
+        composeRule.onNodeWithText("XX 100 SYD to SIN").assertExists()
+        composeRule.onNodeWithText("Online check-in open, usually until departure · Ref XX7Q2P").assertDoesNotExist()
+    }
+
+    @Test
     fun `I've checked in on the card takes its check-in line away`() {
         val store = flightTripStore()
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })

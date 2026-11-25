@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { flagsUnknown, hiddenFromList, localOnly, noListFilters, tripFlagsToWrite, tripTravelers, watching } from "./listFilters";
+import { flagsUnknown, hiddenFromList, localOnly, noListFilters, tripFlagsToWrite, tripTravelers, watchedTrip, watching } from "./listFilters";
 import type { ExtractedSegment } from "./schema";
 
 // Invented bookings: a show and a class in town, a hire car returned where
@@ -129,5 +129,14 @@ describe("watching", () => {
     expect(hiddenFromList({}, [{ ...flight, travelers: ["Pat Example"] }], filters, [sam, pat])).toBe(true);
     expect(hiddenFromList({}, [{ ...flight, travelers: ["Sam Example"] }], filters, [sam, pat])).toBe(false);
     expect(hiddenFromList({}, undefined, filters, [sam, pat])).toBe(false);
+  });
+});
+
+describe("watchedTrip", () => {
+  it("goes by the trip's bookings once read, else by what the trip keeps", () => {
+    expect(watchedTrip({ travelers: ["Sam Example"] }, [{ ...flight, travelers: ["Pat Example"] }], [sam, pat])).toBe(true);
+    expect(watchedTrip({ travelers: ["Pat Example"] }, undefined, [sam, pat])).toBe(true);
+    expect(watchedTrip({ travelers: ["Pat Example"] }, [{ ...flight, travelers: ["Sam Example"] }], [sam, pat])).toBe(false);
+    expect(watchedTrip({}, undefined, [sam, pat])).toBe(false);
   });
 });

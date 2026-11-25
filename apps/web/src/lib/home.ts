@@ -1,11 +1,12 @@
 "use client";
 
-import { effectiveHomes, homeTimeline, maxHomeCorrections, paths, withChosenAirports, withHomeAirports, type ChosenHomeAirports, type HomeCorrection, type HomePeriod, type Segment } from "@travelmo/core";
+import { effectiveHomes, homeTimeline, maxHomeCorrections, paths, watchedTrip, withChosenAirports, withHomeAirports, type ChosenHomeAirports, type HomeCorrection, type HomePeriod, type PersonDoc, type Segment, type Trip } from "@travelmo/core";
 
 export { airportCodes, correctionText, homeLine, homeTownKey, parseAirportCodes, parseCorrection } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { firestore } from "./firebase";
+import { usePeople } from "./people";
 import { useAllSegments, useProfile, useTrips } from "./trips";
 
 // Where home was over time, and how many trips could not be read to work it
@@ -25,6 +26,17 @@ export function deriveHomes(
   return { periods, corrections: [...corrections], chosen: [...chosen], failed: failed.length };
 }
 
+// The bookings home is worked out from: those of trips the user owns and
+// isn't only watching (watchedTrip), by trip.
+export function ownTripSegments(
+  trips: readonly Trip[],
+  byTrip: Readonly<Record<string, Segment[]>>,
+  uid: string,
+  people: readonly PersonDoc[],
+): Record<string, Segment[]> {
+  return Object.fromEntries(trips.flatMap((t) => (t.ownerUid === uid && byTrip[t.id] && !watchedTrip(t, byTrip[t.id], people) ? [[t.id, byTrip[t.id]!]] : [])));
+}
+
 // As the reports page says it for trips it could not read.
 export function failedReadsText(failed: number): string {
   const trips = `${failed.toLocaleString("en-US")} ${failed === 1 ? "trip" : "trips"}`;
@@ -32,14 +44,16 @@ export function failedReadsText(failed: number): string {
 }
 
 // Where home was over time for this user: worked out from their own trips'
-// bookings, with their corrections over it. Undefined while loading.
+// bookings, those they're only watching aside, with their corrections over
+// it. Undefined while loading.
 export function useHomes(user: User): Homes | undefined {
   const trips = useTrips(user);
   const profile = useProfile(user.uid);
+  const people = usePeople(user.uid);
   const own = trips?.filter((t) => t.ownerUid === user.uid).map((t) => t.id);
   const all = useAllSegments(own);
-  if (!all || !profile) return undefined;
-  return deriveHomes(all.byTrip, all.failed, profile.homes ?? [], profile.homeAirports ?? []);
+  if (!trips || !all || !profile || !people) return undefined;
+  return deriveHomes(ownTripSegments(trips, all.byTrip, user.uid, people), all.failed, profile.homes ?? [], profile.homeAirports ?? []);
 }
 
 // Runs a change to the corrections, logging a failure by what it was doing

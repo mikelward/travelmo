@@ -35,6 +35,8 @@ import app.travelmo.core.rideNeedKey
 import kotlin.time.Instant
 import kotlinx.coroutines.flow.first
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.collections.shouldContain
+import io.kotest.matchers.collections.shouldNotContain
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -209,6 +211,22 @@ class TripsViewModelTest {
         viewModel.hideRideNeed("hide", needs[1])
         viewModel.outcomes.value shouldBe mapOf("hide" to Outcome.Done)
         store.hiddenRides shouldBe listOf("b-out/car")
+    }
+
+    @Test
+    fun `the reports leave out a trip the user is only watching`() = runTest {
+        val store = FakeTripStore(
+            trips = fixtureTrips + fixtureFlightTrip,
+            segments = fixtureSegments + ("sydney" to listOf(fixtureNextFlight.copy(travelers = listOf("Pat Example")))),
+            people = listOf(
+                app.travelmo.core.Person("me", "Sam Example", bookings = 4, direct = 4),
+                app.travelmo.core.Person("mum", "Pat Example", bookings = 1),
+            ),
+        )
+        val viewModel = TripsViewModel(store, OWNER, null, clock = { Instant.parse(FROZEN_NOW) })
+        val ids = viewModel.reportTrips.first { it != null }!!.map { it.trip.id }
+        ids shouldNotContain fixtureFlightTrip.id
+        ids shouldContain "liverpool"
     }
 
     @Test

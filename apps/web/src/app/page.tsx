@@ -7,6 +7,7 @@ import {
   groupTrips,
   hiddenFromList,
   tripTravelers,
+  watchedTrip,
   watching,
   journeyGap,
   journeyGapHomes,
@@ -24,7 +25,7 @@ import {
 } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SignInGate } from "@/components/SignInGate";
 import { TripCard } from "@/components/TripCard";
 import { AddTripForm } from "@/components/AddTripForm";
@@ -252,7 +253,9 @@ function Trips({ user }: { user: User }) {
   };
   const people = usePeopleDocuments(user);
   const profile = useProfile(user.uid);
-  const warnings = useTripWarnings(people, trips ?? [], segmentsByTrip, today);
+  // The user's own trips: one they're only watching warns of no one's documents.
+  const ownTrips = useMemo(() => (trips ?? []).filter((t) => !watchedTrip(t, segmentsByTrip[t.id], travelers ?? [])), [trips, segmentsByTrip, travelers]);
+  const warnings = useTripWarnings(people, ownTrips, segmentsByTrip, today);
 
   if (!trips || !groups) return <p className="text-muted">Loading trips…</p>;
   // The bar and Add a trip's form, first on the page whether or not there

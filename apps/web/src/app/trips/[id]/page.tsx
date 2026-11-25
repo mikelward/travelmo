@@ -1,6 +1,6 @@
 "use client";
 
-import { allLoyalty, bookedDateRange, flightCheckInState, displayBounds, effectiveHomes, homeTimeline, journeyGap, journeyGapHomes, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, gmailMailboxes, localDate, normalizeEmail, paths, programsFor, sharedWithAny, tripTravelers, watching, type Segment, type SenderCleanup, type Trip } from "@travelmo/core";
+import { allLoyalty, bookedDateRange, flightCheckInState, displayBounds, effectiveHomes, homeTimeline, journeyGap, journeyGapHomes, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, gmailMailboxes, localDate, normalizeEmail, paths, programsFor, sharedWithAny, watchedTrip, type Segment, type SenderCleanup, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { arrayRemove, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -379,24 +379,26 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   const people = usePeopleDocuments(user);
   // Whom the user's bookings name, and so whether they're only watching this trip.
   const travelers = usePeople(user.uid);
-  const onlyWatching = !!segments && watching(tripTravelers(segments), travelers ?? []);
+  // Watching it, what is the user's own leaves it out: warnings, entry
+  // requirements, rides, the checklist and check-in.
+  const onlyWatching = !!segments && watchedTrip({}, segments, travelers ?? []);
   // The viewer's own programs, for the number at check-in; a fellow
   // traveler's are theirs.
   const ownTravelProfile = useTravelProfile(user.uid);
   const loyalty = useMemo(() => (ownTravelProfile ? allLoyalty(ownTravelProfile) : []), [ownTravelProfile]);
   const today = localToday();
-  const tripList = useMemo(() => (trip ? [trip] : []), [trip]);
+  const tripList = useMemo(() => (trip && !onlyWatching ? [trip] : []), [trip, onlyWatching]);
   const segmentsOfTrip = useMemo(() => (segments ? { [tripId]: segments } : {}), [segments, tripId]);
   const warnings = useTripWarnings(people, tripList, segmentsOfTrip, today)[tripId] ?? [];
-  const entries = useEntryRequirements(people, trip, segments, today);
+  const entries = useEntryRequirements(people, onlyWatching ? null : trip, segments, today);
   // Flights with no car or ride booked. Home is where this trip's round trip
   // starts, unless the viewer said otherwise on Profile: reading every trip
   // to work it out would cost a read of each on every visit.
   const needs = useMemo(() => {
-    if (!segments || !profile) return [];
+    if (!segments || !profile || onlyWatching) return [];
     const periods = effectiveHomes(homeTimeline(segments), profile.homes ?? []);
     return rideNeeds(segments, { periods, hidden: profile.hiddenRideNeeds ?? [], now });
-  }, [segments, profile, now]);
+  }, [segments, profile, now, onlyWatching]);
   // A journey the trip seems to be missing (no flight back), unless the
   // viewer said it goes one way. Home is only what they set on Profile, as
   // a one-way trip has no round trip to work it out from.
@@ -536,7 +538,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
         />
       )}
       {entries && <EntryRequirements entries={entries.entries} fetched={entries.fetched} />}
-      {checklist && !trip.deleting && <BeforeYouGo uid={user.uid} tripId={trip.id} entries={checklist.entries} added={checklist.added} today={today} />}
+      {checklist && !trip.deleting && !onlyWatching && <BeforeYouGo uid={user.uid} tripId={trip.id} entries={checklist.entries} added={checklist.added} today={today} />}
 
       {canEdit && !editing && (
         <button type="button" onClick={() => setEditing({ kind: "add" })} className={`${buttonClass} mt-4`}>
@@ -589,7 +591,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
                       programs={programsFor(segment.provider, loyalty)}
                       flightLines={flightLinesFor(segment, flightStatuses, now)}
                       {...(() => {
-                        const state = checkedIn && flightCheckInState(segment, checkedIn, now);
+                        const state = checkedIn && !onlyWatching && flightCheckInState(segment, checkedIn, now);
                         return state ? { checkIn: { state, onChange: (on: boolean) => void markCheckedIn(segment.id, on) } } : {};
                       })()}
                       {...(canEdit

@@ -131,4 +131,12 @@ class ListFiltersTest {
         hiddenFromList(trip, listOf(flight.copy(travelers = listOf("Sam Example"))), filters, listOf(sam, pat)) shouldBe false
         hiddenFromList(trip, null, filters, listOf(sam, pat)) shouldBe false
     }
+
+    @Test
+    fun `a watched trip goes by its bookings once read else by what the trip keeps`() {
+        watchedTrip(trip.copy(travelers = listOf("Sam Example")), listOf(flight.copy(travelers = listOf("Pat Example"))), listOf(sam, pat)) shouldBe true
+        watchedTrip(trip.copy(travelers = listOf("Pat Example")), null, listOf(sam, pat)) shouldBe true
+        watchedTrip(trip.copy(travelers = listOf("Pat Example")), listOf(flight.copy(travelers = listOf("Sam Example"))), listOf(sam, pat)) shouldBe false
+        watchedTrip(trip, null, listOf(sam, pat)) shouldBe false
+    }
 }

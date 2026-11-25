@@ -397,10 +397,17 @@ big group never drops the user's name; `tripTravelers`) with the list's other
 flags (see "Filtering the trip list"); a trip from before it was kept has
 its bookings read once, while the user is known, to fill it in.
 
-Still to come (TODO.md): leaving watched trips out of the user's own
-warnings, reminders, check-in, rides, reports, residence days, the trips
-download and working out home; travelers editable on the trip page; and
-renaming and merging people.
+What is the user's own leaves a trip they're only watching out
+(`watchedTrip`: by its bookings once read, else by the trip's
+`travelers`), on the web and Android: its document and visa warnings, its
+check-in line and "I've checked in", its ride suggestions and "Before you
+go"; and the reports, residence days, the trips download and working out
+home (Profile, the reports) count none of it. Its flights' live status
+still shows.
+
+Still to come (TODO.md): the same for the parser's reminders, check-in
+alerts, calendar feed and working out home; travelers editable on the
+trip page; and renaming and merging people.
 
 ### Adding a trip
 

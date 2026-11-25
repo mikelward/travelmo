@@ -62,10 +62,12 @@
   - [x] Watching: a trip none of whose travelers is the user says
         "Watching" on its card and page; "Hide trips I'm not on" in the
         funnel.
-  - [ ] A watched trip keeps flight status and alerts, and leaves out the
-        user's document and visa warnings, reminders, check-in prompts, ride
-        suggestions, reports, residence days, the trips download and working
-        out home.
+  - [x] A watched trip keeps flight status, and the apps leave it out of the
+        user's document and visa warnings, check-in prompts, ride
+        suggestions, "Before you go", reports, residence days, the trips
+        download and working out home.
+  - [ ] The parser too: no reminders, check-in alerts, calendar-feed events
+        or home detection from a watched trip.
   - [ ] Travelers editable on the trip page.
   - [ ] "This is me" from two devices at once can leave two people marked
         until the next tap; a single selected-person field would stop it.

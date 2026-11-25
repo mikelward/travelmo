@@ -60,7 +60,8 @@ export function TripCard({
   const going = segments && now && !cancelled;
   const { stay, checkIn } = going ? tripStatus(segments, now) : {};
   const next = going ? tripNextUp(segments, now, flightStatuses) : undefined;
-  const showCheckIn = checkIn && !checkedIn?.has(checkIn.segment.id);
+  // Check-in is the traveler's to do, not someone watching the trip.
+  const showCheckIn = checkIn && !watching && !checkedIn?.has(checkIn.segment.id);
   return (
     // The check-in button sits outside the link: a button can't be inside one.
     <div

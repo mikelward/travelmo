@@ -1,6 +1,6 @@
 "use client";
 
-import { countryDays, countryDaysRange, shiftDate, displayTitles, favoritePlaces, formatDateRange, placeRows, placeRowsCsv, travelReport, tripRows, tripRowsCsv, type FavoritePlace, type CountryCounting, type CountryDaysReport, type HomePeriod, type PlaceLookup, type SummaryTrip, type TravelReport } from "@travelmo/core";
+import { countryDays, countryDaysRange, shiftDate, displayTitles, favoritePlaces, formatDateRange, placeRows, placeRowsCsv, travelReport, tripRows, watchedTrip, tripRowsCsv, type FavoritePlace, type CountryCounting, type CountryDaysReport, type HomePeriod, type PlaceLookup, type SummaryTrip, type TravelReport } from "@travelmo/core";
 import Link from "next/link";
 import type { User } from "firebase/auth";
 import { Fragment, useEffect, useMemo, useState } from "react";
@@ -10,7 +10,8 @@ import { WorldMap, type WorldMapData } from "@/components/WorldMap";
 import { countryName } from "@/lib/countries";
 import { localToday } from "@/lib/dates";
 import { useSaveForOffline } from "@/lib/offline";
-import { deriveHomes } from "@/lib/home";
+import { deriveHomes, ownTripSegments } from "@/lib/home";
+import { usePeople } from "@/lib/people";
 import { useAllSegments, useProfile, useTrips } from "@/lib/trips";
 
 type Tables = { lookup: PlaceLookup; map: WorldMapData };
@@ -338,17 +339,19 @@ function Report({ user }: { user: User }) {
   const segments = useAllSegments(ids);
   const tables = useTables();
   const profile = useProfile(user.uid);
+  // Whom the user's bookings name: a trip they're only watching isn't theirs to count.
+  const travelers = usePeople(user.uid);
   const [year, setYear] = useState("");
   const today = localToday();
 
   const all = useMemo(() => {
-    if (!trips || !segments || !tables || tables instanceof Error) return undefined;
+    if (!trips || !segments || !travelers || !tables || tables instanceof Error) return undefined;
     const withSegments = trips.flatMap((trip) => {
       const s = segments.byTrip[trip.id];
-      return s ? [{ trip, segments: s }] : [];
+      return s && !watchedTrip(trip, s, travelers) ? [{ trip, segments: s }] : [];
     });
     return { withSegments, report: travelReport(withSegments, today, { lookup: tables.lookup }) };
-  }, [trips, segments, tables, today]);
+  }, [trips, segments, travelers, tables, today]);
   const report = useMemo(
     () => (all && tables && !(tables instanceof Error) && year ? travelReport(all.withSegments, today, { year, lookup: tables.lookup }) : all?.report),
     [all, tables, year, today],
@@ -357,11 +360,9 @@ function Report({ user }: { user: User }) {
   // Home over time, for the days with no trip: from the viewer's own trips,
   // already read, with their corrections over it, as the Profile works it out.
   const homes = useMemo(() => {
-    if (!trips || !segments || !profile) return undefined;
-    const own = new Set(trips.filter((t) => t.ownerUid === user.uid).map((t) => t.id));
-    const byTrip = Object.fromEntries(Object.entries(segments.byTrip).filter(([id]) => own.has(id)));
-    return deriveHomes(byTrip, [], profile.homes ?? []).periods;
-  }, [trips, segments, profile, user.uid]);
+    if (!trips || !segments || !travelers || !profile) return undefined;
+    return deriveHomes(ownTripSegments(trips, segments.byTrip, user.uid, travelers), [], profile.homes ?? []).periods;
+  }, [trips, segments, travelers, profile, user.uid]);
   const titles = useMemo(() => displayTitles(trips ?? []), [trips]);
   const [counting, setCounting] = useCounting();
   const countries = useMemo(() => {
