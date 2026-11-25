@@ -40,4 +40,9 @@ class DirectionsTest {
         directionsUrl(stay.copy(cancelledAt = "2026-11-01T00:00:00Z")).shouldBeNull()
         directionsUrl(Segment("n", "t", SegmentType.OTHER, "Note", "2026-12-12T09:00:00+00:00")).shouldBeNull()
     }
+
+    @Test
+    fun `maps shows the place found as directions find it`() {
+        mapsUrl(stay.destination!!) shouldBe "https://www.google.com/maps/search/?api=1&query=Motel%20Example%2C%20123%20Example%20Blvd%2C%20Las%20Vegas%2C%20NV%2089101"
+    }
 }

@@ -75,6 +75,31 @@ class SegmentRowTest {
     }
 
     @Test
+    fun `a tap on the row opens the booking, which carries the small print`() {
+        var opened = 0
+        composeRule.setContent { TravelmoTheme { SegmentRow(tour, onOpen = { opened++ }) } }
+        // The reference, provider, notes and travelers are on the details, not the row.
+        composeRule.onNodeWithText("Ref LFC-4471", substring = true).assertDoesNotExist()
+        composeRule.onNodeWithText("Anfield stadium tour").performClick()
+        opened shouldBe 1
+    }
+
+    @Test
+    fun `the owner renames the trip from its menu, not by the dates`() {
+        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent {
+            TravelmoTheme {
+                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Rename").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("More options").performClick()
+        // The dialog it opens has a text field that never lets Compose call itself idle here, so it is not opened.
+        composeRule.onNodeWithText("Rename").assertExists()
+    }
+
+    @Test
     fun `every type has its own icon`() {
         val icons = SegmentType.entries.map(::segmentIcon)
         icons.toSet().size shouldBe SegmentType.entries.size
@@ -88,19 +113,22 @@ class SegmentRowTest {
     }
 
     @Test
-    fun `a viewer who cannot edit gets Sources alone`() {
+    fun `a viewer who cannot edit gets Directions and Copy reference alone`() {
         composeRule.setContent { TravelmoTheme { SegmentRow(stay) } }
         composeRule.onNodeWithContentDescription("Booking actions").performClick()
-        composeRule.onNodeWithText("Sources").assertExists()
+        composeRule.onNodeWithText("Directions").assertExists()
+        composeRule.onNodeWithText("Copy reference").assertExists()
+        // Sources are on the booking's details.
+        composeRule.onNodeWithText("Sources").assertDoesNotExist()
         composeRule.onNodeWithText("Edit").assertDoesNotExist()
         composeRule.onNodeWithText("Delete").assertDoesNotExist()
     }
 
     @Test
-    fun `an editor gets Sources and the actions`() {
+    fun `an editor gets the actions`() {
         composeRule.setContent { TravelmoTheme { SegmentRow(stay, editor) } }
         composeRule.onNodeWithContentDescription("Booking actions").performClick()
-        for (item in listOf("Directions", "Sources", "Edit", "Move to another trip…", "Delete")) composeRule.onNodeWithText(item).assertExists()
+        for (item in listOf("Directions", "Copy reference", "Edit", "Move to another trip…", "Delete")) composeRule.onNodeWithText(item).assertExists()
     }
 
     @Test
@@ -127,12 +155,9 @@ class SegmentRowTest {
     }
 
     @Test
-    fun `a viewer can copy a booking's reference from the menu, ahead of Sources`() {
+    fun `a viewer can copy a booking's reference from the menu`() {
         composeRule.setContent { TravelmoTheme { SegmentRow(stay) } }
         composeRule.onNodeWithContentDescription("Booking actions").performClick()
-        val copy = composeRule.onNodeWithText("Copy reference").fetchSemanticsNode().boundsInRoot.top
-        val sources = composeRule.onNodeWithText("Sources").fetchSemanticsNode().boundsInRoot.top
-        (copy < sources) shouldBe true
         composeRule.onNodeWithText("Copy reference").performClick()
         clipboardText() shouldBe "CV-55120"
         clipboard().primaryClipDescription!!.label shouldBe "Booking reference"
@@ -144,129 +169,13 @@ class SegmentRowTest {
     fun `a booking without a reference has no Copy reference`() {
         composeRule.setContent { TravelmoTheme { SegmentRow(stay.copy(confirmation = null)) } }
         composeRule.onNodeWithContentDescription("Booking actions").performClick()
-        composeRule.onNodeWithText("Sources").assertExists()
+        composeRule.onNodeWithText("Directions").assertExists()
         composeRule.onNodeWithText("Copy reference").assertDoesNotExist()
-    }
-
-    @Test
-    fun `a long press on the reference line copies the reference, and TalkBack offers it`() {
-        composeRule.setContent { TravelmoTheme { SegmentRow(tour) } }
-        val line = composeRule.onNodeWithText("Liverpool FC · Ref LFC-4471")
-        line.assert(SemanticsMatcher("long-click labeled Copy reference") { it.config.getOrNull(SemanticsActions.OnLongClick)?.label == "Copy reference" })
-        line.performTouchInput { longClick() }
-        clipboardText() shouldBe "LFC-4471"
-    }
-
-    @Test
-    fun `a pinch that starts on the reference line does not copy it`() {
-        composeRule.setContent { TravelmoTheme { SegmentRow(tour) } }
-        composeRule.onNodeWithText("Liverpool FC · Ref LFC-4471").performTouchInput {
-            down(0, center)
-            advanceEventTime(50)
-            down(1, center + Offset(10f, 0f))
-            for (step in 1..10) {
-                advanceEventTime(100)
-                moveTo(0, center - Offset(step * 10f, 0f))
-                moveTo(1, center + Offset(10f + step * 10f, 0f))
-            }
-            up(0)
-            up(1)
-        }
-        composeRule.waitForIdle()
-        clipboard().hasPrimaryClip() shouldBe false
     }
 
     private fun clipboard() = composeRule.activity.getSystemService(ClipboardManager::class.java)
 
     private fun clipboardText() = clipboard().primaryClip!!.getItemAt(0).text.toString()
-
-    @Test
-    fun `Sources lists every source and the sender`() {
-        composeRule.setContent { TravelmoTheme { SegmentRow(stay) } }
-        composeRule.onNodeWithContentDescription("Booking actions").performClick()
-        composeRule.onNodeWithText("Sources").performClick()
-        for (label in listOf("Booking confirmed: Cove Liverpool", "Payment received: Cove Liverpool", "Fastmail email", "Your stay is coming up", "Liverpool weekend", "TripIt", "From cove.example")) {
-            composeRule.onNodeWithText(label).assertExists()
-        }
-        composeRule.onNodeWithText("Close").performClick()
-        composeRule.onNodeWithText("Your stay is coming up").assertDoesNotExist()
-    }
-
-    @Test
-    fun `an email the viewer imported opens in Gmail, and one someone else imported does not`() {
-        composeRule.setContent { TravelmoTheme { SegmentRow(stay, emailLink = { emailLinkFor(it, OWNER, ownsTrip = true) }) } }
-        composeRule.onNodeWithContentDescription("Booking actions").performClick()
-        composeRule.onNodeWithText("Sources").performClick()
-        val started = shadowOf(composeRule.activity)
-
-        composeRule.onNodeWithText("Your stay is coming up").performClick()
-        started.nextStartedActivity.shouldBeNull()
-        // The viewer's own, but Fastmail has no link to a message.
-        composeRule.onNodeWithText("Payment received: Cove Liverpool").performClick()
-        started.nextStartedActivity.shouldBeNull()
-
-        composeRule.onNodeWithText("Booking confirmed: Cove Liverpool").performClick()
-        val intent = started.nextStartedActivity
-        intent.action shouldBe Intent.ACTION_VIEW
-        intent.dataString shouldBe "https://mail.google.com/mail/u/0/#all/m-cove"
-    }
-
-    @Test
-    fun `with the Gmail app an email opens there with a search for it on the clipboard`() {
-        val gmail = ComponentName("com.google.android.gm", "com.google.android.gm.ConversationListActivityGmail")
-        shadowOf(composeRule.activity.packageManager).apply {
-            addActivityIfNotPresent(gmail)
-            addIntentFilterForActivity(gmail, IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
-        }
-        composeRule.setContent { TravelmoTheme { SegmentRow(stay, emailLink = { emailLinkFor(it, OWNER, ownsTrip = true) }) } }
-        composeRule.onNodeWithContentDescription("Booking actions").performClick()
-        composeRule.onNodeWithText("Sources").performClick()
-        composeRule.onNodeWithText("Booking confirmed: Cove Liverpool").performClick()
-
-        shadowOf(composeRule.activity).nextStartedActivity.component shouldBe gmail
-        val clip = composeRule.activity.getSystemService(ClipboardManager::class.java).primaryClip!!
-        clip.getItemAt(0).text.toString() shouldBe "subject:\"Booking confirmed: Cove Liverpool\""
-        ShadowToast.getTextOfLatestToast() shouldBe "Search copied. Paste it in Gmail's search."
-    }
-
-    @Test
-    fun `the trip page opens the viewer's own import in Gmail`() {
-        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
-        composeRule.setContent {
-            TravelmoTheme {
-                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
-            }
-        }
-        composeRule.waitForIdle()
-        // The stay is the second booking.
-        composeRule.onAllNodesWithContentDescription("Booking actions")[1].performClick()
-        composeRule.onNodeWithText("Sources").performClick()
-        composeRule.onNodeWithText("Booking confirmed: Cove Liverpool").performClick()
-        shadowOf(composeRule.activity).nextStartedActivity.dataString shouldBe "https://mail.google.com/mail/u/0/#all/m-cove"
-    }
-
-    @Test
-    fun `the trip page opens the viewer's own import in the Gmail account it came from`() {
-        // The email came from the first mailbox; a second one names its own emails.
-        val store = FakeTripStore(
-            gmailStatuses = listOf(
-                GmailStatus("owner@example.com", connectedAt = "2026-10-01T00:00:00Z"),
-                GmailStatus("owner@work.example", connectedAt = "2026-10-02T00:00:00Z", idPrefix = "gmail-k1-"),
-            ),
-        )
-        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
-        composeRule.setContent {
-            TravelmoTheme {
-                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
-            }
-        }
-        composeRule.waitForIdle()
-        composeRule.onAllNodesWithContentDescription("Booking actions")[1].performClick()
-        composeRule.onNodeWithText("Sources").performClick()
-        composeRule.onNodeWithText("Booking confirmed: Cove Liverpool").performClick()
-        shadowOf(composeRule.activity).nextStartedActivity.dataString shouldBe
-            "https://mail.google.com/mail/u/?authuser=owner%40example.com#all/m-cove"
-    }
 
     @Test
     fun `moving a booking offers a new trip first and the trips around its dates with the rest behind More`() {
@@ -292,102 +201,4 @@ class SegmentRowTest {
         store.movedToNew shouldBe listOf(Triple("liverpool", "l-stay", OWNER))
     }
 
-    @Test
-    fun `never importing a sender from the trip page offers to delete what it already imported`() {
-        // A trip of nothing but another stay from the stay's sender.
-        val stay = fixtureSegments.getValue("liverpool").single { it.id == "l-stay" }
-        val store = FakeTripStore(
-            trips = fixtureTrips + fixtureTrips.single { it.id == "dublin" }.copy(id = "class", title = "Class"),
-            segments = fixtureSegments + ("class" to listOf(stay.copy(id = "c-stay", tripId = "class"))),
-        )
-        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
-        composeRule.setContent {
-            TravelmoTheme {
-                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
-            }
-        }
-        composeRule.waitForIdle()
-        composeRule.onAllNodesWithContentDescription("Booking actions")[1].performClick()
-        composeRule.onNodeWithText("Sources").performClick()
-        composeRule.onNodeWithText("Never import this sender").performScrollTo().performClick()
-        composeRule.onNodeWithText("Mail from cove.example won't be imported again. Delete 1 trip and 1 booking already imported from it?").assertExists()
-        store.patterns.value.deny.contains("cove.example") shouldBe true
-        composeRule.onNodeWithText("Delete").performClick()
-        composeRule.waitForIdle()
-        store.deletedTrips shouldBe listOf("class")
-        store.deleted shouldBe listOf("liverpool" to "l-stay")
-    }
-
-    @Test
-    fun `a booking that arrives while the offer is open keeps its trip`() {
-        val stay = fixtureSegments.getValue("liverpool").single { it.id == "l-stay" }
-        val store = FakeTripStore(
-            trips = fixtureTrips + fixtureTrips.single { it.id == "dublin" }.copy(id = "class", title = "Class"),
-            segments = fixtureSegments + ("class" to listOf(stay.copy(id = "c-stay", tripId = "class"))),
-        )
-        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
-        composeRule.setContent {
-            TravelmoTheme {
-                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
-            }
-        }
-        composeRule.waitForIdle()
-        composeRule.onAllNodesWithContentDescription("Booking actions")[1].performClick()
-        composeRule.onNodeWithText("Sources").performClick()
-        composeRule.onNodeWithText("Never import this sender").performScrollTo().performClick()
-        composeRule.waitForIdle()
-        // Another sender's booking lands in the class trip before the answer.
-        store.arrived["class"] = listOf("c-flight")
-        composeRule.onNodeWithText("Delete").performClick()
-        composeRule.waitForIdle()
-        store.deletedTrips shouldBe emptyList()
-        store.deleted shouldBe listOf("liverpool" to "l-stay", "class" to "c-stay")
-    }
-
-    @Test
-    fun `a failed cleanup is offered again to retry`() {
-        val store = FakeTripStore()
-        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
-        composeRule.setContent {
-            TravelmoTheme {
-                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
-            }
-        }
-        composeRule.waitForIdle()
-        composeRule.onAllNodesWithContentDescription("Booking actions")[1].performClick()
-        composeRule.onNodeWithText("Sources").performClick()
-        composeRule.onNodeWithText("Never import this sender").performScrollTo().performClick()
-        composeRule.waitForIdle()
-        val offered = { composeRule.onAllNodesWithText("Delete what it imported?").fetchSemanticsNodes().isNotEmpty() }
-        composeRule.waitUntil(5_000, offered)
-        store.failDeleteSegment = true
-        composeRule.onNodeWithText("Delete").performClick()
-        // The failure brings the offer back.
-        composeRule.waitUntil(5_000, offered)
-        store.failDeleteSegment = false
-        composeRule.onNodeWithText("Delete").performClick()
-        composeRule.waitForIdle()
-        store.deleted shouldBe listOf("liverpool" to "l-stay")
-    }
-
-    @Test
-    fun `a failed scan saves nothing and keeps never on offer`() {
-        val store = FakeTripStore()
-        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
-        composeRule.setContent {
-            TravelmoTheme {
-                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
-            }
-        }
-        composeRule.waitForIdle()
-        store.failSegments = true
-        composeRule.onAllNodesWithContentDescription("Booking actions")[1].performClick()
-        composeRule.onNodeWithText("Sources").performClick()
-        composeRule.onNodeWithText("Never import this sender").performScrollTo().performClick()
-        composeRule.waitUntil(5_000) { viewModel.outcomes.value.values.any { it is Outcome.Failed } }
-        store.patterns.value.deny shouldBe listOf("news.example")
-        composeRule.onAllNodesWithContentDescription("Booking actions")[1].performClick()
-        composeRule.onNodeWithText("Sources").performClick()
-        composeRule.onNodeWithText("Never import this sender").assertExists()
-    }
 }

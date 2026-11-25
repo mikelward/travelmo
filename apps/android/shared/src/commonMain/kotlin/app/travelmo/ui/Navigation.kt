@@ -39,6 +39,9 @@ data object ImportReview : NavKey
 data object AccessPage : NavKey
 
 @Serializable
+data class BookingDetail(val tripId: String, val segmentId: String) : NavKey
+
+@Serializable
 data class BookingForm(val tripId: String, val segmentId: String?, val defaultDate: String) : NavKey
 
 /** A booking added with no trip in view, which goes into the trip it falls in, or a new one. */
@@ -127,12 +130,30 @@ fun SignedInNavigation(user: SignedIn, viewModel: TripsViewModel, backStack: Nav
                     onBack = { backStack.removeLastOrNull() },
                     onAddBooking = { defaultDate -> backStack.add(BookingForm(key.tripId, null, defaultDate)) },
                     onEditBooking = { segmentId -> backStack.add(BookingForm(key.tripId, segmentId, "")) },
+                    onOpenBooking = { segmentId -> backStack.add(BookingDetail(key.tripId, segmentId)) },
                     // A merge lands on the trip the bookings went to, in place of the one that is gone.
                     onMerged = { targetId ->
                         backStack.removeLastOrNull()
                         backStack.add(TripDetail(targetId))
                     },
                 )
+                }
+            }
+            entry<BookingDetail> { key ->
+                CompositionLocalProvider(LocalReportScreen provides tripReportScreen("Booking", viewModel, key.tripId)) {
+                    BookingDetailScreen(
+                        viewModel = viewModel,
+                        tripId = key.tripId,
+                        segmentId = key.segmentId,
+                        uid = user.uid,
+                        onBack = { backStack.removeLastOrNull() },
+                        onEdit = { backStack.add(BookingForm(key.tripId, key.segmentId, "")) },
+                        // Off the booking and its trip, both gone, to wherever the trip was opened from.
+                        onTripGone = {
+                            backStack.removeLastOrNull()
+                            if (backStack.lastOrNull() is TripDetail) backStack.removeLastOrNull()
+                        },
+                    )
                 }
             }
             entry<BookingForm> { key ->

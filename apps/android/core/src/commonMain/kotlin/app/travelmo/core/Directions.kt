@@ -30,5 +30,8 @@ fun directionsQuery(place: Place): String {
 fun directionsUrl(segment: Segment): String? =
     directionsPlace(segment)?.let { "https://www.google.com/maps/dir/?api=1&destination=${encodeUriComponent(directionsQuery(it))}" }
 
+/** Google Maps showing a place (found as [directionsQuery] finds it), not the way there: what tapping a booking's address opens. */
+fun mapsUrl(place: Place): String = "https://www.google.com/maps/search/?api=1&query=${encodeUriComponent(directionsQuery(place))}"
+
 // As JavaScript prints a number: 36.17, not 36.17000; -115, not -115.0.
 private fun formatCoordinate(value: Double): String = if (value == kotlin.math.floor(value)) value.toLong().toString() else value.toString()

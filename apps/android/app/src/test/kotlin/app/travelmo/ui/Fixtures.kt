@@ -458,7 +458,9 @@ class FakeTripStore(
     override fun trips(uid: String, addresses: List<String>): Flow<List<Trip>> = flowOf(trips)
     /** Makes reading bookings fail, as offline. */
     var failSegments = false
-    override fun segments(tripId: String): Flow<List<Segment>> = flowOf(segments[tripId].orEmpty())
+    /** The bookings as a screen sees them: a deletion takes one away. */
+    private val liveSegments = MutableStateFlow(segments)
+    override fun segments(tripId: String): Flow<List<Segment>> = liveSegments.map { it[tripId].orEmpty() }
     override suspend fun serverOwnTrips(uid: String): List<Trip> {
         if (failSegments) throw IllegalStateException("offline")
         return trips.filter { it.ownerUid == uid }
@@ -476,6 +478,7 @@ class FakeTripStore(
     override suspend fun deleteSegment(tripId: String, segmentId: String) {
         if (failDeleteSegment) throw IllegalStateException("offline")
         deleted += tripId to segmentId
+        liveSegments.value = liveSegments.value + (tripId to liveSegments.value[tripId].orEmpty().filter { it.id != segmentId })
     }
     val restored = mutableListOf<Pair<String, String>>()
     override suspend fun restoreSegment(tripId: String, segmentId: String) {
@@ -529,6 +532,8 @@ class FakeTripStore(
     }
     override suspend fun deleteTrip(tripId: String) {
         deletedTrips += tripId
+        // As Firestore does it: the bookings go before the trip.
+        liveSegments.value = liveSegments.value - tripId
     }
 
     /** Bookings that land in a trip after it was read, by trip, for deleteTripIfOnly. */

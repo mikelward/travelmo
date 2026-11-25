@@ -18,6 +18,15 @@
 
 ## Product
 
+- [ ] Booking details (maintainer, 2026-11-25): a tap on a booking opens
+      its details, which carry the small print and the sources; Rename is
+      in the trip's ⋮ menu.
+  - [x] Android: the details page (✎ edits, a tap on the reference copies
+        it, a tap on a place shows it in Maps), the rows without the small
+        print, Rename in the ⋮ menu.
+  - [ ] Web: the same.
+  - [ ] Later: drop Edit, Copy reference and Directions from a booking's ⋮
+        menu, now on its details.
 - [ ] Travelers and watching (maintainer, 2026-11-25): who each booking is
       for, and trips the user watches but isn't on (a parent's forwarded
       itinerary, a child's school trip).
