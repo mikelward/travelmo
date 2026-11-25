@@ -8,21 +8,34 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Las Vegas").id).toBe("las-vegas");
     expect(tripLandmark("Vegas, baby").id).toBe("las-vegas");
     expect(tripLandmark("Weekend in Paris").id).toBe("paris");
+    expect(tripLandmark("Sydney").id).toBe("sydney");
+    expect(tripLandmark("Dubai stopover").id).toBe("dubai");
+    expect(tripLandmark("Singapore").id).toBe("singapore");
+    expect(tripLandmark("Barcelona").id).toBe("barcelona");
+    expect(tripLandmark("NYC weekend").id).toBe("new-york");
+    expect(tripLandmark("San Francisco").id).toBe("san-francisco");
+    expect(tripLandmark("Tokyo").id).toBe("tokyo");
   });
 
   it("ignores accents and case", () => {
     expect(tripLandmark("LISBOA").id).toBe("lisbon");
     expect(tripLandmark("Édinburgh").id).toBe("edinburgh");
+    expect(tripLandmark("München").id).toBe("munich");
+    expect(tripLandmark("Reykjavík").id).toBe("reykjavik");
+    expect(tripLandmark("Ciudad de México").id).toBe("mexico-city");
+    expect(tripLandmark("Roma").id).toBe("rome");
   });
 
   it("takes the city named first", () => {
     expect(tripLandmark("Dublin and Liverpool").id).toBe("dublin");
     expect(tripLandmark("Liverpool and Dublin").id).toBe("liverpool");
+    expect(tripLandmark("Sydney via Singapore").id).toBe("sydney");
   });
 
   it("matches whole words only", () => {
     expect(tripLandmark("Parisian cafés").id).toBe("trip");
     expect(tripLandmark("Bostonia").id).toBe("trip");
+    expect(tripLandmark("Romanian coast").id).toBe("trip");
   });
 
   it("gives a place with no landmark the suitcase", () => {
@@ -30,7 +43,19 @@ describe("tripLandmark", () => {
     expect(tripLandmark("").id).toBe("trip");
   });
 
-  it("keeps every city name folded, so it can match", () => {
-    for (const landmark of LANDMARKS) for (const city of landmark.cities) expect(foldText(city)).toBe(city);
+  it("keeps every id and city unique, folded, and backed by a path", () => {
+    const ids = new Set<string>();
+    const cities = new Set<string>();
+    for (const landmark of LANDMARKS) {
+      expect(ids.has(landmark.id)).toBe(false);
+      ids.add(landmark.id);
+      expect(landmark.d.trim().length).toBeGreaterThan(0);
+      for (const city of landmark.cities) {
+        expect(foldText(city)).toBe(city);
+        expect(cities.has(city)).toBe(false);
+        cities.add(city);
+      }
+    }
+    expect(LANDMARKS.length).toBe(50);
   });
 });
