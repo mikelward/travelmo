@@ -1,6 +1,7 @@
 package app.travelmo.data
 
 import app.travelmo.core.withOneWay
+import app.travelmo.core.mergedBookingDocument
 import app.travelmo.core.RefreshShown
 import app.travelmo.core.checkedInOf
 import app.travelmo.core.withCheckedIn
@@ -942,6 +943,27 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
      * to hold it, unless it is cancelled and so counts for no dates; the
      * source's dates stay.
      */
+    override suspend fun mergeSegments(tripId: String, keepId: String, otherId: String) {
+        if (keepId == otherId) return
+        val now = Clock.System.now().toString()
+        val tripRef = db.collection("trips").document(tripId)
+        val keepRef = tripRef.collection("segments").document(keepId)
+        val otherRef = tripRef.collection("segments").document(otherId)
+        db.runTransaction { t ->
+            val trip = t.get(tripRef)
+            val keep = t.get(keepRef)
+            val other = t.get(otherRef)
+            if (!trip.exists()) throw TripGoneException("Trip no longer exists")
+            if (trip.getBoolean("deleting") == true) throw TripGoneException("This trip is being deleted")
+            val kept = keep.data?.takeIf { keep.exists() } ?: throw TripGoneException("That booking is no longer in this trip")
+            val gone = other.data?.takeIf { other.exists() } ?: throw TripGoneException("That booking is no longer in this trip")
+            t.setData(keepRef, mergedBookingDocument(kept, gone, otherId, now))
+            t.delete(otherRef)
+            t.updateData(tripRef, mapOf("updatedAt" to now) + FLAGS_UNKNOWN)
+            null
+        }.await()
+    }
+
     override suspend fun moveSegment(fromTripId: String, segmentId: String, toTripId: String) {
         if (fromTripId == toTripId) return
         val now = Clock.System.now().toString()

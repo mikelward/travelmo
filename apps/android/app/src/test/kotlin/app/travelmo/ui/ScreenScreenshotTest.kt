@@ -417,6 +417,31 @@ class ScreenScreenshotTest {
         capture("trip_detail_dark", dark = true) { TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {}) }
     }
 
+    // Merge with: the trip's other stay, offered from the first stay's menu.
+    @Test
+    fun trip_detail_merge() = tripMerge("trip_detail_merge", dark = false)
+
+    @Test
+    fun trip_detail_merge_dark() = tripMerge("trip_detail_merge_dark", dark = true)
+
+    private fun tripMerge(name: String, dark: Boolean) {
+        val second = Segment("l-stay-2", "liverpool", SegmentType.LODGING, "Cove Liverpool apartment", "2026-12-12T16:00:00+00:00", "2026-12-13T11:00:00+00:00")
+        val store = FakeTripStore(segments = fixtureSegments + ("liverpool" to fixtureSegments.getValue("liverpool") + second))
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        val fontSize = FontSizeState(FontSizeSettings(scale = 1f), onScaleSettled = {}, onPinchEnabledChange = {})
+        composeRule.setContent {
+            TravelmoTheme(darkTheme = dark, fontSize = fontSize) {
+                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithContentDescription("Booking actions")[1].performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Merge with…").performClick()
+        composeRule.waitForIdle()
+        captureScreenRoboImage(filePath = "$outputDir/$name.png")
+    }
+
     // A flight near departure: its live gates from the parser's status.
     private fun flightViewModel(): TripsViewModel {
         val trip = Trip("sydney", "Singapore", "2026-11-02", "2026-11-06", OWNER)

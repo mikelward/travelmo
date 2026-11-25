@@ -92,6 +92,8 @@ import app.travelmo.core.displayTitles
 import app.travelmo.core.sourceSearch
 import app.travelmo.core.fittedRange
 import app.travelmo.core.formatDate
+import app.travelmo.core.localDate
+import app.travelmo.core.localTime
 import app.travelmo.core.formatDateRange
 import app.travelmo.core.isCancelled
 import app.travelmo.core.directionsUrl
@@ -143,6 +145,9 @@ import app.travelmo.shared.booking_details
 import app.travelmo.shared.more_trips
 import app.travelmo.shared.move_booking_title
 import app.travelmo.shared.new_trip
+import app.travelmo.shared.merge_booking_hint
+import app.travelmo.shared.merge_booking_title
+import app.travelmo.shared.merge_booking_with
 import app.travelmo.shared.move_to
 import app.travelmo.shared.only_you
 import app.travelmo.shared.open_in_gmail
@@ -220,6 +225,7 @@ fun TripDetailScreen(
     val cleanup by viewModel.senderCleanup.collectAsStateWithLifecycle()
     var deleting by remember { mutableStateOf<Segment?>(null) }
     var moving by remember { mutableStateOf<Segment?>(null) }
+    var merging by remember { mutableStateOf<Segment?>(null) }
     var renaming by rememberSaveable { mutableStateOf(false) }
     val current = trip
     val isOwner = current != null && current.ownerUid == uid
@@ -295,6 +301,12 @@ fun TripDetailScreen(
             val leave = if (plan.trips.any { it.id == tripId }) "leave" else "stay"
             viewModel.removeSenderBookings("${prefix}sender-cleanup/$leave")
         }
+        merging?.let { segment ->
+            MergeDialog(segments.filter { it.id != segment.id && it.type == segment.type }, onDismiss = { merging = null }) { other ->
+                merging = null
+                viewModel.mergeSegments("${prefix}segment/${segment.id}/merge", tripId, segment.id, other.id)
+            }
+        }
         moving?.let { segment ->
             MoveDialog(
                 segment,
@@ -343,6 +355,8 @@ fun TripDetailScreen(
                         onDelete = { deleting = it },
                         // A new trip only for the owner: a sharee's would take the booking from the owner's sight.
                         onMove = if (targets.isEmpty() && !isOwner) null else { segment -> moving = segment },
+                        onMerge = { segment -> merging = segment },
+                        canMerge = { segment -> segments.any { it.id != segment.id && it.type == segment.type } },
                         onRestore = { segment -> viewModel.restoreSegment("${prefix}segment/${segment.id}/restore", tripId, segment.id) },
                         onMarkCancelled = { segment -> viewModel.cancelSegment("${prefix}segment/${segment.id}/cancel", tripId, segment.id) },
                         // One cancelled with its trip comes back with the trip.
@@ -385,6 +399,9 @@ class BookingActions(
     val onEdit: (Segment) -> Unit,
     val onDelete: (Segment) -> Unit,
     val onMove: ((Segment) -> Unit)? = null,
+    /** Offers the trip's other bookings of its kind to merge into it; offered only where [canMerge]. */
+    val onMerge: ((Segment) -> Unit)? = null,
+    val canMerge: (Segment) -> Boolean = { false },
     val onRestore: ((Segment) -> Unit)? = null,
     /** Says it didn't happen; offered only while it's booked. */
     val onMarkCancelled: ((Segment) -> Unit)? = null,
@@ -637,6 +654,30 @@ private fun RenameDialog(current: String, onDismiss: () -> Unit, onRename: (Stri
     )
 }
 
+/** The trip's other bookings of a kind, one tap each to merge into the one whose menu was used. */
+@Composable
+private fun MergeDialog(others: List<Segment>, onDismiss: () -> Unit, onMerge: (Segment) -> Unit) {
+    AppAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(Res.string.merge_booking_title)) },
+        text = {
+            LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
+                item(key = "hint") {
+                    Text(stringResource(Res.string.merge_booking_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                items(others, key = { it.id }) { other ->
+                    Column(modifier = Modifier.fillMaxWidth().clickable { onMerge(other) }.padding(vertical = 12.dp)) {
+                        Text(bookingHeading(other).headline, style = MaterialTheme.typography.bodyLarge)
+                        Text("${formatDate(localDate(other.start))} ${localTime(other.start)}", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+    )
+}
+
 /** Where a booking can move, one tap each: a new trip first, then the trips around its dates, the rest behind More. */
 @Composable
 private fun MoveDialog(segment: Segment, targets: List<Trip>, onDismiss: () -> Unit, onMoveToNew: (() -> Unit)?, onMove: (Trip) -> Unit) {
@@ -755,6 +796,9 @@ fun SegmentRow(
                             actions.onMarkCancelled?.let { cancel ->
                                 DropdownMenuItem(text = { Text(stringResource(Res.string.mark_cancelled)) }, onClick = { menu = false; cancel(segment) })
                             }
+                        }
+                        actions.onMerge?.takeIf { actions.canMerge(segment) }?.let { merge ->
+                            DropdownMenuItem(text = { Text(stringResource(Res.string.merge_booking_with)) }, onClick = { menu = false; merge(segment) })
                         }
                         actions.onMove?.let { move ->
                             DropdownMenuItem(text = { Text(stringResource(Res.string.move_to)) }, onClick = { menu = false; move(segment) })

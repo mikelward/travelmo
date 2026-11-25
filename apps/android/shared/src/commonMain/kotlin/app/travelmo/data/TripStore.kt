@@ -278,6 +278,12 @@ interface TripStore {
      */
     suspend fun deleteTripIfOnly(tripId: String, expected: Set<String>): Boolean
 
+    /**
+     * Merges [otherId] into [keepId], two bookings of one trip the user says are one, as the web's mergeSegments:
+     * the kept one gains what only the other knew and every source of both, and the other goes.
+     */
+    suspend fun mergeSegments(tripId: String, keepId: String, otherId: String)
+
     /** Moves a booking to another trip the viewer can edit, keeping its id; the target widens to hold it. */
     suspend fun moveSegment(fromTripId: String, segmentId: String, toTripId: String)
 

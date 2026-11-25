@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { directionsUrl, formatDateRange, isCancelled, nearbyTrips, segmentSources, sourceSearch, type Segment, type SourceRef, type Trip } from "@travelmo/core";
+import { bookingHeading, directionsUrl, formatDate, formatDateRange, localDate, localTime, isCancelled, nearbyTrips, segmentSources, sourceSearch, type Segment, type SourceRef, type Trip } from "@travelmo/core";
 import { emailLinkFor, sourceKindLabels, type EmailLinks } from "@/lib/sourceLinks";
 
 const buttonClass = "rounded-lg border border-field px-3 py-2  hover:bg-zinc-100 dark:hover:bg-zinc-900";
@@ -176,11 +176,40 @@ function MoveDialog({
   );
 }
 
+// The trip's other bookings of this kind, to merge into this one: each by
+// its heading and when, as its row shows it.
+function MergeDialog({ others, onMerge, onClose }: { others: Segment[]; onMerge: (otherId: string) => void; onClose: () => void }) {
+  return (
+    <Dialog title="Merge with" onClose={onClose}>
+      <p className="text-muted">Keeps this booking and adds what the other one says, then deletes it.</p>
+      <ul className="mt-2">
+        {others.map((other) => (
+          <li key={other.id}>
+            <button
+              type="button"
+              onClick={() => {
+                onMerge(other.id);
+                onClose();
+              }}
+              className="w-full rounded-lg px-2 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-900"
+            >
+              {bookingHeading(other).headline}
+              <span className="block text-muted">
+                {formatDate(localDate(other.start))} {localTime(other.start)}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Dialog>
+  );
+}
+
 /**
  * A booking's ⋮ menu, in the order Android's has: Directions (to where it
  * leads, directionsUrl) and Copy reference (when it has one) for anyone who
  * sees the trip (the sources are on the booking's details), then Edit, Mark cancelled (for a booking still booked) or Restore
- * (for a cancelled one), Move to and Delete
+ * (for a cancelled one), Merge with, Move to and Delete
  * for those who may edit.
  */
 export function BookingMenu({
@@ -192,6 +221,8 @@ export function BookingMenu({
   moveTargets,
   onMove,
   onMoveToNew,
+  mergeTargets,
+  onMerge,
 }: {
   segment: Segment;
   onEdit?: () => void;
@@ -204,9 +235,12 @@ export function BookingMenu({
   onMove?: (tripId: string) => void;
   // Moves the booking into a trip made for it.
   onMoveToNew?: () => void;
+  // The trip's other bookings of this kind, and merging one into this one.
+  mergeTargets?: Segment[];
+  onMerge?: (otherId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [dialog, setDialog] = useState<"move">();
+  const [dialog, setDialog] = useState<"move" | "merge">();
   const [status, setStatus] = useState<string>();
   const wrapper = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -330,10 +364,12 @@ export function BookingMenu({
           {onEdit && item("Edit", onEdit)}
           {canMarkCancelled && onMarkCancelled && item("Mark cancelled", onMarkCancelled)}
           {canRestore && onRestore && item("Restore", onRestore)}
+          {onMerge && (mergeTargets?.length ?? 0) > 0 && item("Merge with…", () => setDialog("merge"))}
           {canMove && item("Move to another trip…", () => setDialog("move"))}
           {onDelete && item("Delete", onDelete)}
         </div>
       )}
+      {dialog === "merge" && onMerge && <MergeDialog others={mergeTargets ?? []} onMerge={onMerge} onClose={closeDialog} />}
       {dialog === "move" && onMove && (
         <MoveDialog segment={segment} targets={moveTargets ?? []} onMove={onMove} {...(onMoveToNew ? { onMoveToNew } : {})} onClose={closeDialog} />
       )}

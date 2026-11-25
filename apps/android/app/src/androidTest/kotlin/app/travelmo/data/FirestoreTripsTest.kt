@@ -224,6 +224,23 @@ class FirestoreTripsTest {
     }
 
     @Test
+    fun mergeSegments_keepsOneBookingWithBothEmailsAndRemembersTheOther() = runBlocking {
+        val id = seedTrip()
+        seedSegment(id)
+        seedSegment(id, id = "s2", start = "2026-12-12T16:00:00+00:00", end = null)
+        tripRef(id).collection("segments").document("s2").update(mapOf("gmailMessageIds" to listOf("m2"), "confirmation" to "CV-1", "editedAt" to stamp)).await()
+        sharee.store.mergeSegments(id, "s1", "s2")
+        val all = segments(id)
+        assertEquals(setOf("s1"), all.keys)
+        val kept = all.getValue("s1")
+        assertEquals("2026-12-12T15:00:00+00:00", kept["start"])
+        assertEquals("CV-1", kept["confirmation"])
+        assertEquals(listOf("m1", "m2"), kept["gmailMessageIds"])
+        assertEquals(listOf("s2"), kept["mergedFrom"])
+        assertTrue(kept["editedAt"] is String)
+    }
+
+    @Test
     fun moveSegment_movesABookingKeepingItsIdAndWidensTheTarget() = runBlocking {
         val from = seedTrip()
         val to = seedTrip(title = "Dublin", start = "2026-12-20", end = "2026-12-22")

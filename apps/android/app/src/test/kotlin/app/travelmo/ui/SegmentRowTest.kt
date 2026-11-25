@@ -23,7 +23,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onLast
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.travelmo.core.Segment
 import app.travelmo.core.SegmentType
 import app.travelmo.core.emailLinkFor
 import app.travelmo.ui.theme.TravelmoTheme
@@ -176,6 +178,28 @@ class SegmentRowTest {
     private fun clipboard() = composeRule.activity.getSystemService(ClipboardManager::class.java)
 
     private fun clipboardText() = clipboard().primaryClip!!.getItemAt(0).text.toString()
+
+    @Test
+    fun `merging offers the trip's other bookings of the kind and keeps the one whose menu was used`() {
+        val second = Segment("l-stay-2", "liverpool", SegmentType.LODGING, "Cove Liverpool apartment", "2026-12-12T16:00:00+00:00", "2026-12-13T11:00:00+00:00")
+        val store = FakeTripStore(segments = fixtureSegments + ("liverpool" to fixtureSegments.getValue("liverpool") + second))
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent {
+            TravelmoTheme {
+                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
+            }
+        }
+        composeRule.waitForIdle()
+        // The train has no other train to merge with.
+        composeRule.onAllNodesWithContentDescription("Booking actions")[0].performClick()
+        composeRule.onNodeWithText("Merge with…").assertDoesNotExist()
+        composeRule.onNodeWithText("Edit").performClick()
+        composeRule.onAllNodesWithContentDescription("Booking actions")[1].performClick()
+        composeRule.onNodeWithText("Merge with…").performClick()
+        composeRule.onAllNodesWithText("Cove Liverpool apartment").onLast().performClick()
+        composeRule.waitForIdle()
+        store.mergedBookings shouldBe listOf(Triple("liverpool", "l-stay", "l-stay-2"))
+    }
 
     @Test
     fun `moving a booking offers a new trip first and the trips around its dates with the rest behind More`() {

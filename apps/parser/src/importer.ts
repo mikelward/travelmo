@@ -47,6 +47,7 @@ import {
   type IcsCalendar,
   type IcsEvent,
   mergeDetails,
+  mergedBookingOf,
   overlappingTrips,
   sameBooking,
   sameEvent,
@@ -707,8 +708,13 @@ type CancellationSignal = Pick<PendingCancellation, "messageId" | "sentAt" | "ca
 // before that field existed falls back to the record while it remains, and
 // is undated after.
 type Standing = { messageId: string; sentAt?: string | undefined };
+// Whether a cancellation names a booking (cancels), or one the user merged
+// into it (mergedBookings): cancelling either cancels the one booking.
+function cancelsBooking(c: ExtractedCancellation, segment: ExtractedSegment & Pick<Partial<Segment>, "mergedBookings">, sent?: string): boolean {
+  return cancels(c, segment, sent) || (segment.mergedBookings ?? []).some((merged) => cancels(c, { ...segment, ...merged }, sent));
+}
 function standingCancellation(
-  segment: ExtractedSegment & Pick<Partial<Segment>, "cancelledBy" | "cancelledSentAt" | "restoredFrom" | "restoredAt">,
+  segment: ExtractedSegment & Pick<Partial<Segment>, "cancelledBy" | "cancelledSentAt" | "restoredFrom" | "restoredAt" | "mergedBookings">,
   confirmations: readonly (string | undefined)[],
   waiting: readonly CancellationSignal[],
   all: readonly CancellationSignal[],
@@ -718,7 +724,7 @@ function standingCancellation(
   const restoredAt = segment.restoredAt ? Date.parse(segment.restoredAt) : undefined;
   const overridden = (when: string | undefined) => restoredAt !== undefined && when !== undefined && Date.parse(when) <= restoredAt;
   const candidates = waiting
-    .filter((p) => !restored.includes(p.messageId) && !overridden(p.sentAt ?? p.at) && p.cancellations.some((c) => cancels(c, segment, p.sentAt ?? p.at)))
+    .filter((p) => !restored.includes(p.messageId) && !overridden(p.sentAt ?? p.at) && p.cancellations.some((c) => cancelsBooking(c, segment, p.sentAt ?? p.at)))
     .map((p) => ({ messageId: p.messageId, sentAt: p.sentAt }));
   const recorded = segment.cancelledBy;
   if (recorded && !restored.includes(recorded) && !candidates.some((c) => c.messageId === recorded)) {
@@ -844,7 +850,7 @@ export async function markCancelled(
       const segments = await tx.listSegments(trip.id);
       segmentsOf.set(trip.id, segments);
       for (const segment of segments) {
-        const named = cancellations.some((c) => cancels(c, segment, sent ?? timestamp));
+        const named = cancellations.some((c) => cancelsBooking(c, segment, sent ?? timestamp));
         if (!named && segment.cancelledBy !== messageId) continue;
         const confirmations = (segment.sources ?? []).map((r) => r.sentAt);
         const after = settled(segment, standingCancellation(segment, confirmations, waiting, all), timestamp);
@@ -1274,6 +1280,28 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
         : !payment &&
           !(other.sources ?? []).some((r) => r.kind === ref.kind && r.id === ref.id) &&
           !(booking.gmailMessageIds ?? []).some((m) => other.gmailMessageIds.includes(m)));
+    // The booking an item is one of the bookings the user merged into
+    // (mergedBookingOf), whatever that booking now says, unless it was
+    // cancelled and this books it again: one item for each booking merged
+    // in, so several merged together share it and two alike rooms stay two.
+    const claimed = new Map<string, Set<number>>();
+    const absorbedBy = (segment: ExtractedSegment): Segment | undefined => {
+      for (const other of existing) {
+        const key = `${other.tripId}/${other.id}`;
+        // Not one an earlier item of the same upload used (a TripIt export or
+        // a calendar files each item on its own), nor one set aside for another.
+        const owner = booking.reserved?.get(key);
+        if (booking.consumed?.has(key) || (owner !== undefined && owner !== booking.sourceId)) continue;
+        const used = claimed.get(key) ?? new Set<number>();
+        const merged = mergedBookingOf(other, segment, used);
+        // Booked again after cancelling, judged by the booking merged in (its reference), not the keeper's.
+        if (merged === undefined || rebooked({ ...other, ...other.mergedBookings![merged] }, segment)) continue;
+        used.add(merged);
+        claimed.set(key, used);
+        return other;
+      }
+      return undefined;
+    };
     const fresh = booking.segments
       .map((segment, index) => ({ segment, id: `${booking.sourceId}-${booking.indexes?.[index] ?? index}` }))
       .filter(({ segment, id }) => {
@@ -1291,6 +1319,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
         const best = (others: Segment[]) =>
           others.reduce<Segment | undefined>((top, other) => (top && compareMatchRanks(matchRank(top, segment), matchRank(other, segment)) <= 0 ? top : other), undefined);
         const match =
+          absorbedBy(segment) ??
           existing.find((other) => booking.reserved?.get(`${other.tripId}/${other.id}`) === booking.sourceId && candidate(other)) ??
           best(existing.filter(candidate));
         if (match) {

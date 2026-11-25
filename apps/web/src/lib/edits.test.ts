@@ -3,7 +3,7 @@ import { paths, type ExtractedSegment, type Segment, type Trip } from "@travelmo
 import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where, type Firestore } from "firebase/firestore";
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { cancelSegment, cancelTrip, createTrip, deleteSegment, deleteTrip, deleteTripIfOnly, favoriteSegment, fitTripDates, mergeTrips, moveSegment, moveSegmentToNewTrip, rateSegment, renameTrip, restoreSegment, restoreTrip, saveSegment } from "./edits";
+import { cancelSegment, cancelTrip, createTrip, deleteSegment, deleteTrip, deleteTripIfOnly, favoriteSegment, fitTripDates, mergeSegments, mergeTrips, moveSegment, moveSegmentToNewTrip, rateSegment, renameTrip, restoreSegment, restoreTrip, saveSegment } from "./edits";
 
 // A switch to make reading a collection fail, as when the connection drops.
 const failReads = vi.hoisted(() => ({ on: false }));
@@ -290,6 +290,18 @@ describe("cancelling by hand", () => {
     expect((await stored(trip.id, byEmail.id))?.userCancelled).toBeUndefined();
     // Its bookings come back with the trip, not one at a time.
     await expect(restoreSegment(asOwner(), trip.id, imported.id)).rejects.toThrow("Restore the trip first");
+  });
+
+  it("merges a booking into another as one, keeping it and both sources, for whoever may edit", async () => {
+    const added = await saveSegment(asOwner(), trip.id, flight("2026-12-13"));
+    await mergeSegments(as(partner), trip.id, imported.id, added.id);
+    expect(await stored(trip.id, added.id)).toBeUndefined();
+    expect(await stored()).toMatchObject({ id: imported.id, title: imported.title, mergedFrom: [added.id], editedAt: expect.any(String) });
+    await expect(mergeSegments(as(partner), trip.id, imported.id, added.id)).rejects.toThrow("no longer in this trip");
+    // An edit afterwards keeps what was merged in.
+    const kept = (await stored())!;
+    await saveSegment(asOwner(), trip.id, { type: kept.type, title: "Renamed after merging", start: kept.start }, kept);
+    expect(await stored()).toMatchObject({ title: "Renamed after merging", mergedFrom: [added.id], mergedBookings: [expect.objectContaining({ start: added.start })] });
   });
 
   it("cancels a booking added to or moved into a cancelled trip, and books one moved out again", async () => {

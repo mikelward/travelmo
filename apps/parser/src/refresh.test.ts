@@ -384,6 +384,94 @@ describe("refreshEmail", () => {
     expect(flights[0]!.sources?.map((r) => r.id).sort()).toEqual(["m1", "m2"]);
   });
 
+  it("leaves a booking the user merged another into as one, the other's email read again", async () => {
+    const w = world();
+    const car = (title: string, start: string, confirmation: string): ExtractedSegment => ({ type: "car_rental", title, start, end: "2027-03-14T17:30:00-04:00", provider: "Avis", confirmation });
+    const reservation = car("Avis Boston Logan Intl Airport", "2027-03-12T17:30:00-04:00", "20874163US2");
+    const agreement = car("Avis Car Rental East Boston", "2027-03-12T18:15:00-04:00", "708843612");
+    const both = { sources: [{ kind: "gmail" as const, id: "m1", uid, at: filed }, { kind: "gmail" as const, id: "m2", uid, at: filed }] };
+    w.put(trip("t1"), booking("m1-0", "t1", reservation, { ...both, gmailMessageIds: ["m1", "m2"], mergedFrom: ["m2-0"], mergedBookings: [agreement], editedAt: filed }));
+    w.memory.parsed.set(`${uid}/m2`, record("m2", { segmentIds: ["m2-0"] }));
+
+    await w.refresh("m2", found(agreement));
+    expect([...w.memory.segments.keys()]).toEqual(["m1-0"]);
+    expect(w.memory.segments.get("m1-0")).toMatchObject({ title: "Avis Boston Logan Intl Airport", start: reservation.start });
+  });
+
+  it("leaves a booking merged in from two emails out when the other of them is read again", async () => {
+    const w = world();
+    const car = (title: string, start: string, confirmation: string): ExtractedSegment => ({ type: "car_rental", title, start, end: "2027-03-14T17:30:00-04:00", provider: "Avis", confirmation });
+    const reservation = car("Avis Boston Logan Intl Airport", "2027-03-12T17:30:00-04:00", "20874163US2");
+    const agreement = car("Avis Car Rental East Boston", "2027-03-12T18:15:00-04:00", "708843612");
+    // The agreement, filed from m2 and read again from m3, was merged into the reservation.
+    const sources = ["m1", "m2", "m3"].map((id) => ({ kind: "gmail" as const, id, uid, at: filed }));
+    w.put(trip("t1"), booking("m1-0", "t1", reservation, { sources, gmailMessageIds: ["m1", "m2", "m3"], mergedFrom: ["m2-0"], mergedBookings: [agreement], editedAt: filed }));
+    w.memory.parsed.set(`${uid}/m3`, record("m3", { segmentIds: [] }));
+
+    await w.refresh("m3", found(agreement));
+    expect([...w.memory.segments.keys()]).toEqual(["m1-0"]);
+  });
+
+  it("files the second of two alike rooms an email gives beside the merged booking that looks like them", async () => {
+    const w = world();
+    const sources = ["m1", "m2"].map((id) => ({ kind: "gmail" as const, id, uid, at: filed }));
+    w.put(trip("t1"), booking("m1-0", "t1", stay, { sources, gmailMessageIds: ["m1", "m2"], mergedFrom: ["m9-0"], mergedBookings: [stay], editedAt: filed }));
+    w.memory.parsed.set(`${uid}/m2`, record("m2", { segmentIds: [] }));
+
+    await w.refresh("m2", found(stay, stay));
+    expect(w.memory.segments.size).toBe(2);
+  });
+
+  it("files a second alike room of an email whose booking was merged in beside the keeper", async () => {
+    const w = world();
+    const sources = ["m1", "m2"].map((id) => ({ kind: "gmail" as const, id, uid, at: filed }));
+    // m2's room was merged into m1's; m2, read again, now gives a second room too.
+    w.put(trip("t1"), booking("m1-0", "t1", stay, { sources, gmailMessageIds: ["m1", "m2"], mergedFrom: ["m2-0"], mergedBookings: [stay], editedAt: filed }));
+    w.memory.parsed.set(`${uid}/m2`, record("m2", { segmentIds: [] }));
+
+    await w.refresh("m2", found(stay, stay));
+    expect(w.memory.segments.size).toBe(2);
+  });
+
+  it("finds a merged-in flight by what it says, not where its email lists it", async () => {
+    const w = world();
+    const leg = (title: string, start: string): ExtractedSegment => ({ type: "flight", title, start, confirmation: "ABC123", origin: { name: "Heathrow", code: "LHR" }, destination: { name: "Boston", code: "BOS" } });
+    const out = leg("VS 11 LHR to BOS", "2027-03-12T17:20:00+00:00");
+    const back = { ...leg("VS 12 BOS to LHR", "2027-03-20T19:00:00-04:00"), origin: { name: "Boston", code: "BOS" }, destination: { name: "Heathrow", code: "LHR" } };
+    // m2's outbound, its first item when merged, now comes second.
+    const sources = ["m1", "m2"].map((id) => ({ kind: "gmail" as const, id, uid, at: filed }));
+    w.put(trip("t1"), booking("m1-0", "t1", out, { sources, gmailMessageIds: ["m1", "m2"], mergedFrom: ["m2-0"], mergedBookings: [out], editedAt: filed }));
+    w.memory.parsed.set(`${uid}/m2`, record("m2", { segmentIds: [] }));
+
+    await w.refresh("m2", found(back, out));
+    expect([...w.memory.segments.values()].map((s) => s.title).sort()).toEqual(["VS 11 LHR to BOS", "VS 12 BOS to LHR"]);
+  });
+
+  it("files an item of an email whose other booking was merged in as a booking of its own", async () => {
+    const w = world();
+    const leg = (title: string, start: string): ExtractedSegment => ({ type: "flight", title, start, confirmation: "ABC123", origin: { name: "Heathrow", code: "LHR" }, destination: { name: "Boston", code: "BOS" } });
+    const out = leg("VS 11 LHR to BOS", "2027-03-12T17:20:00+00:00");
+    const back = { ...leg("VS 12 BOS to LHR", "2027-03-20T19:00:00-04:00"), origin: { name: "Boston", code: "BOS" }, destination: { name: "Heathrow", code: "LHR" } };
+    // m2's outbound was merged into m1's; m2, read again, now gives the flight back too.
+    const sources = ["m1", "m2"].map((id) => ({ kind: "gmail" as const, id, uid, at: filed }));
+    w.put(trip("t1"), booking("m1-0", "t1", out, { sources, gmailMessageIds: ["m1", "m2"], mergedFrom: ["m2-0"], mergedBookings: [out], editedAt: filed }));
+    w.memory.parsed.set(`${uid}/m2`, record("m2", { segmentIds: [] }));
+
+    await w.refresh("m2", found(out, back));
+    expect([...w.memory.segments.values()].map((s) => s.title).sort()).toEqual(["VS 11 LHR to BOS", "VS 12 BOS to LHR"]);
+  });
+
+  it("leaves two bookings of one email the user merged as one when that email is read again", async () => {
+    const w = world();
+    const room = { ...stay, title: "Cove Liverpool, room 1" };
+    const second = { ...stay, title: "Cove Liverpool, room 2", start: "2027-03-12T16:00:00+00:00" };
+    w.put(trip("t1"), booking("m1-0", "t1", room, { mergedFrom: ["m1-1"], mergedBookings: [second], editedAt: filed }));
+    w.memory.parsed.set(`${uid}/m1`, record("m1", { segmentIds: ["m1-0"] }));
+
+    await w.refresh("m1", found(room, second));
+    expect([...w.memory.segments.keys()]).toEqual(["m1-0"]);
+  });
+
   it("keeps what only the duplicate knew, its reference and provider, on the booking that stays", async () => {
     const room = { ...stay, confirmation: undefined };
     const w = world();

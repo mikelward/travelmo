@@ -1,4 +1,4 @@
-import { Segment, Trip, bookedDateRange, displayBounds, fittingTrip, inTrip, isCancelled, liveBounds, newTripTitle, paths, segmentDateRange, type ExtractedSegment } from "@travelmo/core";
+import { Segment, Trip, bookedDateRange, mergeBookings, displayBounds, fittingTrip, inTrip, isCancelled, liveBounds, newTripTitle, paths, segmentDateRange, type ExtractedSegment } from "@travelmo/core";
 import {
   arrayUnion,
   collection,
@@ -91,6 +91,9 @@ export async function saveSegment(db: Firestore, tripId: string, extracted: Extr
       if (current.data.cancelledSentAt) saved.cancelledSentAt = current.data.cancelledSentAt;
       if (current.data.restoredFrom) saved.restoredFrom = current.data.restoredFrom;
       if (current.data.restoredAt) saved.restoredAt = current.data.restoredAt;
+      // What the user merged into it stays, so its email read again finds it.
+      if (current.data.mergedFrom) saved.mergedFrom = current.data.mergedFrom;
+      if (current.data.mergedBookings) saved.mergedBookings = current.data.mergedBookings;
       if (current.data.userCancelled) saved.userCancelled = current.data.userCancelled;
       // Who it is for comes from its emails; the form doesn't edit it.
       if (current.data.travelers) saved.travelers = current.data.travelers;
@@ -278,6 +281,27 @@ export async function moveSegment(db: Firestore, fromTripId: string, segmentId: 
     t.delete(segmentRef);
     t.update(toRef, { ...widened(target, range, live), ...flagsUnknown(), updatedAt: timestamp });
     t.update(fromRef, { ...flagsUnknown(), updatedAt: timestamp });
+  });
+}
+
+// Merges `otherId` into `keepId`, two bookings of one trip the user says
+// are one (mergeBookings): the kept one gains what only the other knew and
+// every source of both, and the other goes. The trip's dates are left as
+// they are, as a delete leaves them.
+export async function mergeSegments(db: Firestore, tripId: string, keepId: string, otherId: string): Promise<void> {
+  if (keepId === otherId) return;
+  const timestamp = now();
+  const tripRef = doc(db, paths.trip(tripId));
+  const keepRef = doc(db, paths.segment(tripId, keepId));
+  const otherRef = doc(db, paths.segment(tripId, otherId));
+  await runTransaction(db, async (t) => {
+    const [trip, keep, other] = await Promise.all([t.get(tripRef), t.get(keepRef), t.get(otherRef)]);
+    if (!trip.exists()) throw new Error("Trip no longer exists");
+    if (Trip.parse(trip.data()).deleting) throw new Error("This trip is being deleted");
+    if (!keep.exists() || !other.exists()) throw new Error("That booking is no longer in this trip");
+    t.set(keepRef, mergeBookings(Segment.parse(keep.data()), Segment.parse(other.data()), timestamp));
+    t.delete(otherRef);
+    t.update(tripRef, { ...flagsUnknown(), updatedAt: timestamp });
   });
 }
 
