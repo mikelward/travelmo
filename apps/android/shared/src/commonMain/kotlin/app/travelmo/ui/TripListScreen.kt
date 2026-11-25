@@ -53,7 +53,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.travelmo.core.journeyGapText
 import app.travelmo.core.ListWarning
 import app.travelmo.core.FlightStatus
 import app.travelmo.core.Segment
@@ -102,9 +101,7 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
     val filters by viewModel.listFilters.collectAsStateWithLifecycle()
     val hidden by viewModel.hiddenTrips.collectAsStateWithLifecycle()
     val watching by viewModel.watchingTrips.collectAsStateWithLifecycle()
-    val rideSettings by viewModel.rideSettings.collectAsStateWithLifecycle()
-    // A journey a trip seems to be missing, for the cards whose bookings are read, as its page says it.
-    val missingOf = { trip: Trip -> state.segmentsByTrip[trip.id]?.let { viewModel.journeyGapFor(trip, it, rideSettings) }?.let(::journeyGapText) }
+    val missingOf = { trip: Trip -> state.missing[trip.id] }
     val crashed = crashPending()
     // The cards' "I've checked in" writes: a finished one is acknowledged, a
     // failed one says so above the trips until the next tap replaces it.
@@ -184,7 +181,7 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
                 state = list,
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             ) {
-                val titles = displayTitles(groups.current + groups.upcoming + groups.past)
+                val titles = state.titles
                 // In the list, so it scrolls away with it rather than taking room from the trips.
                 if (crashed) item(key = "crash") { LastCrashBanner(Modifier.padding(bottom = 12.dp)) }
                 val result = found

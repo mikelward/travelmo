@@ -45,6 +45,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
@@ -873,5 +875,15 @@ class TripsViewModelTest {
         viewModel.outcomeSeen("t")
         viewModel.setCheckedIn("t", "sydney", "s-flight", false)
         viewModel.checkedIn("sydney").first { it == emptySet<String>() }
+    }
+
+    @Test
+    fun `the list's titles and missing journeys are worked out where the app asks, off the main thread`() = runTest {
+        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, compute = Dispatchers.Default)
+        val state = withContext(Dispatchers.Default) {
+            withTimeout(10_000) { viewModel.state.first { it.groups != null && it.missing.isNotEmpty() } }
+        }
+        state.titles.values shouldContain "Paris"
+        state.missing.values.any { it.startsWith("No flight back to") } shouldBe true
     }
 }
