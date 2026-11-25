@@ -2,6 +2,7 @@
 
 import { useState, type MouseEvent } from "react";
 import { SegmentIcon } from "@/components/SegmentIcon";
+import { AirlineLogo } from "@/components/AirlineLogo";
 import { BookingMenu } from "@/components/BookingMenu";
 import { BookingDetailsDialog } from "@/components/BookingDetails";
 import type { EmailLinks } from "@/lib/sourceLinks";
@@ -180,7 +181,8 @@ export function SegmentRow({
           </p>
         )}
         <p className={`font-medium${cancelled ? " text-muted line-through" : ""}`}>
-          <button type="button" onClick={() => setDetails(true)} className="block w-full text-left hover:underline">
+          <button type="button" onClick={() => setDetails(true)} className="flex w-full items-center gap-1.5 text-left hover:underline">
+            <AirlineLogo code={heading.airline} />
             {heading.headline}
           </button>
         </p>
