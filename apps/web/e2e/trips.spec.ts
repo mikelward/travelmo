@@ -216,6 +216,16 @@ test.describe("on a phone", () => {
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBe(0);
   });
+
+  // A long title once widened the whole list past the screen, so a phone showed it zoomed out.
+  test("the trip list fits, however long a trip's title", async ({ page }) => {
+    const ownerUid = await signIn(page, owner);
+    await seedTrip(ownerUid, "e2e-trip");
+    await seedTrip(ownerUid, "e2e-long", {}, { title: "Holiday Camp East Finchley - Junior Group Summer Session", start: "2026-08-10", end: "2026-08-14" });
+    await expect(page.getByTestId("trip-card")).toHaveCount(2);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBe(0);
+  });
 });
 
 test("a booking's menu copies its reference and moves it to another trip", async ({ page, context }) => {

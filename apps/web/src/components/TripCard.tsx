@@ -1,7 +1,21 @@
-import { tripCancelled, checkInLine, displayBounds, formatDate, formatDateRange, localDate, localTime, tripNextUp, tripStatus, type FlightStatus, type Segment, type Trip } from "@travelmo/core";
+import {
+  tripCancelled,
+  checkInLine,
+  displayBounds,
+  formatDate,
+  formatDateRange,
+  localDate,
+  localTime,
+  tripNextUp,
+  tripStatus,
+  type FlightStatus,
+  type Segment,
+  type Trip,
+} from "@travelmo/core";
 import Link from "next/link";
+import { TripLandmark } from "@/components/TripLandmark";
 
-// A trip's card: the title (as displayTitles shows it among the list), its
+// A trip in its section's card: the landmark of its city (TripLandmark), the title (as displayTitles shows it among the list), its
 // dates, both struck through once it was cancelled, and given the time now (for a
 // trip under way) what comes next (tripNextUp), with the live status of its
 // next flight, and the flight's online check-in until the viewer says they
@@ -33,7 +47,13 @@ export function TripCard({
   // Whether the viewer is only watching it: none of its travelers is them.
   watching?: boolean;
 }) {
-  const badge = trip.deleting ? "Deleting" : watching ? "Watching" : shared ? "Shared" : undefined;
+  const badge = trip.deleting
+    ? "Deleting"
+    : watching
+      ? "Watching"
+      : shared
+        ? "Shared"
+        : undefined;
   // A cancelled trip (by hand, or every booking) is struck through, as a
   // cancelled booking is, and has nothing coming.
   const cancelled = tripCancelled(trip, segments);
@@ -45,67 +65,102 @@ export function TripCard({
     // The check-in button sits outside the link: a button can't be inside one.
     <div
       data-testid="trip-card"
-      className={`rounded-xl border border-zinc-200 transition-colors hover:border-zinc-400 dark:border-zinc-800 dark:hover:border-zinc-600 ${trip.deleting ? "opacity-60" : ""}`}
+      className={`transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900 ${trip.deleting ? "opacity-60" : ""}`}
     >
-      <Link href={`/trips/${trip.id}`} className="block p-4">
-        <div className="flex items-baseline justify-between gap-4">
-          <h3 className={`truncate text-2xl font-semibold${cancelled ? " text-muted line-through" : ""}`}>
-            {title}
-            {cancelled && (
-              <span className="sr-only" data-testid="trip-cancelled">
-                {" "}
-                (cancelled)
-              </span>
-            )}
-          </h3>
-          {badge && <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-muted">{badge}</span>}
-        </div>
-        <p className={`mt-1 text-zinc-600 dark:text-zinc-400${cancelled ? " line-through" : ""}`}>
-          {formatDateRange(displayBounds(trip).start, displayBounds(trip).end)}
-        </p>
-        {missing && !cancelled && (
-          <p className="mt-2 text-amber-800 dark:text-amber-300" data-testid="trip-missing">
-            {missing}
-          </p>
-        )}
-        {stay && (
-          <p className="mt-2 text-zinc-600 dark:text-zinc-400" data-testid="trip-stay">
-            Staying at {stay.title}
-            {stay.end && (
-              <span className="text-muted">
-                {" · "}until {formatDate(localDate(stay.end))} {localTime(stay.end)}
-              </span>
-            )}
-          </p>
-        )}
-        {next && (
-          <div className="mt-2" data-testid="trip-next">
-            <p className="font-medium" data-testid="trip-next-title">
-              {next.title}
+      <Link href={`/trips/${trip.id}`} className="block px-4 py-3">
+        {/* The landmark beside the title and dates; what comes next runs below, in line with the title. */}
+        <div className="flex items-center gap-3">
+          <TripLandmark title={title} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline justify-between gap-4">
+              <h3
+                className={`truncate text-2xl font-semibold${cancelled ? " text-muted line-through" : ""}`}
+              >
+                {title}
+                {cancelled && (
+                  <span className="sr-only" data-testid="trip-cancelled">
+                    {" "}
+                    (cancelled)
+                  </span>
+                )}
+              </h3>
+              {badge && (
+                <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-muted">
+                  {badge}
+                </span>
+              )}
+            </div>
+            <p
+              className={`mt-1 text-zinc-600 dark:text-zinc-400${cancelled ? " line-through" : ""}`}
+            >
+              {formatDateRange(
+                displayBounds(trip).start,
+                displayBounds(trip).end,
+              )}
             </p>
-            <p className="text-muted" data-testid="trip-next-when">
-              {next.when}
-            </p>
-            {next.step && (
-              <p className="text-muted" data-testid="trip-next-step">
-                {next.step}
-              </p>
-            )}
-            {next.then && (
-              <p className="text-muted" data-testid="trip-next-then">
-                {next.then}
-              </p>
-            )}
           </div>
-        )}
+        </div>
+        <div className="pl-[52px]">
+          {missing && !cancelled && (
+            <p
+              className="mt-2 text-amber-800 dark:text-amber-300"
+              data-testid="trip-missing"
+            >
+              {missing}
+            </p>
+          )}
+          {stay && (
+            <p
+              className="mt-2 text-zinc-600 dark:text-zinc-400"
+              data-testid="trip-stay"
+            >
+              Staying at {stay.title}
+              {stay.end && (
+                <span className="text-muted">
+                  {" · "}until {formatDate(localDate(stay.end))}{" "}
+                  {localTime(stay.end)}
+                </span>
+              )}
+            </p>
+          )}
+          {next && (
+            <div className="mt-2" data-testid="trip-next">
+              <p className="font-medium" data-testid="trip-next-title">
+                {next.title}
+              </p>
+              <p className="text-muted" data-testid="trip-next-when">
+                {next.when}
+              </p>
+              {next.step && (
+                <p className="text-muted" data-testid="trip-next-step">
+                  {next.step}
+                </p>
+              )}
+              {next.then && (
+                <p className="text-muted" data-testid="trip-next-then">
+                  {next.then}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
       </Link>
       {showCheckIn && (
-        <div className="-mt-3 flex flex-wrap items-baseline gap-x-3 px-4 pb-4">
-          <p className={checkIn.open ? "text-amber-800 dark:text-amber-300" : "text-muted"} data-testid="trip-checkin">
+        <div className="-mt-2 flex flex-wrap items-baseline gap-x-3 pb-3 pl-[68px] pr-4">
+          <p
+            className={
+              checkIn.open ? "text-amber-800 dark:text-amber-300" : "text-muted"
+            }
+            data-testid="trip-checkin"
+          >
             {checkInLine(checkIn)}
           </p>
           {checkIn.open && onCheckedIn && (
-            <button type="button" onClick={() => onCheckedIn(checkIn.segment.id)} className="font-medium underline hover:no-underline">
+            <button
+              type="button"
+              onClick={() => onCheckedIn(checkIn.segment.id)}
+              className="font-medium underline hover:no-underline"
+            >
               I&rsquo;ve checked in
             </button>
           )}

@@ -18,6 +18,16 @@
 
 ## Product
 
+- [ ] Trip landmarks (maintainer, 2026-11-25): each trip in the list shows
+      its city's landmark as a line drawing, in one card per section.
+  - [x] Boston, Las Vegas, Liverpool, Paris, Edinburgh, Lisbon and Dublin,
+        on Android and the web.
+  - [ ] Better than the suitcase for a place with no landmark drawn: the
+        kind of place (small town, beach, mountains, forest), or a letter.
+  - [ ] More cities' landmarks.
+  - [ ] The trip page's days in the same style: one card per day, a rule
+        between its bookings.
+
 - [ ] Booking details (maintainer, 2026-11-25): a tap on a booking opens
       its details, which carry the small print and the sources; Rename is
       in the trip's ⋮ menu.
