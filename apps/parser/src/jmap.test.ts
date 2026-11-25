@@ -241,6 +241,8 @@ describe("fastmailSource", () => {
       date: "2026-01-01T10:00:00Z",
       listUnsubscribe: true,
       text: "Flight XY123 on 2 Feb",
+      // Which body was read, for Import anyway's report.
+      textChoice: { from: "plain", plainChars: 21, htmlChars: 21, truncated: false },
     });
     expect((await source.fetch(fastmailRecordId("M2"))).text).toBe("Room for two nights");
   });
