@@ -257,7 +257,13 @@ schemes.
 
 ## The trip list
 
-Trips are grouped into now, upcoming and past by calendar date. Trips under
+Trips are grouped into now, upcoming and past by calendar date, each group
+one card with a rule between its trips. Each trip shows a line drawing of
+the best-known landmark of the city its title names, the first one named
+("Paris and Lyon" is Paris; whole words, accents and case ignored), else a
+suitcase (`tripLandmark` in `packages/core/src/landmarks.ts`, mirrored in
+the Android app's core; the drawings are `landmarks.json`, one SVG path in
+a 48-unit square stroked 1.5 wide, which both apps draw). Trips under
 way also show what comes next — the soonest booking start still ahead, or
 the end of one under way (check-out, arrival, car return) — read from their
 segments with one listener each; the next three upcoming trips get a

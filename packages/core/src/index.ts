@@ -50,3 +50,4 @@ export * from "./listFilters";
 export * from "./travelers";
 export * from "./journeyGap";
 export * from "./directions";
+export * from "./landmarks";

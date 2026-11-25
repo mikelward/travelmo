@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,7 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,6 +43,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -177,31 +183,30 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
                 modifier = Modifier.fillMaxSize().padding(padding).scrollEdgeCue(list, scrollCueColors()),
                 state = list,
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 val titles = displayTitles(groups.current + groups.upcoming + groups.past)
                 // In the list, so it scrolls away with it rather than taking room from the trips.
-                if (crashed) item(key = "crash") { LastCrashBanner() }
+                if (crashed) item(key = "crash") { LastCrashBanner(Modifier.padding(bottom = 12.dp)) }
                 val result = found
                 val kept = groups.without(hidden)
                 val shown = if (result == null) kept else kept.only(result.ids)
                 if (result == null && hidden.isNotEmpty() && kept.current.isEmpty() && kept.upcoming.isEmpty() && kept.past.isEmpty()) {
-                    item(key = "all-hidden") { Message(stringResource(Res.string.all_trips_hidden), Modifier) }
+                    item(key = "all-hidden") { Message(stringResource(Res.string.all_trips_hidden)) }
                 }
-                if (result != null && !result.bookingsSearched) item(key = "searching") { Message(stringResource(Res.string.searching_bookings), Modifier) }
+                if (result != null && !result.bookingsSearched) item(key = "searching") { Message(stringResource(Res.string.searching_bookings)) }
                 // Judged by what is shown: a search can find only trips the filters hide.
                 val nothingShown = shown.current.isEmpty() && shown.upcoming.isEmpty() && shown.past.isEmpty()
-                if (result != null && result.bookingsSearched && nothingShown) item(key = "no-match") { Message(stringResource(Res.string.no_trips_match), Modifier) }
+                if (result != null && result.bookingsSearched && nothingShown) item(key = "no-match") { Message(stringResource(Res.string.no_trips_match)) }
                 if (checkInFailed != null) {
                     item(key = "checked-in-failed") {
-                        Text(checkInFailed, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
+                        Text(checkInFailed, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(bottom = 12.dp))
                     }
                 }
                 // Document warnings once, at the top, each for the earliest trip
                 // it bears on and opening it, rather than repeated on every card.
                 if (state.warnings.isNotEmpty()) {
                     item(key = "warnings") {
-                        ListWarnings(state.warnings, titles, today = state.now.substring(0, 10), onOpenTrip = onOpenTrip)
+                        Box(Modifier.padding(bottom = 12.dp)) { ListWarnings(state.warnings, titles, today = state.now.substring(0, 10), onOpenTrip = onOpenTrip) }
                     }
                 }
                 // What comes next is said only for a trip under way; an upcoming
@@ -247,10 +252,11 @@ private fun androidx.compose.foundation.lazy.LazyListScope.section(
         Text(
             stringResource(title),
             style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(top = 8.dp),
+            modifier = Modifier.padding(top = 8.dp, bottom = 12.dp),
         )
     }
-    items(trips, key = { it.id }) { trip ->
+    // One card per section, a rule between its trips: each trip draws its part of the card.
+    itemsIndexed(trips, key = { _, trip -> trip.id }) { index, trip ->
         TripCard(
             trip = trip, title = titles[trip.id] ?: trip.title, shared = trip.ownerUid != uid, segments = state.segmentsByTrip[trip.id], now = state.now, showNext = showNext,
             flightStatuses = state.flightStatuses, checkedIn = state.checkedIn[trip.id].orEmpty(),
@@ -258,7 +264,28 @@ private fun androidx.compose.foundation.lazy.LazyListScope.section(
             missing = missingOf(trip),
             watching = trip.id in watching,
             onClick = { onOpenTrip(trip.id) },
+            modifier = Modifier.padding(bottom = if (index == trips.lastIndex) 12.dp else 0.dp)
+                .sectionPart(first = index == 0, last = index == trips.lastIndex, color = MaterialTheme.colorScheme.outlineVariant),
         )
+    }
+}
+
+/**
+ * This trip's part of its section's card: the card's rounded top if [first], its rounded bottom if [last], its sides,
+ * and the rule above it otherwise. The rule is the top edge, so the one below a trip is the next trip's.
+ */
+private fun Modifier.sectionPart(first: Boolean, last: Boolean, color: Color): Modifier {
+    val radius = 12.dp
+    val shape = RoundedCornerShape(topStart = if (first) radius else 0.dp, topEnd = if (first) radius else 0.dp, bottomStart = if (last) radius else 0.dp, bottomEnd = if (last) radius else 0.dp)
+    return clip(shape).drawWithContent {
+        drawContent()
+        val stroke = 1.dp.toPx()
+        // Only the last trip draws a bottom edge: above another trip, the outline runs past the bottom, where the clip
+        // hides it, and the next trip's top edge is the rule between them.
+        val height = if (last) size.height - stroke else size.height + stroke
+        translate(stroke / 2, stroke / 2) {
+            drawOutline(shape.createOutline(Size(size.width - stroke, height), layoutDirection, this), color, style = Stroke(stroke))
+        }
     }
 }
 
@@ -283,6 +310,8 @@ fun TripCard(
     /** Whether the user is only watching it: none of its travelers is them. */
     watching: Boolean = false,
     onClick: () -> Unit,
+    /** Its outline: the list draws one card per section ([sectionPart]). */
+    modifier: Modifier = Modifier,
 ) {
     val badge = when {
         trip.deleting -> stringResource(Res.string.badge_deleting) to MaterialTheme.colorScheme.onSurfaceVariant
@@ -296,39 +325,49 @@ fun TripCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+            .then(modifier)
             .clickable(onClick = onClick)
             // The strike-through, said: a screen reader doesn't read it.
             .semantics(mergeDescendants = true) { if (cancelled) stateDescription = cancelledLabel }
-            .padding(16.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
-        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleLarge,
-                color = if (cancelled) MaterialTheme.colorScheme.onSurfaceVariant else Color.Unspecified,
-                textDecoration = struck,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            badge?.let { (text, color) -> Text(text.uppercase(), style = MaterialTheme.typography.labelSmall, color = color) }
+        // The landmark beside the title and dates; what comes next runs below, in line with the title.
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            TripLandmark(title)
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = if (cancelled) MaterialTheme.colorScheme.onSurfaceVariant else Color.Unspecified,
+                        textDecoration = struck,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    badge?.let { (text, color) -> Text(text.uppercase(), style = MaterialTheme.typography.labelSmall, color = color) }
+                }
+                Text(
+                    formatDateRange(trip.shownStart, trip.shownEnd),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textDecoration = struck,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
         }
-        Text(
-            formatDateRange(trip.shownStart, trip.shownEnd),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textDecoration = struck,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-        if (!cancelled && missing != null) {
-            Text(missing, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.padding(top = 8.dp))
+        Column(Modifier.padding(start = LANDMARK_INDENT)) {
+            if (!cancelled && missing != null) {
+                Text(missing, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.padding(top = 8.dp))
+            }
+            // A cancelled trip has nothing coming.
+            if (!cancelled && segments != null) StatusLines(segments, now, showNext, flightStatuses, checkedIn, onCheckedIn)
         }
-        // A cancelled trip has nothing coming.
-        if (!cancelled && segments != null) StatusLines(segments, now, showNext, flightStatuses, checkedIn, onCheckedIn)
     }
 }
+
+/** The landmark's width and the gap after it, so lines below the title start where it does. */
+private val LANDMARK_INDENT = 52.dp
 
 /**
  * With [showNext], the stay under way, what comes next ([tripNextUp], with the
