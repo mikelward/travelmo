@@ -32,10 +32,16 @@ jobs:
         if: env.HAS_PLAY_SA == 'true'
         with:
           persist-credentials: false
+      # setup-node sees the repository's packageManager and wants pnpm on the path to
+      # cache with, though this job installs nothing: without it, it stops. Its cache
+      # is off too, as there is nothing to cache.
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320  # v4.4.0
+        if: env.HAS_PLAY_SA == 'true'
       - uses: actions/setup-node@v5
         if: env.HAS_PLAY_SA == 'true'
         with:
           node-version-file: .node-version
+          package-manager-cache: false
       # The newest release whose bundle finished uploading; a release still
       # receiving its bundle waits for the next hour.
       - name: Fetch the newest release's bundle
