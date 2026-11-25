@@ -23,10 +23,12 @@
   - [x] Boston, Las Vegas, Liverpool, Paris, Edinburgh, Lisbon and Dublin,
         on Android and the web.
   - [ ] Better than the suitcase for a place with no landmark drawn: the
-        kind of place (small town, beach, mountains, forest), or a letter.
-  - [x] More cities' landmarks (190 cities total, including the original
-        seven redone plus Sydney, Dubai, Singapore, Barcelona, London,
-        Amsterdam, Rome, New York, San Francisco, Tokyo and 173 others).
+        kind of place (small town, beach [done for 221 beach destinations],
+        mountains, forest), or a letter.
+  - [x] More cities' landmarks (208 cities total plus a shared beach
+        drawing for 221 beach destinations, including the original seven
+        redone plus Sydney, Dubai, Singapore, Barcelona, London,
+        Amsterdam, Rome, New York, San Francisco, Tokyo and 191 others).
   - [ ] The trip page's days in the same style: one card per day, a rule
         between its bookings.
 

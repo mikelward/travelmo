@@ -31,6 +31,31 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Borobudur").id).toBe("yogyakarta");
     expect(tripLandmark("Riyadh").id).toBe("riyadh");
     expect(tripLandmark("Wellington").id).toBe("wellington");
+    expect(tripLandmark("Zagreb").id).toBe("zagreb");
+    expect(tripLandmark("Adelaide").id).toBe("adelaide");
+    expect(tripLandmark("Park City").id).toBe("park-city");
+    expect(tripLandmark("Bergen").id).toBe("bergen");
+    expect(tripLandmark("Tenerife").id).toBe("tenerife");
+    expect(tripLandmark("Winchester").id).toBe("winchester");
+    expect(tripLandmark("Chelmsford").id).toBe("chelmsford");
+    expect(tripLandmark("Sacramento").id).toBe("sacramento");
+    expect(tripLandmark("Hurghada").id).toBe("hurghada");
+    expect(tripLandmark("Heraklion").id).toBe("heraklion");
+    expect(tripLandmark("Valetta").id).toBe("valletta");
+    expect(tripLandmark("Malta").id).toBe("valletta");
+    expect(tripLandmark("Carmel").id).toBe("carmel");
+    expect(tripLandmark("Ravenna").id).toBe("ravenna");
+    expect(tripLandmark("Split").id).toBe("split");
+    expect(tripLandmark("Lake Tahoe").id).toBe("lake-tahoe");
+    expect(tripLandmark("Kahului").id).toBe("kahului");
+    expect(tripLandmark("Waikiki").id).toBe("honolulu");
+    expect(tripLandmark("Nadi").id).toBe("nadi");
+    expect(tripLandmark("Suva").id).toBe("suva");
+    expect(tripLandmark("Kihei").id).toBe("beach");
+    expect(tripLandmark("Lahaina").id).toBe("beach");
+    expect(tripLandmark("Bora Bora").id).toBe("beach");
+    expect(tripLandmark("Santa Cruz").id).toBe("beach");
+    expect(tripLandmark("Santa Cruz de Tenerife").id).toBe("tenerife");
   });
 
   it("ignores accents and case", () => {
@@ -73,6 +98,9 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Bath").id).toBe("bath");
     expect(tripLandmark("Bath time").id).toBe("trip");
     expect(tripLandmark("Nice weekend in Bath").id).toBe("bath");
+    expect(tripLandmark("Split, Croatia").id).toBe("split");
+    expect(tripLandmark("Week in Split").id).toBe("split");
+    expect(tripLandmark("Split stay").id).toBe("trip");
   });
 
   it("leaves out a longer name that begins with a city's", () => {
@@ -80,6 +108,7 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Rio Grande").id).toBe("trip");
     expect(tripLandmark("Washington State road trip").id).toBe("trip");
     expect(tripLandmark("Canton, Ohio").id).toBe("trip");
+    expect(tripLandmark("Santa Cruz de la Sierra").id).toBe("trip");
     expect(tripLandmark("Santiago").id).toBe("santiago");
     expect(tripLandmark("Washington, DC").id).toBe("washington");
     expect(tripLandmark("Rio Grande, then Rio").id).toBe("rio-de-janeiro");
@@ -110,6 +139,6 @@ describe("tripLandmark", () => {
       }
       for (const name of landmark.not ?? []) expect(foldText(name)).toBe(name);
     }
-    expect(LANDMARKS.length).toBe(191);
+    expect(LANDMARKS.length).toBe(210);
   });
 });

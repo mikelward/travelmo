@@ -33,6 +33,31 @@ class LandmarksTest {
         assertEquals("yogyakarta", tripLandmark("Borobudur").id)
         assertEquals("riyadh", tripLandmark("Riyadh").id)
         assertEquals("wellington", tripLandmark("Wellington").id)
+        assertEquals("zagreb", tripLandmark("Zagreb").id)
+        assertEquals("adelaide", tripLandmark("Adelaide").id)
+        assertEquals("park-city", tripLandmark("Park City").id)
+        assertEquals("bergen", tripLandmark("Bergen").id)
+        assertEquals("tenerife", tripLandmark("Tenerife").id)
+        assertEquals("winchester", tripLandmark("Winchester").id)
+        assertEquals("chelmsford", tripLandmark("Chelmsford").id)
+        assertEquals("sacramento", tripLandmark("Sacramento").id)
+        assertEquals("hurghada", tripLandmark("Hurghada").id)
+        assertEquals("heraklion", tripLandmark("Heraklion").id)
+        assertEquals("valletta", tripLandmark("Valetta").id)
+        assertEquals("valletta", tripLandmark("Malta").id)
+        assertEquals("carmel", tripLandmark("Carmel").id)
+        assertEquals("ravenna", tripLandmark("Ravenna").id)
+        assertEquals("split", tripLandmark("Split").id)
+        assertEquals("lake-tahoe", tripLandmark("Lake Tahoe").id)
+        assertEquals("kahului", tripLandmark("Kahului").id)
+        assertEquals("honolulu", tripLandmark("Waikiki").id)
+        assertEquals("nadi", tripLandmark("Nadi").id)
+        assertEquals("suva", tripLandmark("Suva").id)
+        assertEquals("beach", tripLandmark("Kihei").id)
+        assertEquals("beach", tripLandmark("Lahaina").id)
+        assertEquals("beach", tripLandmark("Bora Bora").id)
+        assertEquals("beach", tripLandmark("Santa Cruz").id)
+        assertEquals("tenerife", tripLandmark("Santa Cruz de Tenerife").id)
     }
 
     @Test
@@ -79,6 +104,9 @@ class LandmarksTest {
         assertEquals("bath", tripLandmark("Bath").id)
         assertEquals("trip", tripLandmark("Bath time").id)
         assertEquals("bath", tripLandmark("Nice weekend in Bath").id)
+        assertEquals("split", tripLandmark("Split, Croatia").id)
+        assertEquals("split", tripLandmark("Week in Split").id)
+        assertEquals("trip", tripLandmark("Split stay").id)
     }
 
     @Test
@@ -87,6 +115,7 @@ class LandmarksTest {
         assertEquals("trip", tripLandmark("Rio Grande").id)
         assertEquals("trip", tripLandmark("Washington State road trip").id)
         assertEquals("trip", tripLandmark("Canton, Ohio").id)
+        assertEquals("trip", tripLandmark("Santa Cruz de la Sierra").id)
         assertEquals("santiago", tripLandmark("Santiago").id)
         assertEquals("washington", tripLandmark("Washington, DC").id)
         assertEquals("rio-de-janeiro", tripLandmark("Rio Grande, then Rio").id)
@@ -102,7 +131,7 @@ class LandmarksTest {
     fun readsEveryLandmarkTheWebHas() {
         val rawEntries = landmarksJson.lines().count { it.startsWith("{\"id\":") }
         assertEquals(rawEntries, landmarks.size)
-        assertEquals(191, landmarks.size)
+        assertEquals(210, landmarks.size)
         assertEquals(landmarks.size, landmarks.map { it.id }.toSet().size)
         val seenCities = mutableSetOf<String>()
         for (landmark in landmarks) {
