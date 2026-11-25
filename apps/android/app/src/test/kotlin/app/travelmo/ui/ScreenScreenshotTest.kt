@@ -1,5 +1,12 @@
 package app.travelmo.ui
 
+import app.travelmo.core.travelReport
+import app.travelmo.data.InMemoryReportSnapshotStore
+import app.travelmo.data.TripStore
+import app.travelmo.data.encodeReportSnapshot
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -661,6 +668,22 @@ class ScreenScreenshotTest {
     fun reports() {
         val viewModel = viewModel()
         capture("reports") { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.REPORTS) {} }) }
+    }
+
+    // Reports drawn from the last visit's counts while the bookings are still being read: the year picker waits.
+    @Test
+    fun reports_saved() = reportsSaved("reports_saved", dark = false)
+
+    @Test
+    fun reports_saved_dark() = reportsSaved("reports_saved_dark", dark = true)
+
+    private fun reportsSaved(name: String, dark: Boolean) {
+        val stalled = object : TripStore by FakeTripStore() {
+            override fun segments(tripId: String): Flow<List<Segment>> = flow { awaitCancellation() }
+        }
+        val last = travelReport(fixtureTrips.map { TripWithSegments(it, fixtureSegments[it.id].orEmpty()) }, FROZEN_NOW.take(10))
+        val viewModel = TripsViewModel(stalled, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, reportSnapshotStore = InMemoryReportSnapshotStore(encodeReportSnapshot(OWNER, last)))
+        capture(name, dark = dark) { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.REPORTS) {} }) }
     }
 
     // A country opened to the trips with days there.

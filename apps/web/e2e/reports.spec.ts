@@ -16,6 +16,8 @@ test("reports count days in each country, trips per year, and mark the map", asy
   await page.getByRole("link", { name: "Reports" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Reports" })).toBeVisible();
   await expect(page.getByTestId("summary")).toHaveText("1 trip · 5 days away · 2 countries");
+  // Kept for the next visit, to draw before the bookings are read.
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("travelmo.reportSnapshot") ?? "{}").report?.trips)).toBe(1);
 
   // Worked out only once opened.
   const countries = page.getByRole("table", { name: "Days in each country" });

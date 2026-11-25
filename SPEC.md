@@ -530,6 +530,15 @@ its title is tapped, and home only for them or when the trips download is
 saved; every visit starts with both closed. Before any trip has begun,
 "Days in each country" says there are no days to count.
 
+Every year's counts and map, as last worked out, are kept on the device for
+the next visit (`reportSnapshot.ts`; the web's `localStorage`, a file in
+Android's no-backup storage, tagged with the account so another one signed
+in there never sees them), and drawn at once, before the bookings are read;
+the fresh ones replace them and are kept in turn. The rest of the page,
+another year and the trips download wait for the bookings. Android reads
+Reports' world map as it starts, with the other tables, rather than as the
+tab opens.
+
 "Days in each country" counts every day from the first trip (or of the year
 picked) to today, home included (`countryDays` in
 `packages/core/src/residence.ts`, the residence timeline below): a day with

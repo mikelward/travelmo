@@ -1,6 +1,6 @@
 "use client";
 
-import { countryDays, countryDaysRange, shiftDate, displayTitles, favoritePlaces, formatDateRange, placeRows, placeRowsCsv, travelReport, tripRows, watchedTrip, tripRowsCsv, type FavoritePlace, type CountryCounting, type CountryDaysReport, type HomePeriod, type PlaceLookup, type SummaryTrip, type TravelReport } from "@travelmo/core";
+import { countryDays, countryDaysRange, decodeReportSnapshot, encodeReportSnapshot, shiftDate, displayTitles, favoritePlaces, formatDateRange, placeRows, placeRowsCsv, travelReport, tripRows, watchedTrip, tripRowsCsv, type FavoritePlace, type CountryCounting, type CountryDaysReport, type HomePeriod, type PlaceLookup, type SummaryTrip, type TravelReport } from "@travelmo/core";
 import Link from "next/link";
 import type { User } from "firebase/auth";
 import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
@@ -352,6 +352,35 @@ function Years({ report, onPick }: { report: TravelReport; onPick: (year: string
   );
 }
 
+// Every year's counts and map as last worked out in this browser, drawn
+// while the bookings are read (SPEC "Reports"); `fresh` replaces them once
+// worked out.
+const snapshotKey = "travelmo.reportSnapshot";
+
+function useReportSnapshot(uid: string, fresh: TravelReport | undefined): TravelReport | undefined {
+  const [saved, setSaved] = useState<TravelReport>();
+  // Read after the first render, so the page the server sent matches.
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- browser storage is only there after hydration
+      setSaved(decodeReportSnapshot(localStorage.getItem(snapshotKey), uid));
+    } catch (e) {
+      // Blocked storage, or text from another version: worked out from the bookings in a moment.
+      console.debug("Reading Reports' last counts failed; waiting for the bookings", e);
+    }
+  }, [uid]);
+  useEffect(() => {
+    if (!fresh) return;
+    try {
+      localStorage.setItem(snapshotKey, encodeReportSnapshot(uid, fresh));
+    } catch (e) {
+      // The next visit works them out before drawing, as before.
+      console.debug("Saving Reports' counts for next time failed", e);
+    }
+  }, [uid, fresh]);
+  return saved;
+}
+
 function Report({ user }: { user: User }) {
   useSaveForOffline();
   const trips = useTrips(user);
@@ -396,10 +425,15 @@ function Report({ user }: { user: User }) {
     return range && countryDays(all.withSegments, homes, range, tables.lookup, counting);
   }, [countriesOpen, all, homes, tables, today, year, counting]);
 
-  if (tables instanceof Error) return <p className="text-danger">The map couldn&apos;t be loaded: {tables.message}</p>;
-  if (!report || !tables || !all || !segments) return <p className="text-muted">Loading reports…</p>;
+  const snapshot = useReportSnapshot(user.uid, all?.report);
 
-  const years = all.report.years.map((y) => y.year);
+  if (tables instanceof Error) return <p className="text-danger">The map couldn&apos;t be loaded: {tables.message}</p>;
+  // Until the bookings are read, every year's counts and map as last worked out here.
+  const whole = all?.report ?? snapshot;
+  const shown = report ?? (year ? undefined : snapshot);
+  if (!shown || !whole || !tables) return <p className="text-muted">Loading reports…</p>;
+
+  const years = whole.years.map((y) => y.year);
   return (
     <>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -407,6 +441,8 @@ function Report({ user }: { user: User }) {
         <select
             value={year}
             onChange={(e) => setYear(e.target.value)}
+            // Another year is worked out from the bookings: until they are read the saved counts stand.
+            disabled={!all}
             aria-label="Year"
             className="rounded-lg border border-field bg-background px-2 py-1"
           >
@@ -418,8 +454,8 @@ function Report({ user }: { user: User }) {
             ))}
           </select>
       </div>
-      <Summary report={report} />
-      {segments.failed.length > 0 && (
+      <Summary report={shown} />
+      {segments && segments.failed.length > 0 && (
         <p className="mt-2 text-danger">
           {plural(segments.failed.length, "trip")} couldn&apos;t be read, so {segments.failed.length === 1 ? "it isn't" : "they aren't"}{" "}
           counted. Reload to try again.
@@ -427,33 +463,38 @@ function Report({ user }: { user: User }) {
       )}
       <WorldMap
         data={tables.map}
-        visited={new Set(report.countries.map((c) => c.country))}
-        airports={report.airports}
-        places={report.places}
+        visited={new Set(shown.countries.map((c) => c.country))}
+        airports={shown.airports}
+        places={shown.places}
         name={countryName}
       />
-      <OnDemand id="countries-heading" title="Days in each country" open={countriesOpen} onToggle={() => setCountriesOpen(!countriesOpen)}>
-        {countries ? (
-          <Countries report={countries} counting={counting} onCounting={setCounting} titles={titles} today={today} />
-        ) : homes ? (
-          <p className="mt-2 text-muted">No trip has begun yet, so there are no days to count.</p>
-        ) : (
-          <Working />
+      {!all && <Working />}
+      {all && (
+        <>
+        <OnDemand id="countries-heading" title="Days in each country" open={countriesOpen} onToggle={() => setCountriesOpen(!countriesOpen)}>
+          {countries ? (
+            <Countries report={countries} counting={counting} onCounting={setCounting} titles={titles} today={today} />
+          ) : homes ? (
+            <p className="mt-2 text-muted">No trip has begun yet, so there are no days to count.</p>
+          ) : (
+            <Working />
+          )}
+        </OnDemand>
+        <Favorites places={favoritePlaces(all.withSegments)} titles={titles} />
+        <OnDemand id="residence-heading" title="Residence and visa days" open={residenceOpen} onToggle={() => setResidenceOpen(!residenceOpen)}>
+          {homes ? <ResidenceDays trips={all.withSegments} homes={homes} lookup={tables.lookup} today={today} titles={titles} /> : <Working />}
+        </OnDemand>
+        <Years report={all.report} onPick={setYear} />
+        {/* Once the profile has answered, so "outside my home country" never takes a home not yet read for none. */}
+        {profile && <DownloadTrips trips={all.withSegments} homes={() => homes ?? homesOf()} lookup={tables.lookup} titles={titles} today={today} />}
+        {all.report.upcoming > 0 && (
+          <p className="mt-6 text-muted">
+            {plural(all.report.upcoming, "trip")} still ahead {all.report.upcoming === 1 ? "isn't" : "aren't"} counted.
+          </p>
         )}
-      </OnDemand>
-      <Favorites places={favoritePlaces(all.withSegments)} titles={titles} />
-      <OnDemand id="residence-heading" title="Residence and visa days" open={residenceOpen} onToggle={() => setResidenceOpen(!residenceOpen)}>
-        {homes ? <ResidenceDays trips={all.withSegments} homes={homes} lookup={tables.lookup} today={today} titles={titles} /> : <Working />}
-      </OnDemand>
-      <Years report={all.report} onPick={setYear} />
-      {/* Once the profile has answered, so "outside my home country" never takes a home not yet read for none. */}
-      {profile && <DownloadTrips trips={all.withSegments} homes={() => homes ?? homesOf()} lookup={tables.lookup} titles={titles} today={today} />}
-      {all.report.upcoming > 0 && (
-        <p className="mt-6 text-muted">
-          {plural(all.report.upcoming, "trip")} still ahead {all.report.upcoming === 1 ? "isn't" : "aren't"} counted.
-        </p>
+        {all.report.trips === 0 && all.report.upcoming === 0 && <p className="mt-6 text-muted">No trips yet.</p>}
+        </>
       )}
-      {all.report.trips === 0 && all.report.upcoming === 0 && <p className="mt-6 text-muted">No trips yet.</p>}
     </>
   );
 }
