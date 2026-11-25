@@ -720,7 +720,7 @@ export function mergeDetails<S extends ExtractedSegment>(existing: S, found: Ext
     merged.start = found.start;
     if (found.end !== undefined) merged.end = found.end;
     if (found.confirmation !== undefined) merged.confirmation = found.confirmation;
-  } else if (!edited && (newer ? found.type === existing.type && (journeyTypes.has(existing.type) || agreementOf(existing, found)) && !datedJourney(found) : agreementOf(existing, found) && existing.rentalStage === "reservation")) {
+  } else if (!edited && (newer ? found.type === existing.type && ((journeyTypes.has(existing.type) && !otherRoute(existing, found)) || agreementOf(existing, found)) && !datedJourney(found) : agreementOf(existing, found) && existing.rentalStage === "reservation")) {
     // A car's rental agreement (sameRental) says when it was picked up and
     // is due back, whichever email was read first; a later one corrects it.
     // A change that gives no arrival moves the old one with the departure,
@@ -761,6 +761,15 @@ export function mergeDetails<S extends ExtractedSegment>(existing: S, found: Ext
   const travelers = canonicalTravelers([...(existing.travelers ?? []), ...(found.travelers ?? [])]);
   if (travelers) merged.travelers = travelers;
   return merged;
+}
+
+// A journey between other airports or stations than this one's: a
+// reminder's whole trip ("ADL to LHR, 1 stop") read beside its first leg
+// (ADL to DOH), whose arrival is not the leg's.
+function otherRoute(a: ExtractedSegment, b: ExtractedSegment): boolean {
+  const code = (p?: Place) => p?.code?.toUpperCase();
+  const differ = (x?: Place, y?: Place) => !!code(x) && !!code(y) && code(x) !== code(y);
+  return differ(a.origin, b.origin) || differ(a.destination, b.destination);
 }
 
 // The rental agreement of a car `existing` is, or was, reserved as.
