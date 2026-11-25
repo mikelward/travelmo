@@ -431,6 +431,10 @@
         <item quantity="other">%1$d days this year</item>
     </plurals>
     <string name="reports_loading">Loading reports…</string>
+    <string name="reports_working">Working it out…</string>
+    <string name="no_days_to_count">No trip has begun yet, so there are no days to count.</string>
+    <string name="section_open">Open</string>
+    <string name="section_closed">Closed</string>
     <string name="profile">Travel profile</string>
     <string name="profile_empty">Nothing here yet. Import a TripIt export on the web to fill in your documents, loyalty programs and travelers.</string>
     <string name="profile_nothing_yet">Nothing in it yet.</string>

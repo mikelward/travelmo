@@ -17,6 +17,10 @@ import app.travelmo.core.HomeCorrection
 import app.travelmo.core.Place
 import app.travelmo.data.InMemoryCountingStore
 import app.travelmo.data.RideSettings
+import app.travelmo.data.TripStore
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentType
 import app.travelmo.core.Trip
@@ -41,6 +45,7 @@ class ReportsScreenTest {
         val opened = mutableListOf<String>()
         val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
         composeRule.setContent { TravelmoTheme { ReportsScreen(viewModel = viewModel, onOpenTrip = { opened += it }, onOpenSettings = {}, bottomBar = {}) } }
+        openSection("Days in each country")
         composeRule.onNodeWithText("Portugal").performScrollTo().performClick()
         composeRule.onNodeWithText("14–19 Sept 2026 · 6 days").performScrollTo()
         // The stay's trip, above the favorite places that name it too.
@@ -61,6 +66,7 @@ class ReportsScreenTest {
         store.rides.value = RideSettings(homes = listOf(HomeCorrection("London", "GB", "2020-01-01")))
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
         composeRule.setContent { TravelmoTheme { ReportsScreen(viewModel = viewModel, onOpenTrip = { opened += it }, onOpenSettings = {}, bottomBar = {}) } }
+        openSection("Days in each country")
         composeRule.onNodeWithText("9–12 Oct 2026 · 4 days").performScrollTo()
         composeRule.onNodeWithText("Second weekend").performClick()
         composeRule.onNodeWithText("First weekend").performClick()
@@ -87,6 +93,50 @@ class ReportsScreenTest {
     }
 
     @Test
+    fun `works out days in each country only once its section is opened`() {
+        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent { TravelmoTheme { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = {}) } }
+        composeRule.onNodeWithText("Days in each country", substring = true).performScrollTo()
+        composeRule.onNodeWithText("Part days").assertDoesNotExist()
+        openSection("Days in each country")
+        composeRule.onNodeWithText("Part days").performScrollTo()
+        // And closes again.
+        openSection("Days in each country")
+        composeRule.onNodeWithText("Part days").assertDoesNotExist()
+    }
+
+    @Test
+    fun `says there is nothing to count in each country before any trip has begun`() {
+        // Only a trip still ahead.
+        val store = FakeTripStore(trips = listOf(Trip("later", "Later", "2027-01-08", "2027-01-10", OWNER)), segments = emptyMap())
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent { TravelmoTheme { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = {}) } }
+        openSection("Days in each country")
+        composeRule.onNodeWithText("No trip has begun yet, so there are no days to count.").performScrollTo()
+        composeRule.onNodeWithText("Working it out…").assertDoesNotExist()
+    }
+
+    @Test
+    fun `offers the trips download only once home's corrections have answered`() {
+        val settings = MutableStateFlow<RideSettings?>(null)
+        val store = object : TripStore by FakeTripStore() {
+            override fun rideSettings(uid: String): Flow<RideSettings?> = settings.filterNotNull()
+        }
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent { TravelmoTheme { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = {}) } }
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Trips per year"))
+        composeRule.onNodeWithText("Download CSV").assertDoesNotExist()
+        settings.value = RideSettings(homes = listOf(HomeCorrection("London", "GB", "2020-01-01")))
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Download CSV"))
+    }
+
+    /** Opens (or closes) a section that is worked out only when opened. */
+    private fun openSection(title: String) {
+        composeRule.onNodeWithText(title, substring = true).performScrollTo().performClick()
+        composeRule.waitForIdle()
+    }
+
+    @Test
     fun `asks for home's country when every day counted is at home`() {
         // Only a class near home, and a home with no country: no day is in any country.
         val store = FakeTripStore(
@@ -95,7 +145,8 @@ class ReportsScreenTest {
         )
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
         composeRule.setContent { TravelmoTheme { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = {}) } }
-        composeRule.onNodeWithText("Days in each country").performScrollTo()
+        openSection("Days in each country")
+        composeRule.onNodeWithText("Days in each country", substring = true).performScrollTo()
     }
 
     @Test
@@ -103,6 +154,7 @@ class ReportsScreenTest {
         val counting = InMemoryCountingStore()
         val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, countingStore = counting)
         composeRule.setContent { TravelmoTheme { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = {}) } }
+        openSection("Days in each country")
         composeRule.onNodeWithText("Part days").performScrollTo().performClick()
         composeRule.onNodeWithText("Nights").performClick()
         composeRule.onNodeWithText("Portugal").performScrollTo().performClick()
@@ -124,6 +176,7 @@ class ReportsScreenTest {
         store.rides.value = RideSettings(homes = listOf(HomeCorrection("London", "GB", "2020-01-01")))
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, countingStore = InMemoryCountingStore(CountryCounting.WHOLE))
         composeRule.setContent { TravelmoTheme { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = {}) } }
+        openSection("Days in each country")
         composeRule.onNodeWithText("Whole days").performScrollTo()
     }
 }

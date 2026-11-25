@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { contrastRatio, owner, signIn } from "./helpers";
 import { clearData, seedLisbonTrip, seedPerson, seedTrip, updateUser } from "./seed";
 
@@ -17,7 +17,10 @@ test("reports count days in each country, trips per year, and mark the map", asy
   await expect(page.getByRole("heading", { level: 1, name: "Reports" })).toBeVisible();
   await expect(page.getByTestId("summary")).toHaveText("1 trip · 5 days away · 2 countries");
 
+  // Worked out only once opened.
   const countries = page.getByRole("table", { name: "Days in each country" });
+  await expect(countries).toHaveCount(0);
+  await openSection(page, "Days in each country");
   // From the first trip to the frozen date, home included; the days of
   // leaving and coming back count for both countries.
   await expect(countries.getByRole("row")).toHaveText(["CountryDays", "United Kingdom507", "Portugal5"]);
@@ -35,6 +38,8 @@ test("reports count days in each country, trips per year, and mark the map", asy
   await page.getByRole("combobox", { name: "Count" }).selectOption("Nights");
   await expect(countries.getByRole("row")).toHaveText(["CountryNights", "United Kingdom506", "Portugal4"]);
   await page.reload();
+  // Closed again, as every visit starts, but counting nights still.
+  await openSection(page, "Days in each country");
   await expect(page.getByRole("combobox", { name: "Count" })).toHaveValue("nights");
   // A run of nights still going ends today, not on a morning still to come.
   await countries.getByRole("button", { name: "United Kingdom" }).click();
@@ -69,6 +74,8 @@ test("with no trips, nothing is counted", async ({ page }) => {
   await expect(page.getByText("No trips yet.")).toBeVisible();
   await expect(page.getByTestId("summary")).toHaveText("0 trips · 0 days away · 0 countries");
   await expect(page.getByTestId("world-map").locator("[data-visited]")).toHaveCount(0);
+  await openSection(page, "Days in each country");
+  await expect(page.getByText("No trip has begun yet, so there are no days to count.")).toBeVisible();
 });
 
 test("in dark mode, the year dropdown is drawn dark with readable text", async ({ page }) => {
@@ -93,6 +100,7 @@ test("residence and visa days count time away and in the Schengen area, from hom
   await updateUser(ownerUid, { homes: [{ city: "London", country: "GB", from: "2020-01-01" }] });
   await page.goto("/reports");
 
+  await openSection(page, "Residence and visa days");
   const section = page.getByRole("region", { name: "Residence and visa days" });
   await expect(section.getByRole("combobox", { name: "Rules" })).toHaveValue("uk-settlement");
   const rule = section.getByTestId("residence-rule");
@@ -124,6 +132,7 @@ test("UK settlement counts from the move to the UK and lists the days it can't p
   );
   await page.goto("/reports");
 
+  await openSection(page, "Residence and visa days");
   const rule = page.getByRole("region", { name: "Residence and visa days" }).getByTestId("residence-rule");
   await expect(rule.getByText("Since you moved to the UK on 3 Mar 2024")).toBeVisible();
   await expect(rule.getByText("Includes 3 days we can’t place in a country, counted as away to be safe.")).toBeVisible();
@@ -131,6 +140,7 @@ test("UK settlement counts from the move to the UK and lists the days it can't p
   const unplaced = rule.getByRole("list", { name: "Days we can't place" });
   await expect(unplaced.getByRole("listitem")).toHaveText([/Give these trips’ bookings a place/, "1–3 Apr 2026 · 3 days · Mystery"]);
   // Days in each country leaves them out until they have one.
+  await openSection(page, "Days in each country");
   const countries = page.getByTestId("unplaced");
   await expect(countries).toContainText("3 days we can’t place aren’t counted.");
   await expect(countries.getByRole("listitem")).toHaveText(["1–3 Apr 2026 · 3 days · Mystery"]);
@@ -142,6 +152,7 @@ test("residence and visa days ask for home's country when nothing gives one", as
   const ownerUid = await signIn(page, owner);
   await seedLisbonTrip(ownerUid, "e2e-lisbon");
   await page.goto("/reports");
+  await openSection(page, "Residence and visa days");
   const section = page.getByRole("region", { name: "Residence and visa days" });
   await expect(section.getByText("Days with no trip count as at home, but home has no country yet.")).toBeVisible();
   await expect(section.getByRole("link", { name: "Add one on your Profile" })).toHaveAttribute("href", "/profile");
@@ -192,3 +203,8 @@ test("downloads a summary of trips as CSV, by trip or by place, optionally abroa
   expect(byPlace.lines.slice(1).every((line) => line.includes("Portugal"))).toBe(true);
   expect(byPlace.lines.length).toBeGreaterThan(1);
 });
+
+// Opens a section the page works out only once asked.
+async function openSection(page: Page, name: string) {
+  await page.getByRole("button", { name }).click();
+}
