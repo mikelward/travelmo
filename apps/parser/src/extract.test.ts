@@ -1,5 +1,5 @@
 import type { GoogleGenAI } from "@google/genai";
-import { geminiExtractor, isModelRateLimit, parseExtraction } from "./extract";
+import { bookedOn, geminiExtractor, isModelRateLimit, parseExtraction } from "./extract";
 
 describe("geminiExtractor", () => {
   it("hands attached PDFs to the model as documents beside the email, and the email alone without", async () => {
@@ -13,6 +13,26 @@ describe("geminiExtractor", () => {
       { role: "user", parts: [{ text: expect.stringContaining("Your tickets are attached.") }, { inlineData: { mimeType: "application/pdf", data: "JVBERi0=" } }] },
     ]);
     expect(asked[1]).toEqual(expect.stringContaining("Your tickets are attached."));
+  });
+
+  it("leaves the year the model read from an attached PDF, which the email may not show", async () => {
+    // Sent after the stay; the receipt's year is in the PDF alone.
+    const stay = { type: "lodging", title: "Example Hotel", start: "2025-09-20T15:00:00+01:00", end: "2025-09-25T11:00:00+01:00" };
+    const client = { models: { generateContent: async () => ({ text: JSON.stringify({ isBooking: true, segments: [stay] }) }) } } as unknown as GoogleGenAI;
+    const extract = geminiExtractor(client, "model");
+    const message = { id: "m1", threadId: "t1", from: "Hotel <stay@hotel.example>", subject: "Your receipt", date: "Mon, 6 Oct 2025 10:00:00 +0000", listUnsubscribe: false, text: "Your receipt is attached." };
+    expect((await extract(message, [{ name: "receipt.pdf", mimeType: "application/pdf", data: "JVBERi0=" }])).segments[0]?.start).toBe(stay.start);
+    expect((await extract(message)).segments[0]?.start).toBe("2026-09-20T15:00:00+01:00");
+  });
+});
+
+describe("bookedOn", () => {
+  it("dates a forward by its original, and leaves one with no original date undated", () => {
+    const sent = "Mon, 6 Oct 2025 10:00:00 +0000";
+    expect(bookedOn({ from: "Air <a@air.example>", subject: "Your booking", text: "Thu 2 Jan", date: sent })).toBe(sent);
+    const text = "---------- Forwarded message ---------\nFrom: Air <a@air.example>\nDate: Mon, 7 Oct 2024 09:00:00 +0000\nSubject: Your booking\n\nThu 2 Jan";
+    expect(bookedOn({ from: "Me <me@example.com>", subject: "Fwd: Your booking", text, date: sent })).toBe("2024-10-07T09:00:00.000Z");
+    expect(bookedOn({ from: "Me <me@example.com>", subject: "Fwd: Your booking", text: "Thu 2 Jan", date: sent })).toBeUndefined();
   });
 });
 

@@ -1,9 +1,10 @@
 import { GoogleGenAI } from "@google/genai";
-import { ExtractedBooking } from "@travelmo/core";
+import { ExtractedBooking, stripForwardPrefix, unwrapForwarded } from "@travelmo/core";
 import { z } from "zod";
 import type { Attachment, EmailMessage } from "./gmail";
 import type { Embedder } from "./importer";
 import { embeddingDimensions } from "./similarity";
+import { withInferredYears } from "./years";
 
 // The email reader's version: how an email becomes the text the model reads
 // (text.ts), the instructions below and the model. Bump it with any change
@@ -11,7 +12,7 @@ import { embeddingDimensions } from "./similarity";
 // email" then reads again the emails an older reader judged that way, from
 // travel senders (refresh.ts `readAgain`). Records from before versions were
 // kept have none, and count as older.
-export const readerVersion = 1;
+export const readerVersion = 2;
 
 export type Extractor = (message: EmailMessage, attachments?: readonly Attachment[]) => Promise<ExtractedBooking>;
 
@@ -35,7 +36,7 @@ Rules:
 - One segment per leg or stay: each flight leg, each train leg, each hotel stay, each car rental period, each ticketed activity. A return journey is two segments.
 - type: flight, train, bus, ferry, lodging, car_rental, activity, or other.
 - title: short and specific, e.g. "BA 117 LHR to JFK", "Cove Liverpool", "Hertz Manchester Airport".
-- start/end: ISO 8601 with the local UTC offset of the place where the event happens. Infer the offset from the airport/city. For lodging, start is check-in and end is check-out; if times are not stated use 15:00 and 11:00. For an activity, use the time the event starts if the email gives one; if it gives only a date, use 00:00 local time and no end. Never use 00:00 as a guess otherwise. end is when the journey arrives or the event ends: never a ticket's validity or expiry date; leave end out when the email does not say. An airport train runs between the airport and the city, not from a city to itself. If a year is missing, use the email's Date header to infer it.
+- start/end: ISO 8601 with the local UTC offset of the place where the event happens. Infer the offset from the airport/city. For lodging, start is check-in and end is check-out; if times are not stated use 15:00 and 11:00. For an activity, use the time the event starts if the email gives one; if it gives only a date, use 00:00 local time and no end. Never use 00:00 as a guess otherwise. end is when the journey arrives or the event ends: never a ticket's validity or expiry date; leave end out when the email does not say. An airport train runs between the airport and the city, not from a city to itself. If a year is missing, use the email's Date header to infer it: a booking is for the next such date on or after it, never one before it.
 - origin/destination: for transport, where it departs and arrives (name, IATA/station code, city, ISO 3166-1 alpha-2 country). For lodging and activities use destination only.
 - address: the place's street address as the email or its attachments give it, on one line (e.g. "4 Hope Street, Liverpool L1 9AB"), for a hotel or other stay, a venue, a car rental desk, or a station or terminal when one is given. Leave it out when the email gives none; never make one up from the name.
 - confirmation: the booking reference / PNR / confirmation number if present.
@@ -71,8 +72,21 @@ export function geminiExtractor(client: GoogleGenAI, model: string): Extractor {
     });
     const text = response.text;
     if (!text) throw new Error(`Gemini returned no text for message ${message.id}`);
-    return parseExtraction(text, message.id);
+    // A date the model put before the email in a year the email never shows
+    // is the next such date (years.ts), unless a PDF it read may show it.
+    const booking = parseExtraction(text, message.id);
+    return attachments.length > 0 ? booking : withInferredYears(booking, `${message.subject}\n${message.text}`, bookedOn(message));
   };
+}
+
+// When the email a booking came in was sent, to infer its years by: a
+// forward's original's date (undefined when its header block gives none, so
+// nothing is inferred), never the forward's own, as an old confirmation
+// forwarded today is still old.
+export function bookedOn(message: Pick<EmailMessage, "from" | "subject" | "text" | "date">): string | undefined {
+  const original = unwrapForwarded(message);
+  const forwarded = original.unwrapped || stripForwardPrefix(message.subject) !== message.subject.trim();
+  return forwarded ? original.date : message.date;
 }
 
 // Embeddings for the similarity pre-filter (similarity.ts); truncated to a

@@ -1709,7 +1709,21 @@ message there, and its HTML flattened to text otherwise: a plain part under
 a third the length of the HTML's text is a stub (Virgin Atlantic's
 e-tickets put only a footer there), and the HTML is read instead
 (`bodyText`, for Gmail and forwarded mail alike), at most 24,000
-characters. An email that passes the filters also has its PDF
+characters. A booking wholly over more than two days before its email was sent
+(a forward's original, by its header block; nothing is inferred when that
+gives no date), in a year the email's subject and text never show, moves on
+a year (`withInferredYears`; each time keeps its wall time, a flight's at the
+offset its airport keeps that day where the airport's zone is known and
+agrees with the offset as read): an itinerary
+that says "Thu 2 Jan" in October
+means the coming January, and a booking dated a year early made one trip
+run from one January to the next. A booking with any part still to come
+when sent stays as read (a payment taken mid-stay, a trip under way), as
+does one the email gives a year for anywhere (2025, 02/01/25 or ’25: one
+leg's year dates the others), every date in an email whose PDFs the model
+read (their years can't be checked), and one with a date that has no day a
+year on (29 February): a booking moves whole or not at all, keeping its
+order. An email that passes the filters also has its PDF
 attachments read (a rail ticket may carry the journey only there), from
 every source: Gmail, Fastmail, IMAP and forwarded mail. Up to
 three, each at most 5 MB and 10 MB in all (`withinAttachmentLimits`), fetched only then where the
