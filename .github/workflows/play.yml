@@ -1,0 +1,65 @@
+name: play
+# Puts the newest GitHub release (which ci's Publish job makes on every push
+# to main) and the store listing on Play, hourly, in one edit. Play limits
+# how many edits an app may commit a day, and committing on every push used
+# it up on busy days ("Daily save quota exceeded"), stopping every upload
+# until the next day. Hourly, with the bundle and listing together and
+# nothing committed when Play is already current, stays well inside it.
+# Run it by hand (Actions → play → Run workflow) not to wait for the hour.
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+# One at a time; a run that starts while another is publishing waits.
+concurrency:
+  group: play
+  cancel-in-progress: false
+jobs:
+  publish:
+    name: Publish to Play
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    env:
+      HAS_PLAY_SA: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
+    steps:
+      - name: Say when nothing can be published yet
+        if: env.HAS_PLAY_SA != 'true'
+        run: echo "::warning::No Play publishing until PLAY_SERVICE_ACCOUNT_JSON is set in the production environment (README 'Release')."
+      - uses: actions/checkout@v5
+        if: env.HAS_PLAY_SA == 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        if: env.HAS_PLAY_SA == 'true'
+        with:
+          node-version-file: .node-version
+      # The newest release whose bundle finished uploading; a release still
+      # receiving its bundle waits for the next hour.
+      - name: Fetch the newest release's bundle
+        if: env.HAS_PLAY_SA == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/play"
+          mkdir -p "$dir"
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '[.[] | select(.tag_name | test("^v[0-9]+$")) | {tag_name, body, aab: ([.assets[] | select((.name | endswith(".aab")) and .state == "uploaded") | .name] | first)}]' \
+            > "$dir/releases.json"
+          newest=$(jq -r '[.[] | select(.aab != null)] | max_by(.tag_name | ltrimstr("v") | tonumber) // empty | "\(.tag_name) \(.aab)"' "$dir/releases.json")
+          if [ -z "$newest" ]; then
+            echo "No release with a bundle yet; publishing the listing alone."
+            exit 0
+          fi
+          read -r tag aab <<< "$newest"
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$aab" --dir "$dir"
+          echo "PLAY_RELEASES=$dir/releases.json" >> "$GITHUB_ENV"
+          echo "PLAY_BUNDLE=$dir/$aab" >> "$GITHUB_ENV"
+      - name: Publish the release and the listing to Play
+        if: env.HAS_PLAY_SA == 'true'
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: node scripts/publish-play.mjs

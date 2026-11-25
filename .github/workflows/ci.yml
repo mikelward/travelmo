@@ -89,12 +89,12 @@ jobs:
       - name: Icon sources match their generator
         working-directory: .
         run: node scripts/icon-sources.mjs && node scripts/segment-icons.mjs && git diff --exit-code
-      - name: Test the Play listing script
+      - name: Test the Play publishing script
         working-directory: .
-        run: node --test scripts/publish-play-listing.test.mjs
+        run: node --test scripts/publish-play.test.mjs
       - name: Check the Play listing
         working-directory: .
-        run: node scripts/publish-play-listing.mjs --check
+        run: node scripts/publish-play.mjs --check
       - name: Check the core module stays free of Android
         run: ./gradlew :core:verifyNoAndroid :core:test
       - name: Prove that guard actually fails
@@ -241,10 +241,11 @@ jobs:
           path: apps/android/app/build/reports/androidTests
           retention-days: 7
   # A push to main builds the signed release bundle, keeps it as a workflow
-  # artifact, publishes it as a GitHub prerelease tagged by its versionCode
-  # with the release-worthy commit subjects as notes, and, once a Play
-  # service account is configured, uploads it to the Play internal track
-  # (README "Release"). The secrets live in the `production` environment,
+  # artifact, and publishes it as a GitHub prerelease tagged by its
+  # versionCode with the release-worthy commit subjects as notes (README
+  # "Release"). The play workflow puts the newest prerelease on Play's
+  # internal track hourly: Play limits how many edits an app may commit a
+  # day, and uploading on every push used that up. The secrets live in the `production` environment,
   # whose deployment branches should be limited to main. Without the
   # keystore the job warns and stops rather than fails: the app has no Play
   # listing yet, and a red main for every merge would say nothing new.
@@ -256,8 +257,8 @@ jobs:
     timeout-minutes: 30
     environment: production
     # One publication at a time, whatever the workflow-level groups above
-    # let run side by side: two publishing at once could upload to Play out
-    # of versionCode order. The group holds one pending job, so a third
+    # let run side by side: two publishing at once could put the GitHub
+    # releases out of versionCode order. The group holds one pending job, so a third
     # back-to-back push evicts the second's; the notes step below measures
     # from the last published release, so nothing is lost, only deferred.
     concurrency:
@@ -268,7 +269,6 @@ jobs:
     env:
       HAS_RELEASE_KEYSTORE: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' }}
       HAS_FIREBASE_CONFIG: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
-      HAS_PLAY_SA: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -362,10 +362,10 @@ jobs:
       # publication carries them into the next release instead of losing
       # them. The tags come with the full-depth checkout; the first release
       # ever, with no tag yet, falls back to the push's own range. A tag on
-      # this very commit is this run's own earlier attempt (the GitHub
-      # release went up, the Play upload did not), so it is skipped over:
-      # the rerun then rebuilds the same notes, the script finds its release
-      # already there, and the upload gets its second chance.
+      # this very commit is this run's own earlier attempt (the release
+      # went up, its bundle upload did not), so it is skipped over: the
+      # rerun then rebuilds the same notes, the script finds its release
+      # already there, and the bundle upload gets its second chance.
       - name: Build release notes
         if: env.RELEASE_KEYSTORE_FILE != ''
         env:
@@ -430,45 +430,6 @@ jobs:
           AAB_PATH: apps/android/app/build/outputs/bundle/release/app-release.aab
           ASSET_BASE: travelmo
         run: scripts/publish-github-release.sh
-      - name: Compose the Play "What's new"
-        if: env.RELEASE_KEYSTORE_FILE != '' && env.HAS_PLAY_SA == 'true' && env.RELEASE_NOTES_SKIP != 'true' && env.RELEASE_SUPERSEDED != 'true'
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/whatsnew"
-          printf '%s' "$RELEASE_NOTES" > "$RUNNER_TEMP/whatsnew/whatsnew-en-US"
-          echo "PLAY_WHATSNEW_DIR=$RUNNER_TEMP/whatsnew" >> "$GITHUB_ENV"
-      - name: Upload to Play Store internal track
-        if: env.RELEASE_KEYSTORE_FILE != '' && env.HAS_PLAY_SA == 'true' && env.RELEASE_NOTES_SKIP != 'true' && env.RELEASE_SUPERSEDED != 'true'
-        uses: r0adkll/upload-google-play@a80b0bcdcfdfcc2d026f2bc73f726760b2cbc967 # post-v1.1.5
-        with:
-          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: app.travelmo
-          releaseFiles: apps/android/app/build/outputs/bundle/release/app-release.aab
-          tracks: internal
-          status: completed
-          whatsNewDirectory: ${{ env.PLAY_WHATSNEW_DIR }}
-      # Last, so a listing problem (such as a service account without
-      # "Manage store presence") fails the job without holding back the
-      # release above. The script compares the listing with Play's copy and
-      # sends only what differs, committing nothing when they match, so a
-      # change whose run was cancelled still goes up with the next push. Only
-      # the run for main's current tip publishes: release-main serializes
-      # these jobs but not in push order, and a late older run would put an
-      # older listing back; the tip's own run sends the newest one. It needs
-      # no keystore, only the service account (README "Release").
-      - name: Update the Play listing
-        if: ${{ !cancelled() && env.HAS_PLAY_SA == 'true' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-        run: |
-          set -euo pipefail
-          tip=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
-          if [ "$tip" != "$GITHUB_SHA" ]; then
-            echo "main has moved on to $tip; its run publishes the newer listing."
-            exit 0
-          fi
-          node scripts/publish-play-listing.mjs
   # A push to main deploys what it changed: the Firestore rules and indexes,
   # the parser (built on Cloud Build, then a new Cloud Run revision), its
   # Cloud Scheduler jobs and the forwarding Worker on Cloudflare (README "Continuous deployment"). Google
