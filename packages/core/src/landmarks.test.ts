@@ -15,6 +15,12 @@ describe("tripLandmark", () => {
     expect(tripLandmark("NYC weekend").id).toBe("new-york");
     expect(tripLandmark("San Francisco").id).toBe("san-francisco");
     expect(tripLandmark("Tokyo").id).toBe("tokyo");
+    expect(tripLandmark("Pisa").id).toBe("pisa");
+    expect(tripLandmark("Shanghai").id).toBe("shanghai");
+    expect(tripLandmark("Philly").id).toBe("philadelphia");
+    expect(tripLandmark("Saigon").id).toBe("ho-chi-minh-city");
+    expect(tripLandmark("Machu Picchu").id).toBe("cusco");
+    expect(tripLandmark("Petra").id).toBe("amman");
   });
 
   it("ignores accents and case", () => {
@@ -24,6 +30,9 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Reykjavík").id).toBe("reykjavik");
     expect(tripLandmark("Ciudad de México").id).toBe("mexico-city");
     expect(tripLandmark("Roma").id).toBe("rome");
+    expect(tripLandmark("Genève").id).toBe("geneva");
+    expect(tripLandmark("København").id).toBe("copenhagen");
+    expect(tripLandmark("Kraków").id).toBe("krakow");
   });
 
   it("takes the city named first", () => {
@@ -56,6 +65,6 @@ describe("tripLandmark", () => {
         cities.add(city);
       }
     }
-    expect(LANDMARKS.length).toBe(50);
+    expect(LANDMARKS.length).toBe(95);
   });
 });
