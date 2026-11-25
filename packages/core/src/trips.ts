@@ -1,5 +1,6 @@
 import type { Location } from "./geocode";
 import { compareInstants } from "./instant";
+import { canonicalTravelers } from "./travelers";
 import type { ExtractedCancellation, ExtractedSegment, Place, SegmentType, Trip } from "./schema";
 
 export type TripGroups = {
@@ -692,6 +693,9 @@ export function mergeDetails<S extends ExtractedSegment>(existing: S, found: Ext
     notes.push(`Other reference: ${other}`);
   }
   if (notes.length) merged.notes = notes.join("\n");
+  // Everyone either email names, each once.
+  const travelers = canonicalTravelers([...(existing.travelers ?? []), ...(found.travelers ?? [])]);
+  if (travelers) merged.travelers = travelers;
   return merged;
 }
 

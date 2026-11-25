@@ -3,6 +3,7 @@ import {
   findTripForBooking,
   homeTimeline,
   homesWithAirports,
+  canonicalTravelers,
   inTrip,
   isCancelled,
   mergeDetails,
@@ -77,7 +78,12 @@ export function handEdited(segment: Pick<Segment, "editedAt" | "createdAt" | "up
 }
 
 // The fields extraction gives a booking.
-const detailKeys = ["type", "title", "provider", "confirmation", "start", "end", "origin", "destination", "notes"] as const;
+const detailKeys = ["type", "title", "provider", "confirmation", "start", "end", "origin", "destination", "notes", "travelers"] as const;
+
+// A detail as filed: travelers as people write their names (canonicalTravelers),
+// so a reading that names the same people the same way changes nothing.
+const filedDetail = (segment: ExtractedSegment, key: (typeof detailKeys)[number]) =>
+  key === "travelers" ? canonicalTravelers(segment.travelers) : segment[key];
 
 // A value with its objects' keys in order, for comparing two documents.
 function canonical(value: unknown): unknown {
@@ -94,7 +100,7 @@ function canonical(value: unknown): unknown {
 }
 const same = (a: unknown, b: unknown) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
 
-const detailsOf = (segment: ExtractedSegment) => Object.fromEntries(detailKeys.map((key) => [key, segment[key]]));
+const detailsOf = (segment: ExtractedSegment) => Object.fromEntries(detailKeys.map((key) => [key, filedDetail(segment, key)]));
 const sameDetails = (a: ExtractedSegment, b: ExtractedSegment) => same(detailsOf(a), detailsOf(b));
 
 // The place a fresh extraction gives, with what the stored one knew besides
@@ -118,7 +124,7 @@ export function withDetails(segment: Segment, found: ExtractedSegment): Segment 
   const out: Record<string, unknown> = { ...segment };
   for (const key of detailKeys) delete out[key];
   for (const key of detailKeys) {
-    const value = key === "origin" || key === "destination" ? freshPlace(found[key], segment[key]) : found[key];
+    const value = key === "origin" || key === "destination" ? freshPlace(found[key], segment[key]) : filedDetail(found, key);
     if (value !== undefined) out[key] = value;
   }
   return out as Segment;
@@ -390,8 +396,12 @@ export async function refreshEmail(
         let id = `${record.messageId}-${index}`;
         for (let n = 1; taken.has(id); n++) id = `${record.messageId}-${index}-${n}`;
         taken.add(id);
+        // Its travelers as an import files them (canonicalTravelers).
+        const { travelers: named, ...details } = segment;
+        const travelers = canonicalTravelers(named);
         const fresh: Segment = withWaitingCancellations({
-          ...segment,
+          ...details,
+          ...(travelers ? { travelers } : {}),
           id,
           tripId,
           source,

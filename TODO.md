@@ -18,6 +18,25 @@
 
 ## Product
 
+- [ ] Travelers and watching (maintainer, 2026-11-25): who each booking is
+      for, and trips the user watches but isn't on (a parent's forwarded
+      itinerary, a child's school trip).
+  - [x] Read each booking's travelers from its emails, filed as people write
+        their names (`canonicalTravelers`), and shown under each booking.
+  - [ ] The user's people (`users/{uid}/people`): each name matched to one
+        already seen (`findPerson`) or added; rename, merge and "this is me"
+        on Profile; older bookings filled in by a sweep.
+  - [ ] Which person is the user: guessed from the names on emails sent
+        straight to them (a recipient's display name where there is one;
+        forwarded mail counts against), else their Google account's name;
+        changeable on Profile.
+  - [ ] Watching: a trip none of whose travelers is the user shows
+        "Watching", keeps flight status and alerts, and leaves out the user's
+        document and visa warnings, reminders, check-in prompts, ride
+        suggestions, reports, residence days, the trips download and working
+        out home; travelers editable on the trip page; "Hide trips I'm not
+        on" in the funnel.
+
 - [x] Add and edit segments by hand; delete a trip; rename a trip.
 - [x] Let sharees add, edit and delete segments.
 - [x] Offer a timezone picker instead of a raw UTC offset when adding a

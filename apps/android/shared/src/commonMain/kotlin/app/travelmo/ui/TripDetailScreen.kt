@@ -118,6 +118,7 @@ import app.travelmo.shared.add_booking
 import app.travelmo.shared.back
 import app.travelmo.shared.badge_shared
 import app.travelmo.shared.booking_actions
+import app.travelmo.shared.booking_for
 import app.travelmo.shared.cancel
 import app.travelmo.shared.cancelled
 import app.travelmo.shared.checked_in
@@ -758,6 +759,9 @@ fun SegmentRow(
                     TextButton(onClick = { checkIn.onChange(false) }) { Text(stringResource(Res.string.undo)) }
                 }
                 null -> Unit
+            }
+            if (segment.travelers.isNotEmpty()) {
+                Text(stringResource(Res.string.booking_for, segment.travelers.joinToString(", ")), style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp))
             }
             referenceLine(segment)?.let { line ->
                 // A long press on the line copies the reference too, as ⋮ does.

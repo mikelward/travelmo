@@ -312,6 +312,26 @@ is the airline's, read from the flight number ("Check-in reminders"); an
 airline may change it, so the card says "usually". The clock behind these
 lines ticks once a minute.
 
+### Travelers
+
+Each booking says who it is for when its emails name anyone: the reader
+lists each passenger, guest or attendee as written ("SMITH/JOHN MR",
+"Mrs Jane Doe"; never the person a receipt merely greets), and the import
+files them as people write them, each once (`canonicalTravelers` in
+`packages/core/src/travelers.ts`): titles and passenger-type codes dropped,
+an airline record's surname/given name and a list's "Surname, Given" put
+first name first, a name written in one case title-cased, and two writings
+one person when their words match, their first and last do (a middle name
+or not), or one first name is the other's initial (`sameTraveler`). A
+booking read again from another email gains whoever that one names
+(`mergeDetails`); a hand edit keeps them, as the form doesn't edit them.
+The trip page shows them under each booking ("For John Smith, Jane
+Smith"), on the web and Android.
+
+Still to come (TODO.md): the user's people, matched by those rules and
+added as new names arrive, with which of them is the user (guessed, and
+changeable on Profile); and trips the user is watching but not on.
+
 ### Adding a trip
 
 Trips mostly come from imports, but one can be planned by hand: **Add a

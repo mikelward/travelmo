@@ -98,6 +98,13 @@ class DocumentsTest {
     }
 
     @Test
+    fun `reads who a booking is for`() {
+        val base = mapOf("type" to "lodging", "title" to "Harbor Inn", "start" to "2026-12-12T15:00:00+01:00")
+        segmentFromDocument("s1", "t1", base + mapOf("travelers" to listOf("John Smith", "Jane Smith")))!!.travelers shouldBe listOf("John Smith", "Jane Smith")
+        segmentFromDocument("s1", "t1", base)!!.travelers shouldBe emptyList()
+    }
+
+    @Test
     fun `reads a cancellation by hand on a booking and on a trip`() {
         val base = mapOf("type" to "lodging", "title" to "Harbor Inn", "start" to "2026-12-12T15:00:00+01:00")
         segmentFromDocument("s1", "t1", base + mapOf("cancelledAt" to "2026-11-20T08:00:00Z", "userCancelled" to "booking"))!!.userCancelled shouldBe "booking"

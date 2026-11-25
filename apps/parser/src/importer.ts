@@ -16,6 +16,7 @@ import {
   unwrapForwarded,
   pendingCancellationExpired,
   stillWaiting,
+  canonicalTravelers,
   inTrip,
   isCancelled,
   liveBounds,
@@ -1019,7 +1020,15 @@ export function settlingTripDates(tx: TripTx, timestamp: string): TripTx & { set
 export async function fileBooking(uid: string, incoming: BookingToFile, deps: ImportDeps): Promise<Filed> {
   const { store, log } = deps;
   const placed = await placeSegments(uid, incoming, deps);
-  const booking = { ...incoming, segments: placed.segments };
+  // Each traveler as people write them, once (SPEC "Travelers").
+  const booking = {
+    ...incoming,
+    segments: placed.segments.map((s) => {
+      const { travelers: raw, ...rest } = s;
+      const travelers = canonicalTravelers(raw);
+      return travelers ? { ...rest, travelers } : rest;
+    }),
+  };
   const range = segmentDateRange(booking.segments);
   if (!range) throw new Error(`booking ${booking.sourceId} has no segments`);
   const timestamp = deps.now();
