@@ -1,13 +1,15 @@
 "use client";
 
-import { allLoyalty, loyaltyByPerson, loyaltySummary, type FoundLoyalty, type ProfileEntry, type TravelProfile } from "@travelmo/core";
+import { allLoyalty, guessMe, loyaltyByPerson, loyaltySummary, type FoundLoyalty, type ProfileEntry, type TravelProfile } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
 import { useState } from "react";
 import { Dialog } from "@/components/BookingMenu";
 import { SignInGate } from "@/components/SignInGate";
 import { airportCodes, homeTownKey, correctionText, failedReadsText, homeLine, logged, parseAirportCodes, parseCorrection, saveCorrections, saveHomeAirports, useHomes, type Homes } from "@/lib/home";
+import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
+import { setMe, usePeople } from "@/lib/people";
 import { maxTrusted, removeFoundLoyalty, saveTrusted, setLoyaltyPerson, useSharedProfiles, useTravelProfile } from "@/lib/travelProfile";
 
 const buttonClass =
@@ -499,6 +501,46 @@ function SharedWithYou({ user }: { user: User }) {
   );
 }
 
+// Who the user's bookings are for (SPEC "Travelers"): each person, the one
+// taken to be the user marked, and "This is me" to say otherwise.
+function PeopleSection({ user }: { user: User }) {
+  const people = usePeople(user.uid);
+  const [error, setError] = useState<string>();
+  if (!people || people.length === 0) return null;
+  const me = guessMe(people);
+  return (
+    <section className="mt-10">
+      <h2 className="text-lg font-medium">People</h2>
+      <p className="mt-1 text-sm text-muted">Who your bookings are for.</p>
+      <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800" aria-label="People">
+        {people.map((person) => (
+          <li key={person.id} className="flex items-baseline justify-between gap-3 py-2">
+            <span>
+              {person.name}
+              {person.id === me?.id && <span className="ml-2 text-xs font-medium uppercase tracking-wide text-muted">You</span>}
+            </span>
+            {person.id !== me?.id && (
+              <button
+                type="button"
+                className="text-sm text-muted hover:underline"
+                onClick={() =>
+                  setMe(firestore(), user.uid, people, person.id).catch((e: Error) => {
+                    console.error("Saving who the user is failed", e);
+                    setError(e.message);
+                  })
+                }
+              >
+                This is me
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+    </section>
+  );
+}
+
 function ProfilePage({ user }: { user: User }) {
   const profile = useTravelProfile(user.uid);
   return (
@@ -512,6 +554,7 @@ function ProfilePage({ user }: { user: User }) {
         </p>
       )}
       {profile && hasDetails(profile) && <ProfileSections profile={profile} ownUid={user.uid} />}
+      <PeopleSection user={user} />
       <HomeSection user={user} />
       {profile !== undefined && <SharingSection user={user} profile={profile} />}
       <SharedWithYou user={user} />

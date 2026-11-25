@@ -328,9 +328,29 @@ booking read again from another email gains whoever that one names
 The trip page shows them under each booking ("For John Smith, Jane
 Smith"), on the web and Android.
 
-Still to come (TODO.md): the user's people, matched by those rules and
-added as new names arrive, with which of them is the user (guessed, and
-changeable on Profile); and trips the user is watching but not on.
+Each import also keeps the user's people (`users/{uid}/people/{id}`,
+`PersonDoc`, the owner's alone to read): each traveler on a newly filed
+booking is someone already known (`findPerson`, by their name or any other
+spelling seen; through an initial only when none of their spellings has
+another whole first name, so "J Smith" known as John isn't Jane), who
+gains the spelling and one more booking, or someone new
+(`notePeople`), in the same transaction as the booking. A later email,
+or Refresh, that names someone new on a booking already filed counts them
+too, and only them, so reading an email again counts no one twice; a new
+spelling it gives for someone already named is still kept. A booking from an
+email in the user's own mailbox (Gmail, Fastmail, IMAP) that wasn't
+forwarded (no "Fwd:" or "FW:" subject, no forwarded message's header in
+its body, `forwarded`) counts toward who the user is; one forwarded to the
+import address counts neither way. Which person is the user (`guessMe`,
+mirrored in `People.kt`) is the one they said, else the one most named on
+those direct emails, then on any booking. Profile, on the web and Android,
+lists the people, most often named first, marks the one taken to be the
+user "You", and offers "This is me" on the others (one batch, so only one
+is marked); the rules let the owner change only a person's name, other
+spellings and that mark.
+
+Still to come (TODO.md): trips the user is watching but not on, and
+renaming and merging people.
 
 ### Adding a trip
 

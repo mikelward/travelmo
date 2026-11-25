@@ -39,6 +39,7 @@ import app.travelmo.core.slotNumber
 import app.travelmo.core.withDone
 import app.travelmo.core.RideCompany
 import app.travelmo.core.queryAddresses
+import app.travelmo.core.Person
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentDraft
 import app.travelmo.core.localDate
@@ -181,6 +182,31 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             trySend(calendarExportOf(snapshot?.data))
         }
         awaitClose { registration.remove() }
+    }
+
+    override fun people(uid: String): Flow<List<Person>> = callbackFlow {
+        val registration = db.collection("users").document(uid).collection("people")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    SharedLog.error(error, "Reading the user's people failed")
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                trySend(snapshot?.documents.orEmpty().mapNotNull { personOf(it.id, it.data) })
+            }
+        awaitClose { registration.remove() }
+    }
+
+    /** As the web's setMe: one batch marking [personId] and unmarking any other. */
+    override suspend fun setMe(uid: String, people: List<Person>, personId: String) {
+        val now = Clock.System.now().toString()
+        val ref = db.collection("users").document(uid).collection("people")
+        db.runBatch { batch ->
+            for (person in people) {
+                if (person.id == personId) batch.updateData(ref.document(person.id), mapOf("me" to true, "updatedAt" to now))
+                else if (person.me) batch.updateData(ref.document(person.id), mapOf("me" to false, "updatedAt" to now))
+            }
+        }.await()
     }
 
     override fun feeds(uid: String): Flow<List<CalendarFeedShown>?> = callbackFlow {

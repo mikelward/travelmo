@@ -3,7 +3,10 @@ package app.travelmo.ui
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -32,6 +35,23 @@ class ProfileScreenTest {
     private fun show(store: TripStore) {
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL)
         composeRule.setContent { TravelmoTheme { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = {}) } }
+    }
+
+    @Test
+    fun `people are listed with the one taken to be the user and This is me moves it`() {
+        val store = FakeTripStore(
+            people = listOf(
+                app.travelmo.core.Person("mum", "Pat Example", bookings = 6),
+                app.travelmo.core.Person("me", "Sam Example", bookings = 4, direct = 4),
+            ),
+        )
+        show(store)
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("This is me"))
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("YOU"))
+        composeRule.onNodeWithText("YOU").assertExists()
+        composeRule.onNodeWithText("This is me").performClick()
+        composeRule.waitForIdle()
+        store.peopleState.value.single { it.me }.id shouldBe "mum"
     }
 
     @Test

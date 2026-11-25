@@ -39,7 +39,9 @@ import app.travelmo.core.flightStatusShown
 import app.travelmo.core.shownFlightKeys
 import app.travelmo.core.nextUpFlightKeys
 import app.travelmo.core.ListWarning
+import app.travelmo.core.Person
 import app.travelmo.core.Segment
+import app.travelmo.core.peopleInOrder
 import app.travelmo.core.SegmentDraft
 import app.travelmo.core.TravelProfile
 import app.travelmo.core.peopleDocuments
@@ -675,6 +677,12 @@ class TripsViewModel(
     fun deleteSegment(token: String, tripId: String, segmentId: String) = run(token, "deleteSegment") { store.deleteSegment(tripId, segmentId) }
 
     fun restoreSegment(token: String, tripId: String, segmentId: String) = run(token, "restoreSegment") { store.restoreSegment(tripId, segmentId) }
+
+    /** The people the user's bookings name, most often named first (SPEC "Travelers"). */
+    val travelers: StateFlow<List<Person>> = accessSettled.flatMapLatest { store.people(uid) }.map(::peopleInOrder)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun setMe(token: String, personId: String) = run(token, "setMe") { store.setMe(uid, travelers.value, personId) }
 
     fun newTripId(): String = store.newTripId()
 

@@ -4,6 +4,7 @@ import {
   homeTimeline,
   homesWithAirports,
   canonicalTravelers,
+  notePeople,
   inTrip,
   isCancelled,
   mergeDetails,
@@ -25,6 +26,7 @@ import {
   type Segment,
   type SourceRef,
   type Trip,
+  type NamedBooking,
 } from "@travelmo/core";
 import { maxFailedIds, type BackfillBatch } from "./backfill";
 import { isModelRateLimit, readerVersion } from "./extract";
@@ -34,6 +36,7 @@ import {
   attachmentsOf,
   emptyCounts,
   importMessage,
+  forwarded,
   originalSentAt,
   placeSegments,
   rebookedByEmail,
@@ -244,12 +247,14 @@ export async function refreshEmail(
     const segmentsByTrip = new Map(await Promise.all(read.map(async (trip) => [trip.id, await tx.listSegments(trip.id)] as const)));
     // Cancellations still waiting for bookings, for any this adds.
     const pending = await tx.listPendingCancellations(uid);
+    const people = await tx.listPeople(uid);
 
     const tripOf = new Map(read.map((trip) => [trip.id, trip]));
     const all = [...segmentsByTrip.values()].flat();
     const own = all.filter(isOwn);
     const counts = nothingChanged();
     const used = new Set<string>();
+    const learned: NamedBooking[] = [];
     const writes = new Map<string, Segment>();
     const deletes = new Map<string, Segment>();
     // The bookings that carry this email once it is refreshed.
@@ -342,6 +347,9 @@ export async function refreshEmail(
       for (const o of merging) next = mergeDetails(next, o, { edited: edited(keeper) });
       if (!edited(keeper) && !sameDetails(keeper, next)) counts.updated += 1;
       for (const o of merging) deletes.set(segmentKey(o), o);
+      // Whom it newly names, counted as an import counts them; named
+      // already, they aren't counted again, so a second refresh adds none.
+      learned.push({ travelers: next.travelers ?? [], before: [keeper, ...merging].flatMap((o) => o.travelers ?? []) });
       counts.merged += merging.length;
       if (!same(next, keeper)) {
         // Still unedited, as an import leaves a booking it fills out, unless
@@ -419,6 +427,11 @@ export async function refreshEmail(
         carrying.push(filed);
       }
       counts.added = added.length;
+    }
+    // Who the bookings it fills out and adds are for, among the user's
+    // people, as an import counts them.
+    for (const person of notePeople(people, [...learned, ...added.map((s) => ({ travelers: s.travelers ?? [] }))], { direct: !forwarded(message), timestamp, newId: () => deps.store.newId() })) {
+      tx.putPerson(uid, person);
     }
 
     // A rebooking: the flights of older emails it flies another way are

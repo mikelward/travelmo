@@ -1,6 +1,7 @@
-import { ParsedMessage, PendingCancellation, Segment, SenderPatterns, TravelProfile, Trip, paths, withFoundLoyalties } from "@travelmo/core";
+import { ParsedMessage, PendingCancellation, PersonDoc, Segment, SenderPatterns, TravelProfile, Trip, paths, withFoundLoyalties } from "@travelmo/core";
 import { FieldPath, FieldValue, type DocumentReference, type DocumentSnapshot, type Firestore, type Transaction } from "firebase-admin/firestore";
 import { AccountDeletedError, wasDeleted } from "./deleted";
+import { log } from "./log";
 import { changeClaimable, claimRecord, claimable, reclaimable, retryable, type TripStore } from "./importer";
 import { Examples, addExample, emptyExamples } from "./similarity";
 
@@ -249,6 +250,18 @@ export function firestoreStore(db: Firestore): TripStore {
           },
           deletePendingCancellation(owner, messageId) {
             t.delete(db.doc(paths.pendingCancellation(owner, messageId)));
+          },
+          async listPeople(owner) {
+            const snap = await t.get(db.collection(paths.people(owner)));
+            // One that doesn't parse is left out rather than failing the import.
+            return snap.docs.flatMap((d) => {
+              const parsed = PersonDoc.safeParse(d.data());
+              if (!parsed.success) log("WARNING", "person_unreadable", { uid: owner, personId: d.id });
+              return parsed.success ? [parsed.data] : [];
+            });
+          },
+          putPerson(owner, person) {
+            t.set(db.doc(paths.person(owner, person.id)), person);
           },
           addSource(tripId, segmentId, source) {
             t.update(db.doc(paths.segment(tripId, segmentId)), { sources: FieldValue.arrayUnion(source) });

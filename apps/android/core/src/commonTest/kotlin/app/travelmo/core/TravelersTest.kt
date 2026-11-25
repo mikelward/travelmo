@@ -74,4 +74,13 @@ class TravelersTest {
         findPerson(people, "Alex Example").shouldBeNull()
         findPerson(people, "MR").shouldBeNull()
     }
+
+    @Test
+    fun `finds no one through an initial when the whole first name known is another`() {
+        val smiths = listOf(Person("john", "J Smith", listOf("John Smith")))
+        findPerson(smiths, "Jane Smith").shouldBeNull()
+        findPerson(smiths, "SMITH/JOHN MR")?.id shouldBe "john"
+        findPerson(smiths, "J Smith")?.id shouldBe "john"
+        findPerson(listOf(Person("j", "J Smith")), "Jane Smith")?.id shouldBe "j"
+    }
 }

@@ -453,6 +453,25 @@ describe("refreshEmail", () => {
     w.put(trip("t1"), booking("m1-0", "t1", stay));
     await w.refresh("m1", found(stay, { ...show, travelers: ["SMITH/JOHN MR", "Smith, John"] }));
     expect(w.memory.segments.get("m1-1")?.travelers).toEqual(["John Smith"]);
+    // And counts them among the user's people, as an import does.
+    expect([...w.memory.people.values()].map((p) => [p.name, p.bookings, p.direct])).toEqual([["John Smith", 1, 1]]);
+  });
+
+  it("counts whom a booking it fills out newly names among the user's people, once however often it runs", async () => {
+    const w = world();
+    w.put(trip("t1"), booking("m1-0", "t1", stay));
+    await w.refresh("m1", found({ ...stay, travelers: ["SMITH/JOHN MR"] }));
+    await w.refresh("m1", found({ ...stay, travelers: ["SMITH/JOHN MR"] }));
+    expect(w.memory.segments.get("m1-0")?.travelers).toEqual(["John Smith"]);
+    expect([...w.memory.people.values()].map((p) => [p.name, p.bookings])).toEqual([["John Smith", 1]]);
+  });
+
+  it("counts the travelers of a booking filed before people were kept, once however often it runs", async () => {
+    const w = world();
+    w.put(trip("t1"), booking("m1-0", "t1", { ...stay, travelers: ["John Smith"] }));
+    await w.refresh("m1", found({ ...stay, travelers: ["SMITH/JOHN MR"] }));
+    await w.refresh("m1", found({ ...stay, travelers: ["SMITH/JOHN MR"] }));
+    expect([...w.memory.people.values()].map((p) => [p.name, p.bookings])).toEqual([["John Smith", 1]]);
   });
 
   it("changes nothing when the model now finds no booking in the email", async () => {

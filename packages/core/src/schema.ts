@@ -595,6 +595,24 @@ export type ParsedMessage = z.infer<typeof ParsedMessage>;
 // is read newest first, so a cancellation often arrives before the booking
 // it cancels. Each booking filed later is checked against these and marked
 // cancelled if one names it. Parser-only.
+// Someone the user's bookings name (SPEC "Travelers"): the name they are
+// shown by, every other way it was written, whether the user said this is
+// them, and how many bookings named them, and how many of those came in
+// emails sent straight to the user (not forwarded), which say most of who
+// the user is (guessMe). Written by imports; the owner renames and says
+// which is them.
+export const PersonDoc = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1).max(200),
+  aliases: z.array(z.string().min(1).max(200)).max(50).default([]),
+  me: z.boolean().optional(),
+  bookings: z.number().int().nonnegative().default(0),
+  direct: z.number().int().nonnegative().default(0),
+  createdAt: isoDateTime,
+  updatedAt: isoDateTime,
+});
+export type PersonDoc = z.infer<typeof PersonDoc>;
+
 export const PendingCancellation = z.object({
   messageId: z.string().min(1),
   uid: z.string().min(1),

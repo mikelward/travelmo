@@ -83,6 +83,10 @@
     <!-- Booking form and actions. -->
     <string name="add_booking">Add a booking</string>
     <string name="add_trip">Add a trip</string>
+    <string name="people">People</string>
+    <string name="people_hint">Who your bookings are for.</string>
+    <string name="you">You</string>
+    <string name="this_is_me">This is me</string>
     <string name="booking_for">For %1$s</string>
     <string name="pick_dates">Pick dates</string>
     <string name="edit_booking">Edit booking</string>
