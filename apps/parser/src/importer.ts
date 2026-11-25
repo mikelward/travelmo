@@ -17,6 +17,8 @@ import {
   pendingCancellationExpired,
   stillWaiting,
   canonicalTravelers,
+  notePeople,
+  type PersonDoc,
   inTrip,
   isCancelled,
   liveBounds,
@@ -65,6 +67,7 @@ import {
   foundLoyaltyFrom,
   type ExtractedMembership,
   type FoundLoyalty,
+  type NamedBooking,
 } from "@travelmo/core";
 import { airportPlace } from "@travelmo/core/airportPlaces";
 import { cityCountry } from "@travelmo/core/cityCountries";
@@ -122,6 +125,10 @@ export type TripTx = {
   listPendingCancellations(uid: string): Promise<PendingCancellation[]>;
   putPendingCancellation(pending: PendingCancellation): void;
   deletePendingCancellation(uid: string, messageId: string): void;
+  // The people the user's bookings name (SPEC "Travelers"), read before any
+  // write, and one written as a booking teaches more of them (notePeople).
+  listPeople(uid: string): Promise<PersonDoc[]>;
+  putPerson(uid: string, person: PersonDoc): void;
 };
 
 // An import that began before the user deleted all their trips: it files
@@ -307,6 +314,14 @@ export type ImportOptions = {
 // Where a message read like an email came from: a mailbox (Gmail,
 // Fastmail, IMAP), the forwarding address, or a calendar event.
 export type EmailSource = "gmail" | "fastmail" | "imap" | "ics" | "forward";
+
+// Whether an email was forwarded to the user rather than sent to them: its
+// subject says so ("Fwd:", "FW:"), or its body carries a forwarded message's
+// header, as mail clients write one.
+export function forwarded(message: Pick<EmailMessage, "subject" | "text">): boolean {
+  if (/^\s*(fwd?|fw)\s*:/i.test(message.subject)) return true;
+  return /-{3,} ?Forwarded message ?-{3,}|Begin forwarded message:|-{3,} ?Original Message ?-{3,}/i.test(message.text);
+}
 
 export async function importMessage(
   uid: string,
@@ -554,6 +569,10 @@ async function importOnce(
             ...(source === "gmail" ? { gmailMessageIds: [message.id] } : {}),
             ...(sender ? { sender } : {}),
             ...(isEmail && sent ? { sentAt: sent } : {}),
+            // From the user's own mailbox and not forwarded: its travelers
+            // are likely them (guessMe). One forwarded to the import address
+            // says nothing either way.
+            ...(source === "gmail" || source === "fastmail" || source === "imap" ? { direct: !forwarded(message) } : {}),
             // Events of a calendar are one list with an id each: two alike
             // are two reservations. Emails are not; one booking is often
             // confirmed twice.
@@ -877,6 +896,9 @@ export type BookingToFile = {
   indexes?: readonly number[];
   gmailMessageIds?: string[];
   sender?: string;
+  // Whether the email came straight to the user rather than forwarded,
+  // when that is known: it says the travelers it names are likely them.
+  direct?: boolean;
   // When the source was sent (an email's Date), if known.
   sentAt?: string;
   trip?: TripHint;
@@ -1052,6 +1074,14 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     // Cancellations read before this booking was (the mailbox is read newest
     // first); read here, before any write, as a transaction requires.
     const pending = await tx.listPendingCancellations(uid);
+    const people = await tx.listPeople(uid);
+    // Who the bookings this email writes are for, matched to the user's
+    // people or added: once for each booking that newly names them.
+    const notePeopleIn = (bookings: NamedBooking[]) => {
+      for (const person of notePeople(people, bookings, { direct: booking.direct === true, timestamp, newId: () => store.newId() })) {
+        tx.putPerson(uid, person);
+      }
+    };
     // A source that is already one deduplicated list (a TripIt export) is
     // checked only against other sources: two alike reservations in it are
     // two rooms, not one booking seen twice.
@@ -1115,6 +1145,8 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     // Trips whose flights a rebooking filed cancelled: each gets a fresh
     // revision with the others this email changed (recordSources).
     const rebookedTrips = new Set<string>();
+    // Whom the bookings this email filled out name now and named before.
+    const learned: NamedBooking[] = [];
     const recordSources = (target?: string) => {
       const changedTrips = new Set<string>(rebookedTrips);
       for (const { segment, found } of matchedSegments) {
@@ -1128,6 +1160,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
             segment,
           );
           tx.putSegment(upgraded);
+          learned.push({ travelers: upgraded.travelers ?? [], before: segment.travelers });
           upgradedSegments.set(`${segment.tripId}/${segment.id}`, upgraded);
           continue;
         }
@@ -1143,6 +1176,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
         const unedited = segment.updatedAt === segment.createdAt;
         const written = { ...merged, sources: [...kept, ref], ...(unedited ? { createdAt: timestamp } : {}), updatedAt: timestamp };
         tx.putSegment(written);
+        learned.push({ travelers: written.travelers ?? [], before: segment.travelers });
         merges.push(written);
         changedTrips.add(segment.tripId);
       }
@@ -1283,6 +1317,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     const freshRange = segmentDateRange(fresh.map((f) => f.segment));
     if (!freshRange) {
       recordSources();
+      notePeopleIn(learned);
       settleUpgradedTrips([]);
       settleTitles([]);
       tx.settle(live, segmentsOf);
@@ -1503,6 +1538,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
       };
     }).map((segment) => (target ? inTrip(segment, target, timestamp) : segment));
     for (const segment of written) tx.putSegment(segment);
+    notePeopleIn([...learned, ...written.map((s) => ({ travelers: s.travelers ?? [] }))]);
     // Moved as they are, revision and all, as Regroup moves bookings; a trip
     // left with none of its bookings goes.
     // Cancelled with the trip they join, or live again leaving a cancelled one.

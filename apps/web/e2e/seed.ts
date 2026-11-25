@@ -146,6 +146,15 @@ export async function seedFeed(uid: string, feed: CalendarFeed): Promise<void> {
 
 // The connection as the parser leaves it on the profile (no token here).
 // A change to the user's profile made elsewhere (another tab or device).
+// One of the people the user's bookings name, as imports leave them.
+export async function seedPerson(uid: string, person: { id: string; name: string; bookings: number; direct: number; me?: boolean }): Promise<void> {
+  await db.doc(paths.person(uid, person.id)).set({ aliases: [], createdAt: "2026-11-01T00:00:00Z", updatedAt: "2026-11-01T00:00:00Z", ...person });
+}
+
+export async function readPerson(uid: string, id: string): Promise<Record<string, unknown> | undefined> {
+  return (await db.doc(paths.person(uid, id)).get()).data();
+}
+
 export async function updateUser(uid: string, data: Partial<UserProfile>): Promise<void> {
   await db.doc(paths.user(uid)).set(data, { merge: true });
 }

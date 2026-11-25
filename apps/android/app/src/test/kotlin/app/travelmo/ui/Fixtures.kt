@@ -275,6 +275,8 @@ class FakeTripStore(
     private val profile: TravelProfile? = fixtureProfile,
     private val shared: List<TravelProfile> = listOf(fixtureSharedProfile),
     private val flightStatuses: Map<String, FlightStatus> = emptyMap(),
+    /** The people the user's bookings name; none by default. */
+    people: List<app.travelmo.core.Person> = emptyList(),
     private val addressHolder: AddressHolder = AddressHolder(),
     private val parsed: List<ParsedRecord> = fixtureParsed,
     private val gmailStatuses: List<GmailStatus> = emptyList(),
@@ -345,6 +347,11 @@ class FakeTripStore(
     override fun feeds(uid: String): Flow<List<app.travelmo.data.CalendarFeedShown>?> = feedList
     override fun forwarding(uid: String): Flow<app.travelmo.data.Forwarding?> = forward
     override fun ownProfile(uid: String): Flow<OwnProfile> = flowOf(OwnProfile(profile))
+    val peopleState = kotlinx.coroutines.flow.MutableStateFlow(people)
+    override fun people(uid: String): Flow<List<app.travelmo.core.Person>> = peopleState
+    override suspend fun setMe(uid: String, people: List<app.travelmo.core.Person>, personId: String) {
+        peopleState.value = peopleState.value.map { it.copy(me = it.id == personId) }
+    }
     val reminders = mutableListOf<Boolean>()
 
     override fun reminderEmail(uid: String): Flow<Boolean?> = flowOf(true)

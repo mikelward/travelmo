@@ -61,6 +61,9 @@ export const paths = {
     `users/${uid}/parsedMessages/${messageId}`,
   pendingCancellations: (uid: string) => `users/${uid}/pendingCancellations`,
   pendingCancellation: (uid: string, messageId: string) => `users/${uid}/pendingCancellations/${messageId}`,
+  // The people the user's bookings name (SPEC "Travelers").
+  people: (uid: string) => `users/${uid}/people`,
+  person: (uid: string, personId: string) => `users/${uid}/people/${personId}`,
   gmailAccount: (emailAddress: string) => `gmailAccounts/${emailAddress}`,
   // Server-only: which account a confirmed address is linked to, one each
   // (emails.ts), and the account's unconfirmed links' token hashes and the

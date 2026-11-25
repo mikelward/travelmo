@@ -273,6 +273,30 @@ describe("segments", () => {
   });
 });
 
+describe("people", () => {
+  const sam = { id: "p1", name: "Sam Example", aliases: ["S Example"], bookings: 3, direct: 2, createdAt: "2026-11-01T00:00:00Z", updatedAt: "2026-11-01T00:00:00Z" };
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), paths.person(owner.uid, sam.id)), sam);
+    });
+  });
+
+  it("are the owner's alone to read", async () => {
+    await assertSucceeds(getDoc(doc(as(owner), paths.person(owner.uid, sam.id))));
+    await assertFails(getDoc(doc(as(partner), paths.person(owner.uid, sam.id))));
+  });
+
+  it("let the owner rename one and say it is them, and nothing else", async () => {
+    const ref = doc(as(owner), paths.person(owner.uid, sam.id));
+    await assertSucceeds(updateDoc(ref, { name: "Samuel Example", me: true, updatedAt: "2026-11-02T00:00:00Z" }));
+    await assertFails(updateDoc(ref, { bookings: 99 }));
+    await assertFails(updateDoc(ref, { name: "" }));
+    await assertFails(updateDoc(ref, { me: "yes" }));
+    await assertFails(setDoc(doc(as(owner), paths.person(owner.uid, "p2")), { ...sam, id: "p2" }));
+    await assertFails(updateDoc(doc(as(partner), paths.person(owner.uid, sam.id)), { me: true }));
+  });
+});
+
 describe("users", () => {
   it("a user reads and edits their own profile but not the gmail connection", async () => {
     await assertSucceeds(getDoc(doc(as(owner), paths.user(owner.uid))));

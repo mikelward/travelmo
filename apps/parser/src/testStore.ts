@@ -1,4 +1,4 @@
-import { withFoundLoyalties, type FoundLoyalty, type ParsedMessage, type PendingCancellation, type Segment, type Trip } from "@travelmo/core";
+import { withFoundLoyalties, type FoundLoyalty, type ParsedMessage, type PendingCancellation, type PersonDoc, type Segment, type Trip } from "@travelmo/core";
 import { changeClaimable, claimRecord, claimable, reclaimable, retryable, type TripStore, type TripTx } from "./importer";
 import { addExample, emptyExamples, type Examples } from "./similarity";
 
@@ -13,6 +13,8 @@ export type Memory = TripStore & {
   examplesOf: Map<string, Examples>;
   // Keyed by "uid/messageId".
   pending: Map<string, PendingCancellation>;
+  // Keyed by "uid/personId".
+  people: Map<string, PersonDoc>;
   // Loyalty found in emails, and the name on each account, by uid.
   foundLoyalty: Map<string, FoundLoyalty[]>;
   ownerNames: Map<string, string>;
@@ -24,6 +26,7 @@ export function memoryStore(): Memory {
   const parsed = new Map<string, ParsedMessage>();
   const examplesOf = new Map<string, Examples>();
   const pending = new Map<string, PendingCancellation>();
+  const people = new Map<string, PersonDoc>();
   const foundLoyalty = new Map<string, FoundLoyalty[]>();
   const ownerNames = new Map<string, string>();
   const locks = new Map<string, Promise<unknown>>();
@@ -71,6 +74,8 @@ export function memoryStore(): Memory {
     },
     deleteTrip: (id) => void trips.delete(id),
     listPendingCancellations: async (uid) => [...pending.values()].filter((p) => p.uid === uid),
+    listPeople: async (uid) => [...people.entries()].filter(([key]) => key.startsWith(`${uid}/`)).map(([, p]) => p),
+    putPerson: (uid, person) => void people.set(`${uid}/${person.id}`, person),
     putPendingCancellation: (p) => void pending.set(`${p.uid}/${p.messageId}`, p),
     deletePendingCancellation: (uid, messageId) => void pending.delete(`${uid}/${messageId}`),
     addSource: (_tripId, id, source) => {
@@ -88,6 +93,7 @@ export function memoryStore(): Memory {
     parsed,
     examplesOf,
     pending,
+    people,
     examples: async (uid) => examplesOf.get(uid) ?? emptyExamples(),
     countSender: async (domain, counts) => {
       const now = senderStats.get(domain) ?? {};

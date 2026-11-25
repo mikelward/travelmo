@@ -93,14 +93,40 @@ export function sameTraveler(a: string, b: string): boolean {
 
 // Someone the user has seen on their bookings: the name they are shown by,
 // every other way it was written, and whether it is the user themself.
-export type Person = { id: string; name: string; aliases?: readonly string[]; me?: boolean };
+export type Person = { id: string; name: string; aliases?: readonly string[] | undefined; me?: boolean | undefined };
+
+// A name's first and last words as compared, when it has both.
+function firstAndLast(name: string): [string, string] | undefined {
+  const words = nameWords(canonicalName(name) ?? name);
+  return words.length < 2 ? undefined : [words[0]!, words[words.length - 1]!];
+}
+
+// Whether two names are one person's only through an initial ("J Smith"
+// and "John Smith").
+function throughInitial(a: string, b: string): boolean {
+  const [x, y] = [firstAndLast(a), firstAndLast(b)];
+  return !!x && !!y && sameTraveler(a, b) && x[0] !== y[0] && (x[0].length === 1 || y[0].length === 1);
+}
+
+// Whether two names are surely two people's: one last name, two whole
+// first names ("John Smith" and "Jane Smith").
+function twoPeople(a: string, b: string): boolean {
+  const [x, y] = [firstAndLast(a), firstAndLast(b)];
+  return !!x && !!y && x[1] === y[1] && x[0].length > 1 && y[0].length > 1 && !sameTraveler(a, b);
+}
 
 // The person a name is, among those known, or undefined: by their name or
 // any alias (sameTraveler), the user themself first when it could be either.
+// Through an initial only when none of their spellings is surely someone
+// else's, so "J Smith" known as John doesn't take Jane too.
 export function findPerson<P extends Person>(people: readonly P[], raw: string): P | undefined {
   const name = canonicalName(raw);
   if (!name) return undefined;
-  const matches = people.filter((p) => [p.name, ...(p.aliases ?? [])].some((known) => sameTraveler(known, name)));
+  const matches = people.filter((p) => {
+    const spellings = [p.name, ...(p.aliases ?? [])];
+    if (spellings.some((known) => sameTraveler(known, name) && !throughInitial(known, name))) return true;
+    return spellings.some((known) => sameTraveler(known, name)) && !spellings.some((known) => twoPeople(known, name));
+  });
   return matches.find((p) => p.me) ?? matches[0];
 }
 
@@ -133,4 +159,73 @@ export function canonicalTravelers(raw: readonly string[] | undefined): string[]
     else if (fuller(name, names[i]!)) names[i] = name;
   }
   return names.length > 0 ? names : undefined;
+}
+
+// One booking as filing it teaches about people: whom it names now, and
+// whom it named before this email (already counted), if it was filed
+// already.
+export type NamedBooking = { travelers: readonly string[]; before?: readonly string[] | undefined };
+
+// What filing bookings teaches about the user's people: each traveler is
+// someone already known (findPerson), who gains the spelling if it is new,
+// or someone new. A person counts one more booking for each booking that
+// newly names them: once however many of its names are theirs, and not
+// again for one that named them before (as findPerson finds them), which still teaches
+// its new spellings (someone not yet known is new, and counted, either way:
+// a booking filed before people were kept), so a whole first name learned for an initial keeps two
+// people apart from then on. `direct` says the email came straight to the
+// user, not forwarded. Returns only the people it changed or added, each
+// once.
+export function notePeople<P extends Person & { bookings: number; direct: number; aliases: string[]; createdAt: string; updatedAt: string }>(
+  people: readonly P[],
+  bookings: readonly NamedBooking[],
+  options: { direct: boolean; timestamp: string; newId: () => string },
+): P[] {
+  const known = [...people];
+  const changed = new Map<string, P>();
+  const put = (before: P | undefined, next: P) => {
+    changed.set(next.id, next);
+    if (before) known[known.indexOf(before)] = next;
+    else known.push(next);
+  };
+  for (const booking of bookings) {
+    // Whom it named before, as people (findPerson), so an initial before
+    // doesn't hide someone else after.
+    const before = new Set((booking.before ?? []).flatMap((b) => findPerson(known, b)?.id ?? []));
+    const counted = new Set<string>();
+    for (const raw of booking.travelers) {
+      const name = canonicalName(raw);
+      if (!name) continue;
+      const found = findPerson(known, name);
+      if (!found) {
+        const person = { id: options.newId(), name, aliases: [], bookings: 1, direct: options.direct ? 1 : 0, createdAt: options.timestamp, updatedAt: options.timestamp } as unknown as P;
+        put(undefined, person);
+        counted.add(person.id);
+        continue;
+      }
+      const spellings = [found.name, ...found.aliases];
+      const aliases = spellings.includes(name) ? found.aliases : [...found.aliases, name].slice(-50);
+      const count = !before.has(found.id) && !counted.has(found.id);
+      counted.add(found.id);
+      if (!count && aliases === found.aliases) continue;
+      put(found, {
+        ...found,
+        aliases,
+        bookings: found.bookings + (count ? 1 : 0),
+        direct: found.direct + (count && options.direct ? 1 : 0),
+        updatedAt: options.timestamp,
+      });
+    }
+  }
+  return [...changed.values()];
+}
+
+// Which of the user's people is the user: the one they said, else the
+// one most often named on emails sent straight to them, then on any
+// booking; none before any booking named anyone.
+export function guessMe<P extends Person & { bookings: number; direct: number }>(people: readonly P[]): P | undefined {
+  const said = people.find((p) => p.me);
+  if (said) return said;
+  const ranked = [...people].sort((a, b) => b.direct - a.direct || b.bookings - a.bookings || a.name.localeCompare(b.name));
+  return ranked[0];
 }

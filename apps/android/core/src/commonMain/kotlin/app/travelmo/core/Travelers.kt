@@ -107,8 +107,32 @@ fun canonicalTravelers(raw: List<String>): List<String>? {
 /** The person a name is, among those known, by their name or any other spelling; the user first when it could be either. */
 fun findPerson(people: List<Person>, raw: String): Person? {
     val name = canonicalName(raw) ?: return null
-    val matches = people.filter { p -> (listOf(p.name) + p.aliases).any { sameTraveler(it, name) } }
+    val matches = people.filter { p ->
+        val spellings = listOf(p.name) + p.aliases
+        spellings.any { sameTraveler(it, name) && !throughInitial(it, name) } ||
+            (spellings.any { sameTraveler(it, name) } && spellings.none { twoPeople(it, name) })
+    }
     return matches.firstOrNull { it.me } ?: matches.firstOrNull()
+}
+
+/** A name's first and last words as compared, when it has both. */
+private fun firstAndLast(name: String): Pair<String, String>? {
+    val words = travelerWords(canonicalName(name) ?: name)
+    return if (words.size < 2) null else words.first() to words.last()
+}
+
+/** Whether two names are one person's only through an initial ("J Smith" and "John Smith"). */
+private fun throughInitial(a: String, b: String): Boolean {
+    val x = firstAndLast(a) ?: return false
+    val y = firstAndLast(b) ?: return false
+    return sameTraveler(a, b) && x.first != y.first && (x.first.length == 1 || y.first.length == 1)
+}
+
+/** Whether two names are surely two people's: one last name, two whole first names ("John Smith" and "Jane Smith"). */
+private fun twoPeople(a: String, b: String): Boolean {
+    val x = firstAndLast(a) ?: return false
+    val y = firstAndLast(b) ?: return false
+    return x.second == y.second && x.first.length > 1 && y.first.length > 1 && !sameTraveler(a, b)
 }
 
 /**

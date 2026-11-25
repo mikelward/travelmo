@@ -266,6 +266,18 @@ service cloud.firestore {
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(serverKeys())
         && validHomes(request.resource.data) && validRides(request.resource.data);
 
+      // The people the user's bookings name (SPEC "Travelers"): imports add
+      // and count them; the owner renames them and says which is them.
+      match /people/{personId} {
+        allow read: if isSelf() && approved();
+        allow update: if member() && isSelf()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'aliases', 'me', 'updatedAt'])
+          && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 200
+          && request.resource.data.aliases is list && request.resource.data.aliases.size() <= 50
+          && (!('me' in request.resource.data) || request.resource.data.me is bool)
+          && request.resource.data.updatedAt is string;
+      }
+
       // Reminders before every international trip (Settings), one per
       // slot, s0 to s19, so there are at most twenty.
       match /tripReminders/{slot} {

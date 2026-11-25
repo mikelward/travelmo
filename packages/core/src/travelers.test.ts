@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mergeDetails } from "./trips";
-import { canonicalName, canonicalTravelers, findPerson, sameTraveler } from "./travelers";
+import { canonicalName, canonicalTravelers, findPerson, guessMe, notePeople, sameTraveler } from "./travelers";
 
 describe("canonicalName", () => {
   it("reads an airline record's surname/given name, with or without a title", () => {
@@ -72,6 +72,14 @@ describe("findPerson", () => {
     expect(findPerson(people, "Alex Example")).toBeUndefined();
     expect(findPerson(people, "MR")).toBeUndefined();
   });
+
+  it("finds no one through an initial when the whole first name known is another", () => {
+    const smiths = [{ id: "john", name: "J Smith", aliases: ["John Smith"] }];
+    expect(findPerson(smiths, "Jane Smith")).toBeUndefined();
+    expect(findPerson(smiths, "SMITH/JOHN MR")?.id).toBe("john");
+    expect(findPerson(smiths, "J Smith")?.id).toBe("john");
+    expect(findPerson([{ id: "j", name: "J Smith" }], "Jane Smith")?.id).toBe("j");
+  });
 });
 
 describe("canonicalTravelers", () => {
@@ -107,5 +115,99 @@ describe("mergeDetails with travelers", () => {
     const stay = { type: "lodging" as const, title: "Example Hotel", start: "2026-12-12T15:00:00+00:00", travelers: ["John Smith"] };
     expect(mergeDetails(stay, { ...stay, travelers: ["SMITH/JOHN MR", "SMITH/JANE MRS"] }).travelers).toEqual(["John Smith", "Jane Smith"]);
     expect(mergeDetails({ ...stay, travelers: undefined }, stay).travelers).toEqual(["John Smith"]);
+  });
+});
+
+describe("notePeople", () => {
+  const at = "2026-05-01T00:00:00Z";
+  let n = 0;
+  const options = (direct: boolean) => ({ direct, timestamp: at, newId: () => `p${++n}` });
+  const sam = { id: "sam", name: "Sam Example", aliases: [], bookings: 3, direct: 2, createdAt: at, updatedAt: at };
+
+  it("counts a known traveler once more, keeping a new spelling", () => {
+    const [changed] = notePeople([sam], [{ travelers: ["EXAMPLE/SAM JAMES MR"] }], options(true));
+    expect(changed).toMatchObject({ id: "sam", aliases: ["Sam James Example"], bookings: 4, direct: 3 });
+    expect(notePeople([sam], [{ travelers: ["Sam Example"] }], options(false))[0]).toMatchObject({ aliases: [], bookings: 4, direct: 2 });
+  });
+
+  it("adds someone new, once however often the booking names them", () => {
+    n = 0;
+    const changed = notePeople([sam], [{ travelers: ["DOE/JANE MRS", "Jane Doe", "Sam Example"] }], options(false));
+    expect(changed.map((p) => [p.id, p.name, p.bookings])).toEqual([
+      ["p1", "Jane Doe", 1],
+      ["sam", "Sam Example", 4],
+    ]);
+  });
+});
+
+describe("guessMe", () => {
+  const person = (id: string, bookings: number, direct: number, me?: boolean) => ({ id, name: id, bookings, direct, ...(me ? { me } : {}) });
+
+  it("is whoever the user said", () => {
+    expect(guessMe([person("a", 9, 9), person("b", 1, 0, true)])?.id).toBe("b");
+  });
+
+  it("else whoever emails sent straight to the user name most, then any booking", () => {
+    expect(guessMe([person("mum", 9, 0), person("me", 4, 4)])?.id).toBe("me");
+    expect(guessMe([person("a", 2, 0), person("b", 5, 0)])?.id).toBe("b");
+    expect(guessMe([])).toBeUndefined();
+  });
+});
+
+describe("notePeople across bookings", () => {
+  const none: { id: string; name: string; aliases: string[]; bookings: number; direct: number; createdAt: string; updatedAt: string }[] = [];
+  const options = { direct: true, timestamp: "2026-05-01T00:00:00Z", newId: (() => { let n = 0; return () => `p${++n}`; })() };
+
+  it("counts a person once for each booking that names them", () => {
+    const changed = notePeople(none, [{ travelers: ["Sam Example"] }, { travelers: ["SAMPLE/SAM MR", "Sam Example", "EXAMPLE/SAM MR"] }, { travelers: ["Pat Example"] }], options);
+    // Sam twice, once in each booking, however often a booking names him.
+    expect(changed.map((p) => [p.name, p.bookings, p.direct])).toEqual([
+      ["Sam Example", 2, 2],
+      ["Sam Sample", 1, 1],
+      ["Pat Example", 1, 1],
+    ]);
+  });
+
+  it("counts only whom a booking filed before newly names, still keeping a new spelling", () => {
+    const j = { id: "j", name: "J Smith", aliases: [], bookings: 1, direct: 1, createdAt: "2026-04-01T00:00:00Z", updatedAt: "2026-04-01T00:00:00Z" };
+    const changed = notePeople([j], [{ travelers: ["John Smith", "Amy Smith"], before: ["J Smith"] }], options);
+    expect(changed.map((p) => [p.name, p.aliases, p.bookings])).toEqual([
+      ["J Smith", ["John Smith"], 1],
+      ["Amy Smith", [], 1],
+    ]);
+    // So Jane, on the next booking, is someone else.
+    expect(findPerson(changed, "Jane Smith")).toBeUndefined();
+    expect(notePeople(changed, [{ travelers: ["John Smith"], before: ["John Smith"] }], options)).toEqual([]);
+  });
+
+  it("counts someone a booking newly names whom an initial it named before could be taken for", () => {
+    const at = { createdAt: "2026-04-01T00:00:00Z", updatedAt: "2026-04-01T00:00:00Z" };
+    const john = { id: "john", name: "J Smith", aliases: ["John Smith"], bookings: 1, direct: 0, ...at };
+    const jane = { id: "jane", name: "Jane Smith", aliases: [], bookings: 1, direct: 0, ...at };
+    const changed = notePeople([john, jane], [{ travelers: ["John Smith", "Jane Smith"], before: ["J Smith"] }], options);
+    expect(changed.map((p) => [p.id, p.bookings])).toEqual([["jane", 2]]);
+  });
+
+  it("keeps a whole first name seen beside an initial in one email, so the next stays apart", () => {
+    const changed = notePeople(none, [{ travelers: ["J Smith", "John Smith", "Jane Smith"] }], options);
+    expect(changed.map((p) => [p.name, p.aliases, p.bookings])).toEqual([
+      ["J Smith", ["John Smith"], 1],
+      ["Jane Smith", [], 1],
+    ]);
+  });
+});
+
+describe("people named through an initial", () => {
+  it("stay two once both whole first names are known", () => {
+    let people: { id: string; name: string; aliases: string[]; bookings: number; direct: number; createdAt: string; updatedAt: string }[] = [];
+    let n = 0;
+    for (const name of ["J Smith", "John Smith", "Jane Smith"]) {
+      const changed = notePeople(people, [{ travelers: [name] }], { direct: false, timestamp: "2026-05-01T00:00:00Z", newId: () => `p${++n}` });
+      people = [...people.filter((p) => !changed.some((c) => c.id === p.id)), ...changed];
+    }
+    expect(people.map((p) => [p.name, p.bookings]).sort()).toEqual([
+      ["J Smith", 2],
+      ["Jane Smith", 1],
+    ]);
   });
 });

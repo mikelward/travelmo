@@ -1,7 +1,10 @@
 package app.travelmo.ui
 
+import app.travelmo.core.guessMe
 import app.travelmo.core.today
 import org.jetbrains.compose.resources.StringResource
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -73,6 +76,10 @@ import app.travelmo.core.loyaltyByPerson
 import app.travelmo.core.loyaltySummary
 import app.travelmo.core.parseCorrection
 import app.travelmo.shared.Res
+import app.travelmo.shared.people
+import app.travelmo.shared.people_hint
+import app.travelmo.shared.this_is_me
+import app.travelmo.shared.you
 import app.travelmo.shared.a_booking_email
 import app.travelmo.shared.cancel
 import app.travelmo.shared.city
@@ -131,6 +138,7 @@ fun ProfileScreen(viewModel: TripsViewModel, onOpenSettings: () -> Unit, bottomB
     val shared by viewModel.sharedProfiles.collectAsStateWithLifecycle()
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
     val loaded by viewModel.profileLoaded.collectAsStateWithLifecycle()
+    val travelers by viewModel.travelers.collectAsStateWithLifecycle()
     // A finished share is acknowledged so a later one starts afresh.
     LaunchedEffect(outcomes[SHARE_TOKEN]) { if (outcomes[SHARE_TOKEN] is Outcome.Done) viewModel.outcomeSeen(SHARE_TOKEN) }
     // A removal that failed says so under the list; one that finished is acknowledged.
@@ -175,6 +183,27 @@ fun ProfileScreen(viewModel: TripsViewModel, onOpenSettings: () -> Unit, bottomB
                     onWhose = { program, number -> editing = listOf(program, number) },
                     whoseError = whoseError,
                 )
+            }
+            // Who the user's bookings are for (SPEC "Travelers"), the one taken to be the user marked.
+            if (travelers.isNotEmpty()) {
+                item(key = "people-title") {
+                    SectionTitle(stringResource(Res.string.people))
+                    Text(stringResource(Res.string.people_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                val me = guessMe(travelers)
+                items(travelers, key = { "person-${it.id}" }) { person ->
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                        Text(person.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                        if (person.id == me?.id) {
+                            Text(stringResource(Res.string.you).uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            TextButton(onClick = { viewModel.setMe(PEOPLE_TOKEN, person.id) }) { Text(stringResource(Res.string.this_is_me)) }
+                        }
+                    }
+                }
+                (outcomes[PEOPLE_TOKEN] as? Outcome.Failed)?.let { failed ->
+                    item(key = "people-error") { Text(failed.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+                }
             }
             item(key = "home-title") { SectionTitle(stringResource(Res.string.home)) }
             item(key = "home") { HomeSection(viewModel) }
@@ -608,3 +637,5 @@ private fun HomeAirports(viewModel: TripsViewModel, periods: List<HomePeriod>) {
     }
 }
 
+/** The token of "This is me"'s write. */
+private const val PEOPLE_TOKEN = "profile/people/me"

@@ -23,13 +23,14 @@
       itinerary, a child's school trip).
   - [x] Read each booking's travelers from its emails, filed as people write
         their names (`canonicalTravelers`), and shown under each booking.
-  - [ ] The user's people (`users/{uid}/people`): each name matched to one
-        already seen (`findPerson`) or added; rename, merge and "this is me"
-        on Profile; older bookings filled in by a sweep.
-  - [ ] Which person is the user: guessed from the names on emails sent
-        straight to them (a recipient's display name where there is one;
-        forwarded mail counts against), else their Google account's name;
-        changeable on Profile.
+  - [x] The user's people (`users/{uid}/people`): each name matched to one
+        already seen (`findPerson`) or added, and listed on Profile.
+  - [ ] Rename and merge people on Profile; older bookings filled in by a
+        sweep.
+  - [x] Which person is the user: guessed from emails in their own mailbox
+        that weren't forwarded; "This is me" on Profile.
+  - [ ] Use a recipient's display name, and the Google account's name before
+        any booking names anyone, toward the guess.
   - [ ] Watching: a trip none of whose travelers is the user shows
         "Watching", keeps flight status and alerts, and leaves out the user's
         document and visa warnings, reminders, check-in prompts, ride

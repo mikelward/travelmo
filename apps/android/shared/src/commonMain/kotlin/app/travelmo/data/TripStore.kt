@@ -30,6 +30,7 @@ import app.travelmo.core.MAX_RIDE_COMPANIES
 import app.travelmo.core.RideCompany
 import app.travelmo.core.rideCompanyOrNull
 import app.travelmo.core.sameRideCompany
+import app.travelmo.core.Person
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentDraft
 import app.travelmo.core.TravelProfile
@@ -56,6 +57,12 @@ interface TripStore {
 
     /** A flight's live gates and carousel by its key (flightStatusKey); null until the parser has looked. */
     fun flightStatus(key: String): Flow<FlightStatus?>
+
+    /** The people the user's bookings name (SPEC "Travelers"), live; empty when a read fails, which is logged. */
+    fun people(uid: String): Flow<List<Person>>
+
+    /** Says which person is the user: that one marked, and no other. */
+    suspend fun setMe(uid: String, people: List<Person>, personId: String)
 
     /** The user's own travel profile, live, from its first answer on: an answer with no profile is one too. A read that fails is logged and keeps the caller waiting. */
     fun ownProfile(uid: String): Flow<OwnProfile>

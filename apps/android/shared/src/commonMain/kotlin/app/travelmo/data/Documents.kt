@@ -19,6 +19,7 @@ import app.travelmo.core.PlaceDraft
 import app.travelmo.core.ProfileEntry
 import app.travelmo.core.ProfileField
 import app.travelmo.core.TravelProfile
+import app.travelmo.core.Person
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentDraft
 import app.travelmo.core.SegmentType
@@ -68,6 +69,19 @@ fun tripFromDocument(id: String, data: Map<String, Any?>): Trip? {
         cancelledAt = data.text("cancelledAt"),
         allCancelled = data["allCancelled"] as? Boolean,
         localOnly = data["localOnly"] as? Boolean,
+    )
+}
+
+/** A person (`users/{uid}/people/{id}`), or null when it doesn't parse. */
+fun personOf(id: String, data: Map<String, Any?>?): Person? {
+    val name = data?.text("name") ?: return null
+    return Person(
+        id = id,
+        name = name,
+        aliases = data.strings("aliases"),
+        me = data["me"] == true,
+        bookings = (data["bookings"] as? Number)?.toInt() ?: 0,
+        direct = (data["direct"] as? Number)?.toInt() ?: 0,
     )
 }
 

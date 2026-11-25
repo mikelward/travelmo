@@ -342,6 +342,24 @@ class ScreenScreenshotTest {
         capture("profile_dark", dark = true) { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.PROFILE) {} }) }
     }
 
+    // The Profile scrolled to the people the user's bookings name, one taken to be the user.
+    @Test
+    fun profile_people() {
+        val store = FakeTripStore(
+            people = listOf(
+                app.travelmo.core.Person("me", "Sam Example", bookings = 4, direct = 4),
+                app.travelmo.core.Person("mum", "Pat Example", bookings = 6),
+            ),
+        )
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent {
+            TravelmoTheme { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.PROFILE) {} }) }
+        }
+        composeRule.onNode(androidx.compose.ui.test.hasScrollToNodeAction()).performScrollToNode(androidx.compose.ui.test.hasText("This is me"))
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage(filePath = "$outputDir/profile_people.png")
+    }
+
     // The Profile scrolled to home: London since 2022 by a correction.
     @Test
     fun profile_home() = profileHome("profile_home", dark = false)
