@@ -1063,8 +1063,24 @@ Each booking has a ⋮ menu, the same as the Android app's: "Directions"
 app, to a journey's or car rental's start or any other booking's place, by
 its name and street address, else its name and town (a geocoded spot may be
 only the town's middle), else its spot on the map; not for a cancelled booking or one with no place) and "Copy reference"
-(when it has one) for everyone who sees the trip, then Edit, "Move to another
-trip…" and Delete for those who may edit. Move to another trip… opens a dialog of
+(when it has one) for everyone who sees the trip, then Edit, "Merge with…"
+(when the trip has another booking of its kind), "Move to another trip…" and
+Delete for those who may edit. Merge with… lists the trip's other bookings of
+its kind (a car's reservation and its rental agreement, read from two
+emails), and the one picked merges into the one whose menu was used
+(`mergeBookings`, `mergeSegments` on both platforms): that one keeps its
+details, gains what only the other knew (a reference, notes, an end, a
+place, travelers, a rating) and every source of both, records the other's
+id (`mergedFrom`), what it said (`mergedBookings`: its type, title, times,
+provider, reference and places) and the merge as a hand edit, and the other
+is deleted. An item of any email read again, by an import or Refresh from
+email, that is one of the bookings merged in (`mergedBookingOf`,
+sameBooking against what it said, wherever the email now lists it) goes to
+the booking it was merged into rather than coming back, one item for each
+booking merged in (two alike rooms stay two), unless that booking was
+cancelled and this books it again; any other item of those emails (a flight
+back the merged-in one didn't have) is filed as usual. `mergedFrom` only
+records which bookings went. Move to another trip… opens a dialog of
 "New trip" (the owner only), then the viewer's other trips within two weeks of
 the booking's dates (`nearbyTrips`), the rest behind "More…". The row shows
 the booking's title, route, times, a flight's gates and check-in, and its

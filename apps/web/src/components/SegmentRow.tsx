@@ -103,6 +103,8 @@ export function SegmentRow({
   onLearnSender,
   onNeverSender,
   moveTargets,
+  mergeTargets,
+  onMerge,
   onMove,
   onMoveToNew,
   emailLinks,
@@ -120,6 +122,8 @@ export function SegmentRow({
   onLearnSender?: () => void;
   onNeverSender?: () => void;
   moveTargets?: Trip[];
+  mergeTargets?: Segment[];
+  onMerge?: (otherId: string) => void;
   onMove?: (tripId: string) => void;
   onMoveToNew?: () => void;
   emailLinks?: EmailLinks;
@@ -220,6 +224,8 @@ export function SegmentRow({
         {...(!cancelled && onMarkCancelled ? { onMarkCancelled } : {})}
         {...(onDelete ? { onDelete } : {})}
         {...(moveTargets ? { moveTargets } : {})}
+        {...(mergeTargets ? { mergeTargets } : {})}
+        {...(onMerge ? { onMerge } : {})}
         {...(onMove ? { onMove } : {})}
         {...(onMoveToNew ? { onMoveToNew } : {})}
       />

@@ -161,6 +161,12 @@ export const Segment = ExtractedSegment.extend({
   // move between trips or an import, which move only `updatedAt`. Refresh
   // from email leaves a booking carrying it as the user left it.
   editedAt: isoDateTime.optional(),
+  // The ids of bookings the user merged into this one (mergeBookings): an
+  // email read again finds its booking here rather than adding it back.
+  mergedFrom: z.array(z.string().min(1)).max(50).optional(),
+  // What each booking merged into this one said (mergeBookings): an item of
+  // any email that is one of them (sameBooking) is this booking.
+  mergedBookings: z.array(ExtractedSegment.pick({ type: true, title: true, start: true, end: true, provider: true, confirmation: true, origin: true, destination: true })).max(50).optional(),
   createdAt: isoDateTime,
   updatedAt: isoDateTime,
 });

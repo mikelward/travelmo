@@ -1309,6 +1309,83 @@ describe("importTripIt", () => {
     }
   });
 
+  it("cancels a merged booking by the reference of a booking merged into it", async () => {
+    const store = memoryStore();
+    const car = (title: string, start: string, confirmation: string) => ({ type: "car_rental" as const, title, start, end: "2026-11-29T17:30:00-05:00", provider: "Avis", confirmation });
+    const agreement = car("Avis Car Rental East Boston", "2026-11-24T18:15:00-05:00", "708843612");
+    await importMessage("u1", email({ id: "m-res", subject: "Avis reservation confirmed" }), deps(store, async () => ({ isBooking: true, segments: [car("Avis Boston Logan Intl Airport", "2026-11-24T17:30:00-05:00", "20874163US2")] })));
+    const [kept] = [...store.segments.values()];
+    store.segments.set(kept!.id, { ...kept!, mergedFrom: ["m-agree-0"], mergedBookings: [agreement], editedAt: "2026-11-02T00:00:00Z" });
+    const cancelled: ExtractedBooking = { isBooking: false, segments: [], cancellations: [{ type: "car_rental", provider: "Avis", confirmation: "708843612", start: agreement.start }] };
+    await importMessage("u1", email({ id: "m-cancel", subject: "Your Avis rental is cancelled" }), deps(store, async () => cancelled));
+    expect(store.segments.get(kept!.id)?.cancelledBy).toBe("m-cancel");
+  });
+
+  it("files the second of two alike rooms beside a merged booking that looks like them", async () => {
+    const store = memoryStore();
+    const room = { type: "lodging" as const, title: "Cove Liverpool", start: "2026-12-12T15:00:00+00:00", end: "2026-12-14T11:00:00+00:00", provider: "Cove" };
+    await importMessage("u1", email({ id: "m-stay", subject: "Your stay at Cove" }), deps(store, async () => ({ isBooking: true, segments: [room] })));
+    const [kept] = [...store.segments.values()];
+    store.segments.set(kept!.id, { ...kept!, mergedFrom: ["m-other-0"], mergedBookings: [room], editedAt: "2026-11-02T00:00:00Z" });
+    await importMessage("u1", email({ id: "m-two", subject: "Your stay at Cove" }), deps(store, async () => ({ isBooking: true, segments: [room, room] })));
+    expect(store.segments.size).toBe(2);
+  });
+
+  it("files the other of two alike rooms beside a merged booking, whichever item was merged", async () => {
+    const store = memoryStore();
+    const room = { type: "lodging" as const, title: "Cove Liverpool", start: "2026-12-12T15:00:00+00:00", end: "2026-12-14T11:00:00+00:00", provider: "Cove" };
+    await importMessage("u1", email({ id: "m-stay", subject: "Your stay at Cove" }), deps(store, async () => ({ isBooking: true, segments: [room] })));
+    const [kept] = [...store.segments.values()];
+    store.segments.set(kept!.id, { ...kept!, mergedFrom: ["m-two-1"], mergedBookings: [room], editedAt: "2026-11-02T00:00:00Z" });
+    await importMessage("u1", email({ id: "m-two", subject: "Your stay at Cove" }), deps(store, async () => ({ isBooking: true, segments: [room, room] })));
+    expect(store.segments.size).toBe(2);
+  });
+
+  it("leaves a merged booking cancelled when the email of a booking merged into it is read again", async () => {
+    const store = memoryStore();
+    const car = (title: string, start: string, confirmation: string) => ({ type: "car_rental" as const, title, start, end: "2026-11-29T17:30:00-05:00", provider: "Avis", confirmation });
+    await importMessage("u1", email({ id: "m-res", subject: "Avis reservation confirmed" }), deps(store, async () => ({ isBooking: true, segments: [car("Avis Boston Logan Intl Airport", "2026-11-24T17:30:00-05:00", "AAA111")] })));
+    const [kept] = [...store.segments.values()];
+    const agreement = car("Avis Car Rental East Boston", "2026-11-24T18:15:00-05:00", "BBB222");
+    const both = [...kept!.sources!, { kind: "gmail" as const, id: "m-agree", uid: "u1", at: "2026-11-02T00:00:00Z" }];
+    store.segments.set(kept!.id, { ...kept!, sources: both, mergedFrom: ["m-agree-0"], mergedBookings: [agreement], editedAt: "2026-11-02T00:00:00Z", cancelledAt: "2026-11-03T00:00:00Z", userCancelled: "booking" });
+    await importMessage("u1", email({ id: "m-agree", subject: "Avis Rental Confirmation" }), deps(store, async () => ({ isBooking: true, segments: [agreement] })));
+    expect([...store.segments.values()].filter((s) => !s.cancelledAt)).toEqual([]);
+  });
+
+  it("files a stay booked again after a merged booking was cancelled as a booking of its own", async () => {
+    const store = memoryStore();
+    const stay = { type: "lodging" as const, title: "Cove Liverpool", start: "2026-12-12T15:00:00+00:00", end: "2026-12-14T11:00:00+00:00", provider: "Cove" };
+    await importMessage("u1", email({ id: "m-stay", subject: "Your stay at Cove" }), deps(store, async () => ({ isBooking: true, segments: [stay] })));
+    const [kept] = [...store.segments.values()];
+    // Merged with another reading of it, then cancelled by the user.
+    store.segments.set(kept!.id, { ...kept!, mergedFrom: ["m-other-0"], mergedBookings: [stay], editedAt: "2026-11-02T00:00:00Z", cancelledAt: "2026-11-03T00:00:00Z", userCancelled: "booking" });
+    await importMessage("u1", email({ id: "m-again", subject: "Your stay at Cove" }), deps(store, async () => ({ isBooking: true, segments: [stay] })));
+    const live = [...store.segments.values()].filter((s) => !s.cancelledAt);
+    expect(live.map((s) => s.title)).toEqual(["Cove Liverpool"]);
+  });
+
+  it("files an email whose booking the user merged into another as that one", async () => {
+    const store = memoryStore();
+    const car = (title: string, start: string, confirmation: string) => ({ type: "car_rental" as const, title, start, end: "2026-11-29T17:30:00-05:00", provider: "Avis", confirmation });
+    await importMessage("u1", email({ id: "m-res", subject: "Avis reservation confirmed" }), deps(store, async () => ({ isBooking: true, segments: [car("Avis Boston Logan Intl Airport", "2026-11-24T17:30:00-05:00", "20874163US2")] })));
+    const [kept] = [...store.segments.values()];
+    // The user merged the rental agreement's booking into it, then its email is read again.
+    const agreementSource = { kind: "gmail" as const, id: "m-agree", uid: "u1", at: "2026-11-02T00:00:00Z" };
+    const agreed = car("Avis Car Rental East Boston", "2026-11-24T18:15:00-05:00", "708843612");
+    store.segments.set(kept!.id, { ...kept!, sources: [...(kept!.sources ?? []), agreementSource], mergedFrom: ["m-agree-0"], mergedBookings: [agreed], editedAt: "2026-11-02T00:00:00Z" });
+    await importMessage("u1", email({ id: "m-agree", subject: "Avis Rental Confirmation: 708843612" }), deps(store, async () => ({ isBooking: true, segments: [car("Avis Car Rental East Boston", "2026-11-24T18:15:00-05:00", "708843612")] })));
+    expect([...store.segments.values()].map((s) => [s.id, s.title])).toEqual([[kept!.id, "Avis Boston Logan Intl Airport"]]);
+    expect(store.segments.get(kept!.id)?.sources?.map((s) => s.id)).toEqual(["m-res", "m-agree"]);
+
+    // Another email already among its sources (the agreement read again before the merge) finds it too.
+    const again = { kind: "gmail" as const, id: "m-again", uid: "u1", at: "2026-11-02T00:00:00Z" };
+    const agreement = car("Avis Car Rental East Boston", "2026-11-24T18:15:00-05:00", "708843612");
+    store.segments.set(kept!.id, { ...store.segments.get(kept!.id)!, sources: [...store.segments.get(kept!.id)!.sources!, again], mergedBookings: [agreement] });
+    await importMessage("u1", email({ id: "m-again", subject: "Avis Rental Confirmation: 708843612" }), deps(store, async () => ({ isBooking: true, segments: [car("Avis Car Rental East Boston", "2026-11-24T18:15:00-05:00", "708843612")] })));
+    expect([...store.segments.keys()]).toEqual([kept!.id]);
+  });
+
   it("keeps the source of a booking dropped as a duplicate on the booking it matched", async () => {
     const store = memoryStore();
     await importMessage("u1", email({ id: "m2", subject: "Your Ryanair itinerary" }), deps(store, async () => flight));
@@ -1372,6 +1449,23 @@ describe("importTripIt", () => {
     };
     const counts = await importTripIt("u1", tripItExport({ Trips: [], UnfiledItems: [room, room] }), deps(store, async () => lodging));
     expect(counts).toMatchObject({ imported: 1, duplicates: 1 });
+    expect([...store.segments.values()].filter((s) => s.type === "lodging")).toHaveLength(2);
+  });
+
+  it("lets a merged Gmail booking stand in for only one of two alike TripIt rooms", async () => {
+    const store = memoryStore();
+    await importMessage("u1", email(), deps(store, async () => lodging));
+    const [kept] = [...store.segments.values()].filter((s) => s.type === "lodging");
+    // Merged with another reading of that stay.
+    const { id: _id, tripId: _trip, source: _source, gmailMessageIds: _ids, sources: _sources, createdAt: _c, updatedAt: _u, ...said } = kept!;
+    store.segments.set(kept!.id, { ...kept!, mergedFrom: ["m9-0"], mergedBookings: [said], editedAt: "2026-11-02T00:00:00Z" });
+    const room = {
+      supplier_name: "Cove Liverpool",
+      room_type: "Double",
+      StartDateTime: { date: "2026-12-12", time: "15:00", timezone: "Europe/London", utc_offset: "+00:00" },
+      EndDateTime: { date: "2026-12-14", time: "11:00", timezone: "Europe/London", utc_offset: "+00:00" },
+    };
+    await importTripIt("u1", tripItExport({ Trips: [], UnfiledItems: [room, room] }), deps(store, async () => lodging));
     expect([...store.segments.values()].filter((s) => s.type === "lodging")).toHaveLength(2);
   });
 

@@ -12,7 +12,7 @@ import { SegmentRow } from "@/components/SegmentRow";
 import { Dialog } from "@/components/BookingMenu";
 import { hideRideNeed, markOneWay } from "@/lib/rides";
 import { SignInGate } from "@/components/SignInGate";
-import { cancelSegment, cancelTrip, deleteSegment, deleteTrip, favoriteSegment, fitTripDates, mergeTrips, moveSegment, moveSegmentToNewTrip, rateSegment, renameTrip, restoreSegment, restoreTrip, saveSegment } from "@/lib/edits";
+import { cancelSegment, cancelTrip, deleteSegment, deleteTrip, favoriteSegment, fitTripDates, mergeSegments, mergeTrips, moveSegment, moveSegmentToNewTrip, rateSegment, renameTrip, restoreSegment, restoreTrip, saveSegment } from "@/lib/edits";
 import { shareTrip } from "@/lib/access";
 import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
@@ -474,6 +474,11 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   const otherTrips = (allTrips ?? [])
     .filter((t) => t.id !== trip.id && !t.deleting)
     .sort((a, b) => a.start.localeCompare(b.start));
+  const merge = (segment: Segment, otherId: string) =>
+    mergeSegments(firestore(), trip.id, segment.id, otherId).catch((e: Error) => {
+      console.error("Merging bookings failed", e);
+      setError(e.message);
+    });
   const move = (segment: Segment, toTripId: string) =>
     moveSegment(firestore(), trip.id, segment.id, toTripId).catch((e: Error) => setError(e.message));
   const moveToNew = (segment: Segment) =>
@@ -571,6 +576,8 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
                             onDelete: () => remove(segment),
                             moveTargets: otherTrips,
                             onMove: (toTripId: string) => move(segment, toTripId),
+                            mergeTargets: segments.filter((other) => other.id !== segment.id && other.type === segment.type),
+                            onMerge: (otherId: string) => merge(segment, otherId),
                             // Only the owner: a sharee's new trip would take the booking from the owner's sight.
                             ...(isOwner ? { onMoveToNew: () => void moveToNew(segment) } : {}),
                           }

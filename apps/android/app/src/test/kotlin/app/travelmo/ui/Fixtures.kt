@@ -548,6 +548,11 @@ class FakeTripStore(
         deleteTrip(tripId)
         return true
     }
+    /** Bookings merged, as (trip, kept, merged in). */
+    val mergedBookings = mutableListOf<Triple<String, String, String>>()
+    override suspend fun mergeSegments(tripId: String, keepId: String, otherId: String) {
+        mergedBookings += Triple(tripId, keepId, otherId)
+    }
     override suspend fun moveSegment(fromTripId: String, segmentId: String, toTripId: String) {
         moved += Triple(fromTripId, segmentId, toTripId)
     }

@@ -275,6 +275,22 @@ test("a booking moved to a new trip gets a trip of its own", async ({ page }) =>
   await expect(page.getByRole("link", { name: /^Liverpool/ })).toHaveCount(2);
 });
 
+test("two bookings of one kind merge into the one whose menu was used", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  await seedTrip(ownerUid, "e2e-trip");
+  await seedFlight("e2e-trip");
+  await seedFlight("e2e-trip", { id: "e2e-trip-again", title: "XX 100 Manchester to Dubai", gmailMessageIds: ["m3"] });
+  await page.goto("/trips/e2e-trip");
+  await expect(page.getByText("XX 100 Manchester to Dubai", { exact: true })).toBeVisible();
+  // The stay has no other stay to merge with; the flights each have the other.
+  await page.getByRole("button", { name: "Booking actions" }).first().click();
+  await expect(page.getByRole("menuitem", { name: "Merge with…" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await bookingAction(page, "Merge with…", 1);
+  await page.getByRole("dialog", { name: "Merge with" }).getByRole("button", { name: /XX 100/ }).click();
+  await expect(page.getByRole("button", { name: "Booking actions" })).toHaveCount(2);
+});
+
 test("never importing a sender offers to delete what it already imported", async ({ page }) => {
   const ownerUid = await signIn(page, owner);
   // A trip with a flight and a stay, and a trip of nothing but another stay from the same sender.

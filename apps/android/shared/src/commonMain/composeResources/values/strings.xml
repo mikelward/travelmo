@@ -273,6 +273,9 @@
     <string name="checked_in">Checked in</string>
     <string name="undo">Undo</string>
     <string name="restore">Restore</string>
+    <string name="merge_booking_with">Merge with…</string>
+    <string name="merge_booking_title">Merge with</string>
+    <string name="merge_booking_hint">Keeps this booking and adds what the other one says, then deletes it.</string>
     <string name="move_to">Move to another trip…</string>
     <string name="move_booking_title">Move %1$s to</string>
     <string name="new_trip">New trip</string>

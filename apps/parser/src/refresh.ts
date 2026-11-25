@@ -9,6 +9,7 @@ import {
   inTrip,
   isCancelled,
   mergeDetails,
+  mergedBookingOf,
   normalizeReference,
   notBookings,
   overlappingTrips,
@@ -280,6 +281,23 @@ export async function refreshEmail(
     };
     const open = (o: Segment) => !reserved.has(segmentKey(o));
     placed.forEach((segment, index) => reserve(index, own.find((o) => open(o) && o.id === ownIdOf(index) && alikeOf(segment)(o))));
+    // An item that is a booking the user merged into another (mergedBookingOf)
+    // goes to that one, whichever item has it already: one item for each
+    // booking merged in, so several merged together share it and two alike
+    // rooms are still two.
+    const claimed = new Map<string, Set<number>>();
+    placed.forEach((segment, index) => {
+      if (mineOf.has(index)) return;
+      for (const o of own) {
+        const used = claimed.get(segmentKey(o)) ?? new Set<number>();
+        const merged = mergedBookingOf(o, segment, used);
+        if (merged === undefined) continue;
+        used.add(merged);
+        claimed.set(segmentKey(o), used);
+        reserve(index, o);
+        return;
+      }
+    });
     placed.forEach((segment, index) => {
       if (!mineOf.has(index)) reserve(index, own.find((o) => open(o) && alikeOf(segment)(o)));
     });

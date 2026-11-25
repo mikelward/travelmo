@@ -221,6 +221,13 @@ describe("segments", () => {
     await assertSucceeds(deleteDoc(doc(as(owner), paths.trip(trip.id))));
   });
 
+  it("lets an editor merge another booking into one, remembering it as a list", async () => {
+    await assertSucceeds(updateDoc(doc(as(partner), paths.segment(trip.id, segment.id)), { mergedFrom: ["s2"], editedAt: "2026-11-05T09:00:00Z" }));
+    await assertFails(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { mergedFrom: "s2", editedAt: "2026-11-05T09:00:00Z" }));
+    await assertSucceeds(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { mergedBookings: [{ type: "lodging", title: "Cove", start: "2026-12-12T15:00:00Z" }], editedAt: "2026-11-05T09:00:00Z" }));
+    await assertFails(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), { mergedBookings: "Cove", editedAt: "2026-11-05T09:00:00Z" }));
+  });
+
   it("keeps a booking's cancellation well formed, and lets an editor take it back", async () => {
     const cancelled = { cancelledAt: "2026-11-05T09:00:00Z", cancelledBy: "m2", cancelledSentAt: "2026-11-04T08:00:00Z" };
     await assertSucceeds(updateDoc(doc(as(owner), paths.segment(trip.id, segment.id)), cancelled));
