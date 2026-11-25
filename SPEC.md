@@ -263,8 +263,9 @@ the best-known landmark of the city its title names, the first one named
 ("Paris and Lyon" is Paris; whole words, accents and case ignored, except
 that a name that is also a word counts only capitalized and not opening the
 title unless alone or before punctuation, so "Nice, France" is Nice and
-"Nice weekend" is not, and a longer name beginning with a city's is not that
-city: "Santiago de Compostela", "Rio Grande", "Washington State"), else a
+"Nice weekend" is not, and a longer name containing a city's is not that
+city: "Santiago de Cuba", "Victoria Falls", "Lake Victoria", "Rio Grande",
+"Washington State"), else a
 matching kind of place or trip (beach, mountains, forest, lake, farm, city,
 town, camp, countryside, desert, wine country, road trip, safari, theme
 park, celebration, castle), season, holiday or vacation word when no city is
