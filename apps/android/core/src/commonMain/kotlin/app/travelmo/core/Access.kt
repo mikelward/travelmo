@@ -139,3 +139,13 @@ data class AccessLists(val approved: List<AccessRecord>)
 fun accessLists(records: List<AccessRecord>): AccessLists = AccessLists(
     approved = records.filter { it.status == AccountAccess.APPROVED || (it.status != AccountAccess.DECLINED && it.invitedBy != null) }.sortedBy { it.email },
 )
+
+/** How the account was let in, as Profile shows it beside the address, as access.ts's accessBadge. */
+enum class AccessBadge { ADMIN, INVITED }
+
+/** [AccessBadge.ADMIN] for an admin's account, [AccessBadge.INVITED] for one let in because someone shared with it; null for the rest. */
+fun accessBadge(admin: Boolean, email: String?, record: AccessRecord?): AccessBadge? = when {
+    admin -> AccessBadge.ADMIN
+    email != null && record?.email == email && record.invitedBy != null && record.status != AccountAccess.DECLINED -> AccessBadge.INVITED
+    else -> null
+}

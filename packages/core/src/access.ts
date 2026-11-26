@@ -137,3 +137,13 @@ export function accessLists(records: readonly AccessRecord[]): { approved: Acces
     .sort((a, b) => a.email.localeCompare(b.email));
   return { approved };
 }
+
+// How the account was let in, as Profile shows it beside the address:
+// "admin" for an admin's, "invited" for one let in because someone shared
+// with it; nothing for the rest, who were approved or used Travelmo before
+// approvals.
+export type AccessBadge = "admin" | "invited";
+export function accessBadge(admin: boolean, email: string | undefined, record: AccessRecord | undefined): AccessBadge | undefined {
+  if (admin) return "admin";
+  return email && record?.email === email && record.invitedBy && record.status !== "declined" ? "invited" : undefined;
+}

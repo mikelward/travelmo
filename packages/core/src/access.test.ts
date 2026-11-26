@@ -1,4 +1,5 @@
 import {
+  accessBadge,
   accessDecision,
   accessInvite,
   accessLists,
@@ -146,3 +147,15 @@ describe("accessLists", () => {
   });
 });
 
+
+describe("accessBadge", () => {
+  const email = "amy@example.com";
+  it("is admin for an admin's account, invited for one someone shared with, nothing for the rest", () => {
+    expect(accessBadge(true, email, undefined)).toBe("admin");
+    expect(accessBadge(false, email, { email, invitedBy: "u2", invitedAt: "2026-01-01T00:00:00Z" })).toBe("invited");
+    expect(accessBadge(false, email, { email, status: "approved", approvedBy: "u2", approvedAt: "2026-01-01T00:00:00Z" })).toBeUndefined();
+    // Another address's invitation, or one an admin declined, says nothing of this account.
+    expect(accessBadge(false, email, { email: "zed@example.com", invitedBy: "u2", invitedAt: "2026-01-01T00:00:00Z" })).toBeUndefined();
+    expect(accessBadge(false, email, { email, invitedBy: "u2", invitedAt: "2026-01-01T00:00:00Z", status: "declined", declinedBy: "u3" })).toBeUndefined();
+  });
+});

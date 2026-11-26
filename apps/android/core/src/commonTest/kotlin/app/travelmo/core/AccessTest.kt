@@ -159,6 +159,16 @@ class AccessTest {
         lists.approved.map { it.email } shouldBe listOf("amy@example.com", "both@example.com", "zed@example.com")
     }
 
+    @Test
+    fun `badges an admin's account and an invited one and nothing else`() {
+        val email = "amy@example.com"
+        accessBadge(true, email, null) shouldBe AccessBadge.ADMIN
+        accessBadge(false, email, AccessRecord(email, invitedBy = "u2")) shouldBe AccessBadge.INVITED
+        accessBadge(false, email, AccessRecord(email, status = AccountAccess.APPROVED, approvedBy = "u2")) shouldBe null
+        accessBadge(false, email, AccessRecord("zed@example.com", invitedBy = "u2")) shouldBe null
+        accessBadge(false, email, AccessRecord(email, invitedBy = "u2", status = AccountAccess.DECLINED)) shouldBe null
+    }
+
     /** A record that approves nothing yet. */
     private fun bare(email: String, uid: String) = mapOf("email" to email, "uid" to uid)
 }

@@ -1,11 +1,12 @@
 "use client";
 
-import { allLoyalty, guessMe, loyaltyByPerson, loyaltySummary, type FoundLoyalty, type ProfileEntry, type TravelProfile } from "@travelmo/core";
+import { accessBadge, allLoyalty, guessMe, loyaltyByPerson, loyaltySummary, type FoundLoyalty, type ProfileEntry, type TravelProfile } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
 import { useState } from "react";
 import { Dialog } from "@/components/BookingMenu";
 import { SignInGate } from "@/components/SignInGate";
+import { useAuth } from "@/lib/auth";
 import { airportCodes, homeTownKey, correctionText, failedReadsText, homeLine, logged, parseAirportCodes, parseCorrection, saveCorrections, saveHomeAirports, useHomes, type Homes } from "@/lib/home";
 import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
@@ -543,9 +544,18 @@ function PeopleSection({ user }: { user: User }) {
 
 function ProfilePage({ user }: { user: User }) {
   const profile = useTravelProfile(user.uid);
+  const { access } = useAuth();
+  const email = user.email?.toLowerCase();
+  const badge = access.state === "loading" ? undefined : accessBadge(access.admin, user.emailVerified ? email : undefined, access.record);
   return (
     <>
       <h1 className="mb-2 text-2xl font-semibold">Travel profile</h1>
+      {email && (
+        <p className="mb-4 text-muted">
+          Signed in as {email}
+          {badge && <span className="ml-2 text-xs font-medium uppercase tracking-wide text-muted">{badge === "admin" ? "Admin" : "Invited"}</span>}
+        </p>
+      )}
       {profile === undefined && <p className="text-muted">Loading…</p>}
       {profile !== undefined && (!profile || !hasDetails(profile)) && (
         <p className="text-zinc-600 dark:text-zinc-400">

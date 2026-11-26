@@ -124,6 +124,11 @@ import app.travelmo.shared.stop_sharing_with
 import app.travelmo.shared.travelers
 import app.travelmo.shared.whose_is
 import org.jetbrains.compose.resources.stringResource
+import app.travelmo.shared.badge_invited
+import app.travelmo.shared.badge_admin
+import app.travelmo.shared.signed_in_as
+import app.travelmo.core.accessBadge
+import app.travelmo.core.AccessBadge
 
 /**
  * The travel profile, as the web's /profile: documents, the loyalty
@@ -139,6 +144,7 @@ fun ProfileScreen(viewModel: TripsViewModel, onOpenSettings: () -> Unit, bottomB
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
     val loaded by viewModel.profileLoaded.collectAsStateWithLifecycle()
     val travelers by viewModel.travelers.collectAsStateWithLifecycle()
+    val access by viewModel.access.collectAsStateWithLifecycle()
     // A finished share is acknowledged so a later one starts afresh.
     LaunchedEffect(outcomes[SHARE_TOKEN]) { if (outcomes[SHARE_TOKEN] is Outcome.Done) viewModel.outcomeSeen(SHARE_TOKEN) }
     // A removal that failed says so under the list; one that finished is acknowledged.
@@ -165,6 +171,23 @@ fun ProfileScreen(viewModel: TripsViewModel, onOpenSettings: () -> Unit, bottomB
     Scaffold(topBar = { AppTopBar(stringResource(Res.string.profile), onOpenSettings = onOpenSettings) }, bottomBar = bottomBar) { padding ->
         val list = rememberLazyListState()
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).scrollEdgeCue(list, scrollCueColors()), state = list, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
+            // Which account this is, and how it was let in (SPEC "Access").
+            viewModel.verifiedEmail?.let { email ->
+                item(key = "account") {
+                    val badge = (access as? AccessState.Known)?.let { accessBadge(it.admin, email, it.record) }
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                        Text(stringResource(Res.string.signed_in_as, email), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        badge?.let {
+                            Text(
+                                stringResource(if (it == AccessBadge.ADMIN) Res.string.badge_admin else Res.string.badge_invited).uppercase(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 8.dp),
+                            )
+                        }
+                    }
+                }
+            }
             val own = profile
             if (own == null || !own.hasDetails) {
                 item(key = "empty") {

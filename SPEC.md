@@ -1403,6 +1403,11 @@ decide the same way):
   approves the account, so the parser (which does read them) and the rules
   agree.
 
+Profile on the web and in the Android app starts with "Signed in as" and the
+account's address, badged ADMIN for an admin's account and INVITED for one
+let in because someone shared with it (`accessBadge`); the rest show no
+badge.
+
 Accounts from before approvals. An Android-only account never wrote a user
 document, and someone shared with may never have signed in, so the parser
 records them before the rules can ask (`grandfatherAccounts` in
