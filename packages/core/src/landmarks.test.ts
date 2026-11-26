@@ -93,6 +93,9 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Makarska").id).toBe("makarska");
     expect(tripLandmark("Makarska Riviera").id).toBe("makarska");
     expect(tripLandmark("Biokovo").id).toBe("makarska");
+    expect(tripLandmark("Johannesburg").id).toBe("johannesburg");
+    expect(tripLandmark("Joburg").id).toBe("johannesburg");
+    expect(tripLandmark("Graz").id).toBe("graz");
   });
 
   it("ignores accents and case", () => {
@@ -293,7 +296,7 @@ describe("tripLandmark", () => {
         fallbacks.add(word);
       }
     }
-    expect(LANDMARKS.length).toBe(300);
+    expect(LANDMARKS.length).toBe(302);
   });
 });
 
