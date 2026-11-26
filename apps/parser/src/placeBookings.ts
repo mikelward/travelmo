@@ -4,9 +4,10 @@ import { cityCountry } from "@travelmo/core/cityCountries";
 import type { ImportDeps } from "./importer";
 
 // Fills in what the airport and city tables know about a user's bookings
-// (a flight's airports, a place in an unambiguous city), with no geocoder
+// (a flight's airports and the city each serves, a place in an unambiguous
+// city), with no geocoder
 // call, so a fix to the tables reaches bookings already filed at once rather
-// than with the nightly sweep. Only a missing country or spot is filled;
+// than with the nightly sweep. Only a missing country, spot or city is filled;
 // nothing a booking has is changed, and a hand-entered booking is left as
 // its author wrote it. Like the sweep, it does not move a booking's
 // revision: an unedited booking stays one.
@@ -19,7 +20,7 @@ export function placedFromTables(segment: Segment): Segment | undefined {
   if (segment.source === "manual") return undefined;
   const filled = fillCities(fillAirports(segment, airportPlace), cityCountry);
   const gained = (before: Segment["origin"], after: Segment["origin"]) =>
-    !!after && (!!after.country !== !!before?.country || (after.lat !== undefined) !== (before?.lat !== undefined));
+    !!after && (!!after.country !== !!before?.country || (after.lat !== undefined) !== (before?.lat !== undefined) || !!after.city !== !!before?.city);
   return gained(segment.origin, filled.origin) || gained(segment.destination, filled.destination) ? (filled as Segment) : undefined;
 }
 

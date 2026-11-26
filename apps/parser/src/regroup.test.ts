@@ -655,6 +655,18 @@ describe("regroupTrips with a trip named for a stay with no town", () => {
     expect(store.trips.get("mel")?.title).toBe("Melbourne");
   });
 
+  it("names it after the city an airport given only by its code serves", async () => {
+    const store = memoryStore();
+    store.trips.set("arn", trip("arn", "ARN", "2026-08-15", "2026-08-18"));
+    const stn = { name: "London Stansted", code: "STN", city: "London", country: "GB" };
+    const put = (s: Segment) => store.segments.set(s.id, s);
+    put(segment("arn", "fr-0", "fr", { type: "flight", title: "FR 1401", start: "2026-08-15T13:55:00+01:00", end: "2026-08-15T17:15:00+02:00", origin: stn, destination: { name: "ARN", code: "ARN" } }));
+    put(segment("arn", "fr-1", "fr", { type: "flight", title: "FR 1402", start: "2026-08-18T18:00:00+02:00", end: "2026-08-18T19:20:00+01:00", origin: { name: "ARN", code: "ARN" }, destination: stn }));
+    await regroupTrips("u1", deps(store));
+    expect(store.trips.get("arn")?.title).toBe("Stockholm");
+    expect(store.segments.get("fr-0")?.destination).toMatchObject({ name: "ARN", code: "ARN", city: "Stockholm", country: "SE" });
+  });
+
   it("keeps a name the user gave it", async () => {
     const store = memoryStore();
     fill(store, "Christmas away");

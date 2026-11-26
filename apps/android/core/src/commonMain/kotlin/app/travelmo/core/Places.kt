@@ -4,12 +4,27 @@ package app.travelmo.core
 // is known by the country its booking names, or for a flight by its airport
 // code, from the web's generated airportPlaces.json, compiled in.
 
-data class AirportPlace(val country: String, val lat: Double, val lon: Double)
+/** An airport's country, point and the city it serves ("Stockholm" for ARN), when the table names one. */
+data class AirportPlace(val country: String, val lat: Double, val lon: Double, val city: String? = null)
 
 private val airportPlaces: Map<String, AirportPlace> by lazy {
     val text = airportPlacesJson
-    Regex(""""([A-Z0-9]{3})":\s*\[\s*"([A-Z]{2})"\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*]""").findAll(text)
-        .associate { it.groupValues[1] to AirportPlace(it.groupValues[2], it.groupValues[3].toDouble(), it.groupValues[4].toDouble()) }
+    Regex(""""([A-Z0-9]{3})":\s*\[\s*"([A-Z]{2})"\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*(?:,\s*"((?:[^"\\]|\\.)*)"\s*)?]""").findAll(text)
+        .associate {
+            val city = it.groupValues[5].takeIf { c -> c.isNotEmpty() }?.let(::unescapeJson)
+            it.groupValues[1] to AirportPlace(it.groupValues[2], it.groupValues[3].toDouble(), it.groupValues[4].toDouble(), city)
+        }
+}
+
+// A JSON string's text, its escapes undone ("\u00f6" is ö).
+private fun unescapeJson(text: String): String = Regex("""\\(u[0-9a-fA-F]{4}|.)""").replace(text) { m ->
+    val e = m.groupValues[1]
+    when {
+        e.startsWith("u") && e.length == 5 -> e.substring(1).toInt(16).toChar().toString()
+        e == "n" -> "\n"
+        e == "t" -> "\t"
+        else -> e
+    }
 }
 
 fun airportPlace(code: String): AirportPlace? {

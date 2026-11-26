@@ -1,4 +1,4 @@
-import { isCountryCode } from "./countries";
+import { countryCodeOf, isCountryCode } from "./countries";
 import { stableHash } from "./hash";
 import type { ExtractedSegment, Place } from "./schema";
 
@@ -126,24 +126,29 @@ export function applyGeocode(place: Place, result: GeocodeResult): Place {
   };
 }
 
-export type AirportLookup = (code: string) => ({ country: string } & Partial<Location>) | undefined;
+export type AirportLookup = (code: string) => ({ country: string; city?: string } & Partial<Location>) | undefined;
 
-// A flight's airport code names its country and its coordinates without
-// asking anyone.
+// A flight's airport code names its country, its coordinates and the city it
+// serves without asking anyone: an email that gives Arlanda only as "ARN"
+// still flies to Stockholm. Nothing the place has is changed, and an airport
+// the booking puts in another country takes nothing from the table.
 export function fillAirports(segment: ExtractedSegment, lookup: AirportLookup): ExtractedSegment {
   if (segment.type !== "flight") return segment;
   const fill = (place: Place | undefined) => {
-    if (!place || !place.code || !geocodeNeed(place)) return place;
+    if (!place || !place.code || (!geocodeNeed(place) && place.city)) return place;
     const found = lookup(place.code);
-    if (!found) return place;
-    return {
+    if (!found || (place.country && (countryCodeOf(place.country) ?? place.country.trim().toUpperCase()) !== found.country)) return place;
+    const filled = {
       ...place,
       ...(place.country ? {} : { country: found.country }),
       ...(hasLocation(place) || !hasLocation(found) ? {} : { lat: found.lat, lon: found.lon }),
+      ...(place.city || !found.city ? {} : { city: found.city }),
     };
+    return Object.keys(filled).length === Object.keys(place).length ? place : filled;
   };
   const origin = fill(segment.origin);
   const destination = fill(segment.destination);
+  if (origin === segment.origin && destination === segment.destination) return segment;
   return {
     ...segment,
     ...(origin ? { origin } : {}),

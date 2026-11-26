@@ -164,6 +164,19 @@ describe("fillAirports", () => {
     expect(fillAirports({ ...flight, origin: { name: "Nowhere", code: "ZZZ" } }, lookup).origin).toEqual({ name: "Nowhere", code: "ZZZ" });
   });
 
+  it("names the city an airport given only by its code serves, keeping a city the booking gave", () => {
+    const lookup = () => ({ country: "SE", lat: 59.65, lon: 17.92, city: "Stockholm" });
+    expect(fillAirports({ ...flight, destination: { name: "ARN", code: "ARN" } }, lookup).destination).toEqual({ name: "ARN", code: "ARN", country: "SE", lat: 59.65, lon: 17.92, city: "Stockholm" });
+    // A place already placed still gains its city.
+    const placed = { name: "ARN", code: "ARN", country: "SE", lat: 59.65, lon: 17.92 };
+    expect(fillAirports({ ...flight, destination: placed }, lookup).destination).toEqual({ ...placed, city: "Stockholm" });
+    expect(fillAirports({ ...flight, destination: { ...placed, city: "Arlanda" } }, lookup).destination?.city).toBe("Arlanda");
+    // An airport the booking puts in another country is another airport.
+    expect(fillAirports({ ...flight, destination: { name: "ARN", code: "ARN", country: "Norway" } }, lookup).destination).toEqual({ name: "ARN", code: "ARN", country: "Norway" });
+    const whole = { ...flight, origin: { ...placed, city: "Stockholm" }, destination: { ...placed, city: "Stockholm" } };
+    expect(fillAirports(whole, lookup)).toBe(whole);
+  });
+
   it("keeps the coordinates the source gave and fills only the country from a table without any", () => {
     const placed = { name: "Exampleville", code: "AAA", lat: 48.6, lon: 2.3 };
     expect(fillAirports({ ...flight, origin: placed }, () => ({ country: "FR", lat: 48.5, lon: 2.25 })).origin).toEqual({ ...placed, country: "FR" });

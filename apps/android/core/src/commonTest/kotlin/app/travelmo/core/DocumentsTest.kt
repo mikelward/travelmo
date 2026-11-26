@@ -139,6 +139,8 @@ class DocumentsTest {
         airportPlace("MAN")!!.country shouldBe "GB"
         airportPlace("DXB")!!.country shouldBe "AE"
         airportPlace("ZZZ").shouldBeNull()
+        airportPlace("ARN")!!.city shouldBe "Stockholm"
+        airportPlace("DUS")!!.city shouldBe "Düsseldorf"
         val flight = Segment("f", "t", SegmentType.FLIGHT, "XX 100", "2026-12-13T09:00:00+05:00", origin = Place("Manchester", code = "MAN"), destination = Place("Dubai", code = "DXB"))
         val stay = Segment("s", "t", SegmentType.LODGING, "Hotel", "2026-12-13T15:00:00+04:00", destination = Place("Hotel", country = "ae"))
         tripPlaces(listOf(flight, stay)) shouldBe TripPlaces(setOf("GB", "AE"), complete = true)
