@@ -635,8 +635,8 @@ class FakeTripActions(private val failure: String? = null) : TripActions {
         failure?.let { throw TripActionFailed(it) }
         return describeStartOver(3, 1)
     }
-    override suspend fun refresh(restart: Boolean, retryFailed: Boolean) {
-        calls += if (restart) "refresh from the start" else if (retryFailed) "refresh the failed emails" else "refresh"
+    override suspend fun refresh(restart: Boolean, retryFailed: Boolean, everything: Boolean) {
+        calls += if (everything) "refresh everything" else if (restart) "refresh from the start" else if (retryFailed) "refresh the failed emails" else "refresh"
         failure?.let { throw TripActionFailed(it) }
     }
     override suspend fun stopRefresh() {

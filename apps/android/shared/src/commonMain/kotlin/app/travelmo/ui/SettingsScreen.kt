@@ -126,6 +126,10 @@ import app.travelmo.shared.delete_account_confirm_title
 import app.travelmo.shared.delete_account_hint
 import app.travelmo.shared.delete_account_on_web
 import app.travelmo.shared.start_over
+import app.travelmo.core.REFRESH_EVERYTHING_CONFIRM
+import app.travelmo.shared.refresh_everything_title
+import app.travelmo.shared.refresh_everything
+import app.travelmo.shared.cancel
 import app.travelmo.shared.start_over_all_trips
 import app.travelmo.shared.start_over_confirm
 import app.travelmo.shared.start_over_go
@@ -1336,6 +1340,7 @@ private fun RefreshFromEmail(viewModel: TripsViewModel, onAddBooking: (defaultDa
     LaunchedEffect(starting) { if (starting is Outcome.Done) viewModel.outcomeSeen(REFRESH_TOKEN) }
     LaunchedEffect(stopping) { if (stopping is Outcome.Done) viewModel.outcomeSeen(REFRESH_STOP_TOKEN) }
     val progress = state.progress
+    var confirmingEverything by remember { mutableStateOf(false) }
     Text(REFRESH_BLURB, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 16.dp))
     if (state.reading) {
         OutlinedButton(onClick = { viewModel.stopRefresh(REFRESH_STOP_TOKEN) }, enabled = !busy, modifier = Modifier.padding(top = 8.dp)) {
@@ -1350,6 +1355,24 @@ private fun RefreshFromEmail(viewModel: TripsViewModel, onAddBooking: (defaultDa
             enabled = !busy,
             modifier = Modifier.padding(top = 8.dp),
         ) { Text(refreshButton(progress)) }
+        OutlinedButton(onClick = { confirmingEverything = true }, enabled = !busy, modifier = Modifier.padding(top = 8.dp)) {
+            Text(stringResource(Res.string.refresh_everything))
+        }
+    }
+    if (confirmingEverything) {
+        AppAlertDialog(
+            onDismissRequest = { confirmingEverything = false },
+            title = { Text(stringResource(Res.string.refresh_everything_title)) },
+            text = { Text(REFRESH_EVERYTHING_CONFIRM) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmingEverything = false
+                    listOf(REFRESH_TOKEN, REFRESH_STOP_TOKEN).forEach(viewModel::outcomeSeen)
+                    viewModel.startRefresh(REFRESH_TOKEN, restart = true, everything = true)
+                }) { Text(stringResource(Res.string.refresh_everything)) }
+            },
+            dismissButton = { TextButton(onClick = { confirmingEverything = false }) { Text(stringResource(Res.string.cancel)) } },
+        )
     }
     progress?.let {
         Text(describeRefresh(it, state.reading), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))

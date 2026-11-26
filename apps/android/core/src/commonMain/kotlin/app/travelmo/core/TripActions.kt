@@ -47,6 +47,10 @@ fun tripActionFailure(status: Int?): String = when (status) {
 }
 
 /** What Refresh from email does, under its button. */
+/** What "Refresh everything from email" does, asked before it starts, as tripActions.ts says it. */
+const val REFRESH_EVERYTHING_CONFIRM =
+    "Reads all your email again from the start, including emails that made no booking before, updates what it imported and finds your loyalty numbers again. Bookings you added or edited stay as you left them. It can take a while."
+
 const val REFRESH_BLURB = "Reads your travel emails again and updates your bookings. Bookings you edited stay as you left them."
 
 /**

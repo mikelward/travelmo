@@ -40,6 +40,10 @@ export function describeStartOver({ trips, mailboxes }: { trips: number; mailbox
   return `${deleted} Reading your email again from the start.`;
 }
 
+// What "Refresh everything from email" does, asked before it starts.
+export const refreshEverythingConfirm =
+  "Reads all your email again from the start, including emails that made no booking before, updates what it imported and finds your loyalty numbers again. Bookings you added or edited stay as you left them. It can take a while.";
+
 // What "Refresh from email" does, under its button.
 export const refreshBlurb = "Reads your travel emails again and updates your bookings. Bookings you edited stay as you left them.";
 

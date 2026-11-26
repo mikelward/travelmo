@@ -25,6 +25,7 @@ import {
   type ImportedProfile,
   type LinkRefusal,
   type ParsedMessage,
+  type RefreshProgress,
   bugReportLimits,
   bugReportPath,
   startOverPath,
@@ -1013,6 +1014,9 @@ function refreshIo(uid: string): ChainIo<undefined> {
   return {
     change: (fn) => changeRefresh(db, uid, fn),
     runBatch: async (_state, from, generation) => {
+      // Refresh everything: when it started, for the loyalty numbers its emails no longer give.
+      const shown = from as RefreshProgress;
+      const loyaltySince = shown.everything ? (shown.everythingFrom ?? shown.updatedAt) : undefined;
       const pace = gmailPacer(backfillUnitsPerMinute, { nowMs: Date.now, sleep });
       const sources = new Map<string, MailSource>();
       // The record's email, or undefined when it is gone or its mailbox is
@@ -1037,11 +1041,11 @@ function refreshIo(uid: string): ChainIo<undefined> {
       };
       try {
         return await runRefreshBatch(from, {
-          records: (after, limit) => deps.store.refreshRecords(uid, after, limit),
+          records: (after, limit, everything) => deps.store.refreshRecords(uid, after, limit, everything),
           senderPatterns: () => deps.store.senderPatterns(uid),
           record: (messageId) => deps.store.getParsed(uid, messageId),
           snapshot: () => deps.store.listUserSegments(uid),
-          refresh: (record, snapshot) => refreshRecord(uid, record, deps, { generation, snapshot, fetch }),
+          refresh: (record, snapshot) => refreshRecord(uid, record, deps, { generation, snapshot, fetch, ...(loyaltySince ? { loyaltySince } : {}) }),
           timeLeftMs,
           now: () => new Date().toISOString(),
           log: warn,
@@ -1067,15 +1071,17 @@ function refreshIo(uid: string): ChainIo<undefined> {
 // returns at once; closing the page does not stop it.
 app.post("/trips/refresh", async (c) => {
   const uid = await requireUser(c);
-  const body = (await c.req.json().catch(() => ({}))) as { restart?: unknown; retryFailed?: unknown };
-  const restart = body.restart === true;
-  const retryFailed = body.retryFailed === true;
+  const body = (await c.req.json().catch(() => ({}))) as { restart?: unknown; retryFailed?: unknown; everything?: unknown };
+  // "Refresh everything from email": every email from the start (refresh.ts).
+  const everything = body.everything === true;
+  const restart = body.restart === true || everything;
+  const retryFailed = body.retryFailed === true && !everything;
   const connected = (await loadMailboxes(db, uid)).length + (await loadImapMailboxes(db, uid)).length + ((await loadFastmailState(db, uid)) ? 1 : 0);
   if (connected === 0) throw new HTTPException(409, { message: "Connect the mailbox your bookings came from first." });
-  const result = await startBackfill(uid, randomBytes(12).toString("base64url"), restart, refreshIo(uid), undefined, retryFailed);
+  const result = await startBackfill(uid, randomBytes(12).toString("base64url"), restart, refreshIo(uid), undefined, retryFailed, everything ? { everything: true, everythingFrom: deps.now() } : {});
   if (result.kind === "disconnected") throw new HTTPException(409, { message: "Sign out, sign in again and try again." });
   if (result.kind === "busy") throw new HTTPException(409, { message: "A batch is still being read. Try again in a few minutes." });
-  log("INFO", "refresh_started", { uid, restart, retryFailed, joined: result.kind === "joined", run: result.progress.run });
+  log("INFO", "refresh_started", { uid, restart, retryFailed, everything, joined: result.kind === "joined", run: result.progress.run });
   const { cursor: _cursor, after: _after, ...progress } = result.progress;
   return c.json({ progress });
 });

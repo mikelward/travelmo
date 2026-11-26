@@ -266,6 +266,15 @@ describe("importMessage", () => {
     expect(store.foundLoyalty.get("u1")).toBeUndefined();
   });
 
+  it("keeps no loyalty numbers once the user started over during the import", async () => {
+    const store = memoryStore();
+    const withNumbers: ExtractedBooking = { ...lodging, memberships: [{ program: "Sample Hotels Rewards", number: "777" }] };
+    // Delete everything and start over runs while the model reads the email.
+    const extract = async () => (await store.withUserLock("u1", async (tx) => tx.bumpGeneration()), withNumbers);
+    await importMessage("u1", email(), deps(store, extract));
+    expect(store.foundLoyalty.get("u1")).toBeUndefined();
+  });
+
   it("imports the booking even when keeping its loyalty numbers fails", async () => {
     const store = memoryStore();
     store.addFoundLoyalty = async () => {

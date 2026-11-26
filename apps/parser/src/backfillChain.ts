@@ -363,10 +363,21 @@ async function handOn<S>(message: ContinueMessage, wake: string, io: ChainIo<S>)
 
 export type StartResult = { kind: "disconnected" } | { kind: "busy" } | { kind: "started" | "joined"; progress: BackfillProgress };
 
-export async function startBackfill<S>(uid: string, run: string, restart: boolean, io: ChainIo<S>, mailbox?: string, retryFailed = false): Promise<StartResult> {
+// `seed`: fields a reading started over (`restart`) begins with (a
+// refresh's `everything`), never added to one carried on.
+export async function startBackfill<S>(
+  uid: string,
+  run: string,
+  restart: boolean,
+  io: ChainIo<S>,
+  mailbox?: string,
+  retryFailed = false,
+  seed: Record<string, unknown> = {},
+): Promise<StartResult> {
   const now = io.now();
   const changed = await io.change((current) => {
-    const decision = decideStart(current, run, restart, now, retryFailed);
+    let decision = decideStart(current, run, restart, now, retryFailed);
+    if (decision.kind === "started" && restart) decision = { ...decision, next: { ...decision.next, ...seed } };
     return { next: decision.kind === "busy" ? undefined : decision.next, result: decision };
   });
   if (!changed) return { kind: "disconnected" };

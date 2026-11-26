@@ -1388,8 +1388,8 @@ class TripsViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RefreshState(null, false))
 
     /** Starts or continues Refresh from email on the parser; from the first email again once the last one finished. */
-    fun startRefresh(token: String, restart: Boolean, retryFailed: Boolean = false) =
-        run(token, "startRefresh") { tripActions.refresh(restart, retryFailed) }
+    fun startRefresh(token: String, restart: Boolean, retryFailed: Boolean = false, everything: Boolean = false) =
+        run(token, "startRefresh") { tripActions.refresh(restart, retryFailed, everything) }
 
     /** The import records of the emails a finished refresh couldn't read, for Settings to name them; empty while none. */
     suspend fun failedEmailRecords(ids: List<String>): Map<String, ParsedRecord> =

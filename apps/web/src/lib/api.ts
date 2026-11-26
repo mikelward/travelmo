@@ -144,8 +144,9 @@ export const api = {
   // "Refresh from email" (`restart` from the first email again), run on the
   // server; its progress shows on the profile.
   // `retryFailed`: only the emails the last refresh couldn't read.
-  refreshFromEmail: (user: User, restart = false, retryFailed = false) =>
-    post<BackfillStarted>(user, refreshPath, restart ? { restart } : retryFailed ? { retryFailed } : {}, true),
+  // `everything`: "Refresh everything from email", every email from the start.
+  refreshFromEmail: (user: User, restart = false, retryFailed = false, everything = false) =>
+    post<BackfillStarted>(user, refreshPath, everything ? { everything } : restart ? { restart } : retryFailed ? { retryFailed } : {}, true),
   stopRefresh: (user: User) => post<void>(user, refreshStopPath),
   sendBugReport,
   refreshFlights: (user: User, tripId: string) => post<{ enabled: boolean; checked?: number }>(user, "/flights/refresh", { tripId }),

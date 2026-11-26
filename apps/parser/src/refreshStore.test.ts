@@ -89,3 +89,39 @@ describe("refreshRecords", () => {
     expect((await store.refreshRecords(uid, "e", 2)).map((r) => r.messageId)).toEqual([]);
   });
 });
+
+describe("dropUnseenFoundLoyalty", () => {
+  it("drops only the numbers an email last gave before then, keeping others' and those seen again", async () => {
+    const uid = `renew-${Date.now()}`;
+    const ref = db.doc(paths.travelProfile(uid));
+    await ref.set({
+      ownerUid: uid,
+      trustedEmails: ["partner@example.com"],
+      foundLoyalty: [
+        { program: "Cove Club", number: "CC 9999", messageId: "m1", at: "2027-01-01T00:00:00Z" },
+        { program: "Cove Club", number: "CC 4455", messageId: "m1", at: "2027-01-03T00:00:00Z" },
+        { program: "Example Air", number: "EA 123", messageId: "fwd-1", at: "2027-01-01T00:00:00Z" },
+      ],
+    });
+    const store = firestoreStore(db);
+    expect(await store.dropUnseenFoundLoyalty(uid, "m1", "2027-01-02T00:00:00Z")).toBe(1);
+    const left = (await ref.get()).data();
+    expect(left?.foundLoyalty.map((f: { number: string }) => f.number)).toEqual(["CC 4455", "EA 123"]);
+    expect(left?.trustedEmails).toEqual(["partner@example.com"]);
+    expect(await store.dropUnseenFoundLoyalty(`${uid}-none`, "m1", "2027-01-02T00:00:00Z")).toBe(0);
+  });
+
+  it("changes nothing once the trips were reset since the given generation", async () => {
+    const uid = `renew-reset-${Date.now()}`;
+    const ref = db.doc(paths.travelProfile(uid));
+    const seen = { program: "Cove Club", number: "CC 9999", messageId: "m1", at: "2027-01-01T00:00:00Z" };
+    await ref.set({ ownerUid: uid, trustedEmails: [], foundLoyalty: [seen] });
+    await db.doc(paths.importLock(uid)).set({ generation: 2 });
+    const store = firestoreStore(db);
+    expect(await store.dropUnseenFoundLoyalty(uid, "m1", "2027-01-02T00:00:00Z", 1)).toBe(0);
+    expect(await store.addFoundLoyalty(uid, [{ ...seen, number: "CC 4455", messageId: "m2" }], 1)).toEqual({ refused: 0, superseded: true });
+    expect((await ref.get()).data()?.foundLoyalty).toEqual([seen]);
+    expect(await store.addFoundLoyalty(uid, [{ ...seen, number: "CC 4455", messageId: "m2" }], 2)).toEqual({ refused: 0 });
+    expect(await store.dropUnseenFoundLoyalty(uid, "m1", "2027-01-02T00:00:00Z", 2)).toBe(1);
+  });
+});

@@ -33,13 +33,14 @@ class ParserTripActions(private val client: ParserClient) : TripActions {
         return describeStartOver(body.optInt("trips"), body.optInt("mailboxes"))
     }
 
-    override suspend fun refresh(restart: Boolean, retryFailed: Boolean) {
+    override suspend fun refresh(restart: Boolean, retryFailed: Boolean, everything: Boolean) {
         val body = when {
+            everything -> JSONObject().put("everything", true)
             restart -> JSONObject().put("restart", true)
             retryFailed -> JSONObject().put("retryFailed", true)
             else -> JSONObject()
         }
-        call(REFRESH_PATH, if (retryFailed) "Trying the failed emails again" else "Refreshing from email", body.toString())
+        call(REFRESH_PATH, if (everything) "Refreshing everything from email" else if (retryFailed) "Trying the failed emails again" else "Refreshing from email", body.toString())
     }
 
     override suspend fun stopRefresh() {
