@@ -818,6 +818,36 @@ export function findTripForBooking(
   });
 }
 
+// The other trips a booking filed into `target` also belongs in, to be
+// merged into it as it is filed rather than when the reading ends: each one
+// the booking would join on its own (findTripForBooking), whose dates
+// overlap the target's, and which goes to the same town away from home as
+// the target does with the booking (awayPlace). A flight to Las Vegas
+// joining the trip of its car to Heathrow brings in the Las Vegas trip of
+// its hotel and hire car; a Stockholm trip and the Gothenburg trip after it
+// stay two, one trip a city. The caller leaves out trips it must not merge
+// (shared otherwise, renamed, a TripIt trip's own).
+export function bridgedTrips(
+  trips: readonly Trip[],
+  segmentsOf: (tripId: string) => readonly Grouped[],
+  target: Pick<Trip, "id" | "start" | "end">,
+  booking: readonly ExtractedSegment[],
+  periods: readonly HomePeriod[],
+  overrides: readonly HomePeriod[] = [],
+): Trip[] {
+  const range = segmentDateRange(booking);
+  if (!range) return [];
+  const span = { start: range.start < target.start ? range.start : target.start, end: range.end > target.end ? range.end : target.end };
+  const where = town(awayPlace([...segmentsOf(target.id), ...booking].sort((a, b) => compareInstants(a.start, b.start)), periods, overrides));
+  if (!where) return [];
+  return trips.filter((trip) => {
+    if (trip.id === target.id || trip.start > span.end || trip.end < span.start) return false;
+    const theirs = [...segmentsOf(trip.id)].sort((a, b) => compareInstants(a.start, b.start));
+    const there = town(awayPlace(theirs, periods, overrides));
+    return !!there && sameTown(there, where) && findTripForBooking([trip], segmentsOf, booking, periods, overrides)?.id === trip.id;
+  });
+}
+
 // Where a booking goes away from home, for naming its trip: the first
 // destination that is not the home of its day, else the first origin that is
 // not (a return journey booked on its own), else nothing.

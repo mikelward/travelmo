@@ -1065,6 +1065,123 @@ describe("importTripIt", () => {
     expect(store.trips.get(gmailTrip.id)).toMatchObject({ start: "2026-12-10", end: "2026-12-31" });
   });
 
+  it("merges two trips to one city that a booking bridges, in whichever order the emails come", async () => {
+    const lhr = { name: "London Heathrow", code: "LHR", city: "London", country: "GB" };
+    const las = { name: "Harry Reid International", code: "LAS", city: "Las Vegas", country: "US" };
+    // An earlier trip says home is London.
+    const before: ExtractedBooking = {
+      isBooking: true,
+      segments: [
+        { type: "flight", title: "BA 1 LHR to CDG", start: "2026-05-01T08:00:00+01:00", end: "2026-05-01T10:15:00+02:00", origin: lhr, destination: { name: "Paris Charles de Gaulle", code: "CDG", city: "Paris", country: "FR" } },
+        { type: "flight", title: "BA 2 CDG to LHR", start: "2026-05-04T18:00:00+02:00", end: "2026-05-04T18:20:00+01:00", origin: { name: "Paris Charles de Gaulle", code: "CDG", city: "Paris", country: "FR" }, destination: lhr },
+      ],
+    };
+    const bookings: Record<string, ExtractedBooking> = {
+      carOut: { isBooking: true, segments: [{ type: "other", title: "Abetta car to Heathrow", start: "2026-07-08T13:00:00+01:00", origin: { name: "Muswell Hill", city: "London", country: "GB" }, destination: { name: "London Heathrow Airport, Terminal 3", city: "London", country: "GB" } }] },
+      flights: {
+        isBooking: true,
+        segments: [
+          { type: "flight", title: "VS 155 LHR to LAS", start: "2026-07-08T17:25:00+01:00", end: "2026-07-08T20:10:00-07:00", origin: lhr, destination: las },
+          { type: "flight", title: "VS 156 LAS to LHR", start: "2026-07-22T22:00:00-07:00", end: "2026-07-23T15:55:00+01:00", origin: las, destination: lhr },
+        ],
+      },
+      hotel: { isBooking: true, segments: [{ type: "lodging", title: "Holiday Inn Express Las Vegas", start: "2026-07-08T15:00:00-07:00", end: "2026-07-09T12:00:00-07:00", destination: { name: "Holiday Inn Express Las Vegas", city: "Las Vegas", country: "US" } }] },
+      avis: { isBooking: true, segments: [{ type: "car_rental", title: "Avis Las Vegas", start: "2026-07-08T20:00:00-07:00", end: "2026-07-22T20:00:00-07:00", origin: las, destination: las }] },
+      carBack: { isBooking: true, segments: [{ type: "other", title: "Abetta Heathrow to home", start: "2026-07-23T15:27:00+01:00", origin: { name: "Heathrow Terminal 3 - LHR", city: "London", country: "GB" }, destination: { name: "Muswell Hill", city: "London", country: "GB" } }] },
+    };
+    const orders = (ids: string[]): string[][] => (ids.length <= 1 ? [ids] : ids.flatMap((id, i) => orders([...ids.slice(0, i), ...ids.slice(i + 1)]).map((rest) => [id, ...rest])));
+    const split: string[] = [];
+    for (const order of orders(Object.keys(bookings))) {
+      const store = memoryStore();
+      await importMessage("u1", email({ id: "before", subject: "Booking before" }), deps(store, async () => before));
+      for (const id of order) await importMessage("u1", email({ id, subject: `Booking ${id}` }), deps(store, async () => bookings[id]!));
+      const tripOf = (title: string) => [...store.segments.values()].find((s) => s.title === title)!.tripId;
+      const vegas = ["VS 155 LHR to LAS", "Holiday Inn Express Las Vegas", "Avis Las Vegas", "VS 156 LAS to LHR"].map(tripOf);
+      if (new Set(vegas).size > 1) split.push(order.join(","));
+    }
+    expect(split).toEqual([]);
+    // A booking this email also updates moves as updated: the outbound and
+    // the return filed apart, then again together with their reference and
+    // a night more.
+    {
+      const store = memoryStore();
+      await importMessage("u1", email({ id: "before", subject: "Booking before" }), deps(store, async () => before));
+      const [out, back] = bookings.flights!.segments as [ExtractedSegment, ExtractedSegment];
+      const filed: [string, ExtractedBooking][] = [["avis", bookings.avis!], ["hotel", bookings.hotel!], ["f1", { isBooking: true, segments: [out] }], ["f2", { isBooking: true, segments: [back] }]];
+      for (const [id, booking] of filed) {
+        await importMessage("u1", email({ id, subject: `Booking ${id}` }), deps(store, async () => booking));
+      }
+      // The outbound in a trip of its own, as an earlier reading left it.
+      const flight = [...store.segments.values()].find((s) => s.title === "VS 155 LHR to LAS")!;
+      store.trips.set("solo", { ...store.trips.get(flight.tripId)!, id: "solo" });
+      store.segments.set(flight.id, { ...flight, tripId: "solo" });
+      const night: ExtractedSegment = { type: "lodging", title: "Airport hotel", start: "2026-07-21T15:00:00-07:00", end: "2026-07-22T11:00:00-07:00", destination: { name: "Airport hotel", city: "Las Vegas", country: "US" } };
+      const whole: ExtractedBooking = { isBooking: true, segments: [{ ...out, confirmation: "VSQ1" }, { ...back, confirmation: "VSQ1" }, night] };
+      await importMessage("u1", email({ id: "f3", subject: "Booking f3" }), deps(store, async () => whole));
+      const after = [...store.segments.values()].filter((s) => !s.title.startsWith("BA "));
+      expect(new Set(after.map((s) => s.tripId)).size).toBe(1);
+      for (const [title, first] of [["VS 155 LHR to LAS", "f1"], ["VS 156 LAS to LHR", "f2"]] as const) {
+        const flown = after.find((s) => s.title === title)!;
+        expect(flown.confirmation).toBe("VSQ1");
+        expect((flown.sources ?? []).map((ref) => ref.id)).toEqual(expect.arrayContaining([first, "f3"]));
+      }
+    }
+    // A receipt this email upgrades in the trip it merges in goes over too,
+    // whichever of the two trips it joins, and when the trip merged away was
+    // named after the receipt (named afresh, it would be written after it went).
+    for (const [solo, named] of [["flight", false], ["stay", false], ["flight", true]] as const) {
+      const store = memoryStore();
+      await importMessage("u1", email({ id: "before", subject: "Booking before" }), deps(store, async () => before));
+      const out = bookings.flights!.segments[0]!;
+      const paid: ExtractedSegment = { type: "activity", title: "Stage Stars Holiday Club payment", provider: "Example Academy of Performing Arts", start: "2026-07-09T00:00:00-07:00" };
+      const tour: ExtractedSegment = { type: "activity", title: "Stage Stars! Holiday Club - Day 1", provider: "Example Academy of Performing Arts", start: "2026-07-09T09:00:00-07:00", end: "2026-07-09T15:00:00-07:00" };
+      const filed: [string, ExtractedBooking][] = [["hotel", bookings.hotel!], ["paid", { isBooking: true, segments: [paid] }], ["f1", { isBooking: true, segments: [out] }]];
+      for (const [id, booking] of filed) await importMessage("u1", email({ id, subject: `Booking ${id}` }), deps(store, async () => booking));
+      // The flight in one trip, the stay and the receipt in another.
+      const all = [...store.segments.values()].filter((s) => !s.title.startsWith("BA "));
+      const [flight, stay, receipt] = [out.title, "Holiday Inn Express Las Vegas", paid.title].map((t) => all.find((s) => s.title === t)!) as [Segment, Segment, Segment];
+      for (const id of new Set(all.map((s) => s.tripId))) store.trips.delete(id);
+      const vegas = { ownerUid: "u1", sharedWith: [], createdAt: "2026-11-01T00:00:00Z", updatedAt: "2026-11-01T00:00:00Z", title: "Las Vegas" };
+      const [first, second] = solo === "flight" ? ["a", "b"] : ["b", "a"];
+      store.trips.set(first, { ...vegas, id: first, start: "2026-07-08", end: "2026-07-08" });
+      store.trips.set(second, { ...vegas, id: second, start: "2026-07-08", end: "2026-07-09", ...(named ? { title: paid.title } : {}) });
+      store.segments.set(flight.id, { ...flight, tripId: first });
+      store.segments.set(stay.id, { ...stay, tripId: second });
+      store.segments.set(receipt.id, { ...receipt, tripId: second });
+      const night: ExtractedSegment = { type: "lodging", title: "Airport hotel", start: "2026-07-21T15:00:00-07:00", end: "2026-07-22T11:00:00-07:00", destination: { name: "Airport hotel", city: "Las Vegas", country: "US" } };
+      await importMessage("u1", email({ id: "f2", subject: "Booking f2" }), deps(store, async () => ({ isBooking: true, segments: [out, tour, night] })));
+      const after = [...store.segments.values()].filter((s) => !s.title.startsWith("BA "));
+      expect(new Set(after.map((s) => s.tripId)).size).toBe(1);
+      // The receipt became the tour it paid for.
+      expect(after.filter((s) => s.title.includes("Stage Stars")).map((s) => [s.id, s.title])).toEqual([[receipt.id, tour.title]]);
+    }
+    // Nor is a live trip merged into one its owner cancelled, which would cancel it too.
+    {
+      const store = memoryStore();
+      await importMessage("u1", email({ id: "before", subject: "Booking before" }), deps(store, async () => before));
+      for (const id of ["carOut", "avis"]) await importMessage("u1", email({ id, subject: `Booking ${id}` }), deps(store, async () => bookings[id]!));
+      const [car, avis] = ["Abetta car to Heathrow", "Avis Las Vegas"].map((t) => [...store.segments.values()].find((s) => s.title === t)!) as [Segment, Segment];
+      // The car to Heathrow in a trip of its own, which its owner cancelled.
+      store.trips.set("gone", { ...store.trips.get(car.tripId)!, id: "gone", title: "Abetta car to Heathrow", start: "2026-07-08", end: "2026-07-08", cancelledAt: "2026-06-01T00:00:00Z" });
+      store.segments.set(car.id, { ...car, tripId: "gone" });
+      await importMessage("u1", email({ id: "flights", subject: "Booking flights" }), deps(store, async () => bookings.flights!));
+      const kept = [...store.segments.values()].find((s) => s.id === avis.id)!;
+      expect(kept.tripId).toBe(avis.tripId);
+      expect(kept.cancelledAt).toBeUndefined();
+    }
+    // A trip the user renamed is never merged away, nor one shared otherwise or cancelled.
+    for (const change of [{ title: "Vegas baby" }, { sharedWith: ["partner@example.com"] }, { cancelledAt: "2026-06-01T00:00:00Z" }]) {
+      const store = memoryStore();
+      await importMessage("u1", email({ id: "before", subject: "Booking before" }), deps(store, async () => before));
+      for (const id of ["carOut", "avis"]) await importMessage("u1", email({ id, subject: `Booking ${id}` }), deps(store, async () => bookings[id]!));
+      const avisTrip = [...store.segments.values()].find((s) => s.title === "Avis Las Vegas")!.tripId;
+      store.trips.set(avisTrip, { ...store.trips.get(avisTrip)!, ...change });
+      await importMessage("u1", email({ id: "flights", subject: "Booking flights" }), deps(store, async () => bookings.flights!));
+      expect([...store.segments.values()].find((s) => s.title === "Avis Las Vegas")!.tripId).toBe(avisTrip);
+      expect([...store.segments.values()].find((s) => s.title === "VS 155 LHR to LAS")!.tripId).not.toBe(avisTrip);
+    }
+  });
+
   it("starts a trip with the flight that lands where it leaves from, in whichever order the emails come", async () => {
     const lhr = { name: "Heathrow", code: "LHR", city: "London", country: "GB" };
     const zag = { name: "Zagreb", code: "ZAG", city: "Zagreb", country: "HR" };
@@ -1098,12 +1215,18 @@ describe("importTripIt", () => {
     {
       const store = memoryStore();
       const firstLeg: ExtractedBooking = { isBooking: true, segments: [bookings.on!.segments[0]!] };
-      for (const [id, booking] of [["out", bookings.out!], ["stay", bookings.stay!], ["leg", firstLeg], ["on", bookings.on!], ["home", bookings.home!]] as const) {
+      // The later email gives the leg's reference, which the first lacked.
+      const on: ExtractedBooking = { ...bookings.on!, segments: bookings.on!.segments.map((s, i) => (i === 0 ? { ...s, confirmation: "AFQ12A" } : s)) };
+      for (const [id, booking] of [["out", bookings.out!], ["stay", bookings.stay!], ["leg", firstLeg], ["on", on], ["home", bookings.home!]] as const) {
         await importMessage("u1", email({ id, subject: `Booking ${id}` }), deps(store, async () => booking));
       }
       const tripOf = (title: string) => [...store.segments.values()].find((s) => s.title === title)!.tripId;
       expect(tripOf("A5 8362 ZAG to PAR")).toBe(tripOf("UA122 EWR to LHR"));
       expect(tripOf("AF 8702 PAR to JFK")).toBe(tripOf("UA122 EWR to LHR"));
+      // Moved as this email left it: with its source, not as first read.
+      const leg = [...store.segments.values()].find((s) => s.title === "A5 8362 ZAG to PAR")!;
+      expect((leg.sources ?? []).map((ref) => ref.id)).toEqual(expect.arrayContaining(["leg", "on"]));
+      expect(leg.confirmation).toBe("AFQ12A");
     }
     // A booking brought over with a cancelled leg keeps the trip's own dates
     // covering that leg, so a later email finds it by date.

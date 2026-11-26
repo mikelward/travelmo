@@ -54,7 +54,9 @@ export function memoryStore(): Memory {
     putParsed: (r) => void parsed.set(`${r.uid}/${r.messageId}`, r),
     touchTrip: (id, updatedAt, title) => {
       const trip = trips.get(id);
-      if (trip) trips.set(id, { ...trip, ...(title === undefined ? {} : { title }), updatedAt });
+      // As Firestore's update: a trip that is gone fails the transaction.
+      if (!trip) throw new Error(`trip ${id} missing`);
+      trips.set(id, { ...trip, ...(title === undefined ? {} : { title }), updatedAt });
     },
     updateTrip: (id, fields) => {
       const trip = trips.get(id);

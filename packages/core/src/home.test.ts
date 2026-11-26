@@ -9,6 +9,7 @@ import {
   distanceKm,
   effectiveHomes,
   findTripForBooking,
+  bridgedTrips,
   homeAt,
   homeCorrections,
   homeTimeline,
@@ -1072,5 +1073,41 @@ describe("rebookedFlights", () => {
     const direct = flight("BOS to SFO", "2021-12-01T08:00:00-05:00", "2021-12-01T11:30:00-08:00", bos, sfo);
     const onward = flight("SFO to SEA", "2021-12-01T13:00:00-08:00", "2021-12-01T15:00:00-08:00", sfo, sea, "OTHER2");
     expect(rebookedFlights([original], [direct, onward]).map((r) => r.flight)).toEqual([original]);
+  });
+});
+
+describe("bridgedTrips", () => {
+  const periods = [{ city: "London", country: "GB" }];
+  const lhr = { name: "London Heathrow", code: "LHR", city: "London", country: "GB" };
+  const las = { name: "Las Vegas", code: "LAS", city: "Las Vegas", country: "US" };
+  const trip = (id: string, start: string, end: string): Trip => ({ id, title: id, start, end, ownerUid: "u1", sharedWith: [], createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" });
+  const hotel: ExtractedSegment = { type: "lodging", title: "Hotel", start: "2026-07-08T15:00:00-07:00", end: "2026-07-12T11:00:00-07:00", destination: { name: "Hotel", city: "Las Vegas", country: "US" } };
+  const flights: ExtractedSegment[] = [
+    { type: "flight", title: "Out", start: "2026-07-08T17:25:00+01:00", end: "2026-07-08T20:10:00-07:00", origin: lhr, destination: las },
+    { type: "flight", title: "Back", start: "2026-07-12T22:00:00-07:00", end: "2026-07-13T15:55:00+01:00", origin: las, destination: lhr },
+  ];
+
+  it("finds another trip to the same city that the booking also belongs in", () => {
+    const segments: Record<string, ExtractedSegment[]> = { stay: [hotel], car: [{ type: "car_rental", title: "Car", start: "2026-07-08T20:00:00-07:00", end: "2026-07-12T20:00:00-07:00", origin: las, destination: las }] };
+    const [stay, car] = [trip("stay", "2026-07-08", "2026-07-12"), trip("car", "2026-07-08", "2026-07-12")];
+    expect(bridgedTrips([stay, car], (id) => segments[id] ?? [], stay, flights, periods).map((t) => t.id)).toEqual(["car"]);
+  });
+
+  it("keeps a trip to another city apart, one trip a city", () => {
+    const arn = { name: "Stockholm Arlanda", code: "ARN", city: "Stockholm", country: "SE" };
+    const got = { name: "Göteborg Central", city: "Gothenburg", country: "SE" };
+    const segments: Record<string, ExtractedSegment[]> = {
+      stockholm: [{ type: "flight", title: "To ARN", start: "2026-08-15T08:00:00+01:00", end: "2026-08-15T11:30:00+02:00", origin: lhr, destination: arn }],
+      gothenburg: [{ type: "lodging", title: "Gothenburg hotel", start: "2026-08-19T15:00:00+02:00", end: "2026-08-23T11:00:00+02:00", destination: { name: "Hotel", city: "Gothenburg", country: "SE" } }],
+    };
+    const train: ExtractedSegment[] = [{ type: "train", title: "SJ", start: "2026-08-19T10:00:00+02:00", end: "2026-08-19T13:00:00+02:00", origin: { name: "Stockholm Central", city: "Stockholm", country: "SE" }, destination: got }];
+    const [stockholm, gothenburg] = [trip("stockholm", "2026-08-15", "2026-08-19"), trip("gothenburg", "2026-08-19", "2026-08-23")];
+    expect(bridgedTrips([stockholm, gothenburg], (id) => segments[id] ?? [], stockholm, train, periods)).toEqual([]);
+  });
+
+  it("finds nothing whose dates are apart", () => {
+    const later = trip("later", "2026-09-01", "2026-09-05");
+    const segments: Record<string, ExtractedSegment[]> = { stay: [hotel], later: [{ ...hotel, start: "2026-09-01T15:00:00-07:00", end: "2026-09-05T11:00:00-07:00" }] };
+    expect(bridgedTrips([later], (id) => segments[id] ?? [], trip("stay", "2026-07-08", "2026-07-12"), flights, periods)).toEqual([]);
   });
 });
