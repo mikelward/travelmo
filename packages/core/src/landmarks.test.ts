@@ -90,6 +90,9 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Fez").id).toBe("fez");
     expect(tripLandmark("Quito").id).toBe("quito");
     expect(tripLandmark("Montevideo").id).toBe("montevideo");
+    expect(tripLandmark("Makarska").id).toBe("makarska");
+    expect(tripLandmark("Makarska Riviera").id).toBe("makarska");
+    expect(tripLandmark("Biokovo").id).toBe("makarska");
   });
 
   it("ignores accents and case", () => {
@@ -290,7 +293,7 @@ describe("tripLandmark", () => {
         fallbacks.add(word);
       }
     }
-    expect(LANDMARKS.length).toBe(299);
+    expect(LANDMARKS.length).toBe(300);
   });
 });
 
