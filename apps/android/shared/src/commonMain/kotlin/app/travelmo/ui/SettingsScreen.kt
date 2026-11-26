@@ -125,10 +125,13 @@ import app.travelmo.shared.delete_account_confirm
 import app.travelmo.shared.delete_account_confirm_title
 import app.travelmo.shared.delete_account_hint
 import app.travelmo.shared.delete_account_on_web
-import app.travelmo.shared.delete_all_trips
-import app.travelmo.shared.delete_all_trips_confirm
-import app.travelmo.shared.delete_all_trips_title
-import app.travelmo.shared.delete_n_trips
+import app.travelmo.shared.start_over
+import app.travelmo.shared.start_over_all_trips
+import app.travelmo.shared.start_over_confirm
+import app.travelmo.shared.start_over_go
+import app.travelmo.shared.start_over_title
+import app.travelmo.shared.start_over_type
+import app.travelmo.shared.your_n_trips
 import app.travelmo.shared.deleting
 import app.travelmo.shared.disconnect
 import app.travelmo.shared.email_addresses
@@ -249,7 +252,7 @@ private const val FASTMAIL_TOKENS_URL = "https://app.fastmail.com/settings/secur
 private const val REGROUP_TOKEN = "settings/trips/regroup"
 private const val REFRESH_TOKEN = "settings/trips/refresh"
 private const val REFRESH_STOP_TOKEN = "settings/trips/refresh/stop"
-private const val DELETE_TRIPS_TOKEN = "settings/trips/delete"
+private const val START_OVER_TOKEN = "settings/trips/start-over"
 private const val ADD_EMAIL_TOKEN = "settings/emails/add"
 private const val REMOVE_EMAIL_TOKEN = "settings/emails/remove"
 private const val SENDER_RULES_TOKEN = "settings/senders"
@@ -1208,12 +1211,12 @@ private fun TripsSection(viewModel: TripsViewModel, onAddBooking: (defaultDate: 
     val notice by viewModel.tripNotice.collectAsStateWithLifecycle()
     val own by viewModel.ownTripCount.collectAsStateWithLifecycle()
     val regrouping = outcomes[REGROUP_TOKEN]
-    val deleting = outcomes[DELETE_TRIPS_TOKEN]
+    val deleting = outcomes[START_OVER_TOKEN]
     val busy = regrouping is Outcome.Busy || deleting is Outcome.Busy
-    var confirming by remember { mutableStateOf(false) }
+    val confirmation = remember { TypedConfirmation() }
     // A finished action is acknowledged so the next starts afresh; its line stays.
     LaunchedEffect(regrouping) { if (regrouping is Outcome.Done) viewModel.outcomeSeen(REGROUP_TOKEN) }
-    LaunchedEffect(deleting) { if (deleting is Outcome.Done) viewModel.outcomeSeen(DELETE_TRIPS_TOKEN) }
+    LaunchedEffect(deleting) { if (deleting is Outcome.Done) viewModel.outcomeSeen(START_OVER_TOKEN) }
     Text(stringResource(Res.string.trips_section), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
     Text(stringResource(Res.string.regroup_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (!viewModel.canRunTripActions) {
@@ -1223,40 +1226,53 @@ private fun TripsSection(viewModel: TripsViewModel, onAddBooking: (defaultDate: 
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
         OutlinedButton(
             onClick = {
-                listOf(REGROUP_TOKEN, DELETE_TRIPS_TOKEN).forEach(viewModel::outcomeSeen)
+                listOf(REGROUP_TOKEN, START_OVER_TOKEN).forEach(viewModel::outcomeSeen)
                 viewModel.regroupTrips(REGROUP_TOKEN)
             },
             enabled = !busy,
         ) { Text(stringResource(if (regrouping is Outcome.Busy) Res.string.regrouping else Res.string.regroup_trips)) }
         OutlinedButton(
-            onClick = { confirming = true },
+            onClick = confirmation::open,
             enabled = !busy,
             colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-        ) { Text(stringResource(if (deleting is Outcome.Busy) Res.string.deleting else Res.string.delete_all_trips)) }
+        ) { Text(stringResource(if (deleting is Outcome.Busy) Res.string.deleting else Res.string.start_over)) }
     }
     notice?.let { Text(it, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp)) }
     listOf(regrouping, deleting).filterIsInstance<Outcome.Failed>().lastOrNull()?.let {
         Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
     }
     RefreshFromEmail(viewModel, onAddBooking)
-    if (confirming) {
+    if (confirmation.open) {
         AppAlertDialog(
-            onDismissRequest = { confirming = false },
-            title = { Text(stringResource(Res.string.delete_all_trips_title)) },
-            text = { Text(stringResource(Res.string.delete_all_trips_confirm)) },
+            onDismissRequest = confirmation::close,
+            title = { Text(stringResource(Res.string.start_over_title)) },
+            text = {
+                Column {
+                    val trips = own?.let { pluralStringResource(Res.plurals.your_n_trips, it, it) } ?: stringResource(Res.string.start_over_all_trips)
+                    Text(stringResource(Res.string.start_over_confirm, trips))
+                    OutlinedTextField(
+                        value = confirmation.typed,
+                        onValueChange = { confirmation.typed = it },
+                        label = { Text(stringResource(Res.string.start_over_type)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    )
+                }
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        confirming = false
-                        listOf(REGROUP_TOKEN, DELETE_TRIPS_TOKEN).forEach(viewModel::outcomeSeen)
-                        viewModel.deleteAllTrips(DELETE_TRIPS_TOKEN)
+                        confirmation.close()
+                        listOf(REGROUP_TOKEN, START_OVER_TOKEN).forEach(viewModel::outcomeSeen)
+                        viewModel.startOver(START_OVER_TOKEN)
                     },
+                    enabled = confirmation.confirmed,
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                ) {
-                    Text(own?.let { pluralStringResource(Res.plurals.delete_n_trips, it, it) } ?: stringResource(Res.string.delete))
-                }
+                ) { Text(stringResource(Res.string.start_over_go)) }
             },
-            dismissButton = { TextButton(onClick = { confirming = false }) { Text(stringResource(Res.string.keep)) } },
+            dismissButton = {
+                TextButton(onClick = confirmation::close) { Text(stringResource(Res.string.keep)) }
+            },
         )
     }
 }

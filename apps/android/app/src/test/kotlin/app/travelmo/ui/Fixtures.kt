@@ -22,7 +22,7 @@ import app.travelmo.data.SearchedRecords
 import app.travelmo.data.TripActions
 import app.travelmo.data.TripActionFailed
 import app.travelmo.core.describeRegroup
-import app.travelmo.core.describeDeletedTrips
+import app.travelmo.core.describeStartOver
 import app.travelmo.core.AccessConfig
 import app.travelmo.core.AccessRecord
 import app.travelmo.core.AccountAccess
@@ -630,10 +630,10 @@ class FakeTripActions(private val failure: String? = null) : TripActions {
         failure?.let { throw TripActionFailed(it) }
         return describeRegroup(2, 1)
     }
-    override suspend fun deleteAll(): String {
-        calls += "deleteAll"
+    override suspend fun startOver(): String {
+        calls += "startOver"
         failure?.let { throw TripActionFailed(it) }
-        return describeDeletedTrips(3)
+        return describeStartOver(3, 1)
     }
     override suspend fun refresh(restart: Boolean, retryFailed: Boolean) {
         calls += if (restart) "refresh from the start" else if (retryFailed) "refresh the failed emails" else "refresh"

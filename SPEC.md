@@ -2234,7 +2234,27 @@ else "Heathrow to London"; when a journey later joins it and the owner has
 not renamed it, it takes the name the whole trip would get ("New York"), as
 above.
 
-To start over instead, "Delete all trips" in Settings on the web and Android (`POST /trips/delete-all`,
+### Starting over
+
+"Delete everything and start over" in Settings on the web and Android
+(`POST /trips/start-over`, `startOver` in `apps/parser/src/tripsReset.ts`)
+asks first, saying how many trips go, that bookings added or edited by hand
+and the trips' sharing go with them, and that TripIt files must be
+uploaded again, and goes ahead only once DELETE is typed. It deletes what
+"Delete all trips" below does, then empties what imports put on the travel
+profile (`clearImportedProfile`: the documents, loyalty programs and fellow
+travelers a TripIt upload filled, the loyalty numbers found in emails and
+whose each is, keeping who the owner trusts with it), then starts every
+connected Gmail, IMAP and Fastmail mailbox reading again from the start; a
+mailbox whose reading can't start then is logged and left for "Import past
+bookings". Calendar feeds and Google calendars come back on their next
+poll, their records gone. The account, its connections, forwarding address,
+calendar link, home settings and who the user is stay. It says how many
+trips went and whether email is being read again (`describeStartOver`).
+The apps no longer offer "Delete all trips" alone; its route stays for
+older Android builds.
+
+"Delete all trips" (`POST /trips/delete-all`,
 `apps/parser/src/tripsReset.ts`) deletes every trip the user owns, its
 bookings (with their ratings and favorites), every import record and every
 cancellation still waiting for its booking, in
@@ -3195,6 +3215,7 @@ didn't finish" in place of every page, with "Finish deleting", which calls
 | `POST /trips/regroup` | Firebase ID token | Fills in bookings' countries and spots from the airport and city tables, then rebuilds the user's trips from their bookings with the current grouping ("Home"); returns how many trips changed, how many were merged away and how many bookings were placed |
 | `POST /trips/refresh` | Firebase ID token | Starts "Refresh from email" on the server (`restart: true` from the first email again; `retryFailed: true` only the emails the last one couldn't read) and returns its progress at once; 409 when no mailbox is connected or a batch is still reading |
 | `POST /trips/refresh/stop` | Firebase ID token | Stops the refresh after the batch under way |
+| `POST /trips/start-over` | Firebase ID token | Everything `/trips/delete-all` does, then empties what imports put on the travel profile and reads every connected mailbox again from the start ("Starting over"); returns how many trips went and how many mailboxes started |
 | `POST /trips/delete-all` | Firebase ID token | Deletes every trip the user owns with its bookings, their import records, places waiting for a geocode on those bookings, and how far the last mailbox reading got; returns how many trips went. Trips shared with them, their profile and connections stay |
 | `POST /feeds/add` | Firebase ID token | Subscribes to a calendar feed after checking its address and reading it once; returns counts as for `/import/ics` |
 | `POST /feeds/remove` | Firebase ID token | Stops polling a feed; its bookings stay |

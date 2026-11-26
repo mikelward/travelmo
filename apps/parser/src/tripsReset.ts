@@ -1,5 +1,5 @@
 import { paths } from "@travelmo/core";
-import type { DocumentSnapshot, Firestore } from "firebase-admin/firestore";
+import { FieldValue, type DocumentSnapshot, type Firestore } from "firebase-admin/firestore";
 import type { TripStore } from "./importer";
 import { errorFields } from "./log";
 import { dropStaleRefresh } from "./refreshStore";
@@ -128,6 +128,49 @@ export async function resetTrips(
     return result;
   } catch (error) {
     log("ERROR", "trips_delete_failed", { uid, step, ...errorFields(error) });
+    throw error;
+  }
+}
+
+// What a travel profile was given by imports and found in emails, emptied
+// for starting over: the sections a TripIt upload filled (documents,
+// loyalty programs, fellow travelers), the loyalty numbers found in emails
+// and whose each is. Who the owner trusts with it stays, as does the
+// profile itself, so those people keep seeing what is imported next.
+export async function clearImportedProfile(db: Firestore, uid: string, now: string): Promise<boolean> {
+  const ref = db.doc(paths.travelProfile(uid));
+  return db.runTransaction(async (t) => {
+    if (!(await t.get(ref)).exists) return false;
+    t.update(ref, { travelers: [], loyalty: [], documents: [], foundLoyalty: [], loyaltyPeople: [], importedAt: FieldValue.delete(), updatedAt: now });
+    return true;
+  });
+}
+
+export type StartedOver = TripsDeleted & { mailboxes: number };
+
+// "Delete everything and start over" (SPEC "Starting over"): every trip and
+// its bookings, as resetTrips deletes them, then what imports put on the
+// travel profile, then every connected mailbox read again from the start
+// (`restartReadings`, which says how many it started). Calendar feeds and
+// Google calendars come back on their next poll, their records gone.
+export async function startOver(
+  db: Firestore,
+  uid: string,
+  now: string,
+  restartReadings: () => Promise<number>,
+  log: (severity: "INFO" | "ERROR", event: string, fields: Record<string, unknown>) => void,
+): Promise<StartedOver> {
+  log("INFO", "start_over_started", { uid });
+  const { trips } = await resetTrips(db, uid, log);
+  let step = "profile";
+  try {
+    const profile = await clearImportedProfile(db, uid, now);
+    step = "readings";
+    const mailboxes = await restartReadings();
+    log("INFO", "start_over_done", { uid, trips, profile, mailboxes });
+    return { trips, mailboxes };
+  } catch (error) {
+    log("ERROR", "start_over_failed", { uid, step, ...errorFields(error) });
     throw error;
   }
 }

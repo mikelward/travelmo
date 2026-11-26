@@ -11,7 +11,7 @@ import { cancelImported, emptyCounts, importMessage, importStructured, importTri
 import { firestoreRetryStore, memoryRetryStore } from "./geocodeSweep";
 import { firestoreStore } from "./store";
 import { memoryStore } from "./testStore";
-import { deleteOldRetries, deleteOwnTrips, resetTrips } from "./tripsReset";
+import { clearImportedProfile, deleteOldRetries, deleteOwnTrips, resetTrips, startOver } from "./tripsReset";
 
 // Runs inside `firebase emulators:exec`, which sets FIRESTORE_EMULATOR_HOST.
 const app = getApps()[0] ?? initializeApp({ projectId: "demo-travelmo" });
@@ -509,5 +509,33 @@ describe("resetTrips", () => {
     });
     expect(deleted).toBe(0);
     expect((await ref.get()).get("generation")).toBe(1);
+  });
+});
+
+describe("startOver", () => {
+  it("empties what imports put on the travel profile, keeping who may see it", async () => {
+    const uid = `start-over-${Date.now()}`;
+    const ref = db.doc(paths.travelProfile(uid));
+    const entry = { title: "Example Air", fields: [{ label: "Number", value: "EA 123" }] };
+    await ref.set({
+      ownerUid: uid,
+      trustedEmails: ["partner@example.com"],
+      travelers: [entry],
+      loyalty: [entry],
+      documents: [entry],
+      foundLoyalty: [{ program: "Example Air", number: "EA 123", messageId: "m1", foundAt: at }],
+      loyaltyPeople: [{ program: "Example Air", number: "EA 123", person: "p1" }],
+      importedAt: at,
+    });
+    await db.doc(paths.trip(`${uid}-t`)).set(trip(`${uid}-t`, uid));
+    let restarted = 0;
+    const result = await startOver(db, uid, "2026-11-26T12:00:00Z", async () => (restarted += 1), () => {});
+    expect(restarted).toBe(1);
+    expect(result).toEqual({ trips: 1, mailboxes: 1 });
+    const after = (await ref.get()).data();
+    expect(after).toMatchObject({ ownerUid: uid, trustedEmails: ["partner@example.com"], travelers: [], loyalty: [], documents: [], foundLoyalty: [], loyaltyPeople: [], updatedAt: "2026-11-26T12:00:00Z" });
+    expect(after).not.toHaveProperty("importedAt");
+    // A user with no travel profile has nothing to empty.
+    expect(await clearImportedProfile(db, `${uid}-none`, at)).toBe(false);
   });
 });

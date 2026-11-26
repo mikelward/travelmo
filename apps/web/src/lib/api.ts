@@ -1,5 +1,5 @@
 import type { User } from "firebase/auth";
-import { accountDeletePath, bugReportFailure, bugReportPath, type BugReport, backfillStartPath, backfillStopPath, calendarConnectPath, calendarDisconnectPath, calendarExportIssuePath, calendarSelectPath, calendarExportStopPath, deleteAllTripsPath, fastmailBackfillStartPath, fastmailBackfillStopPath, fastmailConnectPath, fastmailDisconnectPath, feedAddPath, imapBackfillStartPath, imapBackfillStopPath, imapConnectPath, imapDisconnectPath, feedRemovePath, forwardIssuePath, forwardStopPath, gmailConnectPath, gmailDisconnectPath, isDeletionUnfinished, linkRefusalText, refusalOf, refreshPath, refreshStopPath, regroupPath, lookPath, type AccountAccess, type JourneyGap, type LookResult, type CalendarExport, type ForwardAddress, type RegroupResult } from "@travelmo/core";
+import { accountDeletePath, bugReportFailure, bugReportPath, type BugReport, backfillStartPath, backfillStopPath, calendarConnectPath, calendarDisconnectPath, calendarExportIssuePath, calendarSelectPath, calendarExportStopPath, startOverPath, fastmailBackfillStartPath, fastmailBackfillStopPath, fastmailConnectPath, fastmailDisconnectPath, feedAddPath, imapBackfillStartPath, imapBackfillStopPath, imapConnectPath, imapDisconnectPath, feedRemovePath, forwardIssuePath, forwardStopPath, gmailConnectPath, gmailDisconnectPath, isDeletionUnfinished, linkRefusalText, refusalOf, refreshPath, refreshStopPath, regroupPath, lookPath, type AccountAccess, type JourneyGap, type LookResult, type CalendarExport, type ForwardAddress, type RegroupResult } from "@travelmo/core";
 import type { CalendarResult } from "./ics";
 import type { TripItResult } from "./tripit";
 
@@ -139,7 +139,8 @@ export const api = {
   confirmEmail: (user: User, token: string) => post<{ email: string }>(user, "/emails/confirm", { token }),
   removeEmail: (user: User, email: string) => post<void>(user, "/emails/remove", { email }),
   regroupTrips: (user: User) => post<RegroupResult>(user, regroupPath),
-  deleteAllTrips: (user: User) => post<{ trips: number }>(user, deleteAllTripsPath),
+  // "Delete everything and start over" (SPEC "Starting over").
+  startOver: (user: User) => post<{ trips: number; mailboxes: number }>(user, startOverPath),
   // "Refresh from email" (`restart` from the first email again), run on the
   // server; its progress shows on the profile.
   // `retryFailed`: only the emails the last refresh couldn't read.

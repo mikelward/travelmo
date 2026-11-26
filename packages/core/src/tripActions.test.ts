@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeDeletedTrips, describeRefresh, describeRegroup, refreshButton, failedEmailIds, failedEmailLine, failedEmailsReport, failedEmailsShown, moreFailedEmails } from "./tripActions";
+import { describeDeletedTrips, describeStartOver, describeRefresh, describeRegroup, refreshButton, failedEmailIds, failedEmailLine, failedEmailsReport, failedEmailsShown, moreFailedEmails } from "./tripActions";
 
 describe("describeRegroup", () => {
   it("says what changed", () => {
@@ -15,6 +15,14 @@ describe("describeRegroup", () => {
   it("counts the bookings it gave a place", () => {
     expect(describeRegroup({ changed: 0, deleted: 0, placed: 2 })).toBe("Done: 2 bookings placed.");
     expect(describeRegroup({ changed: 1, deleted: 0, placed: 1 })).toBe("Done: 1 trip rebuilt, 1 booking placed.");
+  });
+});
+
+describe("describeStartOver", () => {
+  it("says how many trips went and whether email is being read again", () => {
+    expect(describeStartOver({ trips: 12, mailboxes: 2 })).toBe("Deleted 12 trips. Reading your email again from the start.");
+    expect(describeStartOver({ trips: 0, mailboxes: 1 })).toBe("You had no trips to delete. Reading your email again from the start.");
+    expect(describeStartOver({ trips: 1, mailboxes: 0 })).toBe("Deleted 1 trip. Connect a mailbox, or import past bookings, to start again.");
   });
 });
 

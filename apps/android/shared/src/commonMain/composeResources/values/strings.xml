@@ -258,13 +258,16 @@
     <string name="regroup_hint">Rebuilds your trips from your bookings, keeping days out at home separate from trips away.</string>
     <string name="regroup_trips">Regroup trips</string>
     <string name="regrouping">Regrouping…</string>
-    <string name="delete_all_trips">Delete all trips</string>
-    <string name="delete_all_trips_title">Delete all trips?</string>
-    <string name="delete_all_trips_confirm">Delete all your trips and their bookings? Your profile and connections stay. This cannot be undone.</string>
+    <string name="start_over">Delete everything and start over</string>
+    <string name="start_over_title">Delete everything and start over?</string>
+    <string name="start_over_confirm">Deletes %1$s and every booking in them, including ones you added or edited, stops sharing them, and clears what imports added to your travel profile. Then reads all your email again from the start. Your connections, home and settings stay. Upload TripIt files again afterwards. This can’t be undone.</string>
+    <string name="start_over_all_trips">all your trips</string>
+    <string name="start_over_type">Type DELETE to confirm</string>
+    <string name="start_over_go">Delete everything</string>
     <string name="trips_on_web">Regroup or delete your trips from Settings on the web.</string>
-    <plurals name="delete_n_trips">
-        <item quantity="one">Delete %1$d trip</item>
-        <item quantity="other">Delete %1$d trips</item>
+    <plurals name="your_n_trips">
+        <item quantity="one">your %1$d trip</item>
+        <item quantity="other">your %1$d trips</item>
     </plurals>
     <string name="delete_booking_title">Delete this booking?</string>
     <string name="delete_booking_text">%1$s goes from the trip; an email it came from can be imported again.</string>

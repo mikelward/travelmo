@@ -27,6 +27,7 @@ import {
   type ParsedMessage,
   bugReportLimits,
   bugReportPath,
+  startOverPath,
   checkBugReport,
   lookPath,
 } from "@travelmo/core";
@@ -104,7 +105,7 @@ import { importCalendar, importMessage, importMessages, importTripIt, type Impor
 import { importReport } from "./debugReport";
 import { lookForJourney, lookQuery, type LookMailbox } from "./findJourney";
 import { regroupTrips } from "./regroup";
-import { resetTrips } from "./tripsReset";
+import { resetTrips, startOver } from "./tripsReset";
 import { loadChosenHomeAirports, loadHomeOverrides } from "./homeOverrides";
 import { errorFields, errorKind, log } from "./log";
 import { BadPushEnvelope, parseGmailPush, processNotification, type GmailNotification } from "./pubsub";
@@ -859,6 +860,35 @@ app.post("/trips/delete-all", async (c) => {
   const uid = await requireUser(c);
   const result = await resetTrips(db, uid, (severity, event, fields) => log(severity, event, fields));
   return c.json(result);
+});
+
+// "Delete everything and start over" (SPEC "Starting over"): everything
+// "Delete all trips" deletes, then what imports put on the travel profile,
+// then every connected mailbox read again from the start. A mailbox whose
+// reading cannot start (a batch still under way, gone meanwhile) is logged
+// and left for "Import past bookings".
+app.post(startOverPath, async (c) => {
+  const uid = await requireUser(c);
+  const logged = (severity: "INFO" | "ERROR", event: string, fields: Record<string, unknown>) => log(severity, event, fields);
+  const restartReadings = async () => {
+    const targets: { target: BackfillTarget; key?: string; name: string }[] = [
+      ...(await loadMailboxes(db, uid)).map((m) => ({ target: { emailAddress: m.emailAddress }, key: mailboxKey(m.emailAddress), name: `gmail:${mailboxKey(m.emailAddress)}` })),
+      ...(await loadImapMailboxes(db, uid)).map((m) => ({ target: { provider: "imap" as const, emailAddress: m.emailAddress }, key: mailboxKey(m.emailAddress), name: `imap:${mailboxKey(m.emailAddress)}` })),
+      ...((await loadFastmailState(db, uid)) ? [{ target: { provider: "fastmail" as const }, name: "fastmail" }] : []),
+    ];
+    let started = 0;
+    for (const { target, key, name } of targets) {
+      try {
+        const result = await startBackfill(uid, randomBytes(12).toString("base64url"), true, backfillIo(uid, target), key);
+        if (result.kind === "started" || result.kind === "joined") started += 1;
+        else log("INFO", "start_over_reading_not_started", { uid, mailbox: name, reason: result.kind });
+      } catch (error) {
+        log("ERROR", "start_over_reading_failed", { uid, mailbox: name, ...errorFields(error) });
+      }
+    }
+    return started;
+  };
+  return c.json(await startOver(db, uid, deps.now(), restartReadings, logged));
 });
 
 // The connected mailbox an import record's email is in, and the id it is
