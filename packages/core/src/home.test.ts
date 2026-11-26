@@ -599,6 +599,29 @@ describe("homeCorrections", () => {
     expect(sameCity("Kraków", "Cracow")).toBe(true);
     expect(sameCity("London", "Londonderry")).toBe(false);
   });
+
+  it("knows a city by its name in English or a language of its country", () => {
+    for (const [a, b] of [
+      ["Lisboa", "Lisbon"],
+      ["Köln", "Cologne"],
+      ["München", "Munich"],
+      ["Den Haag", "The Hague"],
+      ["東京", "Tokyo"],
+      ["Москва", "Moscow"],
+      ["Athina", "Athens"],
+      ["Sevilla", "Seville"],
+      ["New York", "New York City"],
+    ]) {
+      expect(sameCity(a!, b!), `${a} is ${b}`).toBe(true);
+    }
+    // Another city's name, or a name in a language the city does not speak, is not this one.
+    expect(sameCity("Paris", "London")).toBe(false);
+    expect(sameCity("Monaco", "Munich")).toBe(false);
+    // A city's own name is its own, though a larger city goes by it too: Mila in Algeria is not Milan.
+    expect(sameCity("ميلة", "Mila")).toBe(true);
+    expect(sameCity("Mila", "Milan")).toBe(false);
+    expect(homeTownKey("Lisboa", "PT")).toBe(homeTownKey("Lisbon", "Portugal"));
+  });
 });
 
 describe("outings during a trip abroad", () => {

@@ -60,29 +60,36 @@ private fun sameTown(a: Town, b: Town): Boolean {
 /** A country as its ISO code, whether written as one or by name ("UK", "United Kingdom" and "GB" are all GB). */
 fun countryCode(country: String): String = countryCodeOf(country) ?: country.trim().uppercase()
 
-// Cities with an English name besides their own, by their own name folded,
-// as packages/core's home.ts lists them.
-private val cityNames = mapOf(
-    "goteborg" to "gothenburg", "munchen" to "munich", "koln" to "cologne", "wien" to "vienna", "praha" to "prague",
-    "warszawa" to "warsaw", "krakow" to "cracow", "kobenhavn" to "copenhagen", "lisboa" to "lisbon", "roma" to "rome",
-    "milano" to "milan", "napoli" to "naples", "firenze" to "florence", "venezia" to "venice", "torino" to "turin",
-    "geneve" to "geneva", "bruxelles" to "brussels", "brussel" to "brussels", "den haag" to "the hague", "sevilla" to "seville",
-    "athina" to "athens", "moskva" to "moscow", "ciudad de mexico" to "mexico city",
-)
+// Every name a city goes by, in English or a language of its country, to
+// its own, from the web's generated cityNames.json, as home.ts reads it: a
+// station in Göteborg is in the Gothenburg its airport names.
+private val otherNames: Map<String, String> by lazy {
+    val names = HashMap<String, String>()
+    val line = Regex(""""([^"]*)":\[(.*)]""")
+    val item = Regex(""""([^"]*)"""")
+    for (match in line.findAll(cityNamesJson)) {
+        val own = match.groupValues[1]
+        for (name in item.findAll(match.groupValues[2])) names[name.groupValues[1]] = own
+    }
+    names
+}
 
 private val marks = Regex("\\p{M}+")
+private val spaces = Regex("\\s+")
 
 // Letters that are not an accented letter, so no accent comes off them.
 private val plainLetters = mapOf('ø' to "o", 'æ' to "ae", 'œ' to "oe", 'ß' to "ss", 'ł' to "l", 'đ' to "d", 'ð' to "d", 'þ' to "th", 'ı' to "i")
 
-private fun foldCity(city: String): String {
-    val folded = decomposed(city).replace(marks, "").trim().lowercase()
-        .map { plainLetters[it] ?: it.toString() }.joinToString("")
-    return cityNames[folded] ?: folded
-}
+// A city's name with case, accents and spacing set aside, as cityFold.ts folds it.
+private fun foldCity(city: String): String =
+    decomposed(city).replace(marks, "").trim().lowercase()
+        .map { plainLetters[it] ?: it.toString() }.joinToString("").replace(spaces, " ")
+
+// The name a city goes by in the table, whichever of its names was given.
+private fun ownName(city: String): String = foldCity(city).let { otherNames[it] ?: it }
 
 /** Whether two city names are one city: ignoring case, accents and the local or English name. */
-fun sameCity(a: String, b: String): Boolean = foldCity(a) == foldCity(b)
+fun sameCity(a: String, b: String): Boolean = ownName(a) == ownName(b)
 
 private fun sameTown(a: Town, b: HomePeriod): Boolean = sameTown(a, Town(b.city, b.country))
 
@@ -213,7 +220,7 @@ fun withChosenAirports(periods: List<HomePeriod>, chosen: List<ChosenHomeAirport
 }
 
 /** One home town, as Profile lists its airports and as its choice is stored: by city and country, as two Londons are two homes. */
-fun homeTownKey(city: String, country: String?): String = "${foldCity(city)}|${country?.let(::countryCode).orEmpty()}"
+fun homeTownKey(city: String, country: String?): String = "${ownName(city)}|${country?.let(::countryCode).orEmpty()}"
 
 /** A home's airports as Profile lists them: their codes, else their names. */
 fun airportCodes(period: HomePeriod): List<String> = period.airports.map { it.code ?: it.name }

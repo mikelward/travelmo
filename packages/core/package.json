@@ -16,6 +16,7 @@
     "test": "vitest run",
     "airports": "node scripts/airports.mjs",
     "cities": "node scripts/cities.mjs",
+    "city-names": "node scripts/cityNames.mjs",
     "visas": "node scripts/visas.mjs"
   },
   "dependencies": {

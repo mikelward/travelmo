@@ -1600,6 +1600,8 @@ export default function SettingsPage() {
           <p className="text-muted">
             Logos from Soaring Symbols, Simple Icons, SVG Logos and Arcticons (CC BY-SA 4.0). They’re trademarks of their owners.
           </p>
+          {/* Credit for the place data, as GeoNames' and OpenFlights' licences ask; as on Android. */}
+          <p className="text-muted">Place names from GeoNames (CC BY 4.0) and OpenFlights (ODbL).</p>
         </>
       )}
     </SignInGate>

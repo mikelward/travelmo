@@ -1,4 +1,6 @@
 import { airportPlace } from "./airportPlaces";
+import { foldCity } from "./cityFold";
+import cityNamesTable from "./cityNames.json";
 import { countryCodeOf, isCountryCode } from "./countries";
 import { formatDate } from "./format";
 import { compareInstants } from "./instant";
@@ -71,49 +73,18 @@ function sameTown(a: Town, b: Town): boolean {
 // "United Kingdom" and "GB" are all GB).
 export const countryCode = (country: string) => countryCodeOf(country) ?? country.trim().toUpperCase();
 
-// Cities with an English name besides their own, by their own name folded
-// (accents dropped, lower case), so a station in Göteborg is in the
-// Gothenburg its airport names.
-const cityNames: Record<string, string> = {
-  goteborg: "gothenburg",
-  munchen: "munich",
-  koln: "cologne",
-  wien: "vienna",
-  praha: "prague",
-  warszawa: "warsaw",
-  krakow: "cracow",
-  kobenhavn: "copenhagen",
-  lisboa: "lisbon",
-  roma: "rome",
-  milano: "milan",
-  napoli: "naples",
-  firenze: "florence",
-  venezia: "venice",
-  torino: "turin",
-  geneve: "geneva",
-  bruxelles: "brussels",
-  brussel: "brussels",
-  "den haag": "the hague",
-  sevilla: "seville",
-  athina: "athens",
-  moskva: "moscow",
-  "ciudad de mexico": "mexico city",
+// Every name a city goes by, in English or a language of its country, to
+// its own (scripts/cityNames.mjs, from GeoNames), so a station in Göteborg
+// is in the Gothenburg its airport names and München is Munich.
+const otherNames = new Map<string, string>();
+for (const [own, names] of Object.entries(cityNamesTable as Record<string, string[]>)) for (const name of names) otherNames.set(name, own);
+
+const ownName = (city: string) => {
+  const folded = foldCity(city);
+  return otherNames.get(folded) ?? folded;
 };
 
-// Letters that are not an accented letter, so no accent comes off them.
-const plainLetters: Record<string, string> = { ø: "o", æ: "ae", œ: "oe", ß: "ss", ł: "l", đ: "d", ð: "d", þ: "th", ı: "i" };
-
-const foldCity = (city: string) => {
-  const folded = city
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
-    .trim()
-    .toLowerCase()
-    .replace(/[øæœßłđðþı]/g, (c) => plainLetters[c]!);
-  return cityNames[folded] ?? folded;
-};
-
-export const sameCity = (a: string, b: string) => foldCity(a) === foldCity(b);
+export const sameCity = (a: string, b: string) => ownName(a) === ownName(b);
 
 const localDate = (instant: string) => instant.slice(0, 10);
 
@@ -281,7 +252,7 @@ export function homesWithAirports(
 // by city and country, as two Londons are two homes.
 // Its city folded as sameCity folds it, so München and Munich are one.
 export function homeTownKey(city: string, country?: string): string {
-  return `${foldCity(city)}|${country ? countryCode(country) : ""}`;
+  return `${ownName(city)}|${country ? countryCode(country) : ""}`;
 }
 
 // A home's airports as Profile lists them: their codes, else their names.
