@@ -1,6 +1,6 @@
 "use client";
 
-import { accessBadge, allLoyalty, guessMe, loyaltyByPerson, loyaltySummary, type FoundLoyalty, type ProfileEntry, type TravelProfile } from "@travelmo/core";
+import { accessBadge, allLoyalty, guessMe, loyaltyByPerson, loyaltySummary, type FoundLoyalty, type PersonDoc, type ProfileEntry, type TravelProfile } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
 import { useState } from "react";
@@ -10,7 +10,7 @@ import { useAuth } from "@/lib/auth";
 import { airportCodes, homeTownKey, correctionText, failedReadsText, homeLine, logged, parseAirportCodes, parseCorrection, saveCorrections, saveHomeAirports, useHomes, type Homes } from "@/lib/home";
 import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
-import { setMe, usePeople } from "@/lib/people";
+import { mergePeople, sayWhoIs, setMe, usePeople } from "@/lib/people";
 import { maxTrusted, removeFoundLoyalty, saveTrusted, setLoyaltyPerson, useSharedProfiles, useTravelProfile } from "@/lib/travelProfile";
 
 const buttonClass =
@@ -104,12 +104,43 @@ function PersonDialog({
   );
 }
 
+// Which of the user's people someone is: "Who is this?" on a loyalty
+// holder's name and "Same person as…" on a person both pick from it.
+function PeoplePicker({ title, people, except, onPick, onClose }: { title: string; people: readonly PersonDoc[]; except?: string; onPick: (personId: string) => void; onClose: () => void }) {
+  const me = guessMe(people);
+  // The user first, then as People lists them.
+  const listed = [...people.filter((p) => p.id === me?.id), ...people.filter((p) => p.id !== me?.id)].filter((p) => p.id !== except);
+  const option = "w-full rounded-lg px-2 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-900";
+  return (
+    <Dialog title={title} onClose={onClose}>
+      <ul>
+        {listed.map((p) => (
+          <li key={p.id}>
+            <button
+              type="button"
+              className={option}
+              onClick={() => {
+                onPick(p.id);
+                onClose();
+              }}
+            >
+              {p.name}
+              {p.id === me?.id && <span className="ml-2 text-xs font-medium uppercase tracking-wide text-muted">You</span>}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Dialog>
+  );
+}
+
 // Every program at a glance: the number, the balance and the status, read
 // from whatever labels the import gave them, the owner's first and then
 // each other person's; the full entries fold below. On the owner's own
 // profile each says whose it is.
-function LoyaltyTable({ entries, ownUid }: { entries: ProfileEntry[]; ownUid?: string }) {
+function LoyaltyTable({ entries, ownUid, travelers }: { entries: ProfileEntry[]; ownUid?: string; travelers?: readonly PersonDoc[] }) {
   const [editing, setEditing] = useState<{ program: string; number: string }>();
+  const [naming, setNaming] = useState<string>();
   const [error, setError] = useState<string>();
   if (!entries.length) return null;
   const groups = loyaltyByPerson(entries);
@@ -124,6 +155,16 @@ function LoyaltyTable({ entries, ownUid }: { entries: ProfileEntry[]; ownUid?: s
       setError((e as Error).message);
     }
   };
+  const whoIs = async (name: string, personId: string) => {
+    if (!ownUid || !travelers) return;
+    setError(undefined);
+    try {
+      await sayWhoIs(firestore(), ownUid, travelers, name, personId);
+    } catch (e) {
+      console.error("Saving who a loyalty holder is failed", e);
+      setError((e as Error).message);
+    }
+  };
   return (
     <section className="mt-6">
       <h3 className="text-lg font-medium">Loyalty programs</h3>
@@ -133,7 +174,16 @@ function LoyaltyTable({ entries, ownUid }: { entries: ProfileEntry[]; ownUid?: s
         const named = groups.length > 1 || !!group.person;
         return (
           <div key={group.person ?? ""}>
-            {named && <h4 className="mt-4 text-lg font-medium">{name}</h4>}
+            {named && (
+              <div className="mt-4 flex items-baseline justify-between gap-3">
+                <h4 className="text-lg font-medium">{name}</h4>
+                {group.person && ownUid && !!travelers?.length && (
+                  <button type="button" className="text-muted hover:underline" onClick={() => setNaming(group.person)}>
+                    Who is this?
+                  </button>
+                )}
+              </div>
+            )}
             <table className="mt-2 w-full" aria-label={named ? `Loyalty programs: ${name}` : "Loyalty programs"}>
               <thead className="text-left text-muted">
                 <tr>
@@ -174,6 +224,9 @@ function LoyaltyTable({ entries, ownUid }: { entries: ProfileEntry[]; ownUid?: s
         );
       })}
       {error && <p className="mt-2 text-danger">{error}</p>}
+      {naming && travelers && (
+        <PeoplePicker title={`Who is ${naming}?`} people={travelers} onPick={(id) => void whoIs(naming, id)} onClose={() => setNaming(undefined)} />
+      )}
       {editing && (
         <PersonDialog program={editing.program} number={editing.number} people={people} onPick={(p) => void pick(p)} onClose={() => setEditing(undefined)} />
       )}
@@ -219,12 +272,14 @@ function FoundInEmails({ uid, found }: { uid: string; found: FoundLoyalty[] }) {
 }
 
 // `ownUid` is set on the viewer's own profile, where what emails showed can be removed.
-function ProfileSections({ profile, ownUid }: { profile: TravelProfile; ownUid?: string }) {
-  const loyalty = allLoyalty(profile);
+// `travelers`: the owner's people, on their own profile, so every spelling
+// of someone is one person (allLoyalty).
+function ProfileSections({ profile, ownUid, travelers }: { profile: TravelProfile; ownUid?: string; travelers?: readonly PersonDoc[] }) {
+  const loyalty = allLoyalty(profile, travelers);
   return (
     <>
       <Entries title="Documents" entries={profile.documents} open={false} />
-      <LoyaltyTable entries={loyalty} {...(ownUid ? { ownUid } : {})} />
+      <LoyaltyTable entries={loyalty} {...(ownUid ? { ownUid } : {})} {...(travelers ? { travelers } : {})} />
       {ownUid && <FoundInEmails uid={ownUid} found={profile.foundLoyalty ?? []} />}
       <Entries title="Loyalty program details" entries={loyalty} open={false} />
       <Entries title="Travelers" entries={profile.travelers} open={false} />
@@ -503,10 +558,11 @@ function SharedWithYou({ user }: { user: User }) {
 }
 
 // Who the user's bookings are for (SPEC "Travelers"): each person, the one
-// taken to be the user marked, and "This is me" to say otherwise.
-function PeopleSection({ user }: { user: User }) {
-  const people = usePeople(user.uid);
+// taken to be the user marked, "This is me" to say otherwise, and "Same
+// person as…" to merge two who are one ("Jessica Wilkes", now "Jessica Ward").
+function PeopleSection({ user, people }: { user: User; people: PersonDoc[] | undefined }) {
   const [error, setError] = useState<string>();
+  const [merging, setMerging] = useState<PersonDoc>();
   if (!people || people.length === 0) return null;
   const me = guessMe(people);
   return (
@@ -520,30 +576,52 @@ function PeopleSection({ user }: { user: User }) {
               {person.name}
               {person.id === me?.id && <span className="ml-2 text-xs font-medium uppercase tracking-wide text-muted">You</span>}
             </span>
-            {person.id !== me?.id && (
-              <button
-                type="button"
-                className="text-muted hover:underline"
-                onClick={() =>
-                  setMe(firestore(), user.uid, people, person.id).catch((e: Error) => {
-                    console.error("Saving who the user is failed", e);
-                    setError(e.message);
-                  })
-                }
-              >
-                This is me
-              </button>
-            )}
+            <span className="flex shrink-0 gap-4">
+              {person.id !== me?.id && (
+                <button
+                  type="button"
+                  className="text-muted hover:underline"
+                  onClick={() =>
+                    setMe(firestore(), user.uid, people, person.id).catch((e: Error) => {
+                      console.error("Saving who the user is failed", e);
+                      setError(e.message);
+                    })
+                  }
+                >
+                  This is me
+                </button>
+              )}
+              {people.length > 1 && (
+                <button type="button" className="text-muted hover:underline" onClick={() => setMerging(person)}>
+                  Same person as…
+                </button>
+              )}
+            </span>
           </li>
         ))}
       </ul>
       {error && <p className="mt-2 text-danger">{error}</p>}
+      {merging && (
+        <PeoplePicker
+          title={`${merging.name} is the same person as`}
+          people={people}
+          except={merging.id}
+          onPick={(id) =>
+            void mergePeople(firestore(), user.uid, people, merging.id, id).catch((e: Error) => {
+              console.error("Merging two people failed", e);
+              setError(e.message);
+            })
+          }
+          onClose={() => setMerging(undefined)}
+        />
+      )}
     </section>
   );
 }
 
 function ProfilePage({ user }: { user: User }) {
   const profile = useTravelProfile(user.uid);
+  const people = usePeople(user.uid);
   const { access } = useAuth();
   const email = user.email?.toLowerCase();
   const badge = access.state === "loading" ? undefined : accessBadge(access.admin, user.emailVerified ? email : undefined, access.record);
@@ -563,8 +641,8 @@ function ProfilePage({ user }: { user: User }) {
           bring in your documents, loyalty programs and fellow travelers.
         </p>
       )}
-      {profile && hasDetails(profile) && <ProfileSections profile={profile} ownUid={user.uid} />}
-      <PeopleSection user={user} />
+      {profile && hasDetails(profile) && <ProfileSections profile={profile} ownUid={user.uid} {...(people ? { travelers: people } : {})} />}
+      <PeopleSection user={user} people={people} />
       <HomeSection user={user} />
       {profile !== undefined && <SharingSection user={user} profile={profile} />}
       <SharedWithYou user={user} />

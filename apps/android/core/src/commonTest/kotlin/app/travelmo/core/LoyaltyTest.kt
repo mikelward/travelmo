@@ -131,4 +131,21 @@ class LoyaltyTest {
     fun `tells a balance read as a number from a membership number`() {
         listOf("9,600 Points", "XXXXX8400", "1200 miles", "UA-XXXXX166", "Gold").map(::isMembershipNumber) shouldBe listOf(false, true, false, true, false)
     }
+
+    @Test
+    fun `shows every spelling of someone as one person and the owner's own as theirs`() {
+        val travelers = listOf(
+            Person("me", "Mikel Ward", aliases = listOf("Mikel Bradlee Ward", "Michael Ward"), me = true, bookings = 9, direct = 9),
+            Person("jess", "Jessica Ward", aliases = listOf("Jessica Wilkes"), bookings = 4),
+        )
+        fun found(number: String, person: String) = FoundLoyalty("Example Air", number, messageId = "m$number", at = "2027-01-01T00:00:00Z", person = person)
+        val profile = TravelProfile(
+            "u1",
+            foundLoyalty = listOf(found("1", "Mikelbradlee Ward"), found("2", "Mikelb Ward"), found("3", "Michael Ward"), found("4", "Jessica Wilkes"), found("5", "Jessica Ward"), found("6", "Alex Sample")),
+            // The owner said this one is "Jessica Wilkes"'s.
+            loyaltyPeople = listOf(LoyaltyPerson("Example Air", "6", "Jessica Wilkes")),
+        )
+        people(allLoyalty(profile, travelers)) shouldBe listOf("You" to listOf("1", "2", "3"), "Jessica Ward" to listOf("4", "5", "6"))
+        people(allLoyalty(profile)).map { it.first } shouldBe listOf("Jessica Ward", "Jessica Wilkes", "Michael Ward", "Mikelb Ward", "Mikelbradlee Ward")
+    }
 }

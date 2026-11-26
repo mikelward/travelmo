@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mergeDetails } from "./trips";
-import { canonicalName, canonicalTravelers, findPerson, guessMe, notePeople, sameTraveler } from "./travelers";
+import { canonicalName, canonicalTravelers, findPerson, guessMe, mergedPerson, notePeople, sameTraveler, withAlias } from "./travelers";
 
 describe("canonicalName", () => {
   it("reads an airline record's surname/given name, with or without a title", () => {
@@ -48,6 +48,20 @@ describe("sameTraveler", () => {
   it("compares accented letters as plain ones, as Android does", () => {
     expect(sameTraveler("Trần An", "Tran An")).toBe(true);
     expect(sameTraveler("Søren Hansen", "Soren Hansen")).toBe(true);
+  });
+
+  it("matches a first and middle name run together, or with the middle one an initial", () => {
+    expect(sameTraveler("MIKELBRADLEE WARD", "Mikel Bradlee Ward")).toBe(true);
+    expect(sameTraveler("Mikel Bradlee Ward", "WARD/MIKELB MR")).toBe(true);
+    expect(sameTraveler("Anna Maria Lena Berg", "Annamarial Berg")).toBe(true);
+    // Not without the middle name to go on, nor another one.
+    expect(sameTraveler("Mikelb Ward", "Mikel Ward")).toBe(false);
+    expect(sameTraveler("Mikela Ward", "Mikel Bradlee Ward")).toBe(false);
+    expect(canonicalTravelers(["MIKELBRADLEE WARD", "Mikel Bradlee Ward"])).toEqual(["Mikel Bradlee Ward"]);
+  });
+
+  it("keeps a Jr apart from the same name without one", () => {
+    expect(sameTraveler("John Smith Jr", "John Smith")).toBe(false);
   });
 
   it("keeps apart different first names, or the same first name in different families", () => {
@@ -209,5 +223,36 @@ describe("people named through an initial", () => {
       ["J Smith", 2],
       ["Jane Smith", 1],
     ]);
+  });
+});
+
+describe("mergedPerson", () => {
+  const ward = { id: "p1", name: "Jessica Ward", aliases: ["J Ward"] };
+  const wilkes = { id: "p2", name: "Jessica Wilkes", aliases: ["WILKES/JESSICA MS", "J Ward"] };
+
+  it("keeps one name and every other spelling of both, once", () => {
+    expect(mergedPerson(ward, wilkes, false)).toEqual({ name: "Jessica Ward", aliases: ["J Ward", "Jessica Wilkes", "WILKES/JESSICA MS"] });
+    expect(findPerson([{ ...ward, ...mergedPerson(ward, wilkes, false) }], "Jessica Wilkes")?.id).toBe("p1");
+  });
+
+  it("is the user when either was", () => {
+    expect(mergedPerson(ward, { ...wilkes, me: true }, true).me).toBe(true);
+    expect(mergedPerson({ ...ward, me: false }, wilkes, false).me).toBe(false);
+  });
+
+  it("keeps at most fifty spellings, the newest", () => {
+    const many = { ...wilkes, aliases: Array.from({ length: 60 }, (_, i) => `J${i} Wilkes`) };
+    const merged = mergedPerson(ward, many, false).aliases;
+    expect(merged).toHaveLength(50);
+    expect(merged[49]).toBe("J59 Wilkes");
+  });
+});
+
+describe("withAlias", () => {
+  it("adds a spelling once", () => {
+    const me = { id: "p1", name: "Mikel Ward", aliases: ["MIKEL WARD"] };
+    expect(withAlias(me, " Michael Ward ")).toEqual(["MIKEL WARD", "Michael Ward"]);
+    expect(withAlias(me, "MIKEL WARD")).toBe(me.aliases);
+    expect(withAlias(me, "Mikel Ward")).toBe(me.aliases);
   });
 });

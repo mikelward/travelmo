@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { openBooking, owner, partner, signIn, signOut } from "./helpers";
-import { clearData, readTravelProfile, readUser, seedFlight, seedTravelProfile, seedTrip } from "./seed";
+import { clearData, readPerson, readTravelProfile, readUser, seedFlight, seedPerson, seedTravelProfile, seedTrip } from "./seed";
 
 test.beforeEach(async () => {
   await clearData();
@@ -135,6 +135,23 @@ test("each loyalty number is shown under whose it is, on the profile and on a bo
   await page.getByLabel("Someone else's name").fill("Sam Sample");
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("table", { name: "Loyalty programs: Sam Sample" })).toContainText("EA 999");
+});
+
+test("a loyalty holder's name that is the owner's, however written, is theirs, and Who is this? says so", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  await seedPerson(ownerUid, { id: "me", name: "Sam Example", aliases: ["Sam Lee Example"], bookings: 4, direct: 4 });
+  const found = (number: string, person: string) => ({ program: "Example Air Club", number, person, messageId: `m${number}`, label: "Your flight", at: "2026-11-01T00:00:00Z" });
+  await seedTravelProfile(ownerUid, { ownerEmail: owner, trustedEmails: [], documents: [], loyalty: [], travelers: [], foundLoyalty: [found("EA 1", "Samlee Example"), found("EA 2", "Samuel Example")] });
+  await page.goto("/profile");
+  // A first and middle name run together is the owner's.
+  await expect(page.getByRole("table", { name: "Loyalty programs: You" })).toContainText("EA 1");
+  // A misspelling is someone else until the owner says otherwise.
+  await expect(page.getByRole("table", { name: "Loyalty programs: Samuel Example" })).toContainText("EA 2");
+  await page.getByRole("button", { name: "Who is this?" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /Sam Example/ }).click();
+  await expect.poll(async () => (await readPerson(ownerUid, "me"))?.aliases).toEqual(["Sam Lee Example", "Samuel Example"]);
+  await expect(page.getByRole("heading", { name: "Samuel Example" })).toHaveCount(0);
+  await expect(page.getByRole("table", { name: "Loyalty programs" })).toContainText("EA 2");
 });
 
 test("home is set by city and a country written as a name, saved as its code", async ({ page }) => {

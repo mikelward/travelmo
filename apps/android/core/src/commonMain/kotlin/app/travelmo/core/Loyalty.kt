@@ -99,7 +99,14 @@ fun foundLoyaltyEntry(found: FoundLoyalty): ProfileEntry = ProfileEntry(
  * brings its balance and status to the imported program it matches, ahead of
  * the imported ones, which the table reads first.
  */
-fun allLoyalty(profile: TravelProfile): List<ProfileEntry> {
+fun allLoyalty(profile: TravelProfile, travelers: List<Person> = emptyList()): List<ProfileEntry> {
+    // A name that is one of the owner's people is shown as theirs, and one of
+    // the owner's own spellings is the owner's (allLoyalty in loyalty.ts).
+    val me = guessMe(travelers)
+    fun known(name: String?): String? {
+        val person = name?.let { findPerson(travelers, it) }
+        return if (person != null && person.id == me?.id) null else person?.name ?: name
+    }
     // One membership: the same number in the same program, as the parser keeps them.
     fun matches(entry: ProfileEntry, found: FoundLoyalty): Boolean {
         val account = loyaltySummary(entry).account ?: return false
@@ -108,7 +115,7 @@ fun allLoyalty(profile: TravelProfile): List<ProfileEntry> {
     // Whose it is: as the owner said, else as the email named, else theirs.
     fun withPerson(entry: ProfileEntry, number: String?, fromEmail: FoundLoyalty?): ProfileEntry {
         val said = number?.let { n -> profile.loyaltyPeople.lastOrNull { sameMembership(it.program, it.number, entry.title, n) } }
-        val person = if (said != null) said.person else fromEmail?.person
+        val person = known(if (said != null) said.person else fromEmail?.person)
         return if (person != null) ProfileEntry(entry.title, entry.fields + ProfileField(PERSON_LABEL, person)) else entry
     }
     // Newer than the TripIt upload, so it has the last word (no upload: it has).

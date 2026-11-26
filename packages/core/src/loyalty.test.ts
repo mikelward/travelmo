@@ -299,3 +299,30 @@ describe("personName", () => {
     expect(personName("  ")).toBeUndefined();
   });
 });
+
+describe("allLoyalty with the owner's people", () => {
+  const people = [
+    { id: "me", name: "Mikel Ward", aliases: ["Mikel Bradlee Ward", "Michael Ward"], me: true, bookings: 9, direct: 9 },
+    { id: "jess", name: "Jessica Ward", aliases: ["Jessica Wilkes"], bookings: 4, direct: 0 },
+  ];
+  const found = (number: string, person?: string): FoundLoyalty => ({ program: "Example Air", number, messageId: `m${number}`, at: "2027-01-01T00:00:00Z", ...(person ? { person } : {}) });
+  const profile = TravelProfile.parse({
+    ownerUid: "u1",
+    trustedEmails: [],
+    foundLoyalty: [found("1", "Mikelbradlee Ward"), found("2", "Mikelb Ward"), found("3", "Michael Ward"), found("4", "Jessica Wilkes"), found("5", "Jessica Ward"), found("6", "Alex Sample")],
+    // The owner said this one is "Jessica Wilkes"'s.
+    loyaltyPeople: [{ program: "Example Air", number: "6", person: "Jessica Wilkes" }],
+  });
+
+  it("shows every spelling of someone as one person, and the owner's own as theirs", () => {
+    const groups = loyaltyByPerson(allLoyalty(profile, people)).map((g) => [g.person, g.entries.map((e) => loyaltySummary(e).account)]);
+    expect(groups).toEqual([
+      [undefined, ["1", "2", "3"]],
+      ["Jessica Ward", ["4", "5", "6"]],
+    ]);
+  });
+
+  it("goes by the names emails gave without them", () => {
+    expect(loyaltyByPerson(allLoyalty(profile)).map((g) => g.person)).toEqual(["Jessica Ward", "Jessica Wilkes", "Michael Ward", "Mikelb Ward", "Mikelbradlee Ward"]);
+  });
+});

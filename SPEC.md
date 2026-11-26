@@ -392,7 +392,9 @@ Each import also keeps the user's people (`users/{uid}/people/{id}`,
 booking is someone already known (`findPerson`, by their name or any other
 spelling seen; through an initial only when none of their spellings has
 another whole first name, so "J Smith" known as John isn't Jane), who
-gains the spelling and one more booking, or someone new
+gains the spelling and one more booking (a first and middle name run
+together, "MIKELBRADLEE WARD" or "MIKELB WARD", is the person with that
+middle name among their spellings; "John Smith Jr" is not "John Smith"), or someone new
 (`notePeople`), in the same transaction as the booking. A later email,
 or Refresh, that names someone new on a booking already filed counts them
 too, and only them, so reading an email again counts no one twice; a new
@@ -405,8 +407,12 @@ mirrored in `People.kt`) is the one they said, else the one most named on
 those direct emails, then on any booking. Profile, on the web and Android,
 lists the people, most often named first, marks the one taken to be the
 user "You", and offers "This is me" on the others (one batch, so only one
-is marked); the rules let the owner change only a person's name, other
-spellings and that mark.
+is marked) and "Same person as…" on each, which merges it into the person
+picked (`mergedPerson`, one batch: that person keeps their name and gains
+the other's name and every spelling, the newest fifty, and is the user if
+either was taken to be; the other is deleted), for someone written two
+ways, such as a maiden and a married name. The rules let the owner change
+only a person's name, other spellings and that mark, and delete one.
 
 **Watching.** A trip whose bookings name travelers, none of them the user
 (`watching` in `listFilters.ts`, mirrored in `ListFilters.kt`: each name
@@ -2591,7 +2597,15 @@ someone else's. On the owner's own Profile each row's ⋮ asks "Whose is …?":
 Mine, a person already named, or someone else by name. The answer goes in
 `loyaltyPeople` on the travel profile (program, number, and the person or
 nobody for the owner; the newest hundred, owner-writable only), which wins
-over what the email said and covers TripIt's programs too.
+over what the email said and covers TripIt's programs too. On the owner's
+own Profile and their bookings, a name either gives is read through their
+people (`allLoyalty`, `findPerson`): one of the user's own spellings is
+the owner's, and one of someone else's is shown by that person's name, so
+"Mikelbradlee Ward" is the owner's and "Jessica Wilkes" is "Jessica Ward"
+once the two are merged. Each other person's heading there offers "Who is
+this?", picking one of the people: the name joins that person's spellings,
+or, when the bookings named someone by it, that person is merged into the
+one picked.
 
 Numbers are kept only from an email that books travel (a flight, train,
 bus, ferry, stay or car): a ticket or an appointment that shows a member

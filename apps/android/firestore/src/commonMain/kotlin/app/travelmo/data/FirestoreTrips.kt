@@ -210,6 +210,21 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         }.await()
     }
 
+    /** As the web's mergePeople: the person kept updated and the other deleted, in one batch. */
+    override suspend fun mergePeople(uid: String, merged: Person, from: Person) {
+        val now = Clock.System.now().toString()
+        val ref = db.collection("users").document(uid).collection("people")
+        db.runBatch { batch ->
+            batch.updateData(ref.document(merged.id), mapOf("name" to merged.name, "aliases" to merged.aliases, "me" to merged.me, "updatedAt" to now))
+            batch.delete(ref.document(from.id))
+        }.await()
+    }
+
+    override suspend fun setAliases(uid: String, personId: String, aliases: List<String>) {
+        db.collection("users").document(uid).collection("people").document(personId)
+            .update(mapOf("aliases" to aliases, "updatedAt" to Clock.System.now().toString())).await()
+    }
+
     override fun feeds(uid: String): Flow<List<CalendarFeedShown>?> = callbackFlow {
         val registration = db.collection("users").document(uid).collection("feeds").orderBy("addedAt")
             .addSnapshotListener { snapshot, error ->

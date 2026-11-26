@@ -1,7 +1,7 @@
 "use client";
 
-import { PersonDoc, paths } from "@travelmo/core";
-import { collection, doc, onSnapshot, writeBatch, type Firestore } from "firebase/firestore";
+import { PersonDoc, findPerson, guessMe, mergedPerson, paths, withAlias } from "@travelmo/core";
+import { collection, doc, onSnapshot, updateDoc, writeBatch, type Firestore } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { firestore } from "./firebase";
 
@@ -35,4 +35,31 @@ export async function setMe(db: Firestore, uid: string, people: readonly PersonD
     else if (person.me) batch.update(doc(db, paths.person(uid, person.id)), { me: false, updatedAt });
   }
   await batch.commit();
+}
+
+// Merges `fromId` into `intoId`, one person (SPEC "Travelers"): the one
+// kept gains the other's name and spellings, and is the user when either
+// was taken to be; the other goes. One batch, so neither is left half done.
+export async function mergePeople(db: Firestore, uid: string, people: readonly PersonDoc[], fromId: string, intoId: string): Promise<void> {
+  const from = people.find((p) => p.id === fromId);
+  const into = people.find((p) => p.id === intoId);
+  if (!from || !into || from.id === into.id) return;
+  const me = guessMe(people)?.id;
+  const batch = writeBatch(db);
+  batch.update(doc(db, paths.person(uid, into.id)), { ...mergedPerson(into, from, me === from.id || me === into.id), updatedAt: new Date().toISOString() });
+  batch.delete(doc(db, paths.person(uid, from.id)));
+  await batch.commit();
+}
+
+// Says `name` (a loyalty number's holder) is `intoId`: merges the person
+// by that name into them when the bookings named one, else adds it as one
+// more spelling of theirs.
+export async function sayWhoIs(db: Firestore, uid: string, people: readonly PersonDoc[], name: string, intoId: string): Promise<void> {
+  const into = people.find((p) => p.id === intoId);
+  if (!into) return;
+  const named = findPerson(people, name);
+  if (named && named.id !== into.id) return mergePeople(db, uid, people, named.id, into.id);
+  const aliases = withAlias(into, name);
+  if (aliases === into.aliases) return;
+  await updateDoc(doc(db, paths.person(uid, into.id)), { aliases, updatedAt: new Date().toISOString() });
 }

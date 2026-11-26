@@ -5,12 +5,16 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.travelmo.core.FoundLoyalty
+import app.travelmo.core.TravelProfile
 import app.travelmo.data.TripStore
 import app.travelmo.ui.theme.TravelmoTheme
 import io.kotest.matchers.shouldBe
@@ -52,6 +56,55 @@ class ProfileScreenTest {
         composeRule.onNodeWithText("This is me").performClick()
         composeRule.waitForIdle()
         store.peopleState.value.single { it.me }.id shouldBe "mum"
+    }
+
+    @Test
+    fun `Same person as merges two people into one`() {
+        val store = FakeTripStore(
+            people = listOf(
+                app.travelmo.core.Person("now", "Pat Example", aliases = listOf("P Example"), bookings = 6),
+                app.travelmo.core.Person("before", "Pat Sample", bookings = 2),
+                app.travelmo.core.Person("me", "Sam Example", bookings = 4, direct = 4),
+            ),
+        )
+        show(store)
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Pat Sample"))
+        // Listed most named first: Pat Example, Sam Example, Pat Sample.
+        composeRule.onAllNodesWithText("Same person as…")[2].performClick()
+        composeRule.onNodeWithText("Pat Sample is the same person as").assertExists()
+        composeRule.onAllNodesWithText("Pat Example").onLast().performClick()
+        composeRule.waitForIdle()
+        store.peopleState.value.map { it.id } shouldBe listOf("now", "me")
+        store.peopleState.value.first().aliases shouldBe listOf("P Example", "Pat Sample")
+    }
+
+    @Test
+    fun `the people picker scrolls to the last of many people`() {
+        val many = List(40) { app.travelmo.core.Person("p$it", "Person $it Example", bookings = 100 - it) }
+        val store = FakeTripStore(people = many)
+        show(store)
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Person 0 Example"))
+        composeRule.onAllNodesWithText("Same person as…")[0].performClick()
+        composeRule.onNodeWithText("Person 39 Example").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        store.peopleState.value.map { it.id } shouldBe many.map { it.id }.filter { it != "p0" }
+    }
+
+    @Test
+    fun `Who is this says a loyalty holder's name is one of the user's people`() {
+        val profile = TravelProfile(
+            OWNER,
+            foundLoyalty = listOf(FoundLoyalty("Example Air Club", "EA 2", messageId = "m2", at = "2026-11-01T00:00:00Z", person = "Samuel Example")),
+        )
+        val store = FakeTripStore(profile = profile, people = listOf(app.travelmo.core.Person("me", "Sam Example", bookings = 4, direct = 4)))
+        show(store)
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Who is this?"))
+        composeRule.onNodeWithText("Who is this?").performClick()
+        composeRule.onNodeWithText("Who is Samuel Example?").assertExists()
+        composeRule.onAllNodesWithText("Sam Example").onLast().performClick()
+        composeRule.waitForIdle()
+        store.peopleState.value.single().aliases shouldBe listOf("Samuel Example")
+        composeRule.onAllNodesWithText("Samuel Example").assertCountEquals(0)
     }
 
     @Test

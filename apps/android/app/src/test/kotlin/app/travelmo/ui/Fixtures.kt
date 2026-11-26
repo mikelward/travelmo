@@ -353,6 +353,12 @@ class FakeTripStore(
     override suspend fun setMe(uid: String, people: List<app.travelmo.core.Person>, personId: String) {
         peopleState.value = peopleState.value.map { it.copy(me = it.id == personId) }
     }
+    override suspend fun mergePeople(uid: String, merged: app.travelmo.core.Person, from: app.travelmo.core.Person) {
+        peopleState.value = peopleState.value.filter { it.id != from.id }.map { if (it.id == merged.id) merged else it }
+    }
+    override suspend fun setAliases(uid: String, personId: String, aliases: List<String>) {
+        peopleState.value = peopleState.value.map { if (it.id == personId) it.copy(aliases = aliases) else it }
+    }
     val reminders = mutableListOf<Boolean>()
 
     override fun reminderEmail(uid: String): Flow<Boolean?> = flowOf(true)

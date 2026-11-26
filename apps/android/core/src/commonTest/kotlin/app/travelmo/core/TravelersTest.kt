@@ -83,4 +83,39 @@ class TravelersTest {
         findPerson(smiths, "J Smith")?.id shouldBe "john"
         findPerson(listOf(Person("j", "J Smith")), "Jane Smith")?.id shouldBe "j"
     }
+
+    @Test
+    fun `matches a first and middle name run together or with the middle one an initial`() {
+        sameTraveler("MIKELBRADLEE WARD", "Mikel Bradlee Ward") shouldBe true
+        sameTraveler("Mikel Bradlee Ward", "WARD/MIKELB MR") shouldBe true
+        sameTraveler("Anna Maria Lena Berg", "Annamarial Berg") shouldBe true
+        sameTraveler("Mikelb Ward", "Mikel Ward") shouldBe false
+        sameTraveler("Mikela Ward", "Mikel Bradlee Ward") shouldBe false
+        canonicalTravelers(listOf("MIKELBRADLEE WARD", "Mikel Bradlee Ward")) shouldBe listOf("Mikel Bradlee Ward")
+        sameTraveler("John Smith Jr", "John Smith") shouldBe false
+    }
+
+    @Test
+    fun `merges two people keeping one name and every other spelling once`() {
+        val ward = Person("p1", "Jessica Ward", aliases = listOf("J Ward"))
+        val wilkes = Person("p2", "Jessica Wilkes", aliases = listOf("WILKES/JESSICA MS", "J Ward"))
+        val merged = mergedPerson(ward, wilkes, me = false)
+        merged.name shouldBe "Jessica Ward"
+        merged.aliases shouldBe listOf("J Ward", "Jessica Wilkes", "WILKES/JESSICA MS")
+        merged.me shouldBe false
+        mergedPerson(ward, wilkes, me = true).me shouldBe true
+        findPerson(listOf(merged), "Jessica Wilkes")?.id shouldBe "p1"
+        mergedPerson(ward, wilkes.copy(aliases = List(60) { "J$it Wilkes" }), me = false).aliases.let {
+            it shouldHaveSize 50
+            it.last() shouldBe "J59 Wilkes"
+        }
+    }
+
+    @Test
+    fun `adds a spelling once`() {
+        val me = Person("p1", "Mikel Ward", aliases = listOf("MIKEL WARD"))
+        withAlias(me, " Michael Ward ") shouldBe listOf("MIKEL WARD", "Michael Ward")
+        withAlias(me, "MIKEL WARD") shouldBe me.aliases
+        withAlias(me, "Mikel Ward") shouldBe me.aliases
+    }
 }

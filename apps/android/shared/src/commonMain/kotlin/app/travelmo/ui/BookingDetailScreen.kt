@@ -83,6 +83,8 @@ fun BookingDetailScreen(
     val segments by segmentsFlow.collectAsStateWithLifecycle(initialValue = null)
     val addresses by viewModel.addresses.collectAsStateWithLifecycle()
     val ownProfile by viewModel.ownProfile.collectAsStateWithLifecycle()
+    // The user's people, so every spelling of someone on a loyalty number is one person.
+    val people by viewModel.travelers.collectAsStateWithLifecycle()
     val gmailMailboxes by viewModel.gmailMailboxes.collectAsStateWithLifecycle()
     val patterns by viewModel.senderPatterns.collectAsStateWithLifecycle()
     val cleanup by viewModel.senderCleanup.collectAsStateWithLifecycle()
@@ -144,7 +146,7 @@ fun BookingDetailScreen(
         }
         BookingDetails(
             segment,
-            programs = programsFor(segment.provider, ownProfile?.let(::allLoyalty).orEmpty()),
+            programs = programsFor(segment.provider, ownProfile?.let { allLoyalty(it, people) }.orEmpty()),
             emailLink = { source -> emailLinkFor(source, uid, ownsTrip = isOwner, mailboxes = gmailMailboxes) },
             errors = mine.values.mapNotNull { (it as? Outcome.Failed)?.message },
             // Sender rules are the viewer's own, so the offers stand for the owner only: the import ran against their mailbox.
