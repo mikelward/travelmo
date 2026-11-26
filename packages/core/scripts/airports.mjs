@@ -1,7 +1,8 @@
 // Regenerates src/airports.json, IATA code to IANA time zone, for preselecting
 // a booking's time zone from the airport typed into From/To; and
-// src/airportPlaces.json, IATA code to [ISO country, latitude, longitude], for
-// placing a flight on the reports page's map and in its country.
+// src/airportPlaces.json, IATA code to [ISO country, latitude, longitude, city],
+// for placing a flight on the reports page's map and in its country, and
+// naming the city of an airport an email gives only by its code ("ARN").
 //
 // Sources: the OpenFlights airport database (ODbL, https://openflights.org/data),
 // as packaged by `airport-data`, then OurAirports (public domain,
@@ -83,6 +84,27 @@ function countryOf(airport) {
   return antilles[airport.iata] ?? renamed[airport.country] ?? countryByName.get(simplify(airport.country));
 }
 
+// The city an airport serves, as OpenFlights names it ("Tokyo" for Narita,
+// where OurAirports names the town it is in), spelled as people write it
+// where OpenFlights does not.
+const cityNames = {
+  "Agana": "Hagåtña",
+  "Duesseldorf": "Düsseldorf",
+  "Gothenborg": "Gothenburg",
+  "Manchester NH": "Manchester",
+  "Milano": "Milan",
+  "Nandi": "Nadi",
+  "Nuernberg": "Nuremberg",
+  "Queenstown International": "Queenstown",
+  "Raleigh-durham": "Raleigh-Durham",
+  "Tel-aviv": "Tel Aviv",
+};
+const cityOf = (name) => {
+  // OpenFlights escapes some apostrophes ("Fiti\\'uta").
+  const city = name?.replace(/\\'/g, "'").trim() ?? "";
+  return cityNames[city] ?? city;
+};
+
 const round = (n) => Math.round(n * 100) / 100;
 
 // RFC 4180: quoted fields may hold commas, newlines and doubled quotes.
@@ -130,7 +152,7 @@ for (const airport of airports) {
   }
   zones.set(code, zone);
   const country = countryOf(airport);
-  if (country) places.set(code, [country, round(airport.latitude), round(airport.longitude)]);
+  if (country) places.set(code, [country, round(airport.latitude), round(airport.longitude), cityOf(airport.city)]);
   else unplaced.add(airport.country);
 }
 if (unplaced.size) throw new Error(`No ISO code for: ${[...unplaced].join(", ")}`);
@@ -146,7 +168,7 @@ const column = (name) => {
   if (i < 0) throw new Error(`OurAirports has no ${name} column`);
   return i;
 };
-const [iata, type, country, lat, lon] = ["iata_code", "type", "iso_country", "latitude_deg", "longitude_deg"].map(column);
+const [iata, type, country, lat, lon, municipality] = ["iata_code", "type", "iso_country", "latitude_deg", "longitude_deg", "municipality"].map(column);
 for (const row of rows) {
   const code = row[iata]?.trim();
   if (!code || !/^[A-Z]{3}$/.test(code) || row[type] === "closed" || !/^[A-Z]{2}$/.test(row[country] ?? "")) continue;
@@ -154,13 +176,18 @@ for (const row of rows) {
   const longitude = Number(row[lon]);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) continue;
   const known_ = places.get(code);
-  if (known_ && known_[0] === row[country]) continue;
+  const city = row[municipality]?.trim() ?? "";
+  if (known_ && known_[0] === row[country]) {
+    // A city OpenFlights left out, from OurAirports.
+    if (!known_[3] && city) known_[3] = city;
+    continue;
+  }
   const zone = tzLookup(latitude, longitude);
   if (!known(zone)) continue;
   if (known_) corrected += 1;
   else added += 1;
   zones.set(code, zone);
-  places.set(code, [row[country], round(latitude), round(longitude)]);
+  places.set(code, [row[country], round(latitude), round(longitude), city]);
 }
 
 const sorted = (map) => Object.fromEntries([...map].sort(([a], [b]) => a.localeCompare(b)));

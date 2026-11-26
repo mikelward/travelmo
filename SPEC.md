@@ -571,7 +571,9 @@ A place's country is the one its booking names, and its spot (`lat`, `lon`)
 the one its booking carries. Imports fill both in when the source gave none:
 a flight's from its airport code (`packages/core/src/airportPlaces.json`,
 generated from the same OpenFlights and OurAirports data as the zone table,
-9,342 codes, which also gives the airport's coordinates for the map); a
+9,342 codes, which also gives the airport's coordinates for the map and
+the city it serves, as OpenFlights names it, so an email that gives Arlanda
+only as "ARN" flies to Stockholm and its trip is named so); a
 place whose city is unambiguous gets that city's country, with no call
 (`packages/core/src/cityCountries.json`, from GeoNames' cities of 1,000
 people or more: a name whose cities are all in one country, or whose
