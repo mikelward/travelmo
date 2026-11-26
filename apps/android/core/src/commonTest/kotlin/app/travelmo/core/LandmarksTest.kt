@@ -91,6 +91,9 @@ class LandmarksTest {
         assertEquals("fez", tripLandmark("Fez").id)
         assertEquals("quito", tripLandmark("Quito").id)
         assertEquals("montevideo", tripLandmark("Montevideo").id)
+        assertEquals("makarska", tripLandmark("Makarska").id)
+        assertEquals("makarska", tripLandmark("Makarska Riviera").id)
+        assertEquals("makarska", tripLandmark("Biokovo").id)
     }
 
     @Test
@@ -278,7 +281,7 @@ class LandmarksTest {
     fun readsEveryLandmarkTheWebHas() {
         val rawEntries = landmarksJson.lines().count { it.startsWith("{\"id\":") }
         assertEquals(rawEntries, landmarks.size)
-        assertEquals(299, landmarks.size)
+        assertEquals(300, landmarks.size)
         assertEquals(landmarks.size, landmarks.map { it.id }.toSet().size)
         val seenCities = mutableSetOf<String>()
         val seenFallbacks = mutableSetOf<String>()
