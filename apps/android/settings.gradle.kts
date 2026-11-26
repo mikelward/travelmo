@@ -14,13 +14,14 @@ pluginManagement {
         }
         // Google's mirror of Maven Central, tried first: repo.maven.apache.org
         // rate-limits shared CI and sandbox egress (HTTP 429), failing builds.
-        // Central stays as the fallback for anything the mirror lacks.
+        // Central stays last as the fallback for anything the mirror and plugin
+        // portal lack, so a 429 there doesn't stop lookups of plugins they hold.
         maven {
             name = "mavenCentralMirror"
             url = uri("https://maven-central.storage-download.googleapis.com/maven2/")
         }
-        mavenCentral()
         gradlePluginPortal()
+        mavenCentral()
     }
 }
 
@@ -34,12 +35,12 @@ dependencyResolutionManagement {
         google()
         // Google's mirror of Maven Central, tried first: repo.maven.apache.org
         // rate-limits shared CI and sandbox egress (HTTP 429), failing builds.
-        // Central stays as the fallback for anything the mirror lacks.
+        // Central stays last as the fallback for anything the mirror lacks,
+        // after the group-scoped repositories below so a 429 never blocks them.
         maven {
             name = "mavenCentralMirror"
             url = uri("https://maven-central.storage-download.googleapis.com/maven2/")
         }
-        mavenCentral()
         // mikelward/androidlog publishes its own Maven repository into the
         // `maven` branch of that repository, which raw.githubusercontent.com
         // serves; scoped to its group so no other coordinate is looked for here.
@@ -55,6 +56,7 @@ dependencyResolutionManagement {
             url = uri("https://raw.githubusercontent.com/mikelward/androidzoom/maven")
             content { includeGroup("com.mikelward.androidzoom") }
         }
+        mavenCentral()
     }
 }
 
