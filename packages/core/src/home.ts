@@ -1,5 +1,6 @@
 import { airportPlace } from "./airportPlaces";
 import { foldCity } from "./cityFold";
+import { wordsOf } from "./words";
 import cityNamesTable from "./cityNames.json";
 import { countryCodeOf, isCountryCode } from "./countries";
 import { formatDate } from "./format";
@@ -302,7 +303,6 @@ export function isTransfer(segment: Pick<ExtractedSegment, "type" | "origin" | "
 
 // Words that say nothing about which airport or station a place is.
 const hubWords = new Set(["airport", "international", "terminal", "station", "central", "railway", "rail", "city"]);
-const wordsOf = (text: string) => text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 
 // Whether a place in a ride's booking is the airport or station a journey
 // leaves from or arrives at: the same code, the code written in it

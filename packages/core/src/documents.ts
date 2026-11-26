@@ -52,9 +52,9 @@ export function parseDocumentDate(value: string): string | undefined {
 
 const lastPart = (label: string) => label.split(" › ").at(-1)!.toLowerCase();
 const isExpiry = (label: string) => /expir|valid (until|to|through)|valid thru/.test(lastPart(label));
-const isNationality = (label: string) => /nationality|citizenship/.test(lastPart(label));
-// A country of birth says nothing about which country a document is for.
-const isCountry = (label: string) => /country/.test(lastPart(label)) && !/birth/.test(lastPart(label)) && !isNationality(label);
+const isNationality = (label: string) => /\b(nationality|citizenship)\b/.test(lastPart(label));
+// A country of birth (or birthplace) says nothing about which country a document is for.
+const isCountry = (label: string) => /\bcountry\b/.test(lastPart(label)) && !/\bbirth/.test(lastPart(label)) && !isNationality(label);
 
 // The country a document belongs to: for a passport, the one that issued it
 // (its holder's nationality is the same); for a visa, the one it admits to
@@ -70,8 +70,9 @@ const isType = (label: string) => /^(document )?type$/.test(lastPart(label));
 
 function kindOf(entry: ProfileEntry): DocumentKind {
   const text = [entry.title, ...entry.fields.filter((f) => isType(f.label)).map((f) => f.value)].join(" ").toLowerCase();
-  if (text.includes("passport")) return "passport";
-  if (text.includes("visa")) return "visa";
+  // As words, electronic ones too (ePassport, e-Visa), never inside a name (Visalia).
+  if (/\b(e-?)?passports?\b/.test(text)) return "passport";
+  if (/\b(e-?)?visas?\b/.test(text)) return "visa";
   return "other";
 }
 

@@ -35,12 +35,10 @@ fun dayRange(from: String?, to: String?, zone: String): DayRange {
     )
 }
 
-/** Whether a record's subject, sender or reason contains every word of [keyword], ignoring case. */
+/** Whether each word of [keyword] starts a word of a record's subject, sender or reason, ignoring case and accents. */
 fun matchesKeyword(record: ParsedRecord, keyword: String): Boolean {
-    val words = keyword.lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
-    if (words.isEmpty()) return true
-    val text = listOfNotNull(record.subject, record.from, record.reason).joinToString(" ").lowercase()
-    return words.all { it in text }
+    if (keyword.isBlank()) return true
+    return hasWordStarts(listOfNotNull(record.subject, record.from, record.reason).joinToString(" "), keyword)
 }
 
 private fun instantOf(record: ParsedRecord): Instant? = runCatching { Instant.parse(record.sentAt ?: record.processedAt) }.getOrNull()
