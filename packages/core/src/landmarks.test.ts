@@ -96,6 +96,11 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Johannesburg").id).toBe("johannesburg");
     expect(tripLandmark("Joburg").id).toBe("johannesburg");
     expect(tripLandmark("Graz").id).toBe("graz");
+    expect(tripLandmark("San Jose").id).toBe("san-jose");
+    expect(tripLandmark("Silicon Valley").id).toBe("san-jose");
+    expect(tripLandmark("San Jose del Cabo").id).toBe("beach");
+    expect(tripLandmark("San Jose, Costa Rica").id).toBe("trip");
+    expect(tripLandmark("Oakland").id).toBe("oakland");
   });
 
   it("ignores accents and case", () => {
@@ -177,7 +182,7 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Roseville").id).toBe("rose");
     expect(tripLandmark("Santa Rosa").id).toBe("rose");
     expect(tripLandmark("Fair Oaks").id).toBe("acorn");
-    expect(tripLandmark("Oakland").id).toBe("acorn");
+    expect(tripLandmark("Thousand Oaks").id).toBe("acorn");
     expect(tripLandmark("Appleton").id).toBe("apple");
     expect(tripLandmark("Orangevale").id).toBe("orange");
     expect(tripLandmark("Cherry Hill").id).toBe("cherry");
@@ -296,7 +301,7 @@ describe("tripLandmark", () => {
         fallbacks.add(word);
       }
     }
-    expect(LANDMARKS.length).toBe(302);
+    expect(LANDMARKS.length).toBe(304);
   });
 });
 
