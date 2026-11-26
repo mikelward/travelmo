@@ -1,6 +1,6 @@
 "use client";
 
-import { RideCompany, cleanSenderList, imapMailboxes, imapRedirect, imapServerFor, maxImapMailboxes, parseCountries, describeBackfill, describeStartOver, gmailMailboxes, isReading, maxGmailMailboxes, pausedReason, describeRegroup, describeRefresh, groupSkips, refreshBlurb, refreshButton, failedEmailIds, failedEmailLine, failedEmailsReport, gmailSourceLink, moreFailedEmails, ParsedMessage, type RefreshProgress, type Trip, maxRideCompanies, paths, type BackfillProgress, type GmailConnection, type ImapConnection, type SenderPatterns, type SkipGroup } from "@travelmo/core";
+import { RideCompany, cleanSenderList, imapMailboxes, imapRedirect, imapServerFor, maxImapMailboxes, parseCountries, describeBackfill, describeStartOver, gmailMailboxes, isReading, maxGmailMailboxes, pausedReason, describeRegroup, describeRefresh, groupSkips, refreshBlurb, refreshButton, refreshEverythingConfirm, failedEmailIds, failedEmailLine, failedEmailsReport, gmailSourceLink, moreFailedEmails, ParsedMessage, type RefreshProgress, type Trip, maxRideCompanies, paths, type BackfillProgress, type GmailConnection, type ImapConnection, type SenderPatterns, type SkipGroup } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -612,6 +612,7 @@ function RegroupSection({ user }: { user: User }) {
 function RefreshFromEmail({ user, progress, mailboxes }: { user: User; progress: RefreshProgress | undefined; mailboxes: GmailConnection[] }) {
   const trips = useTrips(user);
   const [busy, setBusy] = useState(false);
+  const [confirmingEverything, setConfirmingEverything] = useState(false);
   const [error, setError] = useState<string>();
   // The clock a stalled refresh is judged by; a minute is fine enough.
   const [now, setNow] = useState(() => Date.now());
@@ -650,7 +651,31 @@ function RefreshFromEmail({ user, progress, mailboxes }: { user: User; progress:
             {refreshButton(progress)}
           </button>
         )}
+        {!reading && !confirmingEverything && (
+          <button type="button" disabled={busy} className={buttonClass} onClick={() => setConfirmingEverything(true)}>
+            Refresh everything
+          </button>
+        )}
       </div>
+      {confirmingEverything && !reading && (
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <p className="w-full">{refreshEverythingConfirm}</p>
+          <button
+            type="button"
+            disabled={busy}
+            className={buttonClass}
+            onClick={() => {
+              setConfirmingEverything(false);
+              void run(() => api.refreshFromEmail(user, true, false, true), "Refreshing everything from email");
+            }}
+          >
+            Refresh everything
+          </button>
+          <button type="button" disabled={busy} className={buttonClass} onClick={() => setConfirmingEverything(false)}>
+            Cancel
+          </button>
+        </div>
+      )}
       {progress && (
         <p className="mt-3 text-zinc-600 dark:text-zinc-400" data-testid="refresh-progress">
           {describeRefresh(progress, reading)}

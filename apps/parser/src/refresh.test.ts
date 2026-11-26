@@ -9,6 +9,7 @@ import {
   handEdited,
   isMailboxRecord,
   readAgain,
+  refreshesEverything,
   refreshEmail,
   refreshPage,
   refreshRecord,
@@ -739,7 +740,7 @@ function batchIo(records: ParsedMessage[], outcomes: Map<string, RecordOutcome> 
   const refreshed: string[] = [];
   let clock = Date.parse(now);
   const io: RefreshBatchIo = {
-    records: (after, limit) => memory.refreshRecords(uid, after, limit),
+    records: (after, limit, everything) => memory.refreshRecords(uid, after, limit, everything),
     senderPatterns: async () => ({ allow: [], deny: [] }),
     record: (id) => memory.getParsed(uid, id),
     snapshot: async () => [],
@@ -936,5 +937,118 @@ describe("a refresh on the batch chain", () => {
     expect(c.refreshed).toEqual(["m1", "m2", "m3", "m2", "m2"]);
     expect(c.progress()).toMatchObject({ done: true, scanned: 3, failed: 0, updated: 3 });
     expect(c.progress()?.failedIds).toBeUndefined();
+  });
+});
+
+describe("Refresh everything from email", () => {
+  const patterns = { allow: [], deny: [] };
+  it("reads every email from a mailbox, whatever was made of it, but one today's pre-filter still passes over", () => {
+    const wanted = refreshesEverything(patterns, now);
+    expect(wanted(record("a1"))).toBe(true);
+    // Not a booking to today's reader too, and from a sender that is no travel company.
+    expect(wanted(record("a2", { outcome: "not_booking", readerVersion, from: "Shop <orders@shop.example>" }))).toBe(true);
+    expect(wanted(record("a3", { outcome: "failed" }))).toBe(true);
+    // Passed over before, now a travel company's booking email.
+    expect(wanted(record("a4", { outcome: "filtered", from: "QR ebooking <ebooking@qatarairways.com.qa>", subject: "Booking confirmation : 9JRJRI" }))).toBe(true);
+    // Still a newsletter.
+    expect(wanted(record("a5", { outcome: "filtered", from: "Shop <news@shop.example>", subject: "Our summer sale" }))).toBe(false);
+    expect(wanted(record("a6", { outcome: "cancellation" }))).toBe(false);
+    expect(wanted(record("ics-a7", { source: "ics" }))).toBe(false);
+    // A claim a worker is still reading.
+    expect(wanted(record("a8", { outcome: "processing", processedAt: now }))).toBe(false);
+  });
+
+  it("reads them on the batch chain, keeping that it reads everything", async () => {
+    const { io, refreshed } = batchIo([
+      record("b1"),
+      record("b2", { outcome: "not_booking", readerVersion, from: "Shop <orders@shop.example>" }),
+      record("b3", { outcome: "filtered", from: "QR ebooking <ebooking@qatarairways.com.qa>", subject: "Booking confirmation : 9JRJRI" }),
+      record("b4", { outcome: "filtered", from: "Shop <news@shop.example>", subject: "Our summer sale" }),
+    ]);
+    const batch = await runRefreshBatch({ ...fresh(), everything: true }, io);
+    expect(refreshed).toEqual(["b1", "b2", "b3"]);
+    expect(batch.progress).toMatchObject({ scanned: 3, total: 3, done: true, everything: true });
+    // A plain refresh reads only the first.
+    const plain = batchIo([record("b1"), record("b2", { outcome: "not_booking", readerVersion, from: "Shop <orders@shop.example>" })]);
+    await runRefreshBatch(fresh(), plain.io);
+    expect(plain.refreshed).toEqual(["b1"]);
+  });
+
+  it("brings an email's loyalty numbers up to date, keeping those of emails it does not read", async () => {
+    const w = world();
+    w.put(trip("t1"), booking("m1-0", "t1", stay));
+    w.memory.parsed.set(`${uid}/m1`, record("m1"));
+    const before = "2027-01-01T00:00:00Z";
+    // An older reader took a wrong number from this email; a forward gave another.
+    w.memory.foundLoyalty.set(uid, [
+      { program: "Cove Club", number: "CC 9999", messageId: "m1", at: before },
+      { program: "Example Air", number: "EA 123", messageId: "fwd-1", at: before },
+    ]);
+    const withNumber: ExtractedBooking = { ...found(stay), memberships: [{ program: "Cove Club", number: "CC 4455" }] };
+    const since = "2027-01-02T00:00:00Z";
+    await refreshEmail(uid, record("m1"), email("m1"), w.deps(async () => withNumber), { generation: 0, snapshot: await w.memory.listUserSegments(uid), loyaltySince: since });
+    expect(w.memory.foundLoyalty.get(uid)?.map((f) => f.number).sort()).toEqual(["CC 4455", "EA 123"]);
+    // A plain refresh leaves found loyalty as it is.
+    const plain = world();
+    plain.put(trip("t1"), booking("m1-0", "t1", stay));
+    await refreshEmail(uid, record("m1"), email("m1"), plain.deps(async () => withNumber), { generation: 0, snapshot: await plain.memory.listUserSegments(uid) });
+    expect(plain.memory.foundLoyalty.get(uid)).toBeUndefined();
+  });
+
+  it("leaves the numbers an email gave before when today's can't be saved", async () => {
+    const w = world();
+    w.put(trip("t1"), booking("m1-0", "t1", stay));
+    const before = [{ program: "Cove Club", number: "CC 4455", messageId: "m1", at: "2027-01-01T00:00:00Z" }];
+    w.memory.foundLoyalty.set(uid, before);
+    const deps = w.deps(async () => ({ ...found(stay), memberships: [{ program: "Cove Club", number: "CC 4455" }] }));
+    const failing = { ...deps, store: { ...deps.store, addFoundLoyalty: async () => Promise.reject(new Error("Firestore unavailable")) } };
+    await refreshEmail(uid, record("m1"), email("m1"), failing, { generation: 0, snapshot: await w.memory.listUserSegments(uid), loyaltySince: "2027-01-02T00:00:00Z" });
+    expect(w.memory.foundLoyalty.get(uid)).toEqual(before);
+  });
+
+  it("brings no numbers back once the user started over during the refresh", async () => {
+    const w = world();
+    w.put(trip("t1"), booking("m1-0", "t1", stay));
+    const before = [{ program: "Cove Club", number: "CC 9999", messageId: "m1", at: "2027-01-01T00:00:00Z" }];
+    w.memory.foundLoyalty.set(uid, before);
+    // Delete everything and start over runs while the model reads the email.
+    const deps = w.deps(async () => {
+      await w.memory.withUserLock(uid, async (tx) => tx.bumpGeneration());
+      return { ...found(stay), memberships: [{ program: "Cove Club", number: "CC 4455" }] };
+    });
+    await expect(refreshEmail(uid, record("m1"), email("m1"), deps, { generation: 0, snapshot: await w.memory.listUserSegments(uid), loyaltySince: "2027-01-02T00:00:00Z" })).rejects.toBeInstanceOf(ImportSupersededError);
+    expect(w.memory.foundLoyalty.get(uid)).toEqual(before);
+    expect(w.logged).toContain("memberships_superseded");
+  });
+
+  it("leaves the numbers of an email another worker is reading", async () => {
+    const w = world();
+    const judged = record("m1", { outcome: "not_booking", segmentIds: [], tripId: undefined, from: "Cove <stay@cove.example>" });
+    w.memory.parsed.set(`${uid}/m1`, judged);
+    const before = [{ program: "Cove Club", number: "CC 4455", messageId: "m1", at: "2027-01-01T00:00:00Z" }];
+    w.memory.foundLoyalty.set(uid, before);
+    // Another worker claimed it after the refresh listed it.
+    expect(await w.memory.reclaimMessage(uid, "m1", now)).toBe(true);
+    const outcome = await refreshRecord(uid, judged, w.deps(async () => ({ isBooking: false, segments: [] })), { generation: 0, snapshot: [], fetch: async () => email("m1"), loyaltySince: "2027-01-02T00:00:00Z" });
+    expect(outcome.kind).toBe("refreshed");
+    expect(w.memory.foundLoyalty.get(uid)).toEqual(before);
+  });
+
+  it("starts over with its flag, which a refresh carried on keeps and a plain one started over drops", async () => {
+    let stored: BackfillProgress | undefined = { scanned: 5, imported: 5, failed: 0, done: true, updatedAt: now };
+    const io = {
+      change: async (fn: (current: BackfillProgress | undefined, generation: number) => { next?: BackfillProgress; result: unknown }) => {
+        const { next, result } = fn(stored, 0);
+        if (next) stored = next;
+        return { state: undefined, generation: 0, result };
+      },
+      publish: async () => {},
+      now: () => now,
+      log: () => {},
+    } as unknown as ChainIo<undefined>;
+    await startBackfill(uid, "run1", true, io, undefined, false, { everything: true, everythingFrom: now });
+    expect(stored).toMatchObject({ scanned: 0, everything: true, everythingFrom: now });
+    await startBackfill(uid, "run2", true, io);
+    expect((stored as RefreshProgress).everything).toBeUndefined();
   });
 });

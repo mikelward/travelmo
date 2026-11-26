@@ -2254,6 +2254,30 @@ trips went and whether email is being read again (`describeStartOver`).
 The apps no longer offer "Delete all trips" alone; its route stays for
 older Android builds.
 
+"Refresh everything from email", beside "Refresh from email" (below) in
+Settings on the web and Android, says what it does first and keeps what the
+user did: it is Refresh from email (`POST /trips/refresh` with
+`everything`, kept on its progress) started from the first email, reading
+every email from a mailbox whatever was made of it before
+(`refreshesEverything`): those that made bookings, those found no booking
+in by any reader, from any sender, those whose reading failed or stopped
+part way, and those the pre-filter passed over that today's pre-filter
+lets through (a sender since trusted, a booking the similarity filter
+skipped); one today's pre-filter still passes over (a newsletter, a
+sender the user never imports) stays unread. It brings the loyalty numbers
+found in emails up to date, email by email: one read again keeps the
+numbers it gives, as an import does (a booking email it refreshes too,
+`keepTravelMemberships`), and those it last gave before the refresh
+started (`everythingFrom`) and no longer gives are dropped
+(`dropUnseenFoundLoyalty`). A number found only in an email it cannot read
+(a forward, an email since deleted, a mailbox no longer connected) or whose
+reading failed stays. Neither change is made once the user's trips were
+reset since the refresh or import began (the reset generation, below), so
+"Delete everything and start over" during a refresh stays cleared. Whose
+each number is stays, as do the TripIt sections. Bookings are refreshed as below: one added or edited by hand stays
+as it is, and the run ends by regrouping. It costs a model call for every
+email it reads.
+
 "Delete all trips" (`POST /trips/delete-all`,
 `apps/parser/src/tripsReset.ts`) deletes every trip the user owns, its
 bookings (with their ratings and favorites), every import record and every
@@ -3213,7 +3237,7 @@ didn't finish" in place of every page, with "Finish deleting", which calls
 | `POST /imap/backfill` | Firebase ID token | As `/gmail/backfill`, for the IMAP mailbox `emailAddress` names |
 | `POST /imap/backfill/stop` | Firebase ID token | Stops that mailbox's reading after the batch under way |
 | `POST /trips/regroup` | Firebase ID token | Fills in bookings' countries and spots from the airport and city tables, then rebuilds the user's trips from their bookings with the current grouping ("Home"); returns how many trips changed, how many were merged away and how many bookings were placed |
-| `POST /trips/refresh` | Firebase ID token | Starts "Refresh from email" on the server (`restart: true` from the first email again; `retryFailed: true` only the emails the last one couldn't read) and returns its progress at once; 409 when no mailbox is connected or a batch is still reading |
+| `POST /trips/refresh` | Firebase ID token | Starts "Refresh from email" on the server (`restart: true` from the first email again; `retryFailed: true` only the emails the last one couldn't read; `everything: true` "Refresh everything from email") and returns its progress at once; 409 when no mailbox is connected or a batch is still reading |
 | `POST /trips/refresh/stop` | Firebase ID token | Stops the refresh after the batch under way |
 | `POST /trips/start-over` | Firebase ID token | Everything `/trips/delete-all` does, then empties what imports put on the travel profile and reads every connected mailbox again from the start ("Starting over"); returns how many trips went and how many mailboxes started |
 | `POST /trips/delete-all` | Firebase ID token | Deletes every trip the user owns with its bookings, their import records, places waiting for a geocode on those bookings, and how far the last mailbox reading got; returns how many trips went. Trips shared with them, their profile and connections stay |

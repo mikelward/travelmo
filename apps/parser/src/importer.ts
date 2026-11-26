@@ -227,7 +227,8 @@ export type TripStore = {
   // "not_booking", "failed" or "processing"), in order of
   // id, after the one with id `after`: what "Refresh from email" picks the
   // emails to read again from (refresh.ts).
-  refreshRecords(uid: string, after: string | undefined, limit: number): Promise<ParsedMessage[]>;
+  // `everything`: filtered records too (Refresh everything).
+  refreshRecords(uid: string, after: string | undefined, limit: number, everything?: boolean): Promise<ParsedMessage[]>;
   // Every booking in the user's own live trips, read outside any lock: a
   // snapshot for planning an import, never for deciding a write.
   listUserSegments(uid: string): Promise<Segment[]>;
@@ -242,7 +243,14 @@ export type TripStore = {
   // Adds loyalty memberships read from the user's booking emails to their
   // travel profile (withFoundLoyalties), starting the profile if need be;
   // `refused`: new ones left out because the list was full.
-  addFoundLoyalty(uid: string, found: readonly FoundLoyalty[]): Promise<{ refused: number }>;
+  // With `generation`, nothing is saved once the user's trips have been
+  // reset since it was read (superseded): Delete everything and start over
+  // clears the numbers, and an import or refresh already under way must not
+  // bring them back.
+  addFoundLoyalty(uid: string, found: readonly FoundLoyalty[], generation?: number): Promise<{ refused: number; superseded?: boolean }>;
+  // Drops the loyalty numbers last seen in email `messageId` before `since`:
+  // those an email read again (Refresh everything) no longer gives. How many.
+  dropUnseenFoundLoyalty(uid: string, messageId: string, since: string, generation?: number): Promise<number>;
   // Embeddings of emails the model has judged for this user (see similarity.ts).
   examples(uid: string): Promise<Examples>;
   saveExample(uid: string, label: ExampleLabel, example: Example): Promise<void>;
@@ -304,6 +312,9 @@ export type ImportOptions = {
   // replaces that record's bookings only once it has succeeded; a failed
   // read leaves record and bookings as they were.
   replacing?: ParsedMessage;
+  // Set false when the email's loyalty numbers could not be saved, so Refresh
+  // everything (refresh.ts) leaves the numbers it gave before as they are.
+  loyalty?: { saved: boolean };
   // Existing bookings already matched by earlier items of the same upload;
   // this message's own matches are added to it.
   consumed?: Set<string>;
@@ -538,7 +549,7 @@ async function importOnce(
     // A travel loyalty statement (the pre-filter let it through for its
     // sender) is no booking, but its balance and status are kept; any other
     // email that is no booking keeps nothing.
-    if (statement && booking.memberships?.length) await keepMemberships(uid, message, booking.memberships, booking.segments, now(), deps, sent);
+    if (statement && booking.memberships?.length && !(await keepMemberships(uid, message, booking.memberships, booking.segments, now(), deps, sent, generation)) && options.loyalty) options.loyalty.saved = false;
     await save(record("not_booking", { reason, readerVersion }));
     await learn("others");
     log("not_booking", { uid, messageId: message.id });
@@ -610,8 +621,7 @@ async function importOnce(
   await learn("bookings");
   // Only from an email that books travel: a ticket or an appointment that
   // shows a member number (a clinic's, a party's) keeps nothing.
-  const booksTravel = booking.segments.some((segment) => travelTypes.has(segment.type));
-  if (isEmail && booksTravel && booking.memberships?.length) await keepMemberships(uid, message, booking.memberships, booking.segments, timestamp, deps, sent);
+  if (isEmail && !(await keepTravelMemberships(uid, message, booking, timestamp, deps, sent, generation)) && options.loyalty) options.loyalty.saved = false;
   log("imported", { uid, messageId: message.id, tripId, segments: segmentIds.length, duplicates });
   return "imported";
 }
@@ -628,7 +638,8 @@ async function keepMemberships(
   at: string,
   deps: ImportDeps,
   sent: string | undefined,
-): Promise<void> {
+  generation: number | undefined,
+): Promise<boolean> {
   try {
     const owner = await deps.store.ownerName(uid);
     // A balance and a status are as of when the email was sent, so an older
@@ -636,14 +647,37 @@ async function keepMemberships(
     // foundLoyaltyFrom.
     const kept = foundLoyaltyFrom(memberships, segments, owner, { messageId: message.id, label: message.subject, at, ...(sent ? { sent } : {}) });
     if (kept.length) {
-      const { refused } = await deps.store.addFoundLoyalty(uid, kept);
+      const { refused, superseded } = await deps.store.addFoundLoyalty(uid, kept, generation);
+      if (superseded) {
+        deps.log("memberships_superseded", { uid, messageId: message.id });
+        return false;
+      }
       // Never reached in practice (maxFoundLoyalty); counts only.
       if (refused) deps.log("found_loyalty_full", { uid, messageId: message.id, refused }, "WARNING");
     }
     deps.log("memberships", { uid, messageId: message.id, found: memberships.length, kept: kept.length });
+    return true;
   } catch (error) {
     deps.log("memberships_failed", { uid, messageId: message.id, reason: (error as Error).message });
+    return false;
   }
+}
+
+// The user's loyalty numbers an email that books travel shows, kept as an
+// import keeps them; a ticket or an appointment that shows a member number
+// (a clinic's, a party's) keeps nothing. Refresh everything (refresh.ts)
+// keeps them from the booking emails it reads again too.
+export async function keepTravelMemberships(
+  uid: string,
+  message: EmailMessage,
+  booking: Pick<ExtractedBooking, "segments" | "memberships">,
+  at: string,
+  deps: ImportDeps,
+  sent: string | undefined,
+  generation: number | undefined,
+): Promise<boolean> {
+  const booksTravel = booking.segments.some((segment) => travelTypes.has(segment.type));
+  return booksTravel && booking.memberships?.length ? keepMemberships(uid, message, booking.memberships, booking.segments, at, deps, sent, generation) : true;
 }
 
 // What a membership number is kept from: an email booking one of these.

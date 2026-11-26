@@ -258,6 +258,8 @@
     <string name="regroup_hint">Rebuilds your trips from your bookings, keeping days out at home separate from trips away.</string>
     <string name="regroup_trips">Regroup trips</string>
     <string name="regrouping">Regrouping…</string>
+    <string name="refresh_everything">Refresh everything</string>
+    <string name="refresh_everything_title">Refresh everything from email?</string>
     <string name="start_over">Delete everything and start over</string>
     <string name="start_over_title">Delete everything and start over?</string>
     <string name="start_over_confirm">Deletes %1$s and every booking in them, including ones you added or edited, stops sharing them, and clears what imports added to your travel profile. Then reads all your email again from the start. Your connections, home and settings stay. Upload TripIt files again afterwards. This can’t be undone.</string>

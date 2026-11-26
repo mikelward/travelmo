@@ -140,9 +140,9 @@ export function memoryStore(): Memory {
     },
     setParsed: async (r) => void parsed.set(`${r.uid}/${r.messageId}`, r),
     getParsed: async (uid, id) => parsed.get(`${uid}/${id}`),
-    refreshRecords: async (uid, after, limit) =>
+    refreshRecords: async (uid, after, limit, everything = false) =>
       [...parsed.values()]
-        .filter((r) => r.uid === uid && (r.outcome === "imported" || r.outcome === "not_booking" || r.outcome === "failed" || r.outcome === "processing") && (after === undefined || r.messageId > after))
+        .filter((r) => r.uid === uid && (r.outcome === "imported" || r.outcome === "not_booking" || r.outcome === "failed" || r.outcome === "processing" || (everything && r.outcome === "filtered")) && (after === undefined || r.messageId > after))
         .sort((a, b) => (a.messageId < b.messageId ? -1 : a.messageId > b.messageId ? 1 : 0))
         .slice(0, limit),
     readSegment: async (tripId, id) => tx.getSegment(tripId, id),
@@ -173,7 +173,15 @@ export function memoryStore(): Memory {
     },
     senderPatterns: async () => ({ allow: [], deny: [] }),
     ownerName: async (uid) => ownerNames.get(uid),
-    addFoundLoyalty: async (uid, found) => {
+    dropUnseenFoundLoyalty: async (uid, messageId, since, generation) => {
+      if (generation !== undefined && (generations.get(uid) ?? 0) !== generation) return 0;
+      const current = foundLoyalty.get(uid) ?? [];
+      const kept = current.filter((f) => !(f.messageId === messageId && f.at < since));
+      foundLoyalty.set(uid, kept);
+      return current.length - kept.length;
+    },
+    addFoundLoyalty: async (uid, found, generation) => {
+      if (generation !== undefined && (generations.get(uid) ?? 0) !== generation) return { refused: 0, superseded: true };
       const { found: next, refused } = withFoundLoyalties(foundLoyalty.get(uid) ?? [], found);
       foundLoyalty.set(uid, next);
       return { refused };

@@ -301,6 +301,12 @@ export const RefreshProgress = BackfillProgress.extend({
   // Emails no longer there, or in a mailbox no longer connected.
   missing: z.number().int().nonnegative().optional(),
   generation: z.number().int().nonnegative().optional(),
+  // "Refresh everything from email": every email from a mailbox, whatever
+  // was made of it before, not only those that made bookings (refresh.ts).
+  everything: z.boolean().optional(),
+  // When that refresh started: a loyalty number an email it reads again
+  // last gave before then, and no longer gives, goes.
+  everythingFrom: isoDateTime.optional(),
 });
 export type RefreshProgress = z.infer<typeof RefreshProgress>;
 

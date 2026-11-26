@@ -507,7 +507,8 @@ class TripsViewModelTest {
         viewModel.stopRefresh("stop")
         viewModel.startRefresh("start", restart = false)
         viewModel.startRefresh("again", restart = true)
-        actions.calls shouldBe listOf("stopRefresh", "refresh", "refresh from the start")
+        viewModel.startRefresh("everything", restart = true, everything = true)
+        actions.calls shouldBe listOf("stopRefresh", "refresh", "refresh from the start", "refresh everything")
         watching.cancel()
 
         // Stalled: nothing saved for half an hour reads as stopped, for Continue.

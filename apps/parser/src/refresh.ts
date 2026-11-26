@@ -38,6 +38,7 @@ import { GmailRateLimited, type EmailMessage } from "./gmail";
 import {
   ImportSupersededError,
   attachmentsOf,
+  keepTravelMemberships,
   emptyCounts,
   importMessage,
   forwarded,
@@ -52,7 +53,7 @@ import {
   type ImportCounts,
   type ImportDeps,
 } from "./importer";
-import { senderDomain, travelSender, type SenderPatterns } from "./prefilter";
+import { prefilter, senderDomain, travelSender, type SenderPatterns } from "./prefilter";
 
 // "Refresh from email" (SPEC "Refresh from email"): the emails the user's
 // bookings came from, and only those, read again by today's extraction and
@@ -204,13 +205,21 @@ export async function refreshEmail(
   record: ParsedMessage,
   message: EmailMessage,
   deps: ImportDeps,
-  options: { generation: number; snapshot: readonly Segment[] },
+  options: { generation: number; snapshot: readonly Segment[]; loyaltySince?: string },
 ): Promise<EmailRefresh> {
   let booking;
   try {
     booking = await deps.extract(message, await attachmentsOf(message, (error) => deps.log("attachments_failed", { uid, messageId: record.messageId, reason: error.message })));
   } catch (error) {
     throw new ExtractionFailed(error);
+  }
+  // Refresh everything brings the loyalty numbers found in emails up to
+  // date: the booking emails it reads again give theirs, as an import does,
+  // and lose those they no longer give (renewLoyalty).
+  if (options.loyaltySince) {
+    const source = record.source === "fastmail" || record.source === "imap" ? record.source : "gmail";
+    // Only once what it gives now is saved: a failed save leaves the numbers it gave before.
+    if (await keepTravelMemberships(uid, message, booking, deps.now(), deps, originalSentAt(message, source), options.generation)) await renewLoyalty(uid, message, options.loyaltySince, options.generation, deps);
   }
   const dated = oneBookingPerEvent(withoutValidityEnds(booking.segments));
   const bought = notBookings(dated);
@@ -542,6 +551,30 @@ export function readAgain(record: ParsedMessage, patterns: SenderPatterns, now: 
 const refreshes = (patterns: SenderPatterns, now: string) => (record: ParsedMessage) =>
   record.outcome === "imported" ? isMailboxRecord(record) : readAgain(record, patterns, now);
 
+// The records Refresh everything reads: every email from a mailbox, whatever
+// an older reader or older filters made of it (a not-booking, a failure, a
+// claim its worker left), except one today's pre-filter still passes over
+// (a newsletter, a sender the user never imports), which it leaves unread.
+export const refreshesEverything = (patterns: SenderPatterns, now: string) => (record: ParsedMessage) => {
+  if (!isMailboxRecord(record)) return false;
+  switch (record.outcome) {
+    case "imported":
+    case "not_booking":
+    case "failed":
+      return true;
+    case "processing":
+      return staleClaim(record, now);
+    case "filtered":
+      return !!record.from && prefilter({ from: record.from, subject: record.subject ?? "" }, patterns).pass;
+    default:
+      return false;
+  }
+};
+
+// Which records a refresh reads, by its kind.
+const wantedBy = (from: RefreshProgress, patterns: SenderPatterns, now: string) =>
+  from.everything ? refreshesEverything(patterns, now) : refreshes(patterns, now);
+
 export type RecordOutcome =
   | { kind: "refreshed"; counts: EmailRefresh }
   // The email is gone from its mailbox, or the mailbox is not connected.
@@ -560,7 +593,7 @@ export async function refreshRecord(
   uid: string,
   record: ParsedMessage,
   deps: ImportDeps,
-  options: { generation: number; snapshot: readonly Segment[]; fetch: (record: ParsedMessage) => Promise<EmailMessage | undefined> },
+  options: { generation: number; snapshot: readonly Segment[]; fetch: (record: ParsedMessage) => Promise<EmailMessage | undefined>; loyaltySince?: string },
 ): Promise<RecordOutcome> {
   let message: EmailMessage | undefined;
   try {
@@ -573,7 +606,7 @@ export async function refreshRecord(
     deps.log("refresh_email_missing", { uid, messageId: record.messageId });
     return { kind: "missing" };
   }
-  if (record.outcome !== "imported") return importAgain(uid, record, message, deps, options.generation);
+  if (record.outcome !== "imported") return importAgain(uid, record, message, deps, options.generation, options.loyaltySince);
   try {
     const counts = await refreshEmail(uid, record, message, deps, options);
     deps.log("refreshed", { uid, messageId: record.messageId, ...counts });
@@ -614,15 +647,36 @@ async function countRefresh(message: EmailMessage, counts: Record<string, number
 // bookings it now finds are added, and its record says what today's reader
 // made of it. A failed reading (the model's rate limit included) is tried
 // again at the end of the refresh, as one of the emails that failed.
-async function importAgain(uid: string, record: ParsedMessage, message: EmailMessage, deps: ImportDeps, generation: number): Promise<RecordOutcome> {
+async function importAgain(uid: string, record: ParsedMessage, message: EmailMessage, deps: ImportDeps, generation: number, loyaltySince?: string): Promise<RecordOutcome> {
   const again = record.outcome === "failed" ? { retryFailed: true } : { reclaim: true };
   // A mailbox record's source (isMailboxRecord), Gmail's left unsaid.
   const source = record.source === "fastmail" || record.source === "imap" ? record.source : "gmail";
-  const outcome = await importMessage(uid, message, deps, { force: true, ...again, source, generation });
+  const loyalty = { saved: true };
+  const outcome = await importMessage(uid, message, deps, { force: true, ...again, source, generation, loyalty });
   deps.log("refresh_read_again", { uid, messageId: record.messageId, outcome });
   if (outcome === "failed") return { kind: "failed" };
+  // Read, and what it gives of loyalty saved (importMessage): what it no
+  // longer gives goes. Not when another worker claimed it first
+  // ("skipped"), which read nothing here.
+  if (loyaltySince && outcome !== "skipped" && loyalty.saved) await renewLoyalty(uid, message, loyaltySince, generation, deps);
   const added = outcome === "imported" ? ((await deps.store.getParsed(uid, record.messageId))?.segmentIds.length ?? 0) : 0;
   return { kind: "refreshed", counts: { ...nothingChanged(), added } };
+}
+
+// The loyalty numbers an email read again by Refresh everything (since
+// `since`) last gave and no longer gives, dropped: one it gives still was
+// seen again just now. Only an email read again goes through this, so a
+// number found in a forward, a deleted email or a mailbox no longer
+// connected, which the refresh cannot read, stays, as does everything once
+// the trips were reset since `generation`. A failure is logged and the
+// refresh goes on.
+async function renewLoyalty(uid: string, message: EmailMessage, since: string, generation: number, deps: ImportDeps): Promise<void> {
+  try {
+    const dropped = await deps.store.dropUnseenFoundLoyalty(uid, message.id, since, generation);
+    if (dropped) deps.log("loyalty_renewed", { uid, messageId: message.id, dropped });
+  } catch (error) {
+    deps.log("loyalty_renew_failed", { uid, messageId: message.id, reason: (error as Error).message }, "WARNING");
+  }
 }
 
 // Records read per batch: more than a batch gets through in its time.
@@ -634,7 +688,8 @@ export const refreshPauseMs = 60 * 1000;
 export type RefreshBatchIo = {
   // The import records a refresh may read (imported or not a booking), in
   // id order after `after`; it picks which (refreshes).
-  records: (after: string | undefined, limit: number) => Promise<ParsedMessage[]>;
+  // `everything`: filtered ones too (Refresh everything).
+  records: (after: string | undefined, limit: number, everything?: boolean) => Promise<ParsedMessage[]>;
   // The user's always/never import senders, for which emails to read again.
   senderPatterns: () => Promise<SenderPatterns>;
   // One import record by id, for reading failed emails again.
@@ -649,11 +704,11 @@ export type RefreshBatchIo = {
 };
 
 // The emails a refresh will read, counted once when it starts.
-async function countEmails(io: RefreshBatchIo, wanted: (record: ParsedMessage) => boolean): Promise<number> {
+async function countEmails(io: RefreshBatchIo, wanted: (record: ParsedMessage) => boolean, everything = false): Promise<number> {
   let after: string | undefined;
   let total = 0;
   for (;;) {
-    const page = await io.records(after, 500);
+    const page = await io.records(after, 500, everything);
     total += page.filter(wanted).length;
     if (page.length < 500) return total;
     after = page[page.length - 1]!.messageId;
@@ -670,11 +725,11 @@ async function countEmails(io: RefreshBatchIo, wanted: (record: ParsedMessage) =
 // Gmail's, longer for the model's (`counts.failed` slows the chain).
 export async function runRefreshBatch(from: RefreshProgress, io: RefreshBatchIo): Promise<BackfillBatch> {
   if (from.retrying?.length) return retryRefresh(from, io);
-  const wanted = refreshes(await io.senderPatterns(), io.now());
-  const total = from.total ?? (await countEmails(io, wanted));
+  const wanted = wantedBy(from, await io.senderPatterns(), io.now());
+  const total = from.total ?? (await countEmails(io, wanted, !!from.everything));
   const tally = tallyOf(from);
   let cursor = from.cursor;
-  const page = await io.records(cursor, refreshPage);
+  const page = await io.records(cursor, refreshPage, !!from.everything);
   let snapshot = page.some(wanted) ? await io.snapshot() : [];
   const counts = emptyCounts();
   const failedIds: string[] = [];
@@ -715,6 +770,7 @@ export async function runRefreshBatch(from: RefreshProgress, io: RefreshBatchIo)
     // Read through with failures: not done yet, the failed emails are read
     // again by id first.
     done: readThrough && remembered.length === 0,
+    ...(from.everything ? { everything: true, ...(from.everythingFrom ? { everythingFrom: from.everythingFrom } : {}) } : {}),
     ...(readThrough && remembered.length ? { retrying: remembered } : remembered.length ? { failedIds: remembered } : {}),
     updatedAt: io.now(),
     total,
@@ -732,7 +788,7 @@ async function retryRefresh(from: RefreshProgress, io: RefreshBatchIo): Promise<
   const tally = tallyOf(from);
   const stillFailed = [...(from.failedIds ?? [])];
   const snapshot = ids.length ? await io.snapshot() : [];
-  const wanted = ids.length ? refreshes(await io.senderPatterns(), io.now()) : () => false;
+  const wanted = ids.length ? wantedBy(from, await io.senderPatterns(), io.now()) : () => false;
   const counts = emptyCounts();
   let retryAfter: string | undefined;
   let rateLimited = false;
@@ -778,6 +834,7 @@ async function retryRefresh(from: RefreshProgress, io: RefreshBatchIo): Promise<
     ...(from.total !== undefined ? { total: from.total } : {}),
     ...totalsOf(tally),
     done: left.length === 0,
+    ...(from.everything ? { everything: true, ...(from.everythingFrom ? { everythingFrom: from.everythingFrom } : {}) } : {}),
     ...(left.length ? { retrying: left } : {}),
     ...(stillFailed.length ? { failedIds: stillFailed } : {}),
     updatedAt: io.now(),
