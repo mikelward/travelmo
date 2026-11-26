@@ -1,6 +1,6 @@
 "use client";
 
-import { RideCompany, cleanSenderList, imapMailboxes, imapRedirect, imapServerFor, maxImapMailboxes, parseCountries, describeBackfill, describeDeletedTrips, gmailMailboxes, isReading, maxGmailMailboxes, pausedReason, describeRegroup, describeRefresh, groupSkips, refreshBlurb, refreshButton, failedEmailIds, failedEmailLine, failedEmailsReport, gmailSourceLink, moreFailedEmails, ParsedMessage, type RefreshProgress, type Trip, maxRideCompanies, paths, type BackfillProgress, type GmailConnection, type ImapConnection, type SenderPatterns, type SkipGroup } from "@travelmo/core";
+import { RideCompany, cleanSenderList, imapMailboxes, imapRedirect, imapServerFor, maxImapMailboxes, parseCountries, describeBackfill, describeStartOver, gmailMailboxes, isReading, maxGmailMailboxes, pausedReason, describeRegroup, describeRefresh, groupSkips, refreshBlurb, refreshButton, failedEmailIds, failedEmailLine, failedEmailsReport, gmailSourceLink, moreFailedEmails, ParsedMessage, type RefreshProgress, type Trip, maxRideCompanies, paths, type BackfillProgress, type GmailConnection, type ImapConnection, type SenderPatterns, type SkipGroup } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -525,19 +525,22 @@ function RegroupSection({ user }: { user: User }) {
       setBusy(false);
     }
   };
-  // Deleting them all asks first, in the page, with how many will go.
+  // Starting over asks first, in the page, with how many trips will go, and
+  // goes ahead only once DELETE is typed.
   const own = useTrips(user)?.filter((t) => t.ownerUid === user.uid).length;
   const [confirming, setConfirming] = useState(false);
-  const deleteAll = async () => {
+  const [typed, setTyped] = useState("");
+  const startOver = async () => {
     setBusy(true);
     setResult(undefined);
     setError(undefined);
     try {
-      setResult(describeDeletedTrips((await api.deleteAllTrips(user)).trips));
+      setResult(describeStartOver(await api.startOver(user)));
       setConfirming(false);
+      setTyped("");
     } catch (e) {
-      console.error("Deleting all trips failed", e);
-      setError(`Couldn't delete your trips: ${(e as Error).message}. Try again.`);
+      console.error("Starting over failed", e);
+      setError(`Couldn't start over: ${(e as Error).message}. Try again.`);
     } finally {
       setBusy(false);
     }
@@ -553,25 +556,45 @@ function RegroupSection({ user }: { user: User }) {
           {busy && !confirming ? "Regrouping…" : "Regroup trips"}
         </button>
         {!confirming && (
-          <button type="button" disabled={busy} onClick={() => setConfirming(true)} className="text-danger hover:underline disabled:opacity-50">
-            Delete all trips
+          <button type="button" disabled={busy} onClick={() => { setTyped(""); setConfirming(true); }} className="text-danger hover:underline disabled:opacity-50">
+            Delete everything and start over
           </button>
         )}
       </div>
       {confirming && (
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <span>
-            Delete all your trips and their bookings? Your profile and connections stay. This cannot be undone.
-          </span>
+          <p className="w-full">
+            Deletes {own === undefined ? "all your trips" : `your ${own} trip${own === 1 ? "" : "s"}`} and every booking in them,
+            including ones you added or edited, stops sharing them, and clears what imports added to your travel profile.
+            Then reads all your email again from the start. Your connections, home and settings stay. Upload TripIt files
+            again afterwards. This can&apos;t be undone.
+          </p>
+          <label className="flex items-center gap-2">
+            Type DELETE to confirm
+            <input
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              className="w-28 rounded-lg border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
+              autoComplete="off"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={busy || typed.trim().toUpperCase() !== "DELETE"}
+            onClick={() => void startOver()}
+            className="rounded-lg bg-red-600 px-3 py-1.5 font-medium text-white disabled:opacity-50"
+          >
+            {busy ? "Deleting…" : "Delete everything"}
+          </button>
           <button
             type="button"
             disabled={busy}
-            onClick={() => void deleteAll()}
-            className="rounded-lg bg-red-600 px-3 py-1.5 font-medium text-white disabled:opacity-50"
+            onClick={() => {
+              setConfirming(false);
+              setTyped("");
+            }}
+            className={buttonClass}
           >
-            {busy ? "Deleting…" : own === undefined ? "Delete" : `Delete ${own} trip${own === 1 ? "" : "s"}`}
-          </button>
-          <button type="button" disabled={busy} onClick={() => setConfirming(false)} className={buttonClass}>
             Keep
           </button>
         </div>

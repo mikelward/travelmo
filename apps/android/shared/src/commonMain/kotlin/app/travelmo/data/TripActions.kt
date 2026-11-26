@@ -13,8 +13,11 @@ interface TripActions {
     /** Files every booking again; what it did, in a line. Throws [TripActionFailed]. */
     suspend fun regroup(): String
 
-    /** Deletes every trip the user owns, with its bookings; what it did, in a line. Throws [TripActionFailed]. */
-    suspend fun deleteAll(): String
+    /**
+     * "Delete everything and start over" (SPEC "Starting over"): every trip the user owns with its bookings, what
+     * imports put on the travel profile, then every mailbox read again; what it did, in a line. Throws [TripActionFailed].
+     */
+    suspend fun startOver(): String
 
     /**
      * Starts Refresh from email on the parser, from the first email again with [restart], or only the emails the
@@ -37,7 +40,7 @@ class TripActionFailed(message: String, cause: Throwable? = null) : Exception(me
 object NoTripActions : TripActions {
     override val available = false
     override suspend fun regroup(): String = throw TripActionFailed(ON_WEB)
-    override suspend fun deleteAll(): String = throw TripActionFailed(ON_WEB)
+    override suspend fun startOver(): String = throw TripActionFailed(ON_WEB)
     override suspend fun refresh(restart: Boolean, retryFailed: Boolean): Unit = throw TripActionFailed(ON_WEB)
     override suspend fun stopRefresh(): Unit = throw TripActionFailed(ON_WEB)
     override suspend fun lookForJourney(gap: JourneyGap, next: Int?): LookResult = throw TripActionFailed(ON_WEB)

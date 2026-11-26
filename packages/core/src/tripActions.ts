@@ -7,6 +7,7 @@ import type { RefreshProgress } from "./schema";
 // The parser's paths for them.
 export const regroupPath = "/trips/regroup";
 export const deleteAllTripsPath = "/trips/delete-all";
+export const startOverPath = "/trips/start-over";
 export const refreshPath = "/trips/refresh";
 export const refreshStopPath = "/trips/refresh/stop";
 
@@ -30,6 +31,13 @@ export function describeRegroup({ changed, deleted, placed = 0 }: RegroupResult)
 export function describeDeletedTrips(trips: number): string {
   if (trips === 0) return "You had no trips to delete.";
   return `Deleted ${trips} trip${trips === 1 ? "" : "s"}. Import past bookings to start again.`;
+}
+
+// What "Delete everything and start over" did, with what happens next.
+export function describeStartOver({ trips, mailboxes }: { trips: number; mailboxes: number }): string {
+  const deleted = trips === 0 ? "You had no trips to delete." : `Deleted ${trips} trip${trips === 1 ? "" : "s"}.`;
+  if (mailboxes === 0) return `${deleted} Connect a mailbox, or import past bookings, to start again.`;
+  return `${deleted} Reading your email again from the start.`;
 }
 
 // What "Refresh from email" does, under its button.

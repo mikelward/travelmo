@@ -484,15 +484,15 @@ class TripsViewModelTest {
     }
 
     @Test
-    fun `regrouping and deleting all trips go to the parser and say what they did`() = runTest {
+    fun `regrouping and starting over go to the parser and say what they did`() = runTest {
         val actions = FakeTripActions()
         val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, tripActions = actions)
         viewModel.canRunTripActions shouldBe true
         viewModel.regroupTrips("regroup")
         viewModel.tripNotice.value shouldBe "Done: 2 trips rebuilt, 1 trip merged away."
-        viewModel.deleteAllTrips("delete")
-        viewModel.tripNotice.value shouldBe "Deleted 3 trips. Import past bookings to start again."
-        actions.calls shouldBe listOf("regroup", "deleteAll")
+        viewModel.startOver("delete")
+        viewModel.tripNotice.value shouldBe "Deleted 3 trips. Reading your email again from the start."
+        actions.calls shouldBe listOf("regroup", "startOver")
         viewModel.outcomes.value shouldBe mapOf("regroup" to Outcome.Done, "delete" to Outcome.Done)
     }
 
@@ -526,7 +526,7 @@ class TripsViewModelTest {
         failing.outcomes.value shouldBe mapOf("regroup" to Outcome.Failed("Couldn't reach Travelmo. Check your connection and try again."))
         val none = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL)
         none.canRunTripActions shouldBe false
-        none.deleteAllTrips("delete")
+        none.startOver("delete")
         none.outcomes.value shouldBe mapOf("delete" to Outcome.Failed("Use Settings on the web for this."))
     }
 

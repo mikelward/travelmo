@@ -22,6 +22,13 @@ class TripActionsTest {
     }
 
     @Test
+    fun `says what starting over did`() {
+        describeStartOver(12, 2) shouldBe "Deleted 12 trips. Reading your email again from the start."
+        describeStartOver(0, 1) shouldBe "You had no trips to delete. Reading your email again from the start."
+        describeStartOver(1, 0) shouldBe "Deleted 1 trip. Connect a mailbox, or import past bookings, to start again."
+    }
+
+    @Test
     fun `says why an action failed`() {
         tripActionFailure(null) shouldBe "Couldn't reach Travelmo. Check your connection and try again."
         tripActionFailure(401) shouldBe "Couldn't confirm it's you. Sign out, sign in again and try again."

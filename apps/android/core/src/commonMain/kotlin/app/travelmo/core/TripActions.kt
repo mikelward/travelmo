@@ -7,6 +7,7 @@ package app.travelmo.core
 /** The parser's paths for them. */
 const val REGROUP_PATH = "/trips/regroup"
 const val DELETE_ALL_TRIPS_PATH = "/trips/delete-all"
+const val START_OVER_PATH = "/trips/start-over"
 const val REFRESH_PATH = "/trips/refresh"
 const val REFRESH_STOP_PATH = "/trips/refresh/stop"
 
@@ -28,6 +29,12 @@ fun describeRegroup(changed: Int, deleted: Int, placed: Int = 0): String {
 /** What deleting all trips did, with the next step. */
 fun describeDeletedTrips(trips: Int): String =
     if (trips == 0) "You had no trips to delete." else "Deleted ${trips(trips)}. Import past bookings to start again."
+
+/** What "Delete everything and start over" did, with what happens next, as tripActions.ts says it. */
+fun describeStartOver(trips: Int, mailboxes: Int): String {
+    val deleted = if (trips == 0) "You had no trips to delete." else "Deleted ${trips(trips)}."
+    return if (mailboxes == 0) "$deleted Connect a mailbox, or import past bookings, to start again." else "$deleted Reading your email again from the start."
+}
 
 /**
  * What a trip action says when it did not go through: by the parser's

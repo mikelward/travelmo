@@ -1397,13 +1397,13 @@ class TripsViewModel(
 
     fun stopRefresh(token: String) = run(token, "stopRefresh") { tripActions.stopRefresh() }
 
-    /** Deletes every trip the user owns, with its bookings, so they can import again. */
-    fun deleteAllTrips(token: String) = run(token, "deleteAllTrips") {
+    /** "Delete everything and start over": every trip the user owns and what imports added, then their email read again. */
+    fun startOver(token: String) = run(token, "startOver") {
         _tripNotice.value = null
-        _tripNotice.value = tripActions.deleteAll()
+        _tripNotice.value = tripActions.startOver()
     }
 
-    /** How many trips the user owns, for "Delete all trips" to say; null while they load. */
+    /** How many trips the user owns, for starting over to say; null while they load. */
     val ownTripCount: StateFlow<Int?> = trips.map { list -> list?.count { it.ownerUid == uid } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 

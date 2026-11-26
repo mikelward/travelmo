@@ -1,6 +1,5 @@
 package app.travelmo.data
 
-import app.travelmo.core.DELETE_ALL_TRIPS_PATH
 import app.travelmo.core.JourneyGap
 import app.travelmo.core.LOOK_PATH
 import app.travelmo.core.LookResult
@@ -8,7 +7,8 @@ import app.travelmo.core.LookedEmail
 import app.travelmo.core.REFRESH_PATH
 import app.travelmo.core.REFRESH_STOP_PATH
 import app.travelmo.core.REGROUP_PATH
-import app.travelmo.core.describeDeletedTrips
+import app.travelmo.core.START_OVER_PATH
+import app.travelmo.core.describeStartOver
 import app.travelmo.core.describeRegroup
 import app.travelmo.core.tripActionFailure
 import app.travelmo.log.TravelmoLog
@@ -28,9 +28,9 @@ class ParserTripActions(private val client: ParserClient) : TripActions {
         return describeRegroup(body.optInt("changed"), body.optInt("deleted"), body.optInt("placed"))
     }
 
-    override suspend fun deleteAll(): String {
-        val body = call(DELETE_ALL_TRIPS_PATH, "Deleting all trips")
-        return describeDeletedTrips(body.optInt("trips"))
+    override suspend fun startOver(): String {
+        val body = call(START_OVER_PATH, "Starting over")
+        return describeStartOver(body.optInt("trips"), body.optInt("mailboxes"))
     }
 
     override suspend fun refresh(restart: Boolean, retryFailed: Boolean) {
