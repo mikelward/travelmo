@@ -1,5 +1,6 @@
 package app.travelmo.ui
 
+import app.travelmo.core.Person
 import app.travelmo.core.guessMe
 import app.travelmo.core.today
 import org.jetbrains.compose.resources.StringResource
@@ -20,7 +21,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
@@ -78,7 +81,11 @@ import app.travelmo.core.parseCorrection
 import app.travelmo.shared.Res
 import app.travelmo.shared.people
 import app.travelmo.shared.people_hint
+import app.travelmo.shared.same_person_as
+import app.travelmo.shared.same_person_as_title
 import app.travelmo.shared.this_is_me
+import app.travelmo.shared.who_is
+import app.travelmo.shared.who_is_this
 import app.travelmo.shared.you
 import app.travelmo.shared.a_booking_email
 import app.travelmo.shared.cancel
@@ -160,13 +167,24 @@ fun ProfileScreen(viewModel: TripsViewModel, onOpenSettings: () -> Unit, bottomB
         PersonDialog(
             program = program,
             number = number,
-            people = profile?.let { p -> loyaltyByPerson(allLoyalty(p)).mapNotNull { it.person } }.orEmpty(),
+            people = profile?.let { p -> loyaltyByPerson(allLoyalty(p, travelers)).mapNotNull { it.person } }.orEmpty(),
             onPick = { person ->
                 whose.keys.forEach(viewModel::outcomeSeen)
                 viewModel.setLoyaltyPerson("$PERSON_PREFIX$program/$number", program, number, person)
             },
             onDismiss = { editing = null },
         )
+    }
+    // "Who is this?" on a loyalty holder's name, and "Same person as…" on a person (SPEC "Travelers").
+    var naming by rememberSaveable { mutableStateOf<String?>(null) }
+    naming?.let { name ->
+        PeoplePicker(stringResource(Res.string.who_is, name), travelers, except = null, onPick = { viewModel.sayWhoIs(PEOPLE_TOKEN, name, it) }, onDismiss = { naming = null })
+    }
+    var merging by rememberSaveable { mutableStateOf<String?>(null) }
+    merging?.let { id ->
+        travelers.firstOrNull { it.id == id }?.let { person ->
+            PeoplePicker(stringResource(Res.string.same_person_as_title, person.name), travelers, except = id, onPick = { viewModel.mergePeople(PEOPLE_TOKEN, id, it) }, onDismiss = { merging = null })
+        }
     }
     Scaffold(topBar = { AppTopBar(stringResource(Res.string.profile), onOpenSettings = onOpenSettings) }, bottomBar = bottomBar) { padding ->
         val list = rememberLazyListState()
@@ -205,6 +223,8 @@ fun ProfileScreen(viewModel: TripsViewModel, onOpenSettings: () -> Unit, bottomB
                     removalError = removalError,
                     onWhose = { program, number -> editing = listOf(program, number) },
                     whoseError = whoseError,
+                    travelers = travelers,
+                    onWhoIs = if (travelers.isNotEmpty()) ({ name -> naming = name }) else null,
                 )
             }
             // Who the user's bookings are for (SPEC "Travelers"), the one taken to be the user marked.
@@ -221,6 +241,9 @@ fun ProfileScreen(viewModel: TripsViewModel, onOpenSettings: () -> Unit, bottomB
                             Text(stringResource(Res.string.you).uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         } else {
                             TextButton(onClick = { viewModel.setMe(PEOPLE_TOKEN, person.id) }) { Text(stringResource(Res.string.this_is_me)) }
+                        }
+                        if (travelers.size > 1) {
+                            TextButton(onClick = { merging = person.id }) { Text(stringResource(Res.string.same_person_as)) }
                         }
                     }
                 }
@@ -268,9 +291,12 @@ private fun LazyListScope.profileSections(
     removalError: String? = null,
     onWhose: ((program: String, number: String) -> Unit)? = null,
     whoseError: String? = null,
+    travelers: List<Person> = emptyList(),
+    onWhoIs: ((name: String) -> Unit)? = null,
 ) {
     entries(stringResource = Res.string.documents, entries = profile.documents, prefix = "$prefix-doc")
-    val loyalty = allLoyalty(profile)
+    // The owner's people, on their own profile, so every spelling of someone is one person.
+    val loyalty = allLoyalty(profile, travelers)
     if (loyalty.isNotEmpty()) {
         item(key = "$prefix-loyalty-title") { SectionTitle(stringResource(Res.string.loyalty_programs)) }
         // The owner's first, then each other person's, named whenever any is someone else's.
@@ -280,12 +306,16 @@ private fun LazyListScope.profileSections(
                 Column {
                     if (groups.size > 1 || group.person != null) {
                         val name = group.person ?: stringResource(if (onWhose != null) Res.string.loyalty_you else Res.string.loyalty_theirs)
-                        Text(
-                            name,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp).semantics { heading() },
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp)) {
+                            Text(
+                                name,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f).semantics { heading() },
+                            )
+                            val person = group.person
+                            if (person != null && onWhoIs != null) TextButton(onClick = { onWhoIs(person) }) { Text(stringResource(Res.string.who_is_this)) }
+                        }
                     }
                     LoyaltyTable(group.entries, onWhose)
                 }
@@ -365,7 +395,8 @@ private fun PersonDialog(program: String, number: String, people: List<String>, 
                     modifier = Modifier.fillMaxWidth(),
                 )
             } else {
-                Column {
+                // Scrolls, so every person stays reachable however many there are.
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     for ((label, person) in listOf(stringResource(Res.string.loyalty_mine) to null) + people.map { it to it }) {
                         TextButton(onClick = { pick(person) }, modifier = Modifier.fillMaxWidth()) {
                             Text(label, modifier = Modifier.fillMaxWidth())
@@ -380,6 +411,41 @@ private fun PersonDialog(program: String, number: String, people: List<String>, 
         confirmButton = {
             if (naming) TextButton(onClick = { pick(name.trim()) }, enabled = name.isNotBlank()) { Text(stringResource(Res.string.save)) }
         },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+    )
+}
+
+/**
+ * Which of the user's people someone is ("Who is this?", "Same person as…"):
+ * the user first, then as People lists them, less [except].
+ */
+@Composable
+private fun PeoplePicker(title: String, people: List<Person>, except: String?, onPick: (String) -> Unit, onDismiss: () -> Unit) {
+    val me = guessMe(people)
+    val listed = (people.filter { it.id == me?.id } + people.filter { it.id != me?.id }).filter { it.id != except }
+    AppAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            // Scrolls, so every person stays reachable however many there are.
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                for (person in listed) {
+                    TextButton(
+                        onClick = {
+                            onPick(person.id)
+                            onDismiss()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(person.name, modifier = Modifier.weight(1f))
+                        if (person.id == me?.id) {
+                            Text(stringResource(Res.string.you).uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
     )
 }

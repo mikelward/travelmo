@@ -386,7 +386,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   // The viewer's own programs, for the number at check-in; a fellow
   // traveler's are theirs.
   const ownTravelProfile = useTravelProfile(user.uid);
-  const loyalty = useMemo(() => (ownTravelProfile ? allLoyalty(ownTravelProfile) : []), [ownTravelProfile]);
+  const loyalty = useMemo(() => (ownTravelProfile ? allLoyalty(ownTravelProfile, travelers) : []), [ownTravelProfile, travelers]);
   const today = localToday();
   const tripList = useMemo(() => (trip && !onlyWatching ? [trip] : []), [trip, onlyWatching]);
   const segmentsOfTrip = useMemo(() => (segments ? { [tripId]: segments } : {}), [segments, tripId]);

@@ -88,7 +88,30 @@ export function sameTraveler(a: string, b: string): boolean {
   if (x.length < 2 || y.length < 2) return false;
   if (x[x.length - 1] !== y[y.length - 1]) return false;
   const [fx, fy] = [x[0]!, y[0]!];
-  return fx === fy || gluedTitle(fx, fy) || (fx.length === 1 && fy.startsWith(fx)) || (fy.length === 1 && fx.startsWith(fy));
+  return fx === fy || gluedTitle(fx, fy) || (fx.length === 1 && fy.startsWith(fx)) || (fy.length === 1 && fx.startsWith(fy)) || runTogether(x, y) || runTogether(y, x);
+}
+
+// Whether `x`'s first name is `y`'s first and middle names run together, as
+// some airlines write them ("MIKELBRADLEE WARD" for Mikel Bradlee Ward), or
+// with the last of them as an initial ("MIKELB WARD"). Only against a
+// spelling that has the middle name: "Mikelb Ward" alone could be anyone's.
+function runTogether(x: readonly string[], y: readonly string[]): boolean {
+  const given = x[0]!;
+  let joined = y[0]!;
+  for (const middle of y.slice(1, -1)) {
+    if (!given.startsWith(joined)) return false;
+    if (given === joined + middle || given === joined + middle[0]) return true;
+    joined += middle;
+  }
+  return false;
+}
+
+// Whether two names are one person's only through names run together
+// (runTogether): the spaced one is the better spelling.
+function runTogetherOnly(a: string, b: string): boolean {
+  const x = nameWords(canonicalName(a) ?? a);
+  const y = nameWords(canonicalName(b) ?? b);
+  return x.length >= 2 && y.length >= 2 && x[0] !== y[0] && (runTogether(x, y) || runTogether(y, x));
 }
 
 // Someone the user has seen on their bookings: the name they are shown by,
@@ -135,6 +158,7 @@ const firstWord = (name: string) => (name.split(" ")[0] ?? "").toLowerCase();
 // Whether `name` is the better spelling of `kept`, one person's: a whole
 // first name over an initial, and none with a title glued on over one with.
 function fuller(name: string, kept: string): boolean {
+  if (runTogetherOnly(name, kept)) return name.split(" ").length > kept.split(" ").length;
   const [a, b] = [firstWord(name), firstWord(kept)];
   if (gluedTitle(a, b)) return a.length < b.length;
   return a.length > b.length;
@@ -204,7 +228,7 @@ export function notePeople<P extends Person & { bookings: number; direct: number
         continue;
       }
       const spellings = [found.name, ...found.aliases];
-      const aliases = spellings.includes(name) ? found.aliases : [...found.aliases, name].slice(-50);
+      const aliases = spellings.includes(name) ? found.aliases : [...found.aliases, name].slice(-maxAliases);
       const count = !before.has(found.id) && !counted.has(found.id);
       counted.add(found.id);
       if (!count && aliases === found.aliases) continue;
@@ -229,3 +253,29 @@ export function guessMe<P extends Person & { bookings: number; direct: number }>
   const ranked = [...people].sort((a, b) => b.direct - a.direct || b.bookings - a.bookings || a.name.localeCompare(b.name));
   return ranked[0];
 }
+
+// One person merged into another (Profile's "Same person as…": "Jessica
+// Wilkes" who is now "Jessica Ward"): `into` keeps its name and gains
+// `from`'s name and every spelling of it, each once, the newest fifty as
+// the rules allow; it is the user when either was. `from` is then deleted.
+export function mergedPerson(into: Person, from: Person, me: boolean): { name: string; aliases: string[]; me?: boolean } {
+  const seen = new Set([into.name]);
+  const aliases: string[] = [];
+  for (const spelling of [...(into.aliases ?? []), from.name, ...(from.aliases ?? [])]) {
+    if (seen.has(spelling)) continue;
+    seen.add(spelling);
+    aliases.push(spelling);
+  }
+  return { name: into.name, aliases: aliases.slice(-maxAliases), ...(me ? { me: true } : into.me !== undefined ? { me: into.me } : {}) };
+}
+
+// One more spelling of a person (Profile's "Who is this?" on a loyalty
+// holder's name), the newest fifty kept; unchanged when it is one already.
+export function withAlias(person: Person & { aliases: string[] }, spelling: string): string[] {
+  const name = spelling.trim();
+  if (!name || name === person.name || person.aliases.includes(name)) return person.aliases;
+  return [...person.aliases, name].slice(-maxAliases);
+}
+
+// How many other spellings a person keeps, as the schema and rules allow.
+export const maxAliases = 50;

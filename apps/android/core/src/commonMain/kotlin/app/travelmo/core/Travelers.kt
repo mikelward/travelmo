@@ -18,6 +18,7 @@ private fun gluedTitle(a: String, b: String) = gluedTitles.any { a == b + it || 
 
 /** Whether [name] is the better spelling of [kept]: a whole first name over an initial, none glued on over one. */
 private fun fuller(name: String, kept: String): Boolean {
+    if (runTogetherOnly(name, kept)) return name.split(' ').size > kept.split(' ').size
     val a = name.substringBefore(' ').lowercase()
     val b = kept.substringBefore(' ').lowercase()
     return if (gluedTitle(a, b)) a.length < b.length else a.length > b.length
@@ -87,7 +88,31 @@ fun sameTraveler(a: String, b: String): Boolean {
     if (x == y) return true
     if (x.size < 2 || y.size < 2 || x.last() != y.last()) return false
     val (fx, fy) = x.first() to y.first()
-    return fx == fy || gluedTitle(fx, fy) || (fx.length == 1 && fy.startsWith(fx)) || (fy.length == 1 && fx.startsWith(fy))
+    return fx == fy || gluedTitle(fx, fy) || (fx.length == 1 && fy.startsWith(fx)) || (fy.length == 1 && fx.startsWith(fy)) || runTogether(x, y) || runTogether(y, x)
+}
+
+/**
+ * Whether [x]'s first name is [y]'s first and middle names run together, as
+ * some airlines write them ("MIKELBRADLEE WARD" for Mikel Bradlee Ward), or
+ * with the last of them as an initial ("MIKELB WARD"), as travelers.ts's.
+ * Only against a spelling that has the middle name.
+ */
+private fun runTogether(x: List<String>, y: List<String>): Boolean {
+    val given = x.first()
+    var joined = y.first()
+    for (middle in y.subList(1, y.size - 1)) {
+        if (!given.startsWith(joined)) return false
+        if (given == joined + middle || given == joined + middle.first()) return true
+        joined += middle
+    }
+    return false
+}
+
+/** Whether two names are one person's only through names run together: the spaced one is the better spelling. */
+private fun runTogetherOnly(a: String, b: String): Boolean {
+    val x = travelerWords(canonicalName(a) ?: a)
+    val y = travelerWords(canonicalName(b) ?: b)
+    return x.size >= 2 && y.size >= 2 && x.first() != y.first() && (runTogether(x, y) || runTogether(y, x))
 }
 
 /** A booking's travelers as filed: each name once, in order, at most [MAX_TRAVELERS]; null when none is a name. */
@@ -148,3 +173,24 @@ data class Person(
     val bookings: Int = 0,
     val direct: Int = 0,
 )
+
+/** How many other spellings a person keeps, as the schema and rules allow. */
+const val MAX_ALIASES = 50
+
+/**
+ * One person merged into another (Profile's "Same person as…", mergedPerson
+ * in travelers.ts): [into] keeps its name and gains [from]'s name and every
+ * spelling of it, each once, the newest fifty; it is the user when [me].
+ */
+fun mergedPerson(into: Person, from: Person, me: Boolean): Person {
+    val seen = mutableSetOf(into.name)
+    val aliases = (into.aliases + from.name + from.aliases).filter { seen.add(it) }
+    return into.copy(aliases = aliases.takeLast(MAX_ALIASES), me = me || into.me)
+}
+
+/** One more spelling of a person ("Who is this?"), the newest fifty kept; the same list when it is one already. */
+fun withAlias(person: Person, spelling: String): List<String> {
+    val name = spelling.trim()
+    if (name.isEmpty() || name == person.name || name in person.aliases) return person.aliases
+    return (person.aliases + name).takeLast(MAX_ALIASES)
+}

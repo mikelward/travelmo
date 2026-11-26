@@ -319,6 +319,11 @@ describe("people", () => {
     await assertFails(setDoc(doc(as(owner), paths.person(owner.uid, "p2")), { ...sam, id: "p2" }));
     await assertFails(updateDoc(doc(as(partner), paths.person(owner.uid, sam.id)), { me: true }));
   });
+
+  it("let the owner delete one, merged into another, and nobody else", async () => {
+    await assertFails(deleteDoc(doc(as(partner), paths.person(owner.uid, sam.id))));
+    await assertSucceeds(deleteDoc(doc(as(owner), paths.person(owner.uid, sam.id))));
+  });
 });
 
 describe("users", () => {

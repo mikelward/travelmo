@@ -2,14 +2,18 @@ package app.travelmo.ui
 
 import app.travelmo.core.JourneyGap
 import app.travelmo.core.LookResult
+import app.travelmo.core.findPerson
+import app.travelmo.core.guessMe
 import app.travelmo.core.journeyGapKey
 import app.travelmo.core.journeyGaps
 import app.travelmo.core.journeyGapHomes
 import app.travelmo.core.displayTitles
 import app.travelmo.core.journeyGapText
+import app.travelmo.core.mergedPerson
 import app.travelmo.core.warmTables
 import app.travelmo.core.homeTownKey
 import app.travelmo.core.ChosenHomeAirports
+import app.travelmo.core.withAlias
 import app.travelmo.core.withHomeAirports
 import app.travelmo.core.withChosenAirports
 import app.travelmo.core.tripMatches
@@ -801,6 +805,32 @@ class TripsViewModel(
     fun restoreSegment(token: String, tripId: String, segmentId: String) = run(token, "restoreSegment") { store.restoreSegment(tripId, segmentId) }
 
     fun setMe(token: String, personId: String) = run(token, "setMe") { store.setMe(uid, travelers.value, personId) }
+
+    /** Merges [fromId] into [intoId], one person, as the web's mergePeople: the user when either was taken to be. */
+    fun mergePeople(token: String, fromId: String, intoId: String) = run(token, "mergePeople") { mergeInto(fromId, intoId) }
+
+    private suspend fun mergeInto(fromId: String, intoId: String) {
+        val people = travelers.value
+        val from = people.firstOrNull { it.id == fromId } ?: return
+        val into = people.firstOrNull { it.id == intoId } ?: return
+        if (from.id == into.id) return
+        val me = guessMe(people)?.id
+        store.mergePeople(uid, mergedPerson(into, from, me == from.id || me == into.id), from)
+    }
+
+    /**
+     * Says [name] (a loyalty number's holder) is [intoId], as the web's
+     * sayWhoIs: merges the person by that name into them when the bookings
+     * named one, else adds it as one more spelling of theirs.
+     */
+    fun sayWhoIs(token: String, name: String, intoId: String) = run(token, "sayWhoIs") {
+        val people = travelers.value
+        val into = people.firstOrNull { it.id == intoId } ?: return@run
+        val named = findPerson(people, name)
+        if (named != null && named.id != into.id) return@run mergeInto(named.id, into.id)
+        val aliases = withAlias(into, name)
+        if (aliases != into.aliases) store.setAliases(uid, into.id, aliases)
+    }
 
     fun newTripId(): String = store.newTripId()
 

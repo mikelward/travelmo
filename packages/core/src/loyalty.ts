@@ -1,3 +1,4 @@
+import { findPerson, guessMe, type Person } from "./travelers";
 import { foundLoyaltyBudgetBytes, maxFoundLoyalty, maxLoyaltyPeople, type FoundLoyalty, type LoyaltyPerson, type ProfileEntry, type TravelProfile } from "./schema";
 
 // A loyalty program at a glance. An imported program is a list of labeled
@@ -262,13 +263,26 @@ export function foundLoyaltyEntry(found: FoundLoyalty): ProfileEntry {
 // imported, then what emails showed that it did not have (by number). A statement newer than the TripIt upload
 // brings its balance and status to the imported program it matches, ahead
 // of the imported ones, which the table reads first.
-export function allLoyalty(profile: Pick<TravelProfile, "loyalty" | "foundLoyalty" | "importedAt" | "loyaltyPeople">): ProfileEntry[] {
+//
+// `travelers`, the owner's people (SPEC "Travelers"), when known: a name
+// that is one of theirs is shown as that person's name, so every spelling
+// of someone ("Jessica Wilkes" merged into "Jessica Ward") is one person,
+// and one of the owner's own ("Mikelbradlee Ward") is the owner's.
+export function allLoyalty(
+  profile: Pick<TravelProfile, "loyalty" | "foundLoyalty" | "importedAt" | "loyaltyPeople">,
+  travelers: readonly (Person & { bookings: number; direct: number })[] = [],
+): ProfileEntry[] {
   const found = profile.foundLoyalty ?? [];
   // Whose it is: as the owner said, else as the email named, else theirs.
   const people = profile.loyaltyPeople ?? [];
+  const me = guessMe(travelers);
+  const known = (name: string | undefined): string | undefined => {
+    const person = name ? findPerson(travelers, name) : undefined;
+    return person && person.id === me?.id ? undefined : (person?.name ?? name);
+  };
   const withPerson = (entry: ProfileEntry, number: string | undefined, fromEmail?: FoundLoyalty): ProfileEntry => {
     const said = number ? [...people].reverse().find((p) => sameMembership(p, { program: entry.title, number })) : undefined;
-    const person = said ? said.person : fromEmail?.person;
+    const person = known(said ? said.person : fromEmail?.person);
     return person ? { ...entry, fields: [...entry.fields, { label: personLabel, value: person }] } : entry;
   };
   // One membership: the same number in the same program (sameMembership).

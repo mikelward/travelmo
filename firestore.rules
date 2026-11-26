@@ -279,9 +279,11 @@ service cloud.firestore {
         && validHomes(request.resource.data) && validRides(request.resource.data);
 
       // The people the user's bookings name (SPEC "Travelers"): imports add
-      // and count them; the owner renames them and says which is them.
+      // and count them; the owner renames them, says which is them, and
+      // merges two who are one (the other deleted, its spellings kept).
       match /people/{personId} {
         allow read: if isSelf() && approved();
+        allow delete: if member() && isSelf();
         allow update: if member() && isSelf()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'aliases', 'me', 'updatedAt'])
           && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 200
