@@ -258,8 +258,12 @@ schemes.
 ## The trip list
 
 Trips are grouped into now, upcoming and past by calendar date, each group
-one card with a rule between its trips. Each trip shows a line drawing of
-the best-known landmark of the city its title names (or a matching object
+one card with a rule between its trips. Each trip shows a picture: for a
+trip that is just an event (every booking still on it a local outing, as
+the Hide local events filter has it), whatever its title, its first
+booking's own icon, as its row on the trip page shows it (a show's ticket,
+a dinner's calendar; `tripBookingType`); else a line drawing of the
+best-known landmark of the city its title names (or a matching object
 when a place is named after one — a rose for Roseville, an acorn for Fair
 Oaks or Oakland, a bear for Big Bear), the first one named ("Paris and Lyon"
 is Paris; whole words, accents and case ignored, except that a name that is
@@ -275,7 +279,8 @@ kind of place the trip goes to, else a suitcase (`tripLandmark` and
 `tripPicture` in `packages/core/src/landmarks.ts`, mirrored in the Android
 app's core; the drawings are `landmarks.json`, one SVG path in a 48-unit
 square stroked 1.5 wide, which both apps draw).
-The kind of place a trip goes to is the trip's `setting` (`tripSetting`):
+The kind of place a trip goes to is the trip's `setting` (`tripSetting`;
+for a trip that is just an event, its first booking's type):
 a city, a small town, a beach, the mountains, a lake or the countryside,
 as the parser read it from the booking or knew of the town (a place's
 `setting`), else by the town's size, a city being one of 250,000 people or
@@ -2194,7 +2199,9 @@ named again from all its bookings, as it is when a booking found again
 changes what its bookings say (a stay's confirmation giving the town its
 request lacked); a trip the owner renamed keeps its name
 (`importGaveTitle`). A day
-out is named after what it is, and so is a course of several days at one
+out (a show, a ticket, a dinner) is named after what it is, or its venue
+when its title starts with it ("Locale" for "Locale (Southbank)"), not its
+town, and so is a course of several days at one
 place: one ticket spanning them, or one a day with the same title or
 titles that differ only in the day or date ("Holiday Camp East Finchley - Junior Group" for "... (Day
 2)", "Debutots Camp" for "Debutots Camp - 11th Aug 2025", not the school it

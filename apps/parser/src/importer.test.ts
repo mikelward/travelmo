@@ -781,8 +781,17 @@ describe("importMessages", () => {
 describe("tripTitle", () => {
   it("prefers the destination city, then its name, then the segment title", () => {
     expect(tripTitle(lodging.segments)).toBe("Liverpool");
-    expect(tripTitle([{ type: "other", title: "Museum", start: "2026-01-01T10:00:00Z", destination: { name: "Tate" } }])).toBe("Tate");
-    expect(tripTitle([{ type: "other", title: "Thing", start: "2026-01-01T10:00:00Z" }])).toBe("Thing");
+    expect(tripTitle([{ type: "lodging", title: "Stay", start: "2026-01-01T15:00:00Z", destination: { name: "Tate Inn" } }])).toBe("Tate Inn");
+    expect(tripTitle([{ type: "car_rental", title: "Thing", start: "2026-01-01T10:00:00Z" }])).toBe("Thing");
+  });
+
+  it("names a dinner after itself, not its town", () => {
+    const dinner = { type: "other", title: "Locale (Southbank)", start: "2025-08-19T18:00:00+01:00", end: "2025-08-19T19:30:00+01:00", destination: { name: "Locale", city: "London", country: "GB" } } as const;
+    expect(tripTitle([dinner])).toBe("Locale");
+    expect(tripTitle([{ ...dinner, title: "Dinner for two", destination: { name: "The Ivy", city: "London" } }])).toBe("Dinner for two");
+    // A ride there is no day out: the trip is named for where it goes, not the taxi.
+    const taxi = { type: "other", title: "Taxi booking", start: "2025-08-19T17:30:00+01:00", origin: { name: "Home", city: "Woburn" }, destination: { name: "Locale", city: "London" } } as const;
+    expect(tripTitle([taxi, dinner])).not.toBe("Taxi booking");
   });
 
   it("names a one-day outing after the place or the event, not its town", () => {

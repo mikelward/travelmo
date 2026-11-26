@@ -70,7 +70,10 @@ fun tripFlagsToWrite(trip: Trip, segments: List<Segment>): TripFlags? {
 }
 
 /** Whether the list needs a trip's bookings to filter it or draw it: only while the trip doesn't yet say. */
-fun flagsUnknown(trip: Trip): Boolean = trip.allCancelled == null || trip.localOnly == null || trip.travelers == null || trip.setting == null
+fun flagsUnknown(trip: Trip): Boolean =
+    trip.allCancelled == null || trip.localOnly == null || trip.travelers == null || trip.setting == null ||
+        // A trip of local events kept a town before events took their booking's icon.
+        (trip.localOnly == true && tripBookingType(trip.setting) == null)
 
 /**
  * Whether the list leaves a trip out: by its own cancellation and flags, else, for a trip from before the flags

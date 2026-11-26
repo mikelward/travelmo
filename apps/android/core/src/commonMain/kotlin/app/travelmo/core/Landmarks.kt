@@ -121,7 +121,16 @@ fun warmTables() {
 /** The kinds of place a stay or outing is in: a big city, a small town or village, a beach, the mountains, a lake, the countryside. */
 val PLACE_SETTINGS = listOf("city", "town", "beach", "mountains", "lake", "countryside")
 
-/** A trip's picture: what its title names ([tripLandmark]), else the drawing of the kind of place it goes to ([setting]), else the suitcase. */
+/** The booking types whose icon a trip that is just an event takes. */
+private val OUTING_TYPES = setOf(SegmentType.ACTIVITY, SegmentType.OTHER, SegmentType.CAR_RENTAL)
+
+/** The booking type whose icon a trip that is just an event takes, whatever its title: a dinner's calendar, a show's ticket ([setting]). */
+fun tripBookingType(setting: String?): SegmentType? = SegmentType.fromWire(setting)?.takeIf { it in OUTING_TYPES }
+
+/**
+ * A trip's picture, for a trip not just an event ([tripBookingType]): what its title names ([tripLandmark]), else the
+ * drawing of the kind of place it goes to ([setting]), else the suitcase.
+ */
 fun tripPicture(title: String, setting: String? = null): Landmark {
     val named = tripLandmark(title)
     if (named.id != "trip") return named
@@ -162,6 +171,8 @@ private val inOrder = Comparator<Segment> { a, b -> compareInstants(a.start, b.s
  * where its first journey arrives; "none" when none of them says. Goes by what is still booked unless nothing is.
  */
 fun tripSetting(segments: List<Segment>): String {
+    // A show, a dinner, a day out: its first booking's icon, not the town it is in.
+    if (localOnly(segments)) return liveSegments(segments).sortedWith(inOrder).first().type.wire
     val live = liveSegments(segments)
     val from = live.ifEmpty { segments }
     val stays = from.filter { it.type == SegmentType.LODGING }.sortedWith(compareByDescending<Segment> { lengthOf(it) }.then(inOrder))

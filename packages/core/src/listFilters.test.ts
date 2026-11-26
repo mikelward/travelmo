@@ -71,15 +71,20 @@ describe("the trip's flags", () => {
     expect(flagsUnknown({ allCancelled: false })).toBe(true);
     expect(flagsUnknown({ allCancelled: false, localOnly: false })).toBe(true);
     expect(flagsUnknown({ allCancelled: false, localOnly: false, travelers: [] })).toBe(true);
-    expect(tripFlagsToWrite({}, [show])).toEqual({ allCancelled: false, localOnly: true, travelers: [], setting: "city" });
-    const kept = { allCancelled: false, localOnly: true, travelers: [], setting: "city" } as const;
+    // A show alone is an event: its ticket, not its town.
+    expect(tripFlagsToWrite({}, [show])).toEqual({ allCancelled: false, localOnly: true, travelers: [], setting: "activity" });
+    const kept = { allCancelled: false, localOnly: true, travelers: [], setting: "activity" } as const;
     expect(tripFlagsToWrite(kept, [show])).toBeUndefined();
+    // All cancelled, it isn't local any more, and goes by its town.
     expect(tripFlagsToWrite(kept, [cancelled(show)])).toEqual({ allCancelled: true, localOnly: false, travelers: [], setting: "city" });
-    expect(tripFlagsToWrite(kept, [{ ...show, travelers: ["Sam Example"] }])).toEqual({ allCancelled: false, localOnly: true, travelers: ["Sam Example"], setting: "city" });
+    expect(tripFlagsToWrite(kept, [{ ...show, travelers: ["Sam Example"] }])).toEqual({ allCancelled: false, localOnly: true, travelers: ["Sam Example"], setting: "activity" });
     // A trip from before its setting was kept gets it, though its filters are known.
     expect(tripFlagsToWrite({ allCancelled: false, localOnly: true, travelers: [] }, [show])).toEqual(kept);
     expect(flagsUnknown({ allCancelled: false, localOnly: true, travelers: [] })).toBe(true);
     expect(flagsUnknown(kept)).toBe(false);
+    // A trip of local events that kept a town before events took their booking's icon is read again, once.
+    expect(flagsUnknown({ ...kept, setting: "city" })).toBe(true);
+    expect(flagsUnknown({ ...kept, localOnly: false, setting: "city" })).toBe(false);
   });
 });
 

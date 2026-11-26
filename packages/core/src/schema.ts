@@ -25,6 +25,11 @@ export type SegmentType = z.infer<typeof SegmentType>;
 // village, a beach, the mountains, a lake, or the countryside.
 export const PlaceSetting = z.enum(["city", "town", "beach", "mountains", "lake", "countryside"]);
 export type PlaceSetting = z.infer<typeof PlaceSetting>;
+// What a trip's picture goes by: for a trip of local events alone
+// (localOnly), the type of its first booking, whose icon it takes; else,
+// when its title names nothing, the kind of place it goes to; or "none".
+export const TripSetting = z.union([PlaceSetting, z.enum(["activity", "other", "car_rental"]), z.literal("none")]);
+export type TripSetting = z.infer<typeof TripSetting>;
 
 export const Place = z.object({
   name: z.string().min(1),
@@ -212,9 +217,10 @@ export const Trip = z.object({
   localOnly: z.boolean().optional(),
   travelers: z.array(z.string().min(1)).max(100).optional(),
   // What kind of place it goes to, for its picture (tripSetting), kept with
-  // the flags above: "none" when its bookings don't say. Absent on a trip
+  // the flags above: for a trip of local events alone (localOnly), its first
+  // booking's type; "none" when its bookings don't say. Absent on a trip
   // from before it was kept, until an app reads its bookings.
-  setting: z.union([PlaceSetting, z.literal("none")]).optional(),
+  setting: TripSetting.optional(),
   createdAt: isoDateTime,
   updatedAt: isoDateTime,
 });

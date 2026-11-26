@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LANDMARKS, placeSetting, tripLandmark, tripPicture, tripSetting } from "./landmarks";
+import { LANDMARKS, placeSetting, tripBookingType, tripLandmark, tripPicture, tripSetting } from "./landmarks";
 import { PlaceSetting, type ExtractedSegment } from "./schema";
 import { foldText } from "./tripSearch";
 
@@ -303,6 +303,15 @@ describe("tripPicture", () => {
     expect(tripPicture("Woburn").id).toBe("trip");
   });
 
+  it("gives a trip that is just an event its booking's icon, whatever its title", () => {
+    expect(tripBookingType("other")).toBe("other");
+    expect(tripBookingType("activity")).toBe("activity");
+    expect(tripBookingType("car_rental")).toBe("car_rental");
+    expect(tripBookingType("city")).toBeUndefined();
+    expect(tripBookingType("none")).toBeUndefined();
+    expect(tripBookingType(undefined)).toBeUndefined();
+  });
+
   it("draws every kind of place", () => {
     for (const setting of PlaceSetting.options) expect(tripPicture("Somewhere", setting).id).toBe(setting);
   });
@@ -331,6 +340,15 @@ describe("placeSetting", () => {
 });
 
 describe("tripSetting", () => {
+  it("is the first booking's type for a trip of local events alone", () => {
+    const show = { type: "activity", title: "Show", start: "2026-12-12T19:00:00Z", destination: { name: "Theatre", city: "London", country: "GB" } } as const;
+    const dinner = { type: "other", title: "Dinner", start: "2026-12-12T17:00:00Z", destination: { name: "Bistro", city: "London" } } as const;
+    // The dinner comes first.
+    expect(tripSetting([show, dinner])).toBe("other");
+    expect(tripSetting([show])).toBe("activity");
+    expect(tripSetting([show, stay({ destination: { name: "Inn", city: "Woburn" } })])).toBe("town");
+  });
+
   it("goes by the longest stay", () => {
     const short = stay({ destination: { name: "Airport Inn", city: "Boston", country: "US" }, end: "2026-12-13T11:00:00Z" });
     const long = stay({ destination: { name: "Beach House", city: "Truro", setting: "beach" }, start: "2026-12-13T15:00:00Z", end: "2026-12-20T11:00:00Z" });

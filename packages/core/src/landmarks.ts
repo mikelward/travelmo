@@ -2,7 +2,8 @@ import big from "./bigCities.json";
 import table from "./landmarks.json";
 import { cityKey } from "./cityKey";
 import { compareInstants } from "./instant";
-import type { ExtractedSegment, Place, PlaceSetting, Trip } from "./schema";
+import { isOuting } from "./home";
+import type { ExtractedSegment, Place, PlaceSetting, Trip, TripSetting } from "./schema";
 import { liveSegments } from "./trips";
 
 // A trip's picture in the trip list: an outline of the best-known landmark
@@ -87,8 +88,18 @@ export function tripLandmark(title: string): Landmark {
 
 const byId = new Map(LANDMARKS.map((l) => [l.id, l]));
 
-// A trip's picture: what its title names (tripLandmark), else the drawing of
-// the kind of place it goes to (the trip's `setting`), else the suitcase.
+// The booking type whose icon a trip that is just an event takes, whatever
+// its title: a dinner's calendar, a show's ticket (its `setting`).
+export function tripBookingType(setting?: Trip["setting"]): OutingType | undefined {
+  return setting && (outingTypes as readonly string[]).includes(setting) ? (setting as OutingType) : undefined;
+}
+
+const outingTypes = ["activity", "other", "car_rental"] as const;
+type OutingType = (typeof outingTypes)[number];
+
+// A trip's picture, for a trip not just an event (tripBookingType): what its
+// title names (tripLandmark), else the drawing of the kind of place it goes
+// to (the trip's `setting`), else the suitcase.
 export function tripPicture(title: string, setting?: Trip["setting"]): Landmark {
   const named = tripLandmark(title);
   return named !== SUITCASE ? named : ((setting && byId.get(setting)) ?? SUITCASE);
@@ -117,8 +128,11 @@ const inOrder = (a: ExtractedSegment, b: ExtractedSegment) => compareInstants(a.
 // stay, else of its first outing, else of where its first journey arrives;
 // "none" when none of them says. Goes by what is still booked unless
 // nothing is.
-export function tripSetting(segments: readonly ExtractedSegment[]): PlaceSetting | "none" {
+export function tripSetting(segments: readonly ExtractedSegment[]): TripSetting {
   const live = liveSegments(segments);
+  // A show, a dinner, a day out: its first booking's icon, not the town it
+  // is in (localOnly).
+  if (live.length > 0 && live.every(isOuting)) return [...live].sort(inOrder)[0]!.type as OutingType;
   const from = live.length > 0 ? live : [...segments];
   const stays = from.filter((s) => s.type === "lodging").sort((a, b) => length(b) - length(a) || inOrder(a, b));
   const outings = from.filter((s) => s.type !== "lodging" && !journey.has(s.type)).sort(inOrder);

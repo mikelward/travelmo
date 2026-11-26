@@ -179,9 +179,16 @@ describe("nearbyTrips", () => {
 
 describe("newTripTitle", () => {
   it("names the trip after where the booking goes, else its title", () => {
-    expect(newTripTitle({ title: "EK 18 MAN to DXB", destination: { name: "Dubai International", city: "Dubai", code: "DXB" } })).toBe("Dubai");
-    expect(newTripTitle({ title: "Stay", destination: { name: "Hotel Example" } })).toBe("Hotel Example");
-    expect(newTripTitle({ title: "Toy Story 5" })).toBe("Toy Story 5");
+    expect(newTripTitle({ type: "flight", title: "EK 18 MAN to DXB", destination: { name: "Dubai International", city: "Dubai", code: "DXB" } })).toBe("Dubai");
+    expect(newTripTitle({ type: "lodging", title: "Stay", destination: { name: "Hotel Example" } })).toBe("Hotel Example");
+    expect(newTripTitle({ type: "car_rental", title: "Example Cars" })).toBe("Example Cars");
+  });
+
+  it("names a show or a dinner after itself, not its town", () => {
+    expect(newTripTitle({ type: "other", title: "Locale (Southbank)", destination: { name: "Locale", city: "London" } })).toBe("Locale (Southbank)");
+    expect(newTripTitle({ type: "activity", title: "Toy Story 5", destination: { name: "Everyman", city: "London" } })).toBe("Toy Story 5");
+    // A taxi goes by where it goes.
+    expect(newTripTitle({ type: "other", title: "Taxi", origin: { name: "Home" }, destination: { name: "Heathrow", city: "London" } })).toBe("London");
   });
 });
 
