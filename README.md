@@ -254,7 +254,10 @@ every range in `package.json`, `apps/*/package.json` and
 against the result, a transitive dependency that would cross a major is
 held back, and one pull request opens with auto-merge armed. Its one-time
 setup is the same Actions permission plus an `npm-update` environment
-holding `NPM_UPDATE_PAT`, a token with the same two scopes.
+holding `NPM_UPDATE_PAT`, a token with the same two scopes. What the checks leave
+behind (each workspace's `node_modules`, the builds, the emulator logs) is
+declared in its `ignored-build-outputs`; a new gitignored build output has
+to be added there, or the batch refuses to open its PR.
 
 Run the web app locally against a Firebase project:
 

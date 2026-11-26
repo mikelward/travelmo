@@ -46,3 +46,22 @@ jobs:
       # pnpm-lock.yaml, `pnpm update -r` across the workspace, pnpm at the
       # version package.json's packageManager pins, Node from .node-version.
       package-manager: pnpm
+      # What the checks (`pnpm run lint`, `pnpm test`, `pnpm run build`)
+      # leave behind, all gitignored: each workspace's own node_modules (the
+      # shared allowlist knows only the root's), the parser's and the web
+      # app's builds, the web app's generated service worker, and the
+      # Firestore emulator's logs from the tests that start it. Without
+      # these the batch refuses to open its PR every week. Spelled as
+      # `git status --ignored` reports them, from the run that refused.
+      ignored-build-outputs: |
+        apps/inbound/node_modules/
+        apps/parser/node_modules/
+        apps/web/node_modules/
+        packages/core/node_modules/
+        packages/rules/node_modules/
+        apps/parser/dist/
+        apps/web/.next/
+        apps/web/public/sw.js
+        apps/parser/firestore-debug.log
+        apps/web/firestore-debug.log
+        packages/rules/firestore-debug.log
