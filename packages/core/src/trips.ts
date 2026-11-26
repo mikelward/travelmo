@@ -2,6 +2,7 @@ import type { Location } from "./geocode";
 import { compareInstants } from "./instant";
 import { canonicalTravelers } from "./travelers";
 import type { ExtractedCancellation, ExtractedSegment, Place, SegmentType, Trip } from "./schema";
+import { hasWords, unpadded } from "./words";
 
 export type TripGroups = {
   current: Trip[];
@@ -417,7 +418,9 @@ export function servicesConflict(a: string | undefined, b: string | undefined, n
   return x.size > 0 && y.size > 0 && ![...x].some((n) => [...y].some((m) => sameService(n, m)));
 }
 
-export const normalizeReference = (ref: string) => ref.toUpperCase().replace(/[^A-Z0-9]/g, "");
+// A reference as written however a source spaces, cases or zero-pads it:
+// "ab-0123" is AB123, and 0708843612 is 708843612.
+export const normalizeReference = (ref: string) => unpadded(ref.toUpperCase().replace(/[^A-Z0-9]/g, ""));
 
 // Whether two bookings from different sources are the same reservation, for
 // imports that carry no shared reference (a TripIt export has no
@@ -746,7 +749,8 @@ export function mergeDetails<S extends ExtractedSegment>(existing: S, found: Ext
   else if (!existing.rentalStage && found.rentalStage && found.rentalStage !== "paired" && found.type === "car_rental") merged.rentalStage = found.rentalStage;
   if (merged.destination === undefined && found.destination !== undefined) merged.destination = found.destination;
   const notes = merged.notes?.trim() ? [merged.notes.trim()] : [];
-  const has = (text: string) => notes.some((note) => note.toLowerCase().includes(text.toLowerCase()));
+  // Said already, as whole words: a reference 1234 is not in "Room 12345".
+  const has = (text: string) => notes.some((note) => hasWords(note, text));
   const extra = found.notes?.trim();
   if (extra && !has(extra)) notes.push(extra);
   // The reference either gave that the booking doesn't keep (a codeshare
@@ -972,7 +976,7 @@ function nearReference(s: ExtractedSegment, sent: string): boolean {
 // the name run together ("Trip.com" is "tripcom").
 const bookingSellers = [
   "expedia", "tripcom", "bookingcom", "hotelscom", "priceline", "orbitz", "travelocity", "agoda", "kayak", "hopper",
-  "edreams", "opodo", "kiwicom", "lastminute", "ctrip", "gotogate", "mytrip", "hotwire", "egencia", "trainline",
+  "edreams", "opodo", "kiwicom", "lastminute", "ctrip", "gotogate", "mytrip", "hotwire", "egencia", "trainline", "thetrainline",
   "raileurope", "sncf", "omio", "flightcentre", "trailfinders", "navan", "tripactions", "amextravel",
 ];
 const sellerWords = new Set(["travel", "travels", "tours", "agency", "agent", "holidays", "vacations"]);
@@ -992,8 +996,11 @@ export function providersDiffer(a: string | undefined, b: string | undefined): b
   if (x.length === 0 || y.length === 0) return false;
   const [joinedX, joinedY] = [x.join(""), y.join("")];
   if (joinedX === joinedY) return false;
-  const seller = (t: string[], joined: string) => bookingSellers.some((name) => joined.includes(name)) || t.some((w) => sellerWords.has(w));
-  if (seller(x, joinedX) || seller(y, joinedY)) return false;
+  // A seller's name as words run together ("booking com", "the trainline"),
+  // never letters inside another word.
+  const runs = (t: string[]) => t.flatMap((_, i) => t.slice(i).map((__, j) => t.slice(i, i + j + 1).join("")));
+  const seller = (t: string[]) => runs(t).some((run) => bookingSellers.includes(run)) || t.some((w) => sellerWords.has(w));
+  if (seller(x) || seller(y)) return false;
   const initials = (t: string[]) => t.map((w) => w[0]).join("");
   if (joinedX === initials(y) || joinedY === initials(x)) return false;
   const distinctive = (t: string[]) => t.filter((w) => !companyWords.has(w));

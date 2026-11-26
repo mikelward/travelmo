@@ -1812,7 +1812,7 @@ reminder's whole trip "ADL to LHR, 1 stop" does beside its first leg ADL to
 DOH: `mergeDetails`) or the same
 dates for stays and rentals, and then evidence of identity, since
 dropping a real booking loses it: equal confirmation numbers when both have
-one, otherwise agreeing codes at both ends of a journey, or a distinctive
+one (however spaced, cased or zero-padded: "ab-0123" is AB123), otherwise agreeing codes at both ends of a journey, or a distinctive
 word shared by the two titles or place names other than their city and,
 unless it is all the name there is, their chain or provider. Known cities
 and countries that differ rule a match out, except for one stay told by two

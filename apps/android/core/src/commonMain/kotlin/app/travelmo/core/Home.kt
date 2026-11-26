@@ -344,7 +344,6 @@ fun inHomeTown(place: Place?, date: String, periods: List<HomePeriod>, overrides
 
 // Words that say nothing about which airport or station a place is.
 private val hubWords = setOf("airport", "international", "terminal", "station", "central", "railway", "rail", "city")
-private fun wordsOf(text: String) = text.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }
 
 // Whether a place in a ride's booking is the airport or station [hub]: the
 // same code, the code written in it, or a word of the hub's name that is not

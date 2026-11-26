@@ -1,6 +1,7 @@
 import type { ExtractedSegment, Place, Trip } from "./schema";
 import { reportBounds } from "./reports";
 import { liveSegments, tripCancelled } from "./trips";
+import { hasWords } from "./words";
 
 // The user's trips as an iCalendar (RFC 5545) feed that Google or Apple
 // Calendar can subscribe to: each trip an all-day event across its dates,
@@ -59,8 +60,9 @@ function nextDay(date: string): string {
 
 function placeText(place: Place | undefined): string | undefined {
   if (!place) return undefined;
-  const name = place.code && !place.name.includes(place.code) ? `${place.name} (${place.code})` : place.name;
-  return place.city && !name.includes(place.city) ? `${name}, ${place.city}` : name;
+  // Each once, as whole words: Rome is not in "Romeo Hotel".
+  const name = place.code && !hasWords(place.name, place.code) ? `${place.name} (${place.code})` : place.name;
+  return place.city && !hasWords(name, place.city) ? `${name}, ${place.city}` : name;
 }
 
 function location(segment: ExtractedSegment): string | undefined {

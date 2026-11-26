@@ -2,6 +2,7 @@ import { normalizeReference, sameBooking } from "./trips";
 import { canonicalTravelers } from "./travelers";
 import { compareInstants } from "./instant";
 import type { ExtractedSegment, Segment, SourceRef } from "./schema";
+import { hasWords } from "./words";
 
 // Two bookings the user says are one (a car's reservation and its rental
 // agreement, read from two emails), as one: `keep` as it is, with what only
@@ -20,7 +21,7 @@ export function mergeBookings(keep: Segment, other: Segment, timestamp: string):
     keep.confirmation && other.confirmation && normalizeReference(keep.confirmation) !== normalizeReference(other.confirmation) ? `Other reference: ${other.confirmation}` : undefined;
   // Each note once: one the kept notes already say isn't added again.
   const notes: string[] = [];
-  for (const note of [keep.notes?.trim(), other.notes?.trim(), otherReference]) if (note && !notes.some((n) => n.includes(note))) notes.push(note);
+  for (const note of [keep.notes?.trim(), other.notes?.trim(), otherReference]) if (note && !notes.some((n) => hasWords(n, note))) notes.push(note);
   if (notes.length) merged.notes = notes.join("\n");
   // Everyone either names, each once, as many as a booking holds.
   const travelers = canonicalTravelers([...(keep.travelers ?? []), ...(other.travelers ?? [])]);

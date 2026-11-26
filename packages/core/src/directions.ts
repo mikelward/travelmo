@@ -1,5 +1,6 @@
 import type { ExtractedSegment, Place } from "./schema";
 import { isCancelled } from "./trips";
+import { hasWords } from "./words";
 
 // Where a booking's directions lead: a journey's or a car rental's start
 // (the airport, station or desk you head to), anything else's place (the
@@ -15,8 +16,8 @@ export function directionsPlace(segment: ExtractedSegment): Place | undefined {
 // spot, which may be only the town's middle), else its spot on the map,
 // else its name.
 export function directionsQuery(place: Place): string {
-  if (place.address) return place.address.toLowerCase().includes(place.name.toLowerCase()) ? place.address : `${place.name}, ${place.address}`;
-  if (place.city) return place.name.toLowerCase().includes(place.city.toLowerCase()) ? place.name : `${place.name}, ${place.city}`;
+  if (place.address) return hasWords(place.address, place.name) ? place.address : `${place.name}, ${place.address}`;
+  if (place.city) return hasWords(place.name, place.city) ? place.name : `${place.name}, ${place.city}`;
   if (place.lat !== undefined && place.lon !== undefined) return `${place.lat},${place.lon}`;
   return place.name;
 }

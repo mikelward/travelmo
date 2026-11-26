@@ -56,9 +56,9 @@ fun parseDocumentDate(value: String): String? {
 
 private fun lastPart(label: String) = label.split(" › ").last().lowercase()
 private fun isExpiry(label: String) = Regex("""expir|valid (until|to|through)|valid thru""").containsMatchIn(lastPart(label))
-private fun isNationality(label: String) = Regex("""nationality|citizenship""").containsMatchIn(lastPart(label))
+private fun isNationality(label: String) = Regex("""\b(nationality|citizenship)\b""").containsMatchIn(lastPart(label))
 // A country of birth says nothing about which country a document is for.
-private fun isCountry(label: String) = lastPart(label).contains("country") && !lastPart(label).contains("birth") && !isNationality(label)
+private fun isCountry(label: String) = Regex("""\bcountry\b""").containsMatchIn(lastPart(label)) && !Regex("""\bbirth""").containsMatchIn(lastPart(label)) && !isNationality(label)
 private fun isType(label: String) = Regex("""^(document )?type$""").matches(lastPart(label))
 
 // The country a document belongs to: for a passport, the one that issued it
@@ -73,8 +73,8 @@ private fun countryOf(entry: ProfileEntry, kind: DocumentKind): String? {
 private fun kindOf(entry: ProfileEntry): DocumentKind {
     val text = (listOf(entry.title) + entry.fields.filter { isType(it.label) }.map { it.value }).joinToString(" ").lowercase()
     return when {
-        text.contains("passport") -> DocumentKind.PASSPORT
-        text.contains("visa") -> DocumentKind.VISA
+        Regex("""\b(e-?)?passports?\b""").containsMatchIn(text) -> DocumentKind.PASSPORT
+        Regex("""\b(e-?)?visas?\b""").containsMatchIn(text) -> DocumentKind.VISA
         else -> DocumentKind.OTHER
     }
 }

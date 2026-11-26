@@ -53,3 +53,4 @@ export * from "./travelers";
 export * from "./journeyGap";
 export * from "./directions";
 export * from "./landmarks";
+export * from "./words";

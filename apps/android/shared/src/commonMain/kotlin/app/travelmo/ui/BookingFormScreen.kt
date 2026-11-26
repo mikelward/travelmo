@@ -44,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.core.BookingFields
 import app.travelmo.core.BookingFormException
 import app.travelmo.core.FIXED_OFFSET_PREFIX
+import app.travelmo.core.hasWordStarts
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentType
 import app.travelmo.core.airportZone
@@ -363,7 +364,7 @@ fun PickerField(value: String, label: String, modifier: Modifier = Modifier, onC
 private fun ZonePicker(current: String, onPick: (String) -> Unit, onDismiss: () -> Unit) {
     var query by remember { mutableStateOf("") }
     val zones = remember { timeZones() }
-    val shown = remember(query) { zones.filter { it.replace('_', ' ').contains(query.trim(), ignoreCase = true) } }
+    val shown = remember(query) { zones.filter { hasWordStarts(it, query) } }
     AppAlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {},

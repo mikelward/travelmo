@@ -19,9 +19,9 @@ fun directionsPlace(segment: Segment): Place? {
  */
 fun directionsQuery(place: Place): String {
     val address = place.address
-    if (address != null) return if (address.contains(place.name, ignoreCase = true)) address else "${place.name}, $address"
+    if (address != null) return if (hasWords(address, place.name)) address else "${place.name}, $address"
     val city = place.city
-    if (city != null) return if (place.name.contains(city, ignoreCase = true)) place.name else "${place.name}, $city"
+    if (city != null) return if (hasWords(place.name, city)) place.name else "${place.name}, $city"
     if (place.lat != null && place.lon != null) return "${formatCoordinate(place.lat)},${formatCoordinate(place.lon)}"
     return place.name
 }

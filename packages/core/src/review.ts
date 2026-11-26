@@ -1,4 +1,5 @@
 import type { ParsedMessage } from "./schema";
+import { hasWordStarts } from "./words";
 
 /** What the review list is narrowed to; empty fields leave it unfiltered. */
 export type ReviewSearch = { keyword: string; from: string; to: string };
@@ -19,12 +20,10 @@ export function dayRange(from: string, to: string): { start?: string; end?: stri
   return range;
 }
 
-/** Whether a record's subject, sender or reason contains every word of the keyword, ignoring case. */
+/** Whether each word of the keyword starts a word of a record's subject, sender or reason, ignoring case and accents. */
 export function matchesKeyword(record: Pick<ParsedMessage, "subject" | "from" | "reason">, keyword: string): boolean {
-  const words = keyword.toLowerCase().split(/\s+/).filter(Boolean);
-  if (!words.length) return true;
-  const text = [record.subject, record.from, record.reason].filter(Boolean).join(" ").toLowerCase();
-  return words.every((word) => text.includes(word));
+  if (!keyword.trim()) return true;
+  return hasWordStarts([record.subject, record.from, record.reason].filter(Boolean).join(" "), keyword);
 }
 
 /**
