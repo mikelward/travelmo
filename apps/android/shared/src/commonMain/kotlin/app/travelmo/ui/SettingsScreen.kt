@@ -229,6 +229,7 @@ import app.travelmo.shared.turn_off
 import app.travelmo.shared.use_https_link
 import app.travelmo.shared.version
 import app.travelmo.shared.logo_credits
+import app.travelmo.shared.place_credits
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
@@ -349,6 +350,13 @@ fun SettingsScreen(
             // Credit for the bundled logos, as Arcticons' licence asks; as on the web.
             Text(
                 stringResource(Res.string.logo_credits),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            // Credit for the place data, as GeoNames' and OpenFlights' licences ask; as on the web.
+            Text(
+                stringResource(Res.string.place_credits),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp),

@@ -1,6 +1,7 @@
 package app.travelmo.core
 
 import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.assertions.withClue
 import io.kotest.matchers.shouldBe
 import kotlin.test.Test
 
@@ -188,6 +189,21 @@ class HomeTest {
         sameCity("København", "Copenhagen") shouldBe true
         sameCity("Kraków", "Cracow") shouldBe true
         sameCity("London", "Londonderry") shouldBe false
+    }
+
+    @Test
+    fun `knows a city by its name in English or a language of its country`() {
+        for ((a, b) in listOf(
+            "Lisboa" to "Lisbon", "Köln" to "Cologne", "München" to "Munich", "Den Haag" to "The Hague", "東京" to "Tokyo",
+            "Москва" to "Moscow", "Athina" to "Athens", "Sevilla" to "Seville", "New York" to "New York City",
+        )) {
+            withClue("$a is $b") { sameCity(a, b) shouldBe true }
+        }
+        sameCity("Paris", "London") shouldBe false
+        sameCity("Monaco", "Munich") shouldBe false
+        sameCity("ميلة", "Mila") shouldBe true
+        sameCity("Mila", "Milan") shouldBe false
+        homeTownKey("Lisboa", "PT") shouldBe homeTownKey("Lisbon", "Portugal")
     }
 
     @Test

@@ -2089,7 +2089,11 @@ home is a town (and optionally a country: a code, or a name or short form
 such as "UK", saved as its code) from a date. A correction saved before the
 form took names ("UK") is read as its code. Towns are one when their
 cities and countries are, however written: case, accents and a city's local
-or English name don't count ("Göteborg" is "Gothenburg", `sameCity`), nor a
+or English name don't count ("Göteborg" is "Gothenburg", "東京" is "Tokyo",
+`sameCity`: every name GeoNames gives a city of 15,000 people or more in
+English or a language of its country, `packages/core/src/cityNames.json`;
+a name two cities share counts only for one at least ten times the other's
+size; credited in Settings), nor a
 country's name or short form ("UK" is GB, `countryCode`). Two places that
 both have coordinates are also one town within 20 km of each other
 (`nearKm`), in no two countries: a hotel in Solna is in Stockholm, and a
