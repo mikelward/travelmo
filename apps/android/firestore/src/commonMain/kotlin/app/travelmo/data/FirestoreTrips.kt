@@ -221,8 +221,9 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     }
 
     override suspend fun setAliases(uid: String, personId: String, aliases: List<String>) {
-        db.collection("users").document(uid).collection("people").document(personId)
-            .update(mapOf("aliases" to aliases, "updatedAt" to Clock.System.now().toString())).await()
+        // updateData, as everywhere here: update needs reflection iOS lacks.
+        val ref = db.collection("users").document(uid).collection("people").document(personId)
+        db.runBatch { batch -> batch.updateData(ref, mapOf("aliases" to aliases, "updatedAt" to Clock.System.now().toString())) }.await()
     }
 
     override fun feeds(uid: String): Flow<List<CalendarFeedShown>?> = callbackFlow {
