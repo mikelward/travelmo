@@ -1,9 +1,20 @@
-import { tripPicture, type Trip } from "@travelmo/core";
+import { tripBookingType, tripPicture, type Trip } from "@travelmo/core";
+import { SegmentIcon } from "@/components/SegmentIcon";
 
-// A trip's picture (tripPicture): the outline of the landmark of the city
-// its title names, else of the kind of place it goes to, else a suitcase;
-// decoration, since the title says where.
+// A trip's picture: for a trip that is just an event, its booking's own
+// icon (tripBookingType: a dinner's calendar, a show's ticket); else
+// (tripPicture) the outline of the landmark of the city its title names, else
+// of the kind of place it goes to, else a suitcase. Decoration, since the
+// title says where.
 export function TripLandmark({ title, setting }: { title: string; setting?: Trip["setting"] }) {
+  const booking = tripBookingType(setting);
+  if (booking) {
+    return (
+      <span aria-hidden="true" data-landmark={booking} className="flex size-10 shrink-0 items-center justify-center text-muted">
+        <SegmentIcon type={booking} label="" className="size-7" />
+      </span>
+    );
+  }
   const picture = tripPicture(title, setting);
   return (
     <svg

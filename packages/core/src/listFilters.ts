@@ -1,8 +1,8 @@
 import { isOuting } from "./home";
 import type { ExtractedSegment, Trip } from "./schema";
 import { canonicalName, findPerson, guessMe, type Person } from "./travelers";
-import { tripSetting } from "./landmarks";
-import type { PlaceSetting } from "./schema";
+import { tripBookingType, tripSetting } from "./landmarks";
+import type { TripSetting } from "./schema";
 import { allCancelled, liveSegments } from "./trips";
 
 // What the trip list leaves out (SPEC "Filtering the trip list"), as the
@@ -72,13 +72,13 @@ export function homeBookings<S extends ExtractedSegment>(byTrip: Iterable<readon
 // as it files bookings, and an app that sees a trip's bookings disagree with
 // it puts it right (tripFlagsToWrite), which also fills it in for trips from
 // before it was kept.
-export type TripFlags = { allCancelled: boolean; localOnly: boolean; travelers: string[]; setting: PlaceSetting | "none" };
+export type TripFlags = { allCancelled: boolean; localOnly: boolean; travelers: string[]; setting: TripSetting };
 // As a trip has them: any may be missing.
 type KeptFlags = {
   allCancelled?: boolean | undefined;
   localOnly?: boolean | undefined;
   travelers?: readonly string[] | undefined;
-  setting?: PlaceSetting | "none" | undefined;
+  setting?: TripSetting | undefined;
 };
 
 export function tripFlags(segments: readonly ExtractedSegment[]): TripFlags {
@@ -98,7 +98,14 @@ export function tripFlagsToWrite(trip: KeptFlags, segments: readonly ExtractedSe
 // Whether the list needs a trip's bookings to filter it or draw it: only
 // while the trip doesn't yet say.
 export function flagsUnknown(trip: KeptFlags): boolean {
-  return trip.allCancelled === undefined || trip.localOnly === undefined || trip.travelers === undefined || trip.setting === undefined;
+  return (
+    trip.allCancelled === undefined ||
+    trip.localOnly === undefined ||
+    trip.travelers === undefined ||
+    trip.setting === undefined ||
+    // A trip of local events kept a town before events took their booking's icon.
+    (trip.localOnly && !tripBookingType(trip.setting))
+  );
 }
 
 // Whether the list leaves a trip out: by its own cancellation and flags,

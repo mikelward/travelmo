@@ -149,6 +149,15 @@ class TripsTest {
     }
 
     @Test
+    fun `a new trip for a show or a dinner is named after it not its town`() {
+        val dinner = Segment("d", "t", SegmentType.OTHER, "Locale (Southbank)", "2025-08-19T18:00:00+01:00", destination = Place("Locale", city = "London"))
+        newTripTitle(dinner) shouldBe "Locale (Southbank)"
+        newTripTitle(dinner.copy(type = SegmentType.ACTIVITY, title = "Toy Story 5")) shouldBe "Toy Story 5"
+        // A taxi goes by where it goes.
+        newTripTitle(dinner.copy(title = "Taxi", origin = Place("Home"), destination = Place("Heathrow", city = "London"))) shouldBe "London"
+    }
+
+    @Test
     fun `files a booking added by hand into the user's shortest trip taking in its first day`() {
         fun trip(id: String, start: String, end: String, ownerUid: String = "u1") = Trip(id, id, start, end, ownerUid)
         val trips = listOf(trip("long", "2026-11-01", "2026-11-30"), trip("short", "2026-11-09", "2026-11-12"), trip("other", "2026-12-01", "2026-12-05"))

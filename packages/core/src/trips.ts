@@ -256,9 +256,14 @@ export function nearbyTrips<T extends Pick<Trip, "start" | "end" | "liveStart" |
 }
 
 // What a trip made for one booking is called, until more bookings join and
-// an import renames it: where the booking goes (its town, else the place's
-// own name), else the booking's title, as the parser names a trip of one.
-export function newTripTitle(segment: Pick<ExtractedSegment, "title" | "destination" | "origin">): string {
+// an import renames it: a show's or a dinner's own title; else where the
+// booking goes (its town, else the place's own name), else its title, as
+// the parser names a trip of one.
+export function newTripTitle(segment: Pick<ExtractedSegment, "type" | "title" | "destination" | "origin">): string {
+  // A show or a dinner is its own name ("Locale (Southbank)"), not its town's;
+  // a ride from one place to another (a taxi) goes by where it goes.
+  const ride = !!segment.origin && !!segment.destination;
+  if ((segment.type === "activity" || (segment.type === "other" && !ride)) && segment.title.trim()) return segment.title.trim();
   const place = segment.destination ?? segment.origin;
   return (place?.city || place?.name || segment.title).trim() || "Trip";
 }

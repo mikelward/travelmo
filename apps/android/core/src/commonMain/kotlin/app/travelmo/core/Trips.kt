@@ -172,16 +172,23 @@ fun nearbyTrips(trips: List<Trip>, segment: Segment, days: Long = NEARBY_TRIP_DA
 
 /**
  * What a trip made for one booking is called, as packages/core's
- * newTripTitle: where the booking goes (its town, else the place's own
- * name), else the booking's title.
+ * newTripTitle: a show's or a dinner's own title ("Locale (Southbank)");
+ * else where the booking goes (its town, else the place's own name), else
+ * the booking's title.
  */
 fun newTripTitle(segment: Segment): String {
+    if (namedForItself(segment.type, segment.origin, segment.destination) && segment.title.isNotBlank()) return segment.title.trim()
     val place = segment.destination ?: segment.origin
     return listOf(place?.city, place?.name, segment.title).firstOrNull { !it.isNullOrBlank() }?.trim() ?: "Trip"
 }
 
-/** As [newTripTitle], for a booking the form is adding: where it goes, else its title. */
+/** Whether a trip of one booking is named after it, not its town: a show, a dinner; not a ride from one place to another (a taxi). */
+private fun namedForItself(type: SegmentType, origin: Any?, destination: Any?): Boolean =
+    type == SegmentType.ACTIVITY || (type == SegmentType.OTHER && (origin == null || destination == null))
+
+/** As [newTripTitle], for a booking the form is adding: a show's or a dinner's own title, else where it goes, else its title. */
 fun newTripTitle(draft: SegmentDraft): String {
+    if (namedForItself(draft.type, draft.origin, draft.destination) && draft.title.isNotBlank()) return draft.title.trim()
     val place = draft.destination ?: draft.origin
     return listOf(place?.name, draft.title).firstOrNull { !it.isNullOrBlank() }?.trim() ?: "Trip"
 }

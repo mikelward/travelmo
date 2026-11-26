@@ -301,6 +301,22 @@ class LandmarksTest {
     }
 
     @Test
+    fun givesATripThatIsJustAnEventItsBookingsIconWhateverItsTitle() {
+        assertEquals(SegmentType.OTHER, tripBookingType("other"))
+        assertEquals(SegmentType.ACTIVITY, tripBookingType("activity"))
+        assertEquals(SegmentType.CAR_RENTAL, tripBookingType("car_rental"))
+        assertEquals(null, tripBookingType("city"))
+        assertEquals(null, tripBookingType("none"))
+        assertEquals(null, tripBookingType(null))
+        val show = Segment("s", "t", SegmentType.ACTIVITY, "Show", "2026-12-12T19:00:00Z", destination = Place("Theatre", city = "London", country = "GB"))
+        val dinner = Segment("d", "t", SegmentType.OTHER, "Dinner", "2026-12-12T17:00:00Z", destination = Place("Bistro", city = "London"))
+        // The dinner comes first.
+        assertEquals("other", tripSetting(listOf(show, dinner)))
+        assertEquals("activity", tripSetting(listOf(show)))
+        assertEquals("town", tripSetting(listOf(show, stay("i", Place("Inn", city = "Woburn")))))
+    }
+
+    @Test
     fun tripPictureGoesByTheTitleThenTheKindOfPlaceElseTheSuitcase() {
         assertEquals("paris", tripPicture("Paris", "town").id)
         assertEquals("town", tripPicture("Woburn", "town").id)

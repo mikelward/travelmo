@@ -77,15 +77,20 @@ class ListFiltersTest {
         flagsUnknown(trip.copy(allCancelled = false)) shouldBe true
         flagsUnknown(trip.copy(allCancelled = false, localOnly = false)) shouldBe true
         flagsUnknown(trip.copy(allCancelled = false, localOnly = false, travelers = emptyList())) shouldBe true
-        tripFlagsToWrite(trip, listOf(show)) shouldBe TripFlags(allCancelled = false, localOnly = true, travelers = emptyList(), setting = "city")
-        val kept = trip.copy(allCancelled = false, localOnly = true, travelers = emptyList(), setting = "city")
+        // A show alone is an event: its ticket, not its town.
+        tripFlagsToWrite(trip, listOf(show)) shouldBe TripFlags(allCancelled = false, localOnly = true, travelers = emptyList(), setting = "activity")
+        val kept = trip.copy(allCancelled = false, localOnly = true, travelers = emptyList(), setting = "activity")
         flagsUnknown(kept) shouldBe false
         tripFlagsToWrite(kept, listOf(show)) shouldBe null
+        // All cancelled, it isn't local any more, and goes by its town.
         tripFlagsToWrite(kept, listOf(cancelled(show))) shouldBe TripFlags(allCancelled = true, localOnly = false, travelers = emptyList(), setting = "city")
         tripFlagsToWrite(kept, listOf(show.copy(travelers = listOf("Sam Example")))) shouldBe
-            TripFlags(allCancelled = false, localOnly = true, travelers = listOf("Sam Example"), setting = "city")
+            TripFlags(allCancelled = false, localOnly = true, travelers = listOf("Sam Example"), setting = "activity")
         // A trip from before its setting was kept gets it, though its filters are known.
-        tripFlagsToWrite(kept.copy(setting = null), listOf(show)) shouldBe TripFlags(allCancelled = false, localOnly = true, travelers = emptyList(), setting = "city")
+        tripFlagsToWrite(kept.copy(setting = null), listOf(show)) shouldBe TripFlags(allCancelled = false, localOnly = true, travelers = emptyList(), setting = "activity")
+        // A trip of local events that kept a town before events took their booking's icon is read again, once.
+        flagsUnknown(kept.copy(setting = "city")) shouldBe true
+        flagsUnknown(kept.copy(localOnly = false, setting = "city")) shouldBe false
     }
 
     // Invented people, as in listFilters.test.ts: the user, whom mail sent straight to them names most, and their mum.

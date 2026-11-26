@@ -18,6 +18,10 @@
 
 ## Product
 
+- [ ] A food icon (a fork and knife) for a meal booking, on its row and on
+      a trip that is just that meal, rather than the calendar every "other"
+      booking gets (maintainer, 2026-11-26): the parser would need to tell
+      a meal from other bookings.
 - [x] Trip landmarks (maintainer, 2026-11-25): each trip in the list shows
       its city's landmark as a line drawing, in one card per section.
   - [x] Boston, Las Vegas, Liverpool, Paris, Edinburgh, Lisbon and Dublin,
