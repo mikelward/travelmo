@@ -3,6 +3,7 @@ import {
   fillAirports,
   fillCities,
   awayPlace,
+  bridgedTrips,
   isConnection,
   opensTrip,
   compareInstants,
@@ -1191,6 +1192,9 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     const rebookedTrips = new Set<string>();
     // Whom the bookings this email filled out name now and named before.
     const learned: NamedBooking[] = [];
+    // Each booking this email found again as recordSources leaves it, so
+    // one that moves trips (adopted, bridged) moves as updated, not as first read.
+    const finals = new Map<string, Segment>();
     const recordSources = (target?: string) => {
       const changedTrips = new Set<string>(rebookedTrips);
       for (const { segment, found } of matchedSegments) {
@@ -1206,11 +1210,13 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
           tx.putSegment(upgraded);
           learned.push({ travelers: upgraded.travelers ?? [], before: segment.travelers });
           upgradedSegments.set(`${segment.tripId}/${segment.id}`, upgraded);
+          finals.set(`${segment.tripId}/${segment.id}`, upgraded);
           continue;
         }
         const merged = mergedOf(segment, found);
         if (JSON.stringify(merged) === JSON.stringify(segment)) {
           tx.addSource(segment.tripId, segment.id, ref);
+          if (!segmentSources(segment).some((s) => s.kind === ref.kind && s.id === ref.id)) finals.set(`${segment.tripId}/${segment.id}`, { ...segment, sources: [...segmentSources(segment), ref] });
           continue;
         }
         const kept = (segment.sources ?? []).filter((s) => s.kind !== ref.kind || s.id !== ref.id);
@@ -1222,6 +1228,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
         tx.putSegment(written);
         learned.push({ travelers: written.travelers ?? [], before: segment.travelers });
         merges.push(written);
+        finals.set(`${segment.tripId}/${segment.id}`, written);
         changedTrips.add(segment.tripId);
       }
       for (const tripId of changedTrips) {
@@ -1250,7 +1257,8 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
       for (const tripId of new Set([...changed, ...written].map((segment) => segment.tripId))) {
         const trip = live.find((t) => t.id === tripId);
         const before = segmentsOf(tripId);
-        if (!trip || tripId.startsWith(sourceTripPrefix) || before.length === 0) continue;
+        // A trip merged away is gone; the trip it joined is named below.
+        if (!trip || removed.has(tripId) || tripId.startsWith(sourceTripPrefix) || before.length === 0) continue;
         if (!importGaveTitle(trip.title, before, periods, overrides)) continue;
         const final = [
           ...before.map((segment) => changed.find((c) => c.tripId === tripId && c.id === segment.id) ?? segment),
@@ -1267,8 +1275,12 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     // last, so it supersedes bounds set from the trip as first read.
     const upgradedSegments = new Map<string, Segment>();
     const wanted = new Map<string, { start: string; end: string }>();
+    // Trips this import merged away, whose upgraded bookings went with the
+    // rest to the trip they joined, which is dated for them already.
+    const removed = new Set<string>();
     const settleUpgradedTrips = (written: readonly Segment[]) => {
       for (const tripId of new Set([...upgradedSegments.values()].map((segment) => segment.tripId))) {
+        if (removed.has(tripId)) continue;
         const trip = live.find((t) => t.id === tripId);
         if (!trip) continue;
         const before = segmentsOf(tripId);
@@ -1376,6 +1388,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
         if (matched.includes(`${written.tripId}/${written.id}`)) continue;
         tx.putSegment(written);
         merges.push(written);
+        finals.set(`${written.tripId}/${written.id}`, written);
         rebookedTrips.add(written.tripId);
         log("booking_rebooked", { uid, tripId: written.tripId, segmentId: written.id, messageId: booking.sourceId });
       }
@@ -1552,7 +1565,27 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     // landing where this booking leaves from comes over to open its trip,
     // as Regroup files it, unless the user edited it or either trip is
     // shared (bookings never move between trips shared differently).
-    const adopted = hint ? [] : adoptable(live.filter((trip) => !trip.id.startsWith(holdingTripPrefix) && !trip.id.startsWith(sourceTripPrefix)));
+    const own = live.filter((trip) => !trip.id.startsWith(holdingTripPrefix) && !trip.id.startsWith(sourceTripPrefix));
+    // Trips this booking bridges, merged into the one it joins as it is
+    // filed (bridgedTrips): the same town, overlapping dates, and shared
+    // alike; never one the user renamed, whose name would be lost.
+    const bridged =
+      // Never into a trip its owner cancelled, which would cancel what it took in.
+      hint || !target || !anyLive || target.cancelledAt !== undefined
+        ? []
+        : bridgedTrips(
+            // Nor one its owner cancelled, which keeps its bookings as they are, as Regroup leaves it.
+            own.filter((trip) => trip.cancelledAt === undefined && shareKey(trip) === shareKey(target!) && importGaveTitle(trip.title, segmentsOf(trip.id), periods, overrides)),
+            liveSegmentsOf,
+            target,
+            deciding,
+            periods,
+            overrides,
+          );
+    if (bridged.length) log("trips_merged", { uid, into: target!.id, trips: bridged.map((trip) => trip.id) });
+    const adopted = hint
+      ? []
+      : [...new Map([...adoptable(own), ...bridged.flatMap((trip) => segmentsOf(trip.id))].map((segment) => [`${segment.tripId}/${segment.id}`, segment])).values()];
     // The trip's own dates cover them as booked, cancelled legs too, so each
     // is found again by date; when the person travels is settled after.
     const adoptedRange = bookedDateRange(adopted);
@@ -1569,7 +1602,11 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
       // each is found again by date; when the person now travels is
       // settled once everything is written (settle).
       const own = hint ? { start: min(hint.start, filedRange.start), end: max(hint.end, filedRange.end) } : filedRange;
-      const filled = growth(tripId);
+      // And as the bookings it brings over are once this email filled them
+      // out (a receipt it upgrades in a trip it merges in).
+      const filled = [tripId, ...new Set(adopted.map((segment) => segment.tripId))]
+        .map(growth)
+        .reduce<{ start: string; end: string } | undefined>((a, b) => (!a ? b : !b ? a : { start: min(a.start, b.start), end: max(a.end, b.end) }), undefined);
       const want = filled ? { start: min(own.start, filled.start), end: max(own.end, filled.end) } : own;
       wanted.set(tripId, want);
       tx.extendTrip(tripId, { start: min(target.start, want.start), end: max(target.end, want.end), updatedAt: timestamp });
@@ -1609,12 +1646,14 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     // Moved as they are, revision and all, as Regroup moves bookings; a trip
     // left with none of its bookings goes.
     // Cancelled with the trip they join, or live again leaving a cancelled one.
-    const moved = adopted.map((segment) => inTrip({ ...segment, tripId }, target ?? {}, timestamp));
+    const moved = adopted.map((segment) => inTrip({ ...(finals.get(`${segment.tripId}/${segment.id}`) ?? segment), tripId }, target ?? {}, timestamp));
     for (const segment of adopted) tx.deleteSegment(segment.tripId, segment.id);
     for (const segment of moved) tx.putSegment(segment);
     for (const from of new Set(adopted.map((segment) => segment.tripId))) {
-      if (segmentsOf(from).every((segment) => adopted.includes(segment))) tx.deleteTrip(from);
-      else tx.touchTrip(from, timestamp);
+      if (segmentsOf(from).every((segment) => adopted.includes(segment))) {
+        tx.deleteTrip(from);
+        removed.add(from);
+      } else tx.touchTrip(from, timestamp);
     }
     settleUpgradedTrips(written);
     settleTitles([...written, ...moved]);
@@ -1960,6 +1999,10 @@ function legacyPlaceTitle(
 const byStart = <S extends ExtractedSegment>(segments: readonly S[]): S[] => [...segments].sort((a, b) => compareInstants(a.start, b.start));
 
 const journeyTypes: ReadonlySet<ExtractedSegment["type"]> = new Set(["flight", "train", "bus", "ferry"]);
+
+// Who a trip is shared with, as one key: bookings never move between trips
+// shared differently (as Regroup's).
+const shareKey = (trip: Pick<Trip, "sharedWith">) => [...new Set(trip.sharedWith.map((e) => e.trim().toLowerCase()))].sort().join(",");
 
 // Whether a trip's title is still one an import gave it, not one the user
 // chose: what tripTitle or placeTitle names its bookings, or the bookings

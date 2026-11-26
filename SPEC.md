@@ -2234,7 +2234,16 @@ the one it leaves from up to 12 hours before it departs; of several, the
 trip with the shortest wait wins (`connectionGap`). The place matches on the
 same code, the code written in it in any case ("Heathrow Terminal 3 - LHR"),
 or a word of the hub's name that is not its town's ("Heathrow" of London
-Heathrow). Whichever is imported first, the other joins its trip. A trip of nothing but a transfer is named by its route
+Heathrow). Whichever is imported first, the other joins its trip. A booking that fits
+two trips, the one it joins and another to the same town away from home
+(`awayPlace`) whose dates overlap it, merges that other trip into the one
+it joins as it is filed (`bridgedTrips`): its bookings move over as
+Regroup moves them and the emptied trip goes, so a flight to Las Vegas read
+after the car to Heathrow started one trip and the hotel and hire car
+another brings the three together at once rather than when the reading
+ends. Trips to different towns stay apart, one trip a city (Stockholm, then
+Gothenburg by train), as do a trip the user renamed and one shared
+otherwise. A trip of nothing but a transfer is named by its route
 (`transferTitle`): "Heathrow to home" when it ends in the home of its day,
 else "Heathrow to London"; when a journey later joins it and the owner has
 not renamed it, it takes the name the whole trip would get ("New York"), as
