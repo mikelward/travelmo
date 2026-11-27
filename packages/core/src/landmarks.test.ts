@@ -101,6 +101,10 @@ describe("tripLandmark", () => {
     expect(tripLandmark("San Jose del Cabo").id).toBe("beach");
     expect(tripLandmark("San Jose, Costa Rica").id).toBe("trip");
     expect(tripLandmark("Oakland").id).toBe("oakland");
+    expect(tripLandmark("Leipzig").id).toBe("leipzig");
+    expect(tripLandmark("Lausanne").id).toBe("lausanne");
+    expect(tripLandmark("Osijek").id).toBe("osijek");
+    expect(tripLandmark("Marseilles").id).toBe("marseille");
   });
 
   it("ignores accents and case", () => {
@@ -301,7 +305,7 @@ describe("tripLandmark", () => {
         fallbacks.add(word);
       }
     }
-    expect(LANDMARKS.length).toBe(304);
+    expect(LANDMARKS.length).toBe(307);
   });
 });
 
