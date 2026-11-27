@@ -59,22 +59,57 @@ describe("sourceSearch", () => {
 
 describe("sourceGroups", () => {
   const at = "2026-01-01T00:00:00Z";
-  const booking = (id: string, ...emails: string[]) => ({
+  const booking = (id: string, start: string, ...emails: string[]) => ({
     id,
+    title: `Booking ${id}`,
+    start,
     createdAt: at,
     gmailMessageIds: [],
     sources: emails.map((e, i) => ({ kind: "gmail" as const, id: e, label: `Subject ${e}`, at: `2026-01-0${i + 1}T00:00:00Z` })),
   });
 
-  it("gives each email that some of a trip's bookings came from, with them, the most first", () => {
-    const groups = sourceGroups([booking("a", "theirs"), booking("b", "theirs"), booking("c", "mine"), booking("d", "theirs", "mine")]);
-    expect(groups.map((g) => [g.source.id, g.segmentIds])).toEqual([
-      ["theirs", ["a", "b", "d"]],
-      ["mine", ["c", "d"]],
+  it("gives every email with the bookings it gave in date order, the email of the earliest booking first", () => {
+    const groups = sourceGroups([
+      booking("theirs-back", "2026-12-19T09:00:00Z", "theirs"),
+      booking("mine-flight", "2026-12-11T09:00:00Z", "mine"),
+      booking("theirs-out", "2026-12-12T09:00:00Z", "theirs"),
+      // A stay confirmed in one email and paid in another is under both.
+      booking("stay", "2026-12-11T15:00:00Z", "confirmed", "paid"),
+    ]);
+    expect(groups.map((g) => [g.source?.id, g.segmentIds])).toEqual([
+      ["mine", ["mine-flight"]],
+      ["confirmed", ["stay"]],
+      ["paid", ["stay"]],
+      ["theirs", ["theirs-out", "theirs-back"]],
     ]);
   });
 
-  it("leaves out an email every booking came from, which splits nothing off", () => {
-    expect(sourceGroups([booking("a", "all"), booking("b", "all", "one")]).map((g) => g.source.id)).toEqual(["one"]);
+  it("keeps an email every booking came from, and puts bookings added by hand last", () => {
+    const groups = sourceGroups([booking("a", "2026-12-11T09:00:00Z", "all"), { ...booking("b", "2026-12-12T09:00:00Z"), sender: undefined }]);
+    expect(groups.map((g) => [g.source?.id, g.segmentIds])).toEqual([
+      ["all", ["a"]],
+      [undefined, ["b"]],
+    ]);
+  });
+
+  it("names an email's sender only from a booking it gave alone", () => {
+    const stay = { ...booking("stay", "2026-12-11T15:00:00Z", "confirmed", "receipt"), sender: "cove.example" };
+    const train = { ...booking("train", "2026-12-11T09:00:00Z", "tickets"), sender: "avanti.example" };
+    expect(sourceGroups([stay, train]).map((g) => [g.source?.id, g.sender])).toEqual([
+      ["tickets", "avanti.example"],
+      // The stay's sender could be either email's.
+      ["confirmed", undefined],
+      ["receipt", undefined],
+    ]);
+  });
+
+  it("names an email's sender, and no sender for a TripIt trip", () => {
+    const stay = { ...booking("a", "2026-12-11T09:00:00Z", "m1"), sender: "cove.example" };
+    const tripit = { kind: "tripit" as const, id: "tripit-1", label: "Liverpool weekend", at };
+    const groups = sourceGroups([{ ...stay, sources: [...stay.sources, tripit] }]);
+    expect(groups.map((g) => [g.source?.id, g.sender])).toEqual([
+      ["m1", "cove.example"],
+      ["tripit-1", undefined],
+    ]);
   });
 });

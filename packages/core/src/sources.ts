@@ -1,3 +1,4 @@
+import { compareInstants } from "./instant";
 import { stripForwardPrefix } from "./forward";
 import type { Segment, SourceRef } from "./schema";
 
@@ -58,22 +59,41 @@ export function sourceSearch(segment: Pick<Segment, "sender" | "sources" | "gmai
   return gmailSearch({ sender: emails.length === 1 ? segment.sender : undefined, subject: source.label, sentAt: source.sentAt });
 }
 
-// The sources a trip's bookings came from, for splitting the trip (Split… on
-// the trip page): each with the bookings it gave, the most first. Only a
-// source that gave some of the bookings and not all can split anything off.
-export type SourceGroup = { source: SourceRef; segmentIds: string[] };
+// A trip's bookings by the source each came from, for splitting the trip
+// (Split… on the trip page): every email or other source with the bookings
+// it gave, in date order, so which is which is plain; a booking from two
+// emails (a stay's confirmation and its receipt) is under both. Bookings
+// with no source (added by hand) come last, with no `source`. Groups go by
+// their first booking's start, then by when the source was read; `sender`
+// is an email's sender, as a booking that came from that email alone names
+// it (a TripIt trip or a calendar event has none, nor an email whose every
+// booking another email gave too).
+export type SourceGroup = { source?: SourceRef; sender?: string; segmentIds: string[] };
 
-export function sourceGroups(segments: readonly Pick<Segment, "id" | "sources" | "gmailMessageIds" | "createdAt">[]): SourceGroup[] {
-  const groups = new Map<string, SourceGroup>();
-  for (const segment of segments) {
-    for (const source of segmentSources(segment)) {
+const emailKinds = new Set<SourceRef["kind"]>(["gmail", "forward", "fastmail", "imap"]);
+
+type Grouped = Pick<Segment, "id" | "title" | "start" | "sender" | "sources" | "gmailMessageIds" | "createdAt">;
+
+export function sourceGroups(segments: readonly Grouped[]): SourceGroup[] {
+  const sorted = [...segments].sort((a, b) => compareInstants(a.start, b.start) || (a.title < b.title ? -1 : a.title > b.title ? 1 : 0));
+  const groups = new Map<string, SourceGroup & { first: string }>();
+  const unsourced: string[] = [];
+  for (const segment of sorted) {
+    const sources = segmentSources(segment);
+    if (sources.length === 0) unsourced.push(segment.id);
+    // A booking's sender is its first email's: it says which email that was
+    // only when the booking came from one email alone (as sourceSearch).
+    const oneEmail = sources.filter((s) => emailKinds.has(s.kind)).length === 1;
+    for (const source of sources) {
       const key = `${source.kind}/${source.id}`;
-      const group = groups.get(key) ?? { source, segmentIds: [] };
+      const group = groups.get(key) ?? { source, segmentIds: [], first: segment.start };
+      if (!group.sender && oneEmail && emailKinds.has(source.kind) && segment.sender) group.sender = segment.sender;
       group.segmentIds.push(segment.id);
       groups.set(key, group);
     }
   }
-  return [...groups.values()]
-    .filter((g) => g.segmentIds.length < segments.length)
-    .sort((a, b) => b.segmentIds.length - a.segmentIds.length || a.source.at.localeCompare(b.source.at));
+  const ordered = [...groups.values()]
+    .sort((a, b) => compareInstants(a.first, b.first) || a.source!.at.localeCompare(b.source!.at))
+    .map(({ first: _first, ...group }) => group);
+  return unsourced.length ? [...ordered, { segmentIds: unsourced }] : ordered;
 }

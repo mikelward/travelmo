@@ -256,6 +256,7 @@
         <item quantity="other">Showing the %1$d most recent. Search to find older ones.</item>
     </plurals>
     <string name="no_subject">(no subject)</string>
+    <string name="split_by_hand">Added by hand</string>
     <string name="loyalty_not_kept">Loyalty not kept: %1$s</string>
     <string name="unknown_sender">unknown sender</string>
     <string name="import_anyway">Import anyway</string>
