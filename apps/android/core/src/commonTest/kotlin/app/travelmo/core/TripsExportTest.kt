@@ -99,6 +99,19 @@ class TripsExportTest {
     }
 
     @Test
+    fun `shows no town for a stay without one rather than the hotel's name but a station's for a journey`() {
+        val inn = TripWithSegments(
+            Trip("inn", "Inn", "2026-04-10", "2026-04-12", "u1"),
+            listOf(
+                seg("20", "inn", SegmentType.TRAIN, "2026-04-10T09:00:00+02:00", "2026-04-10T11:00:00+02:00", Place("Example Central", country = "FR"), Place("Exampleville Gare", country = "FR")),
+                seg("21", "inn", SegmentType.LODGING, "2026-04-10T15:00:00+02:00", "2026-04-12T11:00:00+02:00", destination = Place("Example Inn", country = "FR")),
+            ),
+        )
+        tripRows(listOf(inn), periods, TODAY).single().cities shouldBe listOf("Exampleville Gare")
+        placeRows(listOf(inn), periods, TODAY).map { it.city } shouldBe listOf("Exampleville Gare", "")
+    }
+
+    @Test
     fun `lists no trip of nothing but events and tickets`() {
         val dinner = TripWithSegments(
             Trip("din", "Dinner", "2026-03-01", "2026-03-01", "u1"),

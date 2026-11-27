@@ -686,7 +686,9 @@ arrives, never where it leaves), stays and cars, so an event or a ticket
 says nothing; places in the home town of their day are left out.
 
 - **One row per trip** (`Trip,Start,End,Cities,Countries`): the trip's
-  dates, and its towns and countries in order, several joined with "; ".
+  dates, and its towns and countries in order, several joined with "; ". A
+  journey with no town shows its station or port; a stay or car with none
+  shows no town rather than the hotel's or desk's name.
 - **One row per place** (`City,Country,Start,End,Trip`): each town from the
   day someone got there until the day they moved on (the next town's first
   day), or for the last, the later of its stay's end and the trip's. Two

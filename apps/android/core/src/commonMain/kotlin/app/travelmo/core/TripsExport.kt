@@ -34,6 +34,10 @@ private fun stops(segments: List<Segment>): List<Stop> = liveSegments(segments)
 
 private fun cityOf(place: Place) = (place.city ?: place.name).trim()
 
+// The town to show for a stop, as tripsExport.ts's shownCity: its own, or for a journey the station or port it
+// arrives at; a stay or a car with no town shows none, not the hotel's or the rental desk's name.
+private fun shownCity(stop: Stop): String? = stop.place.city?.trim()?.ifEmpty { null } ?: if (stop.type in exportJourneys) stop.place.name.trim() else null
+
 private fun countryOf(stop: Stop, lookup: (String) -> AirportPlace?): String? = placeCountry(stop.place, stop.type, lookup)?.let(::countryCode)
 
 private fun englishName(code: String) = displayCountry(code, "en").ifEmpty { code }
@@ -82,7 +86,7 @@ fun tripRows(
     val countries = located.map { it.second }
     // Each place against the home of its own day: home may change mid-trip.
     if (international && away.indices.none { abroad(countries[it], away[it].date, periods) }) return@mapNotNull null
-    TripRow(titles[trip.id] ?: trip.title, start, end, away.map { cityOf(it.place) }.filter { it.isNotEmpty() }.distinct(), countries.filterNotNull().map(::englishName).distinct())
+    TripRow(titles[trip.id] ?: trip.title, start, end, away.mapNotNull(::shownCity).filter { it.isNotEmpty() }.distinct(), countries.filterNotNull().map(::englishName).distinct())
 }.sortedBy { it.start }
 
 data class PlaceRow(val city: String, val country: String, val start: String, val end: String, val trip: String)
@@ -121,7 +125,7 @@ fun placeRows(
             if (international && !abroad(v.country, v.start, periods)) return@forEachIndexed
             val next = visits.getOrNull(i + 1)
             val end = next?.start ?: listOfNotNull(v.until, tripEnd).max()
-            rows += PlaceRow(cityOf(v.stop.place), v.country?.let(::englishName).orEmpty(), v.start, if (end < v.start) v.start else end, title)
+            rows += PlaceRow(shownCity(v.stop).orEmpty(), v.country?.let(::englishName).orEmpty(), v.start, if (end < v.start) v.start else end, title)
         }
     }
     return rows.sortedBy { it.start }
