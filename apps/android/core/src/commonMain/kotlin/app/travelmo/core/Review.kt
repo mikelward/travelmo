@@ -21,6 +21,10 @@ data class ParsedRecord(
     val subject: String? = null,
     /** When the email was sent; null for other sources and older records. */
     val sentAt: String? = null,
+    /** What a travel program's email gave of the user's loyalty, a line a membership ("Delta: Silver Medallion · 49,606 Miles"). */
+    val loyalty: List<String> = emptyList(),
+    /** Why such an email gave none ("no member number in it"). */
+    val loyaltyMissed: String? = null,
 )
 
 /** Bounds for a range of local days in [zone]: from the start of [from] to the start of the day after [to]. */
@@ -67,11 +71,11 @@ fun reviewDate(record: ParsedRecord, zone: String): String {
     return listOfNotNull(sent, read).joinToString(" · ")
 }
 
-/** What a record's outcome says, as the web's list says it. */
-fun outcomeLabel(outcome: String): String = when (outcome) {
+/** What a record's outcome says, as the web's list says it: an email that gave loyalty ([loyalty]) says it kept it. */
+fun outcomeLabel(outcome: String, loyalty: List<String> = emptyList()): String = when (outcome) {
     "processing" -> "Processing"
     "filtered" -> "Skipped before reading"
-    "not_booking" -> "Read, not a booking"
+    "not_booking" -> if (loyalty.isNotEmpty()) "Read, loyalty kept" else "Read, not a booking"
     "imported" -> "Imported"
     "failed" -> "Failed"
     "cancellation" -> "Cancellation"

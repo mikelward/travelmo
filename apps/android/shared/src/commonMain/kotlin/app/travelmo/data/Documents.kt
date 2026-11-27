@@ -294,6 +294,8 @@ fun parsedRecordOf(id: String, data: Map<String, Any?>?): ParsedRecord? {
         from = map.text("from"),
         subject = map.text("subject"),
         sentAt = map.text("sentAt"),
+        loyalty = map.strings("loyalty"),
+        loyaltyMissed = map.text("loyaltyMissed"),
     )
 }
 

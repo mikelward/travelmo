@@ -1720,7 +1720,13 @@ reason, and optionally dates: when the email was sent (`sentAt`, a forward's
 original), or when it was read for a record without one (older records,
 other sources). Each row shows when the email was sent and when Travelmo
 last read it ("Sent 18 Oct 2026 · Read 24 Nov 2026", or the reading alone
-when the email's date is unknown), the sender and the outcome. It offers three actions: always import that sender, never
+when the email's date is unknown), the sender and the outcome. An email
+read for a travel program's loyalty (a statement, news of a new status)
+says what it kept, a line a membership ("Delta: Silver Medallion · 49,606
+Miles", without the number), its outcome "Read, loyalty kept"; or why it
+kept none ("Loyalty not kept: no member number in it", "not from a travel
+company", "couldn't be saved"), from its record's `loyalty` and
+`loyaltyMissed`, which Import anyway's report carries too. It offers three actions: always import that sender, never
 import it, or import this one anyway (`POST /gmail/reimport`, which reclaims
 the record of a message that did not become a booking — never an imported
 one, whose bookings are edited on the trip page, nor one whose import is

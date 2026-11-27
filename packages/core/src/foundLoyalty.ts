@@ -44,6 +44,14 @@ export function foundLoyaltyFrom(
     }));
 }
 
+// What an import kept of a membership, for its review row: the program,
+// then its status and balance as the email gave them ("Delta: Silver
+// Medallion · 49,606 Miles"). The number stays out: the loyalty table has it.
+export function foundLoyaltyLine(found: Pick<FoundLoyalty, "program" | "status" | "balance">): string {
+  const details = [found.status, found.balance].filter(Boolean).join(" · ");
+  return details ? `${found.program}: ${details}` : found.program;
+}
+
 // Bumped when a change to how numbers are read should reach those already
 // kept; the parser runs the revision once per bump (config/foundLoyaltyRevision).
 export const foundLoyaltyRevision = 1;

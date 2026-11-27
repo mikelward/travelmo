@@ -92,3 +92,15 @@ test("Import anyway offers its report to copy when the email still isn't a booki
   await expect(row).toContainText("Report copied");
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(report);
 });
+
+// A travel program's email says what it gave of the user's loyalty, or why nothing.
+test("the review list says what loyalty an email gave, or why none was kept", async ({ page }) => {
+  const uid = await signIn(page, owner);
+  const base = { uid, segmentIds: [], processedAt: "2026-11-26T09:00:00Z", source: "gmail" as const, outcome: "not_booking" as const };
+  await seedParsedMessage({ ...base, messageId: "status", from: "Example Air <news@t.delta.com>", subject: "Welcome to Silver Medallion® Status", loyalty: ["Delta: Silver Medallion · 49,606 Miles"] });
+  await seedParsedMessage({ ...base, messageId: "shop", from: "Example Mart <rewards@examplemart.example>", subject: "Your points statement", loyaltyMissed: "not from a travel company" });
+  await page.goto("/settings/review");
+  await expect(page.getByText("Example Air <news@t.delta.com> · Gmail · Read, loyalty kept")).toBeVisible();
+  await expect(page.getByTestId("review-loyalty")).toHaveText("Delta: Silver Medallion · 49,606 Miles");
+  await expect(page.getByText("Loyalty not kept: not from a travel company")).toBeVisible();
+});

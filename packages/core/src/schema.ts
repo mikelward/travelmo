@@ -622,6 +622,12 @@ export const ParsedMessage = z.object({
   // no booking in it, so "Refresh from email" reads again what an older one
   // judged; absent for records from before versions were kept.
   readerVersion: z.number().int().positive().optional(),
+  // For an email read for a travel program's loyalty (a statement, news of a
+  // new status), what of it was kept, a line a membership ("Delta: Silver
+  // Medallion · 49,606 Miles", foundLoyaltyLine); or, when it gave none,
+  // why (`loyaltyMissed`). Absent for other emails and older records.
+  loyalty: z.array(z.string()).max(20).optional(),
+  loyaltyMissed: z.string().optional(),
 });
 export type ParsedMessage = z.infer<typeof ParsedMessage>;
 

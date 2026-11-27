@@ -55,6 +55,7 @@ import app.travelmo.shared.import_review
 import app.travelmo.shared.import_review_hint
 import app.travelmo.shared.loading
 import app.travelmo.shared.never_import
+import app.travelmo.shared.loyalty_not_kept
 import app.travelmo.shared.no_subject
 import app.travelmo.shared.nothing_matches
 import app.travelmo.shared.nothing_to_review
@@ -225,9 +226,14 @@ private fun ReviewRow(
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(bottom = 12.dp))
         Text(record.subject?.takeIf { it.isNotBlank() } ?: stringResource(Res.string.no_subject), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-        val line = listOf(reviewDate(record, zone), record.from ?: stringResource(Res.string.unknown_sender), recordSourceLabel(record.source), outcomeLabel(record.outcome)).joinToString(" · ") +
+        val line = listOf(reviewDate(record, zone), record.from ?: stringResource(Res.string.unknown_sender), recordSourceLabel(record.source), outcomeLabel(record.outcome, record.loyalty)).joinToString(" · ") +
             (record.reason?.let { " ($it)" } ?: "")
         Text(line, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // What a travel program's email gave of the user's loyalty, or why nothing.
+        for (kept in record.loyalty) Text(kept, style = MaterialTheme.typography.bodyLarge)
+        record.loyaltyMissed?.let {
+            Text(stringResource(Res.string.loyalty_not_kept, it), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
             if (fromMailbox && canReimport) OutlinedButton(onClick = onReimport, enabled = !busy) { Text(stringResource(Res.string.import_anyway)) }
             if (domain != null && decision != SenderList.ALLOW) {

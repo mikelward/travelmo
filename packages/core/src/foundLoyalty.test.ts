@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { foundLoyaltyFrom, needsReread, rereadFoundLoyalty, revisedFoundLoyalty } from "./foundLoyalty";
+import { foundLoyaltyFrom, foundLoyaltyLine, needsReread, rereadFoundLoyalty, revisedFoundLoyalty } from "./foundLoyalty";
 import { allLoyalty, loyaltySummary, withFoundLoyalty } from "./loyalty";
 import type { FoundLoyalty, LoyaltyPerson } from "./schema";
 
@@ -145,5 +145,13 @@ describe("reading an email again", () => {
       seen("Hilton Honors", "12345", { holder: "Mikel Ward", status: "Diamond", statusAt: "2026-10-01T00:00:00Z" }),
       seen("United MileagePlus", "12345", { holder: "Mikel Ward", status: "Silver", statusAt: "2026-10-01T00:00:00Z" }),
     ]);
+  });
+});
+
+describe("foundLoyaltyLine", () => {
+  it("names the program, then its status and balance, never the number", () => {
+    expect(foundLoyaltyLine({ program: "Delta", status: "Silver Medallion", balance: "49,606 Miles" })).toBe("Delta: Silver Medallion · 49,606 Miles");
+    expect(foundLoyaltyLine({ program: "Avios", balance: "12,400 Avios" })).toBe("Avios: 12,400 Avios");
+    expect(foundLoyaltyLine({ program: "Emerald Club" })).toBe("Emerald Club");
   });
 });

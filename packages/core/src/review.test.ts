@@ -1,6 +1,6 @@
 import type { ParsedMessage } from "./schema";
 import { describe, expect, it } from "vitest";
-import { dayRange, matchesKeyword, reviewDate, toReview, withLatest } from "./review";
+import { dayRange, matchesKeyword, outcomeLabel, reviewDate, toReview, withLatest } from "./review";
 
 const record = (extra: Partial<ParsedMessage>): ParsedMessage => ({
   messageId: "m",
@@ -82,5 +82,13 @@ describe("reviewDate", () => {
   it("says when the email was sent and when it was read, or only when it was read if the sending is unknown", () => {
     expect(reviewDate({ sentAt: "2026-05-23T07:22:58Z", processedAt: "2026-11-23T12:00:00Z" }, "en-GB", "Europe/London")).toBe("Sent 23 May 2026 · Read 23 Nov 2026");
     expect(reviewDate({ processedAt: "2026-11-23T12:00:00Z" }, "en-GB", "Europe/London")).toBe("Read 23 Nov 2026");
+  });
+});
+
+describe("outcomeLabel", () => {
+  it("says an email that gave loyalty kept it, rather than only that it was no booking", () => {
+    expect(outcomeLabel({ outcome: "not_booking", loyalty: ["Delta: Silver Medallion · 49,606 Miles"] })).toBe("Read, loyalty kept");
+    expect(outcomeLabel({ outcome: "not_booking" })).toBe("Read, not a booking");
+    expect(outcomeLabel({ outcome: "filtered" })).toBe("Skipped before reading");
   });
 });

@@ -33,6 +33,13 @@ describe("importReport", () => {
     expect(report.endsWith("Text the model read:\nFlight 1 of 2 XX 11 LHR 17:20 BOS 20:15")).toBe(true);
   });
 
+  it("says what loyalty was kept, or why none was", () => {
+    const kept = importReport(message, { ...record, loyalty: ["Delta: Silver Medallion · 49,606 Miles"] }, { attachments: 0 });
+    expect(kept).toContain("Outcome: not_booking (sender air.example allowed)\nLoyalty kept: Delta: Silver Medallion · 49,606 Miles\nReader:");
+    const missed = importReport(message, { ...record, loyaltyMissed: "no member number in it" }, { attachments: 0 });
+    expect(missed).toContain("Loyalty not kept: no member number in it");
+  });
+
   it("says why the model failed, and shows only the start of a long text", () => {
     const long = { ...message, text: "x".repeat(reportExcerptChars + 10) };
     const report = importReport(long, undefined, { error: "Gemini returned no text" });

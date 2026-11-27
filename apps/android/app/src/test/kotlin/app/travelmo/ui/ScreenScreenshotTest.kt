@@ -757,7 +757,12 @@ class ScreenScreenshotTest {
     fun import_review_report() = importReview("import_review_report", dark = false, reimported = "ticket")
 
     private fun importReview(name: String, dark: Boolean, reimported: String? = null) {
-        val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, importReview = FakeImportReview())
+        // Newest, an airline's welcome to a new status, whose loyalty was kept.
+        val status = app.travelmo.core.ParsedRecord(
+            "status", "not_booking", "2026-11-23T12:30:00Z", from = "Example Air <news@t.delta.com>", subject = "Welcome to Silver Medallion® Status",
+            loyalty = listOf("Delta: Silver Medallion · 49,606 Miles"),
+        )
+        val viewModel = TripsViewModel(FakeTripStore(parsed = listOf(status) + fixtureParsed), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, importReview = FakeImportReview())
         reimported?.let { viewModel.reimport("report", it) }
         capture(name, dark = dark) {
             ImportReviewScreen(viewModel = viewModel, onBack = {}, zone = "Europe/London")

@@ -27,6 +27,8 @@ export function importReport(message: EmailMessage, record: ParsedMessage | unde
     `From: ${message.from}`,
     `Sent: ${message.date}`,
     `Outcome: ${outcome}`,
+    ...(record?.loyalty ?? []).map((line) => `Loyalty kept: ${line}`),
+    ...(record?.loyaltyMissed ? [`Loyalty not kept: ${record.loyaltyMissed}`] : []),
     `Reader: version ${readerVersion}`,
     `Text read: ${text}, ${count(message.text.length)} characters sent`,
     `PDFs sent: ${debug.attachments ?? 0}`,
