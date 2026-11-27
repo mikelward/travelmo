@@ -1,6 +1,6 @@
 "use client";
 
-import { dayRange, reviewDate, toReview, withLatest, type ParsedMessage, type ReviewSearch } from "@travelmo/core";
+import { dayRange, outcomeLabel, reviewDate, toReview, withLatest, type ParsedMessage, type ReviewSearch } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
 import { useState } from "react";
@@ -20,15 +20,6 @@ const fieldClass = "mt-1 rounded-lg border border-field bg-background px-3 py-2"
 // How many records the list shows, newest first, until a search looks
 // through them all.
 const recent = 100;
-
-const outcomeLabels: Record<ParsedMessage["outcome"], string> = {
-  processing: "Processing",
-  filtered: "Skipped before reading",
-  not_booking: "Read, not a booking",
-  imported: "Imported",
-  failed: "Failed",
-  cancellation: "Cancellation",
-};
 
 function ReviewList({ user }: { user: User }) {
   const [search, setSearch] = useState<ReviewSearch>({ keyword: "", from: "", to: "" });
@@ -110,9 +101,16 @@ function ReviewList({ user }: { user: User }) {
               <p className="font-medium">{record.subject || "(no subject)"}</p>
               <p className="text-zinc-600 dark:text-zinc-400">
                 {reviewDate(record)} · {record.from || "unknown sender"} · {recordSourceLabels[record.source ?? "gmail"]} ·{" "}
-                {outcomeLabels[record.outcome]}
+                {outcomeLabel(record)}
                 {record.reason ? ` (${record.reason})` : ""}
               </p>
+              {/* What a travel program's email gave of its loyalty, or why nothing. */}
+              {record.loyalty?.map((line) => (
+                <p key={line} data-testid="review-loyalty">
+                  {line}
+                </p>
+              ))}
+              {record.loyaltyMissed && <p className="text-muted">Loyalty not kept: {record.loyaltyMissed}</p>}
               <div className="mt-2 flex flex-wrap gap-2">
                 {fromMailbox && (
                   <button

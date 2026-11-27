@@ -67,4 +67,11 @@ class ReviewTest {
     fun `reads a typed list of senders as one domain a line`() {
         cleanSenderList(listOf(" Air.Example ", "", "cove.example", "air.example")) shouldBe listOf("air.example", "cove.example")
     }
+
+    @Test
+    fun `an email that gave loyalty says it kept it`() {
+        outcomeLabel("not_booking", listOf("Delta: Silver Medallion · 49,606 Miles")) shouldBe "Read, loyalty kept"
+        outcomeLabel("not_booking") shouldBe "Read, not a booking"
+        outcomeLabel("filtered") shouldBe "Skipped before reading"
+    }
 }

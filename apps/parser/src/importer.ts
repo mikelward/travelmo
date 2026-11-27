@@ -68,6 +68,7 @@ import {
   type TripItImport,
   untimedMatchDays,
   foundLoyaltyFrom,
+  foundLoyaltyLine,
   type ExtractedMembership,
   type FoundLoyalty,
   type NamedBooking,
@@ -545,13 +546,21 @@ async function importOnce(
   const original = source === "forward" ? unwrapForwarded(message) : message;
   const statement =
     fromEmail &&
-    (reason === statementReason || (!!options.force && (booking.memberships?.length ?? 0) > 0 && isTravelStatement(original, await store.senderPatterns(uid))));
+    (reason === statementReason || (!!options.force && isTravelStatement(original, await store.senderPatterns(uid))));
   if (!booking.isBooking || booking.segments.length === 0 || !range) {
     // A travel loyalty statement (the pre-filter let it through for its
     // sender) is no booking, but its balance and status are kept; any other
-    // email that is no booking keeps nothing.
-    if (statement && booking.memberships?.length && !(await keepMemberships(uid, message, booking.memberships, booking.segments, now(), deps, sent, generation)) && options.loyalty) options.loyalty.saved = false;
-    await save(record("not_booking", { reason, readerVersion }));
+    // email that is no booking keeps nothing. Its record says which, for the
+    // review list: what was kept, or why nothing was.
+    let loyalty: Pick<ParsedMessage, "loyalty" | "loyaltyMissed"> = {};
+    if (statement) {
+      const kept = booking.memberships?.length ? await keepMemberships(uid, message, booking.memberships, booking.segments, now(), deps, sent, generation) : { saved: true, kept: [] };
+      if (!kept.saved && options.loyalty) options.loyalty.saved = false;
+      loyalty = !kept.saved ? { loyaltyMissed: couldNotSave } : kept.kept.length ? { loyalty: kept.kept.map(foundLoyaltyLine) } : { loyaltyMissed: noNumber };
+    } else if (fromEmail && booking.memberships?.length) {
+      loyalty = { loyaltyMissed: notTravel };
+    }
+    await save(record("not_booking", { reason, readerVersion, ...loyalty }));
     await learn("others");
     log("not_booking", { uid, messageId: message.id });
     return "not_booking";
@@ -640,7 +649,7 @@ async function keepMemberships(
   deps: ImportDeps,
   sent: string | undefined,
   generation: number | undefined,
-): Promise<boolean> {
+): Promise<{ saved: boolean; kept: FoundLoyalty[] }> {
   try {
     const owner = await deps.store.ownerName(uid);
     // A balance and a status are as of when the email was sent, so an older
@@ -651,18 +660,23 @@ async function keepMemberships(
       const { refused, superseded } = await deps.store.addFoundLoyalty(uid, kept, generation);
       if (superseded) {
         deps.log("memberships_superseded", { uid, messageId: message.id });
-        return false;
+        return { saved: false, kept: [] };
       }
       // Never reached in practice (maxFoundLoyalty); counts only.
       if (refused) deps.log("found_loyalty_full", { uid, messageId: message.id, refused }, "WARNING");
     }
     deps.log("memberships", { uid, messageId: message.id, found: memberships.length, kept: kept.length });
-    return true;
+    return { saved: true, kept };
   } catch (error) {
     deps.log("memberships_failed", { uid, messageId: message.id, reason: (error as Error).message });
-    return false;
+    return { saved: false, kept: [] };
   }
 }
+
+// Why an email read for its loyalty kept none, as its review row says it.
+export const noNumber = "no member number in it";
+export const notTravel = "not from a travel company";
+export const couldNotSave = "couldn't be saved";
 
 // The user's loyalty numbers an email that books travel shows, kept as an
 // import keeps them; a ticket or an appointment that shows a member number
@@ -678,7 +692,7 @@ export async function keepTravelMemberships(
   generation: number | undefined,
 ): Promise<boolean> {
   const booksTravel = booking.segments.some((segment) => travelTypes.has(segment.type));
-  return booksTravel && booking.memberships?.length ? keepMemberships(uid, message, booking.memberships, booking.segments, at, deps, sent, generation) : true;
+  return booksTravel && booking.memberships?.length ? (await keepMemberships(uid, message, booking.memberships, booking.segments, at, deps, sent, generation)).saved : true;
 }
 
 // What a membership number is kept from: an email booking one of these.

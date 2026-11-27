@@ -161,6 +161,8 @@ describe("importMessage", () => {
     expect(store.foundLoyalty.get("u1")).toEqual([
       expect.objectContaining({ program: "Emerald Club", number: "EC 77", balance: "3 free rental days", balanceAt: "2026-11-01T08:00:00.000Z" }),
     ]);
+    // Its record says what was kept, for the review list.
+    expect(store.parsed.get("u1/m1")).toMatchObject({ outcome: "not_booking", loyalty: ["Emerald Club: Executive · 3 free rental days"] });
 
     let asked = false;
     const old = email({ ...mail, id: "m2", date: "Mon, 1 Jun 2026 08:00:00 +0000" });
@@ -194,6 +196,20 @@ describe("importMessage", () => {
     const clubcard = email({ from: "Example Mart <rewards@examplemart.example>", subject: "Your points statement" });
     await importMessage("u1", clubcard, deps(shop, async () => statement), { force: true });
     expect(shop.foundLoyalty.get("u1")).toBeUndefined();
+    // Its record says why.
+    expect(shop.parsed.get(`u1/${clubcard.id}`)).toMatchObject({ outcome: "not_booking", loyaltyMissed: "not from a travel company" });
+  });
+
+  it("says when a travel statement gave no member number", async () => {
+    const store = memoryStore();
+    const mail = email({ from: "Example Air <news@email.ba.com>", subject: "Your Avios balance" });
+    await importMessage("u1", mail, deps(store, async () => ({ isBooking: false, segments: [] })));
+    expect(store.parsed.get(`u1/${mail.id}`)).toMatchObject({ outcome: "not_booking", loyaltyMissed: "no member number in it" });
+    expect(store.parsed.get(`u1/${mail.id}`)?.loyalty).toBeUndefined();
+    // Read again on request, it still says why.
+    const again = memoryStore();
+    await importMessage("u1", mail, deps(again, async () => ({ isBooking: false, segments: [] })), { force: true });
+    expect(again.parsed.get(`u1/${mail.id}`)).toMatchObject({ outcome: "not_booking", loyaltyMissed: "no member number in it" });
   });
 
   it("keeps the loyalty numbers from a booking email, a fellow traveler's as theirs, and no balance read as one", async () => {

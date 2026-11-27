@@ -52,6 +52,22 @@ export function reviewDate(record: Pick<ParsedMessage, "sentAt" | "processedAt">
  * the latest: a record read again (reimported) is newer there and replaces
  * its old copy, and one new since the search is added. Newest first.
  */
+// What came of a record, as its review row says it: an email that gave a
+// travel program's loyalty says so, rather than only that it was no booking.
+export function outcomeLabel(record: Pick<ParsedMessage, "outcome" | "loyalty">): string {
+  if (record.outcome === "not_booking" && record.loyalty?.length) return "Read, loyalty kept";
+  return outcomeLabels[record.outcome];
+}
+
+const outcomeLabels: Record<ParsedMessage["outcome"], string> = {
+  processing: "Processing",
+  filtered: "Skipped before reading",
+  not_booking: "Read, not a booking",
+  imported: "Imported",
+  failed: "Failed",
+  cancellation: "Cancellation",
+};
+
 export function withLatest(searched: readonly ParsedMessage[], latest: readonly ParsedMessage[]): ParsedMessage[] {
   const fresh = new Map(latest.map((r) => [r.messageId, r]));
   const kept = searched.filter((r) => !fresh.has(r.messageId));
