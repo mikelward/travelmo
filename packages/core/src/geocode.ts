@@ -100,8 +100,18 @@ export function geocodeQuery(place: Place | undefined): string | undefined {
   if (!place || !geocodeNeed(place)) return undefined;
   const name = place.name.trim();
   if (!name) return undefined;
-  if (place.code && name.toUpperCase() === place.code.trim().toUpperCase()) return undefined;
-  if (/^[A-Z0-9]{2,4}$/.test(name)) return undefined;
+  // A street address names the place better than its town does ("Lodging, 490
+  // Dolliver Street, Pismo Beach, CA, 93449" rather than "Lodging").
+  const address = place.address?.trim();
+  const codeLike = (place.code && name.toUpperCase() === place.code.trim().toUpperCase()) || /^[A-Z0-9]{2,4}$/.test(name);
+  if (address) {
+    // With the town and country it doesn't already name, so "1 Example St" is
+    // looked for in the right one.
+    const named = (part: string | undefined) => part && !address.toLowerCase().includes(part.trim().toLowerCase()) ? part.trim() : undefined;
+    const country = place.country && !countryCodeOf(address.split(",").at(-1) ?? "") ? place.country : undefined;
+    return [codeLike || name.toLowerCase() === address.toLowerCase() ? undefined : name, address, named(place.city), country].filter(Boolean).join(", ");
+  }
+  if (codeLike) return undefined;
   const city = place.city?.trim();
   const parts = [name, city && city.toLowerCase() !== name.toLowerCase() ? city : undefined, place.country];
   return parts.filter(Boolean).join(", ");

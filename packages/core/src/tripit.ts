@@ -126,18 +126,148 @@ export function tripItInstant(value: unknown, defaultTime = "12:00"): string | u
 
 export const floatingNote = "Time zone not in the TripIt file; time shown as written";
 
+// US states, DC and the territories, by their postal codes.
+const usStates = new Set(
+  "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY PR GU VI AS MP".split(" "),
+);
+// The UK's nations, which an address may end its town with: not towns.
+const nations = new Set(["england", "scotland", "wales", "northern ireland"]);
+// Australia's states as an address writes them after the town ("Melbourne Vic").
+const auStates = new Set(["nsw", "vic", "vi", "qld", "sa", "wa", "tas", "nt", "act"]);
+// Regions an address may name between its town and its country: not towns.
+const regions = new Set(["new south wales", "victoria", "queensland", "south australia", "western australia", "tasmania", "northern territory"]);
+const regionWords = new Set(["governorate", "metropolitan", "region", "province", "county"]);
+// Short words that begin a town's own name: Saint, Sainte, Mount, Fort.
+const townPrefixes = new Set(["st", "ste", "mt", "ft"]);
+// Words that make a part of an address a street, a building or a business,
+// not a town: "Front St San Francisco" is no town to show.
+const streetWords = new Set(
+  "st street rd road ave avenue dr drive way blvd bd boulevard ln lane hwy highway pl place sq square suite ste terminal airport arpt building center centre bar hotel station via viale rue ul ulica strasse str cnr corner near shuttle apartment apt flat house court expressway parkway pkwy parade mews quay".split(" "),
+);
+
+const hasDigit = (word: string) => /\d/.test(word);
+// A word that is a postcode, or part of one ("02128", "CM2", "0DD", "M5A4R6").
+const postcodeWord = (word: string) => hasDigit(word) || word === "-";
+
+// A one-line address's parts, without what TripIt wraps in brackets
+// ("Boston (massachusetts)"), a stray leading colon or a mis-decoded space.
+function addressParts(address: unknown): string[] {
+  const line = text(address)
+    ?.replace(/\([^)]*\)/g, " ")
+    .replace(/^[\s:\u00c2\u00a0]+/, "");
+  if (!line) return [];
+  return line.split(",").map((p) => p.replace(/\s+/g, " ").trim()).filter(Boolean);
+}
+
+// The country a part of an address names, before or after its postcode
+// ("Italy", "00054 Italy", "Sweden 41103", "92707 United States", "XX 3045 AU").
+function countryIn(part: string): string | undefined {
+  // A time ("6:18 PM") is no part of an address.
+  if (part.includes(":")) return undefined;
+  const tokens = part.split(" ");
+  // The words that aren't postcodes, each with where it stood among them all.
+  const kept = tokens.flatMap((w, at) => (postcodeWord(w) ? [] : [{ w, at }]));
+  const words = kept.map((k) => k.w);
+  for (let n = Math.min(4, words.length); n >= 1; n--) {
+    const named = words.slice(-n).join(" ");
+    // A country after other words only when a postcode stands beside it, or
+    // with the town between ("Florida 32830 USA", "XX 3045 AU", "London United
+    // Kingdom W2 1HL", "8000 Bruges Belgium"): a street named for one ("10 Rue
+    // du Luxembourg") is no country.
+    if (n < words.length) {
+      const first = kept[words.length - n]!.at;
+      const last = kept[words.length - 1]!.at;
+      const beside = (at: number) => at >= 0 && at < tokens.length && postcodeWord(tokens[at]!);
+      if (!beside(first - 1) && !beside(first - 2) && !beside(last + 1)) continue;
+    }
+    // A two-letter code alone is a country only when it is no US state: TripIt
+    // writes a country by name, and "…, VA" or "CA 92029" is a state.
+    if (n === 1 && named.length === 2 && usStates.has(named.toUpperCase())) return undefined;
+    // Nor is a street's abbreviation ending a street ("10 Downing St" is no São
+    // Tomé, "Rue X Pl" no Poland, "Bd de Parc" no Bangladesh).
+    if (n === 1 && words.length > 1 && streetWords.has(named.toLowerCase().replace(/\./g, ""))) return undefined;
+    const code = countryCodeOf(named);
+    if (code) return code;
+  }
+  return undefined;
+}
+
+// Whether a part of an address is a US state, with or without its ZIP and the
+// country after it ("VA", "MA 02128", "CA 95117 US", "D.C."), so the address is
+// in the US and its town comes before it.
+function usStatePart(part: string): boolean {
+  const words = part.replace(/\./g, "").split(" ").filter((w) => !postcodeWord(w));
+  const [state, ...rest] = words;
+  if (!state || state.length !== 2 || !usStates.has(state.toUpperCase())) return false;
+  return rest.length === 0 || countryCodeOf(rest.join(" ")) === "US";
+}
+
+// Where the address says its region: the last part naming a country or a US
+// state, after any postcode that stands alone.
+function regionAt(parts: readonly string[]): { index: number; country: string } | undefined {
+  for (let i = parts.length - 1; i >= 0 && i >= parts.length - 3; i--) {
+    const part = parts[i]!;
+    if (usStatePart(part)) return { index: i, country: "US" };
+    const country = countryIn(part);
+    if (country) return { index: i, country };
+    // Only a postcode after the region ("…, TX, 78719-2339") is passed over.
+    if (!part.split(" ").every(postcodeWord)) return undefined;
+  }
+  return undefined;
+}
+
 // The country named at the end of a one-line address ("…, Sydney NSW 2000,
-// Australia"; "…, Boston, MA 02116" is the US), or nothing.
+// Australia"; "…, Boston, MA 02116" or "…, Sperryville, VA" is the US), or nothing.
 export function countryFromAddress(address: unknown): string | undefined {
-  const line = text(address);
-  if (!line) return undefined;
-  const parts = line.split(",").map((p) => p.trim()).filter(Boolean);
-  const last = parts.at(-1);
-  if (!last) return undefined;
-  if (/^[A-Z]{2}\s+\d{5}(-\d{4})?$/.test(last)) return "US";
-  // A postcode after the name ("Australia 2000", "France 75001").
-  const named = last.replace(/(\s+\S*\d\S*)+$/, "").trim();
-  return countryCodeOf(named);
+  return regionAt(addressParts(address))?.country;
+}
+
+// The town a one-line address names before its region ("…, Back Bay, Boston
+// (massachusetts), MA, 02716" is Boston; "…, 10000 Zagreb, Croatia" is
+// Zagreb), or nothing when that part is a street, a postcode alone or a code.
+export function cityFromAddress(address: unknown): string | undefined {
+  const parts = addressParts(address);
+  const region = regionAt(parts);
+  if (!region) return undefined;
+  for (let i = region.index - 1; i >= 0; i--) {
+    const part = parts[i]!;
+    // A state written twice ("Washington, D.c., DC"), a province code ("RM",
+    // "BY") or a postcode alone comes between the town and its region.
+    if (usStatePart(part) || /^[A-Z]{2,3}$/.test(part) || part.split(" ").every(postcodeWord)) continue;
+    // A postcode before or after the town ("10000 Zagreb", "Bath BA2 6NS") is
+    // left out; a number anywhere else, or a street's word, makes it a street
+    // or a business ("26 Chandler Street", "Suite B San Jose"), and a guess at
+    // its town is left to the geocoder, which reads the whole address.
+    const words = part.split(" ");
+    // A postcode before the town is a European habit ("10000 Zagreb"), never a
+    // US one, where a leading number is a house's ("1 Infinite Loop"). With it
+    // go its letters ("1071 NR Amsterdam") and an abbreviation after it ("1st
+    // arr. Paris"), but not one that begins the town's own name ("St. Louis").
+    if (region.country !== "US") {
+      let stripped = false;
+      while (words.length > 1 && (postcodeWord(words[0]!) || (stripped && words[0]!.endsWith(".")))) {
+        stripped = true;
+        words.shift();
+        if (words.length > 1 && /^[A-Z]{2}$/.test(words[0]!)) words.shift();
+      }
+    }
+    while (words.length > 1 && postcodeWord(words.at(-1)!)) words.pop();
+    // A state or province code after the town ("Melbourne Vic", "Torino TO"),
+    // but not a town's own short word when it is all in capitals ("SANTA FE").
+    const provinceAfter = () => /^[A-Z]{2}$/.test(words.at(-1)!) && words.at(-2) !== words.at(-2)!.toUpperCase();
+    while (words.length > 1 && (auStates.has(words.at(-1)!.toLowerCase()) || provinceAfter())) words.pop();
+    const plain = words.map((w) => w.toLowerCase().replace(/[^\p{L}-]/gu, ""));
+    // "St", "Mt" or "Ft" first is a saint, a mount or a fort ("St. Louis", "St Kilda"), not a street.
+    const streetLike = plain.filter((w, j) => !(j === 0 && townPrefixes.has(w)));
+    if (words.length > 4 || words.some(postcodeWord) || streetLike.some((w) => streetWords.has(w))) return undefined;
+    const town = words.join(" ");
+    // A province code left once its postcode is gone ("ON M5V 3L9") comes before the town too.
+    if (/^[A-Z]{2,3}$/.test(town)) continue;
+    if (regions.has(town.toLowerCase()) || auStates.has(town.toLowerCase()) || plain.some((w) => regionWords.has(w))) continue;
+    if (!town || nations.has(town.toLowerCase()) || countryCodeOf(town)) return undefined;
+    return town;
+  }
+  return undefined;
 }
 
 // TripIt writes coordinates as strings; a pair is kept only when both are
@@ -168,7 +298,10 @@ function place(name: unknown, code: unknown, city: unknown, country: unknown, la
 
 function addressPlace(name: unknown, address: unknown): Place | undefined {
   const a = isObj(address) ? address : {};
-  return place(name ?? a.address, undefined, a.city, a.country ?? countryFromAddress(a.address), a.latitude, a.longitude);
+  const found = place(name ?? a.address, undefined, a.city ?? cityFromAddress(a.address), a.country ?? countryFromAddress(a.address), a.latitude, a.longitude);
+  // The address itself too, for the map's geocoding to look for.
+  const line = addressParts(a.address).join(", ");
+  return found && line && line !== found.name ? { ...found, address: line } : found;
 }
 
 const joinNotes = (...parts: (string | undefined)[]) => {

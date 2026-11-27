@@ -621,7 +621,8 @@ named for its city ("Liverpool"), though never a venue's name (a restaurant
 called Florence); anything else's from Google's
 Geocoding API (`packages/core/src/geocode.ts` for what to ask and how to read
 the answer, `apps/parser/src/geocode.ts` for the call), asked once per
-distinct place name (with the country on the end when the source named one),
+distinct place name (with its street address when the place has one, else
+with the country on the end when the source named one),
 cached in `geocodes`, and capped per day; the city is filled too when the
 source left it out. A place that has its country and lacks only its spot is
 asked about as well, but may use only half the day's budget, so a backlog of
@@ -2524,8 +2525,13 @@ directly. A stay with no times takes 15:00 and 11:00, anything else noon; a
 DateTime with neither an offset nor a zone keeps its time as written at
 `+00:00` with a note saying so (the preview counts these), while a zone that is
 named but unknown is not guessed at. A place's country comes from the end of
-its one-line address when that names a country, and otherwise from the
-geocoder like any import's. Notes get TripIt's `[[TripItALT…]]`
+its one-line address when that names a country, or a US state with or without
+its ZIP ("…, Sperryville, VA" is in the US, not Vatican City: TripIt writes
+countries by name), and otherwise from the geocoder like any import's. Its town
+comes from the part before the region when that is plainly a town ("…, Back
+Bay, Boston (massachusetts), MA, 02716" is Boston; a part with a street's
+word or a house number is not), and the address itself is kept for the
+geocoder to look for. Notes get TripIt's `[[TripItALT…]]`
 markers and pasted HTML stripped. Notes, empty trips, reservations TripIt kept
 only the name of (an empty leg, no dates: common in an old account, and all
 of its unfiled items), objects of no known kind and legs without a usable

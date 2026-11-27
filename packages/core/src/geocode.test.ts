@@ -88,6 +88,12 @@ describe("geocodeQuery and keys", () => {
     expect(geocodeQuery({ name: "Hotel Example", city: "Exampleville" })).toBe("Hotel Example, Exampleville");
     expect(geocodeQuery({ name: "Exampleville", city: "Exampleville" })).toBe("Exampleville");
     expect(geocodeQuery({ name: "Hotel Example" })).toBe("Hotel Example");
+    // A street address, when the place has one, is asked about instead of its town.
+    expect(geocodeQuery({ name: "Lodging", city: "Exampleville", address: "1 Example St, Exampleville, CA, 93449" })).toBe("Lodging, 1 Example St, Exampleville, CA, 93449");
+    expect(geocodeQuery({ name: "XYZ", code: "XYZ", address: "1 Example St, Exampleville" })).toBe("1 Example St, Exampleville");
+    // With the town and country the address doesn't name, so it is looked for in the right place.
+    expect(geocodeQuery({ name: "Hotel Example", address: "1 Example St", city: "Exampleville", country: "FR" })).toBe("Hotel Example, 1 Example St, Exampleville, FR");
+    expect(geocodeQuery({ name: "Hotel Example", address: "1 Rue Exemple, Exampleville, France", city: "Exampleville", country: "FR" })).toBe("Hotel Example, 1 Rue Exemple, Exampleville, France");
   });
 
   it("asks where a place with a country is, naming the country, until it has coordinates", () => {
