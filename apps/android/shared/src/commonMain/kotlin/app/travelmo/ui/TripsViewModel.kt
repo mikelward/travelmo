@@ -862,7 +862,7 @@ class TripsViewModel(
             .flatMapLatest { needs -> if (needs) unknownSegments.onStart { emit(emptyMap()) } else flowOf(emptyMap()) },
         travelers,
     ) { trips, segments, people ->
-        computed { trips.orEmpty().filter { watching(it.travelers ?: segments[it.id]?.let(::tripTravelers), people) }.map { it.id }.toSet() }
+        computed { trips.orEmpty().filter { watching(it.travelers ?: segments[it.id]?.let { s -> tripTravelers(s, it.removedTravelers) }, people, it.removedTravelers) }.map { it.id }.toSet() }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
     // Shared per-trip live segment streams and per-flight live status streams, kept 5s across screen transitions
@@ -1269,6 +1269,8 @@ class TripsViewModel(
         if (title.isBlank()) throw IllegalArgumentException("Give the trip a name")
         store.renameTrip(tripId, title)
     }
+
+    fun setRemovedTravelers(token: String, tripId: String, removed: List<String>) = run(token, "setRemovedTravelers") { store.setRemovedTravelers(tripId, removed) }
 
     fun fitTripDates(token: String, tripId: String) = run(token, "fitTripDates") { store.fitTripDates(tripId) }
 

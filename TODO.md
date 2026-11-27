@@ -18,6 +18,15 @@
 
 ## Product
 
+- [ ] Travelers… per booking (maintainer, 2026-11-27): the trip-wide
+      Travelers… takes a name off every booking at once; consider editing
+      one booking's travelers too, for a trip shared with someone who is on
+      only some of it.
+- [ ] Flag trips that look like two trips in one (maintainer, 2026-11-27):
+      bookings for different travelers, or flights that can't all be one
+      person's (overlapping, or leaving from where the last didn't land),
+      with a notice that points at Split… or Travelers….
+
 - [ ] A food icon (a fork and knife) for a meal booking, on its row and on
       a trip that is just that meal, rather than the calendar every "other"
       booking gets (maintainer, 2026-11-26): the parser would need to tell

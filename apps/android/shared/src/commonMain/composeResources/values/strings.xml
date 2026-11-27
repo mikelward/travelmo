@@ -310,6 +310,9 @@
     <!-- The owner's trip edits. -->
     <string name="rename">Rename</string>
     <string name="split">Split…</string>
+    <string name="travelers_menu">Travelers…</string>
+    <string name="travelers_title">Travelers</string>
+    <string name="travelers_hint">Untick anyone not on this trip. A trip you're not on is left out of your reports and reminders.</string>
     <string name="split_trip_title">Split trip</string>
     <string name="split_trip_hint">Pick the bookings to move to a new trip.</string>
     <plurals name="split_move">

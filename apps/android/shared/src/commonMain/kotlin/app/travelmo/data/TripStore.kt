@@ -277,6 +277,12 @@ interface TripStore {
     /** The owner's powers over a trip, as the web's edits.ts has them. */
     suspend fun renameTrip(tripId: String, title: String)
 
+    /**
+     * Takes names off a trip, or puts them back (Travelers…): [removed] is every name its bookings give that isn't on
+     * it. Its list flags are worked out again, so whom it is for follows. Owner only.
+     */
+    suspend fun setRemovedTravelers(tripId: String, removed: List<String>)
+
     /** Sets the trip's dates to its bookings' span; false when it has none. Owner only. */
     suspend fun fitTripDates(tripId: String): Boolean
 

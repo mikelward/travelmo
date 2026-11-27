@@ -195,6 +195,10 @@ export function firestoreStore(db: Firestore): TripStore {
             const snap = await t.get(db.collection(paths.trips()).where("ownerUid", "==", uid));
             return snap.docs.map((d) => Trip.parse(d.data()));
           },
+          async getTrip(tripId) {
+            const snap = await t.get(db.doc(paths.trip(tripId)));
+            return snap.exists ? Trip.parse(snap.data()) : undefined;
+          },
           async listSegments(tripId) {
             const snap = await t.get(db.collection(paths.segments(tripId)));
             return snap.docs.map((d) => Segment.parse(d.data()));

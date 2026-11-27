@@ -35,6 +35,7 @@ export function memoryStore(): Memory {
   let ids = 0;
   const tx: Omit<TripTx, "listParsedIds" | "deleteParsed" | "generation" | "bumpGeneration" | "connectedMailboxes" | "clearBackfill"> = {
     listTrips: async () => [...trips.values()],
+    getTrip: async (id) => trips.get(id),
     listSegments: async (tripId) => [...segments.values()].filter((s) => s.tripId === tripId),
     createTrip: (t) => {
       if (trips.has(t.id)) throw new Error(`trip ${t.id} exists`);

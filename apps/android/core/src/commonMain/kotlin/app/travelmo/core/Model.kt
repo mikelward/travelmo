@@ -122,6 +122,11 @@ data class Trip(
     val travelers: List<String>? = null,
     /** What kind of place it goes to, for its picture ([tripSetting]): one of [PLACE_SETTINGS] or "none"; null on a trip from before it was kept. */
     val setting: String? = null,
+    /**
+     * Names the owner took off the trip (Travelers…): its bookings give them, wrongly, as a relative's printout that
+     * lists the family. Left out of whom it is for, so a trip the user was taken off is one they're only watching.
+     */
+    val removedTravelers: List<String> = emptyList(),
     /** When the trip or any of its bookings last changed (ISO instant); empty when missing or in fixtures without one. */
     val updatedAt: String = "",
 )

@@ -4,6 +4,9 @@ import app.travelmo.shared.split_move
 import app.travelmo.shared.split_trip_hint
 import app.travelmo.shared.split_trip_title
 import app.travelmo.shared.split
+import app.travelmo.shared.travelers_hint
+import app.travelmo.shared.travelers_menu
+import app.travelmo.shared.travelers_title
 import app.travelmo.core.compareInstants
 import app.travelmo.core.sourceGroups
 import androidx.compose.foundation.selection.toggleable
@@ -85,6 +88,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.core.journeyGapKey
 import app.travelmo.core.tripTravelers
+import app.travelmo.core.namedTravelers
 import app.travelmo.core.watching
 import androidx.lifecycle.repeatOnLifecycle
 import app.travelmo.core.MAX_TRIP_REMINDERS
@@ -241,6 +245,7 @@ fun TripDetailScreen(
     var merging by remember { mutableStateOf<Segment?>(null) }
     var renaming by rememberSaveable { mutableStateOf(false) }
     var splitting by rememberSaveable { mutableStateOf(false) }
+    var editingTravelers by rememberSaveable { mutableStateOf(false) }
     val current = trip
     val isOwner = current != null && current.ownerUid == uid
     val canEdit = current != null && !current.deleting && (isOwner || sharedWithAny(current.sharedWith, addresses))
@@ -290,6 +295,9 @@ fun TripDetailScreen(
                         if (segments.size > 1) {
                             DropdownMenuItem(text = { Text(stringResource(Res.string.split)) }, enabled = !busy, onClick = { close(); splitting = true })
                         }
+                        if (current != null && namedTravelers(segments, current.removedTravelers).isNotEmpty()) {
+                            DropdownMenuItem(text = { Text(stringResource(Res.string.travelers_menu)) }, enabled = !busy, onClick = { close(); editingTravelers = true })
+                        }
                     }
                 },
             )
@@ -305,6 +313,12 @@ fun TripDetailScreen(
             SplitDialog(segments, onDismiss = { splitting = false }) { ids ->
                 splitting = false
                 viewModel.splitTrip("${prefix}split", tripId, ids)
+            }
+        }
+        if (editingTravelers && current != null) {
+            TravelersDialog(segments, current.removedTravelers, onDismiss = { editingTravelers = false }) { removed ->
+                editingTravelers = false
+                viewModel.setRemovedTravelers("${prefix}travelers", tripId, removed)
             }
         }
         deleting?.let { segment ->
@@ -356,7 +370,8 @@ fun TripDetailScreen(
             if (upcomingOrCurrent) viewModel.clockNow else kotlinx.coroutines.flow.flowOf(viewModel.now())
         }
         val currentNow by nowFlow.collectAsStateWithLifecycle(initialValue = viewModel.now())
-        val onlyWatching = remember(segments, travelers) { watching(tripTravelers(segments), travelers) }
+        val removedTravelers = current?.removedTravelers.orEmpty()
+        val onlyWatching = remember(segments, travelers, removedTravelers) { watching(tripTravelers(segments, removedTravelers), travelers, removedTravelers) }
         val warnings = remember(onlyWatching, people, current, segments, today) {
             if (onlyWatching || current == null) emptyList() else tripWarnings(people, current, segments, today)
         }
@@ -757,6 +772,41 @@ private fun SplitDialog(segments: List<Segment>, onDismiss: () -> Unit, onSplit:
                 Text(pluralStringResource(Res.plurals.split_move, picked.size, picked.size))
             }
         },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+    )
+}
+
+/**
+ * Travelers…: every name the trip's bookings give, ticked unless the owner took it off. Unticking a wrongly named
+ * passenger, the user among them, makes it a trip they're only watching. As the web's.
+ */
+@Composable
+private fun TravelersDialog(segments: List<Segment>, removed: List<String>, onDismiss: () -> Unit, onSave: (List<String>) -> Unit) {
+    val names = remember(segments, removed) { namedTravelers(segments, removed) }
+    // Unticked: only those the owner took off, as people write them; a name on nothing but a cancelled booking is
+    // still on the trip.
+    var off by rememberSaveable { mutableStateOf(namedTravelers(emptyList(), removed).toSet()) }
+    AppAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(Res.string.travelers_title)) },
+        text = {
+            LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
+                item(key = "hint") {
+                    Text(stringResource(Res.string.travelers_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                items(names, key = { it }) { name ->
+                    val on = name !in off
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().toggleable(value = on, role = Role.Checkbox) { off = if (it) off - name else off + name }.padding(vertical = 6.dp),
+                    ) {
+                        Checkbox(checked = on, onCheckedChange = null)
+                        Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 12.dp))
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(names.filter { it in off }) }) { Text(stringResource(Res.string.save)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
     )
 }

@@ -147,4 +147,34 @@ class ListFiltersTest {
         watchedTrip(trip.copy(travelers = listOf("Pat Example")), listOf(flight.copy(travelers = listOf("Sam Example"))), listOf(sam, pat)) shouldBe false
         watchedTrip(trip, null, listOf(sam, pat)) shouldBe false
     }
+
+    private val printout = listOf(flight.copy(travelers = listOf("EXAMPLE/SAM MR", "Pat Example")), stay.copy(travelers = listOf("Sam Example")))
+
+    @Test
+    fun leavesTheNamesTheOwnerTookOffOutOfWhomATripIsFor() {
+        tripTravelers(printout, listOf("Sam Example")) shouldBe listOf("Pat Example")
+        tripTravelers(printout, listOf("SAM EXAMPLE")) shouldBe listOf("Pat Example")
+    }
+
+    @Test
+    fun makesATripTheUserWasTakenOffOneTheyAreOnlyWatching() {
+        watchedTrip(trip, printout, listOf(sam, pat)) shouldBe false
+        watchedTrip(trip.copy(removedTravelers = listOf("Sam Example")), printout, listOf(sam, pat)) shouldBe true
+        watchedTrip(trip.copy(removedTravelers = listOf("Sam Example")), listOf(stay.copy(travelers = listOf("Sam Example"))), listOf(sam, pat)) shouldBe true
+        watchedTrip(trip.copy(removedTravelers = listOf("Sam Example"), travelers = emptyList()), null, listOf(sam, pat)) shouldBe true
+        watchedTrip(trip.copy(removedTravelers = listOf("Pat Example")), printout, listOf(sam, pat)) shouldBe false
+    }
+
+    @Test
+    fun keepsTheFlagsAndTheListFilterInStepWithTheNamesTakenOff() {
+        tripFlagsToWrite(trip.copy(removedTravelers = listOf("Sam Example")), printout)?.travelers shouldBe listOf("Pat Example")
+        hiddenFromList(trip.copy(removedTravelers = listOf("Sam Example")), printout, ListFilters(hideWatching = true), listOf(sam, pat)) shouldBe true
+    }
+
+    @Test
+    fun listsEveryNameForTheDialogThoseTakenOffToo() {
+        namedTravelers(printout, listOf("Sam Example")) shouldBe listOf("Sam Example", "Pat Example")
+        namedTravelers(listOf(flight), listOf("Sam Example")) shouldBe listOf("Sam Example")
+        namedTravelers(listOf(cancelled(flight.copy(travelers = listOf("Alex Other"))), stay.copy(travelers = listOf("Sam Example")))) shouldBe listOf("Sam Example", "Alex Other")
+    }
 }

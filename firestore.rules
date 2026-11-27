@@ -133,12 +133,14 @@ service cloud.firestore {
     }
 
     function validTrip(trip) {
-      return trip.keys().hasOnly(['id', 'title', 'start', 'end', 'liveStart', 'liveEnd', 'ownerUid', 'sharedWith', 'deleting', 'cancelledAt', 'allCancelled', 'localOnly', 'travelers', 'setting', 'createdAt', 'updatedAt'])
+      return trip.keys().hasOnly(['id', 'title', 'start', 'end', 'liveStart', 'liveEnd', 'ownerUid', 'sharedWith', 'deleting', 'cancelledAt', 'allCancelled', 'localOnly', 'travelers', 'setting', 'removedTravelers', 'createdAt', 'updatedAt'])
         && (!('deleting' in trip) || trip.deleting is bool)
         // What the list's filters need of its bookings (listFilters.ts).
         && (!('allCancelled' in trip) || trip.allCancelled is bool)
         && (!('localOnly' in trip) || trip.localOnly is bool)
         && (!('travelers' in trip) || (trip.travelers is list && trip.travelers.size() <= 100))
+        // Names the owner took off the trip (Travelers…); a sharee may not.
+        && (!('removedTravelers' in trip) || (trip.removedTravelers is list && trip.removedTravelers.size() <= 100))
         // What kind of place it goes to, for its picture (tripSetting).
         && (!('setting' in trip) || trip.setting in ['city', 'town', 'beach', 'mountains', 'lake', 'countryside', 'activity', 'other', 'car_rental', 'none'])
         && (!('cancelledAt' in trip) || (trip.cancelledAt is string && trip.cancelledAt.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}.*')))

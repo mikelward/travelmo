@@ -1,6 +1,6 @@
 "use client";
 
-import { allLoyalty, bookedDateRange, flightCheckInState, displayBounds, effectiveHomes, homeTimeline, journeyGapHomes, journeyGaps, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, gmailMailboxes, localDate, normalizeEmail, paths, programsFor, sharedWithAny, sourceGroups, watchedTrip, type Segment, type SenderCleanup, type Trip } from "@travelmo/core";
+import { allLoyalty, bookedDateRange, flightCheckInState, displayBounds, effectiveHomes, homeTimeline, journeyGapHomes, journeyGaps, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, gmailMailboxes, localDate, normalizeEmail, paths, programsFor, namedTravelers, sharedWithAny, sourceGroups, watchedTrip, type Segment, type SenderCleanup, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { arrayRemove, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -14,7 +14,7 @@ import { api } from "@/lib/api";
 import { hideRideNeed, markOneWay } from "@/lib/rides";
 import { SignInGate } from "@/components/SignInGate";
 import { sourceKindLabels } from "@/lib/sourceLinks";
-import { cancelSegment, cancelTrip, deleteSegment, deleteTrip, favoriteSegment, fitTripDates, mergeSegments, mergeTrips, moveSegment, moveSegmentToNewTrip, splitTrip, rateSegment, renameTrip, restoreSegment, restoreTrip, saveSegment } from "@/lib/edits";
+import { cancelSegment, cancelTrip, deleteSegment, deleteTrip, favoriteSegment, fitTripDates, mergeSegments, mergeTrips, moveSegment, moveSegmentToNewTrip, splitTrip, rateSegment, renameTrip, restoreSegment, restoreTrip, saveSegment, setRemovedTravelers } from "@/lib/edits";
 import { shareTrip } from "@/lib/access";
 import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
@@ -46,7 +46,9 @@ function byDay(segments: Segment[]): [string, Segment[]][] {
 }
 
 // The trip's own ⋮ menu, as Android's top bar has it: Rename and Split…, for the owner.
-function TripMenu({ onRename, onSplit }: { onRename: () => void; onSplit?: (() => void) | undefined }) {
+type MenuItem = { label: string; onSelect: () => void };
+
+function TripMenu({ items }: { items: readonly MenuItem[] }) {
   const [open, setOpen] = useState(false);
   const wrapper = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -72,37 +74,27 @@ function TripMenu({ onRename, onSplit }: { onRename: () => void; onSplit?: (() =
       </button>
       {open && (
         <div role="menu" aria-label="Trip actions" className="absolute right-0 top-9 z-10 min-w-40 rounded-lg border border-zinc-200 bg-background py-1 shadow-lg dark:border-zinc-800">
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onRename();
-            }}
-            className="block w-full px-4 py-2 text-left hover:bg-zinc-100 focus:bg-zinc-100 focus:outline-none dark:hover:bg-zinc-900 dark:focus:bg-zinc-900"
-          >
-            Rename
-          </button>
-          {onSplit && (
+          {items.map((item) => (
             <button
+              key={item.label}
               type="button"
               role="menuitem"
               onClick={() => {
                 setOpen(false);
-                onSplit();
+                item.onSelect();
               }}
               className="block w-full px-4 py-2 text-left hover:bg-zinc-100 focus:bg-zinc-100 focus:outline-none dark:hover:bg-zinc-900 dark:focus:bg-zinc-900"
             >
-              Split…
+              {item.label}
             </button>
-          )}
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-function Title({ trip, canEdit, onSplit }: { trip: Trip; canEdit: boolean; onSplit?: (() => void) | undefined }) {
+function Title({ trip, canEdit, more = [] }: { trip: Trip; canEdit: boolean; more?: readonly MenuItem[] }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(trip.title);
   const [error, setError] = useState<string>();
@@ -113,11 +105,16 @@ function Title({ trip, canEdit, onSplit }: { trip: Trip; canEdit: boolean; onSpl
         <h1 className="text-2xl font-semibold">{trip.title}</h1>
         {canEdit && (
           <TripMenu
-            onRename={() => {
-              setTitle(trip.title);
-              setEditing(true);
-            }}
-            onSplit={onSplit}
+            items={[
+              {
+                label: "Rename",
+                onSelect: () => {
+                  setTitle(trip.title);
+                  setEditing(true);
+                },
+              },
+              ...more,
+            ]}
           />
         )}
       </div>
@@ -303,6 +300,62 @@ function SplitDialog({ trip, segments, uid, onClose }: { trip: Trip; segments: S
   );
 }
 
+// Whom the trip is for: every name its bookings give, ticked unless the
+// owner took it off. Unticking a wrongly named passenger, the user among
+// them, makes it a trip they're only watching.
+function TravelersDialog({ trip, segments, onClose }: { trip: Trip; segments: Segment[]; onClose: () => void }) {
+  const names = useMemo(() => namedTravelers(segments, trip.removedTravelers), [segments, trip.removedTravelers]);
+  // Unticked: only those the owner took off, as people write them; a name
+  // on nothing but a cancelled booking is still on the trip.
+  const [off, setOff] = useState<Set<string>>(() => new Set(namedTravelers([], trip.removedTravelers)));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const save = async () => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await setRemovedTravelers(firestore(), trip.id, [...off]);
+      onClose();
+    } catch (e) {
+      console.error("Saving a trip's travelers failed", e);
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog title="Travelers" onClose={onClose}>
+      <p className="text-zinc-600 dark:text-zinc-400">Untick anyone not on this trip. A trip you&apos;re not on is left out of your reports and reminders.</p>
+      <ul className="mt-3" aria-label="Travelers">
+        {names.map((name) => (
+          <li key={name}>
+            <label className="flex items-baseline gap-3 py-2">
+              <input
+                type="checkbox"
+                checked={!off.has(name)}
+                onChange={(e) =>
+                  setOff((was) => {
+                    const next = new Set(was);
+                    if (e.target.checked) next.delete(name);
+                    else next.add(name);
+                    return next;
+                  })
+                }
+              />
+              <span>{name}</span>
+            </label>
+          </li>
+        ))}
+      </ul>
+      {error && <p className="mt-2 text-danger">{error}</p>}
+      <div className="mt-3">
+        <button type="button" disabled={busy} onClick={save} className={buttonClass}>
+          {busy ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </Dialog>
+  );
+}
+
 function MergeInto({ trip, targets, titles }: { trip: Trip; targets: Trip[]; titles: Map<string, string> }) {
   const router = useRouter();
   const [target, setTarget] = useState<Trip>();
@@ -475,7 +528,8 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   const travelers = usePeople(user.uid);
   // Watching it, what is the user's own leaves it out: warnings, entry
   // requirements, rides, the checklist and check-in.
-  const onlyWatching = useMemo(() => !!segments && watchedTrip({}, segments, travelers ?? []), [segments, travelers]);
+  const removedTravelers = trip?.removedTravelers;
+  const onlyWatching = useMemo(() => !!segments && watchedTrip({ removedTravelers }, segments, travelers ?? []), [segments, travelers, removedTravelers]);
   // The viewer's own programs, for the number at check-in; a fellow
   // traveler's are theirs.
   const ownTravelProfile = useTravelProfile(user.uid);
@@ -520,6 +574,7 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   const [cleanup, setCleanup] = useState<{ domain: string; plan: SenderCleanup }>();
   const router = useRouter();
   const [splitting, setSplitting] = useState(false);
+  const [editingTravelers, setEditingTravelers] = useState(false);
   const otherTrips = useMemo(
     () =>
       trip
@@ -614,8 +669,16 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
       <Link href="/" className="text-muted hover:underline">
         ← All trips
       </Link>
-      <Title trip={trip} canEdit={canManage} onSplit={canManage && segments && segments.length > 1 ? () => setSplitting(true) : undefined} />
+      <Title
+        trip={trip}
+        canEdit={canManage}
+        more={[
+          ...(canManage && segments && segments.length > 1 ? [{ label: "Split…", onSelect: () => setSplitting(true) }] : []),
+          ...(canManage && segments && namedTravelers(segments, trip.removedTravelers).length > 0 ? [{ label: "Travelers…", onSelect: () => setEditingTravelers(true) }] : []),
+        ]}
+      />
       {splitting && segments && <SplitDialog trip={trip} segments={segments} uid={user.uid} onClose={() => setSplitting(false)} />}
+      {editingTravelers && segments && <TravelersDialog trip={trip} segments={segments} onClose={() => setEditingTravelers(false)} />}
       <p className="mt-1 text-zinc-600 dark:text-zinc-400" data-testid="trip-dates">
         {formatDateRange(displayBounds(trip).start, displayBounds(trip).end)}
         {canManage && segments && <FitDates trip={trip} segments={segments} />}

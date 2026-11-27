@@ -188,6 +188,9 @@ export const Segment = ExtractedSegment.extend({
 });
 export type Segment = z.infer<typeof Segment>;
 
+// The most names a trip's owner may take off it (Trip.removedTravelers).
+export const maxRemovedTravelers = 100;
+
 export const Trip = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
@@ -221,6 +224,11 @@ export const Trip = z.object({
   // booking's type; "none" when its bookings don't say. Absent on a trip
   // from before it was kept, until an app reads its bookings.
   setting: TripSetting.optional(),
+  // Names the owner took off the trip (Travelers…): its bookings give them,
+  // wrongly, as a relative's printout that lists the family. Left out of
+  // whom it is for, so a trip the user was taken off is one they're only
+  // watching; an email read again doesn't put them back.
+  removedTravelers: z.array(z.string().min(1)).max(maxRemovedTravelers).optional(),
   createdAt: isoDateTime,
   updatedAt: isoDateTime,
 });

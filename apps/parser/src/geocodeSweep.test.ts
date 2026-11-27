@@ -74,6 +74,14 @@ describe("sweepGeocodeRetries", () => {
     expect(store.trips.get("t1")?.setting).toBe("town");
   });
 
+  it("keeps the names the trip's owner took off it out of whom the trip is for", async () => {
+    const { store, retries, deps } = setup({ "Hotel Example": spot }, stay("s1", { destination: { name: "Hotel Example" }, travelers: ["Sam Example", "Pat Example"] }));
+    store.trips.set(trip.id, { ...trip, removedTravelers: ["Sam Example"], travelers: ["Pat Example"] });
+    await retries.put({ uid: "u1", tripId: "t1", segmentId: "s1", at });
+    await sweepGeocodeRetries(deps);
+    expect(store.trips.get("t1")?.travelers).toEqual(["Pat Example"]);
+  });
+
   it("drops an entry whose booking is gone, already placed, or answered with nothing", async () => {
     const placed = stay("s2", { destination: { name: "Hotel Sample", country: "FR", lat: 1, lon: 2 } });
     const { store, retries, deps, asked } = setup({}, placed, stay("s3", { destination: { name: "Nowhere Special" } }));

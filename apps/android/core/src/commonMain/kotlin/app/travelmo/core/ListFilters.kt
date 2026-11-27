@@ -25,23 +25,37 @@ const val MAX_TRIP_TRAVELERS = 100
  * Whom a trip's bookings are for: every name they give, as people write it ([canonicalName]), each spelling once, going
  * by what is still booked unless nothing is. Spellings stay apart ("J Smith" beside "John Smith") until they're matched
  * to the user's people, who may tell them apart. More than [MAX_TRIP_TRAVELERS] is kept as none, so a trip is never
- * taken for one the user isn't on for want of room for their name.
+ * taken for one the user isn't on for want of room for their name. Names the owner took off the trip ([removed],
+ * [Trip.removedTravelers]) are left out, however a booking spells them.
  */
-fun tripTravelers(segments: List<Segment>): List<String> {
+fun tripTravelers(segments: List<Segment>, removed: List<String> = emptyList()): List<String> {
     val live = liveSegments(segments)
-    val names = live.ifEmpty { segments }.flatMap { it.travelers }.mapNotNull(::canonicalName).distinct()
+    val gone = removed.mapNotNull(::canonicalName).toSet()
+    val names = live.ifEmpty { segments }.flatMap { it.travelers }.mapNotNull(::canonicalName).distinct().filter { it !in gone }
     return if (names.size > MAX_TRIP_TRAVELERS) emptyList() else names
 }
 
 /**
- * Whether the user is only watching a trip: its bookings name travelers and none of them is the user ([guessMe],
- * [findPerson]). Never while who the user is is unknown, nor for a trip whose bookings name no one (watching in
- * listFilters.ts).
+ * Every name a trip's bookings give, those the owner took off too, as the Travelers… dialog lists them: what is still
+ * booked first, then the rest (namedTravelers in listFilters.ts).
  */
-fun watching(travelers: List<String>?, people: List<Person>): Boolean {
+fun namedTravelers(segments: List<Segment>, removed: List<String> = emptyList()): List<String> {
+    val live = liveSegments(segments)
+    val all = (live + segments.filter { it !in live }).flatMap { it.travelers }
+    return (all + removed).mapNotNull(::canonicalName).distinct()
+}
+
+/**
+ * Whether the user is only watching a trip: its bookings name travelers and none of them is the user ([guessMe],
+ * [findPerson]). Never while who the user is is unknown, nor for a trip whose bookings name no one, unless the owner
+ * took the user off it ([removed]): a printout that named them wrongly (watching in listFilters.ts).
+ */
+fun watching(travelers: List<String>?, people: List<Person>, removed: List<String> = emptyList()): Boolean {
     val me = guessMe(people) ?: return false
-    if (travelers.isNullOrEmpty()) return false
-    return travelers.none { findPerson(people, it)?.id == me.id }
+    val isMe = { t: String -> findPerson(people, t)?.id == me.id }
+    if (travelers.orEmpty().any(isMe)) return false
+    if (removed.any(isMe)) return true
+    return !travelers.isNullOrEmpty()
 }
 
 /**
@@ -50,7 +64,7 @@ fun watching(travelers: List<String>?, people: List<Person>): Boolean {
  * working out home) leaves such a trip out (watchedTrip in listFilters.ts).
  */
 fun watchedTrip(trip: Trip, segments: List<Segment>?, people: List<Person>): Boolean =
-    watching(segments?.let(::tripTravelers) ?: trip.travelers, people)
+    watching(segments?.let { tripTravelers(it, trip.removedTravelers) } ?: trip.travelers, people, trip.removedTravelers)
 
 /**
  * What the trip list needs of a trip's bookings (for its filters, and [setting] for its picture), kept on the trip
@@ -60,11 +74,12 @@ fun watchedTrip(trip: Trip, segments: List<Segment>?, people: List<Person>): Boo
  */
 data class TripFlags(val allCancelled: Boolean, val localOnly: Boolean, val travelers: List<String>, val setting: String)
 
-fun tripFlags(segments: List<Segment>): TripFlags = TripFlags(allCancelled(segments), localOnly(segments), tripTravelers(segments), tripSetting(segments))
+fun tripFlags(segments: List<Segment>, removed: List<String> = emptyList()): TripFlags =
+    TripFlags(allCancelled(segments), localOnly(segments), tripTravelers(segments, removed), tripSetting(segments))
 
 /** The flags to write on a trip whose bookings have just been read, or null when the trip already says so. */
 fun tripFlagsToWrite(trip: Trip, segments: List<Segment>): TripFlags? {
-    val flags = tripFlags(segments)
+    val flags = tripFlags(segments, trip.removedTravelers)
     val same = trip.allCancelled == flags.allCancelled && trip.localOnly == flags.localOnly && trip.travelers == flags.travelers && trip.setting == flags.setting
     return if (same) null else flags
 }
@@ -92,8 +107,8 @@ fun hiddenFromList(trip: Trip, segments: List<Segment>?, filters: ListFilters, p
         if (local) return true
     }
     if (filters.hideWatching) {
-        val travelers = trip.travelers ?: segments?.let(::tripTravelers)
-        if (watching(travelers, people)) return true
+        val travelers = trip.travelers ?: segments?.let { tripTravelers(it, trip.removedTravelers) }
+        if (watching(travelers, people, trip.removedTravelers)) return true
     }
     return false
 }
