@@ -19,8 +19,16 @@ export function addMonths(month: Month, n: number): Month {
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}`;
 }
 
+const monthFormatters = new Map<string, Intl.DateTimeFormat>();
+
 export function monthLabel(month: Month, locale = "en-GB"): string {
-  return new Intl.DateTimeFormat(locale, { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${month}-01T00:00:00Z`));
+  let formatter = monthFormatters.get(locale);
+  if (!formatter) {
+    if (monthFormatters.size >= 32) monthFormatters.clear();
+    formatter = new Intl.DateTimeFormat(locale, { month: "long", year: "numeric", timeZone: "UTC" });
+    monthFormatters.set(locale, formatter);
+  }
+  return formatter.format(new Date(`${month}-01T00:00:00Z`));
 }
 
 const addDays = (date: string, n: number): string => {

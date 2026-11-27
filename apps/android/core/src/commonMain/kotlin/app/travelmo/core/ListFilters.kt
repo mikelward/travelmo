@@ -81,8 +81,19 @@ fun flagsUnknown(trip: Trip): Boolean =
  * only watching it.
  */
 fun hiddenFromList(trip: Trip, segments: List<Segment>?, filters: ListFilters, people: List<Person> = emptyList()): Boolean {
-    val read = segments?.let(::tripFlags)
-    if (filters.hideCancelled && (trip.cancelledAt != null || (trip.allCancelled ?: read?.allCancelled ?: false))) return true
-    if (filters.hideLocal && (trip.localOnly ?: read?.localOnly ?: false)) return true
-    return filters.hideWatching && watching(trip.travelers ?: read?.travelers, people)
+    if (!filters.any) return false
+    if (filters.hideCancelled) {
+        if (trip.cancelledAt != null) return true
+        val cancelled = trip.allCancelled ?: segments?.let(::allCancelled) ?: false
+        if (cancelled) return true
+    }
+    if (filters.hideLocal) {
+        val local = trip.localOnly ?: segments?.let(::localOnly) ?: false
+        if (local) return true
+    }
+    if (filters.hideWatching) {
+        val travelers = trip.travelers ?: segments?.let(::tripTravelers)
+        if (watching(travelers, people)) return true
+    }
+    return false
 }

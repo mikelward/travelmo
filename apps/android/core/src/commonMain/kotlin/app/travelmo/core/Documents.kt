@@ -33,6 +33,18 @@ private fun validDate(y: Int, m: Int, d: Int): String? = try {
 
 private fun month(name: String): Int? = months.indexOf(name.take(3).lowercase()).takeIf { it >= 0 }?.plus(1)
 
+private val isoDocDate = Regex("""^(\d{4})-(\d{2})-(\d{2})(?:$|T)""")
+private val dmyDocDate = Regex("""^(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,})\.?,?\s+(\d{4})$""")
+private val mdyDocDate = Regex("""^([A-Za-z]{3,})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})$""")
+private val expiryLabelPattern = Regex("""expir|valid (until|to|through)|valid thru""")
+private val nationalityLabelPattern = Regex("""\b(nationality|citizenship)\b""")
+private val countryLabelPattern = Regex("""\bcountry\b""")
+private val birthLabelPattern = Regex("""\bbirth""")
+private val typeLabelPattern = Regex("""^(document )?type$""")
+private val isoTwoLetterPattern = Regex("^[A-Z]{2}$")
+private val passportKindPattern = Regex("""\b(e-?)?passports?\b""")
+private val visaKindPattern = Regex("""\b(e-?)?visas?\b""")
+
 /**
  * "2031-05-06", "2031-05-06T00:00:00Z", "6 May 2031", "May 6, 2031". Dates
  * written only in numbers with slashes are left alone: 06/05/2031 is a
@@ -40,14 +52,14 @@ private fun month(name: String): Int? = months.indexOf(name.take(3).lowercase())
  */
 fun parseDocumentDate(value: String): String? {
     val text = value.trim()
-    Regex("""^(\d{4})-(\d{2})-(\d{2})(?:$|T)""").find(text)?.let { m ->
+    isoDocDate.find(text)?.let { m ->
         return validDate(m.groupValues[1].toInt(), m.groupValues[2].toInt(), m.groupValues[3].toInt())
     }
-    Regex("""^(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,})\.?,?\s+(\d{4})$""").find(text)?.let { m ->
+    dmyDocDate.find(text)?.let { m ->
         val mo = month(m.groupValues[2]) ?: return null
         return validDate(m.groupValues[3].toInt(), mo, m.groupValues[1].toInt())
     }
-    Regex("""^([A-Za-z]{3,})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})$""").find(text)?.let { m ->
+    mdyDocDate.find(text)?.let { m ->
         val mo = month(m.groupValues[1]) ?: return null
         return validDate(m.groupValues[3].toInt(), mo, m.groupValues[2].toInt())
     }
@@ -55,26 +67,28 @@ fun parseDocumentDate(value: String): String? {
 }
 
 private fun lastPart(label: String) = label.split(" › ").last().lowercase()
-private fun isExpiry(label: String) = Regex("""expir|valid (until|to|through)|valid thru""").containsMatchIn(lastPart(label))
-private fun isNationality(label: String) = Regex("""\b(nationality|citizenship)\b""").containsMatchIn(lastPart(label))
+private fun isExpiry(label: String) = expiryLabelPattern.containsMatchIn(lastPart(label))
+private fun isNationality(label: String) = nationalityLabelPattern.containsMatchIn(lastPart(label))
 // A country of birth says nothing about which country a document is for.
-private fun isCountry(label: String) = Regex("""\bcountry\b""").containsMatchIn(lastPart(label)) && !Regex("""\bbirth""").containsMatchIn(lastPart(label)) && !isNationality(label)
-private fun isType(label: String) = Regex("""^(document )?type$""").matches(lastPart(label))
+private fun isCountry(label: String) = lastPart(label).let { part ->
+    countryLabelPattern.containsMatchIn(part) && !birthLabelPattern.containsMatchIn(part) && !nationalityLabelPattern.containsMatchIn(part)
+}
+private fun isType(label: String) = typeLabelPattern.matches(lastPart(label))
 
 // The country a document belongs to: for a passport, the one that issued it
 // (its holder's nationality is the same); for a visa, the one it admits to,
 // never its holder's nationality. Written as a code or as a name.
 private fun countryOf(entry: ProfileEntry, kind: DocumentKind): String? {
     fun code(f: ProfileField) = countryCodeOf(f.value) ?: f.value.trim().uppercase()
-    fun pick(test: (String) -> Boolean) = entry.fields.filter { test(it.label) }.map(::code).firstOrNull { Regex("^[A-Z]{2}$").matches(it) }
+    fun pick(test: (String) -> Boolean) = entry.fields.filter { test(it.label) }.map(::code).firstOrNull { isoTwoLetterPattern.matches(it) }
     return if (kind == DocumentKind.PASSPORT) pick(::isNationality) ?: pick(::isCountry) else pick(::isCountry)
 }
 
 private fun kindOf(entry: ProfileEntry): DocumentKind {
     val text = (listOf(entry.title) + entry.fields.filter { isType(it.label) }.map { it.value }).joinToString(" ").lowercase()
     return when {
-        Regex("""\b(e-?)?passports?\b""").containsMatchIn(text) -> DocumentKind.PASSPORT
-        Regex("""\b(e-?)?visas?\b""").containsMatchIn(text) -> DocumentKind.VISA
+        passportKindPattern.containsMatchIn(text) -> DocumentKind.PASSPORT
+        visaKindPattern.containsMatchIn(text) -> DocumentKind.VISA
         else -> DocumentKind.OTHER
     }
 }

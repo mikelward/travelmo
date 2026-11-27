@@ -10,30 +10,47 @@ function utcDate(date: string): Date {
   return new Date(Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10))));
 }
 
-export function formatDate(date: string, locale = "en-GB", options: Intl.DateTimeFormatOptions = {}): string {
-  return new Intl.DateTimeFormat(locale, {
+const dateFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function getDateFormatter(locale: string, key: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const fullKey = `${locale}|${key}`;
+  let formatter = dateFormatters.get(fullKey);
+  if (!formatter) {
+    if (dateFormatters.size >= 100) dateFormatters.clear();
+    formatter = new Intl.DateTimeFormat(locale, options);
+    dateFormatters.set(fullKey, formatter);
+  }
+  return formatter;
+}
+
+export function formatDate(date: string, locale = "en-GB", options?: Intl.DateTimeFormatOptions): string {
+  const key = options ? JSON.stringify(options) : "default";
+  const formatter = getDateFormatter(locale, `d:${key}`, {
     weekday: "short",
     day: "numeric",
     month: "short",
     timeZone: "UTC",
     ...options,
-  }).format(utcDate(date));
+  });
+  return formatter.format(utcDate(date));
 }
+
+const OPT_DAY: Intl.DateTimeFormatOptions = { day: "numeric", timeZone: "UTC" };
+const OPT_DAY_MONTH: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", timeZone: "UTC" };
+const OPT_FULL: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" };
 
 export function formatDateRange(start: string, end: string, locale = "en-GB"): string {
   const sameYear = start.slice(0, 4) === end.slice(0, 4);
   const sameMonth = sameYear && start.slice(5, 7) === end.slice(5, 7);
-  const fmt = (date: string, options: Intl.DateTimeFormatOptions) =>
-    new Intl.DateTimeFormat(locale, { timeZone: "UTC", ...options }).format(utcDate(date));
-  if (start === end) return fmt(start, { day: "numeric", month: "short", year: "numeric" });
+  const fullFmt = getDateFormatter(locale, "r:full", OPT_FULL);
+  if (start === end) return fullFmt.format(utcDate(start));
   if (sameMonth) {
-    return `${fmt(start, { day: "numeric" })}–${fmt(end, { day: "numeric", month: "short", year: "numeric" })}`;
+    return `${getDateFormatter(locale, "r:day", OPT_DAY).format(utcDate(start))}–${fullFmt.format(utcDate(end))}`;
   }
   if (sameYear) {
-    return `${fmt(start, { day: "numeric", month: "short" })} – ${fmt(end, { day: "numeric", month: "short", year: "numeric" })}`;
+    return `${getDateFormatter(locale, "r:dm", OPT_DAY_MONTH).format(utcDate(start))} – ${fullFmt.format(utcDate(end))}`;
   }
-  const full = { day: "numeric", month: "short", year: "numeric" } as const;
-  return `${fmt(start, full)} – ${fmt(end, full)}`;
+  return `${fullFmt.format(utcDate(start))} – ${fullFmt.format(utcDate(end))}`;
 }
 
 // How each trip's title reads where trips are listed together: a title two

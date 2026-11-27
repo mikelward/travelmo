@@ -137,18 +137,32 @@ private val nonAlnum = Regex("[^a-z0-9]+")
 
 private fun fold(text: String): String = " " + foldText(text).replace(nonAlnum, " ").trim() + " "
 
+private class FoldedBrand(val brand: Brand, val foldedAliases: List<String>)
+
+private val foldedNonSiteBrands: List<FoldedBrand> by lazy {
+    brands.filter { !it.site }.mapNotNull { b ->
+        b.aliases.map(::fold).filter { it.isNotBlank() }.takeIf { it.isNotEmpty() }?.let { FoldedBrand(b, it) }
+    }
+}
+
+private val foldedSiteBrands: List<FoldedBrand> by lazy {
+    brands.filter { it.site }.mapNotNull { b ->
+        b.aliases.map(::fold).filter { it.isNotBlank() }.takeIf { it.isNotEmpty() }?.let { FoldedBrand(b, it) }
+    }
+}
+
 /** The brand a booking names, as brands.ts's bookingBrand: the longest alias its title or provider says, a booking site only when no other. */
 fun bookingBrand(segment: Segment): Brand? {
-    val text = listOf(segment.title, segment.provider.orEmpty()).map(::fold)
-    for (site in listOf(false, true)) {
+    val title = fold(segment.title)
+    val provider = segment.provider?.takeIf { it.isNotEmpty() }?.let(::fold)
+    for (group in listOf(foldedNonSiteBrands, foldedSiteBrands)) {
         var best: Brand? = null
         var length = 0
-        for (brand in brands) {
-            if (brand.site != site || (brand.types != null && segment.type !in brand.types)) continue
-            for (alias in brand.aliases) {
-                val wanted = fold(alias)
-                if (wanted.isNotBlank() && text.any { it.contains(wanted) } && wanted.length > length) {
-                    best = brand
+        for (entry in group) {
+            if (entry.brand.types != null && segment.type !in entry.brand.types) continue
+            for (wanted in entry.foldedAliases) {
+                if ((title.contains(wanted) || (provider != null && provider.contains(wanted))) && wanted.length > length) {
+                    best = entry.brand
                     length = wanted.length
                 }
             }
