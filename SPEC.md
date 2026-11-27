@@ -1216,11 +1216,17 @@ import this sender" and "Never import this sender" for the owner (each where
 it isn't already the rule), all in the page's body size. A ✎ beside its title
 edits it, for those who may.
 Rename is in the trip's own ⋮ menu beside its name, for the owner, with
-Split… once the trip has two bookings: a list of its bookings to tick, and
-above it one button for each email (or other source) that gave some of them
-and not all (`sourceGroups` in `packages/core/src/sources.ts`, mirrored in
-`Sources.kt`), which ticks every booking from it, so someone else's forwarded
-itinerary filed into the user's trip comes out in one tap. "Move N bookings
+Split… once the trip has two bookings: the trip's bookings by the email (or
+other source) each came from (`sourceGroups` in
+`packages/core/src/sources.ts`, mirrored in `Sources.kt`), each email a
+heading with its subject, then its sender (an email's, as its bookings name
+it; else the kind, such as TripIt) and the day it was sent, its bookings in
+date order ticked under it. Ticking the email ticks every booking it gave
+(partly ticked when some are), so someone else's forwarded itinerary filed
+into the user's trip comes out in one tap; a booking two emails gave (a
+stay's confirmation and its receipt) is under both, ticked in both at once;
+bookings added by hand come last, under "Added by hand". Groups go by their
+first booking's day. "Move N bookings
 to a new trip" (`splitTrip`, on the web and Android) makes the trip as
 "Move to another trip…" makes one (owned by the viewer, named for where the
 first booking goes, shared as the trip it leaves), moves every booking

@@ -83,19 +83,50 @@ class SourcesTest {
         sourceSearch(stay.copy(sources = listOf(forward)), forward) shouldBe "subject:\"Fwd: Your stay\""
     }
 
-    private fun booking(id: String, vararg emails: String) = Segment(
-        id, "t", SegmentType.FLIGHT, id, "2030-01-01T00:00:00Z",
-        sources = emails.mapIndexed { i, e -> SourceRef(SourceKind.GMAIL, e, label = "Subject $e", at = "2030-01-0${i + 1}T00:00:00Z") },
+    private fun booking(id: String, start: String, vararg emails: String) = Segment(
+        id, "t", SegmentType.FLIGHT, "Booking $id", start,
+        sources = emails.mapIndexed { i, e -> SourceRef(SourceKind.GMAIL, e, label = "Subject $e", at = "2026-01-0${i + 1}T00:00:00Z") },
     )
 
     @Test
-    fun `gives each email that some of a trip's bookings came from with them the most first`() {
-        val groups = sourceGroups(listOf(booking("a", "theirs"), booking("b", "theirs"), booking("c", "mine"), booking("d", "theirs", "mine")))
-        groups.map { it.source.id to it.segmentIds } shouldBe listOf("theirs" to listOf("a", "b", "d"), "mine" to listOf("c", "d"))
+    fun `gives every email with the bookings it gave in date order the email of the earliest booking first`() {
+        val groups = sourceGroups(
+            listOf(
+                booking("theirs-back", "2026-12-19T09:00:00Z", "theirs"),
+                booking("mine-flight", "2026-12-11T09:00:00Z", "mine"),
+                booking("theirs-out", "2026-12-12T09:00:00Z", "theirs"),
+                // A stay confirmed in one email and paid in another is under both.
+                booking("stay", "2026-12-11T15:00:00Z", "confirmed", "paid"),
+            ),
+        )
+        groups.map { it.source?.id to it.segmentIds } shouldBe listOf(
+            "mine" to listOf("mine-flight"),
+            "confirmed" to listOf("stay"),
+            "paid" to listOf("stay"),
+            "theirs" to listOf("theirs-out", "theirs-back"),
+        )
     }
 
     @Test
-    fun `leaves out an email every booking came from which splits nothing off`() {
-        sourceGroups(listOf(booking("a", "all"), booking("b", "all", "one"))).map { it.source.id } shouldBe listOf("one")
+    fun `keeps an email every booking came from and puts bookings added by hand last`() {
+        val groups = sourceGroups(listOf(booking("a", "2026-12-11T09:00:00Z", "all"), booking("b", "2026-12-12T09:00:00Z")))
+        groups.map { it.source?.id to it.segmentIds } shouldBe listOf("all" to listOf("a"), null to listOf("b"))
+    }
+
+    @Test
+    fun `names an email's sender only from a booking it gave alone`() {
+        val stay = booking("stay", "2026-12-11T15:00:00Z", "confirmed", "receipt").copy(sender = "cove.example")
+        val train = booking("train", "2026-12-11T09:00:00Z", "tickets").copy(sender = "avanti.example")
+        // The stay's sender could be either email's.
+        sourceGroups(listOf(stay, train)).map { it.source?.id to it.sender } shouldBe
+            listOf("tickets" to "avanti.example", "confirmed" to null, "receipt" to null)
+    }
+
+    @Test
+    fun `names an email's sender and no sender for a TripIt trip`() {
+        val stay = booking("a", "2026-12-11T09:00:00Z", "m1").copy(sender = "cove.example")
+        val tripit = SourceRef(SourceKind.TRIPIT, "tripit-1", label = "Liverpool weekend", at = "2026-01-01T00:00:00Z")
+        sourceGroups(listOf(stay.copy(sources = stay.sources + tripit))).map { it.source?.id to it.sender } shouldBe
+            listOf("m1" to "cove.example", "tripit-1" to null)
     }
 }

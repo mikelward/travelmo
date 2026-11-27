@@ -275,7 +275,7 @@ test("a booking moved to a new trip gets a trip of its own", async ({ page }) =>
   await expect(page.getByRole("link", { name: /^Liverpool/ })).toHaveCount(2);
 });
 
-test("Split… moves every booking from one email to a new trip", async ({ page }) => {
+test("Split… shows each email with its bookings, and moves every booking from one email to a new trip", async ({ page }) => {
   const ownerUid = await signIn(page, owner);
   await seedTrip(ownerUid, "e2e-trip");
   // Two flights from someone else's itinerary, filed into the user's trip.
@@ -287,7 +287,17 @@ test("Split… moves every booking from one email to a new trip", async ({ page 
   await page.getByRole("button", { name: "Trip actions" }).click();
   await page.getByRole("menuitem", { name: "Split…" }).click();
   const dialog = page.getByRole("dialog", { name: "Split trip" });
-  await dialog.getByRole("button", { name: "Their itinerary (2)" }).click();
+  // Each email is a heading with the bookings it gave under it.
+  const email = dialog.getByRole("listitem").filter({ has: page.getByText("Their itinerary", { exact: true }) });
+  await expect(email.getByText("XX 100 MAN to DXB")).toBeVisible();
+  await expect(email.getByText("XX 101 DXB to MAN")).toBeVisible();
+  await expect(email.getByText("Cove Liverpool")).toHaveCount(0);
+  const all = dialog.getByRole("checkbox", { name: /^Their itinerary/ });
+  // One of its bookings ticked leaves the email partly ticked.
+  await dialog.getByRole("checkbox", { name: /^XX 101 DXB to MAN/ }).check();
+  await expect(all).toHaveAttribute("aria-checked", "mixed");
+  await all.check();
+  await expect(all).toHaveAttribute("aria-checked", "true");
   await dialog.getByRole("button", { name: "Move 2 bookings to a new trip" }).click();
   await expect(page).not.toHaveURL(/\/trips\/e2e-trip$/);
   await expect(page.getByText("XX 101 DXB to MAN", { exact: true })).toBeVisible();

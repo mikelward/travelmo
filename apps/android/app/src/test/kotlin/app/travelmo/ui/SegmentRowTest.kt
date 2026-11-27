@@ -110,7 +110,7 @@ class SegmentRowTest {
     }
 
     @Test
-    fun `Split moves every booking from one email to a new trip and opens it`() {
+    fun `Split shows each email with its bookings and moves every booking from one email to a new trip`() {
         val store = FakeTripStore()
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
         val opened = mutableListOf<String>()
@@ -122,8 +122,8 @@ class SegmentRowTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithContentDescription("More options").performClick()
         composeRule.onNodeWithText("Split…").performClick()
-        // The train's email gave only the train: one tap picks it.
-        composeRule.onNodeWithText("${fixtureTrainEmail.label} (1)").performClick()
+        // The train's email is a heading with the train under it, and nothing else: ticking it picks the train.
+        composeRule.onNodeWithText(fixtureTrainEmail.label!!).performClick()
         composeRule.onNodeWithText("Move 1 booking to a new trip").performClick()
         composeRule.waitForIdle()
         store.splits shouldBe listOf(Triple("liverpool", listOf("l-train"), OWNER))

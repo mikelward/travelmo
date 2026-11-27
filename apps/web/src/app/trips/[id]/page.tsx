@@ -227,16 +227,18 @@ function Sharing({ trip, user }: { trip: Trip; user: User }) {
   );
 }
 
-// Split…: some of the trip's bookings into a new trip of their own, picked one
-// by one or all those from one email at once (sourceGroups), as when a
+// Split…: some of the trip's bookings into a new trip of their own, as when a
 // forwarded itinerary of someone else's was filed into the user's own trip.
+// Each email (sourceGroups) is a heading with its subject, sender and date,
+// its bookings ticked under it; ticking the email ticks them all, and a
+// booking two emails gave is ticked under both.
 function SplitDialog({ trip, segments, uid, onClose }: { trip: Trip; segments: Segment[]; uid: string; onClose: () => void }) {
   const router = useRouter();
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const groups = useMemo(() => sourceGroups(segments), [segments]);
-  const sorted = useMemo(() => [...segments].sort((a, b) => a.start.localeCompare(b.start)), [segments]);
+  const byId = useMemo(() => new Map(segments.map((s) => [s.id, s])), [segments]);
   const toggle = (ids: readonly string[], on: boolean) =>
     setPicked((was) => {
       const next = new Set(was);
@@ -250,7 +252,8 @@ function SplitDialog({ trip, segments, uid, onClose }: { trip: Trip; segments: S
     setBusy(true);
     setError(undefined);
     try {
-      const id = await splitTrip(firestore(), trip.id, [...picked], uid);
+      const ids = [...segments].sort((a, b) => a.start.localeCompare(b.start)).map((s) => s.id).filter((id) => picked.has(id));
+      const id = await splitTrip(firestore(), trip.id, ids, uid);
       router.push(`/trips/${id}`);
     } catch (e) {
       console.error("Splitting a trip failed", e);
@@ -262,34 +265,39 @@ function SplitDialog({ trip, segments, uid, onClose }: { trip: Trip; segments: S
   return (
     <Dialog title="Split trip" onClose={onClose}>
       <p className="text-zinc-600 dark:text-zinc-400">Pick the bookings to move to a new trip.</p>
-      {groups.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2" aria-label="From an email">
-          {groups.map((g) => {
-            const all = g.segmentIds.every((id) => picked.has(id));
-            return (
-              <button
-                key={`${g.source.kind}/${g.source.id}`}
-                type="button"
-                aria-pressed={all}
-                onClick={() => toggle(g.segmentIds, !all)}
-                className={`${buttonClass} max-w-full truncate text-left ${all ? "bg-zinc-100 dark:bg-zinc-900" : ""}`}
-              >
-                {g.source.label ?? sourceKindLabels[g.source.kind]} ({g.segmentIds.length})
-              </button>
-            );
-          })}
-        </div>
-      )}
-      <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800" aria-label="Bookings">
-        {sorted.map((segment) => (
-          <li key={segment.id}>
-            <label className="flex items-baseline gap-3 py-2">
-              <input type="checkbox" checked={picked.has(segment.id)} onChange={(e) => toggle([segment.id], e.target.checked)} />
-              <span className="min-w-0 flex-1">{segment.title}</span>
-              <span className="shrink-0 text-muted">{formatDate(localDate(segment.start))}</span>
-            </label>
-          </li>
-        ))}
+      <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800" aria-label="Emails">
+        {groups.map((group) => {
+          const ticked = group.segmentIds.filter((id) => picked.has(id)).length;
+          const subject = group.source ? (group.source.label ?? sourceKindLabels[group.source.kind]) : "Added by hand";
+          const from = group.source ? [group.sender ?? sourceKindLabels[group.source.kind], formatDate(localDate(group.source.sentAt ?? group.source.at))].join(" · ") : undefined;
+          return (
+            <li key={group.source ? `${group.source.kind}/${group.source.id}` : "by-hand"} className="py-2" data-testid="split-group">
+              <label className="flex items-baseline gap-3 py-1">
+                <TriCheckbox checked={ticked === group.segmentIds.length} mixed={ticked > 0 && ticked < group.segmentIds.length} onChange={(on) => toggle(group.segmentIds, on)} />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-lg font-medium">{subject}</span>
+                  {from && <span className="block text-muted">{from}</span>}
+                </span>
+              </label>
+              <ul className="pl-7" aria-label={subject}>
+                {group.segmentIds.map((id) => {
+                  const segment = byId.get(id)!;
+                  return (
+                    <li key={id}>
+                      <label className="flex items-baseline gap-3 py-1">
+                        <input type="checkbox" checked={picked.has(id)} onChange={(e) => toggle([id], e.target.checked)} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block">{segment.title}</span>
+                          <span className="block text-muted">{formatDate(localDate(segment.start))}</span>
+                        </span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            </li>
+          );
+        })}
       </ul>
       {error && <p className="mt-2 text-danger">{error}</p>}
       <div className="mt-3">
@@ -299,6 +307,15 @@ function SplitDialog({ trip, segments, uid, onClose }: { trip: Trip; segments: S
       </div>
     </Dialog>
   );
+}
+
+// A checkbox that can be partly ticked, as an email's is when only some of its bookings are.
+function TriCheckbox({ checked, mixed, onChange }: { checked: boolean; mixed: boolean; onChange: (on: boolean) => void }) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = mixed;
+  }, [mixed]);
+  return <input ref={ref} type="checkbox" checked={checked} aria-checked={mixed ? "mixed" : checked} onChange={(e) => onChange(e.target.checked)} />;
 }
 
 // Whom the trip is for: every name its bookings give, ticked unless the

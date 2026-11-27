@@ -1,5 +1,10 @@
 package app.travelmo.ui
 
+import androidx.compose.material3.HorizontalDivider
+import app.travelmo.shared.split_by_hand
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.material3.TriStateCheckbox
+import androidx.compose.foundation.selection.triStateToggleable
 import app.travelmo.shared.split_move
 import app.travelmo.shared.split_trip_hint
 import app.travelmo.shared.split_trip_title
@@ -11,7 +16,6 @@ import app.travelmo.core.compareInstants
 import app.travelmo.core.sourceGroups
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilterChip
 import app.travelmo.shared.ic_segment_train
 import app.travelmo.shared.ic_segment_other
 import app.travelmo.shared.ic_segment_lodging
@@ -82,7 +86,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -743,41 +746,69 @@ private fun RenameDialog(current: String, onDismiss: () -> Unit, onRename: (Stri
 }
 
 /**
- * Split…: some of the trip's bookings into a new trip of their own, picked one by one or all those from one email at
- * once (sourceGroups), as when someone else's forwarded itinerary was filed into the user's own trip. As the web's.
+ * Split…: some of the trip's bookings into a new trip of their own, as when someone else's forwarded itinerary was
+ * filed into the user's own trip. Each email ([sourceGroups]) is a heading with its subject, sender and date, its
+ * bookings ticked under it; ticking the email ticks them all, and a booking two emails gave is ticked under both.
+ * As the web's.
  */
 @Composable
 private fun SplitDialog(segments: List<Segment>, onDismiss: () -> Unit, onSplit: (List<String>) -> Unit) {
     var picked by rememberSaveable { mutableStateOf(emptySet<String>()) }
     val groups = remember(segments) { sourceGroups(segments) }
+    val byId = remember(segments) { segments.associateBy { it.id } }
     val sorted = remember(segments) { segments.sortedWith { a, b -> compareInstants(a.start, b.start) } }
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
     AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(Res.string.split_trip_title)) },
         text = {
             LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
                 item(key = "hint") {
-                    Text(stringResource(Res.string.split_trip_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(Res.string.split_trip_hint), style = MaterialTheme.typography.bodyLarge, color = muted)
                 }
-                items(groups, key = { "source/${it.source.kind.wire}/${it.source.id}" }) { group ->
-                    val all = group.segmentIds.all { it in picked }
-                    FilterChip(
-                        selected = all,
-                        onClick = { picked = if (all) picked - group.segmentIds.toSet() else picked + group.segmentIds },
-                        label = { Text("${group.source.label ?: stringResource(sourceKindLabel(group.source.kind))} (${group.segmentIds.size})", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                }
-                items(sorted, key = { it.id }) { segment ->
-                    val on = segment.id in picked
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().toggleable(value = on, role = Role.Checkbox) { picked = if (it) picked + segment.id else picked - segment.id }.padding(vertical = 6.dp),
-                    ) {
-                        Checkbox(checked = on, onCheckedChange = null)
-                        Column(modifier = Modifier.padding(start = 12.dp)) {
-                            Text(bookingHeading(segment).headline, style = MaterialTheme.typography.bodyLarge)
-                            Text(formatDate(localDate(segment.start)), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                groups.forEachIndexed { index, group ->
+                    val key = group.source?.let { "${it.kind.wire}/${it.id}" } ?: "by-hand"
+                    item(key = "source/$key") {
+                        val ticked = group.segmentIds.count { it in picked }
+                        val state = when (ticked) {
+                            0 -> ToggleableState.Off
+                            group.segmentIds.size -> ToggleableState.On
+                            else -> ToggleableState.Indeterminate
+                        }
+                        val subject = group.source?.let { it.label ?: stringResource(sourceKindLabel(it.kind)) } ?: stringResource(Res.string.split_by_hand)
+                        val from = group.source?.let { source ->
+                            listOf(group.sender ?: stringResource(sourceKindLabel(source.kind)), formatDate(localDate(source.sentAt ?: source.at))).joinToString(" · ")
+                        }
+                        Column {
+                            if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(top = 8.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                                    .triStateToggleable(state = state, role = Role.Checkbox) {
+                                        picked = if (state == ToggleableState.On) picked - group.segmentIds.toSet() else picked + group.segmentIds
+                                    }
+                                    .padding(vertical = 6.dp),
+                            ) {
+                                TriStateCheckbox(state = state, onClick = null)
+                                Column(modifier = Modifier.padding(start = 12.dp)) {
+                                    Text(subject, style = MaterialTheme.typography.titleMedium)
+                                    from?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = muted) }
+                                }
+                            }
+                        }
+                    }
+                    items(group.segmentIds, key = { "$key/$it" }) { id ->
+                        val segment = byId.getValue(id)
+                        val on = id in picked
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(start = 28.dp).toggleable(value = on, role = Role.Checkbox) { picked = if (it) picked + id else picked - id }.padding(vertical = 6.dp),
+                        ) {
+                            Checkbox(checked = on, onCheckedChange = null)
+                            Column(modifier = Modifier.padding(start = 12.dp)) {
+                                Text(bookingHeading(segment).headline, style = MaterialTheme.typography.bodyLarge)
+                                Text(formatDate(localDate(segment.start)), style = MaterialTheme.typography.bodyLarge, color = muted)
+                            }
                         }
                     }
                 }

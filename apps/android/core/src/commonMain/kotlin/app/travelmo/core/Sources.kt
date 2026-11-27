@@ -126,24 +126,39 @@ internal fun encodeUriComponent(value: String): String = buildString {
 private const val HEX_UPPER = "0123456789ABCDEF"
 
 /** A source of some of a trip's bookings, with which ones, for splitting the trip, as sources.ts's SourceGroup. */
-data class SourceGroup(val source: SourceRef, val segmentIds: List<String>)
+/** A source of a trip's bookings and the bookings it gave; no [source] for bookings added by hand. */
+data class SourceGroup(val source: SourceRef?, val segmentIds: List<String>, val sender: String? = null)
+
+private val EMAIL_KINDS = setOf(SourceKind.GMAIL, SourceKind.FORWARD, SourceKind.FASTMAIL, SourceKind.IMAP)
 
 /**
- * The sources a trip's bookings came from, for Split… on the trip page: each with the bookings it gave, the most
- * first. Only a source that gave some of the bookings and not all can split anything off. As sources.ts's sourceGroups.
+ * A trip's bookings by the source each came from, for Split… on the trip page: every email or other source with the
+ * bookings it gave, in date order, so which is which is plain; a booking from two emails is under both. Bookings with
+ * no source (added by hand) come last, with no source. Groups go by their first booking's start, then by when the
+ * source was read; [SourceGroup.sender] is an email's sender, as a booking that came from that email alone names it.
+ * As sources.ts's sourceGroups.
  */
 fun sourceGroups(segments: List<Segment>): List<SourceGroup> {
-    val groups = LinkedHashMap<String, Pair<SourceRef, MutableList<String>>>()
-    for (segment in segments) {
+    val sorted = segments.sortedWith { a, b -> compareInstants(a.start, b.start).takeIf { it != 0 } ?: a.title.compareTo(b.title) }
+    class Building(val source: SourceRef, val first: String, var sender: String?, val ids: MutableList<String>)
+    val groups = LinkedHashMap<String, Building>()
+    val unsourced = mutableListOf<String>()
+    for (segment in sorted) {
         val seen = HashSet<String>()
-        for (source in segment.sources.sortedBy { it.at }) {
+        val sources = segment.sources.sortedBy { it.at }.filter { seen.add("${it.kind.wire}/${it.id}") }
+        if (sources.isEmpty()) unsourced += segment.id
+        // A booking's sender is its first email's: it says which email that was only when the booking came from one
+        // email alone (as sourceSearch).
+        val oneEmail = sources.count { it.kind in EMAIL_KINDS } == 1
+        for (source in sources) {
             val key = "${source.kind.wire}/${source.id}"
-            if (!seen.add(key)) continue
-            groups.getOrPut(key) { source to mutableListOf() }.second += segment.id
+            val group = groups.getOrPut(key) { Building(source, segment.start, null, mutableListOf()) }
+            if (group.sender == null && oneEmail && source.kind in EMAIL_KINDS && segment.sender != null) group.sender = segment.sender
+            group.ids += segment.id
         }
     }
-    return groups.values
-        .filter { it.second.size < segments.size }
-        .sortedWith(compareByDescending<Pair<SourceRef, MutableList<String>>> { it.second.size }.thenBy { it.first.at })
-        .map { SourceGroup(it.first, it.second.toList()) }
+    val ordered = groups.values
+        .sortedWith { a, b -> compareInstants(a.first, b.first).takeIf { it != 0 } ?: a.source.at.compareTo(b.source.at) }
+        .map { SourceGroup(it.source, it.ids.toList(), it.sender) }
+    return if (unsourced.isEmpty()) ordered else ordered + SourceGroup(null, unsourced)
 }

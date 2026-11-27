@@ -526,7 +526,7 @@ class ScreenScreenshotTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithContentDescription("More options").performClick()
         composeRule.onNodeWithText("Split…").performClick()
-        composeRule.onNodeWithText("${fixtureTrainEmail.label} (1)").performClick()
+        composeRule.onNodeWithText(fixtureTrainEmail.label!!).performClick()
         composeRule.waitForIdle()
         captureScreenRoboImage(filePath = "$outputDir/$name.png")
     }
