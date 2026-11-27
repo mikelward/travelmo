@@ -67,6 +67,10 @@ private fun taken(trips: List<TripWithSegments>, until: String) =
 private fun sameStop(a: Place, aCountry: String?, b: Place, bCountry: String?) =
     sameCity(cityOf(a), cityOf(b)) && (aCountry == null || bCountry == null || aCountry == bCountry)
 
+// Each town once, by the first spelling met: a town's local and English names ("München", "Munich") are one town.
+private fun uniqueTowns(values: List<String>): List<String> =
+    values.filter { it.isNotEmpty() }.fold(emptyList()) { kept, town -> if (kept.any { sameCity(it, town) }) kept else kept + town }
+
 data class TripRow(val trip: String, val start: String, val end: String, val cities: List<String>, val countries: List<String>)
 
 /** One row per trip, oldest first: its dates and the towns and countries it went to, home left out. */
@@ -86,7 +90,7 @@ fun tripRows(
     val countries = located.map { it.second }
     // Each place against the home of its own day: home may change mid-trip.
     if (international && away.indices.none { abroad(countries[it], away[it].date, periods) }) return@mapNotNull null
-    TripRow(titles[trip.id] ?: trip.title, start, end, away.mapNotNull(::shownCity).filter { it.isNotEmpty() }.distinct(), countries.filterNotNull().map(::englishName).distinct())
+    TripRow(titles[trip.id] ?: trip.title, start, end, uniqueTowns(away.mapNotNull(::shownCity)), countries.filterNotNull().map(::englishName).distinct())
 }.sortedBy { it.start }
 
 data class PlaceRow(val city: String, val country: String, val start: String, val end: String, val trip: String)

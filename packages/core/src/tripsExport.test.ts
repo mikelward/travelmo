@@ -126,6 +126,8 @@ describe("what is one trip and one place", () => {
       ],
     };
     expect(placeRows([gothenburg], { periods, until })).toEqual([{ city: "Gothenburg", country: "Sweden", start: "2026-09-01", end: "2026-09-04", trip: "Gothenburg" }]);
+    // And the trip lists it once, as first met.
+    expect(tripRows([gothenburg], { periods, until })[0]!.cities).toEqual(["Gothenburg"]);
   });
 });
 

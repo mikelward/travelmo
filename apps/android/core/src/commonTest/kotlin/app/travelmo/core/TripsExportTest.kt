@@ -130,6 +130,8 @@ class TripsExportTest {
             ),
         )
         placeRows(listOf(gothenburg), periods, TODAY) shouldBe listOf(PlaceRow("Gothenburg", "Sweden", "2026-09-01", "2026-09-04", "Gothenburg"))
+        // And the trip lists it once, as first met.
+        tripRows(listOf(gothenburg), periods, TODAY).single().cities shouldBe listOf("Gothenburg")
     }
 
     @Test
