@@ -161,6 +161,8 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Perth, Scotland").id).toBe("trip");
     expect(tripLandmark("Manchester, NH").id).toBe("trip");
     expect(tripLandmark("Athens, GA").id).toBe("trip");
+    expect(tripLandmark("Santa Barbara").id).toBe("santa-barbara");
+    expect(tripLandmark("Marina Del Rey").id).toBe("beach");
   });
 
   it("ignores accents and case", () => {
@@ -361,7 +363,7 @@ describe("tripLandmark", () => {
         fallbacks.add(word);
       }
     }
-    expect(LANDMARKS.length).toBe(320);
+    expect(LANDMARKS.length).toBe(321);
   });
 });
 
