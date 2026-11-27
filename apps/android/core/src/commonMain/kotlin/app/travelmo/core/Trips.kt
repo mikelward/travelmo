@@ -39,7 +39,7 @@ fun eventVerb(event: UpcomingEvent): String = when (event.segment.type) {
         if (event.kind == EventKind.START) "Departs" else "Arrives"
     SegmentType.LODGING -> if (event.kind == EventKind.START) "Check-in" else "Check-out"
     SegmentType.CAR_RENTAL -> if (event.kind == EventKind.START) "Pick up" else "Return"
-    SegmentType.ACTIVITY, SegmentType.OTHER -> if (event.kind == EventKind.START) "Starts" else "Ends"
+    SegmentType.ACTIVITY, SegmentType.MEAL, SegmentType.OTHER -> if (event.kind == EventKind.START) "Starts" else "Ends"
 }
 
 /** A trip's bookings in order, grouped under the date each starts. */
@@ -61,11 +61,11 @@ fun routeLine(segment: Segment): String? =
     listOfNotNull(placeLabel(segment.origin), placeLabel(segment.destination)).takeIf { it.isNotEmpty() }?.joinToString(" → ")
 
 /**
- * An activity with no time of its own: local midnight and no end, the
- * importer's convention for a dated thing with no stated time.
+ * An activity or meal with no time of its own: local midnight and no end,
+ * the importer's convention for a dated thing with no stated time.
  */
 fun isUntimed(segment: Segment): Boolean =
-    (segment.type == SegmentType.ACTIVITY || segment.type == SegmentType.OTHER) && segment.end == null && localTime(segment.start) == "00:00"
+    (segment.type == SegmentType.ACTIVITY || segment.type == SegmentType.MEAL || segment.type == SegmentType.OTHER) && segment.end == null && localTime(segment.start) == "00:00"
 
 /**
  * "09:07 – 11:25", or for a stay "Check-in 15:00 · Check-out Sun 13 Dec 11:00";
@@ -184,7 +184,7 @@ fun newTripTitle(segment: Segment): String {
 
 /** Whether a trip of one booking is named after it, not its town: a show, a dinner; not a ride from one place to another (a taxi). */
 private fun namedForItself(type: SegmentType, origin: Any?, destination: Any?): Boolean =
-    type == SegmentType.ACTIVITY || (type == SegmentType.OTHER && (origin == null || destination == null))
+    type == SegmentType.ACTIVITY || type == SegmentType.MEAL || (type == SegmentType.OTHER && (origin == null || destination == null))
 
 /** As [newTripTitle], for a booking the form is adding: a show's or a dinner's own title, else where it goes, else its title. */
 fun newTripTitle(draft: SegmentDraft): String {

@@ -14,6 +14,7 @@ enum class SegmentType(val wire: String, val label: String) {
     LODGING("lodging", "Stay"),
     CAR_RENTAL("car_rental", "Car"),
     ACTIVITY("activity", "Activity"),
+    MEAL("meal", "Meal"),
     OTHER("other", "Other");
 
     companion object {

@@ -30,6 +30,12 @@ test("each trip in the list shows its city's landmark, else the kind of place it
     { type: "activity", title: "Tower of London tour", destination: { name: "Tower of London", city: "London", country: "GB" } },
     { title: "Tower of London", start: "2025-03-01", end: "2025-03-01", allCancelled: false, localOnly: true, travelers: [], setting: "city" },
   );
+  await seedTrip(
+    ownerUid,
+    "e2e-meal",
+    { type: "meal", title: "Example Bistro", destination: { name: "Example Bistro", city: "London", country: "GB" } },
+    { title: "Example Bistro", start: "2025-02-01", end: "2025-02-01" },
+  );
   await page.goto("/");
   await expect(landmark(page, "Liverpool")).toHaveAttribute("data-landmark", "liverpool");
   await expect(landmark(page, "Sydney")).toHaveAttribute("data-landmark", "sydney");
@@ -37,6 +43,8 @@ test("each trip in the list shows its city's landmark, else the kind of place it
   await expect(landmark(page, "Cornwall")).toHaveAttribute("data-landmark", "beach");
   await expect(landmark(page, "Somewhere")).toHaveAttribute("data-landmark", "trip");
   await expect(landmark(page, "Tower of London")).toHaveAttribute("data-landmark", "activity");
+  await expect(landmark(page, "Example Bistro")).toHaveAttribute("data-landmark", "meal");
   await expect.poll(async () => (await readTrip("e2e-show"))?.setting).toBe("activity");
+  await expect.poll(async () => (await readTrip("e2e-meal"))?.setting).toBe("meal");
   await expect.poll(async () => (await readTrip("e2e-woburn"))?.setting).toBe("town");
 });

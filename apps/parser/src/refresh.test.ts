@@ -1051,4 +1051,83 @@ describe("Refresh everything from email", () => {
     await startBackfill(uid, "run2", true, io);
     expect((stored as RefreshProgress).everything).toBeUndefined();
   });
+
+  it("upgrades an existing restaurant booking from other to meal in place, keeping its rating and updating the trip setting", async () => {
+    const w = world();
+    const dinnerTrip = trip("t-meal", { title: "Example Bistro", start: "2027-03-13", end: "2027-03-13", localOnly: true, setting: "other" });
+    const oldDinner = booking("m1-0", dinnerTrip.id, {
+      type: "other",
+      title: "Example Bistro",
+      start: "2027-03-13T19:30:00+00:00",
+      destination: { name: "Example Bistro", city: "London", country: "GB" },
+    }, { rating: 5, favorite: true });
+    w.put(dinnerTrip, oldDinner);
+    const rec = record("m1", { tripId: dinnerTrip.id });
+    const res = await refreshEmail(
+      uid,
+      rec,
+      email("m1"),
+      w.deps(async () => ({
+        isBooking: true,
+        segments: [{
+          type: "meal",
+          title: "Example Bistro",
+          start: "2027-03-13T19:30:00+00:00",
+          destination: { name: "Example Bistro", city: "London", country: "GB" },
+        }],
+      })),
+      { generation: 0, snapshot: [oldDinner] },
+    );
+    expect(res).toEqual({ updated: 1, added: 0, removed: 0, merged: 0, kept: 0 });
+    const updated = w.memory.segments.get("m1-0");
+    expect(updated).toMatchObject({ id: "m1-0", type: "meal", rating: 5, favorite: true });
+    expect(w.memory.trips.get(dinnerTrip.id)?.setting).toBe("meal");
+  });
+
+  it("upgrades a multi-source restaurant booking in place when refreshed through a non-originating email", async () => {
+    const w = world();
+    const dinnerTrip = trip("t-meal2", { title: "Example Bistro", start: "2027-03-13", end: "2027-03-13", localOnly: true, setting: "other" });
+    const oldDinner = booking("m1-0", dinnerTrip.id, {
+      type: "other",
+      title: "Example Bistro",
+      start: "2027-03-13T19:30:00+00:00",
+      confirmation: "RES-42",
+      destination: { name: "Example Bistro", city: "London", country: "GB" },
+    }, {
+      rating: 4,
+      gmailMessageIds: ["m1", "m2"],
+      sources: [
+        { kind: "gmail", id: "m1", uid, at: filed },
+        { kind: "gmail", id: "m2", uid, at: filed },
+      ],
+    });
+    w.put(dinnerTrip, oldDinner);
+    const meal: ExtractedSegment = {
+      type: "meal",
+      title: "Example Bistro",
+      start: "2027-03-13T19:30:00+00:00",
+      confirmation: "RES-42",
+      destination: { name: "Example Bistro", city: "London", country: "GB" },
+    };
+    const res = await refreshEmail(
+      uid,
+      record("m2", { tripId: dinnerTrip.id, segmentIds: ["m2-0"] }),
+      email("m2"),
+      w.deps(async () => ({ isBooking: true, segments: [meal] })),
+      { generation: 0, snapshot: [oldDinner] },
+    );
+    expect(res).toEqual({ updated: 1, added: 0, removed: 0, merged: 0, kept: 0 });
+    expect([...w.memory.segments.keys()]).toEqual(["m1-0"]);
+    expect(w.memory.segments.get("m1-0")).toMatchObject({ id: "m1-0", type: "meal", rating: 4 });
+    expect(w.memory.trips.get(dinnerTrip.id)?.setting).toBe("meal");
+    const followUp = await refreshEmail(
+      uid,
+      record("m1", { tripId: dinnerTrip.id }),
+      email("m1"),
+      w.deps(async () => ({ isBooking: true, segments: [meal] })),
+      { generation: 0, snapshot: [w.memory.segments.get("m1-0")!] },
+    );
+    expect(followUp).toEqual({ updated: 0, added: 0, removed: 0, merged: 0, kept: 0 });
+    expect([...w.memory.segments.keys()]).toEqual(["m1-0"]);
+  });
 });

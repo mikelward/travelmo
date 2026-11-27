@@ -45,6 +45,8 @@ describe("fillCities", () => {
   it("keeps a country the booking gave, and takes no venue's name for a city", () => {
     const show: ExtractedSegment = { type: "activity", title: "Dinner", start: "2026-05-23T19:00:00+01:00", destination: { name: "Florence" } };
     expect(fillCities(show, lookup).destination?.country).toBeUndefined();
+    const meal: ExtractedSegment = { type: "meal", title: "Dinner at Florence", start: "2026-05-23T19:00:00+01:00", destination: { name: "Florence" } };
+    expect(fillCities(meal, lookup).destination?.country).toBeUndefined();
     const stay: ExtractedSegment = { type: "lodging", title: "Cove", start: "2026-05-23T15:00:00+01:00", destination: { name: "Cove", city: "Liverpool", country: "AU" } };
     expect(fillCities(stay, lookup).destination?.country).toBe("AU");
     expect(fillCities({ ...stay, destination: { name: "Cove", city: "Liverpool" } }, lookup).destination?.country).toBe("GB");

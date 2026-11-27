@@ -5,7 +5,8 @@ import type { ExtractedSegment } from "./schema";
 // Invented bookings: a show and a class in town, a hire car returned where
 // it was picked up, a car to the airport, a flight and a stay.
 const show: ExtractedSegment = { type: "activity", title: "Example Theatre", start: "2026-12-12T19:30:00+00:00", destination: { name: "Example Theatre", city: "London", country: "GB" } };
-const dinner: ExtractedSegment = { type: "other", title: "Example Bistro", start: "2026-12-12T18:00:00+00:00", destination: { name: "Example Bistro", city: "London" } };
+const dinner: ExtractedSegment = { type: "meal", title: "Example Bistro", start: "2026-12-12T18:00:00+00:00", destination: { name: "Example Bistro", city: "London" } };
+const appointment: ExtractedSegment = { type: "other", title: "Example Visit", start: "2026-12-12T15:00:00+00:00", destination: { name: "Example Office", city: "London" } };
 const hire: ExtractedSegment = { type: "car_rental", title: "Example Cars", start: "2026-12-13T09:00:00+00:00", origin: { name: "Example Cars Camden" }, destination: { name: "Example Cars Camden" } };
 const transfer: ExtractedSegment = { type: "car_rental", title: "Example Cars", start: "2026-12-13T09:00:00+00:00", origin: { name: "Example Cars Camden" }, destination: { name: "Heathrow", code: "LHR" } };
 const flight: ExtractedSegment = { type: "flight", title: "XX 1 LHR to DUB", start: "2026-12-13T09:00:00+00:00", origin: { name: "Heathrow", code: "LHR" }, destination: { name: "Dublin", code: "DUB" } };
@@ -14,7 +15,7 @@ const cancelled = (s: ExtractedSegment) => ({ ...s, cancelledAt: "2026-11-01T00:
 
 describe("localOnly", () => {
   it("is a trip of shows, meals and a car returned where it was hired", () => {
-    expect(localOnly([show, dinner, hire])).toBe(true);
+    expect(localOnly([show, dinner, appointment, hire])).toBe(true);
   });
 
   it("isn't a trip with any journey, stay or ride to somewhere else", () => {

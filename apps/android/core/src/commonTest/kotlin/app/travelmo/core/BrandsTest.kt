@@ -28,6 +28,7 @@ class BrandsTest {
     fun `names a brand only for its kind of booking as whole words`() {
         bookingBrand(booking(SegmentType.CAR_RENTAL, "SIXT Göteborg Central Train Station"))?.id shouldBe "sixt"
         bookingBrand(booking(SegmentType.TRAIN, "Eurostar 9014"))?.id shouldBe "eurostar"
+        bookingBrand(booking(SegmentType.MEAL, "Dishoom", "OpenTable"))?.id shouldBe "opentable"
         bookingBrand(booking(SegmentType.FLIGHT, "Hilton Head to Atlanta")).shouldBeNull()
         bookingBrand(stay("Cove Liverpool")).shouldBeNull()
         bookingBrand(stay("Hiltonia guest house")).shouldBeNull()

@@ -31,7 +31,7 @@ viewer's zone. Trip bounds are calendar dates.
   createdAt, updatedAt`. `sharedWith` holds lowercase email addresses;
   `deleting` marks a trip whose segments are being removed.
 - `trips/{tripId}/segments/{segmentId}` — `type` (flight, train, bus, ferry,
-  lodging, car_rental, activity, other), `title, provider, confirmation,
+  lodging, car_rental, activity, meal, other), `title, provider, confirmation,
   start, end, origin, destination, notes, source, gmailMessageIds[], sources[],
   sender` (the booking email's domain), `rating` (one to five) and
   `favorite`, the traveler's own verdict, and `editedAt`, when someone last
@@ -262,7 +262,7 @@ one card with a rule between its trips. Each trip shows a picture: for a
 trip that is just an event (every booking still on it a local outing, as
 the Hide local events filter has it), whatever its title, its first
 booking's own icon, as its row on the trip page shows it (a show's ticket,
-a dinner's calendar; `tripBookingType`); else a line drawing of the
+a dinner's fork and knife; `tripBookingType`); else a line drawing of the
 best-known landmark of the city its title names (or a matching object
 when a place is named after one — a rose for Roseville, an acorn for Fair
 Oaks or Oakland, a bear for Big Bear), the first one named ("Paris and Lyon"
@@ -2540,7 +2540,7 @@ are told apart by their fields (airline codes on legs make a flight, train
 numbers a train, a carrier and pick-up place a transfer, which is a bus,
 ferry by TripIt's code `F` and otherwise a bus, a ship name or port calls a cruise, a room
 type a stay, a car type a rental, a cuisine a restaurant booking, which becomes
-an activity), each flight, train or transfer leg is a segment, a cruise is one
+a meal), each flight, train or transfer leg is a segment, a cruise is one
 ferry segment per sailing between consecutive port calls (so every port's
 country counts for reports and document checks), and
 TripIt's DateTimes (date, time, IANA zone, offset) become our instants

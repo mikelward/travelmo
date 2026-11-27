@@ -9,6 +9,7 @@ import {
   notePeople,
   inTrip,
   isCancelled,
+  isTransfer,
   mergeDetails,
   mergedBookingOf,
   normalizeReference,
@@ -28,6 +29,7 @@ import {
   type Place,
   type RefreshProgress,
   type Segment,
+  type SegmentType,
   type SourceRef,
   type Trip,
   type NamedBooking,
@@ -282,6 +284,9 @@ export async function refreshEmail(
     // item that still looks like it, then any of the email's bookings that
     // does, then (the fix this refresh is for: the old reading got it wrong
     // enough that it no longer looks like itself) the one filed for it.
+    // Event types that a newer reader may reclassify in place when the title
+    // or time also changed (sameBooking/sameEvent already handle meals).
+    const eventTypes: ReadonlySet<SegmentType> = new Set(["activity", "meal", "other"]);
     const alikeOf = (segment: ExtractedSegment) => (other: Segment) => sameBooking(other, segment) || sameEvent(other, segment, other.sender, sender);
     const ownIdOf = (index: number) => `${record.messageId}-${index}`;
     const mineOf = new Map<number, Segment>();
@@ -314,7 +319,12 @@ export async function refreshEmail(
       if (!mineOf.has(index)) reserve(index, own.find((o) => open(o) && alikeOf(segment)(o)));
     });
     placed.forEach((segment, index) => {
-      if (!mineOf.has(index)) reserve(index, own.find((o) => open(o) && o.id === ownIdOf(index) && o.type === segment.type));
+      if (!mineOf.has(index)) {
+        reserve(
+          index,
+          own.find((o) => open(o) && o.id === ownIdOf(index) && (o.type === segment.type || (eventTypes.has(o.type) && eventTypes.has(segment.type) && !isTransfer(o) && !isTransfer(segment)))),
+        );
+      }
     });
 
     placed.forEach((segment, index) => {

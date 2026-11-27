@@ -5,9 +5,9 @@ data class ListFilters(val hideCancelled: Boolean = false, val hideLocal: Boolea
     val any: Boolean get() = hideCancelled || hideLocal || hideWatching
 }
 
-/** An outing: a ticket, an event or a car hired and returned in one place; nothing that travels or stays (isOuting in home.ts). */
+/** An outing: a ticket, a meal, an event or a car hired and returned in one place; nothing that travels or stays (isOuting in home.ts). */
 fun isOuting(segment: Segment): Boolean =
-    (segment.type == SegmentType.ACTIVITY || segment.type == SegmentType.OTHER || segment.type == SegmentType.CAR_RENTAL) && !isTransfer(segment)
+    (segment.type == SegmentType.ACTIVITY || segment.type == SegmentType.MEAL || segment.type == SegmentType.OTHER || segment.type == SegmentType.CAR_RENTAL) && !isTransfer(segment)
 
 /**
  * A trip of local events alone: everything still booked in it is an outing.

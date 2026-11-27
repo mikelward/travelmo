@@ -2,7 +2,7 @@ import { tripBookingType, tripPicture, type Trip } from "@travelmo/core";
 import { SegmentIcon } from "@/components/SegmentIcon";
 
 // A trip's picture: for a trip that is just an event, its booking's own
-// icon (tripBookingType: a dinner's calendar, a show's ticket); else
+// icon (tripBookingType: a dinner's fork and knife, a show's ticket); else
 // (tripPicture) the outline of the landmark of the city its title names, else
 // of the kind of place it goes to, else a suitcase. Decoration, since the
 // title says where.

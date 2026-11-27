@@ -55,6 +55,7 @@ export const segmentTypeLabels: Record<SegmentType, string> = {
   lodging: "Stay",
   car_rental: "Car rental",
   activity: "Activity",
+  meal: "Meal",
   other: "Other",
 };
 
@@ -278,7 +279,7 @@ export function SegmentForm({
     }
   };
 
-  const transport = fields.type !== "lodging" && fields.type !== "activity";
+  const transport = fields.type !== "lodging" && fields.type !== "activity" && fields.type !== "meal";
   // A picked place fills the end's name, city, country, address and spot; a
   // name typed afterwards keeps the country (still likely, and for a flight
   // the pick is the only way it was set) and drops the rest.

@@ -190,6 +190,30 @@ describe("cancels", () => {
     expect(cancels({ type: "lodging", place: "Hotel Berlin", start: "2026-06-10T15:00:00+02:00" }, berlin)).toBe(true);
   });
 
+  it("tells meals apart by restaurant name at the same time and booking site", () => {
+    const dishoom: ExtractedSegment = {
+      type: "meal",
+      title: "Dinner at Dishoom Shoreditch",
+      provider: "OpenTable",
+      start: "2026-06-10T19:30:00+01:00",
+      destination: { name: "Dishoom Shoreditch", city: "London", country: "GB" },
+    };
+    expect(cancels({ type: "meal", provider: "OpenTable", place: "Dinner at Dishoom Shoreditch", start: "2026-06-10T19:30:00+01:00" }, dishoom)).toBe(true);
+    expect(cancels({ type: "meal", provider: "OpenTable", place: "Dinner at Hawksmoor Spitalfields", start: "2026-06-10T19:30:00+01:00" }, dishoom)).toBe(false);
+    // A meal cancellation also cancels a legacy restaurant booking stored as "other" or "activity", by reference or venue, but never a transfer.
+    expect(cancels({ type: "meal", confirmation: "OT-42" }, { ...dishoom, type: "other", confirmation: "OT-42" })).toBe(true);
+    expect(cancels({ type: "meal", confirmation: "OT-42" }, { ...dishoom, type: "activity", confirmation: "OT-42" })).toBe(true);
+    expect(cancels({ type: "meal", provider: "OpenTable", place: "Dinner at Dishoom Shoreditch", start: "2026-06-10T19:30:00+01:00" }, { ...dishoom, type: "other" })).toBe(true);
+    expect(cancels({ type: "meal", provider: "OpenTable", place: "Dinner at Hawksmoor Spitalfields", start: "2026-06-10T19:30:00+01:00" }, { ...dishoom, type: "other" })).toBe(false);
+    expect(cancels({ type: "meal", confirmation: "OT-42" }, { ...dishoom, type: "other", confirmation: "OT-42", origin: { name: "Home", city: "London" } })).toBe(false);
+    // And a legacy pending cancellation stored as "other" or "activity" cancels an incoming meal booking too, unless it is a transfer.
+    expect(cancels({ type: "other", confirmation: "OT-42" }, { ...dishoom, confirmation: "OT-42" })).toBe(true);
+    expect(cancels({ type: "activity", confirmation: "OT-42" }, { ...dishoom, confirmation: "OT-42" })).toBe(true);
+    expect(cancels({ type: "other", provider: "OpenTable", place: "Dinner at Dishoom Shoreditch", start: "2026-06-10T19:30:00+01:00" }, dishoom)).toBe(true);
+    expect(cancels({ type: "other", provider: "OpenTable", place: "Dinner at Hawksmoor Spitalfields", start: "2026-06-10T19:30:00+01:00" }, dishoom)).toBe(false);
+    expect(cancels({ type: "other", confirmation: "OT-42", origin: "Home", destination: "Dishoom" }, { ...dishoom, confirmation: "OT-42" })).toBe(false);
+  });
+
   it("tells hotels apart by short words too", () => {
     const city: ExtractedSegment = {
       type: "lodging",

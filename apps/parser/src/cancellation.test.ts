@@ -500,6 +500,39 @@ describe("cancellation emails", () => {
     expect(store.segments.get("m1-0")?.sources?.map((s) => s.id)).toContain("m3");
   });
 
+  it.each(["other", "activity"] as const)(
+    "cancels an incoming meal booking when a legacy %s cancellation is already waiting for it",
+    async (legacyType) => {
+      const store = memoryStore();
+      clock = "2026-05-20T08:00:00Z";
+      // Persisted cancellation read before "meal" existed (newer date than confirmation).
+      await importMessage(
+        "u1",
+        cancelEmail,
+        deps(store, async () => ({
+          isBooking: false,
+          segments: [],
+          cancellations: [{ type: legacyType, provider: "OpenTable", confirmation: "OT-777", start: "2026-06-10T19:30:00+01:00" }],
+        })),
+      );
+      const dinner: ExtractedBooking = {
+        isBooking: true,
+        segments: [
+          {
+            type: "meal",
+            title: "Dinner at Dishoom Shoreditch",
+            provider: "OpenTable",
+            confirmation: "OT-777",
+            start: "2026-06-10T19:30:00+01:00",
+            destination: { name: "Dishoom Shoreditch", city: "London", country: "GB" },
+          },
+        ],
+      };
+      await importMessage("u1", email(), deps(store, async () => dinner));
+      expect(store.segments.get("m1-0")?.cancelledBy).toBe("m2");
+    },
+  );
+
   describe("read in any order", () => {
     // One reference: confirmed 1 May, cancelled 10 May, booked again 15 May,
     // cancelled again 20 May. By date, it ends cancelled by the 20 May email.

@@ -20,6 +20,7 @@ import app.travelmo.shared.ic_segment_ferry
 import app.travelmo.shared.ic_segment_car_rental
 import app.travelmo.shared.ic_segment_bus
 import app.travelmo.shared.ic_segment_activity
+import app.travelmo.shared.ic_segment_meal
 import app.travelmo.shared.booking_reference
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.DrawableResource
@@ -1067,5 +1068,6 @@ fun segmentIcon(type: SegmentType): DrawableResource = when (type) {
     SegmentType.LODGING -> Res.drawable.ic_segment_lodging
     SegmentType.CAR_RENTAL -> Res.drawable.ic_segment_car_rental
     SegmentType.ACTIVITY -> Res.drawable.ic_segment_activity
+    SegmentType.MEAL -> Res.drawable.ic_segment_meal
     SegmentType.OTHER -> Res.drawable.ic_segment_other
 }

@@ -206,9 +206,9 @@ fun warmTables() {
 val PLACE_SETTINGS = listOf("city", "town", "beach", "mountains", "lake", "countryside")
 
 /** The booking types whose icon a trip that is just an event takes. */
-private val OUTING_TYPES = setOf(SegmentType.ACTIVITY, SegmentType.OTHER, SegmentType.CAR_RENTAL)
+private val OUTING_TYPES = setOf(SegmentType.ACTIVITY, SegmentType.MEAL, SegmentType.OTHER, SegmentType.CAR_RENTAL)
 
-/** The booking type whose icon a trip that is just an event takes, whatever its title: a dinner's calendar, a show's ticket ([setting]). */
+/** The booking type whose icon a trip that is just an event takes, whatever its title: a dinner's fork and knife, a show's ticket ([setting]). */
 fun tripBookingType(setting: String?): SegmentType? = SegmentType.fromWire(setting)?.takeIf { it in OUTING_TYPES }
 
 /**

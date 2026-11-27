@@ -122,7 +122,7 @@ val brands: List<Brand> = listOf(
     Brand("lner", "LNER", setOf(SegmentType.TRAIN), false, null, listOf("LNER")),
     Brand("avanti", "Avanti West Coast", setOf(SegmentType.TRAIN), false, null, listOf("Avanti West Coast")),
     Brand("flixbus", "FlixBus", setOf(SegmentType.BUS, SegmentType.TRAIN), false, null, listOf("FlixBus", "Flix", "FlixTrain")),
-    Brand("opentable", "OpenTable", setOf(SegmentType.ACTIVITY, SegmentType.OTHER), true, null, listOf("OpenTable")),
+    Brand("opentable", "OpenTable", setOf(SegmentType.MEAL, SegmentType.ACTIVITY, SegmentType.OTHER), true, null, listOf("OpenTable")),
     Brand("getyourguide", "GetYourGuide", setOf(SegmentType.ACTIVITY, SegmentType.OTHER), true, null, listOf("GetYourGuide")),
     Brand("klook", "Klook", setOf(SegmentType.ACTIVITY, SegmentType.OTHER), true, null, listOf("Klook")),
     Brand("eventbrite", "Eventbrite", setOf(SegmentType.ACTIVITY, SegmentType.OTHER), true, null, listOf("Eventbrite")),

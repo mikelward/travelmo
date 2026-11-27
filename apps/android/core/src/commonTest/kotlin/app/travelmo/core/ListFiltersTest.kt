@@ -7,7 +7,8 @@ import kotlin.test.Test
 // hire car returned where it was picked up, a car to the airport, a flight
 // and a stay.
 private val show = Segment("show", "t", SegmentType.ACTIVITY, "Example Theatre", "2026-12-12T19:30:00+00:00", destination = Place("Example Theatre", city = "London", country = "GB"))
-private val dinner = Segment("dinner", "t", SegmentType.OTHER, "Example Bistro", "2026-12-12T18:00:00+00:00", destination = Place("Example Bistro", city = "London"))
+private val dinner = Segment("dinner", "t", SegmentType.MEAL, "Example Bistro", "2026-12-12T18:00:00+00:00", destination = Place("Example Bistro", city = "London"))
+private val appointment = Segment("appointment", "t", SegmentType.OTHER, "Example Visit", "2026-12-12T15:00:00+00:00", destination = Place("Example Office", city = "London"))
 private val hire = Segment("hire", "t", SegmentType.CAR_RENTAL, "Example Cars", "2026-12-13T09:00:00+00:00", origin = Place("Example Cars Camden"), destination = Place("Example Cars Camden"))
 private val transfer = Segment("transfer", "t", SegmentType.CAR_RENTAL, "Example Cars", "2026-12-13T09:00:00+00:00", origin = Place("Example Cars Camden"), destination = Place("Heathrow", code = "LHR"))
 private val flight = Segment("flight", "t", SegmentType.FLIGHT, "XX 1 LHR to DUB", "2026-12-13T09:00:00+00:00", origin = Place("Heathrow", code = "LHR"), destination = Place("Dublin", code = "DUB"))
@@ -20,7 +21,7 @@ class ListFiltersTest {
 
     @Test
     fun `a trip of shows and meals and a car returned where it was hired is local`() {
-        localOnly(listOf(show, dinner, hire)) shouldBe true
+        localOnly(listOf(show, dinner, appointment, hire)) shouldBe true
     }
 
     @Test

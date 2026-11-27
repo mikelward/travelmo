@@ -186,6 +186,7 @@ describe("newTripTitle", () => {
 
   it("names a show or a dinner after itself, not its town", () => {
     expect(newTripTitle({ type: "other", title: "Locale (Southbank)", destination: { name: "Locale", city: "London" } })).toBe("Locale (Southbank)");
+    expect(newTripTitle({ type: "meal", title: "Dishoom Shoreditch", destination: { name: "Dishoom", city: "London" } })).toBe("Dishoom Shoreditch");
     expect(newTripTitle({ type: "activity", title: "Toy Story 5", destination: { name: "Everyman", city: "London" } })).toBe("Toy Story 5");
     // A taxi goes by where it goes.
     expect(newTripTitle({ type: "other", title: "Taxi", origin: { name: "Home" }, destination: { name: "Heathrow", city: "London" } })).toBe("London");
@@ -402,6 +403,31 @@ describe("sameEvent", () => {
     expect(sameEvent({ ...booked, provider: undefined }, { ...reserved, provider: undefined }, "everymancinema.com", "odeon.co.uk")).toBe(false);
     expect(sameEvent(booked, { ...reserved, destination: { name: "Everyman", city: "Leeds", country: "GB" } })).toBe(false);
   });
+
+  it("matches duplicate meal confirmations under different references, including legacy other/activity bookings, and keeps different restaurants apart", () => {
+    const first: ExtractedSegment = {
+      type: "meal",
+      title: "Dinner at Dishoom Shoreditch",
+      provider: "OpenTable",
+      confirmation: "OT-111",
+      start: "2026-11-08T19:30:00+00:00",
+      destination: { name: "Dishoom Shoreditch", city: "London", country: "GB" },
+    };
+    const second: ExtractedSegment = { ...first, confirmation: "OT-222", title: "Dinner at Dishoom" };
+    const otherPlace: ExtractedSegment = { ...first, confirmation: "OT-333", title: "Dinner at Hawksmoor", destination: { name: "Hawksmoor", city: "London", country: "GB" } };
+    const transfer: ExtractedSegment = { ...second, type: "other", origin: { name: "Home", city: "London" } };
+    expect(sameEvent(first, second)).toBe(true);
+    expect(sameEvent(first, { ...second, type: "other" })).toBe(true);
+    expect(sameEvent(first, { ...second, type: "activity" })).toBe(true);
+    expect(sameEvent(first, otherPlace)).toBe(false);
+    expect(sameEvent(first, { ...otherPlace, type: "other" })).toBe(false);
+    expect(sameEvent(first, transfer)).toBe(false);
+    expect(sameEvent(first, { ...second, type: "lodging" })).toBe(false);
+    expect(sameBooking({ ...first, type: "other" }, first)).toBe(true);
+    expect(sameBooking(transfer, first)).toBe(false);
+    expect(mergeDetails({ ...first, type: "other" }, first).type).toBe("meal");
+    expect(mergeDetails({ ...first, type: "other" }, first, { edited: true }).type).toBe("other");
+  });
 });
 
 describe("mergeDetails", () => {
@@ -431,8 +457,9 @@ describe("overlappingTrips", () => {
 });
 
 describe("isUntimed", () => {
-  it("is an activity at local midnight with no end", () => {
+  it("is an activity or meal at local midnight with no end", () => {
     expect(isUntimed({ type: "activity", start: "2026-05-26T00:00:00+01:00" })).toBe(true);
+    expect(isUntimed({ type: "meal", start: "2026-05-26T00:00:00+01:00" })).toBe(true);
     expect(isUntimed({ type: "other", start: "2026-05-26T00:00:00+01:00" })).toBe(true);
   });
 

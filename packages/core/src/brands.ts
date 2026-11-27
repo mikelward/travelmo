@@ -124,7 +124,7 @@ export const brands: readonly Brand[] = [
   { id: "lner", name: "LNER", types: ["train"], aliases: ["LNER"] },
   { id: "avanti", name: "Avanti West Coast", types: ["train"], aliases: ["Avanti West Coast"] },
   { id: "flixbus", name: "FlixBus", types: ["bus", "train"], aliases: ["FlixBus", "Flix", "FlixTrain"] },
-  { id: "opentable", name: "OpenTable", types: ["activity", "other"], site: true, aliases: ["OpenTable"] },
+  { id: "opentable", name: "OpenTable", types: ["meal", "activity", "other"], site: true, aliases: ["OpenTable"] },
   { id: "getyourguide", name: "GetYourGuide", types: ["activity", "other"], site: true, aliases: ["GetYourGuide"] },
   { id: "klook", name: "Klook", types: ["activity", "other"], site: true, aliases: ["Klook"] },
   { id: "eventbrite", name: "Eventbrite", types: ["activity", "other"], site: true, aliases: ["Eventbrite"] },

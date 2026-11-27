@@ -150,11 +150,14 @@ class TripsTest {
 
     @Test
     fun `a new trip for a show or a dinner is named after it not its town`() {
-        val dinner = Segment("d", "t", SegmentType.OTHER, "Locale (Southbank)", "2025-08-19T18:00:00+01:00", destination = Place("Locale", city = "London"))
+        val dinner = Segment("d", "t", SegmentType.MEAL, "Locale (Southbank)", "2025-08-19T18:00:00+01:00", destination = Place("Locale", city = "London"))
         newTripTitle(dinner) shouldBe "Locale (Southbank)"
+        newTripTitle(dinner.copy(type = SegmentType.OTHER)) shouldBe "Locale (Southbank)"
         newTripTitle(dinner.copy(type = SegmentType.ACTIVITY, title = "Toy Story 5")) shouldBe "Toy Story 5"
+        eventVerb(UpcomingEvent(dinner, EventKind.START, dinner.start)) shouldBe "Starts"
+        isUntimed(dinner.copy(start = "2025-08-19T00:00:00+01:00")) shouldBe true
         // A taxi goes by where it goes.
-        newTripTitle(dinner.copy(title = "Taxi", origin = Place("Home"), destination = Place("Heathrow", city = "London"))) shouldBe "London"
+        newTripTitle(dinner.copy(type = SegmentType.OTHER, title = "Taxi", origin = Place("Home"), destination = Place("Heathrow", city = "London"))) shouldBe "London"
     }
 
     @Test

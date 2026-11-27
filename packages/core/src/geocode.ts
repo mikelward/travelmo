@@ -173,7 +173,7 @@ export type CityLookup = (name: string) => string | undefined;
 // journey a station or port named for its city ("Liverpool"). A venue's own
 // name is not taken for a city: a restaurant called Florence is not in Italy.
 export function fillCities(segment: ExtractedSegment, lookup: CityLookup): ExtractedSegment {
-  const journey = segment.type !== "lodging" && segment.type !== "activity" && segment.type !== "other";
+  const journey = segment.type !== "lodging" && segment.type !== "activity" && segment.type !== "meal" && segment.type !== "other";
   const fill = (place: Place | undefined) => {
     if (!place || place.country) return place;
     const country = (place.city && lookup(place.city)) || (journey ? lookup(place.name) : undefined);

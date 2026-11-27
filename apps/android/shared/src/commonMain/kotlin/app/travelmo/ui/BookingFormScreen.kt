@@ -91,7 +91,7 @@ import org.jetbrains.compose.resources.stringResource
 
 private val typeLabels = mapOf(
     SegmentType.FLIGHT to "Flight", SegmentType.TRAIN to "Train", SegmentType.BUS to "Bus", SegmentType.FERRY to "Ferry",
-    SegmentType.LODGING to "Stay", SegmentType.CAR_RENTAL to "Car rental", SegmentType.ACTIVITY to "Activity", SegmentType.OTHER to "Other",
+    SegmentType.LODGING to "Stay", SegmentType.CAR_RENTAL to "Car rental", SegmentType.ACTIVITY to "Activity", SegmentType.MEAL to "Meal", SegmentType.OTHER to "Other",
 )
 
 /**

@@ -379,6 +379,7 @@ describe("tripPicture", () => {
   it("gives a trip that is just an event its booking's icon, whatever its title", () => {
     expect(tripBookingType("other")).toBe("other");
     expect(tripBookingType("activity")).toBe("activity");
+    expect(tripBookingType("meal")).toBe("meal");
     expect(tripBookingType("car_rental")).toBe("car_rental");
     expect(tripBookingType("city")).toBeUndefined();
     expect(tripBookingType("none")).toBeUndefined();
@@ -415,9 +416,11 @@ describe("placeSetting", () => {
 describe("tripSetting", () => {
   it("is the first booking's type for a trip of local events alone", () => {
     const show = { type: "activity", title: "Show", start: "2026-12-12T19:00:00Z", destination: { name: "Theatre", city: "London", country: "GB" } } as const;
-    const dinner = { type: "other", title: "Dinner", start: "2026-12-12T17:00:00Z", destination: { name: "Bistro", city: "London" } } as const;
-    // The dinner comes first.
-    expect(tripSetting([show, dinner])).toBe("other");
+    const dinner = { type: "meal", title: "Dinner", start: "2026-12-12T17:00:00Z", destination: { name: "Bistro", city: "London" } } as const;
+    const other = { type: "other", title: "Appointment", start: "2026-12-12T16:00:00Z", destination: { name: "Office", city: "London" } } as const;
+    // The dinner comes before the show, and the appointment before both.
+    expect(tripSetting([show, dinner])).toBe("meal");
+    expect(tripSetting([show, dinner, other])).toBe("other");
     expect(tripSetting([show])).toBe("activity");
     expect(tripSetting([show, stay({ destination: { name: "Inn", city: "Woburn" } })])).toBe("town");
   });
