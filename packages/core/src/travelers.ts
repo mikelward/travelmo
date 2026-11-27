@@ -76,19 +76,21 @@ function nameWords(name: string): string[] {
     .filter(Boolean);
 }
 
+function sameWords(x: readonly string[], y: readonly string[]): boolean {
+  if (x.length === 0 || y.length === 0) return false;
+  if (x.length === y.length && x.every((w, i) => w === y[i])) return true;
+  if (x.length < 2 || y.length < 2) return false;
+  if (x[x.length - 1] !== y[y.length - 1]) return false;
+  const [fx, fy] = [x[0]!, y[0]!];
+  return fx === fy || gluedTitle(fx, fy) || (fx.length === 1 && fy.startsWith(fx)) || (fy.length === 1 && fx.startsWith(fy)) || runTogether(x, y) || runTogether(y, x);
+}
+
 // Whether two names are one person's: the same words, or the same first and
 // last ones (a middle name written or not), or the same last with one first
 // an initial of the other ("J Smith" is "John Smith"). Case, accents and
 // titles don't count.
 export function sameTraveler(a: string, b: string): boolean {
-  const x = nameWords(canonicalName(a) ?? a);
-  const y = nameWords(canonicalName(b) ?? b);
-  if (x.length === 0 || y.length === 0) return false;
-  if (x.join(" ") === y.join(" ")) return true;
-  if (x.length < 2 || y.length < 2) return false;
-  if (x[x.length - 1] !== y[y.length - 1]) return false;
-  const [fx, fy] = [x[0]!, y[0]!];
-  return fx === fy || gluedTitle(fx, fy) || (fx.length === 1 && fy.startsWith(fx)) || (fy.length === 1 && fx.startsWith(fy)) || runTogether(x, y) || runTogether(y, x);
+  return sameWords(nameWords(canonicalName(a) ?? a), nameWords(canonicalName(b) ?? b));
 }
 
 // Whether `x`'s first name is `y`'s first and middle names run together, as
@@ -118,24 +120,16 @@ function runTogetherOnly(a: string, b: string): boolean {
 // every other way it was written, and whether it is the user themself.
 export type Person = { id: string; name: string; aliases?: readonly string[] | undefined; me?: boolean | undefined };
 
-// A name's first and last words as compared, when it has both.
-function firstAndLast(name: string): [string, string] | undefined {
-  const words = nameWords(canonicalName(name) ?? name);
-  return words.length < 2 ? undefined : [words[0]!, words[words.length - 1]!];
-}
-
 // Whether two names are one person's only through an initial ("J Smith"
 // and "John Smith").
-function throughInitial(a: string, b: string): boolean {
-  const [x, y] = [firstAndLast(a), firstAndLast(b)];
-  return !!x && !!y && sameTraveler(a, b) && x[0] !== y[0] && (x[0].length === 1 || y[0].length === 1);
+function throughInitialWords(x: readonly string[], y: readonly string[], same: boolean): boolean {
+  return same && x.length >= 2 && y.length >= 2 && x[0] !== y[0] && (x[0]!.length === 1 || y[0]!.length === 1);
 }
 
 // Whether two names are surely two people's: one last name, two whole
 // first names ("John Smith" and "Jane Smith").
-function twoPeople(a: string, b: string): boolean {
-  const [x, y] = [firstAndLast(a), firstAndLast(b)];
-  return !!x && !!y && x[1] === y[1] && x[0].length > 1 && y[0].length > 1 && !sameTraveler(a, b);
+function twoPeopleWords(x: readonly string[], y: readonly string[], same: boolean): boolean {
+  return !same && x.length >= 2 && y.length >= 2 && x[x.length - 1] === y[y.length - 1] && x[0]!.length > 1 && y[0]!.length > 1;
 }
 
 // The person a name is, among those known, or undefined: by their name or
@@ -145,12 +139,32 @@ function twoPeople(a: string, b: string): boolean {
 export function findPerson<P extends Person>(people: readonly P[], raw: string): P | undefined {
   const name = canonicalName(raw);
   if (!name) return undefined;
-  const matches = people.filter((p) => {
-    const spellings = [p.name, ...(p.aliases ?? [])];
-    if (spellings.some((known) => sameTraveler(known, name) && !throughInitial(known, name))) return true;
-    return spellings.some((known) => sameTraveler(known, name)) && !spellings.some((known) => twoPeople(known, name));
-  });
-  return matches.find((p) => p.me) ?? matches[0];
+  const target = nameWords(canonicalName(name) ?? name);
+  let first: P | undefined;
+  for (const p of people) {
+    const spellings = p.aliases && p.aliases.length > 0 ? [p.name, ...p.aliases] : [p.name];
+    let direct = false;
+    let anySame = false;
+    let anyTwo = false;
+    for (const known of spellings) {
+      const words = nameWords(canonicalName(known) ?? known);
+      const same = sameWords(words, target);
+      if (same) {
+        if (!throughInitialWords(words, target, true)) {
+          direct = true;
+          break;
+        }
+        anySame = true;
+      } else if (twoPeopleWords(words, target, false)) {
+        anyTwo = true;
+      }
+    }
+    if (direct || (anySame && !anyTwo)) {
+      if (p.me) return p;
+      first ??= p;
+    }
+  }
+  return first;
 }
 
 const firstWord = (name: string) => (name.split(" ")[0] ?? "").toLowerCase();

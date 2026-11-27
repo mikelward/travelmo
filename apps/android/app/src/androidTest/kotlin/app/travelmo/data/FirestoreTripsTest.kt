@@ -499,4 +499,19 @@ class FirestoreTripsTest {
         assertEquals(listOf(mapOf("program" to "Example Air Club", "number" to "EA123")), profile.get("loyaltyPeople"))
         assertTrue(refused { sharee.store.setLoyaltyPerson(owner.uid, "Example Air Club", "EA123", "Sam Sample") }.isPermissionDenied())
     }
+
+    @Test
+    fun segmentsOnce_readsBookingsAndRespectsRules() = runBlocking {
+        val shared = seedTrip(shared = true)
+        seedSegment(shared, "s1")
+        val ownerSeen = owner.store.segmentsOnce(shared)
+        assertTrue(ownerSeen.confirmed)
+        assertEquals(listOf("s1"), ownerSeen.value.map { it.id })
+        val shareeSeen = sharee.store.segmentsOnce(shared)
+        assertTrue(shareeSeen.confirmed)
+        assertEquals(listOf("s1"), shareeSeen.value.map { it.id })
+        val mine = seedTrip(shared = false)
+        seedSegment(mine, "s2")
+        assertTrue(refused { sharee.store.segmentsOnce(mine) }.isPermissionDenied())
+    }
 }

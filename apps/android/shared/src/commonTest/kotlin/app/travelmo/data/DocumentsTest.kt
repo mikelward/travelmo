@@ -46,6 +46,8 @@ class DocumentsTest {
         trip.title shouldBe "Liverpool"
         trip.sharedWith shouldBe listOf("partner@example.com")
         trip.deleting shouldBe false
+        trip.updatedAt shouldBe "y"
+        tripFromDocument("t1", mapOf("title" to "Liverpool", "start" to "2026-12-12", "end" to "2026-12-14", "ownerUid" to "u1"))!!.updatedAt shouldBe ""
         tripFromDocument("t2", mapOf("title" to "No dates")).shouldBeNull()
     }
 

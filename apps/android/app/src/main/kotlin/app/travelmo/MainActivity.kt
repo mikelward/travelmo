@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import app.travelmo.ui.CountingPrefs
 import app.travelmo.ui.ListFilterPrefs
 import app.travelmo.ui.ReportSnapshotFile
+import app.travelmo.ui.SegmentVersionsFile
 import app.travelmo.ui.AccessPage
 import app.travelmo.ui.TripDetail
 import app.travelmo.ui.Home
@@ -56,6 +57,7 @@ import app.travelmo.ui.LocalCrashReport
 import app.travelmo.ui.CollectingBugReportSender
 import app.travelmo.ui.LocalBugReportSender
 import app.travelmo.ui.LocalReportBug
+import app.travelmo.ui.networkReconnected
 import app.travelmo.ui.pageCloses
 import app.travelmo.ui.pageOpens
 import app.travelmo.ui.LocalUpdateAvailable
@@ -178,7 +180,7 @@ private fun SignedInApp(
     val factory = remember(user.uid) {
         object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T = TripsViewModel(app.trips, user.uid, user.email, emailVerified = user.emailVerified, pushDevice = app.pushDevice, accountDeletion = app.accountDeletion, flightRefresh = app.flightRefresh, accessCheck = app.accessCheck, emailLinks = app.emailLinks, tripActions = app.tripActions, importReview = app.importReview, gmailActions = app.gmailActions, fastmailActions = app.fastmailActions, imapActions = app.imapActions, googleCalendarActions = app.googleCalendarActions, calendarExportActions = app.calendarExportActions, parserUrl = BuildConfig.PARSER_URL, feedActions = app.feedActions, forwardActions = app.forwardActions, forwardOffered = BuildConfig.FORWARD_DOMAIN.isNotEmpty(), listFilterStore = ListFilterPrefs(app), countingStore = CountingPrefs(app), reportSnapshotStore = ReportSnapshotFile(app), compute = Dispatchers.Default) as T
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = TripsViewModel(app.trips, user.uid, user.email, emailVerified = user.emailVerified, pushDevice = app.pushDevice, accountDeletion = app.accountDeletion, flightRefresh = app.flightRefresh, accessCheck = app.accessCheck, emailLinks = app.emailLinks, tripActions = app.tripActions, importReview = app.importReview, gmailActions = app.gmailActions, fastmailActions = app.fastmailActions, imapActions = app.imapActions, googleCalendarActions = app.googleCalendarActions, calendarExportActions = app.calendarExportActions, parserUrl = BuildConfig.PARSER_URL, feedActions = app.feedActions, forwardActions = app.forwardActions, forwardOffered = BuildConfig.FORWARD_DOMAIN.isNotEmpty(), listFilterStore = ListFilterPrefs(app), countingStore = CountingPrefs(app), reportSnapshotStore = ReportSnapshotFile(app), segmentVersionsStore = SegmentVersionsFile(app), reconnected = networkReconnected(app), compute = Dispatchers.Default) as T
         }
     }
     val viewModel: TripsViewModel = viewModel(key = user.uid, factory = factory)

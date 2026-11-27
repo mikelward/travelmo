@@ -6,6 +6,7 @@ import {
   collection,
   doc,
   getDocs,
+  getDocsFromCache,
   limit,
   onSnapshot,
   orderBy,
@@ -21,6 +22,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { z } from "zod";
 import { firestore } from "./firebase";
+import { loadAllSegments, peekAllSegments, type AllSegments } from "./segmentCache";
 
 function parseDocs<T extends z.ZodType>(schema: T, snapshot: QuerySnapshot<DocumentData>): z.infer<T>[] {
   const out: z.infer<T>[] = [];
@@ -155,42 +157,72 @@ export function useSegmentsOnce(trips: readonly Pick<Trip, "id" | "updatedAt">[]
   }, [read, key]);
 }
 
-export type AllSegments = { byTrip: Record<string, Segment[]>; failed: string[] };
+export type { AllSegments } from "./segmentCache";
 
-// Every trip's segments, read once rather than listened to: the reports
-// page reads all of them, too many for a listener each. Undefined until
+// Every trip's segments, read once per trip version with bounded concurrency
+// rather than listened to: unchanged trips are reused from memory or
+// Firestore's local cache when the manifest count matches. Undefined until
 // every read has finished; a read that failed is named, not left out.
-export function useAllSegments(tripIds: readonly string[] | undefined): AllSegments | undefined {
-  const [result, setResult] = useState<{ key: string; value: AllSegments }>();
-  const key = tripIds?.join("\n");
+export function useAllSegments(trips: readonly Pick<Trip, "id" | "updatedAt">[] | undefined, uid: string): AllSegments | undefined {
+  const [result, setResult] = useState<{ key: string; value: AllSegments; incomplete: boolean }>();
+  const [retry, setRetry] = useState(0);
+  const key = trips
+    ? `${uid}\n${trips
+        .map((t) => `${t.id}@${t.updatedAt}`)
+        .sort()
+        .join("\n")}`
+    : undefined;
+  const versions = useMemo(() => {
+    if (key === undefined) return undefined;
+    const lines = key.split("\n").slice(1);
+    return lines.filter(Boolean).map((line) => {
+      const at = line.lastIndexOf("@");
+      return { id: line.slice(0, at), updatedAt: line.slice(at + 1) };
+    });
+  }, [key]);
+  const cached = useMemo(() => (versions ? peekAllSegments(uid, versions) : undefined), [uid, versions]);
+
   useEffect(() => {
-    if (key === undefined) return;
+    if (key === undefined || !versions || cached) return;
     let current = true;
-    const ids = key ? key.split("\n") : [];
-    Promise.all(
-      ids.map((tripId) =>
-        getDocs(query(collection(firestore(), paths.segments(tripId)), orderBy("start"))).then(
-          (s) => ({ tripId, segments: parseDocs(Segment, s) }),
-          (error: unknown) => {
-            console.error(`Reading segments failed for ${tripId}`, error);
-            return { tripId, segments: undefined };
-          },
-        ),
-      ),
-    ).then((reads) => {
-      if (!current) return;
-      const byTrip: Record<string, Segment[]> = {};
-      const failed: string[] = [];
-      for (const { tripId, segments } of reads) {
-        if (segments) byTrip[tripId] = segments;
-        else failed.push(tripId);
-      }
-      setResult({ key, value: { byTrip, failed } });
+    let unconfirmed = false;
+    const reader = {
+      fromCache: async (tripId: string) => {
+        try {
+          const s = await getDocsFromCache(query(collection(firestore(), paths.segments(tripId)), orderBy("start")));
+          return parseDocs(Segment, s);
+        } catch (error) {
+          // Cache miss or eviction; caller falls back to a normal read.
+          console.debug(`Cached segments read missed for ${tripId}`, error);
+          return undefined;
+        }
+      },
+      fromStore: async (tripId: string) => {
+        const s = await getDocs(query(collection(firestore(), paths.segments(tripId)), orderBy("start")));
+        const confirmed = !s.metadata.fromCache;
+        if (!confirmed) unconfirmed = true;
+        return { segments: parseDocs(Segment, s), confirmed };
+      },
+    };
+    void loadAllSegments(uid, versions, reader).then((value) => {
+      if (current) setResult({ key, value, incomplete: unconfirmed || value.failed.length > 0 });
     });
     return () => {
       current = false;
     };
-  }, [key]);
+  }, [key, uid, versions, cached, retry]);
+
+  // Any trip read unconfirmed from offline cache or that failed stays out of the
+  // version cache; retry automatically when the browser reconnects.
+  const needsRefresh = Boolean(result && result.key === key && result.incomplete);
+  useEffect(() => {
+    if (!needsRefresh) return;
+    const onOnline = () => setRetry((n) => n + 1);
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [needsRefresh]);
+
+  if (cached) return cached;
   // A result for another set of trips is not shown for this one.
   return result && result.key === key ? result.value : undefined;
 }

@@ -37,27 +37,29 @@ type Moment = { at: string; country?: string; then?: string; transit?: true; mov
 const connectionHours = 24;
 
 function connections(live: readonly ExtractedSegment[], lookup?: PlaceLookup): { lands: Set<ExtractedSegment>; leaves: Set<ExtractedSegment> } {
-  const flights = live.filter((s) => s.type === "flight").sort((a, b) => compareInstants(a.start, b.start));
-  const stays = live.filter((s) => s.type === "lodging");
+  const flights = live
+    .filter((s) => s.type === "flight")
+    .map((s) => ({ s, start: Date.parse(s.start), end: Date.parse(s.end ?? s.start) }))
+    .sort((a, b) => a.start - b.start);
+  const stays = live
+    .filter((s) => s.type === "lodging")
+    .map((s) => ({ s, start: Date.parse(s.start), end: Date.parse(s.end ?? s.start), where: placeCountry(s.destination ?? s.origin, "lodging", lookup) }));
   const lands = new Set<ExtractedSegment>();
   const leaves = new Set<ExtractedSegment>();
   for (let i = 0; i + 1 < flights.length; i++) {
     const [a, b] = [flights[i]!, flights[i + 1]!];
-    const at = a.destination?.code?.trim().toUpperCase();
-    if (!at || at !== b.origin?.code?.trim().toUpperCase()) continue;
-    const landed = Date.parse(a.end ?? a.start);
-    const left = Date.parse(b.start);
+    const at = a.s.destination?.code?.trim().toUpperCase();
+    if (!at || at !== b.s.origin?.code?.trim().toUpperCase()) continue;
+    const landed = a.end;
+    const left = b.start;
     if (!(left >= landed && left - landed <= connectionHours * 3_600_000)) continue;
     // Only a stay in the connection's country makes it a stopover: a hotel
     // booked where the trip goes next can overlap the change of planes.
-    const country = placeCountry(a.destination, "flight", lookup);
-    const stayed = stays.some((s) => {
-      const where = placeCountry(s.destination ?? s.origin, "lodging", lookup);
-      return (!where || !country || where === country) && Date.parse(s.start) < left && Date.parse(s.end ?? s.start) > landed;
-    });
+    const country = placeCountry(a.s.destination, "flight", lookup);
+    const stayed = stays.some((st) => (!st.where || !country || st.where === country) && st.start < left && st.end > landed);
     if (stayed) continue;
-    lands.add(a);
-    leaves.add(b);
+    lands.add(a.s);
+    leaves.add(b.s);
   }
   return { lands, leaves };
 }
@@ -83,10 +85,21 @@ function moments(segment: ExtractedSegment, lookup?: PlaceLookup, connecting: { 
   return [{ at: segment.start, ...at }, ...(segment.end ? [{ at: segment.end, ...at }] : [])];
 }
 
-function nextDay(date: string): string {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + 1);
-  return d.toISOString().slice(0, 10);
+const dayMs = 86_400_000;
+
+function epochDay(date: string): number {
+  const y = Number(date.slice(0, 4));
+  const m = Number(date.slice(5, 7));
+  const d = Number(date.slice(8, 10));
+  return Math.floor(Date.UTC(y, m - 1, d) / dayMs);
+}
+
+function formatEpochDay(day: number): string {
+  const d = new Date(day * dayMs);
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth() + 1;
+  const dom = d.getUTCDate();
+  return `${y < 1000 ? String(y).padStart(4, "0") : y}-${m < 10 ? "0" : ""}${m}-${dom < 10 ? "0" : ""}${dom}`;
 }
 
 // The countries of each day of a trip, up to `today`: a day counts for every
@@ -124,46 +137,65 @@ export function tripDayPlaces(
   today: string,
   lookup?: PlaceLookup,
 ): Map<string, TripDay> {
+  const days = new Map<string, TripDay>();
+  const bounds = reportBounds(trip, segments);
+  if (!bounds) return days;
+  const last = bounds.end < today ? bounds.end : today;
+  if (bounds.start > last) return days;
   // In the order they happened, which across the date line is not the
   // order of their local dates: a flight can land the day before it left.
   const live = liveSegments(segments);
   const changes = connections(live, lookup);
   const timeline = live
     .flatMap((s) => moments(s, lookup, { lands: changes.lands.has(s), leaves: changes.leaves.has(s) }))
-    .sort((a, b) => compareInstants(a.at, b.at));
-  const days = new Map<string, TripDay>();
-  const bounds = reportBounds(trip, segments);
-  if (!bounds) return days;
-  const last = bounds.end < today ? bounds.end : today;
-  for (let day = bounds.start; day <= last; day = nextDay(day)) {
-    // Where the traveler was as the day began: left by the latest moment
-    // dated before it.
-    let where: string | undefined;
-    let transit = false;
-    let started = false;
-    let travelled = false;
-    // Where the traveler is as the day ends: left by its latest moment.
-    let night: string | undefined;
-    let nightAt: string | undefined;
+    .map((m) => ({ m, ms: Date.parse(m.at), date: localDate(m.at) }))
+    .sort((a, b) => a.ms - b.ms || compareInstants(a.m.at, b.m.at));
+
+  // Bucket moments by local date while preserving their instant-order index,
+  // so advancing a day at a time only touches moments on that date.
+  const byDate = new Map<string, number[]>();
+  let started = false;
+  let travelled = false;
+  let lastIdx = -1;
+  for (let idx = 0; idx < timeline.length; idx++) {
+    const entry = timeline[idx]!;
+    if (entry.date < bounds.start) {
+      started = true;
+      if (entry.m.moves || entry.m.country) travelled = true;
+      if (entry.m.moves || entry.m.then) lastIdx = idx;
+    } else if (entry.date <= last) {
+      let list = byDate.get(entry.date);
+      if (!list) {
+        list = [];
+        byDate.set(entry.date, list);
+      }
+      list.push(idx);
+    }
+  }
+
+  const startNum = epochDay(bounds.start);
+  const endNum = epochDay(last);
+  for (let d = startNum; d <= endNum; d++) {
+    const day = formatEpochDay(d);
+    const prev = lastIdx >= 0 ? timeline[lastIdx]!.m : undefined;
+    const where = prev?.then;
+    const transit = Boolean(prev?.transit);
     const countries = new Set<string>();
-    for (const m of timeline) {
-      const date = localDate(m.at);
-      if (date <= day) {
+    const onDay = byDate.get(day);
+    if (onDay) {
+      for (const idx of onDay) {
+        const m = timeline[idx]!.m;
         started = true;
         if (m.moves || m.country) travelled = true;
-        if (m.moves || m.then) {
-          night = m.transit ? undefined : m.then;
-          nightAt = m.at;
-        }
+        if ((m.moves || m.then) && idx > lastIdx) lastIdx = idx;
+        if (m.country) countries.add(m.country);
       }
-      // An outing that names no country leaves the traveler where they were.
-      if (date < day && (m.moves || m.then)) {
-        where = m.then;
-        transit = Boolean(m.transit);
-      } else if (date === day && m.country) countries.add(m.country);
     }
     if (where) countries.add(where);
     const inTransit = !countries.size && transit;
+    const endM = lastIdx >= 0 ? timeline[lastIdx]!.m : undefined;
+    const night = endM && !endM.transit ? endM.then : undefined;
+    const nightAt = endM?.at;
     days.set(day, { countries, inTransit, started, local: !countries.size && !inTransit && !travelled, ...(night ? { night } : {}), ...(nightAt ? { nightAt } : {}) });
   }
   return days;
@@ -245,12 +277,32 @@ export function travelReport(
     for (const [day, { countries, inTransit }] of tripDayPlaces(trip, segments, today, lookup)) {
       if (inTransit && inYear(day)) transitDays.add(day);
       const y = day.slice(0, 4);
-      const ofYear = yearDays.get(y) ?? new Map<string, Set<string>>();
-      yearDays.set(y, ofYear);
-      ofYear.set(day, new Set([...(ofYear.get(day) ?? []), ...countries]));
+      let ofYear = yearDays.get(y);
+      if (!ofYear) {
+        ofYear = new Map<string, Set<string>>();
+        yearDays.set(y, ofYear);
+      }
+      let yearDaySet = ofYear.get(day);
+      if (!yearDaySet) {
+        yearDaySet = new Set<string>();
+        ofYear.set(day, yearDaySet);
+      }
+      for (const c of countries) yearDaySet.add(c);
       if (!inYear(day)) continue;
-      dayCountries.set(day, new Set([...(dayCountries.get(day) ?? []), ...countries]));
-      for (const c of countries) countryTrips.set(c, new Set([...(countryTrips.get(c) ?? []), trip.id]));
+      let daySet = dayCountries.get(day);
+      if (!daySet) {
+        daySet = new Set<string>();
+        dayCountries.set(day, daySet);
+      }
+      for (const c of countries) {
+        daySet.add(c);
+        let tripSet = countryTrips.get(c);
+        if (!tripSet) {
+          tripSet = new Set<string>();
+          countryTrips.set(c, tripSet);
+        }
+        tripSet.add(trip.id);
+      }
     }
 
     for (const s of liveSegments(segments)) {

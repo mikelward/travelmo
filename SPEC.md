@@ -560,6 +560,18 @@ another year and the trips download wait for the bookings. Android reads
 Reports' world map as it starts, with the other tables, rather than as the
 tab opens.
 
+Both platforms read each trip's bookings once per version (`updatedAt`,
+bounded to 16 reads at a time) rather than keeping a live listener per trip:
+server-confirmed bookings stay in memory for the session, and a per-account
+manifest of `(updatedAt, count)` (`localStorage` on the web, a no-backup
+file on Android) lets unchanged trips be read from Firestore's local cache
+across restarts whenever the cached count still matches (catching cache
+eviction); unconfirmed offline reads are shown without recording a version
+so they refresh once back online. On Android, traveler filtering, favorite
+places, trip titles, residence rules and CSV exports also run off the main
+thread, and "Days in each country" emits each country and expanded stay as
+its own lazy list item.
+
 "Days in each country" counts every day from the first trip (or of the year
 picked) to today, home included (`countryDays` in
 `packages/core/src/residence.ts`, the residence timeline below): a day with

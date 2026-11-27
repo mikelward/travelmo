@@ -15,12 +15,15 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.travelmo.core.HomeCorrection
+import app.travelmo.core.HomePeriod
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentType
 import app.travelmo.core.Trip
 import app.travelmo.data.RideSettings
 import app.travelmo.ui.theme.TravelmoTheme
+import io.kotest.matchers.shouldBe
 import kotlin.time.Instant
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -121,5 +124,33 @@ class ResidenceDaysTest {
         composeRule.onNodeWithText(asked).assertDoesNotExist()
         openSection("Days in each country")
         composeRule.onNodeWithText(asked).performScrollTo()
+    }
+
+    @Test
+    fun `runs residenceReport through the compute callback and shows Working while it waits`() {
+        val gate = CompletableDeferred<Unit>()
+        var computed = false
+        composeRule.setContent {
+            TravelmoTheme {
+                ResidenceDays(
+                    trips = emptyList(),
+                    homes = listOf(HomePeriod("London", "GB")),
+                    today = "2026-11-01",
+                    titles = emptyMap(),
+                    onOpenTrip = {},
+                    compute = { block ->
+                        computed = true
+                        gate.await()
+                        block()
+                    },
+                )
+            }
+        }
+        composeRule.onNodeWithText("Working it out…").assertExists()
+        gate.complete(Unit)
+        composeRule.waitForIdle()
+        computed shouldBe true
+        composeRule.onNodeWithText("Working it out…").assertDoesNotExist()
+        composeRule.onNodeWithText("0 of 180 days · 180 days left").assertExists()
     }
 }

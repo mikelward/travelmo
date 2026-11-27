@@ -13,17 +13,45 @@ import kotlinx.datetime.plus
 
 data class DateShift(val years: Int = 0, val months: Int = 0, val days: Int = 0)
 
+private fun epochDay(date: String): Long = LocalDate.parse(date).toEpochDays()
+
+private fun formatEpochDay(day: Long): String = LocalDate.fromEpochDays(day).toString()
+
+private fun shiftEpochDay(day: Long, shift: DateShift): Long {
+    if (shift.years == 0 && shift.months == 0) return day + shift.days
+    return LocalDate.fromEpochDays(day)
+        .plus(DatePeriod(months = shift.years * 12 + shift.months))
+        .plus(DatePeriod(days = shift.days))
+        .toEpochDays()
+}
+
 /**
  * A calendar date moved by whole years and months (keeping to the last day
  * of a shorter month: 29 Feb 2024 plus a year is 28 Feb 2025), then days.
  */
 fun shiftDate(date: String, shift: DateShift): String =
-    LocalDate.parse(date).plus(DatePeriod(months = shift.years * 12 + shift.months)).plus(DatePeriod(days = shift.days)).toString()
-
+    formatEpochDay(shiftEpochDay(epochDay(date), shift))
 
 private fun dates(from: String, to: String): Sequence<String> {
-    val end = LocalDate.parse(to)
-    return generateSequence(LocalDate.parse(from)) { it.plus(DatePeriod(days = 1)) }.takeWhile { it <= end }.map { it.toString() }
+    val start = epochDay(from)
+    val end = epochDay(to)
+    if (start > end) return emptySequence()
+    return (start..end).asSequence().map(::formatEpochDay)
+}
+
+private class ResolvedHome(val from: Long, val until: Long, val code: String?)
+
+private fun resolveHomes(homes: List<HomePeriod>): List<ResolvedHome> = homes.map { h ->
+    ResolvedHome(
+        from = h.from?.let(::epochDay) ?: Long.MIN_VALUE,
+        until = h.until?.let(::epochDay) ?: Long.MAX_VALUE,
+        code = h.country?.let(::countryCode),
+    )
+}
+
+private fun homeCodeAtDay(homes: List<ResolvedHome>, day: Long): String? {
+    for (h in homes) if (h.from <= day && day <= h.until) return h.code
+    return null
 }
 
 /**
@@ -77,16 +105,26 @@ fun presenceTimeline(
             transit[day] = known.isEmpty() && ((transit[day] ?: false) || place.inTransit)
         }
     }
-    val timeline = LinkedHashMap<String, DayPresence>()
-    for (day in dates(from, to)) {
+    val resolved = resolveHomes(homes)
+    val homeCache = HashMap<String, DayPresence>()
+    val emptyHome = DayPresence(emptySet(), emptySet(), assumedHome = true, inTransit = false, night = null)
+    val startDay = epochDay(from)
+    val endDay = epochDay(to)
+    val timeline = LinkedHashMap<String, DayPresence>(((endDay - startDay + 1).coerceAtLeast(16)).toInt())
+    for (d in startDay..endDay) {
+        val day = formatEpochDay(d)
         val known = countries[day]
         if (known != null) {
             timeline[day] = DayPresence(known, trips[day].orEmpty(), assumedHome = false, inTransit = transit[day] ?: false, tripCountries = tripCountries[day].orEmpty(), night = nights[day])
             continue
         }
         // As a code, however the home was written ("UK" is GB).
-        val home = homeAt(homes, day)?.country?.let(::countryCode)
-        timeline[day] = DayPresence(setOfNotNull(home), emptySet(), assumedHome = true, inTransit = false, night = home)
+        val home = homeCodeAtDay(resolved, d)
+        timeline[day] = if (home == null) {
+            emptyHome
+        } else {
+            homeCache.getOrPut(home) { DayPresence(setOf(home), emptySet(), assumedHome = true, inTransit = false, night = home) }
+        }
     }
     return timeline
 }
@@ -260,8 +298,11 @@ val residenceRuleSets: List<ResidenceRuleSet> = listOf(
 )
 
 /** The first day of a span ending on [end], both days included. */
+private fun spanStartDay(endDay: Long, span: DateShift): Long =
+    shiftEpochDay(shiftEpochDay(endDay, DateShift(years = -span.years, months = -span.months)), DateShift(days = 1 - span.days))
+
 private fun spanStart(end: String, span: DateShift): String =
-    shiftDate(shiftDate(end, DateShift(years = -span.years, months = -span.months)), DateShift(days = 1 - span.days))
+    formatEpochDay(spanStartDay(epochDay(end), span))
 
 data class DateRange(val start: String, val end: String)
 
@@ -416,53 +457,65 @@ fun evaluateRule(rule: ResidenceRule, timeline: Map<String, DayPresence>, date: 
             )
         }
         is RuleKind.Limit -> {
-            fun windowEnding(end: String) = DateRange(spanStart(end, kind.window), end)
-            var latest = windowEnding(date)
+            val dateDay = epochDay(date)
+            val latestStartDay = spanStartDay(dateDay, kind.window)
+            var latest = DateRange(formatEpochDay(latestStartDay), date)
             var window = latest
-            var used = countIn(latest)
+            var used = 0
+            var currentUsed: Int? = null
             var period: QualifyingPeriod? = null
             if (kind.rolling != null) {
                 // Every window ending within the rolling period, kept as a
-                // running count: the latest of the worst is the one shown.
+                // prefix sum: the latest of the worst is the one shown.
                 // For a qualifying period, only windows wholly inside it, as
                 // days before it do not count.
                 val full = spanStart(date, kind.rolling)
                 val moved = if (kind.qualifying) movedTo(homes, area, date, full) else null
                 val start = moved ?: full
+                val startDay = epochDay(start)
                 if (kind.qualifying) period = QualifyingPeriod(start, date, moved != null)
-                var firstEnd = start
+                var firstEndDay = startDay
                 // Moved on a day at a time, as month arithmetic is not
                 // reversible (a period starting on 29 February); a window's
                 // length bounds it.
                 if (kind.qualifying) {
-                    while (firstEnd < date && windowEnding(firstEnd).start < start) firstEnd = shiftDate(firstEnd, DateShift(days = 1))
+                    while (firstEndDay < dateDay && spanStartDay(firstEndDay, kind.window) < startDay) firstEndDay += 1
                 }
-                if (kind.qualifying && windowEnding(firstEnd).start < start) {
+                if (kind.qualifying && spanStartDay(firstEndDay, kind.window) < startDay) {
                     // A period shorter than one window: its days alone.
                     latest = DateRange(start, date)
                     window = latest
                     used = countIn(latest)
+                    currentUsed = used
                 } else {
-                    val ends = dates(if (firstEnd < date) firstEnd else date, date).toList()
-                    val first = windowEnding(ends.first())
-                    var count = countIn(first)
-                    var from = first.start
-                    used = count
-                    window = first
-                    for (end in ends.drop(1)) {
-                        val next = windowEnding(end)
-                        count -= dates(from, shiftDate(next.start, DateShift(days = -1))).count { counted(timeline[it]) }
-                        if (counted(timeline[next.end])) count += 1
-                        from = next.start
+                    val firstEnd = if (firstEndDay < dateDay) firstEndDay else dateDay
+                    val earliestDay = minOf(spanStartDay(firstEnd, kind.window), latestStartDay)
+                    val total = (dateDay - earliestDay + 1).toInt()
+                    val prefix = IntArray(total + 1)
+                    for (i in 0 until total) {
+                        prefix[i + 1] = prefix[i] + if (counted(timeline[formatEpochDay(earliestDay + i)])) 1 else 0
+                    }
+                    fun rangeCount(s: Long, e: Long) = prefix[(e - earliestDay + 1).toInt()] - prefix[(s - earliestDay).toInt()]
+                    var bestStart = spanStartDay(firstEnd, kind.window)
+                    var bestEnd = firstEnd
+                    used = rangeCount(bestStart, bestEnd)
+                    for (end in (firstEnd + 1)..dateDay) {
+                        val winStart = spanStartDay(end, kind.window)
+                        val count = rangeCount(winStart, end)
                         val better = if (kind.type == LimitType.MIN_PRESENT) count <= used else count >= used
                         if (better) {
                             used = count
-                            window = next
+                            bestStart = winStart
+                            bestEnd = end
                         }
                     }
+                    window = DateRange(formatEpochDay(bestStart), formatEpochDay(bestEnd))
+                    currentUsed = rangeCount(latestStartDay, dateDay)
                 }
+            } else {
+                used = countIn(latest)
             }
-            val current = if (kind.rolling != null) CurrentWindow(countIn(latest), latest) else null
+            val current = if (kind.rolling != null) CurrentWindow(currentUsed ?: countIn(latest), latest) else null
             val listed = period?.let { DateRange(it.start, it.end) } ?: window
             // For a minimum of days in, the absences that took from it.
             val runs = if (kind.type == LimitType.MIN_PRESENT) {
@@ -481,13 +534,14 @@ fun evaluateRule(rule: ResidenceRule, timeline: Map<String, DayPresence>, date: 
  * when home on the date is elsewhere, or not known.
  */
 private fun movedTo(homes: List<HomePeriod>, area: Set<String>, date: String, since: String): String? {
-    fun inArea(day: String) = homeAt(homes, day)?.country?.let(::countryCode)?.let { it in area } ?: false
-    if (!inArea(date)) return null
-    var day = date
-    while (day > since) {
-        val before = shiftDate(day, DateShift(days = -1))
-        if (!inArea(before)) return day
-        day = before
+    val resolved = resolveHomes(homes)
+    fun inArea(day: Long) = homeCodeAtDay(resolved, day)?.let { it in area } ?: false
+    var day = epochDay(date)
+    val sinceDay = epochDay(since)
+    if (!inArea(day)) return null
+    while (day > sinceDay) {
+        if (!inArea(day - 1)) return formatEpochDay(day)
+        day -= 1
     }
     return null
 }
@@ -564,7 +618,11 @@ fun countryDays(
     counting: CountryCounting = CountryCounting.PART,
 ): CountryDaysReport {
     // From the day before, to see where the first day began.
-    val timeline = presenceTimeline(all, homes, shiftDate(range.start, DateShift(days = -1)), range.end, lookup)
+    val startDay = epochDay(range.start)
+    val endDay = epochDay(range.end)
+    val dayBeforeStart = formatEpochDay(startDay - 1)
+    val timeline = presenceTimeline(all, homes, dayBeforeStart, range.end, lookup)
+    val resolved = resolveHomes(homes)
     class Run(val start: String, var end: String, var days: Int, val home: Boolean, val tripIds: MutableSet<String>)
     val open = LinkedHashMap<String, Run>()
     val stays = LinkedHashMap<String, MutableList<CountryStay>>()
@@ -572,20 +630,31 @@ fun countryDays(
         val run = open.remove(country) ?: return
         stays.getOrPut(country) { mutableListOf() } += CountryStay(run.start, run.end, run.days, run.home, if (run.home) emptyList() else run.tripIds.sorted())
     }
-    for (day in dates(range.start, range.end)) {
+    var prev = timeline[dayBeforeStart]
+    var homeCountryKnown = true
+    for (num in startDay..endDay) {
+        val day = formatEpochDay(num)
         val d = timeline[day]
-        val here = countedIn(d, timeline[shiftDate(day, DateShift(days = -1))], counting)
-        val homeCountry = homeAt(homes, day)?.country?.let(::countryCode)
+        if (d != null && d.assumedHome && d.countries.isEmpty()) homeCountryKnown = false
+        val here = countedIn(d, prev, counting)
+        prev = d
+        val homeCountry = homeCodeAtDay(resolved, num)
         // A stay ends when the traveler leaves, or when the country stops or starts being home (a
         // move abroad mid-stay starts a stay away).
-        for (c in open.keys.toList()) if (c !in here || open.getValue(c).home != (c == homeCountry)) close(c)
+        if (open.isNotEmpty()) {
+            val closing = open.keys.filter { it !in here || open.getValue(it).home != (it == homeCountry) }
+            for (c in closing) close(c)
+        }
         for (c in here) {
             val run = open.getOrPut(c) { Run(day, day, 0, c == homeCountry, mutableSetOf()) }
             run.end = day
             run.days += 1
             // Only the trips that put the traveler in this country: two trips sharing a day in
             // different countries each link to their own.
-            run.tripIds += d?.tripCountries.orEmpty().filterValues { c in it }.keys
+            val byTrip = d?.tripCountries
+            if (!byTrip.isNullOrEmpty()) {
+                for ((t, there) in byTrip) if (c in there) run.tripIds += t
+            }
         }
     }
     for (c in open.keys.toList()) close(c)
@@ -594,6 +663,6 @@ fun countryDays(
             .sortedWith(compareByDescending<CountryDays> { it.days }.thenBy { it.country }),
         // Home's missing country is one fix on the Profile, not a run of days.
         unplaced = stretches(timeline, range, { isUnknown(it) && it?.assumedHome != true }, emptySet(), false).reversed(),
-        homeCountryKnown = timeline.none { (day, d) -> day >= range.start && d.assumedHome && d.countries.isEmpty() },
+        homeCountryKnown = homeCountryKnown,
     )
 }

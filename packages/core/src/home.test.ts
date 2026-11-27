@@ -8,6 +8,7 @@ import {
   describeHomes,
   distanceKm,
   effectiveHomes,
+  effectiveHomesWithAirports,
   findTripForBooking,
   bridgedTrips,
   homeAt,
@@ -1109,5 +1110,25 @@ describe("bridgedTrips", () => {
     const later = trip("later", "2026-09-01", "2026-09-05");
     const segments: Record<string, ExtractedSegment[]> = { stay: [hotel], later: [{ ...hotel, start: "2026-09-01T15:00:00-07:00", end: "2026-09-05T11:00:00-07:00" }] };
     expect(bridgedTrips([later], (id) => segments[id] ?? [], trip("stay", "2026-07-08", "2026-07-12"), flights, periods)).toEqual([]);
+  });
+});
+
+describe("effectiveHomesWithAirports", () => {
+  const sfo = { name: "San Francisco International", code: "SFO", city: "San Francisco", country: "US" };
+  const bos = { name: "Boston Logan", code: "BOS", city: "Boston", country: "US" };
+  const sea = { name: "Seattle-Tacoma", code: "SEA", city: "Seattle", country: "US" };
+
+  it("matches timeline, corrections, inferred and chosen airports in one pass", () => {
+    const segments: ExtractedSegment[] = [
+      { type: "flight", title: "out1", start: "2025-02-01T08:00:00-08:00", end: "2025-02-01T16:00:00-05:00", origin: sfo, destination: bos },
+      { type: "flight", title: "back1", start: "2025-02-05T09:00:00-05:00", end: "2025-02-05T12:00:00-08:00", origin: bos, destination: sfo },
+      { type: "flight", title: "out2", start: "2025-04-01T08:00:00-07:00", end: "2025-04-01T10:00:00-07:00", origin: sfo, destination: sea },
+      { type: "flight", title: "back2", start: "2025-04-04T15:00:00-07:00", end: "2025-04-04T17:00:00-07:00", origin: sea, destination: sfo },
+    ];
+    const corrections = [{ city: "Boston", country: "US", from: "2026-01-01" }];
+    const chosen = [{ city: "Boston", country: "US", airports: ["BOS"] }];
+    expect(effectiveHomesWithAirports(segments, corrections, chosen)).toEqual(
+      withChosenAirports(withHomeAirports(effectiveHomes(homeTimeline(segments), corrections), segments), chosen),
+    );
   });
 });

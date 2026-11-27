@@ -3,6 +3,8 @@
 
     <!-- Firebase Auth, Firestore and Cloud Messaging; nothing else leaves the device. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Watches for connectivity returning so offline cached reports refresh on screen. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Reminders as notifications, asked for by the switch in Settings. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- A flight's Live Update as a chip in the status bar (Android 16 and later). -->

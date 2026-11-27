@@ -73,7 +73,7 @@ fun gmailMessageUrl(messageId: String, account: String? = null): String {
 fun gmailSearch(sender: String?, subject: String?, sentAt: String?): String {
     val sent = sentAt?.take(10)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
     fun day(offset: Int) = sent?.plus(DatePeriod(days = offset))?.toString()?.replace("-", "/")
-    val words = subject?.replace("\"", " ")?.split(Regex("\\s+"))?.filter { it.isNotEmpty() }?.joinToString(" ")
+    val words = subject?.replace("\"", " ")?.split(SOURCE_SPACES)?.filter { it.isNotEmpty() }?.joinToString(" ")
     return listOfNotNull(
         sender?.takeIf { it.isNotEmpty() }?.let { "from:$it" },
         words?.takeIf { it.isNotEmpty() }?.let { "subject:\"$it\"" },
@@ -81,6 +81,8 @@ fun gmailSearch(sender: String?, subject: String?, sentAt: String?): String {
         day(2)?.let { "before:$it" },
     ).joinToString(" ")
 }
+
+private val SOURCE_SPACES = Regex("\\s+")
 
 /** "Fwd: ", "FW: ", "TR: ", "WG: " and the like, as packages/core/src/forward.ts's. */
 private val FORWARD_PREFIX = Regex("^\\s*(?:fwd?|fw|tr|wg)\\s*:", RegexOption.IGNORE_CASE)

@@ -431,4 +431,18 @@ class HomeTest {
         val onward = leg("SFO to SEA", "2021-12-01T13:00:00-08:00", "2021-12-01T15:00:00-08:00", sfo, sea, "OTHER2")
         rebookedFlights(listOf(original), listOf(direct, onward)).map { it.flight } shouldBe listOf(original)
     }
+
+    @Test
+    fun `effectiveHomesWithAirports matches timeline and corrections and airports in one pass`() {
+        val segments = listOf(
+            leg("out1", "2025-02-01T08:00:00-08:00", "2025-02-01T16:00:00-05:00", sfo, bos),
+            leg("back1", "2025-02-05T09:00:00-05:00", "2025-02-05T12:00:00-08:00", bos, sfo),
+            leg("out2", "2025-04-01T08:00:00-07:00", "2025-04-01T10:00:00-07:00", sfo, sea),
+            leg("back2", "2025-04-04T15:00:00-07:00", "2025-04-04T17:00:00-07:00", sea, sfo),
+        )
+        val corrections = listOf(HomeCorrection("Boston", "US", "2026-01-01"))
+        val chosen = listOf(ChosenHomeAirports("Boston", "US", listOf("BOS")))
+        effectiveHomesWithAirports(segments, corrections, chosen) shouldBe
+            withChosenAirports(withHomeAirports(effectiveHomes(homeTimeline(segments), corrections), segments), chosen)
+    }
 }

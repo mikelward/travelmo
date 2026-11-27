@@ -384,8 +384,7 @@ function useReportSnapshot(uid: string, fresh: TravelReport | undefined): Travel
 function Report({ user }: { user: User }) {
   useSaveForOffline();
   const trips = useTrips(user);
-  const ids = useMemo(() => trips?.map((t) => t.id).sort(), [trips]);
-  const segments = useAllSegments(ids);
+  const segments = useAllSegments(trips, user.uid);
   const tables = useTables();
   const profile = useProfile(user.uid);
   // Whom the user's bookings name: a trip they're only watching isn't theirs to count.
@@ -405,6 +404,7 @@ function Report({ user }: { user: User }) {
     () => (all && tables && !(tables instanceof Error) && year ? travelReport(all.withSegments, today, { year, lookup: tables.lookup }) : all?.report),
     [all, tables, year, today],
   );
+  const favorites = useMemo(() => (all ? favoritePlaces(all.withSegments) : []), [all]);
 
   // Days in each country and residence days take a while (home over time, then every day of every year), so each
   // is worked out only once opened, and home only for them or the download.
@@ -426,11 +426,12 @@ function Report({ user }: { user: User }) {
   }, [countriesOpen, all, homes, tables, today, year, counting]);
 
   const snapshot = useReportSnapshot(user.uid, all?.report);
-
-  if (tables instanceof Error) return <p className="text-danger">The map couldn&apos;t be loaded: {tables.message}</p>;
   // Until the bookings are read, every year's counts and map as last worked out here.
   const whole = all?.report ?? snapshot;
   const shown = report ?? (year ? undefined : snapshot);
+  const visited = useMemo(() => new Set(shown?.countries.map((c) => c.country)), [shown]);
+
+  if (tables instanceof Error) return <p className="text-danger">The map couldn&apos;t be loaded: {tables.message}</p>;
   if (!shown || !whole || !tables) return <p className="text-muted">Loading reports…</p>;
 
   const years = whole.years.map((y) => y.year);
@@ -463,7 +464,7 @@ function Report({ user }: { user: User }) {
       )}
       <WorldMap
         data={tables.map}
-        visited={new Set(shown.countries.map((c) => c.country))}
+        visited={visited}
         airports={shown.airports}
         places={shown.places}
         name={countryName}
@@ -480,7 +481,7 @@ function Report({ user }: { user: User }) {
             <Working />
           )}
         </OnDemand>
-        <Favorites places={favoritePlaces(all.withSegments)} titles={titles} />
+        <Favorites places={favorites} titles={titles} />
         <OnDemand id="residence-heading" title="Residence and visa days" open={residenceOpen} onToggle={() => setResidenceOpen(!residenceOpen)}>
           {homes ? <ResidenceDays trips={all.withSegments} homes={homes} lookup={tables.lookup} today={today} titles={titles} /> : <Working />}
         </OnDemand>

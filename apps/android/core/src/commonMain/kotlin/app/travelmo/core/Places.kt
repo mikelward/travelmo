@@ -9,27 +9,75 @@ data class AirportPlace(val country: String, val lat: Double, val lon: Double, v
 
 private val airportPlaces: Map<String, AirportPlace> by lazy {
     val text = airportPlacesJson
-    Regex(""""([A-Z0-9]{3})":\s*\[\s*"([A-Z]{2})"\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*(?:,\s*"((?:[^"\\]|\\.)*)"\s*)?]""").findAll(text)
-        .associate {
-            val city = it.groupValues[5].takeIf { c -> c.isNotEmpty() }?.let(::unescapeJson)
-            it.groupValues[1] to AirportPlace(it.groupValues[2], it.groupValues[3].toDouble(), it.groupValues[4].toDouble(), city)
+    val map = HashMap<String, AirportPlace>(10_000)
+    var pos = 0
+    val len = text.length
+    while (pos < len) {
+        val nl = text.indexOf('\n', pos).let { if (it < 0) len else it }
+        val q1 = text.indexOf('"', pos)
+        if (q1 in pos until nl) {
+            val q2 = text.indexOf('"', q1 + 1)
+            val lb = if (q2 in (q1 + 1) until nl) text.indexOf('[', q2 + 1) else -1
+            val rb = if (lb in (q2 + 1) until nl) text.lastIndexOf(']', nl - 1) else -1
+            if (rb > lb && lb >= 0) {
+                val code = text.substring(q1 + 1, q2)
+                val c1 = text.indexOf('"', lb + 1)
+                val c2 = if (c1 in (lb + 1) until rb) text.indexOf('"', c1 + 1) else -1
+                val comma1 = if (c2 in (c1 + 1) until rb) text.indexOf(',', c2 + 1) else -1
+                val comma2 = if (comma1 in (c2 + 1) until rb) text.indexOf(',', comma1 + 1) else -1
+                if (comma2 > comma1 && comma1 > c2) {
+                    val country = text.substring(c1 + 1, c2)
+                    val comma3 = text.indexOf(',', comma2 + 1).takeIf { it in (comma2 + 1) until rb }
+                    val lat = text.substring(comma1 + 1, comma2).trim().toDouble()
+                    val lon = text.substring(comma2 + 1, comma3 ?: rb).trim().toDouble()
+                    val city = if (comma3 != null) {
+                        val s1 = text.indexOf('"', comma3 + 1)
+                        val s2 = text.lastIndexOf('"', rb - 1)
+                        if (s1 in (comma3 + 1) until s2) unescapeJson(text.substring(s1 + 1, s2)).takeIf { it.isNotEmpty() } else null
+                    } else null
+                    map[code] = AirportPlace(country, lat, lon, city)
+                }
+            }
         }
+        pos = nl + 1
+    }
+    map
 }
 
 // A JSON string's text, its escapes undone ("\u00f6" is ö).
-private fun unescapeJson(text: String): String = Regex("""\\(u[0-9a-fA-F]{4}|.)""").replace(text) { m ->
-    val e = m.groupValues[1]
-    when {
-        e.startsWith("u") && e.length == 5 -> e.substring(1).toInt(16).toChar().toString()
-        e == "n" -> "\n"
-        e == "t" -> "\t"
-        else -> e
+private fun unescapeJson(text: String): String {
+    if ('\\' !in text) return text
+    val out = StringBuilder(text.length)
+    var i = 0
+    while (i < text.length) {
+        val c = text[i]
+        if (c == '\\' && i + 1 < text.length) {
+            val next = text[i + 1]
+            if (next == 'u' && i + 5 < text.length) {
+                out.append(text.substring(i + 2, i + 6).toInt(16).toChar())
+                i += 6
+            } else {
+                out.append(when (next) {
+                    'n' -> '\n'
+                    't' -> '\t'
+                    else -> next
+                })
+                i += 2
+            }
+        } else {
+            out.append(c)
+            i++
+        }
     }
+    return out.toString()
 }
+
+internal fun isIataCode(key: String): Boolean =
+    key.length == 3 && key[0] in 'A'..'Z' && key[1] in 'A'..'Z' && key[2] in 'A'..'Z'
 
 fun airportPlace(code: String): AirportPlace? {
     val key = code.trim().uppercase()
-    return if (Regex("^[A-Z]{3}$").matches(key)) airportPlaces[key] else null
+    return if (isIataCode(key)) airportPlaces[key] else null
 }
 
 /** The country a place is in, if its booking or its airport says. Station codes are not airport codes. */

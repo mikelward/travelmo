@@ -1,8 +1,6 @@
 package app.travelmo.core
 
-import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
-import kotlinx.datetime.plus
 import kotlinx.serialization.Serializable
 
 // Where the user has been, worked out from their trips' bookings alone, as
@@ -33,27 +31,33 @@ private const val CONNECTION_HOURS = 24L
 private fun instantAt(at: String): Long = instantMillis(at)
 
 private fun connections(live: List<Segment>, lookup: (String) -> AirportPlace?): Pair<Set<Segment>, Set<Segment>> {
-    val flights = live.filter { it.type == SegmentType.FLIGHT }.sortedWith { a, b -> compareInstants(a.start, b.start) }
+    class TimedFlight(val s: Segment, val start: Long, val end: Long)
+    class TimedStay(val start: Long, val end: Long, val where: String?)
+    val flights = live.filter { it.type == SegmentType.FLIGHT }
+        .map { TimedFlight(it, instantAt(it.start), instantAt(it.end ?: it.start)) }
+        .sortedBy { it.start }
     val stays = live.filter { it.type == SegmentType.LODGING }
+        .map { TimedStay(instantAt(it.start), instantAt(it.end ?: it.start), placeCountry(it.destination ?: it.origin, SegmentType.LODGING, lookup)) }
     val lands = mutableSetOf<Segment>()
     val leaves = mutableSetOf<Segment>()
-    for ((a, b) in flights.zipWithNext()) {
-        val at = a.destination?.code?.trim()?.uppercase() ?: continue
-        if (at != b.origin?.code?.trim()?.uppercase()) continue
-        val landed = instantAt(a.end ?: a.start)
-        val left = instantAt(b.start)
+    for (i in 0 until flights.size - 1) {
+        val a = flights[i]
+        val b = flights[i + 1]
+        val at = a.s.destination?.code?.trim()?.uppercase() ?: continue
+        if (at != b.s.origin?.code?.trim()?.uppercase()) continue
+        val landed = a.end
+        val left = b.start
         if (left < landed || left - landed > CONNECTION_HOURS * 3_600_000) continue
         // Only a stay in the connection's country makes it a stopover: a
         // hotel booked where the trip goes next can overlap the change of planes.
-        val country = placeCountry(a.destination, SegmentType.FLIGHT, lookup)
+        val country = placeCountry(a.s.destination, SegmentType.FLIGHT, lookup)
         val stayed = stays.any { stay ->
-            val where = placeCountry(stay.destination ?: stay.origin, SegmentType.LODGING, lookup)
-            (where == null || country == null || where == country) &&
-                instantAt(stay.start) < left && instantAt(stay.end ?: stay.start) > landed
+            (stay.where == null || country == null || stay.where == country) &&
+                stay.start < left && stay.end > landed
         }
         if (stayed) continue
-        lands += a
-        leaves += b
+        lands += a.s
+        leaves += b.s
     }
     return lands to leaves
 }
@@ -76,8 +80,6 @@ private fun moments(segment: Segment, lookup: (String) -> AirportPlace?, lands: 
     val stay = segment.type == SegmentType.LODGING
     return listOfNotNull(Moment(segment.start, here, here, moves = stay), segment.end?.let { Moment(it, here, here, moves = stay) })
 }
-
-private fun nextDay(date: String): String = LocalDate.parse(date).plus(DatePeriod(days = 1)).toString()
 
 /**
  * The countries of each day of a trip, up to `today`: a day counts for every
@@ -115,47 +117,60 @@ fun reportBounds(trip: Trip, segments: List<Segment>): Pair<String, String>? = w
 data class TripDay(val countries: Set<String>, val inTransit: Boolean, val started: Boolean, val local: Boolean = false, val night: String? = null, val nightAt: String? = null)
 
 fun tripDayPlaces(trip: Trip, segments: List<Segment>, today: String, lookup: (String) -> AirportPlace? = ::airportPlace): Map<String, TripDay> {
+    val days = LinkedHashMap<String, TripDay>()
+    val bounds = reportBounds(trip, segments) ?: return days
+    val last = minOf(bounds.second, today)
+    if (bounds.first > last) return days
     // In the order they happened, which across the date line is not the
     // order of their local dates: a flight can land the day before it left.
     val live = liveSegments(segments)
     val (lands, leaves) = connections(live, lookup)
-    val timeline = live.flatMap { moments(it, lookup, it in lands, it in leaves) }.sortedWith { a, b -> compareInstants(a.at, b.at) }
-    val days = LinkedHashMap<String, TripDay>()
-    val bounds = reportBounds(trip, segments) ?: return days
-    val last = minOf(bounds.second, today)
-    var day = bounds.first
-    while (day <= last) {
-        // Where the traveler was as the day began: left by the latest moment dated before it.
-        var where: String? = null
-        var transit = false
-        var started = false
-        var travelled = false
-        // Where the traveler is as the day ends: left by its latest moment.
-        var night: String? = null
-        var nightAt: String? = null
+    class TimedMoment(val m: Moment, val ms: Long, val date: String)
+    val timeline = live.flatMap { moments(it, lookup, it in lands, it in leaves) }
+        .map { TimedMoment(it, instantAt(it.at), localDate(it.at)) }
+        .sortedBy { it.ms }
+
+    // Bucket moments by local date while preserving their instant-order index,
+    // so advancing a day at a time only touches moments on that date.
+    val byDate = HashMap<String, MutableList<Int>>()
+    var started = false
+    var travelled = false
+    var lastIdx = -1
+    for (idx in timeline.indices) {
+        val entry = timeline[idx]
+        if (entry.date < bounds.first) {
+            started = true
+            if (entry.m.moves || entry.m.country != null) travelled = true
+            if (entry.m.moves || entry.m.then != null) lastIdx = idx
+        } else if (entry.date <= last) {
+            byDate.getOrPut(entry.date) { mutableListOf() }.add(idx)
+        }
+    }
+
+    val startEpoch = LocalDate.parse(bounds.first).toEpochDays()
+    val endEpoch = LocalDate.parse(last).toEpochDays()
+    for (d in startEpoch..endEpoch) {
+        val day = LocalDate.fromEpochDays(d).toString()
+        val prev = if (lastIdx >= 0) timeline[lastIdx].m else null
+        val where = prev?.then
+        val transit = prev?.transit ?: false
         val countries = mutableSetOf<String>()
-        for (m in timeline) {
-            val date = localDate(m.at)
-            if (date <= day) {
+        val onDay = byDate[day]
+        if (onDay != null) {
+            for (idx in onDay) {
+                val m = timeline[idx].m
                 started = true
                 if (m.moves || m.country != null) travelled = true
-                if (m.moves || m.then != null) {
-                    night = if (m.transit) null else m.then
-                    nightAt = m.at
-                }
-            }
-            // An outing that names no country leaves the traveler where they were.
-            if (date < day && (m.moves || m.then != null)) {
-                where = m.then
-                transit = m.transit
-            } else if (date == day && m.country != null) {
-                countries += m.country
+                if ((m.moves || m.then != null) && idx > lastIdx) lastIdx = idx
+                if (m.country != null) countries += m.country
             }
         }
         if (where != null) countries += where
         val inTransit = countries.isEmpty() && transit
+        val endM = if (lastIdx >= 0) timeline[lastIdx].m else null
+        val night = if (endM != null && !endM.transit) endM.then else null
+        val nightAt = endM?.at
         days[day] = TripDay(countries, inTransit, started, local = countries.isEmpty() && !inTransit && !travelled, night = night, nightAt = nightAt)
-        day = nextDay(day)
     }
     return days
 }

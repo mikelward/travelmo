@@ -10,6 +10,7 @@ import {
   terminate,
   type Firestore,
 } from "firebase/firestore";
+import { clearSegmentCache } from "./segmentCache";
 
 function requireEnv(name: string, value: string | undefined): string {
   if (!value) throw new Error(`Missing ${name}; copy apps/web/.env.example to .env.local`);
@@ -92,6 +93,7 @@ export async function forgetFirestoreCache(): Promise<void> {
 }
 
 async function clearCache(owner: string | undefined): Promise<void> {
+  clearSegmentCache();
   const instance = firestore();
   try {
     await terminate(instance);

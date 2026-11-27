@@ -680,6 +680,7 @@ class ScreenScreenshotTest {
     private fun reportsSaved(name: String, dark: Boolean) {
         val stalled = object : TripStore by FakeTripStore() {
             override fun segments(tripId: String): Flow<List<Segment>> = flow { awaitCancellation() }
+            override suspend fun segmentsOnce(tripId: String): app.travelmo.data.Seen<List<Segment>> = awaitCancellation()
         }
         val last = travelReport(fixtureTrips.map { TripWithSegments(it, fixtureSegments[it.id].orEmpty()) }, FROZEN_NOW.take(10))
         val viewModel = TripsViewModel(stalled, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, reportSnapshotStore = InMemoryReportSnapshotStore(encodeReportSnapshot(OWNER, last)))

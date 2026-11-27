@@ -1,5 +1,6 @@
 import { equalEarth } from "@travelmo/core/projection";
 import type { AirportVisit, PlaceVisit } from "@travelmo/core";
+import { memo } from "react";
 
 // The shape of src/lib/worldMap.json, drawn by scripts/worldmap.mjs.
 export type WorldMapData = { scale: number; viewBox: number[]; countries: Record<string, string> };
@@ -10,7 +11,7 @@ const placeLabel = (p: PlaceVisit, name: (code: string) => string) =>
 // Countries visited are filled; airports flown through are dots, and the
 // stays, stations and other places whose bookings say where they are
 // smaller ones.
-export function WorldMap({
+export const WorldMap = memo(function WorldMap({
   data,
   visited,
   airports,
@@ -71,4 +72,4 @@ export function WorldMap({
       })}
     </svg>
   );
-}
+});

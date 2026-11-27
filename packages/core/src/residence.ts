@@ -1,5 +1,5 @@
 import { compareInstants } from "./instant";
-import { homeAt, type HomePeriod, countryCode } from "./home";
+import { type HomePeriod, countryCode } from "./home";
 import { reportBounds, tripDayPlaces, type PlaceLookup, type TripWithSegments } from "./reports";
 
 // Days in and out of countries, for residence and visa limits: where the
@@ -12,29 +12,91 @@ import { reportBounds, tripDayPlaces, type PlaceLookup, type TripWithSegments } 
 
 const dayMs = 86_400_000;
 
+function isLeap(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
 function daysInMonth(year: number, month: number): number {
-  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (month === 2) return isLeap(year) ? 29 : 28;
+  return month === 4 || month === 6 || month === 9 || month === 11 ? 30 : 31;
+}
+
+// Civil date (YYYY-MM-DD) <-> days since 1970-01-01 using Howard Hinnant's algorithm.
+function ymdToEpochDay(y: number, m: number, d: number): number {
+  const yr = m <= 2 ? y - 1 : y;
+  const era = Math.floor(yr / 400);
+  const yoe = yr - era * 400;
+  const doy = Math.floor((153 * (m + (m > 2 ? -3 : 9)) + 2) / 5) + d - 1;
+  const doe = yoe * 365 + Math.floor(yoe / 4) - Math.floor(yoe / 100) + doy;
+  return era * 146097 + doe - 719468;
+}
+
+function epochDayToYmd(z: number): [number, number, number] {
+  const zz = z + 719468;
+  const era = Math.floor(zz / 146097);
+  const doe = zz - era * 146097;
+  const yoe = Math.floor((doe - Math.floor(doe / 1460) + Math.floor(doe / 36524) - Math.floor(doe / 146096)) / 365);
+  let y = yoe + era * 400;
+  const doy = doe - (365 * yoe + Math.floor(yoe / 4) - Math.floor(yoe / 100));
+  const mp = Math.floor((5 * doy + 2) / 153);
+  const d = doy - Math.floor((153 * mp + 2) / 5) + 1;
+  const m = mp + (mp < 10 ? 3 : -9);
+  if (m <= 2) y += 1;
+  return [y, m, d];
+}
+
+function epochDay(date: string): number {
+  return ymdToEpochDay(Number(date.slice(0, 4)), Number(date.slice(5, 7)), Number(date.slice(8, 10)));
+}
+
+function formatEpochDay(z: number): string {
+  const [y, m, d] = epochDayToYmd(z);
+  return `${y < 1000 ? String(y).padStart(4, "0") : y}-${m < 10 ? "0" : ""}${m}-${d < 10 ? "0" : ""}${d}`;
 }
 
 export type DateShift = { years?: number; months?: number; days?: number };
 
-// A calendar date moved by whole years and months (keeping to the last day
-// of a shorter month: 29 Feb 2024 plus a year is 28 Feb 2025), then days.
-export function shiftDate(date: string, { years = 0, months = 0, days = 0 }: DateShift): string {
-  const [y, m, d] = date.split("-").map(Number) as [number, number, number];
+function shiftEpochDay(z: number, { years = 0, months = 0, days = 0 }: DateShift): number {
+  if (years === 0 && months === 0) return z + days;
+  const [y, m, d] = epochDayToYmd(z);
   const total = y * 12 + (m - 1) + years * 12 + months;
   const year = Math.floor(total / 12);
-  const month = (total % 12) + 1;
+  const month = total - year * 12 + 1;
   const day = Math.min(d, daysInMonth(year, month));
-  return new Date(Date.UTC(year, month - 1, day) + days * dayMs).toISOString().slice(0, 10);
+  return ymdToEpochDay(year, month, day) + days;
 }
 
-const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / dayMs);
+// A calendar date moved by whole years and months (keeping to the last day
+// of a shorter month: 29 Feb 2024 plus a year is 28 Feb 2025), then days.
+export function shiftDate(date: string, shift: DateShift): string {
+  return formatEpochDay(shiftEpochDay(epochDay(date), shift));
+}
+
+const daysBetween = (from: string, to: string) => epochDay(to) - epochDay(from);
 
 function* dates(from: string, to: string): Generator<string> {
-  for (let t = Date.parse(`${from}T00:00:00Z`), end = Date.parse(`${to}T00:00:00Z`); t <= end; t += dayMs) {
-    yield new Date(t).toISOString().slice(0, 10);
+  const end = epochDay(to);
+  for (let d = epochDay(from); d <= end; d++) {
+    yield formatEpochDay(d);
   }
+}
+
+type ResolvedHome = { from: number; until: number; code?: string };
+
+function resolveHomes(homes: readonly HomePeriod[]): ResolvedHome[] {
+  return homes.map((h) => ({
+    from: h.from ? epochDay(h.from) : -Infinity,
+    until: h.until ? epochDay(h.until) : Infinity,
+    ...(h.country ? { code: countryCode(h.country) } : {}),
+  }));
+}
+
+function homeCodeAtDay(homes: readonly ResolvedHome[], day: number): string | undefined {
+  for (let i = 0; i < homes.length; i++) {
+    const h = homes[i]!;
+    if (h.from <= day && day <= h.until) return h.code;
+  }
+  return undefined;
 }
 
 // ---- Where the traveler was ----
@@ -74,10 +136,19 @@ export function presenceTimeline(
       // days, and a day of outings near home that name no place puts the
       // traveler nowhere new: both are at home.
       if (day < from || !place.started || place.local) continue;
-      const known = days.get(day) ?? { countries: new Set<string>(), tripIds: new Set<string>(), assumedHome: false, inTransit: false, tripCountries: new Map<string, Set<string>>() };
+      let known = days.get(day);
+      if (!known) {
+        known = { countries: new Set<string>(), tripIds: new Set<string>(), assumedHome: false, inTransit: false, tripCountries: new Map<string, Set<string>>() };
+        days.set(day, known);
+      }
       for (const c of place.countries) known.countries.add(c);
       known.tripIds.add(trip.id);
-      known.tripCountries?.set(trip.id, new Set([...(known.tripCountries.get(trip.id) ?? []), ...place.countries]));
+      let tc = known.tripCountries!.get(trip.id);
+      if (!tc) {
+        tc = new Set<string>();
+        known.tripCountries!.set(trip.id, tc);
+      }
+      for (const c of place.countries) tc.add(c);
       // The night is where the day's last booking, of any trip, left them.
       const last = nightAt.get(day);
       if (place.nightAt && (!last || compareInstants(place.nightAt, last) > 0)) {
@@ -86,20 +157,33 @@ export function presenceTimeline(
         else delete known.night;
       }
       known.inTransit = !known.countries.size && (known.inTransit || place.inTransit);
-      days.set(day, known);
     }
   }
+  const resolved = resolveHomes(homes);
+  const homeCache = new Map<string, DayPresence>();
+  const emptyHome: DayPresence = { countries: new Set(), tripIds: new Set(), assumedHome: true, inTransit: false };
   const timeline = new Map<string, DayPresence>();
-  for (const day of dates(from, to)) {
+  const startNum = epochDay(from);
+  const endNum = epochDay(to);
+  for (let d = startNum; d <= endNum; d++) {
+    const day = formatEpochDay(d);
     const known = days.get(day);
     if (known) {
       timeline.set(day, known);
       continue;
     }
     // As a code, however the home was written ("UK" is GB).
-    const homeCountry = homeAt(homes, day)?.country;
-    const home = homeCountry ? countryCode(homeCountry) : undefined;
-    timeline.set(day, { countries: new Set(home ? [home] : []), tripIds: new Set(), assumedHome: true, inTransit: false, ...(home ? { night: home } : {}) });
+    const home = homeCodeAtDay(resolved, d);
+    if (!home) {
+      timeline.set(day, emptyHome);
+    } else {
+      let entry = homeCache.get(home);
+      if (!entry) {
+        entry = { countries: new Set([home]), tripIds: new Set(), assumedHome: true, inTransit: false, night: home };
+        homeCache.set(home, entry);
+      }
+      timeline.set(day, entry);
+    }
   }
   return timeline;
 }
@@ -621,49 +705,66 @@ export function evaluateRule(rule: ResidenceRule, timeline: Map<string, DayPrese
     };
   }
 
-  const windowEnding = (end: string): DateRange => ({ start: spanStart(end, rule.window), end });
-  let latest = windowEnding(date);
+  const spanStartDay = (endDay: number, span: DateShift) =>
+    shiftEpochDay(shiftEpochDay(endDay, { years: -(span.years ?? 0), months: -(span.months ?? 0) }), { days: 1 - (span.days ?? 0) });
+
+  const dateDay = epochDay(date);
+  let latestStartDay = spanStartDay(dateDay, rule.window);
+  let latest: DateRange = { start: formatEpochDay(latestStartDay), end: date };
   let window = latest;
-  let used = countIn(latest);
+  let used = 0;
   let period: RuleResult["period"];
+  let currentUsed: number | undefined;
   if (rule.rolling) {
     // Every window ending within the rolling period, kept as a running
     // count: the latest of the worst is the one shown. For a qualifying
     // period, only windows wholly inside it, as days before it do not count.
-    const full = spanStart(date, rule.rolling);
+    const fullDay = spanStartDay(dateDay, rule.rolling);
+    const full = formatEpochDay(fullDay);
     const moved = rule.qualifying ? movedTo(homes, area, date, full) : undefined;
+    const startDay = moved ? epochDay(moved) : fullDay;
     const start = moved ?? full;
     if (rule.qualifying) period = { start, end: date, moved: Boolean(moved) };
-    let firstEnd = start;
+    let firstEndDay = startDay;
     // Moved on a day at a time, as month arithmetic is not reversible (a
     // period starting on 29 February); a window's length bounds it.
-    if (rule.qualifying) while (firstEnd < date && windowEnding(firstEnd).start < start) firstEnd = shiftDate(firstEnd, { days: 1 });
-    if (rule.qualifying && windowEnding(firstEnd).start < start) {
+    if (rule.qualifying) while (firstEndDay < dateDay && spanStartDay(firstEndDay, rule.window) < startDay) firstEndDay += 1;
+    if (rule.qualifying && spanStartDay(firstEndDay, rule.window) < startDay) {
       // A period shorter than one window: its days alone.
+      latestStartDay = startDay;
       latest = { start, end: date };
       window = latest;
       used = countIn(latest);
+      currentUsed = used;
     } else {
-      const ends = [...dates(firstEnd < date ? firstEnd : date, date)];
-      const first = windowEnding(ends[0]!);
-      let count = countIn(first);
-      let from = first.start;
+      const firstEnd = firstEndDay < dateDay ? firstEndDay : dateDay;
+      const earliestDay = Math.min(spanStartDay(firstEnd, rule.window), latestStartDay);
+      const total = dateDay - earliestDay + 1;
+      const prefix = new Int32Array(total + 1);
+      for (let i = 0; i < total; i++) {
+        prefix[i + 1] = prefix[i]! + (counted(timeline.get(formatEpochDay(earliestDay + i))) ? 1 : 0);
+      }
+      const rangeCount = (s: number, e: number) => prefix[e - earliestDay + 1]! - prefix[s - earliestDay]!;
       const better = (n: number) => (rule.kind === "minPresent" ? n <= used : n >= used);
-      used = count;
-      window = first;
-      for (let i = 1; i < ends.length; i++) {
-        const next = windowEnding(ends[i]!);
-        for (const day of dates(from, shiftDate(next.start, { days: -1 }))) if (counted(timeline.get(day))) count -= 1;
-        if (counted(timeline.get(next.end))) count += 1;
-        from = next.start;
+      let bestStart = spanStartDay(firstEnd, rule.window);
+      let bestEnd = firstEnd;
+      used = rangeCount(bestStart, bestEnd);
+      for (let end = firstEnd + 1; end <= dateDay; end++) {
+        const winStart = spanStartDay(end, rule.window);
+        const count = rangeCount(winStart, end);
         if (better(count)) {
           used = count;
-          window = next;
+          bestStart = winStart;
+          bestEnd = end;
         }
       }
+      window = { start: formatEpochDay(bestStart), end: formatEpochDay(bestEnd) };
+      currentUsed = rangeCount(latestStartDay, dateDay);
     }
+  } else {
+    used = countIn(latest);
   }
-  const current = rule.rolling ? { used: countIn(latest), window: latest } : undefined;
+  const current = rule.rolling ? { used: currentUsed ?? countIn(latest), window: latest } : undefined;
   const listed = period ?? window;
   return {
     rule,
@@ -685,16 +786,17 @@ export function evaluateRule(rule: ResidenceRule, timeline: Map<string, DayPrese
 // of homes in it that reaches the date, if that run starts after `since`.
 // None when home on the date is elsewhere, or not known.
 function movedTo(homes: readonly HomePeriod[], area: ReadonlySet<string>, date: string, since: string): string | undefined {
-  const inArea = (day: string) => {
-    const country = homeAt(homes, day)?.country;
-    return Boolean(country && area.has(countryCode(country) ?? ""));
+  const resolved = resolveHomes(homes);
+  const inArea = (day: number) => {
+    const code = homeCodeAtDay(resolved, day);
+    return Boolean(code && area.has(code));
   };
-  if (!inArea(date)) return undefined;
-  let day = date;
-  while (day > since) {
-    const before = shiftDate(day, { days: -1 });
-    if (!inArea(before)) return day;
-    day = before;
+  let day = epochDay(date);
+  const sinceDay = epochDay(since);
+  if (!inArea(day)) return undefined;
+  while (day > sinceDay) {
+    if (!inArea(day - 1)) return formatEpochDay(day);
+    day -= 1;
   }
   return undefined;
 }
@@ -784,7 +886,11 @@ export function countryDays(
   counting: CountryCounting = "part",
 ): CountryDaysReport {
   // From the day before, to see where the first day began.
-  const timeline = presenceTimeline(all, homes, shiftDate(range.start, { days: -1 }), range.end, lookup);
+  const startDay = epochDay(range.start);
+  const endDay = epochDay(range.end);
+  const dayBeforeStart = formatEpochDay(startDay - 1);
+  const timeline = presenceTimeline(all, homes, dayBeforeStart, range.end, lookup);
+  const resolved = resolveHomes(homes);
   const open = new Map<string, { start: string; end: string; days: number; home: boolean; tripIds: Set<string> }>();
   const stays = new Map<string, CountryStay[]>();
   const close = (country: string) => {
@@ -792,32 +898,47 @@ export function countryDays(
     if (!run) return;
     open.delete(country);
     const stay = { start: run.start, end: run.end, days: run.days, home: run.home, tripIds: run.home ? [] : [...run.tripIds].sort() };
-    stays.set(country, [...(stays.get(country) ?? []), stay]);
+    let list = stays.get(country);
+    if (!list) {
+      list = [];
+      stays.set(country, list);
+    }
+    list.push(stay);
   };
-  for (const day of dates(range.start, range.end)) {
+  let prev = timeline.get(dayBeforeStart);
+  let homeCountryKnown = true;
+  for (let num = startDay; num <= endDay; num++) {
+    const day = formatEpochDay(num);
     const d = timeline.get(day);
-    const here = countedIn(d, timeline.get(shiftDate(day, { days: -1 })), counting);
-    const homeCountry = countryCode(homeAt(homes, day)?.country ?? "");
+    if (d && d.assumedHome && !d.countries.size) homeCountryKnown = false;
+    const here = countedIn(d, prev, counting);
+    prev = d;
+    const homeCountry = homeCodeAtDay(resolved, num);
     // A stay ends when the traveler leaves, or when the country stops or
     // starts being home (a move abroad mid-stay starts a stay away).
     for (const c of [...open.keys()]) if (!here.has(c) || open.get(c)!.home !== (c === homeCountry)) close(c);
     for (const c of here) {
-      const run = open.get(c) ?? { start: day, end: day, days: 0, home: c === homeCountry, tripIds: new Set<string>() };
+      let run = open.get(c);
+      if (!run) {
+        run = { start: day, end: day, days: 0, home: c === homeCountry, tripIds: new Set<string>() };
+        open.set(c, run);
+      }
       run.end = day;
       run.days += 1;
       // Only the trips that put the traveler in this country: two trips
       // sharing a day in different countries each link to their own.
-      for (const [t, there] of d?.tripCountries ?? []) if (there.has(c)) run.tripIds.add(t);
-      open.set(c, run);
+      if (d?.tripCountries) {
+        for (const [t, there] of d.tripCountries) if (there.has(c)) run.tripIds.add(t);
+      }
     }
   }
   for (const c of [...open.keys()]) close(c);
   return {
     countries: [...stays]
-      .map(([country, runs]) => ({ country, days: runs.reduce((n, r) => n + r.days, 0), stays: [...runs].reverse() }))
+      .map(([country, runs]) => ({ country, days: runs.reduce((n, r) => n + r.days, 0), stays: runs.reverse() }))
       .sort((a, b) => b.days - a.days || a.country.localeCompare(b.country)),
     // Home's missing country is one fix on the Profile, not a run of days.
     unplaced: stretches(timeline, range, (d) => isUnknown(d) && !d?.assumedHome, new Set(), false).reverse(),
-    homeCountryKnown: ![...timeline].some(([day, d]) => day >= range.start && d.assumedHome && !d.countries.size),
+    homeCountryKnown,
   };
 }

@@ -183,9 +183,7 @@ function Trips({ user }: { user: User }) {
   // Whom the user's bookings name, and so which trips they're only watching.
   const travelers = usePeople(user.uid);
   // Every trip's bookings, read once a search starts (SPEC "Searching trips").
-  const all = useAllSegments(
-    trips && searched ? trips.map((t) => t.id) : undefined,
-  );
+  const all = useAllSegments(trips && searched ? trips : undefined, user.uid);
   // The bookings of trips that don't yet say what the filters and their
   // picture need (flagsUnknown), each read once per version of the trip,
   // whenever it turns up so (a later snapshot, an edit), and its flags kept,

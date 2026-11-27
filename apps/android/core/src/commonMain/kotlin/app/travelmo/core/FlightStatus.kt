@@ -41,7 +41,7 @@ fun flightDesignator(segment: Segment): String? {
 /** The flight a booking is on, as the parser names its status: "QF1_2026-12-13_SYD". */
 fun flightStatusKey(segment: Segment): String? {
     val ident = flightDesignator(segment) ?: return null
-    val origin = segment.origin?.code?.uppercase()?.takeIf { Regex("[A-Z]{3}").matches(it) }
+    val origin = segment.origin?.code?.uppercase()?.takeIf(::isIataCode)
     return listOfNotNull(ident, localDate(segment.start), origin).joinToString("_")
 }
 

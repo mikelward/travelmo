@@ -14,8 +14,7 @@ import app.travelmo.core.warmTables
 import app.travelmo.core.homeTownKey
 import app.travelmo.core.ChosenHomeAirports
 import app.travelmo.core.withAlias
-import app.travelmo.core.withHomeAirports
-import app.travelmo.core.withChosenAirports
+import app.travelmo.core.effectiveHomesWithAirports
 import app.travelmo.core.tripMatches
 import app.travelmo.core.parseTripQuery
 import app.travelmo.core.ListFilters
@@ -80,10 +79,15 @@ import app.travelmo.data.InMemoryListFilterStore
 import app.travelmo.data.CountingStore
 import app.travelmo.data.InMemoryCountingStore
 import app.travelmo.data.InMemoryReportSnapshotStore
+import app.travelmo.data.InMemorySegmentVersionsStore
 import app.travelmo.data.ListFilterStore
 import app.travelmo.data.ReportSnapshotStore
+import app.travelmo.data.SegmentVersion
+import app.travelmo.data.SegmentVersionsStore
 import app.travelmo.data.decodeReportSnapshot
+import app.travelmo.data.decodeSegmentVersions
 import app.travelmo.data.encodeReportSnapshot
+import app.travelmo.data.encodeSegmentVersions
 import app.travelmo.core.LinkCheck
 import app.travelmo.core.checkNewLink
 import app.travelmo.core.CountryCounting
@@ -156,8 +160,14 @@ import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -169,11 +179,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -284,6 +297,10 @@ class TripsViewModel(
     private val countingStore: CountingStore = InMemoryCountingStore(),
     /** Where Reports' last counts and map are kept, to draw at once next time; in memory by default. */
     private val reportSnapshotStore: ReportSnapshotStore = InMemoryReportSnapshotStore(),
+    /** Where each trip's last read booking version is kept, to reuse Firestore's cache across restarts; in memory by default. */
+    private val segmentVersionsStore: SegmentVersionsStore = InMemorySegmentVersionsStore(),
+    /** Emits when connectivity returns so screens holding unconfirmed offline reads refresh in place. */
+    private val reconnected: Flow<Unit> = emptyFlow(),
     /**
      * Where the trip list's state is worked out: the app passes Dispatchers.Default, so the main thread only draws.
      * Null works it out where the flows run, on the main thread, as tests want for a frame they can wait for.
@@ -512,15 +529,52 @@ class TripsViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TripListState(null, emptyMap(), clock().toString()))
 
 
+    // In-memory bookings keyed by trip id and updatedAt, plus the on-disk version manifest so unchanged
+    // trips reuse Firestore's local cache across app restarts without issuing server RPCs.
+    private val segmentCache = mutableMapOf<String, Pair<String, List<Segment>>>()
+    private var segmentVersionsLoaded = false
+    private val segmentVersions = mutableMapOf<String, SegmentVersion>()
+    private val segmentRefresh = MutableStateFlow(0)
+    private val hasUnconfirmedSegments = MutableStateFlow(false)
+
+    /** Retries any trip whose bookings came from an unconfirmed offline cache read or failed. */
+    fun refreshUnconfirmedSegments() {
+        if (hasUnconfirmedSegments.value) segmentRefresh.update { it + 1 }
+    }
+
+    // Every trip's bookings, read once per trip-version with bounded concurrency rather than attaching
+    // a live listener per trip: emits once when loaded and only re-reads trips whose updatedAt changed.
+    private val allSegments: Flow<List<TripWithSegments>?> = run {
+        val triggers: Flow<Unit> = merge(
+            segmentRefresh.map { },
+            reconnected.filter { hasUnconfirmedSegments.value },
+        )
+        val byTrip: Flow<Map<String, List<Segment>>?> = combine(
+            trips.map { list -> list?.map { it.id to it.updatedAt }?.sortedBy { it.first } }.distinctUntilChanged(),
+            triggers,
+        ) { versions, _ -> versions }
+            .flatMapLatest { versions ->
+                when {
+                    versions == null -> flowOf(null)
+                    versions.isEmpty() -> flowOf(emptyMap())
+                    else -> flow { emit(loadAllSegments(versions)) }
+                }
+            }
+        // A trip just added waits out of the list until its bookings answer.
+        combine(trips, byTrip) { list, segments ->
+            if (list == null || segments == null) null else list.mapNotNull { trip -> segments[trip.id]?.let { TripWithSegments(trip, it) } }
+        }.shareIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
+    }
+
     /**
-     * Every trip the viewer sees with its bookings, for the reports: one
-     * listener per trip, as the web's reports page keeps; null until the
+     * Every trip the viewer sees with its bookings, for the reports: read once
+     * per trip version (cached in memory and across restarts), null until the
      * trips, each one's bookings and the user's people have answered. A trip
      * the user is only watching (watchedTrip) isn't theirs to count: not in
      * the reports, residence days, the download or working out home.
      */
-    val reportTrips: StateFlow<List<TripWithSegments>?> = combine(allSegments(), accessSettled.flatMapLatest { store.people(uid) }) { all, people ->
-        all?.filterNot { watchedTrip(it.trip, it.segments, people) }
+    val reportTrips: StateFlow<List<TripWithSegments>?> = combine(allSegments, accessSettled.flatMapLatest { store.people(uid) }) { all, people ->
+        all?.let { list -> computed { list.filterNot { watchedTrip(it.trip, it.segments, people) } } }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val _searchText = MutableStateFlow("")
@@ -534,25 +588,30 @@ class TripsViewModel(
 
     fun searchTrips(text: String) {
         _searchText.value = text
-        if (text.isNotBlank()) searchStarted.value = true
+        if (text.isNotBlank()) {
+            searchStarted.value = true
+            refreshUnconfirmedSegments()
+        }
     }
 
     /**
      * The trips a search finds (SPEC "Searching trips"), null while the box
-     * is empty. Every trip's bookings are listened to once a search starts;
+     * is empty. Every trip's bookings are read once a search starts;
      * until they answer, trips are matched by title and dates.
      */
     val searchResult: StateFlow<TripSearchResult?> = combine(
         _searchText,
         trips,
-        searchStarted.flatMapLatest { started -> if (started) allSegments() else flowOf(null) },
+        searchStarted.flatMapLatest { started -> if (started) allSegments else flowOf(null) },
     ) { text, trips, all ->
         val query = parseTripQuery(text)
         if (query.isEmpty || trips == null) return@combine null
-        val titles = displayTitles(trips)
-        val segments = all?.associate { it.trip.id to it.segments }
-        val ids = trips.filter { tripMatches(query, it, titles[it.id] ?: it.title, segments?.get(it.id).orEmpty()) }.map { it.id }.toSet()
-        TripSearchResult(ids, bookingsSearched = segments != null)
+        computed {
+            val titles = displayTitles(trips)
+            val segments = all?.associate { it.trip.id to it.segments }
+            val ids = trips.filter { tripMatches(query, it, titles[it.id] ?: it.title, segments?.get(it.id).orEmpty()) }.map { it.id }.toSet()
+            TripSearchResult(ids, bookingsSearched = segments != null)
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val _listFilters = MutableStateFlow(listFilterStore.read())
@@ -653,20 +712,98 @@ class TripsViewModel(
     // Trips whose flags are being repaired now: one repair at a time each.
     private val repairing = mutableSetOf<String>()
 
-    // Every trip's bookings, by trip, null until each has answered. Listened to again only when which trips they are
-    // changes: a change to a trip itself (its flags recorded, its dates widened) keeps every listener, where restarting
-    // them all made the reports wait for every trip's bookings again, and work everything out again, each time.
-    private fun allSegments(): Flow<List<TripWithSegments>?> {
-        val byTrip: Flow<Map<String, List<Segment>>?> = trips.map { list -> list?.map { it.id }?.sorted() }.distinctUntilChanged().flatMapLatest { ids ->
-            when {
-                ids == null -> flowOf(null)
-                ids.isEmpty() -> flowOf(emptyMap())
-                else -> combine(ids.map { id -> segments(id).map { id to it } }) { it.toMap() }
+    private data class LoadedTripSegments(
+        val tripId: String,
+        val updatedAt: String,
+        val segments: List<Segment>,
+        val fresh: Boolean,
+    )
+
+    private suspend fun loadAllSegments(versions: List<Pair<String, String>>): Map<String, List<Segment>> {
+        if (!segmentVersionsLoaded) {
+            val loaded = computed {
+                try {
+                    decodeSegmentVersions(segmentVersionsStore.read(), uid)
+                } catch (e: Exception) {
+                    SharedLog.error(e, "Reading cached trip versions failed")
+                    emptyMap()
+                }
+            }
+            segmentVersions.putAll(loaded)
+            segmentVersionsLoaded = true
+        }
+        val cachedSnapshot = segmentCache.toMap()
+        val versionsSnapshot = segmentVersions.toMap()
+        val result = LinkedHashMap<String, List<Segment>>(versions.size)
+        val toFetch = mutableListOf<Pair<String, String>>()
+        for ((id, updatedAt) in versions) {
+            val hit = cachedSnapshot[id]
+            if (updatedAt.isNotEmpty() && hit != null && hit.first == updatedAt) {
+                result[id] = hit.second
+            } else {
+                toFetch += id to updatedAt
             }
         }
-        // A trip just added waits out of the list until its bookings answer.
-        return combine(trips, byTrip) { list, segments ->
-            if (list == null || segments == null) null else list.mapNotNull { trip -> segments[trip.id]?.let { TripWithSegments(trip, it) } }
+        var manifestChanged = false
+        var unconfirmed = false
+        if (toFetch.isNotEmpty()) {
+            val loaded = withContext(compute ?: EmptyCoroutineContext) {
+                val semaphore = Semaphore(SEGMENT_LOAD_CONCURRENCY)
+                coroutineScope {
+                    toFetch.map { (id, updatedAt) ->
+                        async {
+                            semaphore.withPermit {
+                                loadTripSegments(id, updatedAt, versionsSnapshot[id])
+                            }
+                        }
+                    }.awaitAll()
+                }
+            }
+            for (entry in loaded) {
+                result[entry.tripId] = entry.segments
+                if (!entry.fresh) unconfirmed = true
+                if (entry.fresh && entry.updatedAt.isNotEmpty()) {
+                    segmentCache[entry.tripId] = entry.updatedAt to entry.segments
+                    val next = SegmentVersion(entry.updatedAt, entry.segments.size)
+                    if (segmentVersions[entry.tripId] != next) {
+                        segmentVersions[entry.tripId] = next
+                        manifestChanged = true
+                    }
+                }
+            }
+        }
+        hasUnconfirmedSegments.value = unconfirmed
+        val activeIds = versions.mapTo(HashSet(versions.size)) { it.first }
+        segmentCache.keys.retainAll(activeIds)
+        if (segmentVersions.keys.retainAll(activeIds)) manifestChanged = true
+        if (manifestChanged) {
+            val snapshot = segmentVersions.toMap()
+            try {
+                computed { segmentVersionsStore.write(encodeSegmentVersions(uid, snapshot)) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                SharedLog.error(e, "Saving cached trip versions failed")
+            }
+        }
+        return result
+    }
+
+    private suspend fun loadTripSegments(tripId: String, updatedAt: String, known: SegmentVersion?): LoadedTripSegments {
+        if (updatedAt.isNotEmpty() && known != null && known.updatedAt == updatedAt) {
+            val cached = store.cachedSegments(tripId)
+            if (cached != null && cached.size == known.count) {
+                return LoadedTripSegments(tripId, updatedAt, cached, fresh = true)
+            }
+        }
+        return try {
+            val seen = store.segmentsOnce(tripId)
+            LoadedTripSegments(tripId, updatedAt, seen.value, fresh = seen.confirmed)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            SharedLog.error(e, "Reading a trip's bookings failed")
+            LoadedTripSegments(tripId, updatedAt, emptyList(), fresh = false)
         }
     }
 
@@ -957,7 +1094,7 @@ class TripsViewModel(
     // Each with its airports: those chosen on Profile, else those its round trips leave from.
     private fun homesOf(trips: List<TripWithSegments>, settings: RideSettings): List<HomePeriod> {
         val segments = trips.filter { it.trip.ownerUid == uid }.flatMap { it.segments }
-        return withChosenAirports(withHomeAirports(effectiveHomes(homeTimeline(segments), settings.homes), segments), settings.homeAirports)
+        return effectiveHomesWithAirports(segments, settings.homes, settings.homeAirports)
     }
 
     /**
@@ -1482,3 +1619,6 @@ fun newReminderId(): String = kotlin.uuid.Uuid.random().toHexString().take(20)
 
 /** The prefix of Add a trip's write tokens, followed by the new trip's id. */
 const val NEW_TRIP_TOKEN = "list/new-trip/"
+
+/** How many trips' bookings are read at once when loading every trip for Reports or search. */
+private const val SEGMENT_LOAD_CONCURRENCY = 16

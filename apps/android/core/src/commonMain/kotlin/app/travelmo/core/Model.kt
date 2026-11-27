@@ -122,6 +122,8 @@ data class Trip(
     val travelers: List<String>? = null,
     /** What kind of place it goes to, for its picture ([tripSetting]): one of [PLACE_SETTINGS] or "none"; null on a trip from before it was kept. */
     val setting: String? = null,
+    /** When the trip or any of its bookings last changed (ISO instant); empty when missing or in fixtures without one. */
+    val updatedAt: String = "",
 )
 
 /**

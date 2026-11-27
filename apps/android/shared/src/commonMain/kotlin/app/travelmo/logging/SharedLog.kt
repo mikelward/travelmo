@@ -23,6 +23,8 @@ fun sensitive(value: Any?): LogValue = SensitiveValue(value)
 
 /** Where shared code's log lines go; `%s` in [format] takes each value in turn. */
 interface LogSink {
+    fun debug(format: String, values: List<LogValue>) {}
+
     fun info(format: String, values: List<LogValue>)
 
     fun warning(format: String, values: List<LogValue>)
@@ -30,11 +32,15 @@ interface LogSink {
     fun error(error: Throwable?, format: String, values: List<LogValue>)
 }
 
+private val LOG_PLACEHOLDER = Regex("%s")
+
 /**
  * Until an app installs its recorder (a unit test, say), lines go to
  * standard output with the user's own values left out.
  */
 object ConsoleLogSink : LogSink {
+    override fun debug(format: String, values: List<LogValue>) = println("D ${render(format, values)}")
+
     override fun info(format: String, values: List<LogValue>) = println("I ${render(format, values)}")
 
     override fun warning(format: String, values: List<LogValue>) = println("W ${render(format, values)}")
@@ -45,7 +51,7 @@ object ConsoleLogSink : LogSink {
     /** [format] with each `%s` filled in turn, a sensitive value as "<redacted>". */
     fun render(format: String, values: List<LogValue>): String {
         val queue = ArrayDeque(values)
-        return Regex("%s").replace(format) {
+        return LOG_PLACEHOLDER.replace(format) {
             when (val v = queue.removeFirstOrNull()) {
                 null -> "%s"
                 is SensitiveValue -> "<redacted>"
@@ -57,6 +63,8 @@ object ConsoleLogSink : LogSink {
 
 object SharedLog {
     var sink: LogSink = ConsoleLogSink
+
+    fun debug(format: String, vararg values: LogValue) = sink.debug(format, values.toList())
 
     fun info(format: String, vararg values: LogValue) = sink.info(format, values.toList())
 

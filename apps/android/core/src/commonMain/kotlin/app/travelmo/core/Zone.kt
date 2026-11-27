@@ -19,9 +19,12 @@ const val FIXED_OFFSET_PREFIX = "offset:"
 
 data class InstantParts(val date: String, val time: String, val offset: String)
 
+private val instantPattern = Regex("""^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$""")
+private val offsetPattern = Regex("""^[+-]\d{2}:\d{2}$""")
+
 /** Splits "2026-12-01T09:05:00+01:00" into the pieces a form edits; "Z" and none read as "+00:00". */
 fun splitInstant(instant: String): InstantParts {
-    val m = Regex("""^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$""").find(instant)
+    val m = instantPattern.find(instant)
         ?: throw IllegalArgumentException("Not an ISO 8601 instant: $instant")
     val (date, time, zone) = m.destructured
     val offset = when {
@@ -33,7 +36,7 @@ fun splitInstant(instant: String): InstantParts {
 }
 
 fun composeInstant(date: String, time: String, offset: String): String {
-    require(Regex("""^[+-]\d{2}:\d{2}$""").matches(offset)) { "Offset must look like +01:00, got $offset" }
+    require(offsetPattern.matches(offset)) { "Offset must look like +01:00, got $offset" }
     return "${date}T$time:00$offset"
 }
 
