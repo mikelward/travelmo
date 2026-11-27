@@ -115,6 +115,7 @@ class TripListScreenTest {
         // Its bookings never answer: only its flags can hide it.
         val store = object : TripStore by fake {
             override fun segments(tripId: String): Flow<List<Segment>> = if (tripId == fixtureFlightTrip.id) flow { awaitCancellation() } else fake.segments(tripId)
+            override suspend fun segmentsOnce(tripId: String): app.travelmo.data.Seen<List<Segment>> = if (tripId == fixtureFlightTrip.id) awaitCancellation() else fake.segmentsOnce(tripId)
         }
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, listFilterStore = app.travelmo.data.InMemoryListFilterStore())
         composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }

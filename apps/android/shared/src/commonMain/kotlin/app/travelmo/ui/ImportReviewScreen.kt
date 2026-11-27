@@ -27,6 +27,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -95,10 +97,29 @@ fun ImportReviewScreen(viewModel: TripsViewModel, onBack: () -> Unit, zone: Stri
     val notices by viewModel.reviewNotices.collectAsStateWithLifecycle()
     val reports by viewModel.reviewReports.collectAsStateWithLifecycle()
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
-    // A search's records are read once; the live latest show any read again since.
-    val records = if (searching) all?.let { withLatest(it.records, latest.orEmpty()) } else latest
-    // A row keeps its report to copy once Import anyway made a booking of it.
-    val shown = records?.let { toReview(it, keyword, dayRange(from, to, zone), reports.keys) }.orEmpty()
+    val reportKeys = reports.keys
+    // Non-search view filters at most REVIEW_RECENT (100) items synchronously for instant first frame.
+    val recentShown = remember(latest, reportKeys) { latest?.let { toReview(it, "", kept = reportKeys) } }
+    // A search merges and filters up to 20,000 records off the main thread with a brief debounce while typing.
+    val searchedShown by produceState<List<ParsedRecord>?>(initialValue = null, searching, all, latest, keyword, from, to, zone, reportKeys) {
+        if (!searching) {
+            value = null
+            return@produceState
+        }
+        val currentAll = all
+        if (currentAll == null) {
+            value = null
+            return@produceState
+        }
+        if (keyword.isNotBlank()) viewModel.debounceSearch()
+        val merged = viewModel.computed {
+            val combined = withLatest(currentAll.records, latest.orEmpty())
+            toReview(combined, keyword, dayRange(from, to, zone), reportKeys)
+        }
+        value = merged
+    }
+    val hasRecords = if (searching) all != null && searchedShown != null else latest != null
+    val shown = (if (searching) searchedShown else recentShown).orEmpty()
     val searchDone = !searching || all?.done == true
     Scaffold(
         topBar = {
@@ -135,7 +156,7 @@ fun ImportReviewScreen(viewModel: TripsViewModel, onBack: () -> Unit, zone: Stri
                 }
             }
             when {
-                records == null -> item(key = "loading") { Text(stringResource(Res.string.loading), modifier = Modifier.padding(top = 12.dp)) }
+                !hasRecords -> item(key = "loading") { Text(stringResource(Res.string.loading), modifier = Modifier.padding(top = 12.dp)) }
                 shown.isEmpty() && searchDone -> item(key = "none") {
                     Text(
                         stringResource(if (searching) Res.string.nothing_matches else Res.string.nothing_to_review),
@@ -223,10 +244,11 @@ private fun ReviewRow(
     // Records from other sources have no sender to teach and no email to read again.
     val fromMailbox = isFromMailbox(record)
     val domain = if (fromMailbox) record.from?.let(::domainOf) else null
+    val formattedDate = remember(record.sentAt, record.processedAt, zone) { reviewDate(record, zone) }
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(bottom = 12.dp))
         Text(record.subject?.takeIf { it.isNotBlank() } ?: stringResource(Res.string.no_subject), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-        val line = listOf(reviewDate(record, zone), record.from ?: stringResource(Res.string.unknown_sender), recordSourceLabel(record.source), outcomeLabel(record.outcome, record.loyalty)).joinToString(" · ") +
+        val line = listOf(formattedDate, record.from ?: stringResource(Res.string.unknown_sender), recordSourceLabel(record.source), outcomeLabel(record.outcome, record.loyalty)).joinToString(" · ") +
             (record.reason?.let { " ($it)" } ?: "")
         Text(line, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         // What a travel program's email gave of the user's loyalty, or why nothing.

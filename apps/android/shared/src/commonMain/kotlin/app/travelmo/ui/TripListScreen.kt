@@ -40,10 +40,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
@@ -177,42 +178,44 @@ fun TripListScreen(viewModel: TripsViewModel, uid: String, onOpenTrip: (String) 
                         Text(stringResource(Res.string.trips_empty_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
                     }
                 }
-            else -> LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding).scrollEdgeCue(list, scrollCueColors()),
-                state = list,
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            ) {
-                val titles = state.titles
-                // In the list, so it scrolls away with it rather than taking room from the trips.
-                if (crashed) item(key = "crash") { LastCrashBanner(Modifier.padding(bottom = 12.dp)) }
+            else -> {
                 val result = found
-                val kept = groups.without(hidden)
-                val shown = if (result == null) kept else kept.only(result.ids)
-                if (result == null && hidden.isNotEmpty() && kept.current.isEmpty() && kept.upcoming.isEmpty() && kept.past.isEmpty()) {
-                    item(key = "all-hidden") { Message(stringResource(Res.string.all_trips_hidden)) }
-                }
-                if (result != null && !result.bookingsSearched) item(key = "searching") { Message(stringResource(Res.string.searching_bookings)) }
-                // Judged by what is shown: a search can find only trips the filters hide.
-                val nothingShown = shown.current.isEmpty() && shown.upcoming.isEmpty() && shown.past.isEmpty()
-                if (result != null && result.bookingsSearched && nothingShown) item(key = "no-match") { Message(stringResource(Res.string.no_trips_match)) }
-                if (checkInFailed != null) {
-                    item(key = "checked-in-failed") {
-                        Text(checkInFailed, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(bottom = 12.dp))
+                val kept = remember(groups, hidden) { groups.without(hidden) }
+                val shown = remember(kept, result) { if (result == null) kept else kept.only(result.ids) }
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(padding).scrollEdgeCue(list, scrollCueColors()),
+                    state = list,
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    val titles = state.titles
+                    // In the list, so it scrolls away with it rather than taking room from the trips.
+                    if (crashed) item(key = "crash") { LastCrashBanner(Modifier.padding(bottom = 12.dp)) }
+                    if (result == null && hidden.isNotEmpty() && kept.current.isEmpty() && kept.upcoming.isEmpty() && kept.past.isEmpty()) {
+                        item(key = "all-hidden") { Message(stringResource(Res.string.all_trips_hidden)) }
                     }
-                }
-                // Document warnings once, at the top, each for the earliest trip
-                // it bears on and opening it, rather than repeated on every card.
-                if (state.warnings.isNotEmpty()) {
-                    item(key = "warnings") {
-                        Box(Modifier.padding(bottom = 12.dp)) { ListWarnings(state.warnings, titles, today = state.now.substring(0, 10), onOpenTrip = onOpenTrip) }
+                    if (result != null && !result.bookingsSearched) item(key = "searching") { Message(stringResource(Res.string.searching_bookings)) }
+                    // Judged by what is shown: a search can find only trips the filters hide.
+                    val nothingShown = shown.current.isEmpty() && shown.upcoming.isEmpty() && shown.past.isEmpty()
+                    if (result != null && result.bookingsSearched && nothingShown) item(key = "no-match") { Message(stringResource(Res.string.no_trips_match)) }
+                    if (checkInFailed != null) {
+                        item(key = "checked-in-failed") {
+                            Text(checkInFailed, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(bottom = 12.dp))
+                        }
                     }
+                    // Document warnings once, at the top, each for the earliest trip
+                    // it bears on and opening it, rather than repeated on every card.
+                    if (state.warnings.isNotEmpty()) {
+                        item(key = "warnings") {
+                            Box(Modifier.padding(bottom = 12.dp)) { ListWarnings(state.warnings, titles, today = state.now.substring(0, 10), onOpenTrip = onOpenTrip) }
+                        }
+                    }
+                    // What comes next is said only for a trip under way; an upcoming
+                    // trip's card is its title and dates.
+                    val onCheckedIn = { tripId: String, segmentId: String -> viewModel.setCheckedIn("$CHECKED_IN_TOKEN$tripId/$segmentId", tripId, segmentId, true) }
+                    section(Res.string.section_now, shown.current, titles, state, uid, showNext = true, onOpenTrip, onCheckedIn, missingOf, watching)
+                    section(Res.string.section_upcoming, shown.upcoming, titles, state, uid, showNext = false, onOpenTrip, onCheckedIn, missingOf, watching)
+                    section(Res.string.section_past, shown.past, titles, state, uid, showNext = false, onOpenTrip, onCheckedIn, missingOf, watching)
                 }
-                // What comes next is said only for a trip under way; an upcoming
-                // trip's card is its title and dates.
-                val onCheckedIn = { tripId: String, segmentId: String -> viewModel.setCheckedIn("$CHECKED_IN_TOKEN$tripId/$segmentId", tripId, segmentId, true) }
-                section(Res.string.section_now, shown.current, titles, state, uid, showNext = true, onOpenTrip, onCheckedIn, missingOf, watching)
-                section(Res.string.section_upcoming, shown.upcoming, titles, state, uid, showNext = false, onOpenTrip, onCheckedIn, missingOf, watching)
-                section(Res.string.section_past, shown.past, titles, state, uid, showNext = false, onOpenTrip, onCheckedIn, missingOf, watching)
             }
         }
     }
@@ -275,14 +278,19 @@ private fun androidx.compose.foundation.lazy.LazyListScope.section(
 internal fun Modifier.sectionPart(first: Boolean, last: Boolean, color: Color): Modifier {
     val radius = 12.dp
     val shape = RoundedCornerShape(topStart = if (first) radius else 0.dp, topEnd = if (first) radius else 0.dp, bottomStart = if (last) radius else 0.dp, bottomEnd = if (last) radius else 0.dp)
-    return clip(shape).drawWithContent {
-        drawContent()
+    return clip(shape).drawWithCache {
         val stroke = 1.dp.toPx()
         // Only the last row draws a bottom edge: above another row, the outline runs past the bottom, where the clip
         // hides it, and the next row's top edge is the rule between them.
         val height = if (last) size.height - stroke else size.height + stroke
-        translate(stroke / 2, stroke / 2) {
-            drawOutline(shape.createOutline(Size(size.width - stroke, height), layoutDirection, this), color, style = Stroke(stroke))
+        val outline = shape.createOutline(Size(size.width - stroke, height), layoutDirection, this)
+        val style = Stroke(stroke)
+        val half = stroke / 2
+        onDrawWithContent {
+            drawContent()
+            translate(half, half) {
+                drawOutline(outline, color, style = style)
+            }
         }
     }
 }
@@ -320,6 +328,7 @@ fun TripCard(
     val cancelled = tripCancelled(trip, segments)
     val cancelledLabel = stringResource(Res.string.cancelled)
     val struck = if (cancelled) TextDecoration.LineThrough else null
+    val setting = remember(trip.setting, segments) { trip.setting ?: segments?.let(::tripSetting) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -332,7 +341,7 @@ fun TripCard(
         // The landmark beside the title and dates; what comes next runs below, in line with the title.
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             // Until the trip says what kind of place it goes to, its bookings do, where the list has them.
-            TripLandmark(title, trip.setting ?: segments?.let(::tripSetting))
+            TripLandmark(title, setting)
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text(
@@ -385,12 +394,13 @@ private fun StatusLines(
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     if (!showNext) return
-    val status = tripStatus(segments, now)
+    val status = remember(segments, now) { tripStatus(segments, now) }
     status.stay?.let { stay ->
         val until = stay.end?.let { " · until ${formatDate(localDate(it))} ${localTime(it)}" } ?: ""
         Text(stringResource(Res.string.staying_at, stay.title) + until, style = MaterialTheme.typography.bodyLarge, color = muted, modifier = Modifier.padding(top = 8.dp))
     }
-    tripNextUp(segments, now, flightStatuses)?.let { next ->
+    val next = remember(segments, now, flightStatuses) { tripNextUp(segments, now, flightStatuses) }
+    next?.let { next ->
         // The booking, then in one muted style: when, a flight's next step, and what follows a landing.
         Text(
             next.title,

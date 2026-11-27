@@ -196,9 +196,12 @@ fun TripDetailScreen(
 ) {
     val tripFlow = remember(tripId) { viewModel.trip(tripId) }
     val segmentsFlow = remember(tripId) { viewModel.segments(tripId) }
-    val trip by tripFlow.collectAsStateWithLifecycle(initialValue = null)
+    val initialTrip = remember(tripId) { viewModel.peekTrip(tripId) }
+    val initialSegments = remember(tripId) { viewModel.peekSegments(tripId).orEmpty() }
+    val trip by tripFlow.collectAsStateWithLifecycle(initialValue = initialTrip)
     val trips by viewModel.trips.collectAsStateWithLifecycle()
-    val segments by segmentsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    val titles by viewModel.titles.collectAsStateWithLifecycle()
+    val segments by segmentsFlow.collectAsStateWithLifecycle(initialValue = initialSegments)
     val flightStatusesFlow = remember(tripId) { viewModel.flightStatuses(tripId) }
     val flightStatuses by flightStatusesFlow.collectAsStateWithLifecycle(initialValue = emptyMap())
     val checkedInFlow = remember(tripId) { viewModel.checkedIn(tripId) }
@@ -214,7 +217,6 @@ fun TripDetailScreen(
             }
         }
     }
-    val loaded by viewModel.state.collectAsStateWithLifecycle()
     val people by viewModel.people.collectAsStateWithLifecycle()
     val travelers by viewModel.travelers.collectAsStateWithLifecycle()
     val rideSettings by viewModel.rideSettings.collectAsStateWithLifecycle()
@@ -233,7 +235,7 @@ fun TripDetailScreen(
     val isOwner = current != null && current.ownerUid == uid
     val canEdit = current != null && !current.deleting && (isOwner || sharedWithAny(current.sharedWith, addresses))
     val canManage = isOwner && !current.deleting
-    val targets = otherTrips(trips.orEmpty(), tripId)
+    val targets = remember(trips, tripId) { otherTrips(trips.orEmpty(), tripId) }
 
     // The page's own writes, by token: a finished one is acknowledged here,
     // and a deletion or a merge leaves the page, even after a rotation.
@@ -328,27 +330,45 @@ fun TripDetailScreen(
             }
         }
         // Watching it, what is the user's own leaves it out: warnings, check-in, rides and the checklist.
-        val onlyWatching = watching(tripTravelers(segments), travelers)
+        val today by viewModel.clockToday.collectAsStateWithLifecycle(initialValue = viewModel.today())
+        val upcomingOrCurrent = current == null || current.shownEnd >= today
+        val nowFlow = remember(upcomingOrCurrent) {
+            if (upcomingOrCurrent) viewModel.clockNow else kotlinx.coroutines.flow.flowOf(viewModel.now())
+        }
+        val currentNow by nowFlow.collectAsStateWithLifecycle(initialValue = viewModel.now())
+        val onlyWatching = remember(segments, travelers) { watching(tripTravelers(segments), travelers) }
+        val warnings = remember(onlyWatching, people, current, segments, today) {
+            if (onlyWatching || current == null) emptyList() else tripWarnings(people, current, segments, today)
+        }
+        val rideNeedsBySegment = remember(onlyWatching, segments, rideSettings, currentNow) {
+            if (onlyWatching) emptyMap() else viewModel.rideNeedsFor(segments, rideSettings, currentNow).groupBy { it.segmentId }
+        }
+        val gaps = remember(current, segments, rideSettings) {
+            if (current == null) emptyList() else viewModel.journeyGapsFor(current, segments, rideSettings)
+        }
+        val checklistEntries = remember(onlyWatching, current, segments, standingReminders, myChecklist, rideSettings, today) {
+            if (onlyWatching || current == null) null else viewModel.checklistFor(current, segments, standingReminders, myChecklist, rideSettings, today)
+        }
         when {
             current != null -> TripBody(
                 current, segments, shared = current.ownerUid != uid, errors = errors, busy = busy,
                 watching = onlyWatching,
-                warnings = if (onlyWatching) emptyList() else tripWarnings(people, current, segments, viewModel.today()), today = viewModel.today(),
-                flightLines = { segment -> viewModel.flightLines(segment, flightStatuses) },
+                warnings = warnings, today = today,
+                flightLines = { segment -> viewModel.flightLines(segment, flightStatuses, currentNow) },
                 checkIn = { segment ->
-                    checkedIn?.takeUnless { onlyWatching }?.let { flightCheckInState(segment, it, viewModel.now()) }?.let { state ->
+                    checkedIn?.takeUnless { onlyWatching }?.let { flightCheckInState(segment, it, currentNow) }?.let { state ->
                         SegmentCheckIn(state) { on -> viewModel.setCheckedIn("${prefix}checked-in/${segment.id}", tripId, segment.id, on) }
                     }
                 },
                 onOpenBooking = { onOpenBooking(it.id) },
                 rides = RideSuggestions(
-                    needs = if (onlyWatching) emptyMap() else viewModel.rideNeedsFor(segments, rideSettings).groupBy { it.segmentId },
+                    needs = rideNeedsBySegment,
                     companies = rideSettings?.companies.orEmpty(),
                     onHide = { need -> viewModel.hideRideNeed("${prefix}ride/${rideNeedKey(need)}", need) },
                 ),
-                journeyGap = viewModel.journeyGapsFor(current, segments, rideSettings).takeIf { it.isNotEmpty() }?.let { gaps ->
+                journeyGap = gaps.takeIf { it.isNotEmpty() }?.let { foundGaps ->
                     JourneyGapActions(
-                        gaps,
+                        foundGaps,
                         lookOf = { gap ->
                             GapLook(
                                 found = looks[journeyGapKey(tripId, gap)],
@@ -378,7 +398,7 @@ fun TripDetailScreen(
                 },
                 tripActions = if (isOwner) actions else null,
                 // The viewer's own reminders before the trip, theirs alone, shared trip or not.
-                checklist = viewModel.checklistFor(current, segments, standingReminders, myChecklist, rideSettings)?.takeUnless { onlyWatching }?.let { entries ->
+                checklist = checklistEntries?.let { entries ->
                     Checklist(
                         entries = entries,
                         onTick = { entry, done -> viewModel.setReminderDone("${prefix}checklist/${entry.id}/done", tripId, entry.id, done) },
@@ -389,10 +409,10 @@ fun TripDetailScreen(
                 },
                 canManage = canManage,
                 targets = targets,
-                titles = displayTitles(trips.orEmpty()),
+                titles = titles,
                 modifier = Modifier.padding(padding),
             )
-            loaded.groups == null -> Text(stringResource(Res.string.trip_loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp))
+            trips == null -> Text(stringResource(Res.string.trip_loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp))
             else -> Text(stringResource(Res.string.trip_not_found), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp))
         }
     }
@@ -464,7 +484,7 @@ private fun TripBody(
     titles: Map<String, String>,
     modifier: Modifier = Modifier,
 ) {
-    val days = segmentsByDay(segments)
+    val days = remember(segments) { segmentsByDay(segments) }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     var confirmingDelete by rememberSaveable { mutableStateOf(false) }
     if (confirmingDelete && tripActions != null) {
