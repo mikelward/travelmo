@@ -25,7 +25,7 @@ data class BookingFields(
     val destinationCountry: String = "",
     val notes: String = "",
 ) {
-    val transport: Boolean get() = type != SegmentType.LODGING && type != SegmentType.ACTIVITY
+    val transport: Boolean get() = type != SegmentType.LODGING && type != SegmentType.ACTIVITY && type != SegmentType.MEAL
 }
 
 /** The fields for a new booking on [defaultDate], or for [segment] as stored. */

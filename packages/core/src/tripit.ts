@@ -581,7 +581,7 @@ function mapObject(object: Obj): Mapped {
     });
   }
   if ("cuisine" in object || "number_patrons" in object) {
-    return single(object, "restaurant", "activity", {
+    return single(object, "restaurant", "meal", {
       start: object.DateTime,
       title: supplier ?? name ?? "Restaurant",
       destination: addressPlace(supplier ?? name, object.Address),

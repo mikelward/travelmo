@@ -53,8 +53,15 @@ class SegmentRowTest {
 
     @Test
     fun `the type is an icon named for it`() {
-        composeRule.setContent { TravelmoTheme { SegmentRow(stay) } }
+        val meal = Segment("m", "liverpool", SegmentType.MEAL, "Example Bistro", "2026-12-13T19:30:00+00:00")
+        composeRule.setContent {
+            TravelmoTheme {
+                SegmentRow(stay)
+                SegmentRow(meal)
+            }
+        }
         composeRule.onNodeWithContentDescription("Stay").assertExists()
+        composeRule.onNodeWithContentDescription("Meal").assertExists()
         composeRule.onNodeWithText("STAY").assertDoesNotExist()
     }
 

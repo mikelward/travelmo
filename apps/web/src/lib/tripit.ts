@@ -15,6 +15,7 @@ const plural: Record<SegmentType, [string, string]> = {
   lodging: ["stay", "stays"],
   car_rental: ["car rental", "car rentals"],
   activity: ["activity", "activities"],
+  meal: ["meal", "meals"],
   other: ["other booking", "other bookings"],
 };
 

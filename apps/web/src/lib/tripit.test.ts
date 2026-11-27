@@ -21,7 +21,7 @@ const file = JSON.stringify({
 describe("previewTripIt", () => {
   it("says what the file holds before anything is sent", () => {
     expect(previewTripIt(file).text).toBe(
-      '1 trip with 4 bookings (2 flights, 1 stay, 1 activity), from 2030-01-01 to 2031-02-02. 1 booking TripIt never filed into a trip will go into "Unfiled from TripIt". 1 item can\'t be imported (listed below).',
+      '1 trip with 4 bookings (2 flights, 1 stay, 1 meal), from 2030-01-01 to 2031-02-02. 1 booking TripIt never filed into a trip will go into "Unfiled from TripIt". 1 item can\'t be imported (listed below).',
     );
   });
 

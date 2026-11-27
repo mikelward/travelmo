@@ -166,6 +166,7 @@ const eventVerbs: Record<SegmentType, { start: string; end: string }> = {
   lodging: { start: "Check-in", end: "Check-out" },
   car_rental: { start: "Pick up", end: "Return" },
   activity: { start: "Starts", end: "Ends" },
+  meal: { start: "Starts", end: "Ends" },
   other: { start: "Starts", end: "Ends" },
 };
 
@@ -263,7 +264,7 @@ export function newTripTitle(segment: Pick<ExtractedSegment, "type" | "title" | 
   // A show or a dinner is its own name ("Locale (Southbank)"), not its town's;
   // a ride from one place to another (a taxi) goes by where it goes.
   const ride = !!segment.origin && !!segment.destination;
-  if ((segment.type === "activity" || (segment.type === "other" && !ride)) && segment.title.trim()) return segment.title.trim();
+  if ((segment.type === "activity" || segment.type === "meal" || (segment.type === "other" && !ride)) && segment.title.trim()) return segment.title.trim();
   const place = segment.destination ?? segment.origin;
   return (place?.city || place?.name || segment.title).trim() || "Trip";
 }
@@ -280,11 +281,11 @@ export function fittingTrip<T extends Pick<Trip, "ownerUid" | "start" | "end" | 
     .sort((a, b) => span(a) - span(b) || a.start.localeCompare(b.start))[0];
 }
 
-// An activity with no time of its own: the extractor's convention for a
-// dated thing with no stated time is local midnight and no end. It is shown
+// An activity or meal with no time of its own: the extractor's convention for
+// a dated thing with no stated time is local midnight and no end. It is shown
 // without a time.
 export function isUntimed(segment: Pick<ExtractedSegment, "type" | "start" | "end">): boolean {
-  return (segment.type === "activity" || segment.type === "other") && !segment.end && segment.start.slice(11, 16) === "00:00";
+  return (segment.type === "activity" || segment.type === "meal" || segment.type === "other") && !segment.end && segment.start.slice(11, 16) === "00:00";
 }
 
 const notBookingTitle = /\b(memberships?|annual pass(es)?|season (ticket|pass)(es|s)?|subscriptions?|gift (card|voucher)s?|vouchers?|donations?)\b/i;
@@ -313,7 +314,7 @@ export function withoutValidityEnds<S extends ExtractedSegment>(segments: readon
 // pays for may be dated, in days.
 export const untimedMatchDays = 31;
 
-const timedTypes: ReadonlySet<SegmentType> = new Set(["flight", "train", "bus", "ferry", "activity", "other"]);
+const timedTypes: ReadonlySet<SegmentType> = new Set(["flight", "train", "bus", "ferry", "activity", "meal", "other"]);
 
 // Words too common in booking titles to say two bookings are one.
 const genericWords = new Set([
@@ -443,8 +444,22 @@ export const normalizeReference = (ref: string) => unpadded(ref.toUpperCase().re
 // distinctive word of their titles or place names, leaving out cities and
 // providers (two hotels of one chain, or in one city, on the same nights
 // are two stays).
+// A restaurant booking imported before "meal" existed was stored as "other"
+// (not a transfer: a taxi has both origin and destination) or "activity".
+const legacyMealCandidate = (s: Pick<ExtractedSegment, "type" | "origin" | "destination">): boolean =>
+  s.type === "activity" || (s.type === "other" && !(s.origin && s.destination));
+
+// Whether two segments' types can represent the same booking across the
+// introduction of "meal": exact match, or one is "meal" and the other is a
+// legacy non-transfer "other" or "activity".
+const compatibleBookingTypes = (
+  a: Pick<ExtractedSegment, "type" | "origin" | "destination">,
+  b: Pick<ExtractedSegment, "type" | "origin" | "destination">,
+): boolean =>
+  a.type === b.type || (a.type === "meal" && legacyMealCandidate(b)) || (b.type === "meal" && legacyMealCandidate(a));
+
 export function sameBooking(a: ExtractedSegment, b: ExtractedSegment): boolean {
-  if (a.type !== b.type) return false;
+  if (!compatibleBookingTypes(a, b)) return false;
   const wall = (instant: string) => instant.slice(0, 16);
   if ((isPaymentReceipt(a) || isPaymentReceipt(b)) && wall(a.start) !== wall(b.start)) return sameUntimed(a, b);
   if (datedJourney(a) !== datedJourney(b)) return sameDatedJourney(a, b);
@@ -565,7 +580,7 @@ function sameTicketedEvent(a: ExtractedSegment, b: ExtractedSegment): boolean {
 export function oneBookingPerEvent<S extends ExtractedSegment>(segments: readonly S[]): S[] {
   const out: S[] = [];
   for (const segment of segments) {
-    const event = segment.type === "activity" || segment.type === "other";
+    const event = segment.type === "activity" || segment.type === "meal" || segment.type === "other";
     const i = event && segment.confirmation
       ? out.findIndex(
           (o) =>
@@ -645,15 +660,18 @@ function eventWords(...texts: (string | undefined)[]): Set<string> {
   return out;
 }
 
-// Whether two activities at the same minute are one event confirmed twice
-// under different references (a cinema's booking email and its reservation
-// email): the same seller, by its name or the domain the emails came from
-// (`senderA`, `senderB`), the same town where both give one, and the same
-// event by name. The event is the title before any " at <venue>", less the
-// venue's and the seller's own words; one name must hold every word of the
-// other, so two films at one cinema and time stay two.
+// Whether two activities or meals at the same minute are one event confirmed
+// twice under different references (a cinema's booking email and its
+// reservation email): the same seller, by its name or the domain the emails
+// came from (`senderA`, `senderB`), the same town where both give one, and
+// the same event by name. The event is the title before any " at <venue>",
+// less the venue's and the seller's own words; one name must hold every word
+// of the other, so two films at one cinema and time stay two.
 export function sameEvent(a: ExtractedSegment, b: ExtractedSegment, senderA?: string, senderB?: string): boolean {
-  if (a.type !== "activity" || b.type !== "activity") return false;
+  const compatible =
+    (a.type === "activity" && b.type === "activity") ||
+    ((a.type === "meal" || b.type === "meal") && compatibleBookingTypes(a, b));
+  if (!compatible) return false;
   if (a.start.slice(0, 16) !== b.start.slice(0, 16)) return false;
   const theirBrand = words(b.provider);
   const sameSeller =
@@ -720,6 +738,9 @@ function shifted(instant: string, ms: number): string {
 // flight; times the user set by hand stay.
 export function mergeDetails<S extends ExtractedSegment>(existing: S, found: ExtractedSegment, { edited = false, newer = false }: { edited?: boolean; newer?: boolean } = {}): S {
   const merged: S = { ...existing };
+  // A restaurant booking stored before "meal" existed upgrades once a newer
+  // email reads it as a meal, unless the user edited the booking by hand.
+  if (!edited && found.type === "meal" && legacyMealCandidate(existing)) merged.type = "meal";
   // A journey known only by its date (datedJourney) becomes the one booked:
   // its service, times and reference. One that gives only the date changes
   // no times.
@@ -739,7 +760,7 @@ export function mergeDetails<S extends ExtractedSegment>(existing: S, found: Ext
     else if (existing.end !== undefined) merged.end = shifted(existing.end, moved);
   }
   // An event first known by its day alone takes the time it was then told.
-  if (!edited && isUntimed(existing) && !isUntimed(found) && found.type === existing.type && localDate(found.start) === localDate(existing.start)) {
+  if (!edited && isUntimed(existing) && !isUntimed(found) && compatibleBookingTypes(existing, found) && localDate(found.start) === localDate(existing.start)) {
     merged.start = found.start;
     if (found.end !== undefined) merged.end = found.end;
   }
@@ -873,7 +894,10 @@ export function compareMatchRanks(a: readonly number[], b: readonly number[]): n
 // that is unknown: references are recycled, so one alone reaches only
 // bookings near it (`nearReference`).
 export function cancels(c: ExtractedCancellation, s: ExtractedSegment, sent?: string): boolean {
-  if (c.type && c.type !== s.type) return false;
+  const legacyMeal =
+    (c.type === "meal" && legacyMealCandidate(s)) ||
+    (s.type === "meal" && (c.type === "activity" || (c.type === "other" && !(c.origin && c.destination))));
+  if (c.type && c.type !== s.type && !legacyMeal) return false;
   if (providersDiffer(c.provider, s.provider)) return false;
   // A journey's number may follow its operator's full name (Eurostar 9014).
   const journey = journeyTypes.has(s.type);
@@ -930,7 +954,7 @@ export function cancels(c: ExtractedCancellation, s: ExtractedSegment, sent?: st
   }
   // An event the email names must be this one, by the rule sameEvent uses:
   // Toy Story 4 is not Toy Story 5, at the same time and cinema.
-  if (s.type === "activity" && c.place) {
+  if ((s.type === "activity" || s.type === "meal" || legacyMeal) && c.place) {
     const named: ExtractedSegment = { type: s.type, title: c.place, start: c.start, ...(c.provider ? { provider: c.provider } : {}) };
     if (identitiesConflict(...eventIdentities(named, s))) return false;
   }

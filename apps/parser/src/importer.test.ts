@@ -811,8 +811,9 @@ describe("tripTitle", () => {
   });
 
   it("names a dinner after itself, not its town", () => {
-    const dinner = { type: "other", title: "Locale (Southbank)", start: "2025-08-19T18:00:00+01:00", end: "2025-08-19T19:30:00+01:00", destination: { name: "Locale", city: "London", country: "GB" } } as const;
+    const dinner = { type: "meal", title: "Locale (Southbank)", start: "2025-08-19T18:00:00+01:00", end: "2025-08-19T19:30:00+01:00", destination: { name: "Locale", city: "London", country: "GB" } } as const;
     expect(tripTitle([dinner])).toBe("Locale");
+    expect(tripTitle([{ ...dinner, type: "other" }])).toBe("Locale");
     expect(tripTitle([{ ...dinner, title: "Dinner for two", destination: { name: "The Ivy", city: "London" } }])).toBe("Dinner for two");
     // A ride there is no day out: the trip is named for where it goes, not the taxi.
     const taxi = { type: "other", title: "Taxi booking", start: "2025-08-19T17:30:00+01:00", origin: { name: "Home", city: "Woburn" }, destination: { name: "Locale", city: "London" } } as const;
@@ -2838,4 +2839,29 @@ describe("fileBooking a week in Melbourne", () => {
     expect(stays[0]).toMatchObject({ confirmation: "HMEXAMPLE01", destination: confirmed.destination });
     expect(stays[0]!.sources?.map((s) => s.id).sort()).toEqual(["confirmed", "requested"]);
   });
+
+  it.each(["other", "activity"] as const)(
+    "joins an incoming meal confirmation onto a legacy %s restaurant booking without duplicating it",
+    async (legacyType) => {
+      const store = memoryStore();
+      const dinner: ExtractedSegment = {
+        type: legacyType,
+        title: "Dinner at Dishoom Shoreditch",
+        provider: "OpenTable",
+        confirmation: "OT-100",
+        start: "2026-06-10T19:30:00+01:00",
+        destination: { name: "Dishoom Shoreditch", city: "London", country: "GB" },
+      };
+      await file(store, "legacy", [dinner]);
+      await file(store, "reminder", [{ ...dinner, type: "meal" }]);
+      expect(store.segments.size).toBe(1);
+      const saved = [...store.segments.values()][0]!;
+      expect(saved.type).toBe("meal");
+      expect(saved.sources?.map((s) => s.id).sort()).toEqual(["legacy", "reminder"]);
+      expect(store.trips.get(saved.tripId)?.setting).toBe("meal");
+      // A second confirmation under another reference from the same site also joins via sameEvent.
+      await file(store, "different-ref", [{ ...dinner, type: "meal", confirmation: "OT-200", title: "Dinner at Dishoom" }]);
+      expect(store.segments.size).toBe(1);
+    },
+  );
 });

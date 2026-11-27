@@ -91,6 +91,7 @@ class BookingFormTest {
         toDraft(BookingFields(type = SegmentType.LODGING, title = "Somewhere", startDate = "2026-12-12", destinationCountry = "FR"), null)
             .destination!!.name shouldBe countryName("FR")
         toDraft(BookingFields(type = SegmentType.LODGING, title = "Somewhere", startDate = "2026-12-12"), null).destination.shouldBeNull()
+        BookingFields(type = SegmentType.MEAL).transport shouldBe false
     }
 
     @Test

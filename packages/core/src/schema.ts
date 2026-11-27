@@ -15,6 +15,7 @@ export const segmentTypes = [
   "lodging",
   "car_rental",
   "activity",
+  "meal",
   "other",
 ] as const;
 export const SegmentType = z.enum(segmentTypes);
@@ -28,7 +29,7 @@ export type PlaceSetting = z.infer<typeof PlaceSetting>;
 // What a trip's picture goes by: for a trip of local events alone
 // (localOnly), the type of its first booking, whose icon it takes; else,
 // when its title names nothing, the kind of place it goes to; or "none".
-export const TripSetting = z.union([PlaceSetting, z.enum(["activity", "other", "car_rental"]), z.literal("none")]);
+export const TripSetting = z.union([PlaceSetting, z.enum(["activity", "meal", "other", "car_rental"]), z.literal("none")]);
 export type TripSetting = z.infer<typeof TripSetting>;
 
 export const Place = z.object({

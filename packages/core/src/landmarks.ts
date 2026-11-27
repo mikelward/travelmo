@@ -146,12 +146,12 @@ export function tripLandmark(title: string): Landmark {
 const byId = new Map(LANDMARKS.map((l) => [l.id, l]));
 
 // The booking type whose icon a trip that is just an event takes, whatever
-// its title: a dinner's calendar, a show's ticket (its `setting`).
+// its title: a dinner's fork and knife, a show's ticket (its `setting`).
 export function tripBookingType(setting?: Trip["setting"]): OutingType | undefined {
   return setting && (outingTypes as readonly string[]).includes(setting) ? (setting as OutingType) : undefined;
 }
 
-const outingTypes = ["activity", "other", "car_rental"] as const;
+const outingTypes = ["activity", "meal", "other", "car_rental"] as const;
 type OutingType = (typeof outingTypes)[number];
 
 // A trip's picture, for a trip not just an event (tripBookingType): what its

@@ -534,9 +534,9 @@ type Grouped = Located & Pick<ExtractedSegment, "title">;
 // airport).
 const goes = (s: Grouped) => journeyTypes.has(s.type) || isTransfer(s);
 
-// An outing: a ticket, an event or a car hired and returned in one place;
-// nothing that travels or stays.
-export const isOuting = (s: Grouped) => (s.type === "activity" || s.type === "other" || s.type === "car_rental") && !goes(s);
+// An outing: a ticket, a meal, an event or a car hired and returned in one
+// place; nothing that travels or stays.
+export const isOuting = (s: Grouped) => (s.type === "activity" || s.type === "meal" || s.type === "other" || s.type === "car_rental") && !goes(s);
 const allOutings = (segments: readonly Grouped[]) => segments.length > 0 && segments.every(isOuting);
 
 const millis = (instant: string) => Date.parse(instant);

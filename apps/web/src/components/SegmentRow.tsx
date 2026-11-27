@@ -27,6 +27,7 @@ const labels: Record<SegmentType, string> = {
   lodging: "Stay",
   car_rental: "Car",
   activity: "Activity",
+  meal: "Meal",
   other: "Other",
 };
 

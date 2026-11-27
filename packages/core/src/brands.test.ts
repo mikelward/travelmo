@@ -18,6 +18,7 @@ describe("bookingBrand", () => {
   it("names a brand only for its kind of booking, as whole words", () => {
     expect(bookingBrand({ type: "car_rental", title: "SIXT Göteborg Central Train Station" })?.id).toBe("sixt");
     expect(bookingBrand({ type: "train", title: "Eurostar 9014" })?.id).toBe("eurostar");
+    expect(bookingBrand({ type: "meal", title: "Dishoom", provider: "OpenTable" })?.id).toBe("opentable");
     expect(bookingBrand({ type: "flight", title: "Hilton Head to Atlanta" })).toBeUndefined();
     expect(bookingBrand(stay("Cove Liverpool"))).toBeUndefined();
     expect(bookingBrand(stay("Hiltonia guest house"))).toBeUndefined();

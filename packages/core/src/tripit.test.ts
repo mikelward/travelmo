@@ -447,6 +447,20 @@ describe("parseTripItExport", () => {
     expect(lone.trips[0]).toMatchObject({ start: "2030-05-01", end: "2030-05-01" });
   });
 
+  it("maps a restaurant reservation to a meal segment", () => {
+    const dinner = {
+      supplier_name: "Example Bistro",
+      cuisine: "French",
+      number_patrons: "2",
+      DateTime: dt("2030-06-10", "19:30", "Europe/London", "+01:00"),
+      Address: { address: "12 Example St, London, UK" },
+    };
+    const parsed = parseTripItExport({ Trips: [{ TripData: { display_name: "Dinner" }, Objects: [dinner] }] });
+    expect(parsed.trips[0]!.segments).toMatchObject([
+      { type: "meal", title: "Example Bistro", start: "2030-06-10T19:30:00+01:00", notes: "Cuisine: French\nParty: 2" },
+    ]);
+  });
+
   it("refuses a file that is not an export", () => {
     expect(() => parseTripItExport({ hello: "world" })).toThrow(NotATripItExport);
     expect(() => parseTripItExport([])).toThrow(NotATripItExport);

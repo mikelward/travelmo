@@ -146,6 +146,7 @@ describe("trips", () => {
     // And what kind of place it goes to, one of a few.
     await assertSucceeds(updateDoc(doc(as(owner), paths.trip(trip.id)), { setting: "beach" }));
     await assertSucceeds(updateDoc(doc(as(partner), paths.trip(trip.id)), { setting: "none" }));
+    await assertSucceeds(updateDoc(doc(as(owner), paths.trip(trip.id)), { setting: "meal" }));
     await assertSucceeds(updateDoc(doc(as(owner), paths.trip(trip.id)), { setting: "other" }));
     await assertFails(updateDoc(doc(as(partner), paths.trip(trip.id)), { setting: "moon" }));
     await assertFails(updateDoc(doc(as(stranger), paths.trip(trip.id)), { setting: "town" }));
@@ -201,9 +202,11 @@ describe("segments", () => {
     const manual: Segment = { ...segment, id: "s2", source: "manual", gmailMessageIds: [], end: undefined } as Segment;
     delete (manual as { end?: string }).end;
     await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s2")), manual));
+    await assertSucceeds(setDoc(doc(as(owner), paths.segment(trip.id, "s2-meal")), { ...manual, id: "s2-meal", type: "meal" }));
     await assertSucceeds(setDoc(doc(as(partner), paths.segment(trip.id, "s3")), { ...manual, id: "s3" }));
     await assertFails(setDoc(doc(as(stranger), paths.segment(trip.id, "s4")), { ...manual, id: "s4" }));
     await assertSucceeds(deleteDoc(doc(as(owner), paths.segment(trip.id, "s2"))));
+    await assertSucceeds(deleteDoc(doc(as(owner), paths.segment(trip.id, "s2-meal"))));
     await assertSucceeds(deleteDoc(doc(as(partner), paths.segment(trip.id, "s3"))));
     await assertFails(deleteDoc(doc(as(stranger), paths.segment(trip.id, segment.id))));
   });

@@ -21,9 +21,9 @@ import app.travelmo.core.tripPicture
 import org.jetbrains.compose.resources.painterResource
 
 /**
- * A trip's picture: for a trip that is just an event, its booking's own icon ([tripBookingType]: a dinner's calendar,
- * a show's ticket); else ([tripPicture]) the outline of the landmark of the city [title] names, else of the kind of
- * place it goes to ([setting]), else a suitcase. Decoration, since the title says where.
+ * A trip's picture: for a trip that is just an event, its booking's own icon ([tripBookingType]: a dinner's fork and
+ * knife, a show's ticket); else ([tripPicture]) the outline of the landmark of the city [title] names, else of the kind
+ * of place it goes to ([setting]), else a suitcase. Decoration, since the title says where.
  */
 @Composable
 fun TripLandmark(title: String, setting: String?, modifier: Modifier = Modifier) {

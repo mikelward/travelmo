@@ -1946,7 +1946,7 @@ export function tripTitle(
   if (first && segments.every(isTransfer)) return transferTitle(first, periods, overrides)!;
   const days = new Set(segments.flatMap((s) => [s.start, s.end].filter((t) => t !== undefined).map((t) => t.slice(0, 10))));
   // A day out (shows, dinners) is named for what it is, not its town.
-  if (first && days.size === 1 && segments.every((s) => s.type === "activity" || (s.type === "other" && !isTransfer(s)))) {
+  if (first && days.size === 1 && segments.every((s) => s.type === "activity" || s.type === "meal" || (s.type === "other" && !isTransfer(s)))) {
     const venue = first.destination?.name;
     if (venue && first.title.toLowerCase().startsWith(venue.toLowerCase())) return venue;
     if (first.title) return first.title;

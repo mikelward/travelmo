@@ -377,14 +377,17 @@ class LandmarksTest {
     fun givesATripThatIsJustAnEventItsBookingsIconWhateverItsTitle() {
         assertEquals(SegmentType.OTHER, tripBookingType("other"))
         assertEquals(SegmentType.ACTIVITY, tripBookingType("activity"))
+        assertEquals(SegmentType.MEAL, tripBookingType("meal"))
         assertEquals(SegmentType.CAR_RENTAL, tripBookingType("car_rental"))
         assertEquals(null, tripBookingType("city"))
         assertEquals(null, tripBookingType("none"))
         assertEquals(null, tripBookingType(null))
         val show = Segment("s", "t", SegmentType.ACTIVITY, "Show", "2026-12-12T19:00:00Z", destination = Place("Theatre", city = "London", country = "GB"))
-        val dinner = Segment("d", "t", SegmentType.OTHER, "Dinner", "2026-12-12T17:00:00Z", destination = Place("Bistro", city = "London"))
-        // The dinner comes first.
-        assertEquals("other", tripSetting(listOf(show, dinner)))
+        val dinner = Segment("d", "t", SegmentType.MEAL, "Dinner", "2026-12-12T17:00:00Z", destination = Place("Bistro", city = "London"))
+        val other = Segment("o", "t", SegmentType.OTHER, "Appointment", "2026-12-12T16:00:00Z", destination = Place("Office", city = "London"))
+        // The dinner comes before the show, and the appointment before both.
+        assertEquals("meal", tripSetting(listOf(show, dinner)))
+        assertEquals("other", tripSetting(listOf(show, dinner, other)))
         assertEquals("activity", tripSetting(listOf(show)))
         assertEquals("town", tripSetting(listOf(show, stay("i", Place("Inn", city = "Woburn")))))
     }
