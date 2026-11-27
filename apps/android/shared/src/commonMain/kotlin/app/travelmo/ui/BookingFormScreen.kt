@@ -44,7 +44,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.core.BookingFields
 import app.travelmo.core.BookingFormException
 import app.travelmo.core.FIXED_OFFSET_PREFIX
-import app.travelmo.core.hasWordStarts
+import app.travelmo.core.hasWordStartsOf
+import app.travelmo.core.wordsOf
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentType
 import app.travelmo.core.airportZone
@@ -103,7 +104,8 @@ private val typeLabels = mapOf(
 @Composable
 fun BookingFormScreen(viewModel: TripsViewModel, tripId: String?, segmentId: String?, defaultDate: String, onDone: () -> Unit, onAdded: (tripId: String) -> Unit = { onDone() }) {
     val segmentsFlow = remember(tripId) { tripId?.let { viewModel.segments(it) } ?: kotlinx.coroutines.flow.flowOf(emptyList()) }
-    val segments by segmentsFlow.collectAsStateWithLifecycle(initialValue = null)
+    val initialSegments = remember(tripId) { tripId?.let(viewModel::peekSegments) }
+    val segments by segmentsFlow.collectAsStateWithLifecycle(initialValue = initialSegments)
     val existing = segments?.firstOrNull { it.id == segmentId }
     // The fields are set up once the booking being edited has arrived.
     if (segmentId != null && existing == null) {
@@ -364,7 +366,10 @@ fun PickerField(value: String, label: String, modifier: Modifier = Modifier, onC
 private fun ZonePicker(current: String, onPick: (String) -> Unit, onDismiss: () -> Unit) {
     var query by remember { mutableStateOf("") }
     val zones = remember { timeZones() }
-    val shown = remember(query) { zones.filter { hasWordStarts(it, query) } }
+    val shown = remember(query) {
+        val needles = wordsOf(query)
+        if (needles.isEmpty()) zones else zones.filter { hasWordStartsOf(it, needles) }
+    }
     AppAlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {},

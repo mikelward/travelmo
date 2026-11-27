@@ -479,11 +479,12 @@ month of any year ("march") or of one ("March 2025", "2025-03"), or a day
 ("12 Dec 2025", "2025-12-12"); a number beside a month is its day, else a
 word ("VS 11"). Words and a date combine ("lisbon april"). The trip
 documents hold only titles and dates, so the first search reads every
-trip's bookings (the web once, as the reports page does; Android listens,
-as its reports do) and keeps them while the list is open; until they
-answer, trips are matched by title and dates, under "Searching bookings…".
-A trip whose bookings couldn't be read is searched by title and dates
-only, and the web says so. With no match the list says "No trips match."
+trip's bookings once per trip version via the shared bounded segment cache
+(as Reports does, on both web and Android) and keeps them for the session;
+until they answer, trips are matched by title and dates, under "Searching
+bookings…". A trip whose bookings couldn't be read is searched by title
+and dates only, and the web says so. With no match the list says "No trips
+match."
 
 ### Filtering the trip list
 
@@ -506,21 +507,21 @@ trip keeps what they need of its bookings (`allCancelled`, `localOnly`,
 regroups bookings (`settlingTripDates`). An app's own edit to a trip's
 bookings (adding, editing, cancelling, restoring, deleting, moving or
 merging) takes the flags off that trip and any other it touched, so they
-are unknown rather than wrong; an app that then reads a trip's bookings
-live (its page, a search or reports on Android) and finds them disagreeing
-with the trip writes them, the owner or a sharee alike
-(`tripFlagsToWrite`; the rules allow both, as booleans and a list of at
-most a hundred names), computed from the
-server's bookings rather than the cache's and written only if the trip's
-`updatedAt` hasn't moved since (a booking changed meanwhile is read again
-later). Bookings read
-once (the web's search and filter reads) may be older than what the parser
-wrote since, so they only fill flags in where a trip has none. That also fills them in for trips from
+are unknown rather than wrong; when an app reads a trip's bookings (its
+page, or a bounded cached read for filters or watching) and finds them
+disagreeing with the trip, it writes them once per trip version with
+bounded concurrency, the owner or a sharee alike (`tripFlagsToWrite`; the
+rules allow both, as booleans and a list of at most a hundred names),
+computed from the server's bookings rather than the cache's and written
+only if the trip's `updatedAt` hasn't moved since (a booking changed
+meanwhile is read again later). Bookings read once (the web's search and
+filter reads) may be older than what the parser wrote since, so they only
+fill flags in where a trip has none. That also fills them in for trips from
 before they were kept: only such trips have their bookings read when a
-switch goes on, each counting as it answers, and once read they are not
-read again. A card is struck through by the trip's flag until its bookings
-are read. With a switch on and nothing left, the list says "Every trip is
-hidden."; the search applies to what the switches leave.
+switch goes on (or for watching when `travelers` is missing), and once
+read they are not read again. A card is struck through by the trip's flag
+until its bookings are read. With a switch on and nothing left, the list
+says "Every trip is hidden."; the search applies to what the switches leave.
 
 `/calendar` shows the same trips month by month (`packages/core/src/calendar.ts`):
 weeks run Monday to Sunday, padded with the neighboring months' days, and
@@ -1361,7 +1362,12 @@ network. Two caches do that:
   connection returns (transactions, such as saving a booking, do not and
   fail with a message). The cache belongs to the browser, not the account,
   and the rules cannot reach it, so it is cleared when a different account
-  signs in than the one whose documents it holds.
+  signs in than the one whose documents it holds. Both platforms also share
+  each live subscription across components and keep it warm briefly across
+  page switches (`liveCache` on the web; shared `users/{uid}`, `people`,
+  `gmailStatuses`, per-trip `segments`, and `flightStatus` streams on
+  Android) and keep completed Import Review searches in memory for the
+  session, avoiding duplicate listeners and loading flashes.
 - A service worker (`apps/web/src/sw.ts`, built with Serwist into
   `public/sw.js` by `sw.build.mjs`, which runs before `next build`) keeps the
   pages the user has opened, their router payloads and the hashed build

@@ -36,6 +36,7 @@ import kotlin.time.Instant
 import kotlinx.coroutines.flow.first
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldNotContain
 import kotlinx.coroutines.CompletableDeferred
@@ -49,6 +50,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -993,5 +995,315 @@ class TripsViewModelTest {
         restarted.reportTrips.first { it != null }!!.first().segments shouldBe segA
         cacheCalls shouldBe listOf("a")
         onceCalls shouldBe listOf("a", "a")
+    }
+
+    @Test
+    fun `shares one segments, flightStatus, people, and gmailStatuses listener across consumers and peeks cached data`() = runTest {
+        val base = flightTripStore()
+        var segmentListeners = 0
+        var statusListeners = 0
+        var peopleListeners = 0
+        var gmailListeners = 0
+        val store = object : TripStore by base {
+            override fun segments(tripId: String): Flow<List<Segment>> {
+                segmentListeners++
+                return base.segments(tripId)
+            }
+            override fun flightStatus(key: String): Flow<FlightStatus?> {
+                statusListeners++
+                return base.flightStatus(key)
+            }
+            override fun people(uid: String): Flow<List<app.travelmo.core.Person>> {
+                peopleListeners++
+                return base.people(uid)
+            }
+            override fun gmailStatuses(uid: String): Flow<List<GmailStatus>> {
+                gmailListeners++
+                return base.gmailStatuses(uid)
+            }
+        }
+        val vm = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        val jobs = listOf(
+            backgroundScope.launch { vm.trips.collect {} },
+            backgroundScope.launch { vm.segments("sydney").collect {} },
+            backgroundScope.launch { vm.flightStatuses("sydney").collect {} },
+            backgroundScope.launch { vm.travelers.collect {} },
+            backgroundScope.launch { vm.reportTrips.collect {} },
+            backgroundScope.launch { vm.gmail.collect {} },
+            backgroundScope.launch { vm.gmailMailboxes.collect {} },
+        )
+        runCurrent()
+        // Repeated refreshFlights reuses the live segment and flight-status streams without attaching new listeners.
+        vm.refreshFlights("sydney")
+        vm.refreshFlights("sydney")
+        runCurrent()
+
+        segmentListeners shouldBe 1
+        statusListeners shouldBe 1
+        peopleListeners shouldBe 1
+        gmailListeners shouldBe 1
+        vm.peekTrip("sydney")?.id shouldBe "sydney"
+        vm.peekSegments("sydney")?.map { it.id } shouldBe listOf("s-flight")
+        jobs.forEach { it.cancel() }
+    }
+
+    @Test
+    fun `unknownSegments reads once with bounded cache and attempts each failing flag repair once per version`() = runTest {
+        val unknownTrip = Trip("u1", "Oslo", "2026-08-01", "2026-08-03", OWNER, updatedAt = "2026-08-01T00:00:00Z")
+        val segs = listOf(Segment("s1", "u1", SegmentType.LODGING, "Hotel Oslo", "2026-08-01T15:00:00+02:00", "2026-08-03T11:00:00+02:00", travelers = listOf("Pat")))
+        val base = FakeTripStore(
+            trips = listOf(unknownTrip),
+            segments = mapOf("u1" to segs),
+            people = listOf(app.travelmo.core.Person("me", "Sam", bookings = 4, direct = 4)),
+        )
+        var liveListeners = 0
+        var onceReads = 0
+        var repairCalls = 0
+        val store = object : TripStore by base {
+            override fun segments(tripId: String): Flow<List<Segment>> {
+                liveListeners++
+                return base.segments(tripId)
+            }
+            override suspend fun segmentsOnce(tripId: String): app.travelmo.data.Seen<List<Segment>> {
+                onceReads++
+                return app.travelmo.data.Seen(segs, confirmed = true)
+            }
+            override suspend fun repairTripFlags(tripId: String) {
+                repairCalls++
+                throw IllegalStateException("offline")
+            }
+        }
+        val vm = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        val job = backgroundScope.launch { vm.watchingTrips.collect {} }
+        runCurrent()
+        vm.watchingTrips.value shouldBe setOf("u1")
+        liveListeners shouldBe 0
+        onceReads shouldBe 1
+        repairCalls shouldBe 1
+
+        // Collecting segments directly for the same unchanged trip does not retry the failed repair at the same updatedAt.
+        val segJob = backgroundScope.launch { vm.segments("u1").collect {} }
+        runCurrent()
+        repairCalls shouldBe 1
+        segJob.cancel()
+        job.cancel()
+    }
+
+    @Test
+    fun `reviewAll caches completed search records across clear and re-search`() = runTest {
+        val base = FakeTripStore()
+        var allParsedCalls = 0
+        val store = object : TripStore by base {
+            override fun allParsed(uid: String): Flow<app.travelmo.data.SearchedRecords> {
+                allParsedCalls++
+                return base.allParsed(uid)
+            }
+        }
+        val vm = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        val job = backgroundScope.launch { vm.reviewAll.collect {} }
+        runCurrent()
+        allParsedCalls shouldBe 0
+        vm.setReviewSearching(true)
+        runCurrent()
+        allParsedCalls shouldBe 1
+        vm.reviewAll.value?.done shouldBe true
+        // Clearing and searching again reuses the cached records without re-reading Firestore.
+        vm.setReviewSearching(false)
+        runCurrent()
+        vm.setReviewSearching(true)
+        runCurrent()
+        allParsedCalls shouldBe 1
+        job.cancel()
+    }
+
+    @Test
+    fun `reviewAll does not cache failed or unconfirmed search results and retries on next search`() = runTest {
+        val base = FakeTripStore()
+        var allParsedCalls = 0
+        var fail = true
+        val store = object : TripStore by base {
+            override fun allParsed(uid: String): Flow<app.travelmo.data.SearchedRecords> {
+                allParsedCalls++
+                return if (fail) flowOf(app.travelmo.data.SearchedRecords(emptyList(), done = true, confirmed = false))
+                else base.allParsed(uid)
+            }
+        }
+        val vm = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        val job = backgroundScope.launch { vm.reviewAll.collect {} }
+        vm.setReviewSearching(true)
+        runCurrent()
+        allParsedCalls shouldBe 1
+        vm.reviewAll.value?.done shouldBe true
+        vm.reviewAll.value?.confirmed shouldBe false
+
+        // Clearing and re-entering search retries because the failed read was not cached.
+        fail = false
+        vm.setReviewSearching(false)
+        runCurrent()
+        vm.setReviewSearching(true)
+        runCurrent()
+        allParsedCalls shouldBe 2
+        vm.reviewAll.value?.confirmed shouldBe true
+
+        // Once confirmed, clearing and re-entering reuses the cache.
+        vm.setReviewSearching(false)
+        runCurrent()
+        vm.setReviewSearching(true)
+        runCurrent()
+        allParsedCalls shouldBe 2
+        job.cancel()
+    }
+
+    @Test
+    fun `reviewAll refreshes cached search when new imports advance past the live latest window`() = runTest {
+        fun rec(id: String, idx: Int) = app.travelmo.core.ParsedRecord(
+            messageId = id,
+            outcome = "not_booking",
+            processedAt = "2026-10-30T${(idx / 60).toString().padStart(2, '0')}:${(idx % 60).toString().padStart(2, '0')}:00Z",
+        )
+        val initial = listOf(rec("old2", 2), rec("old1", 1))
+        val latestFlow = kotlinx.coroutines.flow.MutableStateFlow<List<app.travelmo.core.ParsedRecord>?>(initial)
+        var allRecords = initial
+        var allParsedCalls = 0
+        val base = FakeTripStore(parsed = initial)
+        val store = object : TripStore by base {
+            override fun latestParsed(uid: String): Flow<List<app.travelmo.core.ParsedRecord>?> = latestFlow
+            override fun allParsed(uid: String): Flow<app.travelmo.data.SearchedRecords> {
+                allParsedCalls++
+                return flowOf(app.travelmo.data.SearchedRecords(allRecords, done = true, confirmed = true))
+            }
+        }
+        val vm = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        val job = backgroundScope.launch { vm.reviewAll.collect {} }
+        vm.setReviewSearching(true)
+        runCurrent()
+        allParsedCalls shouldBe 1
+
+        // Fewer than REVIEW_RECENT new records keep using the cache.
+        val fewNew = listOf(rec("new1", 10)) + initial
+        latestFlow.value = fewNew
+        vm.setReviewSearching(false)
+        runCurrent()
+        vm.setReviewSearching(true)
+        runCurrent()
+        allParsedCalls shouldBe 1
+
+        // Once a full REVIEW_RECENT window of newer imports arrives, clearing and searching re-reads history.
+        val manyNew = (1..app.travelmo.core.REVIEW_RECENT).map { i -> rec("batch$i", 100 + i) }.reversed()
+        allRecords = manyNew + initial
+        vm.setReviewSearching(false)
+        runCurrent()
+        latestFlow.value = manyNew
+        runCurrent()
+        // Not searching yet: invalidating does not trigger an eager read.
+        allParsedCalls shouldBe 1
+        vm.setReviewSearching(true)
+        runCurrent()
+        allParsedCalls shouldBe 2
+        vm.reviewAll.value?.records?.first()?.messageId shouldBe "batch${app.travelmo.core.REVIEW_RECENT}"
+        job.cancel()
+    }
+
+    @Test
+    fun `reportHomesNow recomputes when home settings change after reportHomes stops collecting`() = runTest {
+        val trip = Trip("t1", "Paris", "2026-06-01", "2026-06-05", OWNER, updatedAt = "2026-06-01T00:00:00Z")
+        val segs = listOf(Segment("s1", "t1", SegmentType.LODGING, "Hotel Paris", "2026-06-01T15:00:00+02:00", "2026-06-05T11:00:00+02:00"))
+        val store = FakeTripStore(
+            trips = listOf(trip),
+            segments = mapOf("t1" to segs),
+        )
+        store.setHomeCorrections(OWNER, listOf(HomeCorrection(city = "London", from = "2025-01-01", country = "GB")))
+        val vm = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        val tripsJob = backgroundScope.launch { vm.reportTrips.collect {} }
+        val settingsJob = backgroundScope.launch { vm.rideSettings.collect {} }
+        val homesJob = backgroundScope.launch { vm.reportHomes.collect {} }
+        runCurrent()
+        vm.reportHomesNow().map { it.city } shouldBe listOf("London")
+
+        // Leave Profile so reportHomes stops upstream collection after its 5s WhileSubscribed timeout.
+        homesJob.cancel()
+        advanceTimeBy(6_000)
+        runCurrent()
+
+        // Home corrections change while Reports is open (reportTrips and rideSettings remain active).
+        store.setHomeCorrections(OWNER, listOf(HomeCorrection(city = "Boston", from = "2025-01-01", country = "US")))
+        runCurrent()
+        vm.reportHomesNow().map { it.city } shouldBe listOf("Boston")
+
+        tripsJob.cancel()
+        settingsJob.cancel()
+    }
+
+    @Test
+    fun `clockNow and clockToday emit as time advances`() = runTest {
+        var now = Instant.parse("2026-05-01T23:59:30Z")
+        val vm = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { now })
+        val seenNow = mutableListOf<String>()
+        val seenToday = mutableListOf<String>()
+        val nowJob = backgroundScope.launch { vm.clockNow.collect { seenNow += it } }
+        val todayJob = backgroundScope.launch { vm.clockToday.collect { seenToday += it } }
+        runCurrent()
+        seenNow shouldBe listOf("2026-05-01T23:59:30Z")
+        val initialDay = seenToday.single()
+
+        now = Instant.parse("2026-05-03T12:00:00Z")
+        advanceTimeBy(60_000)
+        runCurrent()
+        seenNow shouldBe listOf("2026-05-01T23:59:30Z", "2026-05-03T12:00:00Z")
+        seenToday.size shouldBe 2
+        seenToday.last() shouldNotBe initialDay
+
+        nowJob.cancel()
+        todayJob.cancel()
+    }
+
+    @Test
+    fun `unknownSegments retries unconfirmed reads and repairs flags when connectivity returns`() = runTest {
+        val unknownTrip = Trip("u1", "Oslo", "2026-08-01", "2026-08-03", OWNER, updatedAt = "2026-08-01T00:00:00Z")
+        val segs = listOf(Segment("s1", "u1", SegmentType.LODGING, "Hotel Oslo", "2026-08-01T15:00:00+02:00", "2026-08-03T11:00:00+02:00", travelers = listOf("Pat")))
+        val base = FakeTripStore(
+            trips = listOf(unknownTrip),
+            segments = mapOf("u1" to segs),
+            people = listOf(app.travelmo.core.Person("me", "Sam", bookings = 4, direct = 4)),
+        )
+        var online = false
+        var repairFails = true
+        var onceReads = 0
+        var repairCalls = 0
+        val reconnected = kotlinx.coroutines.flow.MutableSharedFlow<Unit>()
+        val store = object : TripStore by base {
+            override suspend fun segmentsOnce(tripId: String): app.travelmo.data.Seen<List<Segment>> {
+                onceReads++
+                return if (online) app.travelmo.data.Seen(segs, confirmed = true)
+                else app.travelmo.data.Seen(emptyList(), confirmed = false)
+            }
+            override suspend fun repairTripFlags(tripId: String) {
+                repairCalls++
+                if (repairFails) throw IllegalStateException("offline")
+            }
+        }
+        val vm = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, reconnected = reconnected)
+        val job = backgroundScope.launch { vm.watchingTrips.collect {} }
+        runCurrent()
+        // Offline unconfirmed read does not mark the trip or burn a repair attempt.
+        onceReads shouldBe 1
+        repairCalls shouldBe 0
+        vm.watchingTrips.value shouldBe emptySet()
+
+        // When connectivity returns, unknownSegments retries the unconfirmed trip and attempts repair.
+        online = true
+        reconnected.emit(Unit)
+        runCurrent()
+        onceReads shouldBe 2
+        repairCalls shouldBe 1
+        vm.watchingTrips.value shouldBe setOf("u1")
+
+        // A failed flag repair retries on the next reconnect without re-reading confirmed bookings.
+        repairFails = false
+        reconnected.emit(Unit)
+        runCurrent()
+        onceReads shouldBe 2
+        repairCalls shouldBe 2
+        job.cancel()
     }
 }

@@ -510,5 +510,5 @@ data class OwnProfile(val profile: TravelProfile?)
  * snapshot listener, so a change made elsewhere shows up on its own and
  * Firestore's own cache answers them offline.
  */
-/** What a search has read so far, and whether it has read them all. */
-data class SearchedRecords(val records: List<ParsedRecord>, val done: Boolean)
+/** What a search has read so far, whether reading has stopped, and whether the full server history was confirmed. */
+data class SearchedRecords(val records: List<ParsedRecord>, val done: Boolean, val confirmed: Boolean = done)

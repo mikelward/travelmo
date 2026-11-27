@@ -56,6 +56,7 @@ import app.travelmo.core.HomePeriod
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -162,12 +163,23 @@ fun ProfileScreen(viewModel: TripsViewModel, onOpenSettings: () -> Unit, bottomB
     val whose = outcomes.filterKeys { it.startsWith(PERSON_PREFIX) }
     val whoseError = whose.values.filterIsInstance<Outcome.Failed>().lastOrNull()?.message
     LaunchedEffect(whose) { for ((token, outcome) in whose) if (outcome is Outcome.Done) viewModel.outcomeSeen(token) }
+    val own = profile
+    val ownLoyalty = remember(own, travelers) { own?.let { allLoyalty(it, travelers) }.orEmpty() }
+    val ownLoyaltyGroups = remember(ownLoyalty) { loyaltyByPerson(ownLoyalty) }
+    val me = remember(travelers) { guessMe(travelers) }
+    val others = remember(shared, own?.ownerUid) { shared.filter { it.ownerUid != own?.ownerUid } }
+    val sharedLoyalty = remember(others) {
+        others.associate { p ->
+            val loyalty = allLoyalty(p, emptyList())
+            p.ownerUid to (loyalty to loyaltyByPerson(loyalty))
+        }
+    }
     var editing by rememberSaveable { mutableStateOf<List<String>?>(null) }
     editing?.let { (program, number) ->
         PersonDialog(
             program = program,
             number = number,
-            people = profile?.let { p -> loyaltyByPerson(allLoyalty(p, travelers)).mapNotNull { it.person } }.orEmpty(),
+            people = remember(ownLoyaltyGroups) { ownLoyaltyGroups.mapNotNull { it.person } },
             onPick = { person ->
                 whose.keys.forEach(viewModel::outcomeSeen)
                 viewModel.setLoyaltyPerson("$PERSON_PREFIX$program/$number", program, number, person)
@@ -206,7 +218,6 @@ fun ProfileScreen(viewModel: TripsViewModel, onOpenSettings: () -> Unit, bottomB
                     }
                 }
             }
-            val own = profile
             if (own == null || !own.hasDetails) {
                 item(key = "empty") {
                     Text(stringResource(Res.string.profile_empty), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -215,6 +226,8 @@ fun ProfileScreen(viewModel: TripsViewModel, onOpenSettings: () -> Unit, bottomB
                 profileSections(
                     own,
                     prefix = "own",
+                    loyalty = ownLoyalty,
+                    loyaltyGroups = ownLoyaltyGroups,
                     onRemoveFound = { found ->
                         // A new attempt clears what the last one said.
                         removals.keys.forEach(viewModel::outcomeSeen)
@@ -223,7 +236,6 @@ fun ProfileScreen(viewModel: TripsViewModel, onOpenSettings: () -> Unit, bottomB
                     removalError = removalError,
                     onWhose = { program, number -> editing = listOf(program, number) },
                     whoseError = whoseError,
-                    travelers = travelers,
                     onWhoIs = if (travelers.isNotEmpty()) ({ name -> naming = name }) else null,
                 )
             }
@@ -233,7 +245,6 @@ fun ProfileScreen(viewModel: TripsViewModel, onOpenSettings: () -> Unit, bottomB
                     SectionTitle(stringResource(Res.string.people))
                     Text(stringResource(Res.string.people_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                val me = guessMe(travelers)
                 items(travelers, key = { "person-${it.id}" }) { person ->
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                         Text(person.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
@@ -264,14 +275,14 @@ fun ProfileScreen(viewModel: TripsViewModel, onOpenSettings: () -> Unit, bottomB
                     onSave = { viewModel.saveTrusted(SHARE_TOKEN, it) },
                 )
             }
-            val others = shared.filter { it.ownerUid != own?.ownerUid }
             if (others.isNotEmpty()) {
                 item(key = "shared-with-you") { SectionTitle(stringResource(Res.string.shared_with_you)) }
                 for (p in others) {
                     item(key = "from-${p.ownerUid}") {
                         Text(stringResource(Res.string.from_sender, p.ownerEmail ?: stringResource(Res.string.someone_who_trusts_you)), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 8.dp))
                     }
-                    if (p.hasDetails) profileSections(p, prefix = p.ownerUid) else item(key = "nothing-${p.ownerUid}") {
+                    val (pLoyalty, pGroups) = sharedLoyalty[p.ownerUid] ?: (emptyList<ProfileEntry>() to emptyList())
+                    if (p.hasDetails) profileSections(p, prefix = p.ownerUid, loyalty = pLoyalty, loyaltyGroups = pGroups) else item(key = "nothing-${p.ownerUid}") {
                         Text(stringResource(Res.string.profile_nothing_yet), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -287,20 +298,19 @@ fun ProfileScreen(viewModel: TripsViewModel, onOpenSettings: () -> Unit, bottomB
 private fun LazyListScope.profileSections(
     profile: TravelProfile,
     prefix: String,
+    loyalty: List<ProfileEntry>,
+    loyaltyGroups: List<app.travelmo.core.LoyaltyGroup>,
     onRemoveFound: ((FoundLoyalty) -> Unit)? = null,
     removalError: String? = null,
     onWhose: ((program: String, number: String) -> Unit)? = null,
     whoseError: String? = null,
-    travelers: List<Person> = emptyList(),
     onWhoIs: ((name: String) -> Unit)? = null,
 ) {
     entries(stringResource = Res.string.documents, entries = profile.documents, prefix = "$prefix-doc")
-    // The owner's people, on their own profile, so every spelling of someone is one person.
-    val loyalty = allLoyalty(profile, travelers)
     if (loyalty.isNotEmpty()) {
         item(key = "$prefix-loyalty-title") { SectionTitle(stringResource(Res.string.loyalty_programs)) }
         // The owner's first, then each other person's, named whenever any is someone else's.
-        val groups = loyaltyByPerson(loyalty)
+        val groups = loyaltyGroups
         for (group in groups) {
             item(key = "$prefix-loyalty-table-${group.person.orEmpty()}") {
                 Column {
@@ -540,7 +550,8 @@ private fun HomeSection(viewModel: TripsViewModel) {
         }
         Text(homeLine(periods) ?: stringResource(Res.string.home_not_known), style = MaterialTheme.typography.bodyLarge)
         Text(stringResource(Res.string.home_worked_out), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        for (c in corrections.sortedBy { it.from }) {
+        val sortedCorrections = remember(corrections) { corrections.sortedBy { it.from } }
+        for (c in sortedCorrections) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(correctionText(c), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                 IconButton(onClick = { adding = false; viewModel.removeHomeCorrection(HOME_TOKEN, c.from) }, enabled = !busy) {
@@ -683,7 +694,7 @@ private fun HomeAirports(viewModel: TripsViewModel, periods: List<HomePeriod>) {
         }
     }
     // One row per home town, its latest period's airports.
-    val towns = periods.associateBy { homeTownKey(it.city, it.country) }
+    val towns = remember(periods) { periods.associateBy { homeTownKey(it.city, it.country) } }
     for ((key, period) in towns) {
         val shown = airportCodes(period)
         if (editing == key) {

@@ -1,6 +1,7 @@
 package app.travelmo
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import app.travelmo.ui.CountingPrefs
 import app.travelmo.ui.ListFilterPrefs
 import app.travelmo.ui.ReportSnapshotFile
@@ -140,8 +141,15 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         // Leaving the app: each live flight's Live Update drawn again from its last message, so
-        // one the system dropped is back.
-        LiveFlightNotifications.redrawAll(this)
+        // one the system dropped is back. Run off the main thread so stopping the activity never blocks.
+        val appContext = applicationContext
+        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+            try {
+                LiveFlightNotifications.redrawAll(appContext)
+            } catch (e: Exception) {
+                app.travelmo.logging.SharedLog.error(e, "Redrawing live flight notifications on stop failed")
+            }
+        }
     }
 
     // singleTask: a tap while the app is open arrives here, not in onCreate.

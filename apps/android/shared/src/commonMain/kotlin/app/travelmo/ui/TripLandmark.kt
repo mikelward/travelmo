@@ -39,14 +39,20 @@ fun TripLandmark(title: String, setting: String?, modifier: Modifier = Modifier)
     Icon(vector, contentDescription = null, tint = tint, modifier = modifier.size(40.dp))
 }
 
+// Built vector cache keyed by landmark id (Compose UI runs on the main thread), so scrolling through
+// repeated city or setting landmarks avoids re-parsing SVG path strings on every row.
+private val landmarkVectors = mutableMapOf<String, ImageVector>()
+
 /** [landmark]'s drawing: a 48-unit square stroked 1.5 units wide with round ends, as the web draws it. */
 private fun landmarkVector(landmark: Landmark): ImageVector =
-    ImageVector.Builder(name = landmark.id, defaultWidth = 48.dp, defaultHeight = 48.dp, viewportWidth = 48f, viewportHeight = 48f)
-        .addPath(
-            pathData = addPathNodes(landmark.d),
-            stroke = SolidColor(Color.Black),
-            strokeLineWidth = 1.5f,
-            strokeLineCap = StrokeCap.Round,
-            strokeLineJoin = StrokeJoin.Round,
-        )
-        .build()
+    landmarkVectors.getOrPut(landmark.id) {
+        ImageVector.Builder(name = landmark.id, defaultWidth = 48.dp, defaultHeight = 48.dp, viewportWidth = 48f, viewportHeight = 48f)
+            .addPath(
+                pathData = addPathNodes(landmark.d),
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.5f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+            .build()
+    }

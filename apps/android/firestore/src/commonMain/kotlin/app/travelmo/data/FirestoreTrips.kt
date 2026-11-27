@@ -17,10 +17,6 @@ import app.travelmo.core.accessSelfApproval
 import app.travelmo.core.emailAddressOf
 import app.travelmo.core.FlightStatus
 import app.travelmo.core.FoundLoyalty
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.flow.flow
 import app.travelmo.core.withLearned
 import app.travelmo.core.SenderPatterns
 import app.travelmo.core.SenderList
@@ -68,22 +64,81 @@ import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.QuerySnapshot
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.Source
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import com.google.firebase.serialization.setData
 import com.google.firebase.serialization.updateData
 import kotlin.time.Clock
 
-
 // Records a search reads at a time.
 private const val SEARCH_PAGE = 1000
+private const val PARSED_RECORD_CONCURRENCY = 16
+
+private sealed interface UserDocSnapshot {
+    data class Data(val exists: Boolean, val data: Map<String, Any?>?, val confirmed: Boolean) : UserDocSnapshot
+    data class Failed(val error: FirebaseFirestoreException) : UserDocSnapshot
+}
+
 class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getInstance()) : TripStore {
+    private val sharedScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val userDocMutex = Mutex()
+    private val userDocFlows = mutableMapOf<String, SharedFlow<UserDocSnapshot>>()
+
+    /**
+     * One shared live listener on `users/{uid}` (with metadata changes so access can tell cache from server),
+     * reused by every user-document flow (addresses, ride settings, mailboxes, calendar, forwarding, reminders,
+     * refresh, access). Kept 5s past the last collector across screen switches; evicted on error so a retry
+     * (such as after access approval) attaches a fresh listener.
+     */
+    private fun sharedUserDoc(uid: String): Flow<UserDocSnapshot> = flow {
+        val shared = userDocMutex.withLock {
+            userDocFlows[uid] ?: run {
+                lateinit var entry: SharedFlow<UserDocSnapshot>
+                entry = callbackFlow {
+                    val registration = db.collection("users").document(uid).addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
+                        if (error != null) {
+                            sharedScope.launch { userDocMutex.withLock { if (userDocFlows[uid] === entry) userDocFlows.remove(uid) } }
+                            trySend(UserDocSnapshot.Failed(error))
+                            return@addSnapshotListener
+                        }
+                        if (snapshot != null) {
+                            trySend(UserDocSnapshot.Data(snapshot.exists(), snapshot.data, confirmed = !snapshot.metadata.isFromCache))
+                        }
+                    }
+                    awaitClose { registration.remove() }
+                }.shareIn(sharedScope, SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000, replayExpirationMillis = 0), replay = 1)
+                userDocFlows[uid] = entry
+                entry
+            }
+        }
+        emitAll(shared)
+    }
     override fun trips(uid: String, addresses: List<String>): Flow<List<Trip>> {
         // One query failing (the rules refusing it, say) must not hold the
         // whole list at "loading": it answers with nothing and is logged.
@@ -175,17 +230,8 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         }
     }
 
-    override fun googleCalendar(uid: String): Flow<GoogleCalendarShown?> = callbackFlow {
-        val registration = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
-            if (error != null) {
-                SharedLog.error(error, "Reading the Google Calendar connection failed")
-                trySend(GoogleCalendarShown(null))
-                return@addSnapshotListener
-            }
-            trySend(googleCalendarOf(snapshot?.data))
-        }
-        awaitClose { registration.remove() }
-    }
+    override fun googleCalendar(uid: String): Flow<GoogleCalendarShown?> =
+        userDocument(uid, "Reading the Google Calendar connection failed", GoogleCalendarShown(null), ::googleCalendarOf)
 
     override fun calendarExport(uid: String): Flow<CalendarExportShown?> = callbackFlow {
         val registration = db.document("users/$uid/calendarExport/main").addSnapshotListener { snapshot, error ->
@@ -253,59 +299,26 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         awaitClose { registration.remove() }
     }
 
-    override fun forwarding(uid: String): Flow<Forwarding?> = callbackFlow {
-        val registration = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
-            if (error != null) {
-                SharedLog.error(error, "Reading the forwarding address failed")
-                trySend(Forwarding(null))
-                return@addSnapshotListener
-            }
-            trySend(forwardingOf(snapshot?.data))
-        }
-        awaitClose { registration.remove() }
-    }
+    override fun forwarding(uid: String): Flow<Forwarding?> =
+        userDocument(uid, "Reading the forwarding address failed", Forwarding(null), ::forwardingOf)
 
-    override fun addressHolder(uid: String): Flow<AddressHolder> = callbackFlow {
-        val registration = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
-            if (error != null) {
-                // The sign-in alone still finds what was shared with it.
-                SharedLog.error(error, "Reading the user document for the email addresses failed")
-                trySend(AddressHolder())
-                return@addSnapshotListener
-            }
-            trySend(snapshot?.data?.let(::addressHolderFromDocument) ?: AddressHolder())
+    override fun addressHolder(uid: String): Flow<AddressHolder> =
+        userDocument(uid, "Reading the user document for the email addresses failed", AddressHolder()) { data ->
+            data?.let(::addressHolderFromDocument) ?: AddressHolder()
         }
-        awaitClose { registration.remove() }
-    }
 
-    override fun reminderEmail(uid: String): Flow<Boolean?> = callbackFlow {
-        val registration = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
-            if (error != null) {
-                SharedLog.error(error, "Reading the user document failed")
-                trySend(null)
-                return@addSnapshotListener
-            }
-            val reminders = snapshot?.get("reminders") as? Map<*, *>
-            trySend(reminders?.get("email") == true)
+    override fun reminderEmail(uid: String): Flow<Boolean?> =
+        userDocument(uid, "Reading the user document failed", null) { data ->
+            val reminders = data?.get("reminders") as? Map<*, *>
+            reminders?.get("email") == true
         }
-        awaitClose { registration.remove() }
-    }
 
     override suspend fun setReminderEmail(uid: String, on: Boolean) {
         db.collection("users").document(uid).setData(mapOf("reminders" to mapOf("email" to on)), SetOptions.merge()).await()
     }
 
-    override fun rideSettings(uid: String): Flow<RideSettings?> = callbackFlow {
-        val registration = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
-            if (error != null) {
-                SharedLog.error(error, "Reading the user document for ride suggestions failed")
-                trySend(null)
-                return@addSnapshotListener
-            }
-            trySend(rideSettingsOf(snapshot?.data))
-        }
-        awaitClose { registration.remove() }
-    }
+    override fun rideSettings(uid: String): Flow<RideSettings?> =
+        userDocument(uid, "Reading the user document for ride suggestions failed", null, ::rideSettingsOf)
 
     override suspend fun removeFoundLoyalty(uid: String, found: FoundLoyalty) {
         val ref = db.collection("users").document(uid).collection("travelProfile").document("main")
@@ -341,18 +354,17 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     override fun refreshProgress(uid: String): Flow<RefreshShown?> =
         userDocument(uid, "Reading the refresh's progress failed", null, ::refreshOf)
 
-    /** What [read] makes of the user document, live; [fallback] once reading it fails, logged as [failure]. */
-    private fun <T> userDocument(uid: String, failure: String, fallback: T, read: (Map<String, Any?>?) -> T): Flow<T> = callbackFlow {
-        val registration = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
-            if (error != null) {
-                SharedLog.error(error, failure)
-                trySend(fallback)
-                return@addSnapshotListener
+    /** What [read] makes of the shared user document, live; [fallback] once reading it fails, logged as [failure]. */
+    private fun <T> userDocument(uid: String, failure: String, fallback: T, read: (Map<String, Any?>?) -> T): Flow<T> =
+        sharedUserDoc(uid).map { snap ->
+            when (snap) {
+                is UserDocSnapshot.Failed -> {
+                    SharedLog.error(snap.error, failure)
+                    fallback
+                }
+                is UserDocSnapshot.Data -> read(snap.data)
             }
-            trySend(read(snapshot?.data))
-        }
-        awaitClose { registration.remove() }
-    }
+        }.distinctUntilChanged()
 
     override fun latestParsed(uid: String): Flow<List<ParsedRecord>?> = callbackFlow {
         val query = db.collection("users").document(uid).collection("parsedMessages")
@@ -369,24 +381,33 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     }
 
     override suspend fun parsedRecords(uid: String, ids: List<String>): Map<String, ParsedRecord> {
+        if (ids.isEmpty()) return emptyMap()
         val records = db.collection("users").document(uid).collection("parsedMessages")
-        return ids.mapNotNull { id ->
-            try {
-                parsedRecordOf(id, records.document(id).get().await().data)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // Listed by id alone, as if the record were gone.
-                SharedLog.error(e, "Reading a failed email's import record failed")
-                null
-            }
-        }.associateBy { it.messageId }
+        val semaphore = Semaphore(PARSED_RECORD_CONCURRENCY)
+        return coroutineScope {
+            ids.map { id ->
+                async {
+                    semaphore.withPermit {
+                        try {
+                            parsedRecordOf(id, records.document(id).get().await().data)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            // Listed by id alone, as if the record were gone.
+                            SharedLog.error(e, "Reading a failed email's import record failed")
+                            null
+                        }
+                    }
+                }
+            }.awaitAll().filterNotNull().associateBy { it.messageId }
+        }
     }
 
     override fun allParsed(uid: String): Flow<SearchedRecords> = flow {
         val base = db.collection("users").document(uid).collection("parsedMessages").orderBy("processedAt", Query.Direction.DESCENDING)
         val read = mutableListOf<ParsedRecord>()
         var last: DocumentSnapshot? = null
+        var confirmed = true
         while (true) {
             val page = try {
                 (last?.let { base.startAfter(it) } ?: base).limit(SEARCH_PAGE.toLong()).get().await()
@@ -394,13 +415,14 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
                 throw e
             } catch (e: Exception) {
                 SharedLog.error(e, "Reading import records for a search failed")
-                emit(SearchedRecords(read.toList(), done = true))
+                emit(SearchedRecords(read.toList(), done = true, confirmed = false))
                 return@flow
             }
+            if (page.metadata.isFromCache) confirmed = false
             read += page.documents.mapNotNull { parsedRecordOf(it.id, it.data) }
             last = page.documents.lastOrNull()
             val done = page.size() < SEARCH_PAGE || read.size >= REVIEW_SEARCH_CAP
-            emit(SearchedRecords(read.toList(), done))
+            emit(SearchedRecords(read.toList(), done = done, confirmed = done && confirmed))
             if (done) return@flow
         }
     }
@@ -623,13 +645,18 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     }
 
     override fun userDocument(uid: String): Flow<Seen<AddressHolder?>> =
-        db.collection("users").document(uid).seen(
-            read = { snapshot -> if (snapshot.exists()) addressHolderFromDocument(snapshot.data.orEmpty()) else null },
-            onError = { error ->
-                SharedLog.error(error, "Reading the user document for access failed")
-                null
-            },
-        )
+        sharedUserDoc(uid).map { snap ->
+            when (snap) {
+                is UserDocSnapshot.Failed -> {
+                    SharedLog.error(snap.error, "Reading the user document for access failed")
+                    Seen<AddressHolder?>(null, confirmed = true)
+                }
+                is UserDocSnapshot.Data -> Seen<AddressHolder?>(
+                    if (snap.exists) addressHolderFromDocument(snap.data.orEmpty()) else null,
+                    confirmed = snap.confirmed,
+                )
+            }
+        }.distinctUntilChanged()
 
     override fun accessRecord(email: String): Flow<Seen<AccessRecord?>> =
         accessRef(email).seen(

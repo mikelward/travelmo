@@ -26,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,7 +39,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.core.Trip
 import app.travelmo.core.TripBar
 import app.travelmo.core.addMonths
-import app.travelmo.core.displayTitles
 import app.travelmo.core.monthLabel
 import app.travelmo.core.monthOf
 import app.travelmo.core.monthWeeks
@@ -72,7 +72,8 @@ fun CalendarScreen(
     bottomBar: @Composable () -> Unit,
 ) {
     val trips by viewModel.trips.collectAsStateWithLifecycle()
-    val today = viewModel.today()
+    val titles by viewModel.titles.collectAsStateWithLifecycle()
+    val today by viewModel.clockToday.collectAsStateWithLifecycle(initialValue = viewModel.today())
     val month = month ?: monthOf(today)
     Scaffold(
         topBar = {
@@ -86,10 +87,10 @@ fun CalendarScreen(
             if (all == null) {
                 Text(stringResource(Res.string.trips_loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
             } else {
-                val inMonth = all.filter { monthOf(it.start) <= month && monthOf(it.end) >= month }
+                val inMonth = remember(all, month) { all.filter { monthOf(it.start) <= month && monthOf(it.end) >= month } }
                 val scroll = rememberScrollState()
                 Column(modifier = Modifier.fillMaxSize().scrollEdgeCue(scroll, scrollCueColors()).verticalScroll(scroll).padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) {
-                    MonthGrid(month = month, trips = inMonth, titles = displayTitles(all), today = today, uid = uid, onOpenTrip = onOpenTrip)
+                    MonthGrid(month = month, trips = inMonth, titles = titles, today = today, uid = uid, onOpenTrip = onOpenTrip)
                     if (inMonth.isEmpty()) {
                         Text(
                             stringResource(Res.string.no_trips_in, monthLabel(month)),
@@ -135,6 +136,7 @@ private fun MonthSwitcher(month: String, today: String, onMonthChange: (String) 
 @Composable
 private fun MonthGrid(month: String, trips: List<Trip>, titles: Map<String, String>, today: String, uid: String, onOpenTrip: (String) -> Unit) {
     val shape = RoundedCornerShape(12.dp)
+    val weeks = remember(month) { monthWeeks(month) }
     Column(modifier = Modifier.fillMaxWidth().clip(shape).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)) {
         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
             for (day in weekdays) {
@@ -147,7 +149,7 @@ private fun MonthGrid(month: String, trips: List<Trip>, titles: Map<String, Stri
                 )
             }
         }
-        for (week in monthWeeks(month)) {
+        for (week in weeks) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Week(week = week, trips = trips, titles = titles, month = month, today = today, uid = uid, onOpenTrip = onOpenTrip)
         }
@@ -157,8 +159,11 @@ private fun MonthGrid(month: String, trips: List<Trip>, titles: Map<String, Stri
 /** Seven day numbers, then one row per lane with the trips' bars across it. */
 @Composable
 private fun Week(week: List<String>, trips: List<Trip>, titles: Map<String, String>, month: String, today: String, uid: String, onOpenTrip: (String) -> Unit) {
-    val bars = weekBars(week, trips)
-    val lanes = (bars.maxOfOrNull { it.lane } ?: -1) + 1
+    val byLane = remember(week, trips) {
+        val bars = weekBars(week, trips)
+        val lanes = (bars.maxOfOrNull { it.lane } ?: -1) + 1
+        List(lanes) { lane -> bars.filter { it.lane == lane }.sortedBy { it.from } }
+    }
     Column(modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp).padding(bottom = 6.dp)) {
         Row(modifier = Modifier.fillMaxWidth()) {
             for (date in week) {
@@ -179,10 +184,10 @@ private fun Week(week: List<String>, trips: List<Trip>, titles: Map<String, Stri
                 }
             }
         }
-        for (lane in 0 until lanes) {
+        for (laneBars in byLane) {
             Row(modifier = Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                 var column = 0
-                for (bar in bars.filter { it.lane == lane }.sortedBy { it.from }) {
+                for (bar in laneBars) {
                     if (bar.from > column) Spacer(modifier = Modifier.weight((bar.from - column).toFloat()))
                     Bar(bar = bar, title = titles[bar.trip.id] ?: bar.trip.title, shared = bar.trip.ownerUid != uid, modifier = Modifier.weight((bar.to - bar.from + 1).toFloat()), onClick = { onOpenTrip(bar.trip.id) })
                     column = bar.to + 1

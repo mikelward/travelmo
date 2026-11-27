@@ -79,8 +79,10 @@ fun BookingDetailScreen(
 ) {
     val tripFlow = remember(tripId) { viewModel.trip(tripId) }
     val segmentsFlow = remember(tripId) { viewModel.segments(tripId) }
-    val trip by tripFlow.collectAsStateWithLifecycle(initialValue = null)
-    val segments by segmentsFlow.collectAsStateWithLifecycle(initialValue = null)
+    val initialTrip = remember(tripId) { viewModel.peekTrip(tripId) }
+    val initialSegments = remember(tripId) { viewModel.peekSegments(tripId) }
+    val trip by tripFlow.collectAsStateWithLifecycle(initialValue = initialTrip)
+    val segments by segmentsFlow.collectAsStateWithLifecycle(initialValue = initialSegments)
     val addresses by viewModel.addresses.collectAsStateWithLifecycle()
     val ownProfile by viewModel.ownProfile.collectAsStateWithLifecycle()
     // The user's people, so every spelling of someone on a loyalty number is one person.
@@ -89,7 +91,9 @@ fun BookingDetailScreen(
     val patterns by viewModel.senderPatterns.collectAsStateWithLifecycle()
     val cleanup by viewModel.senderCleanup.collectAsStateWithLifecycle()
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
-    val segment = segments?.firstOrNull { it.id == segmentId }
+    val segment = remember(segments, segmentId) { segments?.firstOrNull { it.id == segmentId } }
+    val loyalty = remember(ownProfile, people) { ownProfile?.let { allLoyalty(it, people) }.orEmpty() }
+    val programs = remember(segment?.provider, loyalty) { segment?.let { programsFor(it.provider, loyalty) }.orEmpty() }
     val current = trip
     val isOwner = current != null && current.ownerUid == uid
     val canEdit = current != null && !current.deleting && (isOwner || sharedWithAny(current.sharedWith, addresses))
@@ -146,7 +150,7 @@ fun BookingDetailScreen(
         }
         BookingDetails(
             segment,
-            programs = programsFor(segment.provider, ownProfile?.let { allLoyalty(it, people) }.orEmpty()),
+            programs = programs,
             emailLink = { source -> emailLinkFor(source, uid, ownsTrip = isOwner, mailboxes = gmailMailboxes) },
             errors = mine.values.mapNotNull { (it as? Outcome.Failed)?.message },
             // Sender rules are the viewer's own, so the offers stand for the owner only: the import ran against their mailbox.
@@ -186,7 +190,7 @@ fun BookingDetails(
         if (segment.isCancelled) {
             Text(stringResource(Res.string.cancelled), style = body, color = MaterialTheme.colorScheme.error)
         }
-        val heading = bookingHeading(segment)
+        val heading = remember(segment) { bookingHeading(segment) }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             BookingLogo(segment, heading, 24.dp)
             Text(heading.headline, style = MaterialTheme.typography.titleLarge, textDecoration = struck)
