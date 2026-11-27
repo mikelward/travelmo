@@ -88,6 +88,8 @@ export type TripBounds = Pick<Trip, "start" | "end" | "updatedAt"> & Partial<Pic
 // Reads first, then writes: Firestore transactions require that order.
 export type TripTx = {
   listTrips(): Promise<Trip[]>;
+  // One trip of the user's, or undefined when it is gone.
+  getTrip(tripId: string): Promise<Trip | undefined>;
   listSegments(tripId: string): Promise<Segment[]>;
   createTrip(trip: Trip): void;
   extendTrip(tripId: string, bounds: TripBounds): void;
@@ -1123,6 +1125,8 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     const nearby = overlappingTrips(live, { start: shiftDate(range.start, -homeWindowDays), end: shiftDate(range.end, homeWindowDays) });
     const segmentsByTrip = new Map(await Promise.all(nearby.map(async (trip) => [trip.id, await tx.listSegments(trip.id)] as const)));
     const segmentsOf = (tripId: string) => segmentsByTrip.get(tripId) ?? [];
+    // Each nearby trip's bookings with the names its owner took off it (homeBookings).
+    const nearbyBookings = () => nearby.map((trip) => ({ removedTravelers: trip.removedTravelers, segments: segmentsOf(trip.id) }));
     // Home as worked out and as corrected, each with the airports its round
     // trips leave from (withHomeAirports).
     // Whom the user's bookings name: read here, before any write, for the
@@ -1130,7 +1134,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     // (homeBookings), and to note the people this booking names.
     const people = await tx.listPeople(uid);
     const homes = (segments: readonly ExtractedSegment[]) => homesWithAirports(segments, corrections, chosen);
-    let { periods, overrides } = homes([...homeBookings(segmentsByTrip.values(), people), ...homeBookings([booking.segments], people)]);
+    let { periods, overrides } = homes([...homeBookings(nearbyBookings(), people), ...homeBookings([booking.segments], people)]);
     // Cancellations read before this booking was (the mailbox is read newest
     // first); read here, before any write, as a transaction requires.
     const pending = await tx.listPendingCancellations(uid);
@@ -1480,7 +1484,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     };
     // Where home was, by what this booking still books (a journey filed
     // cancelled was never travelled).
-    ({ periods, overrides } = homes([...homeBookings(segmentsByTrip.values(), people), ...homeBookings([deciding], people)]));
+    ({ periods, overrides } = homes([...homeBookings(nearbyBookings(), people), ...homeBookings([deciding], people)]));
     const journey = (s: ExtractedSegment) => journeyTypes.has(s.type);
     const earliest = <S extends ExtractedSegment>(segments: readonly S[]) => segments.reduce((a, b) => (compareInstants(b.start, a.start) < 0 ? b : a));
     const latest = <S extends ExtractedSegment>(segments: readonly S[]) => segments.reduce((a, b) => (compareInstants(b.start, a.start) > 0 ? b : a));

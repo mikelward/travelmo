@@ -462,6 +462,29 @@ class ScreenScreenshotTest {
     @Test
     fun trip_detail_split_dark() = tripSplit("trip_detail_split_dark", dark = true)
 
+    @Test
+    fun trip_detail_travelers() = tripTravelers("trip_detail_travelers", dark = false)
+
+    @Test
+    fun trip_detail_travelers_dark() = tripTravelers("trip_detail_travelers_dark", dark = true)
+
+    // Travelers… with one name unticked.
+    private fun tripTravelers(name: String, dark: Boolean) {
+        val viewModel = viewModel()
+        val fontSize = FontSizeState(FontSizeSettings(scale = 1f), onScaleSettled = {}, onPinchEnabledChange = {})
+        composeRule.setContent {
+            TravelmoTheme(darkTheme = dark, fontSize = fontSize) {
+                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("More options").performClick()
+        composeRule.onNodeWithText("Travelers…").performClick()
+        composeRule.onNodeWithText("Alex Example").performClick()
+        composeRule.waitForIdle()
+        captureScreenRoboImage(filePath = "$outputDir/$name.png")
+    }
+
     private fun tripSplit(name: String, dark: Boolean) {
         val viewModel = viewModel()
         val fontSize = FontSizeState(FontSizeSettings(scale = 1f), onScaleSettled = {}, onPinchEnabledChange = {})

@@ -205,8 +205,9 @@ function Trips({ user }: { user: User }) {
   const watchingOf = (trip: Trip) => {
     const read = bookingsOf(trip.id);
     return watching(
-      trip.travelers ?? (read ? tripTravelers(read) : undefined),
+      trip.travelers ?? (read ? tripTravelers(read, trip.removedTravelers) : undefined),
       travelers ?? [],
+      trip.removedTravelers,
     );
   };
   const shown = useMemo(

@@ -596,9 +596,14 @@ type KeptFlags = Pick<Trip, "allCancelled" | "localOnly" | "travelers" | "settin
 async function repairTripFlags(id: string, kept: KeptFlags): Promise<void> {
   const db = firestore();
   const tripRef = doc(db, paths.trip(id));
-  const revision = (await getDocFromServer(tripRef)).get("updatedAt") as unknown;
+  const stored = await getDocFromServer(tripRef);
+  const revision = stored.get("updatedAt") as unknown;
   if (typeof revision !== "string") return;
-  const flags = tripFlagsToWrite(kept, parseDocs(Segment, await getDocsFromServer(query(collection(db, paths.segments(id))))));
+  // The names the owner took off it are the trip's as stored now, which the
+  // revision check below holds to.
+  const removed = stored.get("removedTravelers") as unknown;
+  const removedTravelers = Array.isArray(removed) ? removed.filter((n): n is string => typeof n === "string") : undefined;
+  const flags = tripFlagsToWrite({ ...kept, removedTravelers }, parseDocs(Segment, await getDocsFromServer(query(collection(db, paths.segments(id))))));
   if (!flags) return;
   const written = await runTransaction(db, async (t) => {
     const now = await t.get(tripRef);

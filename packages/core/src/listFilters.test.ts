@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { flagsUnknown, hiddenFromList, homeBookings, localOnly, noListFilters, tripFlagsToWrite, tripTravelers, watchedTrip, watching } from "./listFilters";
+import { flagsUnknown, hiddenFromList, homeBookings, localOnly, namedTravelers, noListFilters, tripFlagsToWrite, tripTravelers, watchedTrip, watching } from "./listFilters";
 import type { ExtractedSegment } from "./schema";
 
 // Invented bookings: a show and a class in town, a hire car returned where
@@ -148,6 +148,40 @@ describe("watchedTrip", () => {
     expect(watchedTrip({ travelers: ["Pat Example"] }, undefined, [sam, pat])).toBe(true);
     expect(watchedTrip({ travelers: ["Pat Example"] }, [{ ...flight, travelers: ["Sam Example"] }], [sam, pat])).toBe(false);
     expect(watchedTrip({}, undefined, [sam, pat])).toBe(false);
+  });
+});
+
+describe("removedTravelers", () => {
+  const printout = [{ ...flight, travelers: ["EXAMPLE/SAM MR", "Pat Example"] }, { ...stay, travelers: ["Sam Example"] }];
+
+  it("leaves the names the owner took off out of whom a trip is for, however a booking spells them", () => {
+    expect(tripTravelers(printout, ["Sam Example"])).toEqual(["Pat Example"]);
+    expect(tripTravelers(printout, ["SAM EXAMPLE"])).toEqual(["Pat Example"]);
+  });
+
+  it("makes a trip the user was taken off one they're only watching, even when it names no one else", () => {
+    expect(watchedTrip({}, printout, [sam, pat])).toBe(false);
+    expect(watchedTrip({ removedTravelers: ["Sam Example"] }, printout, [sam, pat])).toBe(true);
+    expect(watchedTrip({ removedTravelers: ["Sam Example"] }, [{ ...stay, travelers: ["Sam Example"] }], [sam, pat])).toBe(true);
+    expect(watchedTrip({ removedTravelers: ["Sam Example"], travelers: [] }, undefined, [sam, pat])).toBe(true);
+    expect(watchedTrip({ removedTravelers: ["Pat Example"] }, printout, [sam, pat])).toBe(false);
+  });
+
+  it("keeps the trip's flags and the list filter in step with it", () => {
+    expect(tripFlagsToWrite({ removedTravelers: ["Sam Example"] }, printout)?.travelers).toEqual(["Pat Example"]);
+    expect(hiddenFromList({ removedTravelers: ["Sam Example"] }, printout, { ...noListFilters, hideWatching: true }, [sam, pat])).toBe(true);
+  });
+
+  it("leaves a trip the user was taken off out of where home is", () => {
+    const mine = [{ ...flight, travelers: ["Sam Example"] }];
+    expect(homeBookings([mine, { removedTravelers: ["Sam Example"], segments: printout }], [sam, pat])).toEqual(mine);
+    expect(homeBookings([mine, { segments: printout }], [sam, pat])).toEqual([...mine, ...printout]);
+  });
+
+  it("lists every name for the dialog, those taken off too", () => {
+    expect(namedTravelers(printout, ["Sam Example"])).toEqual(["Sam Example", "Pat Example"]);
+    expect(namedTravelers([flight], ["Sam Example"])).toEqual(["Sam Example"]);
+    expect(namedTravelers([cancelled({ ...flight, travelers: ["Alex Other"] }), { ...stay, travelers: ["Sam Example"] }])).toEqual(["Sam Example", "Alex Other"]);
   });
 });
 

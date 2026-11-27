@@ -123,6 +123,28 @@ class SegmentRowTest {
     }
 
     @Test
+    fun `Travelers takes a name off the trip and keeps those already off unticked`() {
+        // The tour, cancelled, names someone on nothing else: still on the trip, so left ticked.
+        val segments = fixtureSegments + ("liverpool" to fixtureSegments.getValue("liverpool").map { if (it.id == "l-tour") it.copy(cancelledAt = "2026-11-01T00:00:00Z", travelers = listOf("Alex Other")) else it })
+        val store = FakeTripStore(trips = fixtureTrips.map { if (it.id == "liverpool") it.copy(removedTravelers = listOf("Pat Example")) else it }, segments = segments)
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent {
+            TravelmoTheme {
+                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("More options").performClick()
+        composeRule.onNodeWithText("Travelers…").performClick()
+        // A name taken off before is listed, unticked, so it can be put back.
+        composeRule.onNodeWithText("Pat Example").assertExists()
+        composeRule.onNodeWithText("Sam Example").performClick()
+        composeRule.onNodeWithText("Save").performClick()
+        composeRule.waitForIdle()
+        store.removedTravelers shouldBe listOf("liverpool" to listOf("Sam Example", "Pat Example"))
+    }
+
+    @Test
     fun `every type has its own icon`() {
         val icons = SegmentType.entries.map(::segmentIcon)
         icons.toSet().size shouldBe SegmentType.entries.size

@@ -71,6 +71,7 @@ fun tripFromDocument(id: String, data: Map<String, Any?>): Trip? {
         localOnly = data["localOnly"] as? Boolean,
         travelers = (data["travelers"] as? List<*>)?.filterIsInstance<String>(),
         setting = data.text("setting"),
+        removedTravelers = data.strings("removedTravelers"),
         updatedAt = data.text("updatedAt") ?: "",
     )
 }

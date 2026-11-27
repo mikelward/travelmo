@@ -529,6 +529,10 @@ class FakeTripStore(
     override suspend fun renameTrip(tripId: String, title: String) {
         renamed += tripId to title
     }
+    val removedTravelers = mutableListOf<Pair<String, List<String>>>()
+    override suspend fun setRemovedTravelers(tripId: String, removed: List<String>) {
+        removedTravelers += tripId to removed
+    }
     override suspend fun fitTripDates(tripId: String): Boolean {
         fitted += tripId
         return true

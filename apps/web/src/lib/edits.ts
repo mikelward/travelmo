@@ -604,6 +604,13 @@ export async function createTrip(db: Firestore, uid: string, title: string, star
   return ref.id;
 }
 
+// Takes names off a trip, or puts them back (Travelers…): `removed` is
+// every name its bookings give that isn't on it. The list's flags are
+// worked out again, so whom it is for follows.
+export async function setRemovedTravelers(db: Firestore, tripId: string, removed: readonly string[]): Promise<void> {
+  await updateDoc(doc(db, paths.trip(tripId)), { removedTravelers: removed.length > 0 ? [...removed] : deleteField(), ...flagsUnknown(), updatedAt: now() });
+}
+
 export async function renameTrip(db: Firestore, tripId: string, title: string): Promise<void> {
   await updateDoc(doc(db, paths.trip(tripId)), { title: title.trim(), updatedAt: now() });
 }

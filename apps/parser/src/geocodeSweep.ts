@@ -155,6 +155,8 @@ export async function sweepGeocodeRetries(deps: ImportDeps, limit = defaultSweep
         if (!current || current.updatedAt !== segment.updatedAt) return false;
         // Read before any write, as a transaction must.
         const others = (await tx.listSegments(tripId)).filter((s) => s.id !== current.id);
+        // Whom the trip is for leaves out the names its owner took off it.
+        const removed = (await tx.getTrip(tripId))?.removedTravelers;
         const placed = {
           ...current,
           ...(enriched.origin ? { origin: enriched.origin } : {}),
@@ -162,7 +164,7 @@ export async function sweepGeocodeRetries(deps: ImportDeps, limit = defaultSweep
         };
         tx.putSegment(placed);
         // A town now known can change what kind of place the trip goes to (tripSetting).
-        tx.setTripFlags(tripId, tripFlags([...others, placed]));
+        tx.setTripFlags(tripId, tripFlags([...others, placed], removed));
         // A fresh revision per write: a client editing the trip between two
         // writes to it must see it move twice.
         tx.touchTrip(tripId, deps.now());

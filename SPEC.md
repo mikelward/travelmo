@@ -428,6 +428,17 @@ big group never drops the user's name; `tripTravelers`) with the list's other
 flags (see "Filtering the trip list"); a trip from before it was kept has
 its bookings read once, while the user is known, to fill it in.
 
+**Travelers….** A printout that names the family wrongly (a relative's
+itinerary listing everyone) makes a trip the user isn't on look like theirs.
+The trip's ⋮ menu has Travelers… for the owner, on the web and Android, once
+its bookings name anyone: every name they give (`namedTravelers`), each
+ticked unless taken off. Unticking keeps the name on the trip
+(`removedTravelers`, at most a hundred, owner only), not on its bookings, so
+an email read again doesn't put it back, and the list's flags are worked out
+again. Whom the trip is for leaves those names out, however a booking spells
+them, and a trip the user was taken off is one they're only watching even
+when its bookings name no one else. Merging trips keeps the target's list.
+
 What is the user's own leaves a trip they're only watching out
 (`watchedTrip`: by its bookings once read, else by the trip's
 `travelers`), on the web and Android: its document and visa warnings, its

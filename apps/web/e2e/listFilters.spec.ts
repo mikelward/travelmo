@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { owner, signIn } from "./helpers";
-import { clearData, forgetTripFlags, readTrip, seedPerson, seedTrip } from "./seed";
+import { clearData, forgetTripFlags, readTrip, seedFlight, seedPerson, seedTrip } from "./seed";
 
 test.beforeEach(async () => {
   await clearData();
@@ -159,4 +159,42 @@ test("a trip none of whose travelers is the user says Watching, and the filter h
   await expect(page.getByRole("heading", { name: "Before you go" })).toHaveCount(0);
   await page.goto("/trips/e2e-mine");
   await expect(page.getByRole("heading", { name: "Before you go" })).toBeVisible();
+});
+
+test("Travelers… takes the user off a trip a printout named them on, so they're only watching it", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  await seedPerson(ownerUid, { id: "me", name: "Sam Example", bookings: 4, direct: 4 });
+  await seedPerson(ownerUid, { id: "dad", name: "Pat Example", bookings: 1, direct: 0 });
+  // A relative's itinerary that names the user too.
+  await seedTrip(ownerUid, "e2e-dad", { travelers: ["Sam Example", "Pat Example"] }, { title: "Dad's trip" });
+  // A cancelled booking for someone else: still on the trip, so ticked.
+  await seedFlight("e2e-dad", { travelers: ["Alex Other"], cancelledAt: "2026-11-01T00:00:00Z" });
+  await page.goto("/trips/e2e-dad");
+  await expect(page.getByRole("heading", { name: "Before you go" })).toBeVisible();
+  await expect(page.getByTestId("trip-watching")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Trip actions" }).click();
+  await page.getByRole("menuitem", { name: "Travelers…" }).click();
+  const dialog = page.getByRole("dialog", { name: "Travelers" });
+  await expect(dialog.getByRole("checkbox", { name: "Alex Other" })).toBeChecked();
+  await dialog.getByRole("checkbox", { name: "Sam Example" }).uncheck();
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByTestId("trip-watching")).toHaveText("Watching: you're not on this trip");
+  await expect(page.getByRole("heading", { name: "Before you go" })).toHaveCount(0);
+  // The booking still says whom the email named; the trip keeps who isn't on it.
+  await expect.poll(async () => (await readTrip("e2e-dad"))?.removedTravelers).toEqual(["Sam Example"]);
+  // The list says so too, and records whom the trip is now for.
+  await page.goto("/");
+  await expect(page.getByTestId("trip-card").filter({ hasText: "Dad's trip" })).toContainText("Watching");
+  await expect.poll(async () => (await readTrip("e2e-dad"))?.travelers).toEqual(["Pat Example"]);
+  await page.goto("/trips/e2e-dad");
+
+  // Ticked again, the user is back on it.
+  await page.getByRole("button", { name: "Trip actions" }).click();
+  await page.getByRole("menuitem", { name: "Travelers…" }).click();
+  await dialog.getByRole("checkbox", { name: "Sam Example" }).check();
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByTestId("trip-watching")).toHaveCount(0);
+  await expect.poll(async () => (await readTrip("e2e-dad"))?.removedTravelers).toBeUndefined();
 });
