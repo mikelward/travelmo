@@ -106,6 +106,27 @@ class LandmarksTest {
         assertEquals("lausanne", tripLandmark("Lausanne").id)
         assertEquals("osijek", tripLandmark("Osijek").id)
         assertEquals("marseille", tripLandmark("Marseilles").id)
+        assertEquals("gold-coast", tripLandmark("Gold Coast").id)
+        assertEquals("gold-coast", tripLandmark("Surfers Paradise").id)
+        assertEquals("gold-coast", tripLandmark("Surfer's Paradise").id)
+        assertEquals("uluru", tripLandmark("Uluru").id)
+        assertEquals("uluru", tripLandmark("Ayers Rock").id)
+        assertEquals("uluru", tripLandmark("Alice Springs").id)
+        assertEquals("uluru", tripLandmark("Yulara").id)
+        assertEquals("mackay", tripLandmark("Mackay").id)
+        assertEquals("townsville", tripLandmark("Townsville").id)
+        assertEquals("darwin", tripLandmark("Darwin").id)
+        assertEquals("cairns", tripLandmark("Cairns").id)
+        assertEquals("byron-bay", tripLandmark("Byron Bay").id)
+        assertEquals("rotorua", tripLandmark("Rotorua").id)
+        assertEquals("dunedin", tripLandmark("Dunedin").id)
+        assertEquals("launceston", tripLandmark("Launceston").id)
+        assertEquals("bali", tripLandmark("Kuta").id)
+        assertEquals("bali", tripLandmark("Seminyak").id)
+        assertEquals("bali", tripLandmark("Canggu").id)
+        assertEquals("bali", tripLandmark("Nusa Dua").id)
+        assertEquals("bali", tripLandmark("Jimbaran").id)
+        assertEquals("bali", tripLandmark("Sanur").id)
     }
 
     @Test
@@ -293,7 +314,7 @@ class LandmarksTest {
     fun readsEveryLandmarkTheWebHas() {
         val rawEntries = landmarksJson.lines().count { it.startsWith("{\"id\":") }
         assertEquals(rawEntries, landmarks.size)
-        assertEquals(307, landmarks.size)
+        assertEquals(317, landmarks.size)
         assertEquals(landmarks.size, landmarks.map { it.id }.toSet().size)
         val seenCities = mutableSetOf<String>()
         val seenFallbacks = mutableSetOf<String>()

@@ -105,6 +105,27 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Lausanne").id).toBe("lausanne");
     expect(tripLandmark("Osijek").id).toBe("osijek");
     expect(tripLandmark("Marseilles").id).toBe("marseille");
+    expect(tripLandmark("Gold Coast").id).toBe("gold-coast");
+    expect(tripLandmark("Surfers Paradise").id).toBe("gold-coast");
+    expect(tripLandmark("Surfer's Paradise").id).toBe("gold-coast");
+    expect(tripLandmark("Uluru").id).toBe("uluru");
+    expect(tripLandmark("Ayers Rock").id).toBe("uluru");
+    expect(tripLandmark("Alice Springs").id).toBe("uluru");
+    expect(tripLandmark("Yulara").id).toBe("uluru");
+    expect(tripLandmark("Mackay").id).toBe("mackay");
+    expect(tripLandmark("Townsville").id).toBe("townsville");
+    expect(tripLandmark("Darwin").id).toBe("darwin");
+    expect(tripLandmark("Cairns").id).toBe("cairns");
+    expect(tripLandmark("Byron Bay").id).toBe("byron-bay");
+    expect(tripLandmark("Rotorua").id).toBe("rotorua");
+    expect(tripLandmark("Dunedin").id).toBe("dunedin");
+    expect(tripLandmark("Launceston").id).toBe("launceston");
+    expect(tripLandmark("Kuta").id).toBe("bali");
+    expect(tripLandmark("Seminyak").id).toBe("bali");
+    expect(tripLandmark("Canggu").id).toBe("bali");
+    expect(tripLandmark("Nusa Dua").id).toBe("bali");
+    expect(tripLandmark("Jimbaran").id).toBe("bali");
+    expect(tripLandmark("Sanur").id).toBe("bali");
   });
 
   it("ignores accents and case", () => {
@@ -305,7 +326,7 @@ describe("tripLandmark", () => {
         fallbacks.add(word);
       }
     }
-    expect(LANDMARKS.length).toBe(307);
+    expect(LANDMARKS.length).toBe(317);
   });
 });
 
