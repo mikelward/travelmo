@@ -27,12 +27,27 @@ describe("mixedTrip", () => {
     const { end: _end, ...untimed } = out;
     expect(mixedTrip([untimed, { ...untimed, title: "XX 1" }])).toBeUndefined();
     expect(mixedTrip([])).toBeUndefined();
+    // One booking's through flight beside another's legs of it.
+    const through = flight("XX 9 ADL to LHR", "ADL", "LHR", "2026-12-12T21:00:00+10:30", "2026-12-13T13:00:00+00:00");
+    const first = flight("XX 9 ADL to DOH", "ADL", "DOH", "2026-12-12T21:00:00+10:30", "2026-12-13T05:00:00+03:00");
+    const second = flight("XX 7 DOH to LHR", "DOH", "LHR", "2026-12-13T07:30:00+03:00", "2026-12-13T13:00:00+00:00");
+    expect(mixedTrip([through, first, second])).toBeUndefined();
+    // So two people on it, one booked through and one by its legs, fly together.
+    expect(mixedTrip([{ ...through, travelers: ["Sam Example"] }, { ...first, travelers: ["Pat Example"] }, { ...second, travelers: ["Pat Example"] }])).toBeUndefined();
   });
 
   it("is two flights in the air at once", () => {
     // 04:00 to 13:00 UTC, while XX 1 flies 09:00 to 15:00.
     const theirs = flight("YY 9 SYD to SIN", "SYD", "SIN", "2026-12-12T15:00:00+11:00", "2026-12-12T21:00:00+08:00");
     expect(mixedTrip([out, theirs, back])).toMatchObject({ kind: "overlap", first: theirs, second: out });
+    // Leaving from the same airport hours later is another flight.
+    const later = flight("YY 3 LHR to CDG", "LHR", "CDG", "2026-12-12T12:00:00+00:00", "2026-12-12T14:30:00+01:00");
+    expect(mixedTrip([out, later])).toMatchObject({ kind: "overlap" });
+    // Neither saying where it leaves from is no sign they're one journey.
+    // (10:00 to 14:00 UTC, within XX 1's 09:00 to 15:00.)
+    const { origin: _a, ...outNowhere } = out;
+    const { origin: _b, ...inside } = flight("YY 5 KUL to SIN", "KUL", "SIN", "2026-12-12T18:00:00+08:00", "2026-12-12T22:00:00+08:00");
+    expect(mixedTrip([outNowhere, inside])).toMatchObject({ kind: "overlap" });
   });
 
   it("is a flight leaving from another country hours after the last landed, but not days after", () => {

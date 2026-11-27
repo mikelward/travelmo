@@ -24,12 +24,29 @@ const placeKey = (p: Place | undefined) => p?.code?.toUpperCase() ?? p?.name.tri
 // One flight however many bookings give it: its route and its day.
 const flightKey = (s: ExtractedSegment) => `${placeKey(s.origin)}>${placeKey(s.destination)}@${localDate(s.start)}`;
 const sameRoute = (a: ExtractedSegment, b: ExtractedSegment) => placeKey(a.origin) === placeKey(b.origin) && placeKey(a.destination) === placeKey(b.destination);
+// The same place, known on both: an airport a booking leaves out matches
+// nothing.
+const sharedPlace = (a: Place | undefined, b: Place | undefined) => placeKey(a) !== "" && placeKey(a) === placeKey(b);
+// How far apart two bookings may put one journey's ends: a schedule change
+// one booking heard of and the other didn't.
+const journeySlackMs = 60 * 60_000;
+const near = (a: string, b: string) => Math.abs(ms(a) - ms(b)) <= journeySlackMs;
+// Whether `leg` is part of `journey`: within its times, and leaving from
+// where and when it leaves or landing where and when it lands, as one
+// booking writes ADL to LHR and another its legs, ADL to DOH and DOH to LHR.
+const legOf = (leg: ExtractedSegment, journey: ExtractedSegment) =>
+  ms(leg.start) >= ms(journey.start) - journeySlackMs &&
+  ms(arrives(leg)) <= ms(arrives(journey)) + journeySlackMs &&
+  ((sharedPlace(leg.origin, journey.origin) && near(leg.start, journey.start)) || (sharedPlace(leg.destination, journey.destination) && near(arrives(leg), arrives(journey))));
+// One journey, however the bookings write it: the same route, or one a leg
+// of the other.
+const oneJourney = (a: ExtractedSegment, b: ExtractedSegment) => sameRoute(a, b) || legOf(a, b) || legOf(b, a);
 
 // Whether a trip's bookings look like two trips filed as one, and why;
 // undefined when they could all be one traveler's (or one party's). Goes by
 // what is still booked, leaving out the names its owner took off it
 // (`removed`). Flights alike (the same route at once) are one flight booked
-// twice, not two.
+// twice, not two, and a flight with its legs is one journey.
 export function mixedTrip<S extends ExtractedSegment>(segments: readonly S[], removed: readonly string[] = []): MixedTrip<S> | undefined {
   const live = liveSegments(segments);
   const flights = live.filter((s) => s.type === "flight").sort((a, b) => ms(a.start) - ms(b.start));
@@ -38,7 +55,7 @@ export function mixedTrip<S extends ExtractedSegment>(segments: readonly S[], re
       const a = flights[i]!;
       const b = flights[j]!;
       if (ms(b.start) >= ms(arrives(a)) && ms(b.start) !== ms(a.start)) break;
-      if (!sameRoute(a, b)) return { kind: "overlap", first: a, second: b };
+      if (!oneJourney(a, b)) return { kind: "overlap", first: a, second: b };
     }
   }
   for (let i = 1; i < flights.length; i++) {
@@ -83,17 +100,17 @@ function travelerGroups(live: readonly ExtractedSegment[], removed: readonly str
     for (const n of ns) if (!parent.has(n)) parent.set(n, n);
     for (const n of ns.slice(1)) parent.set(find(n), find(ns[0]!));
   }
-  // Those on one flight however many bookings give it: a party booked
-  // apart.
-  const onFlight = new Map<string, string>();
-  for (const s of live) {
-    if (s.type !== "flight") continue;
+  // Those on one flight however many bookings give it, or on a flight and
+  // its legs: a party booked apart.
+  const flown = live.filter((s) => s.type === "flight").flatMap((s) => {
     const first = names(s, removed)[0];
-    if (!first) continue;
-    const key = flightKey(s);
-    const other = onFlight.get(key);
-    if (other) parent.set(find(first), find(other));
-    else onFlight.set(key, first);
+    return first ? [{ s, first }] : [];
+  });
+  for (let i = 0; i < flown.length; i++) {
+    for (let j = i + 1; j < flown.length; j++) {
+      const [a, b] = [flown[i]!, flown[j]!];
+      if (flightKey(a.s) === flightKey(b.s) || legOf(a.s, b.s) || legOf(b.s, a.s)) parent.set(find(b.first), find(a.first));
+    }
   }
   // One person however the bookings spell them ("John Smith", "John Andrew
   // Smith", "J Smith"): sameTraveler.

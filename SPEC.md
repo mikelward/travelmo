@@ -435,7 +435,9 @@ one (`mixedTrip` in `packages/core/src/mixedTrip.ts`, mirrored in
 why, with Split… and, for travelers, Travelers… for the owner, and "It's one
 trip" (`oneTrip` on the trip, owner only), after which neither asks again.
 Going by what is still booked, it looks like two trips when two flights are
-in the air at once (unless they fly the same route: one flight booked twice);
+in the air at once (unless they fly the same route, one flight booked twice,
+or one is a leg of the other, as one booking writes ADL to LHR and another
+its legs through DOH);
 when a flight leaves from another country within twelve hours of the one
 before it landing (countries from the booking or its airport code); or when
 its travelers fall into groups that share no booking and no flight (a party
