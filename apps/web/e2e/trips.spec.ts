@@ -376,7 +376,7 @@ test("a trip that looks like two says so in the list and on its page, until the 
   });
   await page.goto("/");
   const card = page.getByTestId("trip-card").filter({ hasText: "Liverpool" });
-  await expect(card).toContainText("Check");
+  await expect(card).toContainText("Problem");
   await card.getByRole("link").first().click();
   const notice = page.getByTestId("mixed-trip");
   await expect(notice).toContainText("This may be two trips: YY 9 SYD to SIN and XX 100 MAN to DXB are in the air at the same time.");
@@ -385,5 +385,5 @@ test("a trip that looks like two says so in the list and on its page, until the 
   await expect(notice).toHaveCount(0);
   await expect.poll(async () => (await readTrip("e2e-trip"))?.oneTrip).toBe(true);
   await page.goto("/");
-  await expect(card).not.toContainText("Check");
+  await expect(card).not.toContainText("Problem");
 });

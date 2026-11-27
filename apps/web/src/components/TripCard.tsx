@@ -53,11 +53,11 @@ export const TripCard = memo(function TripCard({
 }) {
   // Bookings that look like two trips in one, by the trip's flag or, before
   // it is kept, its bookings; unless the owner said it is one.
-  const check = !trip.oneTrip && (trip.mixed ?? (segments ? mixedTrip(segments, trip.removedTravelers) !== undefined : false));
+  const problem = !trip.oneTrip && (trip.mixed ?? (segments ? mixedTrip(segments, trip.removedTravelers) !== undefined : false));
   const badge = trip.deleting
     ? "Deleting"
-    : check
-      ? "Check"
+    : problem
+      ? "Problem"
       : watching
       ? "Watching"
       : shared

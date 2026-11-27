@@ -431,7 +431,7 @@ its bookings read once, while the user is known, to fill it in.
 **Two trips in one.** A trip whose bookings look like two trips filed as
 one (`mixedTrip` in `packages/core/src/mixedTrip.ts`, mirrored in
 `MixedTrip.kt`) says so, on the web and Android: its card in the list reads
-"Check" (before "Watching" and "Shared"), and its page has a notice saying
+"Problem" (before "Watching" and "Shared"), and its page has a notice saying
 why, with Split… and, for travelers, Travelers… for the owner, and "It's one
 trip" (`oneTrip` on the trip, owner only), after which neither asks again.
 Going by what is still booked, it looks like two trips when two flights are

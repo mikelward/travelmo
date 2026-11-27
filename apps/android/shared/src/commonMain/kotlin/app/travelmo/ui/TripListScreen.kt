@@ -76,7 +76,7 @@ import app.travelmo.core.tripStatus
 import app.travelmo.core.warningText
 import app.travelmo.shared.Res
 import app.travelmo.shared.all_trips_hidden
-import app.travelmo.shared.badge_check
+import app.travelmo.shared.badge_problem
 import app.travelmo.shared.badge_deleting
 import app.travelmo.shared.badge_shared
 import app.travelmo.shared.badge_watching
@@ -323,10 +323,10 @@ fun TripCard(
 ) {
     // Bookings that look like two trips in one, by the trip's flag or, before it is kept, its bookings; unless the
     // owner said it is one.
-    val check = remember(trip, segments) { !trip.oneTrip && (trip.mixed ?: segments?.let { mixedTrip(it, trip.removedTravelers) != null } ?: false) }
+    val problem = remember(trip, segments) { !trip.oneTrip && (trip.mixed ?: segments?.let { mixedTrip(it, trip.removedTravelers) != null } ?: false) }
     val badge = when {
         trip.deleting -> stringResource(Res.string.badge_deleting) to MaterialTheme.colorScheme.onSurfaceVariant
-        check -> stringResource(Res.string.badge_check) to MaterialTheme.colorScheme.tertiary
+        problem -> stringResource(Res.string.badge_problem) to MaterialTheme.colorScheme.tertiary
         watching -> stringResource(Res.string.badge_watching) to MaterialTheme.colorScheme.onSurfaceVariant
         shared -> stringResource(Res.string.badge_shared) to TravelmoTheme.colors.shared
         else -> null
