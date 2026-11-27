@@ -20,13 +20,25 @@ export const elsewhereHours = 12;
 
 const ms = (instant: string) => Date.parse(instant);
 const arrives = (s: ExtractedSegment) => s.end ?? s.start;
-const placeKey = (p: Place | undefined) => p?.code?.toUpperCase() ?? p?.name.trim().toLowerCase() ?? "";
+// What a place goes by: its name, its city and, for an airport code, the
+// city the airport serves (BOS is Boston).
+const placeNames = (p: Place) =>
+  new Set([p.name, p.city, p.code ? airportPlace(p.code)?.city : undefined, p.code].flatMap((n) => (n?.trim() ? [n.trim().toLowerCase()] : [])));
+// One place however a booking writes it: the same airport code, or a name
+// or city the other goes by ("Boston" beside BOS). Two codes are the same
+// only alike, so LHR is never LGW. Two places neither booking gives match.
+function samePlace(a: Place | undefined, b: Place | undefined): boolean {
+  if (!a || !b) return !a && !b;
+  if (a.code && b.code) return a.code.trim().toUpperCase() === b.code.trim().toUpperCase();
+  const other = placeNames(b);
+  return [...placeNames(a)].some((n) => other.has(n));
+}
+const sameRoute = (a: ExtractedSegment, b: ExtractedSegment) => samePlace(a.origin, b.origin) && samePlace(a.destination, b.destination);
 // One flight however many bookings give it: its route and its day.
-const flightKey = (s: ExtractedSegment) => `${placeKey(s.origin)}>${placeKey(s.destination)}@${localDate(s.start)}`;
-const sameRoute = (a: ExtractedSegment, b: ExtractedSegment) => placeKey(a.origin) === placeKey(b.origin) && placeKey(a.destination) === placeKey(b.destination);
+const sameFlight = (a: ExtractedSegment, b: ExtractedSegment) => sameRoute(a, b) && localDate(a.start) === localDate(b.start);
 // The same place, known on both: an airport a booking leaves out matches
 // nothing.
-const sharedPlace = (a: Place | undefined, b: Place | undefined) => placeKey(a) !== "" && placeKey(a) === placeKey(b);
+const sharedPlace = (a: Place | undefined, b: Place | undefined) => !!a && !!b && samePlace(a, b);
 // How far apart two bookings may put one journey's ends: a schedule change
 // one booking heard of and the other didn't.
 const journeySlackMs = 60 * 60_000;
@@ -109,7 +121,7 @@ function travelerGroups(live: readonly ExtractedSegment[], removed: readonly str
   for (let i = 0; i < flown.length; i++) {
     for (let j = i + 1; j < flown.length; j++) {
       const [a, b] = [flown[i]!, flown[j]!];
-      if (flightKey(a.s) === flightKey(b.s) || legOf(a.s, b.s) || legOf(b.s, a.s)) parent.set(find(b.first), find(a.first));
+      if (sameFlight(a.s, b.s) || legOf(a.s, b.s) || legOf(b.s, a.s)) parent.set(find(b.first), find(a.first));
     }
   }
   // One person however the bookings spell them ("John Smith", "John Andrew
