@@ -126,6 +126,19 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Nusa Dua").id).toBe("bali");
     expect(tripLandmark("Jimbaran").id).toBe("bali");
     expect(tripLandmark("Sanur").id).toBe("bali");
+    expect(tripLandmark("Flinders Ranges").id).toBe("flinders-ranges");
+    expect(tripLandmark("Wilpena Pound").id).toBe("flinders-ranges");
+    expect(tripLandmark("Rawnsley Park").id).toBe("flinders-ranges");
+    expect(tripLandmark("Quorn").id).toBe("flinders-ranges");
+    expect(tripLandmark("Parachilna").id).toBe("flinders-ranges");
+    expect(tripLandmark("Blinman").id).toBe("flinders-ranges");
+    expect(tripLandmark("Arkaroola").id).toBe("flinders-ranges");
+    expect(tripLandmark("Flinders Street").id).toBe("trip");
+    expect(tripLandmark("Daintree").id).toBe("daintree");
+    expect(tripLandmark("Cape Tribulation").id).toBe("daintree");
+    expect(tripLandmark("Port Douglas").id).toBe("daintree");
+    expect(tripLandmark("Mossman").id).toBe("daintree");
+    expect(tripLandmark("Cow Bay").id).toBe("daintree");
   });
 
   it("ignores accents and case", () => {
@@ -326,7 +339,7 @@ describe("tripLandmark", () => {
         fallbacks.add(word);
       }
     }
-    expect(LANDMARKS.length).toBe(317);
+    expect(LANDMARKS.length).toBe(319);
   });
 });
 
