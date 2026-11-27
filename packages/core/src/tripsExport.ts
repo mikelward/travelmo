@@ -83,6 +83,11 @@ function abroad(country: string | undefined, date: string, periods: readonly Hom
 
 const unique = (values: readonly string[]) => [...new Set(values.filter(Boolean))];
 
+// Each town once, by the first spelling met: a town's local and English names
+// ("München", "Munich") are one town (sameCity).
+const uniqueTowns = (values: readonly string[]) =>
+  values.filter(Boolean).reduce<string[]>((kept, town) => (kept.some((k) => sameCity(k, town)) ? kept : [...kept, town]), []);
+
 // The trips to list: begun by `until` and not wholly cancelled.
 const taken = (trips: readonly SummaryTrip[], until: string) =>
   trips.filter(({ trip, segments }) => displayBounds(trip).start <= until && !tripCancelled(trip, segments));
@@ -109,7 +114,7 @@ export function tripRows(trips: readonly SummaryTrip[], options: ExportOptions):
         trip: options.titles?.get(trip.id) ?? trip.title,
         start,
         end,
-        cities: unique(away.flatMap((s) => shownCity(s) ?? [])),
+        cities: uniqueTowns(away.flatMap((s) => shownCity(s) ?? [])),
         countries: unique(countries.flatMap((c) => (c ? [countryName(c)] : []))),
       }];
     })
