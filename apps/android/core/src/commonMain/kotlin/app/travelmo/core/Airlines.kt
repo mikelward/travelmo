@@ -182,18 +182,31 @@ val airlineNames: Map<String, String> = mapOf(
 
 private fun foldName(name: String): String = foldText(name)
 
+private class FoldedAirline(val code: String, val name: String, val folded: String)
+
+private val foldedAirlines: List<FoldedAirline> by lazy {
+    airlineNames.entries.map { (code, name) -> FoldedAirline(code, name, foldName(name)) }
+}
+
+private val airlinesByFoldedName: Map<String, List<FoldedAirline>> by lazy {
+    foldedAirlines.groupBy { it.folded }
+}
+
 /** The listed airline a booking's provider names, if exactly one, as airlines.ts: "Delta" is Delta Air Lines; "Virgin" is none. */
 fun airlineNamed(provider: String?): Pair<String, String>? {
     val wanted = provider?.let(::foldName).orEmpty()
     if (wanted.isEmpty()) return null
     // One named in full first: "AirAsia X" is that, not also AirAsia.
-    val found = airlineNames.entries.filter { foldName(it.value) == wanted }.ifEmpty {
-        airlineNames.entries.filter { (_, name) ->
-            val listed = foldName(name)
-            listed.startsWith("$wanted ") || wanted.startsWith("$listed ")
-        }
+    val found = airlinesByFoldedName[wanted] ?: run {
+        val wantedPrefix = "$wanted "
+        foldedAirlines.filter { it.folded.startsWith(wantedPrefix) || wanted.startsWith("${it.folded} ") }
     }
-    return if (found.map { it.value }.toSet().size == 1) found.first().let { it.key to it.value } else null
+    if (found.isEmpty()) return null
+    val first = found.first()
+    for (i in 1 until found.size) {
+        if (found[i].name != first.name) return null
+    }
+    return first.code to first.name
 }
 
 /** The flight number as a heading writes it ("VS 11"), from the booking's title. */

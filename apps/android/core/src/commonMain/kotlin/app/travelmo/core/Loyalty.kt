@@ -38,9 +38,11 @@ private fun field(entry: ProfileEntry, wanted: List<String>): String? {
     return null
 }
 
+private val plainDigits = Regex("""^\d{1,15}$""")
+
 /** "12000" → "12,000"; anything that is not a plain number stays as written. */
 fun formatBalance(value: String): String =
-    if (Regex("""^\d{1,15}$""").matches(value)) groupThousands(value.toLong()) else value
+    if (plainDigits.matches(value)) groupThousands(value.toLong()) else value
 
 fun loyaltySummary(entry: ProfileEntry): LoyaltySummary = LoyaltySummary(
     title = entry.title,
@@ -59,9 +61,11 @@ private val generic = setOf(
     "net", "number", "org", "plus", "points", "privilege", "privileges", "program", "programme", "reward", "rewards", "resorts", "the", "travel", "www",
 )
 
+private val nameWordPattern = Regex("""[\p{L}\p{N}]{3,}""")
+
 /** The distinctive words of a name: three or more letters or digits, not generic. */
 fun nameWords(name: String): Set<String> =
-    Regex("""[\p{L}\p{N}]{3,}""").findAll(name.lowercase()).map { it.value }.filter { it !in generic }.toSet()
+    nameWordPattern.findAll(name.lowercase()).map { it.value }.filter { it !in generic }.toSet()
 
 /** The programs a booking's provider belongs to: those sharing a distinctive word with it. */
 fun programsFor(provider: String?, programs: List<ProfileEntry>): List<ProfileEntry> {
@@ -77,9 +81,12 @@ fun loyaltyLine(entry: ProfileEntry): String {
     return listOfNotNull(s.title, s.account, s.status, s.person).joinToString(" · ")
 }
 
+private val numberSeparators = Regex("[\\s-]")
+private val leadingZeroPrefix = Regex("^([A-Z]*)0+(?=\\d)")
+
 // A number as written: spaces, dashes, case and zeros padding the digits
 // ("EK00557710580" is "EK557710580") do not count.
-private fun plainNumber(n: String) = n.replace(Regex("[\\s-]"), "").uppercase().replace(Regex("^([A-Z]*)0+(?=\\d)"), "$1")
+private fun plainNumber(n: String) = n.replace(numberSeparators, "").uppercase().replace(leadingZeroPrefix, "$1")
 
 /** A found membership as the profile shows a program: labeled fields the table reads, and the email it came from. */
 fun foundLoyaltyEntry(found: FoundLoyalty): ProfileEntry = ProfileEntry(
@@ -107,24 +114,29 @@ fun allLoyalty(profile: TravelProfile, travelers: List<Person> = emptyList()): L
         val person = name?.let { findPerson(travelers, it) }
         return if (person != null && person.id == me?.id) null else person?.name ?: name
     }
-    // One membership: the same number in the same program, as the parser keeps them.
-    fun matches(entry: ProfileEntry, found: FoundLoyalty): Boolean {
-        val account = loyaltySummary(entry).account ?: return false
-        return sameMembership(entry.title, account, found.program, found.number)
-    }
     // Whose it is: as the owner said, else as the email named, else theirs.
     fun withPerson(entry: ProfileEntry, number: String?, fromEmail: FoundLoyalty?): ProfileEntry {
         val said = number?.let { n -> profile.loyaltyPeople.lastOrNull { sameMembership(it.program, it.number, entry.title, n) } }
         val person = known(if (said != null) said.person else fromEmail?.person)
         return if (person != null) ProfileEntry(entry.title, entry.fields + ProfileField(PERSON_LABEL, person)) else entry
     }
+    // Precompute each imported entry's account number once so matching against found entries doesn't re-parse summaries.
+    val importedAccounts = profile.loyalty.map { entry -> entry to loyaltySummary(entry).account }
+    val matchedFound = HashSet<FoundLoyalty>()
     // Newer than the TripIt upload, so it has the last word (no upload: it has).
     fun afterUpload(at: String?) = at != null && (profile.importedAt == null || at > profile.importedAt)
-    val imported = profile.loyalty.map { entry ->
-        val statement = profile.foundLoyalty.firstOrNull { matches(entry, it) }
+    val imported = importedAccounts.map { (entry, account) ->
+        var statement: FoundLoyalty? = null
+        if (account != null) {
+            for (found in profile.foundLoyalty) {
+                if (sameMembership(entry.title, account, found.program, found.number)) {
+                    matchedFound.add(found)
+                    if (statement == null) statement = found
+                }
+            }
+        }
         val balance = statement?.balance?.takeIf { afterUpload(statement.balanceAt) }
         val status = statement?.status?.takeIf { afterUpload(statement.statusAt) }
-        val account = loyaltySummary(entry).account
         val shown = if (statement == null || (balance == null && status == null)) {
             entry
         } else {
@@ -141,7 +153,7 @@ fun allLoyalty(profile: TravelProfile, travelers: List<Person> = emptyList()): L
         }
         withPerson(shown, account, statement)
     }
-    val all = imported + profile.foundLoyalty.filter { found -> profile.loyalty.none { matches(it, found) } }.map { withPerson(foundLoyaltyEntry(it), it.number, it) }
+    val all = imported + profile.foundLoyalty.filter { it !in matchedFound }.map { withPerson(foundLoyaltyEntry(it), it.number, it) }
     // The owner's first, as a booking lists them.
     val (theirs, mine) = all.partition { loyaltySummary(it).person != null }
     return mine + theirs

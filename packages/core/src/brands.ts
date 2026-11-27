@@ -137,19 +137,39 @@ export const brands: readonly Brand[] = [
 
 const fold = (text: string) => ` ${text.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
 
+type FoldedBrand = { brand: Brand; foldedAliases: readonly string[] };
+let foldedBrandsCache: { nonSite: FoldedBrand[]; site: FoldedBrand[] } | undefined;
+
+function getFoldedBrands(): { nonSite: FoldedBrand[]; site: FoldedBrand[] } {
+  if (!foldedBrandsCache) {
+    const nonSite: FoldedBrand[] = [];
+    const site: FoldedBrand[] = [];
+    for (const brand of brands) {
+      const foldedAliases = brand.aliases.map(fold).filter((a) => a.trim().length > 0);
+      if (foldedAliases.length === 0) continue;
+      (brand.site ? site : nonSite).push({ brand, foldedAliases });
+    }
+    foldedBrandsCache = { nonSite, site };
+  }
+  return foldedBrandsCache;
+}
+
 // The brand a booking names, if any: the one whose name or alias its title
 // or provider says, as whole words, the longest found (Hampton by Hilton
 // rather than Hilton), a booking site only when no other is. Only brands of
 // the booking's kind: a hotel brand never names a flight.
 export function bookingBrand(segment: Pick<ExtractedSegment, "type" | "title" | "provider">): Brand | undefined {
-  const text = [segment.title, segment.provider ?? ""].map(fold);
-  let best: { brand: Brand; length: number } | undefined;
-  for (const site of [false, true]) {
-    for (const brand of brands) {
-      if (!!brand.site !== site || (brand.types && !brand.types.includes(segment.type))) continue;
-      for (const alias of brand.aliases) {
-        const wanted = fold(alias);
-        if (wanted.trim() && text.some((t) => t.includes(wanted)) && (!best || wanted.length > best.length)) best = { brand, length: wanted.length };
+  const title = fold(segment.title);
+  const provider = segment.provider ? fold(segment.provider) : "";
+  const { nonSite, site } = getFoldedBrands();
+  for (const group of [nonSite, site]) {
+    let best: { brand: Brand; length: number } | undefined;
+    for (const { brand, foldedAliases } of group) {
+      if (brand.types && !brand.types.includes(segment.type)) continue;
+      for (const wanted of foldedAliases) {
+        if ((title.includes(wanted) || (provider !== "" && provider.includes(wanted))) && (!best || wanted.length > best.length)) {
+          best = { brand, length: wanted.length };
+        }
       }
     }
     if (best) return best.brand;

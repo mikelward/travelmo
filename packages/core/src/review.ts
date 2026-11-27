@@ -1,5 +1,5 @@
 import type { ParsedMessage } from "./schema";
-import { hasWordStarts } from "./words";
+import { hasWordStartsOf, wordsOf } from "./words";
 
 /** What the review list is narrowed to; empty fields leave it unfiltered. */
 export type ReviewSearch = { keyword: string; from: string; to: string };
@@ -20,10 +20,14 @@ export function dayRange(from: string, to: string): { start?: string; end?: stri
   return range;
 }
 
+function recordSearchText(record: Pick<ParsedMessage, "subject" | "from" | "reason">): string {
+  return [record.subject, record.from, record.reason].filter(Boolean).join(" ");
+}
+
 /** Whether each word of the keyword starts a word of a record's subject, sender or reason, ignoring case and accents. */
 export function matchesKeyword(record: Pick<ParsedMessage, "subject" | "from" | "reason">, keyword: string): boolean {
   if (!keyword.trim()) return true;
-  return hasWordStarts([record.subject, record.from, record.reason].filter(Boolean).join(" "), keyword);
+  return hasWordStartsOf(recordSearchText(record), wordsOf(keyword));
 }
 
 /**
@@ -36,15 +40,27 @@ export function inRange(record: Pick<ParsedMessage, "sentAt" | "processedAt">, r
   return (!range.start || at >= Date.parse(range.start)) && (!range.end || at < Date.parse(range.end));
 }
 
+const reviewDateFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function getReviewDateFormatter(locale: string, timeZone?: string): Intl.DateTimeFormat {
+  const key = `${locale}|${timeZone ?? ""}`;
+  let formatter = reviewDateFormatters.get(key);
+  if (!formatter) {
+    if (reviewDateFormatters.size >= 32) reviewDateFormatters.clear();
+    formatter = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric", ...(timeZone ? { timeZone } : {}) });
+    reviewDateFormatters.set(key, formatter);
+  }
+  return formatter;
+}
+
 /**
  * The dates a review row shows, in the viewer's own zone: when the email was
  * sent, if the record says, and when it was read.
  */
 export function reviewDate(record: Pick<ParsedMessage, "sentAt" | "processedAt">, locale = "en-GB", timeZone?: string): string {
-  const day = (at: string) =>
-    new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric", ...(timeZone ? { timeZone } : {}) }).format(new Date(at));
-  const read = `Read ${day(record.processedAt)}`;
-  return record.sentAt ? `Sent ${day(record.sentAt)} · ${read}` : read;
+  const formatter = getReviewDateFormatter(locale, timeZone);
+  const read = `Read ${formatter.format(new Date(record.processedAt))}`;
+  return record.sentAt ? `Sent ${formatter.format(new Date(record.sentAt))} · ${read}` : read;
 }
 
 /**
@@ -75,10 +91,41 @@ export function withLatest(searched: readonly ParsedMessage[], latest: readonly 
 }
 
 /**
+ * Whether a completed search cache (`cached`, newest first) still joins cleanly
+ * with the live `latest` window (`windowSize` newest records, newest first) so
+ * `withLatest(cached, latest)` cannot miss records imported since the search.
+ */
+export function reviewCacheCoversLatest(
+  cached: readonly Pick<ParsedMessage, "messageId" | "processedAt">[],
+  latest: readonly Pick<ParsedMessage, "messageId" | "processedAt">[] | undefined,
+  windowSize: number,
+): boolean {
+  if (!latest || latest.length < windowSize) return true;
+  if (cached.length === 0) return false;
+  const cachedNewest = cached[0]!.processedAt;
+  const oldestLatest = latest[latest.length - 1]!;
+  if (oldestLatest.processedAt < cachedNewest) return true;
+  const cachedAt = new Map<string, string>();
+  for (const r of cached) cachedAt.set(r.messageId, r.processedAt);
+  return latest.every((r) => cachedAt.get(r.messageId) === r.processedAt);
+}
+
+/**
  * The records worth reviewing: those that did not become bookings and are
  * not still being read, matching the keyword and the days, and those whose
  * Import anyway report is still to copy (`kept`), whatever came of them.
  */
 export function toReview(records: readonly ParsedMessage[], keyword: string, range: { start?: string; end?: string } = {}, kept: ReadonlySet<string> = new Set()): ParsedMessage[] {
-  return records.filter((r) => kept.has(r.messageId) || (r.outcome !== "imported" && r.outcome !== "processing" && matchesKeyword(r, keyword) && inRange(r, range)));
+  const queryWords = keyword.trim() ? wordsOf(keyword) : [];
+  const startMs = range.start ? Date.parse(range.start) : undefined;
+  const endMs = range.end ? Date.parse(range.end) : undefined;
+  return records.filter((r) => {
+    if (kept.has(r.messageId)) return true;
+    if (r.outcome === "imported" || r.outcome === "processing") return false;
+    if (startMs !== undefined || endMs !== undefined) {
+      const at = Date.parse(r.sentAt ?? r.processedAt);
+      if ((startMs !== undefined && !(at >= startMs)) || (endMs !== undefined && !(at < endMs))) return false;
+    }
+    return queryWords.length === 0 || hasWordStartsOf(recordSearchText(r), queryWords);
+  });
 }

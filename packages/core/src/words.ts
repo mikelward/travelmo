@@ -31,9 +31,15 @@ export function hasWords(text: string, phrase: string): boolean {
   return false;
 }
 
+// Whether each pre-tokenized word of `queryWords` starts a word of `text`.
+export function hasWordStartsOf(text: string, queryWords: readonly string[]): boolean {
+  if (queryWords.length === 0) return true;
+  const words = wordsOf(text);
+  return queryWords.every((q) => words.some((w) => w.startsWith(q)));
+}
+
 // Whether each word of `query` starts a word of `text`, as a search box
 // finds as you type: "par" finds Paris, "ba" finds BA but not Cuba.
 export function hasWordStarts(text: string, query: string): boolean {
-  const words = wordsOf(text);
-  return wordsOf(query).every((q) => words.some((w) => w.startsWith(q)));
+  return hasWordStartsOf(text, wordsOf(query));
 }

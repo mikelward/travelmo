@@ -287,10 +287,12 @@ sealed interface ParsedAirports {
     data class Problem(val text: String) : ParsedAirports
 }
 
+private val airportCodeSeparators = Regex("[\\s,;]+")
+
 /** Airport or station codes as typed ("SFO, sjc"), or why they can't be, as home.ts's parseAirportCodes. */
 fun parseAirportCodes(text: String): ParsedAirports {
     val codes = mutableListOf<String>()
-    for (word in text.split(Regex("[\\s,;]+")).filter { it.isNotEmpty() }) {
+    for (word in text.split(airportCodeSeparators).filter { it.isNotEmpty() }) {
         if (!homeAirportCode.matches(word)) return ParsedAirports.Problem("\"$word\" isn't an airport or station code.")
         val code = word.uppercase()
         if (code !in codes) codes += code
@@ -402,14 +404,32 @@ fun inHomeTown(place: Place?, date: String, periods: List<HomePeriod>, overrides
 // Words that say nothing about which airport or station a place is.
 private val hubWords = setOf("airport", "international", "terminal", "station", "central", "railway", "rail", "city")
 
+private val nonAlnumUpper = Regex("[^A-Z0-9]")
+
+private fun isAsciiWordChar(c: Char): Boolean =
+    (c in '0'..'9') || (c in 'A'..'Z') || (c in 'a'..'z') || c == '_'
+
+private fun containsWholeWord(text: String, upperCode: String): Boolean {
+    val upperText = text.uppercase()
+    val len = upperCode.length
+    var at = upperText.indexOf(upperCode)
+    while (at >= 0) {
+        val beforeOk = at == 0 || !isAsciiWordChar(upperText[at - 1])
+        val afterOk = at + len == upperText.length || !isAsciiWordChar(upperText[at + len])
+        if (beforeOk && afterOk) return true
+        at = upperText.indexOf(upperCode, at + 1)
+    }
+    return false
+}
+
 // Whether a place in a ride's booking is the airport or station [hub]: the
 // same code, the code written in it, or a word of the hub's name that is not
 // its town's ("Heathrow" of London Heathrow).
 private fun atHub(place: Place, hub: Place): Boolean {
     if (place.code != null && hub.code != null) return place.code.equals(hub.code, ignoreCase = true)
     val text = "${place.name} ${place.address ?: ""}"
-    val code = hub.code?.uppercase()?.replace(Regex("[^A-Z0-9]"), "")
-    if (!code.isNullOrEmpty() && Regex("\\b$code\\b", RegexOption.IGNORE_CASE).containsMatchIn(text)) return true
+    val code = hub.code?.uppercase()?.replace(nonAlnumUpper, "")
+    if (!code.isNullOrEmpty() && containsWholeWord(text, code)) return true
     val townWords = wordsOf("${hub.city ?: ""} ${hub.country ?: ""}").toSet()
     val words = wordsOf(text).toSet()
     return wordsOf(hub.name).any { it.length >= 4 && it !in hubWords && it !in townWords && it in words }

@@ -29,24 +29,86 @@ data class Landmark(
     val fallback: List<String> = emptyList(),
 )
 
-private val landmarkEntry = Regex(
-    """"id":"([^"]+)","name":"([^"]*)","cities":\[([^\]]*)](?:,"capitalized":\[([^\]]*)])?(?:,"not":\[([^\]]*)])?(?:,"fallback":\[([^\]]*)])?,"d":"([^"]+)"""",
-)
-private val quoted = Regex(""""([^"]+)"""")
+private fun scanQuotedStrings(src: String, start: Int, end: Int): List<String> {
+    if (start >= end) return emptyList()
+    val out = ArrayList<String>()
+    var pos = src.indexOf('"', start)
+    while (pos >= 0 && pos < end) {
+        val close = src.indexOf('"', pos + 1)
+        if (close < 0 || close >= end) break
+        out.add(src.substring(pos + 1, close))
+        pos = src.indexOf('"', close + 1)
+    }
+    return out
+}
+
+private fun parseStringField(line: String, key: String, from: Int): Pair<String, Int>? {
+    val at = line.indexOf(key, from)
+    if (at < 0) return null
+    val start = at + key.length
+    val end = line.indexOf('"', start)
+    if (end < 0) return null
+    return line.substring(start, end) to (end + 1)
+}
+
+private fun parseArrayField(line: String, key: String, from: Int): Pair<List<String>, Int>? {
+    val at = line.indexOf(key, from)
+    if (at < 0) return null
+    val start = at + key.length
+    val end = line.indexOf(']', start)
+    if (end < 0) return null
+    return scanQuotedStrings(line, start, end) to (end + 1)
+}
 
 val landmarks: List<Landmark> by lazy {
-    landmarkEntry.findAll(landmarksJson).map { m ->
-        fun list(group: Int) = quoted.findAll(m.groupValues[group]).map { it.groupValues[1] }.toList()
-        Landmark(
-            m.groupValues[1],
-            m.groupValues[2],
-            list(3),
-            m.groupValues[7],
-            capitalized = list(4),
-            not = list(5),
-            fallback = list(6),
-        )
-    }.toList().also { check(it.any { l -> l.id == "trip" }) { "landmarks.json has no suitcase" } }
+    val out = ArrayList<Landmark>(320)
+    val src = landmarksJson
+    var pos = 0
+    while (pos < src.length) {
+        val nl = src.indexOf('\n', pos).let { if (it < 0) src.length else it }
+        val line = src.substring(pos, nl)
+        pos = nl + 1
+        val idHit = parseStringField(line, "\"id\":\"", 0) ?: continue
+        val nameHit = parseStringField(line, "\"name\":\"", idHit.second) ?: continue
+        val citiesHit = parseArrayField(line, "\"cities\":[", nameHit.second) ?: continue
+        var cursor = citiesHit.second
+        val capitalized = parseArrayField(line, "\"capitalized\":[", cursor)?.also { cursor = it.second }?.first.orEmpty()
+        val not = parseArrayField(line, "\"not\":[", cursor)?.also { cursor = it.second }?.first.orEmpty()
+        val fallback = parseArrayField(line, "\"fallback\":[", cursor)?.also { cursor = it.second }?.first.orEmpty()
+        val dHit = parseStringField(line, "\"d\":\"", cursor) ?: continue
+        out.add(Landmark(idHit.first, nameHit.first, citiesHit.first, dHit.first, capitalized = capitalized, not = not, fallback = fallback))
+    }
+    out.also { check(it.any { l -> l.id == "trip" }) { "landmarks.json has no suitcase" } }
+}
+
+private val landmarksById: Map<String, Landmark> by lazy { landmarks.associateBy { it.id } }
+
+private class LandmarkHit(val order: Int, val landmark: Landmark, val name: String, val paddedNot: List<String>)
+
+private class LandmarkIndex(
+    val cities: Map<String, List<LandmarkHit>>,
+    val capitalized: Map<String, List<LandmarkHit>>,
+    val fallback: Map<String, List<LandmarkHit>>,
+    val suitcase: Landmark,
+)
+
+private val landmarkIndex: LandmarkIndex by lazy {
+    val cities = HashMap<String, MutableList<LandmarkHit>>()
+    val capitalized = HashMap<String, MutableList<LandmarkHit>>()
+    val fallback = HashMap<String, MutableList<LandmarkHit>>()
+    fun add(map: HashMap<String, MutableList<LandmarkHit>>, phrase: String, hit: LandmarkHit) {
+        val space = phrase.indexOf(' ')
+        val first = if (space < 0) phrase else phrase.substring(0, space)
+        if (first.isEmpty()) return
+        map.getOrPut(first) { ArrayList(2) }.add(hit)
+    }
+    landmarks.forEachIndexed { order, landmark ->
+        val paddedNot = landmark.not.map { " $it " }
+        for (city in landmark.cities) add(cities, city, LandmarkHit(order, landmark, city, paddedNot))
+        for (name in landmark.capitalized) add(capitalized, name, LandmarkHit(order, landmark, name, paddedNot))
+        for (word in landmark.fallback) add(fallback, word, LandmarkHit(order, landmark, word, paddedNot))
+    }
+    LandmarkIndex(cities, capitalized, fallback, landmarksById.getValue("trip"))
 }
 
 private val marks = Regex("\\p{M}+")
@@ -55,12 +117,26 @@ private val punctuationNext = Regex("^\\s*[,;:(/\\-–—]")
 
 /** Where ` name ` first occurs in [text] at a place [ok] accepts, else -1. */
 private fun firstAt(text: String, name: String, ok: (Int) -> Boolean): Int {
-    var at = text.indexOf(" $name ")
+    val needle = " $name "
+    var at = text.indexOf(needle)
     while (at >= 0) {
         if (ok(at)) return at
-        at = text.indexOf(" $name ", at + 1)
+        at = text.indexOf(needle, at + 1)
     }
     return -1
+}
+
+private fun isNotExcluded(words: String, paddedNot: List<String>, name: String, at: Int): Boolean {
+    if (paddedNot.isEmpty()) return true
+    val needle = " $name "
+    for (padded in paddedNot) {
+        var off = padded.indexOf(needle)
+        while (off >= 0) {
+            if (at >= off && words.startsWith(padded, at - off)) return false
+            off = padded.indexOf(needle, off + 1)
+        }
+    }
+    return true
 }
 
 /**
@@ -69,50 +145,58 @@ private fun firstAt(text: String, name: String, ok: (Int) -> Boolean): Int {
  * case ignored, so "Lisboa" is Lisbon and "Parisian" is nobody; a capitalized name keeps its case.
  */
 fun tripLandmark(title: String): Landmark {
+    val index = landmarkIndex
     val plain = decomposed(title).replace(marks, "").trim()
     // Folded as foldText does, case kept and then not.
-    val kept = " ${plain.replace(notLetters, " ").trim()} "
+    val keptTrimmed = plain.replace(notLetters, " ").trim()
+    val kept = " $keptTrimmed "
     val words = kept.lowercase()
     fun opensTitle(name: String) = plain == name || punctuationNext.containsMatchIn(plain.drop(name.length))
-    fun pick(match: (Landmark, (Int) -> Unit) -> Unit): Landmark? {
-        var best: Pair<Int, Landmark>? = null
-        for (landmark in landmarks) {
-            match(landmark) { at ->
-                if (at >= 0 && (best == null || at < best!!.first)) best = at to landmark
-            }
-        }
-        return best?.second
-    }
-    fun notExcluded(not: List<String>, name: String): (Int) -> Boolean = { at ->
-        not.none { n ->
-            val padded = " $n "
-            var off = padded.indexOf(" $name ")
-            var hit = false
-            while (off >= 0 && !hit) {
-                if (at >= off && words.startsWith(padded, at - off)) hit = true
-                off = padded.indexOf(" $name ", off + 1)
-            }
-            hit
+    val keptTokens = if (keptTrimmed.isEmpty()) emptySet() else keptTrimmed.split(' ').toHashSet()
+    val lowerTokens = if (keptTrimmed.isEmpty()) emptySet() else keptTrimmed.lowercase().split(' ').toHashSet()
+
+    var bestAt = Int.MAX_VALUE
+    var bestOrder = Int.MAX_VALUE
+    var best: Landmark? = null
+    fun consider(at: Int, order: Int, landmark: Landmark) {
+        if (at >= 0 && (at < bestAt || (at == bestAt && order < bestOrder))) {
+            bestAt = at
+            bestOrder = order
+            best = landmark
         }
     }
-    val place = pick { landmark, consider ->
-        for (city in landmark.cities) consider(firstAt(words, city, notExcluded(landmark.not, city)))
-        for (name in landmark.capitalized) consider(firstAt(kept, name) { at -> at > 0 || opensTitle(name) })
+
+    for (token in lowerTokens) {
+        val hits = index.cities[token] ?: continue
+        for (hit in hits) {
+            consider(firstAt(words, hit.name) { at -> isNotExcluded(words, hit.paddedNot, hit.name, at) }, hit.order, hit.landmark)
+        }
     }
-    if (place != null) return place
-    val theme = pick { landmark, consider ->
-        for (word in landmark.fallback) consider(firstAt(words, word, notExcluded(landmark.not, word)))
+    for (token in keptTokens) {
+        val hits = index.capitalized[token] ?: continue
+        for (hit in hits) {
+            consider(firstAt(kept, hit.name) { at -> at > 0 || opensTitle(hit.name) }, hit.order, hit.landmark)
+        }
     }
-    return theme ?: landmarks.first { it.id == "trip" }
+    if (best == null) {
+        for (token in lowerTokens) {
+            val hits = index.fallback[token] ?: continue
+            for (hit in hits) {
+                consider(firstAt(words, hit.name) { at -> isNotExcluded(words, hit.paddedNot, hit.name, at) }, hit.order, hit.landmark)
+            }
+        }
+    }
+    return best ?: index.suitcase
 }
 
 /**
- * Parses the tables the trip list reads (the landmarks, and the airports a missing journey is told by), then
- * Reports' map, each read on first use: a few hundred milliseconds on a phone, so the app calls this off the main
- * thread before the list draws.
+ * Parses the tables the trip list, trip pages and Reports read, each read on first use: a few hundred milliseconds on
+ * a phone, so the app calls this off the main thread before the list draws.
  */
 fun warmTables() {
-    landmarks.size
+    landmarkIndex.suitcase.id
+    placeSetting(Place("", city = "London"))
+    sameCity("London", "London")
     airportPlace("LHR")
     airportZone("LHR")
     worldMap.countries.size
@@ -134,16 +218,28 @@ fun tripBookingType(setting: String?): SegmentType? = SegmentType.fromWire(setti
 fun tripPicture(title: String, setting: String? = null): Landmark {
     val named = tripLandmark(title)
     if (named.id != "trip") return named
-    return landmarks.firstOrNull { setting != null && setting in PLACE_SETTINGS && it.id == setting } ?: named
+    return if (setting != null && setting in PLACE_SETTINGS) landmarksById[setting] ?: named else named
 }
-
-private val bigCityEntry = Regex(""""([^"]+)":\[([^\]]*)]""")
 
 /** Each name some city of at least 250,000 people has, with the countries it is that big in (bigCities.json). */
 private val bigCities: Map<String, List<String>> by lazy {
-    bigCityEntry.findAll(bigCitiesJson).associate { m ->
-        m.groupValues[1] to Regex(""""([A-Z]{2})"""").findAll(m.groupValues[2]).map { it.groupValues[1] }.toList()
+    val out = HashMap<String, List<String>>(2048)
+    val src = bigCitiesJson
+    var pos = 0
+    while (pos < src.length) {
+        val nl = src.indexOf('\n', pos).let { if (it < 0) src.length else it }
+        val keyStart = src.indexOf('"', pos)
+        if (keyStart >= 0 && keyStart < nl) {
+            val keyEnd = src.indexOf('"', keyStart + 1)
+            val arrStart = if (keyEnd >= 0 && keyEnd < nl) src.indexOf('[', keyEnd + 1) else -1
+            val arrEnd = if (arrStart >= 0 && arrStart < nl) src.indexOf(']', arrStart + 1) else -1
+            if (arrEnd >= 0) {
+                out[src.substring(keyStart + 1, keyEnd)] = scanQuotedStrings(src, arrStart + 1, arrEnd)
+            }
+        }
+        pos = nl + 1
     }
+    out
 }
 
 /**

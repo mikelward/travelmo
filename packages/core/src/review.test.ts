@@ -1,6 +1,6 @@
 import type { ParsedMessage } from "./schema";
 import { describe, expect, it } from "vitest";
-import { dayRange, matchesKeyword, outcomeLabel, reviewDate, toReview, withLatest } from "./review";
+import { dayRange, matchesKeyword, outcomeLabel, reviewCacheCoversLatest, reviewDate, toReview, withLatest } from "./review";
 
 const record = (extra: Partial<ParsedMessage>): ParsedMessage => ({
   messageId: "m",
@@ -90,5 +90,28 @@ describe("outcomeLabel", () => {
     expect(outcomeLabel({ outcome: "not_booking", loyalty: ["Delta: Silver Medallion · 49,606 Miles"] })).toBe("Read, loyalty kept");
     expect(outcomeLabel({ outcome: "not_booking" })).toBe("Read, not a booking");
     expect(outcomeLabel({ outcome: "filtered" })).toBe("Skipped before reading");
+  });
+});
+
+describe("reviewCacheCoversLatest", () => {
+  const at = (id: string, processedAt: string) => ({ messageId: id, processedAt });
+  it("keeps the cache while latest has not filled its window or still overlaps the cached newest timestamp", () => {
+    const cached = [at("c2", "2026-10-30T10:00:00Z"), at("c1", "2026-10-30T09:00:00Z")];
+    expect(reviewCacheCoversLatest(cached, undefined, 3)).toBe(true);
+    expect(reviewCacheCoversLatest(cached, [at("n1", "2026-10-30T11:00:00Z")], 3)).toBe(true);
+    // 2 new records + 1 older record in a window of 3: oldest latest < cached newest, no gap.
+    expect(
+      reviewCacheCoversLatest(cached, [at("n2", "2026-10-30T12:00:00Z"), at("n1", "2026-10-30T11:00:00Z"), at("c1", "2026-10-30T09:00:00Z")], 3),
+    ).toBe(true);
+    // Identical timestamps with no new records still hit cache.
+    const same = [at("s3", "2026-10-30T10:00:00Z"), at("s2", "2026-10-30T10:00:00Z"), at("s1", "2026-10-30T10:00:00Z")];
+    expect(reviewCacheCoversLatest(same, same, 3)).toBe(true);
+  });
+
+  it("invalidates the cache once a full latest window advances past the cached newest timestamp or fills from empty", () => {
+    const cached = [at("c2", "2026-10-30T10:00:00Z"), at("c1", "2026-10-30T09:00:00Z")];
+    const newer = [at("n3", "2026-10-30T13:00:00Z"), at("n2", "2026-10-30T12:00:00Z"), at("n1", "2026-10-30T11:00:00Z")];
+    expect(reviewCacheCoversLatest(cached, newer, 3)).toBe(false);
+    expect(reviewCacheCoversLatest([], newer, 3)).toBe(false);
   });
 });

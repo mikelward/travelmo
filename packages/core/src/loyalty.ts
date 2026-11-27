@@ -280,21 +280,27 @@ export function allLoyalty(
     const person = name ? findPerson(travelers, name) : undefined;
     return person && person.id === me?.id ? undefined : (person?.name ?? name);
   };
+  const reversedPeople = [...people].reverse();
   const withPerson = (entry: ProfileEntry, number: string | undefined, fromEmail?: FoundLoyalty): ProfileEntry => {
-    const said = number ? [...people].reverse().find((p) => sameMembership(p, { program: entry.title, number })) : undefined;
+    const said = number ? reversedPeople.find((p) => sameMembership(p, { program: entry.title, number })) : undefined;
     const person = known(said ? said.person : fromEmail?.person);
     return person ? { ...entry, fields: [...entry.fields, { label: personLabel, value: person }] } : entry;
   };
-  // One membership: the same number in the same program (sameMembership).
-  const matching = (entry: ProfileEntry) => {
-    const account = loyaltySummary(entry).account;
-    return account ? (f: FoundLoyalty) => sameMembership(f, { program: entry.title, number: account }) : () => false;
-  };
+  // Precompute each imported entry's account number once so matching against found entries doesn't re-parse summaries.
+  const importedAccounts = profile.loyalty.map((entry) => ({ entry, account: loyaltySummary(entry).account }));
+  const matchedFound = new Set<FoundLoyalty>();
   // Newer than the TripIt upload, so it has the last word (no upload: it has).
   const afterUpload = (at: string | undefined) => !!at && (!profile.importedAt || at > profile.importedAt);
-  const imported = profile.loyalty.map((entry) => {
-    const statement = found.find(matching(entry));
-    const account = loyaltySummary(entry).account;
+  const imported = importedAccounts.map(({ entry, account }) => {
+    let statement: FoundLoyalty | undefined;
+    if (account) {
+      for (const f of found) {
+        if (sameMembership(f, { program: entry.title, number: account })) {
+          matchedFound.add(f);
+          if (!statement) statement = f;
+        }
+      }
+    }
     const balance = statement?.balance && afterUpload(statement.balanceAt) ? statement.balance : undefined;
     const status = statement?.status && afterUpload(statement.statusAt) ? statement.status : undefined;
     if (!statement || (!balance && !status)) return withPerson(entry, account, statement);
@@ -309,11 +315,15 @@ export function allLoyalty(
       ],
     }, account, statement);
   });
-  const shown = (f: FoundLoyalty) => profile.loyalty.some((entry) => matching(entry)(f));
-  const all = [...imported, ...found.filter((f) => !shown(f)).map((f) => withPerson(foundLoyaltyEntry(f), f.number, f))];
+  const all = [...imported, ...found.filter((f) => !matchedFound.has(f)).map((f) => withPerson(foundLoyaltyEntry(f), f.number, f))];
   // The owner's first, as a booking lists them.
-  const theirs = (e: ProfileEntry) => loyaltySummary(e).person !== undefined;
-  return [...all.filter((e) => !theirs(e)), ...all.filter(theirs)];
+  const mine: ProfileEntry[] = [];
+  const theirs: ProfileEntry[] = [];
+  for (const e of all) {
+    if (loyaltySummary(e).person !== undefined) theirs.push(e);
+    else mine.push(e);
+  }
+  return [...mine, ...theirs];
 }
 
 // The owner's word on whose a membership is, replacing any earlier word on

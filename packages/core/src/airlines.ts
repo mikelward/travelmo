@@ -199,20 +199,48 @@ export const airlineNames: Readonly<Record<string, string>> = {
 
 const foldName = (name: string) => name.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
+type FoldedAirline = { code: string; name: string; folded: string };
+let airlineIndexCache: { exact: Map<string, FoldedAirline[]>; all: FoldedAirline[] } | undefined;
+
+function getAirlineIndex(): { exact: Map<string, FoldedAirline[]>; all: FoldedAirline[] } {
+  if (!airlineIndexCache) {
+    const exact = new Map<string, FoldedAirline[]>();
+    const all: FoldedAirline[] = [];
+    for (const [code, name] of Object.entries(airlineNames)) {
+      const folded = foldName(name);
+      const entry = { code, name, folded };
+      all.push(entry);
+      const list = exact.get(folded);
+      if (list) list.push(entry);
+      else exact.set(folded, [entry]);
+    }
+    airlineIndexCache = { exact, all };
+  }
+  return airlineIndexCache;
+}
+
 // The listed airline a booking's provider names, if exactly one: "Delta" is
 // Delta Air Lines; "Virgin" could be Virgin Atlantic or Virgin Australia, so
 // is none. A booking site ("Expedia") is no airline.
 export function airlineNamed(provider: string | undefined): { code: string; name: string } | undefined {
   const wanted = provider ? foldName(provider) : "";
   if (!wanted) return undefined;
+  const { exact, all } = getAirlineIndex();
   // One named in full first: "AirAsia X" is that, not also AirAsia.
-  const exact = Object.entries(airlineNames).filter(([, name]) => foldName(name) === wanted);
-  const found = exact.length > 0 ? exact : Object.entries(airlineNames).filter(([, name]) => {
-    const listed = foldName(name);
-    return listed.startsWith(`${wanted} `) || wanted.startsWith(`${listed} `);
-  });
-  const names = new Set(found.map(([, name]) => name));
-  return names.size === 1 ? { code: found[0]![0], name: found[0]![1] } : undefined;
+  const exactHits = exact.get(wanted);
+  let found: FoldedAirline[];
+  if (exactHits && exactHits.length > 0) {
+    found = exactHits;
+  } else {
+    const wantedPrefix = `${wanted} `;
+    found = all.filter(({ folded }) => folded.startsWith(wantedPrefix) || wanted.startsWith(`${folded} `));
+  }
+  if (found.length === 0) return undefined;
+  const first = found[0]!;
+  for (let i = 1; i < found.length; i++) {
+    if (found[i]!.name !== first.name) return undefined;
+  }
+  return { code: first.code, name: first.name };
 }
 
 // The flight number as a heading writes it: the airline code, a space and

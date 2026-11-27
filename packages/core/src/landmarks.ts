@@ -38,10 +38,51 @@ export const LANDMARKS: readonly Landmark[] = table.landmarks;
 
 const SUITCASE = LANDMARKS.find((l) => l.id === "trip")!;
 
+type LandmarkHit = { order: number; landmark: Landmark; name: string; paddedNot: readonly string[] };
+
+const LANDMARK_INDEX = (() => {
+  const cities = new Map<string, LandmarkHit[]>();
+  const capitalized = new Map<string, LandmarkHit[]>();
+  const fallback = new Map<string, LandmarkHit[]>();
+  const add = (map: Map<string, LandmarkHit[]>, phrase: string, hit: LandmarkHit) => {
+    const space = phrase.indexOf(" ");
+    const first = space < 0 ? phrase : phrase.slice(0, space);
+    if (!first) return;
+    let list = map.get(first);
+    if (!list) {
+      list = [];
+      map.set(first, list);
+    }
+    list.push(hit);
+  };
+  LANDMARKS.forEach((landmark, order) => {
+    const paddedNot = (landmark.not ?? []).map((n) => ` ${n} `);
+    for (const city of landmark.cities) add(cities, city, { order, landmark, name: city, paddedNot });
+    for (const name of landmark.capitalized ?? []) add(capitalized, name, { order, landmark, name, paddedNot });
+    for (const word of landmark.fallback ?? []) add(fallback, word, { order, landmark, name: word, paddedNot });
+  });
+  return { cities, capitalized, fallback };
+})();
+
+const landmarkCache = new Map<string, Landmark>();
+const MAX_LANDMARK_CACHE = 500;
+
 // Where ` name ` first occurs in `text` at a place `ok` accepts, else -1.
 function firstAt(text: string, name: string, ok: (at: number) => boolean): number {
-  for (let at = text.indexOf(` ${name} `); at >= 0; at = text.indexOf(` ${name} `, at + 1)) if (ok(at)) return at;
+  const needle = ` ${name} `;
+  for (let at = text.indexOf(needle); at >= 0; at = text.indexOf(needle, at + 1)) if (ok(at)) return at;
   return -1;
+}
+
+function isNotExcluded(words: string, paddedNot: readonly string[], name: string, at: number): boolean {
+  if (paddedNot.length === 0) return true;
+  const needle = ` ${name} `;
+  for (const padded of paddedNot) {
+    for (let off = padded.indexOf(needle); off >= 0; off = padded.indexOf(needle, off + 1)) {
+      if (at >= off && words.startsWith(padded, at - off)) return false;
+    }
+  }
+  return true;
 }
 
 // The landmark of the city named first in `title` ("Paris and Lyon" is
@@ -50,40 +91,56 @@ function firstAt(text: string, name: string, ok: (at: number) => boolean): numbe
 // and case ignored, so "Lisboa" is Lisbon and "Parisian" is nobody; a
 // capitalized name keeps its case.
 export function tripLandmark(title: string): Landmark {
+  const cached = landmarkCache.get(title);
+  if (cached) return cached;
   const plain = title.normalize("NFKD").replace(/\p{M}/gu, "").trim();
   // Folded as foldText does, case kept and then not.
-  const kept = ` ${plain.replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
+  const keptTrimmed = plain.replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const kept = ` ${keptTrimmed} `;
   const words = kept.toLowerCase();
   const opensTitle = (name: string) => plain === name || /^\s*[,;:(/\-–—]/u.test(plain.slice(name.length));
-  const pick = (match: (landmark: Landmark, consider: (at: number) => void) => void): Landmark | undefined => {
-    let best: { at: number; landmark: Landmark } | undefined;
-    for (const landmark of LANDMARKS) {
-      match(landmark, (at) => {
-        if (at >= 0 && (!best || at < best.at)) best = { at, landmark };
-      });
+  const keptTokens = keptTrimmed ? new Set(keptTrimmed.split(" ")) : new Set<string>();
+  const lowerTokens = keptTrimmed ? new Set(keptTrimmed.toLowerCase().split(" ")) : new Set<string>();
+
+  let bestAt = Number.POSITIVE_INFINITY;
+  let bestOrder = Number.POSITIVE_INFINITY;
+  let best: Landmark | undefined;
+  const consider = (at: number, order: number, landmark: Landmark) => {
+    if (at >= 0 && (at < bestAt || (at === bestAt && order < bestOrder))) {
+      bestAt = at;
+      bestOrder = order;
+      best = landmark;
     }
-    return best?.landmark;
   };
-  const notExcluded = (not: readonly string[], name: string) => (at: number) =>
-    !not.some((n) => {
-      const padded = ` ${n} `;
-      for (let off = padded.indexOf(` ${name} `); off >= 0; off = padded.indexOf(` ${name} `, off + 1)) {
-        if (at >= off && words.startsWith(padded, at - off)) return true;
+
+  for (const token of lowerTokens) {
+    const hits = LANDMARK_INDEX.cities.get(token);
+    if (!hits) continue;
+    for (const hit of hits) {
+      consider(firstAt(words, hit.name, (at) => isNotExcluded(words, hit.paddedNot, hit.name, at)), hit.order, hit.landmark);
+    }
+  }
+  for (const token of keptTokens) {
+    const hits = LANDMARK_INDEX.capitalized.get(token);
+    if (!hits) continue;
+    for (const hit of hits) {
+      consider(firstAt(kept, hit.name, (at) => at > 0 || opensTitle(hit.name)), hit.order, hit.landmark);
+    }
+  }
+  if (!best) {
+    for (const token of lowerTokens) {
+      const hits = LANDMARK_INDEX.fallback.get(token);
+      if (!hits) continue;
+      for (const hit of hits) {
+        consider(firstAt(words, hit.name, (at) => isNotExcluded(words, hit.paddedNot, hit.name, at)), hit.order, hit.landmark);
       }
-      return false;
-    });
-  return (
-    pick((landmark, consider) => {
-      const not = landmark.not ?? [];
-      for (const city of landmark.cities) consider(firstAt(words, city, notExcluded(not, city)));
-      for (const name of landmark.capitalized ?? []) consider(firstAt(kept, name, (at) => at > 0 || opensTitle(name)));
-    }) ??
-    pick((landmark, consider) => {
-      const not = landmark.not ?? [];
-      for (const word of landmark.fallback ?? []) consider(firstAt(words, word, notExcluded(not, word)));
-    }) ??
-    SUITCASE
-  );
+    }
+  }
+
+  const result = best ?? SUITCASE;
+  if (landmarkCache.size >= MAX_LANDMARK_CACHE) landmarkCache.clear();
+  landmarkCache.set(title, result);
+  return result;
 }
 
 const byId = new Map(LANDMARKS.map((l) => [l.id, l]));

@@ -39,23 +39,35 @@ fun dayRange(from: String?, to: String?, zone: String): DayRange {
     )
 }
 
+private fun recordSearchText(record: ParsedRecord): String =
+    listOfNotNull(record.subject, record.from, record.reason).joinToString(" ")
+
 /** Whether each word of [keyword] starts a word of a record's subject, sender or reason, ignoring case and accents. */
 fun matchesKeyword(record: ParsedRecord, keyword: String): Boolean {
     if (keyword.isBlank()) return true
-    return hasWordStarts(listOfNotNull(record.subject, record.from, record.reason).joinToString(" "), keyword)
+    return hasWordStartsOf(recordSearchText(record), wordsOf(keyword))
 }
 
 private fun instantOf(record: ParsedRecord): Instant? = runCatching { Instant.parse(record.sentAt ?: record.processedAt) }.getOrNull()
 
 /** Whether a record falls in [range]: by when the email was sent, or when it was read if that is unknown. */
 fun inRange(record: ParsedRecord, range: DayRange): Boolean {
-    val at = instantOf(record) ?: return range.start == null && range.end == null
+    if (range.start == null && range.end == null) return true
+    val at = instantOf(record) ?: return false
     return (range.start == null || at >= range.start) && (range.end == null || at < range.end)
 }
 
 /** The records worth reviewing: not imported, not still being read, matching the keyword and the days, and those whose Import anyway report is still to copy ([kept]), whatever came of them. */
-fun toReview(records: List<ParsedRecord>, keyword: String, range: DayRange = DayRange(), kept: Set<String> = emptySet()): List<ParsedRecord> =
-    records.filter { it.messageId in kept || (it.outcome != "imported" && it.outcome != "processing" && matchesKeyword(it, keyword) && inRange(it, range)) }
+fun toReview(records: List<ParsedRecord>, keyword: String, range: DayRange = DayRange(), kept: Set<String> = emptySet()): List<ParsedRecord> {
+    val queryWords = if (keyword.isBlank()) emptyList() else wordsOf(keyword)
+    val checkRange = range.start != null || range.end != null
+    return records.filter { r ->
+        if (r.messageId in kept) return@filter true
+        if (r.outcome == "imported" || r.outcome == "processing") return@filter false
+        if (checkRange && !inRange(r, range)) return@filter false
+        queryWords.isEmpty() || hasWordStartsOf(recordSearchText(r), queryWords)
+    }
+}
 
 /** Records read once for a search, brought up to date by the live latest: newer copies win, new ones join. Newest first. */
 fun withLatest(searched: List<ParsedRecord>, latest: List<ParsedRecord>): List<ParsedRecord> {
@@ -65,9 +77,10 @@ fun withLatest(searched: List<ParsedRecord>, latest: List<ParsedRecord>): List<P
 
 /** "Sent 23 May 2026 · Read 23 Nov 2026", or only when it was read if the email's date is unknown, in [zone] (IANA). */
 fun reviewDate(record: ParsedRecord, zone: String): String {
-    val day = { at: String -> runCatching { Instant.parse(at) }.getOrNull()?.let { formatDayMonthYear(it.toLocalDateTime(TimeZone.of(zone)).date.toString()) } }
+    val tz = TimeZone.of(zone)
+    fun day(at: String): String? = runCatching { Instant.parse(at) }.getOrNull()?.let { formatDayMonthYear(it.toLocalDateTime(tz).date.toString()) }
     val read = day(record.processedAt)?.let { "Read $it" }
-    val sent = record.sentAt?.let(day)?.let { "Sent $it" }
+    val sent = record.sentAt?.let(::day)?.let { "Sent $it" }
     return listOfNotNull(sent, read).joinToString(" · ")
 }
 
@@ -99,6 +112,21 @@ fun recordSourceLabel(source: String?): String = when (source ?: "gmail") {
     "ics" -> "Calendar"
     "forward" -> "Forwarded email"
     else -> source.orEmpty()
+}
+
+/**
+ * Whether a completed search cache ([cached], newest first) still joins cleanly
+ * with the live [latest] window ([windowSize] newest records, newest first) so
+ * [withLatest] cannot miss records imported since the search.
+ */
+fun reviewCacheCoversLatest(cached: List<ParsedRecord>, latest: List<ParsedRecord>?, windowSize: Int): Boolean {
+    if (latest == null || latest.size < windowSize) return true
+    if (cached.isEmpty()) return false
+    val cachedNewest = cached.first().processedAt
+    val oldestLatest = latest.last()
+    if (oldestLatest.processedAt < cachedNewest) return true
+    val cachedAt = cached.associate { it.messageId to it.processedAt }
+    return latest.all { cachedAt[it.messageId] == it.processedAt }
 }
 
 /** How many records the review list shows, newest first, until a search reads them all. */

@@ -74,4 +74,23 @@ class ReviewTest {
         outcomeLabel("not_booking") shouldBe "Read, not a booking"
         outcomeLabel("filtered") shouldBe "Skipped before reading"
     }
+
+    @Test
+    fun `reviewCacheCoversLatest detects when imports advance past the live window`() {
+        fun rec(id: String, at: String) = ParsedRecord(messageId = id, outcome = "not_booking", processedAt = at)
+        val cached = listOf(rec("c2", "2026-10-30T10:00:00Z"), rec("c1", "2026-10-30T09:00:00Z"))
+        reviewCacheCoversLatest(cached, null, 3) shouldBe true
+        reviewCacheCoversLatest(cached, listOf(rec("n1", "2026-10-30T11:00:00Z")), 3) shouldBe true
+        reviewCacheCoversLatest(
+            cached,
+            listOf(rec("n2", "2026-10-30T12:00:00Z"), rec("n1", "2026-10-30T11:00:00Z"), rec("c1", "2026-10-30T09:00:00Z")),
+            3,
+        ) shouldBe true
+        val same = listOf(rec("s3", "2026-10-30T10:00:00Z"), rec("s2", "2026-10-30T10:00:00Z"), rec("s1", "2026-10-30T10:00:00Z"))
+        reviewCacheCoversLatest(same, same, 3) shouldBe true
+
+        val newer = listOf(rec("n3", "2026-10-30T13:00:00Z"), rec("n2", "2026-10-30T12:00:00Z"), rec("n1", "2026-10-30T11:00:00Z"))
+        reviewCacheCoversLatest(cached, newer, 3) shouldBe false
+        reviewCacheCoversLatest(emptyList(), newer, 3) shouldBe false
+    }
 }

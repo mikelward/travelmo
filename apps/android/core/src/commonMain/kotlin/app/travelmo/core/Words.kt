@@ -23,8 +23,12 @@ fun hasWords(text: String, phrase: String): Boolean {
     return (0..words.size - wanted.size).any { i -> wanted.indices.all { j -> words[i + j] == wanted[j] } }
 }
 
-/** Whether each word of [query] starts a word of [text], as a search box finds as you type: "par" finds Paris, "ba" not Cuba. */
-fun hasWordStarts(text: String, query: String): Boolean {
+/** Whether each pre-tokenized word of [queryWords] starts a word of [text]. */
+fun hasWordStartsOf(text: String, queryWords: List<String>): Boolean {
+    if (queryWords.isEmpty()) return true
     val words = wordsOf(text)
-    return wordsOf(query).all { q -> words.any { it.startsWith(q) } }
+    return queryWords.all { q -> words.any { it.startsWith(q) } }
 }
+
+/** Whether each word of [query] starts a word of [text], as a search box finds as you type: "par" finds Paris, "ba" not Cuba. */
+fun hasWordStarts(text: String, query: String): Boolean = hasWordStartsOf(text, wordsOf(query))

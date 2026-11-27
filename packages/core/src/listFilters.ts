@@ -118,10 +118,21 @@ export function hiddenFromList(
   filters: ListFilters,
   people: readonly Known[] = [],
 ): boolean {
-  const read = segments ? tripFlags(segments) : undefined;
-  if (filters.hideCancelled && (trip.cancelledAt !== undefined || (trip.allCancelled ?? read?.allCancelled ?? false))) return true;
-  if (filters.hideLocal && (trip.localOnly ?? read?.localOnly ?? false)) return true;
-  return filters.hideWatching && watching(trip.travelers ?? read?.travelers, people);
+  if (!filtering(filters)) return false;
+  if (filters.hideCancelled) {
+    if (trip.cancelledAt !== undefined) return true;
+    const cancelled = trip.allCancelled ?? (segments ? allCancelled(segments) : false);
+    if (cancelled) return true;
+  }
+  if (filters.hideLocal) {
+    const local = trip.localOnly ?? (segments ? localOnly(segments) : false);
+    if (local) return true;
+  }
+  if (filters.hideWatching) {
+    const travelers = trip.travelers ?? (segments ? tripTravelers(segments) : undefined);
+    if (watching(travelers, people)) return true;
+  }
+  return false;
 }
 
 // Whether any filter is on.

@@ -77,12 +77,21 @@ export const countryCode = (country: string) => countryCodeOf(country) ?? countr
 // Every name a city goes by, in English or a language of its country, to
 // its own (scripts/cityNames.mjs, from GeoNames), so a station in Göteborg
 // is in the Gothenburg its airport names and München is Munich.
-const otherNames = new Map<string, string>();
-for (const [own, names] of Object.entries(cityNamesTable as Record<string, string[]>)) for (const name of names) otherNames.set(name, own);
+let otherNamesCache: Map<string, string> | undefined;
+
+function getOtherNames(): Map<string, string> {
+  if (!otherNamesCache) {
+    otherNamesCache = new Map<string, string>();
+    for (const [own, names] of Object.entries(cityNamesTable as Record<string, string[]>)) {
+      for (const name of names) otherNamesCache.set(name, own);
+    }
+  }
+  return otherNamesCache;
+}
 
 const ownName = (city: string) => {
   const folded = foldCity(city);
-  return otherNames.get(folded) ?? folded;
+  return getOtherNames().get(folded) ?? folded;
 };
 
 export const sameCity = (a: string, b: string) => ownName(a) === ownName(b);
@@ -355,6 +364,21 @@ export function isTransfer(segment: Pick<ExtractedSegment, "type" | "origin" | "
 // Words that say nothing about which airport or station a place is.
 const hubWords = new Set(["airport", "international", "terminal", "station", "central", "railway", "rail", "city"]);
 
+function isAsciiWordChar(code: number): boolean {
+  return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code === 95;
+}
+
+function containsWholeWord(text: string, upperCode: string): boolean {
+  const upperText = text.toUpperCase();
+  const len = upperCode.length;
+  for (let at = upperText.indexOf(upperCode); at >= 0; at = upperText.indexOf(upperCode, at + 1)) {
+    const beforeOk = at === 0 || !isAsciiWordChar(upperText.charCodeAt(at - 1));
+    const afterOk = at + len === upperText.length || !isAsciiWordChar(upperText.charCodeAt(at + len));
+    if (beforeOk && afterOk) return true;
+  }
+  return false;
+}
+
 // Whether a place in a ride's booking is the airport or station a journey
 // leaves from or arrives at: the same code, the code written in it
 // ("Heathrow Terminal 3 - LHR"), or a word of the hub's name that is not
@@ -363,7 +387,7 @@ function atHub(place: Place, hub: Place): boolean {
   if (place.code && hub.code) return place.code.toUpperCase() === hub.code.toUpperCase();
   const text = `${place.name} ${place.address ?? ""}`;
   const code = hub.code?.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  if (code && new RegExp(`\\b${code}\\b`, "i").test(text)) return true;
+  if (code && containsWholeWord(text, code)) return true;
   const townWords = new Set(wordsOf(`${hub.city ?? ""} ${hub.country ?? ""}`));
   const words = new Set(wordsOf(text));
   return wordsOf(hub.name).some((w) => w.length >= 4 && !hubWords.has(w) && !townWords.has(w) && words.has(w));
