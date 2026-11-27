@@ -23,7 +23,7 @@ import {
   type Firestore,
   type FirestoreError,
 } from "firebase/firestore";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { firestore } from "./firebase";
 
 // Who may use the app (SPEC "Access"; the decision is packages/core's
@@ -43,6 +43,12 @@ const verifiedEmail = (user: User): string | undefined =>
 // Each answer is kept with the document it came from, so a change of
 // account never reads the last one's.
 type Seen<T> = { path: string; value: T; confirmed: boolean };
+
+function sameAnswer<T>(a: Seen<T> | undefined, b: Seen<T>): boolean {
+  if (!a || a.path !== b.path || a.confirmed !== b.confirmed) return false;
+  if (Object.is(a.value, b.value)) return true;
+  return JSON.stringify(a.value) === JSON.stringify(b.value);
+}
 
 // `retry` names what else the read depends on: a change of it subscribes
 // afresh, so a read the rules refused is tried again once they may allow it.
@@ -64,12 +70,20 @@ function useDocument<T>(
     return onSnapshot(
       doc(firestore(), path),
       { includeMetadataChanges: true },
-      (s) => setAnswer({ path, value: readRef.current(s), confirmed: !s.metadata.fromCache }),
-      (error) => setAnswer({ path, value: errorRef.current(error), confirmed: true }),
+      (s) => {
+        const next: Seen<T> = { path, value: readRef.current(s), confirmed: !s.metadata.fromCache };
+        setAnswer((prev) => (sameAnswer(prev, next) ? prev : next));
+      },
+      (error) => {
+        const next: Seen<T> = { path, value: errorRef.current(error), confirmed: true };
+        setAnswer((prev) => (sameAnswer(prev, next) ? prev : next));
+      },
     );
   }, [path, retry]);
   return answer?.path === path ? answer : undefined;
 }
+
+const LOADING_ACCESS: Access = { state: "loading" };
 
 export function useAccess(user: User | null | undefined): Access {
   const email = user ? verifiedEmail(user) : undefined;
@@ -108,16 +122,17 @@ export function useAccess(user: User | null | undefined): Access {
     profile?.value.linked.join(" "),
   );
 
-  // An unverified address has no record.
-  const none = { value: undefined, confirmed: true };
-  const recordSeen = email ? record : none;
-  if (!user || !profile || !recordSeen || !config) return { state: "loading" };
-  const { exists: hasProfile, linked } = profile.value;
-  const status = accessStatus({ email, hasProfile, record: recordSeen.value, config: config.value, linked });
-  if (status !== "approved" && !(profile.confirmed && recordSeen.confirmed && config.confirmed)) return { state: "loading" };
-  const admins = config.value?.admins ?? [];
-  const admin = admins.some((address) => address === email || linked.includes(address));
-  return { state: status, admin, admins, hasProfile, ...(recordSeen.value ? { record: recordSeen.value } : {}) };
+  return useMemo(() => {
+    // An unverified address has no record.
+    const recordSeen = email ? record : { value: undefined, confirmed: true };
+    if (!user || !profile || !recordSeen || !config) return LOADING_ACCESS;
+    const { exists: hasProfile, linked } = profile.value;
+    const status = accessStatus({ email, hasProfile, record: recordSeen.value, config: config.value, linked });
+    if (status !== "approved" && !(profile.confirmed && recordSeen.confirmed && config.confirmed)) return LOADING_ACCESS;
+    const admins = config.value?.admins ?? [];
+    const admin = admins.some((address) => address === email || linked.includes(address));
+    return { state: status, admin, admins, hasProfile, ...(recordSeen.value ? { record: recordSeen.value } : {}) };
+  }, [user, email, profile, record, config]);
 }
 
 // An account from before approvals records itself once, so it shows on the

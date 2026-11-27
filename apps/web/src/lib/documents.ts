@@ -16,10 +16,12 @@ import { useSharedProfiles, useTravelProfile } from "./travelProfile";
 export { warningText } from "@travelmo/core";
 
 
-export function usePeopleDocuments(user: User): readonly PersonDocuments[] | undefined {
-  const own = useTravelProfile(user.uid);
-  const shared = useSharedProfiles(user);
-  return useMemo(() => (own === undefined || !shared ? undefined : peopleDocuments(own, shared, user.uid)), [own, shared, user.uid]);
+let cachedAirportPlaceLookup: { airportPlace?: PlaceLookup } | undefined;
+
+export function usePeopleDocuments(user: User, enabled = true): readonly PersonDocuments[] | undefined {
+  const own = useTravelProfile(user.uid, enabled);
+  const shared = useSharedProfiles(user, enabled);
+  return useMemo(() => (!enabled || own === undefined || !shared ? undefined : peopleDocuments(own, shared, user.uid)), [enabled, own, shared, user.uid]);
 }
 
 // Warnings for each trip, by id. The airport table, needed to tell whether a
@@ -37,13 +39,16 @@ export function useTripWarnings(
     () => (people ? trips.filter((t) => segmentsByTrip[t.id] && tripWarnings(people, t, undefined, today).length) : []),
     [people, trips, segmentsByTrip, today],
   );
-  const [lookup, setLookup] = useState<{ airportPlace?: PlaceLookup }>();
+  const [lookup, setLookup] = useState<{ airportPlace?: PlaceLookup } | undefined>(() => cachedAirportPlaceLookup);
   const wanted = candidates.length > 0;
   useEffect(() => {
-    if (!wanted) return;
+    if (!wanted || lookup) return;
     let current = true;
     import("@travelmo/core/airportPlaces")
-      .then((m) => current && setLookup({ airportPlace: m.airportPlace }))
+      .then((m) => {
+        cachedAirportPlaceLookup = { airportPlace: m.airportPlace };
+        if (current) setLookup(cachedAirportPlaceLookup);
+      })
       .catch((error) => {
         console.error("Loading the airport table failed; warning of every document", error);
         if (current) setLookup({});
@@ -51,7 +56,7 @@ export function useTripWarnings(
     return () => {
       current = false;
     };
-  }, [wanted]);
+  }, [wanted, lookup]);
   return useMemo(() => {
     if (!people || !lookup) return {};
     return Object.fromEntries(

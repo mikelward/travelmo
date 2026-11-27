@@ -10,9 +10,12 @@ import {
   type User,
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { recordSelf, useAccess, type Access } from "./access";
 import { adoptFirestoreCache, firebaseAuth, firestore } from "./firebase";
+import { clearLiveCache } from "./liveCache";
+import { clearSegmentCache } from "./segmentCache";
+import { useProfile } from "./trips";
 
 type AuthState = {
   user: User | null | undefined;
@@ -54,11 +57,45 @@ async function saveProfile(user: User): Promise<void> {
   await setDoc(doc(firestore(), paths.user(user.uid)), profile, { merge: true });
 }
 
+const signIn = async () => {
+  await signInWithPopup(firebaseAuth(), new GoogleAuthProvider());
+};
+
+const signOut = () => {
+  clearLiveCache();
+  clearSegmentCache();
+  return firebaseSignOut(firebaseAuth());
+};
+
+function ProfileSync({ user, hasProfile }: { user: User; hasProfile: boolean }) {
+  const existing = useProfile(user.uid);
+  useEffect(() => {
+    if (!existing) return;
+    const email = user.email?.toLowerCase();
+    const same =
+      hasProfile &&
+      (email === undefined || existing.email === email) &&
+      (user.displayName == null || existing.displayName === user.displayName) &&
+      (user.photoURL == null || existing.photoURL === user.photoURL);
+    if (!same) {
+      saveProfile(user).catch((error) => console.error("Saving profile failed", error));
+    }
+  }, [user, existing, hasProfile]);
+  return null;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null | undefined>(undefined);
+  const lastUidRef = useRef<string | null>(null);
 
   useEffect(() => {
     return onAuthStateChanged(firebaseAuth(), async (next) => {
+      const nextUid = next?.uid ?? null;
+      if (lastUidRef.current !== null && lastUidRef.current !== nextUid) {
+        clearLiveCache();
+        clearSegmentCache();
+      }
+      lastUidRef.current = nextUid;
       // Before anything reads Firestore for this account.
       if (next) {
         await adoptFirestoreCache(next.uid).catch((error) =>
@@ -72,10 +109,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const access = useAccess(user);
   const approved = access.state === "approved";
-  // The rules refuse the user document to an account not yet approved.
-  useEffect(() => {
-    if (user && approved) saveProfile(user).catch((error) => console.error("Saving profile failed", error));
-  }, [user, approved]);
   const email = user?.emailVerified && user.email ? user.email.toLowerCase() : undefined;
   const unrecorded = access.state === "approved" && access.hasProfile && !access.record && !!email;
   useEffect(() => {
@@ -84,15 +117,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, email, unrecorded]);
 
-  const value: AuthState = {
-    user,
-    access,
-    signIn: async () => {
-      await signInWithPopup(firebaseAuth(), new GoogleAuthProvider());
-    },
-    signOut: () => firebaseSignOut(firebaseAuth()),
-  };
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  const value = useMemo<AuthState>(
+    () => ({
+      user,
+      access,
+      signIn,
+      signOut,
+    }),
+    [user, access],
+  );
+  return (
+    <AuthContext.Provider value={value}>
+      {user && approved && <ProfileSync user={user} hasProfile={access.hasProfile} />}
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth(): AuthState {

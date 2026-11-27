@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarFeed, ParsedMessage, Segment, SenderPatterns, Trip, UserProfile, myAddresses, paths, queryAddresses, flagsUnknown, tripFlagsToWrite } from "@travelmo/core";
+import { CalendarFeed, ParsedMessage, Segment, SenderPatterns, Trip, UserProfile, myAddresses, paths, queryAddresses, flagsUnknown, reviewCacheCoversLatest, tripFlagsToWrite } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import {
   collection,
@@ -19,10 +19,29 @@ import {
   getDocsFromServer,
   runTransaction,
 } from "firebase/firestore";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { z } from "zod";
+import { localToday, msUntilNextLocalDay } from "./dates";
 import { firestore } from "./firebase";
-import { loadAllSegments, peekAllSegments, type AllSegments } from "./segmentCache";
+import { onClearCache, peekLive, peekLivePrefix, subscribeLive, useLiveSubscription } from "./liveCache";
+import { loadAllSegments, peekAllSegments, peekTripSegments, type AllSegments } from "./segmentCache";
+
+let parsedMessagesGeneration = 0;
+let parsedMessagesCache: { uid: string; cap: number; records: ParsedMessage[]; done: boolean } | undefined;
+const repairedTripVersions = new Set<string>();
+const pendingRepairs: Array<{ key: string; id: string; kept: KeptFlags }> = [];
+const failedRepairJobs = new Map<string, { key: string; id: string; kept: KeptFlags }>();
+let activeRepairs = 0;
+let onlineRepairListenerAttached = false;
+const REPAIR_CONCURRENCY = 4;
+
+onClearCache(() => {
+  parsedMessagesGeneration += 1;
+  parsedMessagesCache = undefined;
+  repairedTripVersions.clear();
+  pendingRepairs.length = 0;
+  failedRepairJobs.clear();
+});
 
 function parseDocs<T extends z.ZodType>(schema: T, snapshot: QuerySnapshot<DocumentData>): z.infer<T>[] {
   const out: z.infer<T>[] = [];
@@ -34,127 +53,163 @@ function parseDocs<T extends z.ZodType>(schema: T, snapshot: QuerySnapshot<Docum
   return out;
 }
 
-export function useTrips(user: User): Trip[] | undefined {
-  const [own, setOwn] = useState<Trip[]>();
-  const [sharedWithMe, setSharedWithMe] = useState<Trip[]>();
+export function useTrips(user: User, enabled = true): Trip[] | undefined {
   // Shared with any of the user's addresses (SPEC "Linked email addresses"),
   // in one query; keyed by the list, so a newly linked address re-queries.
   const addresses = queryAddresses(useAddresses(user)).join("\n");
 
-  useEffect(() => {
-    return onSnapshot(
-      query(collection(firestore(), paths.trips()), where("ownerUid", "==", user.uid)),
-      (s) => setOwn(parseDocs(Trip, s)),
-      (error) => console.error("Trips subscription failed", error),
-    );
-  }, [user.uid]);
+  const own = useLiveSubscription<Trip[]>(
+    enabled ? `trips:own:${user.uid}` : undefined,
+    (emit, fail) =>
+      onSnapshot(
+        query(collection(firestore(), paths.trips()), where("ownerUid", "==", user.uid)),
+        (s) => emit(parseDocs(Trip, s)),
+        (error) => {
+          console.error("Trips subscription failed", error);
+          fail();
+        },
+      ),
+  );
 
-  useEffect(() => {
-    if (!addresses) return;
-    return onSnapshot(
-      query(collection(firestore(), paths.trips()), where("sharedWith", "array-contains-any", addresses.split("\n"))),
-      (s) => setSharedWithMe(parseDocs(Trip, s)),
-      (error) => console.error("Shared trips subscription failed", error),
-    );
-  }, [addresses]);
+  const sharedWithMe = useLiveSubscription<Trip[]>(
+    enabled && addresses ? `trips:shared:${user.uid}:${addresses}` : undefined,
+    (emit, fail) =>
+      onSnapshot(
+        query(collection(firestore(), paths.trips()), where("sharedWith", "array-contains-any", addresses.split("\n"))),
+        (s) => emit(parseDocs(Trip, s)),
+        (error) => {
+          console.error("Shared trips subscription failed", error);
+          fail();
+        },
+      ),
+  );
 
   return useMemo(() => {
+    if (!enabled) return undefined;
     const shared = addresses ? sharedWithMe : [];
     if (!own || !shared) return undefined;
     const byId = new Map<string, Trip>();
     for (const trip of [...own, ...shared]) byId.set(trip.id, trip);
     return [...byId.values()];
-  }, [own, sharedWithMe, addresses]);
+  }, [enabled, own, sharedWithMe, addresses]);
 }
 
-export function useTrip(tripId: string): Trip | null | undefined {
-  const [trip, setTrip] = useState<Trip | null>();
-  useEffect(() => {
-    return onSnapshot(
-      doc(firestore(), paths.trip(tripId)),
-      (s) => {
-        if (!s.exists()) return setTrip(null);
-        const result = Trip.safeParse(s.data());
-        if (result.success) setTrip(result.data);
-        else console.error(`Malformed trip ${s.ref.path}`, result.error);
-      },
-      (error) => {
-        console.error("Trip subscription failed", error);
-        setTrip(null);
-      },
-    );
-  }, [tripId]);
-  return trip;
+export function useTrip(tripId: string, uid?: string): Trip | null | undefined {
+  const live = useLiveSubscription<Trip | null>(
+    `trip:${tripId}`,
+    (emit, fail) =>
+      onSnapshot(
+        doc(firestore(), paths.trip(tripId)),
+        (s) => {
+          if (!s.exists()) return emit(null);
+          const result = Trip.safeParse(s.data());
+          if (result.success) emit(result.data);
+          else console.error(`Malformed trip ${s.ref.path}`, result.error);
+        },
+        (error) => {
+          console.error("Trip subscription failed", error);
+          fail({ value: null });
+        },
+      ),
+  );
+  if (live !== undefined) return live;
+  if (!uid) return undefined;
+  const cachedOwn = peekLive<Trip[]>(`trips:own:${uid}`);
+  const fromOwn = cachedOwn?.find((t) => t.id === tripId);
+  if (fromOwn) return fromOwn;
+  for (const shared of peekLivePrefix<Trip[]>(`trips:shared:${uid}:`)) {
+    const match = shared.find((t) => t.id === tripId);
+    if (match) return match;
+  }
+  return undefined;
 }
 
-export function useSegments(tripId: string): Segment[] | undefined {
-  const [segments, setSegments] = useState<Segment[]>();
-  useEffect(() => {
-    return onSnapshot(
-      query(collection(firestore(), paths.segments(tripId)), orderBy("start")),
-      (s) => setSegments(parseDocs(Segment, s)),
-      (error) => console.error("Segments subscription failed", error),
-    );
-  }, [tripId]);
-  return segments;
-}
-
-// Segments of a few trips at once, for the list's "next up" line. One
-// listener per trip, so callers keep the set small. Only trips still asked
-// for are returned: a trip that dropped out of the set has no listener, so
-// its cached segments could go stale.
-export function useSegmentsOf(tripIds: readonly string[]): Record<string, Segment[]> {
-  const [byTrip, setByTrip] = useState<Record<string, Segment[]>>({});
-  const key = tripIds.join("\n");
-  useEffect(() => {
-    const ids = key ? key.split("\n") : [];
-    const unsubscribes = ids.map((tripId) =>
+export function useSegments(tripId: string, uid?: string, updatedAt?: string): Segment[] | undefined {
+  const live = useLiveSubscription<Segment[]>(
+    `segments:${tripId}`,
+    (emit, fail) =>
       onSnapshot(
         query(collection(firestore(), paths.segments(tripId)), orderBy("start")),
-        (s) => setByTrip((current) => ({ ...current, [tripId]: parseDocs(Segment, s) })),
-        (error) => console.error(`Segments subscription failed for ${tripId}`, error),
+        (s) => emit(parseDocs(Segment, s)),
+        (error) => {
+          console.error("Segments subscription failed", error);
+          fail();
+        },
       ),
-    );
-    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
-  }, [key]);
-  return useMemo(() => {
+  );
+  if (live !== undefined) return live;
+  return uid ? peekTripSegments(uid, tripId, updatedAt) : undefined;
+}
+
+const emptyByTrip: Record<string, Segment[]> = {};
+const emptyByTripServerSnapshot = () => emptyByTrip;
+
+// Segments of a few trips at once, for the list's "next up" line. Shares the
+// same liveCache streams as `useSegments`, so opening a detailed trip from the
+// list renders immediately without attaching a duplicate Firestore listener.
+export function useSegmentsOf(tripIds: readonly string[]): Record<string, Segment[]> {
+  const key = [...new Set(tripIds)].join("\n");
+  const snapshotRef = useRef<{ key: string; value: Record<string, Segment[]> }>({ key: "", value: emptyByTrip });
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => {
+      const ids = key ? key.split("\n") : [];
+      const unsubscribes = ids.map((tripId) =>
+        subscribeLive<Segment[]>(
+          `segments:${tripId}`,
+          (emit, fail) =>
+            onSnapshot(
+              query(collection(firestore(), paths.segments(tripId)), orderBy("start")),
+              (s) => emit(parseDocs(Segment, s)),
+              (error) => {
+                console.error(`Segments subscription failed for ${tripId}`, error);
+                fail();
+              },
+            ),
+          onStoreChange,
+        ),
+      );
+      return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
+    },
+    [key],
+  );
+  const getSnapshot = useCallback(() => {
     const ids = key ? key.split("\n") : [];
-    return Object.fromEntries(ids.flatMap((id) => (byTrip[id] ? [[id, byTrip[id]]] : [])));
-  }, [byTrip, key]);
+    const prev = snapshotRef.current;
+    if (prev.key === key) {
+      let count = 0;
+      let same = true;
+      for (const id of ids) {
+        const live = peekLive<Segment[]>(`segments:${id}`);
+        if (live !== undefined) count += 1;
+        if (prev.value[id] !== live) {
+          same = false;
+          break;
+        }
+      }
+      if (same && Object.keys(prev.value).length === count) return prev.value;
+    }
+    const next: Record<string, Segment[]> = {};
+    for (const id of ids) {
+      const live = peekLive<Segment[]>(`segments:${id}`);
+      if (live !== undefined) next[id] = live;
+    }
+    const value = Object.keys(next).length === 0 ? emptyByTrip : next;
+    snapshotRef.current = { key, value };
+    return value;
+  }, [key]);
+  return useSyncExternalStore(subscribe, getSnapshot, emptyByTripServerSnapshot);
 }
 
 // These trips' bookings, each read once per version of the trip (its
-// `updatedAt`, which every booking change moves), as trips join the set:
-// one already read isn't read again while it stays as it was. Only trips
-// still asked for, and only as read for their current version.
-export function useSegmentsOnce(trips: readonly Pick<Trip, "id" | "updatedAt">[] | undefined): Record<string, Segment[]> {
-  const [read, setRead] = useState<Record<string, { version: string; segments: Segment[] }>>({});
-  const started = useRef(new Set<string>());
-  const key = (trips ?? []).map((t) => `${t.id}@${t.updatedAt}`).join("\n");
-  useEffect(() => {
-    for (const entry of key ? key.split("\n") : []) {
-      if (started.current.has(entry)) continue;
-      started.current.add(entry);
-      const [id = "", version = ""] = entry.split("@");
-      getDocs(query(collection(firestore(), paths.segments(id)), orderBy("start"))).then(
-        (s) => setRead((was) => ({ ...was, [id]: { version, segments: parseDocs(Segment, s) } })),
-        (error: unknown) => {
-          // Not read: tried again the next time it is asked for.
-          console.error(`Reading segments failed for ${id}`, error);
-          started.current.delete(entry);
-        },
-      );
-    }
-  }, [key]);
-  return useMemo(() => {
-    const out: Record<string, Segment[]> = {};
-    for (const t of trips ?? []) {
-      const got = read[t.id];
-      if (got && got.version === t.updatedAt) out[t.id] = got.segments;
-    }
-    return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` names the trips and their versions
-  }, [read, key]);
+// `updatedAt`, which every booking change moves) with bounded concurrency and
+// shared version caching: one already read isn't read again while it stays as
+// it was.
+export function useSegmentsOnce(
+  trips: readonly Pick<Trip, "id" | "updatedAt">[] | undefined,
+  uid = "",
+): Record<string, Segment[]> {
+  const all = useAllSegments(trips && trips.length > 0 ? trips : undefined, uid);
+  return all?.byTrip ?? emptyByTrip;
 }
 
 export type { AllSegments } from "./segmentCache";
@@ -229,13 +284,54 @@ export function useAllSegments(trips: readonly Pick<Trip, "id" | "updatedAt">[] 
 
 // The current instant, refreshed on an interval so "next up" lines move on
 // as events pass without anything else changing.
-export function useNow(intervalMs = 60_000): string {
+export function useNow(intervalMs = 60_000, enabled = true): string {
   const [now, setNow] = useState(() => new Date().toISOString());
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date().toISOString()), intervalMs);
-    return () => clearInterval(timer);
-  }, [intervalMs]);
+    if (!enabled) return;
+    const tick = () => setNow(new Date().toISOString());
+    const immediate = setTimeout(tick, 0);
+    const timer = setInterval(tick, intervalMs);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearTimeout(immediate);
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [intervalMs, enabled]);
   return now;
+}
+
+// Today's local YYYY-MM-DD date, updating at local midnight (and when the tab
+// becomes visible again) so trips roll into "Now" overnight even when no
+// minute-by-minute timer is active.
+export function useLocalToday(): string {
+  const [today, setToday] = useState(() => localToday());
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      if (timer !== undefined) clearTimeout(timer);
+      timer = setTimeout(() => {
+        setToday(localToday());
+        schedule();
+      }, msUntilNextLocalDay());
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        setToday(localToday());
+        schedule();
+      }
+    };
+    schedule();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      if (timer !== undefined) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+  return today;
 }
 
 // Every address that is the user's: the sign-in, then those confirmed and
@@ -248,19 +344,22 @@ export function useAddresses(user: User): string[] {
 }
 
 export function useProfile(uid: string): UserProfile | undefined {
-  const [profile, setProfile] = useState<UserProfile>();
-  useEffect(() => {
-    return onSnapshot(
-      doc(firestore(), paths.user(uid)),
-      (s) => {
-        const result = UserProfile.safeParse(s.data() ?? {});
-        if (result.success) setProfile(result.data);
-        else console.error(`Malformed profile ${s.ref.path}`, result.error);
-      },
-      (error) => console.error("Profile subscription failed", error),
-    );
-  }, [uid]);
-  return profile;
+  return useLiveSubscription<UserProfile>(
+    `profile:${uid}`,
+    (emit, fail) =>
+      onSnapshot(
+        doc(firestore(), paths.user(uid)),
+        (s) => {
+          const result = UserProfile.safeParse(s.data() ?? {});
+          if (result.success) emit(result.data);
+          else console.error(`Malformed profile ${s.ref.path}`, result.error);
+        },
+        (error) => {
+          console.error("Profile subscription failed", error);
+          fail();
+        },
+      ),
+  );
 }
 
 // The most recent import decisions, newest first; the caller filters by
@@ -269,81 +368,152 @@ export function useProfile(uid: string): UserProfile | undefined {
 // Every import record, newest first, read in pages while `enabled` (a
 // search), up to `cap`: one import can read thousands of emails, more than
 // the review list shows. `done` once all are read; a failed read stops it
-// with what was read so far.
-export function useAllParsedMessages(uid: string, enabled: boolean, cap = 20_000): { records: ParsedMessage[]; done: boolean } | undefined {
-  const [state, setState] = useState<{ uid: string; records: ParsedMessage[]; done: boolean }>();
+// with what was read so far. Server-confirmed completed reads stay in memory
+// for the session until new imports advance past the live `latest` window,
+// so clearing and re-typing a search does not re-read up to 20,000 docs.
+export function useAllParsedMessages(
+  uid: string,
+  enabled: boolean,
+  latest?: readonly ParsedMessage[],
+  latestWindow = 100,
+  cap = 20_000,
+): { records: ParsedMessage[]; done: boolean } | undefined {
+  const cacheMatches = parsedMessagesCache && parsedMessagesCache.uid === uid && parsedMessagesCache.cap === cap && parsedMessagesCache.done;
+  const cacheStale = Boolean(cacheMatches && !reviewCacheCoversLatest(parsedMessagesCache!.records, latest, latestWindow));
+  const cached = cacheMatches && !cacheStale ? parsedMessagesCache : undefined;
+  const [state, setState] = useState<{ uid: string; records: ParsedMessage[]; done: boolean; confirmed: boolean } | undefined>(
+    cached ? { ...cached, confirmed: true } : undefined,
+  );
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
-    if (!enabled) return;
+    if (cacheStale && parsedMessagesCache?.uid === uid && parsedMessagesCache.cap === cap) {
+      parsedMessagesCache = undefined;
+    }
+  }, [cacheStale, uid, cap]);
+  useEffect(() => {
+    if (!enabled || cached) return;
     let cancelled = false;
+    const generation = parsedMessagesGeneration;
     const page = 1000;
     void (async () => {
       const records: ParsedMessage[] = [];
       let last: QuerySnapshot<DocumentData>["docs"][number] | undefined;
+      let confirmed = true;
       try {
         for (;;) {
           const base = collection(firestore(), `${paths.user(uid)}/parsedMessages`);
           const snapshot = await getDocs(query(base, orderBy("processedAt", "desc"), ...(last ? [startAfter(last)] : []), limit(page)));
-          if (cancelled) return;
+          if (cancelled || generation !== parsedMessagesGeneration) return;
+          if (snapshot.metadata.fromCache) confirmed = false;
           records.push(...parseDocs(ParsedMessage, snapshot));
           last = snapshot.docs.at(-1);
           const done = snapshot.size < page || records.length >= cap;
-          setState({ uid, records: [...records], done });
+          const next = { uid, records: [...records], done, confirmed: done && confirmed };
+          if (done && confirmed && generation === parsedMessagesGeneration) parsedMessagesCache = { uid, records: next.records, done, cap };
+          setState(next);
           if (done) return;
         }
       } catch (error) {
         console.error("Reading import records for a search failed", error);
-        if (!cancelled) setState({ uid, records: [...records], done: true });
+        if (!cancelled && generation === parsedMessagesGeneration) setState({ uid, records: [...records], done: true, confirmed: false });
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [uid, enabled, cap]);
-  return enabled && state?.uid === uid ? state : undefined;
+  }, [uid, enabled, cap, cached, retry]);
+  const needsRetry = Boolean(enabled && !cached && state?.uid === uid && state.done && !state.confirmed);
+  useEffect(() => {
+    if (!needsRetry) return;
+    const onOnline = () => setRetry((n) => n + 1);
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [needsRetry]);
+  if (!enabled) return undefined;
+  if (cached) return cached;
+  return state?.uid === uid ? state : undefined;
 }
 
 // The `max` most recently read import records, newest first.
 export function useParsedMessages(uid: string, max = 100): ParsedMessage[] | undefined {
-  // Tagged with the query they answer, so a longer list shows as loading
-  // rather than the shorter one's records.
-  const key = `${uid}|${max}`;
-  const [loaded, setLoaded] = useState<{ key: string; records: ParsedMessage[] }>();
-  useEffect(() => {
-    return onSnapshot(
-      query(collection(firestore(), `${paths.user(uid)}/parsedMessages`), orderBy("processedAt", "desc"), limit(max)),
-      (s) => setLoaded({ key, records: parseDocs(ParsedMessage, s) }),
-      (error) => console.error("Parsed messages subscription failed", error),
-    );
-  }, [key, uid, max]);
-  return loaded?.key === key ? loaded.records : undefined;
+  return useLiveSubscription<ParsedMessage[]>(
+    `parsedMessages:${uid}:${max}`,
+    (emit, fail) =>
+      onSnapshot(
+        query(collection(firestore(), `${paths.user(uid)}/parsedMessages`), orderBy("processedAt", "desc"), limit(max)),
+        (s) => emit(parseDocs(ParsedMessage, s)),
+        (error) => {
+          console.error("Parsed messages subscription failed", error);
+          fail();
+        },
+      ),
+  );
 }
 
 export function useFeeds(uid: string): CalendarFeed[] | undefined {
-  const [feeds, setFeeds] = useState<CalendarFeed[]>();
-  useEffect(() => {
-    return onSnapshot(
-      query(collection(firestore(), paths.feeds(uid)), orderBy("addedAt")),
-      (s) => setFeeds(parseDocs(CalendarFeed, s)),
-      (error) => console.error("Feeds subscription failed", error),
-    );
-  }, [uid]);
-  return feeds;
+  return useLiveSubscription<CalendarFeed[]>(
+    `feeds:${uid}`,
+    (emit, fail) =>
+      onSnapshot(
+        query(collection(firestore(), paths.feeds(uid)), orderBy("addedAt")),
+        (s) => emit(parseDocs(CalendarFeed, s)),
+        (error) => {
+          console.error("Feeds subscription failed", error);
+          fail();
+        },
+      ),
+  );
 }
 
-export function useSenderPatterns(uid: string): SenderPatterns | undefined {
-  const [patterns, setPatterns] = useState<SenderPatterns>();
-  useEffect(() => {
-    return onSnapshot(
-      doc(firestore(), paths.senderPatterns(uid)),
-      (s) => {
-        const result = SenderPatterns.safeParse(s.data() ?? {});
-        if (result.success) setPatterns(result.data);
-        else console.error(`Malformed patterns ${s.ref.path}`, result.error);
-      },
-      (error) => console.error("Patterns subscription failed", error),
-    );
-  }, [uid]);
-  return patterns;
+export function useSenderPatterns(uid: string, enabled = true): SenderPatterns | undefined {
+  return useLiveSubscription<SenderPatterns>(
+    enabled ? `senderPatterns:${uid}` : undefined,
+    (emit, fail) =>
+      onSnapshot(
+        doc(firestore(), paths.senderPatterns(uid)),
+        (s) => {
+          const result = SenderPatterns.safeParse(s.data() ?? {});
+          if (result.success) emit(result.data);
+          else console.error(`Malformed patterns ${s.ref.path}`, result.error);
+        },
+        (error) => {
+          console.error("Patterns subscription failed", error);
+          fail();
+        },
+      ),
+  );
+}
+
+function ensureOnlineRepairListener(): void {
+  if (onlineRepairListenerAttached || typeof window === "undefined") return;
+  onlineRepairListenerAttached = true;
+  window.addEventListener("online", () => {
+    if (failedRepairJobs.size === 0) return;
+    for (const job of failedRepairJobs.values()) pendingRepairs.push(job);
+    failedRepairJobs.clear();
+    drainRepairQueue();
+  });
+}
+
+function drainRepairQueue(): void {
+  ensureOnlineRepairListener();
+  while (activeRepairs < REPAIR_CONCURRENCY && pendingRepairs.length > 0) {
+    const job = pendingRepairs.shift()!;
+    const generation = parsedMessagesGeneration;
+    activeRepairs += 1;
+    void repairTripFlags(job.id, job.kept)
+      .then(() => {
+        if (generation === parsedMessagesGeneration) failedRepairJobs.delete(job.id);
+      })
+      .catch((error: unknown) => {
+        if (generation === parsedMessagesGeneration) failedRepairJobs.set(job.id, job);
+        console.warn(`Keeping trip ${job.id}'s list flags failed`, error);
+      })
+      .finally(() => {
+        activeRepairs -= 1;
+        drainRepairQueue();
+      });
+  }
 }
 
 // Keeps the flags the trip list filters by (`allCancelled`, `localOnly`,
@@ -358,16 +528,26 @@ export function useKeepTripFlags(
   segmentsOf: (tripId: string) => readonly Segment[] | undefined,
   once = false,
 ): void {
-  // The trips whose bookings disagree with their flags, with the flags they have.
+  // Each (tripId, updatedAt, currentFlags) is attempted at most once per
+  // session with bounded concurrency, preventing O(N^2) repair storms as
+  // trips load or finish repairing.
   const due = (trips ?? []).flatMap((trip) => {
     const segments = trip.deleting || (once && !flagsUnknown(trip)) ? undefined : segmentsOf(trip.id);
-    return segments && tripFlagsToWrite(trip, segments) ? [{ id: trip.id, allCancelled: trip.allCancelled, localOnly: trip.localOnly, travelers: trip.travelers, setting: trip.setting }] : [];
+    if (!segments || !tripFlagsToWrite(trip, segments)) return [];
+    const repairKey = `${trip.id}@${trip.updatedAt}`;
+    if (repairedTripVersions.has(repairKey)) return [];
+    return [{ key: repairKey, id: trip.id, allCancelled: trip.allCancelled, localOnly: trip.localOnly, travelers: trip.travelers, setting: trip.setting }];
   });
-  const key = JSON.stringify(due);
+  const key = due.length > 0 ? JSON.stringify(due) : "";
   useEffect(() => {
-    for (const { id, ...kept } of JSON.parse(key) as ({ id: string } & KeptFlags)[]) {
-      repairTripFlags(id, kept).catch((error: unknown) => console.warn(`Keeping trip ${id}'s list flags failed`, error));
+    if (!key) return;
+    for (const { key: repairKey, id, ...kept } of JSON.parse(key) as ({ key: string; id: string } & KeptFlags)[]) {
+      if (repairedTripVersions.has(repairKey)) continue;
+      repairedTripVersions.add(repairKey);
+      failedRepairJobs.delete(id);
+      pendingRepairs.push({ key: repairKey, id, kept });
     }
+    drainRepairQueue();
   }, [key]);
 }
 

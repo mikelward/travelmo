@@ -53,8 +53,10 @@ export function useHomes(user: User): Homes | undefined {
   const people = usePeople(user.uid);
   const own = useMemo(() => trips?.filter((t) => t.ownerUid === user.uid), [trips, user.uid]);
   const all = useAllSegments(own, user.uid);
-  if (!trips || !all || !profile || !people) return undefined;
-  return deriveHomes(ownTripSegments(trips, all.byTrip, user.uid, people), all.failed, profile.homes ?? [], profile.homeAirports ?? []);
+  return useMemo(() => {
+    if (!trips || !all || !profile || !people) return undefined;
+    return deriveHomes(ownTripSegments(trips, all.byTrip, user.uid, people), all.failed, profile.homes ?? [], profile.homeAirports ?? []);
+  }, [trips, all, profile, people, user.uid]);
 }
 
 // Runs a change to the corrections, logging a failure by what it was doing

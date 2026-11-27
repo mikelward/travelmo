@@ -3,11 +3,10 @@
 import { addMonths, displayBounds, displayTitles, formatDateRange, monthLabel, monthOf, monthWeeks, weekBars, type Trip, type TripBar } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { SignInGate } from "@/components/SignInGate";
-import { localToday } from "@/lib/dates";
 import { useSaveForOffline } from "@/lib/offline";
-import { useTrips } from "@/lib/trips";
+import { useLocalToday, useTrips } from "@/lib/trips";
 
 const buttonClass =
   "rounded-lg border border-zinc-300 px-3 py-1.5  hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
@@ -87,14 +86,14 @@ function Week({
 function Calendar({ user }: { user: User }) {
   useSaveForOffline();
   const trips = useTrips(user);
-  const today = localToday();
+  const today = useLocalToday();
   const [month, setMonth] = useState(monthOf(today));
-  if (!trips) return <p className="text-muted">Loading trips…</p>;
-  const weeks = monthWeeks(month);
+  const weeks = useMemo(() => monthWeeks(month), [month]);
   // Among all the trips, not just this month's: the same camp a year
   // earlier still gets this one its dates.
-  const titles = displayTitles(trips);
-  const inMonth = trips.filter((t) => monthOf(t.start) <= month && monthOf(t.end) >= month);
+  const titles = useMemo(() => (trips ? displayTitles(trips) : new Map<string, string>()), [trips]);
+  const inMonth = useMemo(() => (trips ? trips.filter((t) => monthOf(t.start) <= month && monthOf(t.end) >= month) : []), [trips, month]);
+  if (!trips) return <p className="text-muted">Loading trips…</p>;
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-2">

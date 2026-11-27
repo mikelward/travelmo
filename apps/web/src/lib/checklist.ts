@@ -45,40 +45,39 @@ function slotted<T>(schema: z.ZodType<T>, snap: QuerySnapshot): Slotted<T>[] {
     });
 }
 
-function useSlotted<T>(path: string, schema: z.ZodType<T>, what: string): Slotted<T>[] | undefined {
+function useSlotted<T>(path: string | undefined, schema: z.ZodType<T>, what: string): Slotted<T>[] | undefined {
   const [state, setState] = useState<{ path: string; list: Slotted<T>[] }>();
-  useEffect(
-    () =>
-      onSnapshot(
-        collection(firestore(), path),
-        (s) => setState({ path, list: slotted(schema, s) }),
-        (error) => console.error(`${what} subscription failed`, error),
-      ),
-    [path, schema, what],
-  );
-  return state?.path === path ? state.list : undefined;
+  useEffect(() => {
+    if (!path) return;
+    return onSnapshot(
+      collection(firestore(), path),
+      (s) => setState({ path, list: slotted(schema, s) }),
+      (error) => console.error(`${what} subscription failed`, error),
+    );
+  }, [path, schema, what]);
+  return path && state?.path === path ? state.list : undefined;
 }
 
-export const useStandingReminders = (uid: string) => useSlotted(paths.tripReminders(uid), StandingReminder, "Reminders before trips");
+export const useStandingReminders = (uid: string, enabled = true) =>
+  useSlotted(enabled ? paths.tripReminders(uid) : undefined, StandingReminder, "Reminders before trips");
 
 // The viewer's own ticks and one-offs for a trip; undefined while loading.
-export function useMyChecklist(uid: string, tripId: string): { done: string[]; added: Slotted<OneOffReminder>[] } | undefined {
-  const added = useSlotted(paths.tripChecklistAdded(uid, tripId), OneOffReminder, "Trip reminders");
+export function useMyChecklist(uid: string, tripId: string, enabled = true): { done: string[]; added: Slotted<OneOffReminder>[] } | undefined {
+  const added = useSlotted(enabled ? paths.tripChecklistAdded(uid, tripId) : undefined, OneOffReminder, "Trip reminders");
   const [state, setState] = useState<{ tripId: string; done: string[] }>();
-  useEffect(
-    () =>
-      onSnapshot(
-        doc(firestore(), paths.tripChecklist(uid, tripId)),
-        (s) => {
-          const parsed = TripChecklist.safeParse(s.data() ?? {});
-          if (!parsed.success) console.error(`Malformed checklist ${s.ref.path}`, parsed.error);
-          setState({ tripId, done: parsed.success ? parsed.data.done : [] });
-        },
-        (error) => console.error("Checklist subscription failed", error),
-      ),
-    [uid, tripId],
-  );
-  if (!added || state?.tripId !== tripId) return undefined;
+  useEffect(() => {
+    if (!enabled) return;
+    return onSnapshot(
+      doc(firestore(), paths.tripChecklist(uid, tripId)),
+      (s) => {
+        const parsed = TripChecklist.safeParse(s.data() ?? {});
+        if (!parsed.success) console.error(`Malformed checklist ${s.ref.path}`, parsed.error);
+        setState({ tripId, done: parsed.success ? parsed.data.done : [] });
+      },
+      (error) => console.error("Checklist subscription failed", error),
+    );
+  }, [uid, tripId, enabled]);
+  if (!enabled || !added || state?.tripId !== tripId) return undefined;
   return { done: state.done, added };
 }
 
@@ -97,12 +96,12 @@ async function saveSlotted(collectionPath: string, prefix: string, max: number, 
       tx.set(doc(db, collectionPath, slot), data);
       return;
     }
-    for (let i = 0; i < max; i++) {
-      const ref = doc(db, collectionPath, `${prefix}${i}`);
-      if (!(await tx.get(ref)).exists()) {
-        tx.set(ref, data);
-        return;
-      }
+    const refs = Array.from({ length: max }, (_, i) => doc(db, collectionPath, `${prefix}${i}`));
+    const snaps = await Promise.all(refs.map((ref) => tx.get(ref)));
+    const free = snaps.findIndex((s) => !s.exists());
+    if (free >= 0) {
+      tx.set(refs[free]!, data);
+      return;
     }
     throw new Error(`At most ${max}.`);
   });
@@ -129,6 +128,8 @@ export async function setDone(uid: string, tripId: string, id: string, done: boo
   });
 }
 
+let cachedChecklistAirportLookup: { place: PlaceLookup } | undefined;
+
 // The trip's checklist for the viewer: their standing reminders when the
 // trip goes abroad (from home on its first day, as ride suggestions work
 // home out, with their corrections from Profile), and their one-offs. The
@@ -142,15 +143,19 @@ export function useTripChecklist(
   corrections: readonly HomeCorrection[] | undefined,
   today: string,
 ): { entries: ChecklistEntry[]; added: Slotted<OneOffReminder>[] } | undefined {
-  const standing = useStandingReminders(uid);
-  const mine = useMyChecklist(uid, tripId);
-  const wanted = !!trip && checklistShown(trip, today) && !!standing?.length && !!segments?.length;
-  const [lookup, setLookup] = useState<{ place: PlaceLookup } | Error>();
+  const shown = !!trip && checklistShown(trip, today);
+  const standing = useStandingReminders(uid, shown);
+  const mine = useMyChecklist(uid, tripId, shown);
+  const wanted = shown && !!standing?.length && !!segments?.length;
+  const [lookup, setLookup] = useState<{ place: PlaceLookup } | Error | undefined>(() => cachedChecklistAirportLookup);
   useEffect(() => {
-    if (!wanted) return;
+    if (!wanted || lookup) return;
     let current = true;
     import("@travelmo/core/airportPlaces")
-      .then((m) => current && setLookup({ place: m.airportPlace }))
+      .then((m) => {
+        cachedChecklistAirportLookup = { place: m.airportPlace };
+        if (current) setLookup(cachedChecklistAirportLookup);
+      })
       .catch((error: Error) => {
         // Places named by airport code alone are then not placed.
         console.error("Loading the airport table failed", error);
@@ -159,11 +164,11 @@ export function useTripChecklist(
     return () => {
       current = false;
     };
-  }, [wanted]);
+  }, [wanted, lookup]);
   return useMemo(() => {
-    if (!trip || !standing || !mine || !segments || !corrections || !checklistShown(trip, today)) return undefined;
+    if (!shown || !trip || !standing || !mine || !segments || !corrections) return undefined;
     if (wanted && !lookup) return undefined;
     const international = isInternational(trip, segments, corrections, lookup instanceof Error ? undefined : lookup?.place);
     return { entries: tripChecklist(trip, standing, mine, international), added: mine.added };
-  }, [trip, standing, mine, segments, corrections, today, wanted, lookup]);
+  }, [shown, trip, standing, mine, segments, corrections, wanted, lookup]);
 }

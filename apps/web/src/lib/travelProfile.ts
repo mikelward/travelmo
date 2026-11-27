@@ -3,52 +3,60 @@
 import { LoyaltyPerson, TravelProfile, accessInvite, normalizeEmail, paths, queryAddresses, withLoyaltyPerson, type FoundLoyalty } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { collectionGroup, doc, onSnapshot, query, runTransaction, where, writeBatch, type Firestore } from "firebase/firestore";
-import { useEffect, useState } from "react";
 import { firestore } from "./firebase";
+import { useLiveSubscription } from "./liveCache";
 import { useAddresses } from "./trips";
 
 // The signed-in user's own travel profile; null when there is none yet.
-export function useTravelProfile(uid: string): TravelProfile | null | undefined {
-  const [profile, setProfile] = useState<TravelProfile | null>();
-  useEffect(() => {
-    return onSnapshot(
-      doc(firestore(), paths.travelProfile(uid)),
-      (s) => {
-        if (!s.exists()) return setProfile(null);
-        const result = TravelProfile.safeParse(s.data());
-        if (result.success) setProfile(result.data);
-        else console.error(`Malformed travel profile ${s.ref.path}`, result.error);
-      },
-      (error) => console.error("Travel profile subscription failed", error),
-    );
-  }, [uid]);
-  return profile;
+export function useTravelProfile(uid: string, enabled = true): TravelProfile | null | undefined {
+  return useLiveSubscription<TravelProfile | null>(
+    enabled ? `travelProfile:${uid}` : undefined,
+    (emit, fail) =>
+      onSnapshot(
+        doc(firestore(), paths.travelProfile(uid)),
+        (s) => {
+          if (!s.exists()) return emit(null);
+          const result = TravelProfile.safeParse(s.data());
+          if (result.success) emit(result.data);
+          else console.error(`Malformed travel profile ${s.ref.path}`, result.error);
+        },
+        (error) => {
+          console.error("Travel profile subscription failed", error);
+          fail();
+        },
+      ),
+  );
 }
 
 // Profiles other people have shared with this user, by any of their
 // addresses (verified sign-in or linked).
-export function useSharedProfiles(user: User): TravelProfile[] | undefined {
-  const [profiles, setProfiles] = useState<TravelProfile[]>();
+export function useSharedProfiles(user: User, enabled = true): TravelProfile[] | undefined {
   const addresses = queryAddresses(useAddresses(user)).join("\n");
-  useEffect(() => {
-    if (!addresses) return;
-    return onSnapshot(
-      query(collectionGroup(firestore(), "travelProfile"), where("trustedEmails", "array-contains-any", addresses.split("\n"))),
-      (s) => {
-        const out: TravelProfile[] = [];
-        for (const d of s.docs) {
-          const result = TravelProfile.safeParse(d.data());
-          if (result.success) out.push(result.data);
-          else console.error(`Skipping malformed travel profile ${d.ref.path}`, result.error);
-        }
-        setProfiles(out);
-      },
-      (error) => console.error("Shared profiles subscription failed", error),
-    );
-  }, [addresses]);
+  const profiles = useLiveSubscription<TravelProfile[]>(
+    enabled && addresses ? `sharedProfiles:${user.uid}:${addresses}` : undefined,
+    (emit, fail) =>
+      onSnapshot(
+        query(collectionGroup(firestore(), "travelProfile"), where("trustedEmails", "array-contains-any", addresses.split("\n"))),
+        (s) => {
+          const out: TravelProfile[] = [];
+          for (const d of s.docs) {
+            const result = TravelProfile.safeParse(d.data());
+            if (result.success) out.push(result.data);
+            else console.error(`Skipping malformed travel profile ${d.ref.path}`, result.error);
+          }
+          emit(out);
+        },
+        (error) => {
+          console.error("Shared profiles subscription failed", error);
+          fail();
+        },
+      ),
+  );
   // Without a verified address the user is trusted by nobody.
-  return addresses ? profiles : [];
+  return !enabled || !addresses ? EMPTY_PROFILES : profiles;
 }
+
+const EMPTY_PROFILES: TravelProfile[] = [];
 
 export const maxTrusted = 20;
 
