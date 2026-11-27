@@ -118,6 +118,14 @@ describe("prefilter, loyalty statements", () => {
     });
   });
 
+  it("reads a travel program's news of a new status, though it opens with a welcome", () => {
+    expect(statement("Example Air <ExampleAir@t.delta.com>", "Welcome to Silver Medallion® Status")).toEqual({ pass: true, reason: "loyalty statement" });
+    expect(statement("Example Hotels <rewards@email.hilton.com>", "Welcome to Gold status")).toEqual({ pass: true, reason: "loyalty statement" });
+    expect(statement("Example Hotels <rewards@email.marriott.com>", "Congratulations, you're now Platinum Elite")).toEqual({ pass: true, reason: "loyalty statement" });
+    // A shop's welcome stays out.
+    expect(statement("Example Shop <hello@shop.example>", "Welcome to Gold status").pass).toBe(false);
+  });
+
   it("keeps out a shop's, a coffee chain's or a bank's statement", () => {
     expect(statement("Example Mart <rewards@examplemart.example>", "Your Clubcard points statement").pass).toBe(false);
     expect(statement("Example Coffee <hello@examplecoffee.example>", "Your rewards statement is here").pass).toBe(false);

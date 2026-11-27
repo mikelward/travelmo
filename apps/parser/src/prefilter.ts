@@ -23,12 +23,15 @@ const subjectNoise =
   /\b(newsletter|sale|deal|offer|discount|% off|save up to|last chance|flash|points|miles|survey|feedback|how was|rate your|unsubscribe|password|verify your|welcome to)\b/i;
 
 // A travel loyalty program's statement ("your Emerald Club eStatement",
-// "Avios balance"): read for the balance and status, not a booking. Only from
+// "Avios balance") or news of a new status ("Welcome to Silver Medallion®
+// Status", "You're now Gold"): read for the balance and status, not a
+// booking. Only from
 // a travel company's own domain (an airline, hotel group or car rental
 // company, `travelLoyaltyDomains`) or a sender the user always imports:
 // shops, supermarkets, coffee chains and card issuers send statements too,
 // and those never reach the model.
-const statementWords = /\b(e-?statements?|statements?|account summary|(points|miles|avios) balance|balance update)\b/i;
+const statementWords =
+  /\b(e-?statements?|statements?|account summary|(points|miles|avios) balance|balance update|medallion|elite|status (update|change|match|extension)|(silver|gold|platinum|diamond|titanium) (status|member|tier))\b/i;
 export const statementReason = "loyalty statement";
 
 export const travelLoyaltyDomains = [

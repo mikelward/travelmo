@@ -10,14 +10,15 @@ import { travelLoyaltyDomains } from "./prefilter";
 // reading started over, costs Gmail reads but never imports twice.
 
 // Booking-like subjects over the whole mailbox, and travel programs' recent
-// statements (the pre-filter reads only those under 60 days old); the
+// statements and news of a new status ("Welcome to Silver Medallion®
+// Status"; the pre-filter reads only those under 60 days old); the
 // pre-filter and the model decide the rest.
 // The same search for every provider, in its own query language.
 export const backfillSubjects = [
   "booking", "reservation", "confirmation", "confirmed", "itinerary", "ticket", "tickets", "flight", "hotel", "rental",
   "check-in", "boarding pass", "cancellation", "cancelation", "cancelled", "canceled",
 ] as const;
-export const statementSubjects = ["statement", "estatement", "account summary", "balance"] as const;
+export const statementSubjects = ["statement", "estatement", "account summary", "balance", "status", "medallion", "elite"] as const;
 export const statementDays = 60;
 const gmailTerm = (term: string) => (term.includes(" ") ? `"${term}"` : term);
 const statements = `(subject:(${statementSubjects.map(gmailTerm).join(" OR ")}) newer_than:${statementDays}d from:(${travelLoyaltyDomains.join(" OR ")}))`;

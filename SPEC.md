@@ -2636,9 +2636,11 @@ membership.
 
 A travel program's statement ("Account notification: we're pleased to
 present your Emerald Club eStatement", "November statement: …" from
-MileagePlus) is read for the balance and status, though it is no booking:
-the pre-filter passes a subject with a statement word ("statement",
-"eStatement", "account summary", "points balance") only from a travel
+MileagePlus) or news of a new status ("Welcome to Silver Medallion®
+Status") is read for the number, balance and status, though it is no
+booking: the pre-filter passes a subject with a statement or status word
+("statement", "eStatement", "account summary", "points balance",
+"Medallion", "Elite", "Gold status", "status update") only from a travel
 company's own domain (`travelLoyaltyDomains`: airlines, hotel groups, car
 rental companies) or a sender the user always imports, so a shop's,
 supermarket's, bank's or insurer's statement never reaches the model. One
