@@ -568,6 +568,12 @@ class FakeTripStore(
         movedToNew += Triple(fromTripId, segmentId, uid)
         return "new-trip"
     }
+    /** Trips split, as (from, the bookings moved, owner). */
+    val splits = mutableListOf<Triple<String, List<String>, String>>()
+    override suspend fun splitTrip(fromTripId: String, segmentIds: List<String>, uid: String): String {
+        splits += Triple(fromTripId, segmentIds, uid)
+        return "split-trip"
+    }
     /** The list's flags recorded on trips, by trip. */
     val flagsSet = mutableMapOf<String, TripFlags>()
     /** Every repair asked for, by trip, in order. */

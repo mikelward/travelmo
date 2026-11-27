@@ -1186,7 +1186,17 @@ the viewer imported links to Gmail), then "From" the sender with "Always
 import this sender" and "Never import this sender" for the owner (each where
 it isn't already the rule), all in the page's body size. A ✎ beside its title
 edits it, for those who may.
-Rename is in the trip's own ⋮ menu beside its name, for the owner.
+Rename is in the trip's own ⋮ menu beside its name, for the owner, with
+Split… once the trip has two bookings: a list of its bookings to tick, and
+above it one button for each email (or other source) that gave some of them
+and not all (`sourceGroups` in `packages/core/src/sources.ts`, mirrored in
+`Sources.kt`), which ticks every booking from it, so someone else's forwarded
+itinerary filed into the user's trip comes out in one tap. "Move N bookings
+to a new trip" (`splitTrip`, on the web and Android) makes the trip as
+"Move to another trip…" makes one (owned by the viewer, named for where the
+first booking goes, shared as the trip it leaves), moves every booking
+ticked in one transaction (at most 200), fits both trips' dates to what each
+now holds and opens the new one.
 The same people can rate a booking one to five stars and mark it a favorite
 (`rating`, `favorite` on the segment; tapping the current star clears the
 rating): a write like any other, moving the booking's revision

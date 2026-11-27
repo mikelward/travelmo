@@ -47,6 +47,7 @@ import app.travelmo.core.normalizeEmail
 import app.travelmo.core.normalizeTrusted
 import app.travelmo.core.segmentDateRange
 import app.travelmo.core.bookedDateRange
+import app.travelmo.core.compareInstants
 import app.travelmo.core.tripFlagsToWrite
 import app.travelmo.core.newTripTitle
 import app.travelmo.core.liveBounds
@@ -1153,6 +1154,89 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     }
 
     /**
+     * As the web's splitTrip: the new trip is made first, then every booking picked moves into it in one
+     * transaction, as moveSegment moves one; a split that fails takes the empty trip away again, and once done
+     * both trips' dates fit what each holds.
+     */
+    override suspend fun splitTrip(fromTripId: String, segmentIds: List<String>, uid: String): String {
+        val ids = segmentIds.distinct()
+        if (ids.isEmpty()) throw IllegalArgumentException("Pick the bookings to move")
+        if (ids.size > MAX_SPLIT_BOOKINGS) throw IllegalArgumentException("Pick at most $MAX_SPLIT_BOOKINGS bookings")
+        val fromRef = db.collection("trips").document(fromTripId)
+        val from = fromRef.get().await()
+        if (!from.exists()) throw TripGoneException("Trip no longer exists")
+        val source = tripFromDocument(fromTripId, from.data ?: emptyMap()) ?: throw IllegalStateException("Malformed trip")
+        val picked = ids.map { id ->
+            val snapshot = fromRef.collection("segments").document(id).get().await()
+            val data = snapshot.data
+            if (!snapshot.exists() || data == null) throw TripGoneException("A booking is no longer in this trip")
+            segmentFromDocument(id, fromTripId, data) ?: throw IllegalStateException("Malformed booking")
+        }.sortedWith { a, b -> compareInstants(a.start, b.start) }
+        val range = bookedDateRange(picked) ?: throw IllegalStateException("Those bookings have no dates")
+        val ref = db.collection("trips").document()
+        val now = Clock.System.now().toString()
+        try {
+            ref.setData(
+                mapOf(
+                    "id" to ref.id,
+                    "title" to newTripTitle(picked.first()),
+                    "start" to range.first,
+                    "end" to range.second,
+                    "ownerUid" to uid,
+                    "sharedWith" to if (source.ownerUid == uid) source.sharedWith else emptyList(),
+                    "createdAt" to now,
+                    "updatedAt" to now,
+                ),
+            ).await()
+            db.runTransaction { t ->
+                val f = t.get(fromRef)
+                val to = t.get(ref)
+                val current = ids.map { t.get(fromRef.collection("segments").document(it)) }
+                if (!f.exists() || !to.exists()) throw TripGoneException("Trip no longer exists")
+                if (current.any { !it.exists() }) throw TripGoneException("A booking is no longer in this trip")
+                if (f.getBoolean("deleting") == true || to.getBoolean("deleting") == true) throw TripGoneException("This trip is being deleted")
+                val movedSegments = current.map { snapshot ->
+                    val data = snapshot.data ?: throw TripGoneException("A booking is no longer in this trip")
+                    val moved = inTripDocument(data + mapOf("tripId" to ref.id, "updatedAt" to now), to.getString("cancelledAt"), now)
+                    t.setData(ref.collection("segments").document(snapshot.id), moved)
+                    t.delete(snapshot.reference)
+                    segmentFromDocument(snapshot.id, ref.id, moved) ?: throw IllegalStateException("Malformed booking")
+                }
+                val booked = bookedDateRange(movedSegments)
+                t.updateData(ref, (if (booked != null) widened(to, booked, segmentDateRange(movedSegments), now) else mapOf("updatedAt" to now)) + FLAGS_UNKNOWN)
+                t.updateData(fromRef, mapOf("updatedAt" to now) + FLAGS_UNKNOWN)
+                null
+            }.await()
+        } catch (e: Exception) {
+            // As moveSegmentToNewTrip: the trip goes only once a booking is known not to be in it.
+            withContext(NonCancellable) {
+                try {
+                    if (ref.collection("segments").document(ids.first()).get(Source.SERVER).await().exists()) {
+                        SharedLog.error(e, "Splitting a trip reported a failure, but the bookings moved; keeping the new trip")
+                    } else {
+                        SharedLog.error(e, "Splitting a trip failed; removing the empty trip")
+                        ref.delete().await()
+                    }
+                } catch (cleanup: Exception) {
+                    SharedLog.error(cleanup, "Checking or removing the new trip failed; it stays")
+                }
+            }
+            throw e
+        }
+        // Each trip's dates as its bookings now span; the split stands if this fails.
+        for (tripId in listOf(fromTripId, ref.id)) {
+            try {
+                fitTripDates(tripId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                SharedLog.error(e, "Fitting a trip's dates after a split failed; it keeps its wider dates")
+            }
+        }
+        return ref.id
+    }
+
+    /**
      * As the web's mergeTrips: the source's bookings are read outside the
      * transaction, its updatedAt standing in as a revision as in
      * fitTripDates; every booking is written under the target and deleted
@@ -1249,6 +1333,9 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     private companion object {
         /** How often a revision-checked write is retried before giving up. */
         const val ATTEMPTS = 5
+
+        /** Most bookings one split moves: two writes each, inside Firestore's 500. */
+        const val MAX_SPLIT_BOOKINGS = 200
 
         /** Firestore's batch limit, with room to spare. */
         const val BATCH = 400

@@ -275,6 +275,26 @@ test("a booking moved to a new trip gets a trip of its own", async ({ page }) =>
   await expect(page.getByRole("link", { name: /^Liverpool/ })).toHaveCount(2);
 });
 
+test("Split… moves every booking from one email to a new trip", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  await seedTrip(ownerUid, "e2e-trip");
+  // Two flights from someone else's itinerary, filed into the user's trip.
+  const theirs = { kind: "gmail" as const, id: "their-email", label: "Their itinerary", at: "2026-11-01T00:00:00Z" };
+  await seedFlight("e2e-trip", { gmailMessageIds: [], sources: [theirs] });
+  await seedFlight("e2e-trip", { id: "e2e-trip-back", title: "XX 101 DXB to MAN", start: "2026-12-20T09:00:00+04:00", end: "2026-12-20T13:00:00+00:00", gmailMessageIds: [], sources: [theirs] });
+  await page.goto("/trips/e2e-trip");
+  await expect(page.getByText("XX 101 DXB to MAN", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Trip actions" }).click();
+  await page.getByRole("menuitem", { name: "Split…" }).click();
+  const dialog = page.getByRole("dialog", { name: "Split trip" });
+  await dialog.getByRole("button", { name: "Their itinerary (2)" }).click();
+  await dialog.getByRole("button", { name: "Move 2 bookings to a new trip" }).click();
+  await expect(page).not.toHaveURL(/\/trips\/e2e-trip$/);
+  await expect(page.getByText("XX 101 DXB to MAN", { exact: true })).toBeVisible();
+  // What the email didn't give stays behind.
+  expect((await readSegments("e2e-trip")).map((s) => s.title)).toEqual(["Cove Liverpool"]);
+});
+
 test("two bookings of one kind merge into the one whose menu was used", async ({ page }) => {
   const ownerUid = await signIn(page, owner);
   await seedTrip(ownerUid, "e2e-trip");

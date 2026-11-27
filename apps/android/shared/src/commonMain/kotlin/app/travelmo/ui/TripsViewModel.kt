@@ -1254,6 +1254,17 @@ class TripsViewModel(
     fun moveSegment(token: String, fromTripId: String, segmentId: String, toTripId: String) = run(token, "moveSegment") { store.moveSegment(fromTripId, segmentId, toTripId) }
     fun moveSegmentToNewTrip(token: String, fromTripId: String, segmentId: String) = run(token, "moveSegmentToNewTrip") { store.moveSegmentToNewTrip(fromTripId, segmentId, uid) }
 
+    // The trip each split made, by its token, until the page that asked opens it (splitTarget).
+    private val splitTargets = mutableMapOf<String, String>()
+
+    /** Split…: moves [segmentIds] out of [tripId] into a new trip of their own; [splitTarget] then gives it. */
+    fun splitTrip(token: String, tripId: String, segmentIds: List<String>) = run(token, "splitTrip") {
+        splitTargets[token] = store.splitTrip(tripId, segmentIds, uid)
+    }
+
+    /** The trip a finished split made, once: the page opens it. */
+    fun splitTarget(token: String): String? = splitTargets.remove(token)
+
     fun renameTrip(token: String, tripId: String, title: String) = run(token, "renameTrip") {
         if (title.isBlank()) throw IllegalArgumentException("Give the trip a name")
         store.renameTrip(tripId, title)

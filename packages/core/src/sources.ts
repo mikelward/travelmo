@@ -57,3 +57,23 @@ export function sourceSearch(segment: Pick<Segment, "sender" | "sources" | "gmai
   const emails = segmentSources(segment).filter((s) => s.kind !== "tripit" && s.kind !== "ics");
   return gmailSearch({ sender: emails.length === 1 ? segment.sender : undefined, subject: source.label, sentAt: source.sentAt });
 }
+
+// The sources a trip's bookings came from, for splitting the trip (Split… on
+// the trip page): each with the bookings it gave, the most first. Only a
+// source that gave some of the bookings and not all can split anything off.
+export type SourceGroup = { source: SourceRef; segmentIds: string[] };
+
+export function sourceGroups(segments: readonly Pick<Segment, "id" | "sources" | "gmailMessageIds" | "createdAt">[]): SourceGroup[] {
+  const groups = new Map<string, SourceGroup>();
+  for (const segment of segments) {
+    for (const source of segmentSources(segment)) {
+      const key = `${source.kind}/${source.id}`;
+      const group = groups.get(key) ?? { source, segmentIds: [] };
+      group.segmentIds.push(segment.id);
+      groups.set(key, group);
+    }
+  }
+  return [...groups.values()]
+    .filter((g) => g.segmentIds.length < segments.length)
+    .sort((a, b) => b.segmentIds.length - a.segmentIds.length || a.source.at.localeCompare(b.source.at));
+}
