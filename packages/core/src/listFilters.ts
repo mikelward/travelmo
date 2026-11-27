@@ -4,6 +4,7 @@ import { canonicalName, findPerson, guessMe, type Person } from "./travelers";
 import { tripBookingType, tripSetting } from "./landmarks";
 import type { TripSetting } from "./schema";
 import { allCancelled, liveSegments } from "./trips";
+import { mixedTrip } from "./mixedTrip";
 
 // What the trip list leaves out (SPEC "Filtering the trip list"), as the
 // person set it on this device; nothing by default.
@@ -95,18 +96,26 @@ export function homeBookings<S extends ExtractedSegment>(byTrip: Iterable<readon
 // as it files bookings, and an app that sees a trip's bookings disagree with
 // it puts it right (tripFlagsToWrite), which also fills it in for trips from
 // before it was kept.
-export type TripFlags = { allCancelled: boolean; localOnly: boolean; travelers: string[]; setting: TripSetting };
+// `mixed`: its bookings look like two trips in one (mixedTrip).
+export type TripFlags = { allCancelled: boolean; localOnly: boolean; travelers: string[]; setting: TripSetting; mixed: boolean };
 // As a trip has them: any may be missing.
 type KeptFlags = {
   allCancelled?: boolean | undefined;
   localOnly?: boolean | undefined;
   travelers?: readonly string[] | undefined;
   setting?: TripSetting | undefined;
+  mixed?: boolean | undefined;
   removedTravelers?: readonly string[] | undefined;
 };
 
 export function tripFlags(segments: readonly ExtractedSegment[], removed: readonly string[] = []): TripFlags {
-  return { allCancelled: allCancelled(segments), localOnly: localOnly(segments), travelers: tripTravelers(segments, removed), setting: tripSetting(segments) };
+  return {
+    allCancelled: allCancelled(segments),
+    localOnly: localOnly(segments),
+    travelers: tripTravelers(segments, removed),
+    setting: tripSetting(segments),
+    mixed: mixedTrip(segments, removed) !== undefined,
+  };
 }
 
 const sameList = (a: readonly string[] | undefined, b: readonly string[]) => !!a && a.length === b.length && a.every((x, i) => x === b[i]);
@@ -115,7 +124,7 @@ const sameList = (a: readonly string[] | undefined, b: readonly string[]) => !!a
 // undefined when the trip already says so.
 export function tripFlagsToWrite(trip: KeptFlags, segments: readonly ExtractedSegment[]): TripFlags | undefined {
   const flags = tripFlags(segments, trip.removedTravelers);
-  const same = trip.allCancelled === flags.allCancelled && trip.localOnly === flags.localOnly && sameList(trip.travelers, flags.travelers) && trip.setting === flags.setting;
+  const same = trip.allCancelled === flags.allCancelled && trip.localOnly === flags.localOnly && sameList(trip.travelers, flags.travelers) && trip.setting === flags.setting && trip.mixed === flags.mixed;
   return same ? undefined : flags;
 }
 
@@ -127,6 +136,7 @@ export function flagsUnknown(trip: KeptFlags): boolean {
     trip.localOnly === undefined ||
     trip.travelers === undefined ||
     trip.setting === undefined ||
+    trip.mixed === undefined ||
     // A trip of local events kept a town before events took their booking's icon.
     (trip.localOnly && !tripBookingType(trip.setting))
   );

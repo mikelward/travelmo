@@ -1270,6 +1270,8 @@ class TripsViewModel(
         store.renameTrip(tripId, title)
     }
 
+    fun markOneTrip(token: String, tripId: String) = run(token, "markOneTrip") { store.markOneTrip(tripId) }
+
     fun setRemovedTravelers(token: String, tripId: String, removed: List<String>) = run(token, "setRemovedTravelers") { store.setRemovedTravelers(tripId, removed) }
 
     fun fitTripDates(token: String, tripId: String) = run(token, "fitTripDates") { store.fitTripDates(tripId) }

@@ -21,7 +21,7 @@ const now = () => new Date().toISOString();
 // flags off (listFilters.ts): unknown again, they are recomputed from the
 // bookings the next time an app reads them (useKeepTripFlags), rather than
 // stand wrong for a trip whose page isn't open.
-const flagsUnknown = () => ({ allCancelled: deleteField(), localOnly: deleteField(), travelers: deleteField(), setting: deleteField() });
+const flagsUnknown = () => ({ allCancelled: deleteField(), localOnly: deleteField(), travelers: deleteField(), setting: deleteField(), mixed: deleteField() });
 
 const min = (a: string, b: string) => (a < b ? a : b);
 const max = (a: string, b: string) => (a > b ? a : b);
@@ -609,6 +609,12 @@ export async function createTrip(db: Firestore, uid: string, title: string, star
 // worked out again, so whom it is for follows.
 export async function setRemovedTravelers(db: Firestore, tripId: string, removed: readonly string[]): Promise<void> {
   await updateDoc(doc(db, paths.trip(tripId)), { removedTravelers: removed.length > 0 ? [...removed] : deleteField(), ...flagsUnknown(), updatedAt: now() });
+}
+
+// The owner's word that a trip that looks like two in one is one trip
+// (mixedTrip): neither the list nor its page asks again.
+export async function markOneTrip(db: Firestore, tripId: string): Promise<void> {
+  await updateDoc(doc(db, paths.trip(tripId)), { oneTrip: true, updatedAt: now() });
 }
 
 export async function renameTrip(db: Firestore, tripId: string, title: string): Promise<void> {

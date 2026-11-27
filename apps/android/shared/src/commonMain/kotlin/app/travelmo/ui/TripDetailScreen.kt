@@ -90,6 +90,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.travelmo.core.journeyGapKey
 import app.travelmo.core.tripTravelers
 import app.travelmo.core.namedTravelers
+import app.travelmo.core.MixedTrip
+import app.travelmo.core.mixedTrip
 import app.travelmo.core.watching
 import androidx.lifecycle.repeatOnLifecycle
 import app.travelmo.core.MAX_TRIP_REMINDERS
@@ -373,6 +375,9 @@ fun TripDetailScreen(
         val currentNow by nowFlow.collectAsStateWithLifecycle(initialValue = viewModel.now())
         val removedTravelers = current?.removedTravelers.orEmpty()
         val onlyWatching = remember(segments, travelers, removedTravelers) { watching(tripTravelers(segments, removedTravelers), travelers, removedTravelers) }
+        // Bookings that look like two trips in one, unless the owner said it is one.
+        val oneTrip = current?.oneTrip == true
+        val mixed = remember(segments, oneTrip, removedTravelers) { if (oneTrip) null else mixedTrip(segments, removedTravelers) }
         val warnings = remember(onlyWatching, people, current, segments, today) {
             if (onlyWatching || current == null) emptyList() else tripWarnings(people, current, segments, today)
         }
@@ -402,6 +407,14 @@ fun TripDetailScreen(
                     companies = rideSettings?.companies.orEmpty(),
                     onHide = { need -> viewModel.hideRideNeed("${prefix}ride/${rideNeedKey(need)}", need) },
                 ),
+                mixedTrip = mixed?.let { found ->
+                    MixedTripActions(
+                        found,
+                        onSplit = if (canManage && segments.size > 1) { { splitting = true } } else null,
+                        onTravelers = if (canManage && found is MixedTrip.Travelers) { { editingTravelers = true } } else null,
+                        onOneTrip = if (canManage) { { viewModel.markOneTrip("${prefix}one-trip", tripId) } } else null,
+                    )
+                },
                 journeyGap = gaps.takeIf { it.isNotEmpty() }?.let { foundGaps ->
                     JourneyGapActions(
                         foundGaps,
@@ -511,6 +524,7 @@ private fun TripBody(
     onOpenBooking: (Segment) -> Unit,
     rides: RideSuggestions,
     /** A journey the trip seems to be missing; null when nothing is. */
+    mixedTrip: MixedTripActions? = null,
     journeyGap: JourneyGapActions? = null,
     tripActions: TripActions?,
     checklist: Checklist?,
@@ -575,6 +589,7 @@ private fun TripBody(
         if (warnings.isNotEmpty()) {
             item(key = "warnings") { DocumentWarnings(warnings, today) }
         }
+        mixedTrip?.let { actions -> item(key = "mixed-trip") { MixedTripNotice(actions, busy) } }
         journeyGap?.let { actions -> item(key = "journey-gap") { JourneyGapNotice(actions, busy) } }
         if (checklist != null) {
             item(key = "before-you-go") { BeforeYouGo(checklist, today) }

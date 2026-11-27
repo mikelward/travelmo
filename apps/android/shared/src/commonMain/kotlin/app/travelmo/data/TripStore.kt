@@ -283,6 +283,9 @@ interface TripStore {
      */
     suspend fun setRemovedTravelers(tripId: String, removed: List<String>)
 
+    /** The owner's word that a trip that looks like two in one ([app.travelmo.core.mixedTrip]) is one trip. */
+    suspend fun markOneTrip(tripId: String)
+
     /** Sets the trip's dates to its bookings' span; false when it has none. Owner only. */
     suspend fun fitTripDates(tripId: String): Boolean
 

@@ -72,21 +72,21 @@ fun watchedTrip(trip: Trip, segments: List<Segment>?, people: List<Person>): Boo
  * bookings disagree with it puts it right ([tripFlagsToWrite]), which also fills it in for trips from before it was
  * kept. As listFilters.ts.
  */
-data class TripFlags(val allCancelled: Boolean, val localOnly: Boolean, val travelers: List<String>, val setting: String)
+data class TripFlags(val allCancelled: Boolean, val localOnly: Boolean, val travelers: List<String>, val setting: String, val mixed: Boolean = false)
 
 fun tripFlags(segments: List<Segment>, removed: List<String> = emptyList()): TripFlags =
-    TripFlags(allCancelled(segments), localOnly(segments), tripTravelers(segments, removed), tripSetting(segments))
+    TripFlags(allCancelled(segments), localOnly(segments), tripTravelers(segments, removed), tripSetting(segments), mixedTrip(segments, removed) != null)
 
 /** The flags to write on a trip whose bookings have just been read, or null when the trip already says so. */
 fun tripFlagsToWrite(trip: Trip, segments: List<Segment>): TripFlags? {
     val flags = tripFlags(segments, trip.removedTravelers)
-    val same = trip.allCancelled == flags.allCancelled && trip.localOnly == flags.localOnly && trip.travelers == flags.travelers && trip.setting == flags.setting
+    val same = trip.allCancelled == flags.allCancelled && trip.localOnly == flags.localOnly && trip.travelers == flags.travelers && trip.setting == flags.setting && trip.mixed == flags.mixed
     return if (same) null else flags
 }
 
 /** Whether the list needs a trip's bookings to filter it or draw it: only while the trip doesn't yet say. */
 fun flagsUnknown(trip: Trip): Boolean =
-    trip.allCancelled == null || trip.localOnly == null || trip.travelers == null || trip.setting == null ||
+    trip.allCancelled == null || trip.localOnly == null || trip.travelers == null || trip.setting == null || trip.mixed == null ||
         // A trip of local events kept a town before events took their booking's icon.
         (trip.localOnly == true && tripBookingType(trip.setting) == null)
 

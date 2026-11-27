@@ -360,3 +360,30 @@ test("a cleanup that deleted this trip and then failed is still there to retry",
   await expect(page.getByText("This trip does not exist or is not shared with you.")).toBeVisible();
   await expect(page.getByRole("dialog", { name: "Delete what it imported?" })).toBeVisible();
 });
+
+test("a trip that looks like two says so in the list and on its page, until the owner says it's one", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  await seedTrip(ownerUid, "e2e-trip");
+  await seedFlight("e2e-trip");
+  // Someone else's flight, in the air while XX 100 is.
+  await seedFlight("e2e-trip", {
+    id: "e2e-trip-theirs",
+    title: "YY 9 SYD to SIN",
+    start: "2026-12-13T14:00:00+11:00",
+    end: "2026-12-13T21:00:00+08:00",
+    origin: { name: "Sydney", code: "SYD", country: "AU" },
+    destination: { name: "Singapore", code: "SIN", country: "SG" },
+  });
+  await page.goto("/");
+  const card = page.getByTestId("trip-card").filter({ hasText: "Liverpool" });
+  await expect(card).toContainText("Check");
+  await card.getByRole("link").first().click();
+  const notice = page.getByTestId("mixed-trip");
+  await expect(notice).toContainText("This may be two trips: YY 9 SYD to SIN and XX 100 MAN to DXB are in the air at the same time.");
+  await expect(notice.getByRole("button", { name: "Split…" })).toBeVisible();
+  await notice.getByRole("button", { name: "It's one trip" }).click();
+  await expect(notice).toHaveCount(0);
+  await expect.poll(async () => (await readTrip("e2e-trip"))?.oneTrip).toBe(true);
+  await page.goto("/");
+  await expect(card).not.toContainText("Check");
+});

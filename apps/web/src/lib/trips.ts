@@ -571,7 +571,7 @@ export function useKeepTripFlags(
     if (!segments || !tripFlagsToWrite(trip, segments)) return [];
     const repairKey = `${trip.id}@${trip.updatedAt}`;
     if (repairedTripVersions.has(repairKey)) return [];
-    return [{ key: repairKey, id: trip.id, allCancelled: trip.allCancelled, localOnly: trip.localOnly, travelers: trip.travelers, setting: trip.setting }];
+    return [{ key: repairKey, id: trip.id, allCancelled: trip.allCancelled, localOnly: trip.localOnly, travelers: trip.travelers, setting: trip.setting, mixed: trip.mixed }];
   });
   const key = due.length > 0 ? JSON.stringify(due) : "";
   useEffect(() => {
@@ -591,7 +591,7 @@ export function useKeepTripFlags(
 // if no booking changed meanwhile (the trip's `updatedAt` moved); a change
 // then is left to be read again.
 // What a trip says of its bookings, as useKeepTripFlags reads it.
-type KeptFlags = Pick<Trip, "allCancelled" | "localOnly" | "travelers" | "setting">;
+type KeptFlags = Pick<Trip, "allCancelled" | "localOnly" | "travelers" | "setting" | "mixed">;
 
 async function repairTripFlags(id: string, kept: KeptFlags): Promise<void> {
   const db = firestore();

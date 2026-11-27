@@ -32,6 +32,7 @@
     <string name="badge_shared">Shared</string>
     <string name="badge_deleting">Deleting</string>
     <string name="badge_watching">Watching</string>
+    <string name="badge_check">Check</string>
     <string name="watching_hint">Watching: you’re not on this trip</string>
     <string name="staying_at">Staying at %1$s</string>
     <string name="settings">Settings</string>
@@ -311,6 +312,10 @@
     <string name="rename">Rename</string>
     <string name="split">Split…</string>
     <string name="travelers_menu">Travelers…</string>
+    <string name="mixed_overlap">This may be two trips: %1$s and %2$s are in the air at the same time.</string>
+    <string name="mixed_elsewhere">This may be two trips: %1$s leaves from another country hours after %2$s lands.</string>
+    <string name="mixed_travelers">This may be two trips: some bookings are for %1$s, others for %2$s.</string>
+    <string name="it_is_one_trip">It's one trip</string>
     <string name="travelers_title">Travelers</string>
     <string name="travelers_hint">Untick anyone not on this trip. A trip you're not on is left out of your reports and reminders.</string>
     <string name="split_trip_title">Split trip</string>

@@ -80,8 +80,10 @@ class ListFiltersTest {
         flagsUnknown(trip.copy(allCancelled = false, localOnly = false, travelers = emptyList())) shouldBe true
         // A show alone is an event: its ticket, not its town.
         tripFlagsToWrite(trip, listOf(show)) shouldBe TripFlags(allCancelled = false, localOnly = true, travelers = emptyList(), setting = "activity")
-        val kept = trip.copy(allCancelled = false, localOnly = true, travelers = emptyList(), setting = "activity")
+        val kept = trip.copy(allCancelled = false, localOnly = true, travelers = emptyList(), setting = "activity", mixed = false)
         flagsUnknown(kept) shouldBe false
+        // One from before `mixed` was kept is read again, once.
+        flagsUnknown(kept.copy(mixed = null)) shouldBe true
         tripFlagsToWrite(kept, listOf(show)) shouldBe null
         // All cancelled, it isn't local any more, and goes by its town.
         tripFlagsToWrite(kept, listOf(cancelled(show))) shouldBe TripFlags(allCancelled = true, localOnly = false, travelers = emptyList(), setting = "city")

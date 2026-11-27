@@ -204,6 +204,16 @@ class ScreenScreenshotTest {
         captureScreenRoboImage(filePath = "$outputDir/trip_list_filters.png")
     }
 
+    // A trip whose bookings look like two in one: Check on its card.
+    @Test
+    fun trip_list_mixed() {
+        val store = FakeTripStore(trips = fixtureTrips.map { if (it.id == "liverpool") it.copy(mixed = true) else it })
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, tripActions = FakeTripActions())
+        capture("trip_list_mixed") {
+            TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.TRIPS) {} })
+        }
+    }
+
     // A trip under way with a flight in three hours: its gate on the card.
     @Test
     fun trip_list_flight() {
@@ -461,6 +471,26 @@ class ScreenScreenshotTest {
 
     @Test
     fun trip_detail_split_dark() = tripSplit("trip_detail_split_dark", dark = true)
+
+    @Test
+    fun trip_detail_mixed() = tripMixed("trip_detail_mixed", dark = false)
+
+    @Test
+    fun trip_detail_mixed_dark() = tripMixed("trip_detail_mixed_dark", dark = true)
+
+    // A relative's flight in the air while the user's is: the notice, with Split…, and It's one trip.
+    private fun tripMixed(name: String, dark: Boolean) {
+        val flight = Segment(
+            "l-out", "liverpool", SegmentType.FLIGHT, "XX 1 LHR to DXB", "2026-12-12T09:00:00+00:00", "2026-12-12T19:00:00+04:00",
+            origin = Place("Heathrow", code = "LHR"), destination = Place("Dubai", code = "DXB"),
+        )
+        val theirs = flight.copy(id = "l-theirs", title = "YY 9 SYD to SIN", start = "2026-12-12T14:00:00+11:00", end = "2026-12-12T21:00:00+08:00", origin = Place("Sydney", code = "SYD"), destination = Place("Singapore", code = "SIN"))
+        val store = FakeTripStore(segments = fixtureSegments + ("liverpool" to fixtureSegments.getValue("liverpool") + flight + theirs))
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, tripActions = FakeTripActions())
+        capture(name, dark = dark) {
+            TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
+        }
+    }
 
     @Test
     fun trip_detail_travelers() = tripTravelers("trip_detail_travelers", dark = false)
