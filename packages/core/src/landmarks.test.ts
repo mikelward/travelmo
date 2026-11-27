@@ -139,6 +139,28 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Port Douglas").id).toBe("daintree");
     expect(tripLandmark("Mossman").id).toBe("daintree");
     expect(tripLandmark("Cow Bay").id).toBe("daintree");
+    expect(tripLandmark("Raleigh").id).toBe("raleigh");
+    expect(tripLandmark("Raleigh/Durham").id).toBe("raleigh");
+    expect(tripLandmark("Durham/Raleigh").id).toBe("raleigh");
+    expect(tripLandmark("Durham, NC").id).toBe("raleigh");
+    expect(tripLandmark("Chapel Hill").id).toBe("raleigh");
+    expect(tripLandmark("Research Triangle").id).toBe("raleigh");
+    expect(tripLandmark("Durham").id).toBe("durham");
+    expect(tripLandmark("Venice Beach").id).toBe("beach");
+    expect(tripLandmark("Venice, CA").id).toBe("beach");
+    expect(tripLandmark("Venice, FL").id).toBe("beach");
+    expect(tripLandmark("Naples, FL").id).toBe("beach");
+    expect(tripLandmark("Cambridge, MA").id).toBe("boston");
+    expect(tripLandmark("Portland, ME").id).toBe("trip");
+    expect(tripLandmark("Newcastle, NSW").id).toBe("trip");
+    expect(tripLandmark("Victoria, Australia").id).toBe("trip");
+    expect(tripLandmark("Vancouver, Washington").id).toBe("trip");
+    expect(tripLandmark("Rome, New York").id).toBe("trip");
+    expect(tripLandmark("London, Ontario").id).toBe("trip");
+    expect(tripLandmark("Melbourne, FL").id).toBe("trip");
+    expect(tripLandmark("Perth, Scotland").id).toBe("trip");
+    expect(tripLandmark("Manchester, NH").id).toBe("trip");
+    expect(tripLandmark("Athens, GA").id).toBe("trip");
   });
 
   it("ignores accents and case", () => {
@@ -339,7 +361,7 @@ describe("tripLandmark", () => {
         fallbacks.add(word);
       }
     }
-    expect(LANDMARKS.length).toBe(319);
+    expect(LANDMARKS.length).toBe(320);
   });
 });
 

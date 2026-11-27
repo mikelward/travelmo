@@ -140,6 +140,28 @@ class LandmarksTest {
         assertEquals("daintree", tripLandmark("Port Douglas").id)
         assertEquals("daintree", tripLandmark("Mossman").id)
         assertEquals("daintree", tripLandmark("Cow Bay").id)
+        assertEquals("raleigh", tripLandmark("Raleigh").id)
+        assertEquals("raleigh", tripLandmark("Raleigh/Durham").id)
+        assertEquals("raleigh", tripLandmark("Durham/Raleigh").id)
+        assertEquals("raleigh", tripLandmark("Durham, NC").id)
+        assertEquals("raleigh", tripLandmark("Chapel Hill").id)
+        assertEquals("raleigh", tripLandmark("Research Triangle").id)
+        assertEquals("durham", tripLandmark("Durham").id)
+        assertEquals("beach", tripLandmark("Venice Beach").id)
+        assertEquals("beach", tripLandmark("Venice, CA").id)
+        assertEquals("beach", tripLandmark("Venice, FL").id)
+        assertEquals("beach", tripLandmark("Naples, FL").id)
+        assertEquals("boston", tripLandmark("Cambridge, MA").id)
+        assertEquals("trip", tripLandmark("Portland, ME").id)
+        assertEquals("trip", tripLandmark("Newcastle, NSW").id)
+        assertEquals("trip", tripLandmark("Victoria, Australia").id)
+        assertEquals("trip", tripLandmark("Vancouver, Washington").id)
+        assertEquals("trip", tripLandmark("Rome, New York").id)
+        assertEquals("trip", tripLandmark("London, Ontario").id)
+        assertEquals("trip", tripLandmark("Melbourne, FL").id)
+        assertEquals("trip", tripLandmark("Perth, Scotland").id)
+        assertEquals("trip", tripLandmark("Manchester, NH").id)
+        assertEquals("trip", tripLandmark("Athens, GA").id)
     }
 
     @Test
@@ -327,7 +349,7 @@ class LandmarksTest {
     fun readsEveryLandmarkTheWebHas() {
         val rawEntries = landmarksJson.lines().count { it.startsWith("{\"id\":") }
         assertEquals(rawEntries, landmarks.size)
-        assertEquals(319, landmarks.size)
+        assertEquals(320, landmarks.size)
         assertEquals(landmarks.size, landmarks.map { it.id }.toSet().size)
         val seenCities = mutableSetOf<String>()
         val seenFallbacks = mutableSetOf<String>()
