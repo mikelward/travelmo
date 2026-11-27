@@ -23,10 +23,23 @@ export async function senderBookings(db: Firestore, uid: string, domain: string)
     if (!parsed.success) console.warn("Skipping a malformed trip", d.id);
     return parsed.success && !parsed.data.deleting ? [parsed.data] : [];
   });
-  const read = await Promise.all(
-    trips.map(async (trip) => {
-      const snap = await getDocsFromServer(collection(db, paths.segments(trip.id)));
-      return { trip, segments: snap.docs.map((d) => ({ id: d.id, sender: (d.data() as { sender?: string }).sender })) };
+  const read: Array<{ trip: Trip; segments: Array<{ id: string; sender?: string }> }> = new Array(trips.length);
+  let cursor = 0;
+  const workers = Math.max(1, Math.min(16, trips.length));
+  await Promise.all(
+    Array.from({ length: workers }, async () => {
+      while (cursor < trips.length) {
+        const index = cursor++;
+        const trip = trips[index]!;
+        const snap = await getDocsFromServer(collection(db, paths.segments(trip.id)));
+        read[index] = {
+          trip,
+          segments: snap.docs.map((d) => {
+            const sender = (d.data() as { sender?: string }).sender;
+            return sender !== undefined ? { id: d.id, sender } : { id: d.id };
+          }),
+        };
+      }
     }),
   );
   return senderCleanup(read, uid, domain);

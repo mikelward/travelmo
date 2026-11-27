@@ -2,7 +2,7 @@
 
 import { bugReportLimits, type ReportedTrip, type Segment, type Trip } from "@travelmo/core";
 import { usePathname } from "next/navigation";
-import { createContext, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -15,11 +15,20 @@ import { useAuth } from "@/lib/auth";
 
 type TripOnPage = { trip: Trip; segments: Segment[] };
 
-const ReportTripContext = createContext<{ current?: TripOnPage; set: (trip: TripOnPage | undefined) => void } | undefined>(undefined);
+const ReportTripContext = createContext<{ getCurrent: () => TripOnPage | undefined; set: (trip: TripOnPage | undefined) => void } | undefined>(undefined);
 
 export function BugReportProvider({ children }: { children: ReactNode }) {
-  const [current, set] = useState<TripOnPage>();
-  return <ReportTripContext value={{ ...(current ? { current } : {}), set }}>{children}</ReportTripContext>;
+  const currentRef = useRef<TripOnPage | undefined>(undefined);
+  const value = useMemo(
+    () => ({
+      getCurrent: () => currentRef.current,
+      set: (trip: TripOnPage | undefined) => {
+        currentRef.current = trip;
+      },
+    }),
+    [],
+  );
+  return <ReportTripContext value={value}>{children}</ReportTripContext>;
 }
 
 // The trip page's trip and its bookings, for a report sent from it; gone
@@ -49,7 +58,8 @@ const primaryClass = "rounded-lg bg-zinc-900 px-3 py-2  font-medium text-white d
 // (`initialText`: what the page knows went wrong, which the user can add to).
 export function ReportDialog({ onClose, initialText = "" }: { onClose: () => void; initialText?: string }) {
   const { user } = useAuth();
-  const onTrip = useContext(ReportTripContext)?.current;
+  const getCurrent = useContext(ReportTripContext)?.getCurrent;
+  const [onTrip] = useState<TripOnPage | undefined>(() => getCurrent?.());
   const page = usePathname();
   const ref = useRef<HTMLDialogElement>(null);
   const [text, setText] = useState(initialText);

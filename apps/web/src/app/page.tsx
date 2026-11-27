@@ -30,7 +30,6 @@ import { SignInGate } from "@/components/SignInGate";
 import { TripCard } from "@/components/TripCard";
 import { AddTripForm } from "@/components/AddTripForm";
 import { TripListToolbar } from "@/components/TripListToolbar";
-import { localToday } from "@/lib/dates";
 import {
   usePeopleDocuments,
   useTripWarnings,
@@ -43,6 +42,7 @@ import { useSaveForOffline } from "@/lib/offline";
 import {
   useAllSegments,
   useKeepTripFlags,
+  useLocalToday,
   useNow,
   useProfile,
   useSegmentsOf,
@@ -140,28 +140,31 @@ function Section({
       <h2 className="mb-3 text-lg font-medium">{title}</h2>
       {/* One card per section, a rule between its trips. */}
       <div className="divide-y divide-zinc-200 overflow-hidden rounded-xl border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-        {trips.map((trip) => (
-          <TripCard
-            key={trip.id}
-            trip={trip}
-            title={titles.get(trip.id) ?? trip.title}
-            shared={trip.ownerUid !== uid}
-            {...(segmentsByTrip[trip.id]
-              ? { segments: segmentsByTrip[trip.id] }
-              : {})}
-            {...(showNext
-              ? {
-                  now,
-                  flightStatuses,
-                  onCheckedIn: (segmentId: string) =>
-                    onCheckedIn(trip.id, segmentId),
-                }
-              : {})}
-            {...(checkedIn[trip.id] ? { checkedIn: checkedIn[trip.id] } : {})}
-            {...(missingOf(trip) ? { missing: missingOf(trip) } : {})}
-            watching={watchingOf(trip)}
-          />
-        ))}
+        {trips.map((trip) => {
+          const missing = missingOf(trip);
+          return (
+            <TripCard
+              key={trip.id}
+              trip={trip}
+              title={titles.get(trip.id) ?? trip.title}
+              shared={trip.ownerUid !== uid}
+              {...(segmentsByTrip[trip.id]
+                ? { segments: segmentsByTrip[trip.id] }
+                : {})}
+              {...(showNext
+                ? {
+                    now,
+                    flightStatuses,
+                    onCheckedIn: (segmentId: string) =>
+                      onCheckedIn(trip.id, segmentId),
+                  }
+                : {})}
+              {...(checkedIn[trip.id] ? { checkedIn: checkedIn[trip.id] } : {})}
+              {...(missing ? { missing } : {})}
+              watching={watchingOf(trip)}
+            />
+          );
+        })}
       </div>
     </section>
   );
@@ -170,12 +173,12 @@ function Section({
 function Trips({ user }: { user: User }) {
   useSaveForOffline();
   const trips = useTrips(user);
-  const today = localToday();
+  const today = useLocalToday();
   const [search, setSearch] = useState("");
   // Once searched, kept for the visit, so clearing the box and searching
   // again reads nothing more.
   const [searched, setSearched] = useState(false);
-  const query = parseTripQuery(search);
+  const query = useMemo(() => parseTripQuery(search), [search]);
   const searching = !isEmptyQuery(query);
   const [filters, setFilters] = useListFilters();
   const [addingTrip, setAddingTrip] = useState(false);
@@ -188,14 +191,14 @@ function Trips({ user }: { user: User }) {
   // picture need (flagsUnknown), each read once per version of the trip,
   // whenever it turns up so (a later snapshot, an edit), and its flags kept,
   // so each is read once and never again.
-  const unknown = useSegmentsOnce(
-    trips ? trips.filter(flagsUnknown) : undefined,
-  );
+  const unknownTrips = useMemo(() => (trips ? trips.filter(flagsUnknown) : undefined), [trips]);
+  const unknown = useSegmentsOnce(unknownTrips, user.uid);
   const bookingsOf = (id: string) => all?.byTrip[id] ?? unknown[id];
   useKeepTripFlags(trips, bookingsOf, true);
-  const titles = displayTitles(trips ?? []);
-  const kept = trips?.filter(
-    (t) => !hiddenFromList(t, bookingsOf(t.id), filters, travelers ?? []),
+  const titles = useMemo(() => displayTitles(trips ?? []), [trips]);
+  const kept = useMemo(
+    () => trips?.filter((t) => !hiddenFromList(t, all?.byTrip[t.id] ?? unknown[t.id], filters, travelers ?? [])),
+    [trips, all, unknown, filters, travelers],
   );
   const watchingOf = (trip: Trip) => {
     const read = bookingsOf(trip.id);
@@ -204,40 +207,53 @@ function Trips({ user }: { user: User }) {
       travelers ?? [],
     );
   };
-  const shown =
-    kept && searching
-      ? kept.filter((t) =>
-          tripMatches(
-            query,
-            t,
-            titles.get(t.id) ?? t.title,
-            all?.byTrip[t.id] ?? [],
-          ),
-        )
-      : kept;
+  const shown = useMemo(
+    () =>
+      kept && searching
+        ? kept.filter((t) =>
+            tripMatches(
+              query,
+              t,
+              titles.get(t.id) ?? t.title,
+              all?.byTrip[t.id] ?? [],
+            ),
+          )
+        : kept,
+    [kept, searching, query, titles, all],
+  );
   // Listeners follow every trip, searched or not; the sections show what a search found.
-  const everything = trips ? groupTrips(trips, today) : undefined;
-  const groups = shown ? groupTrips(shown, today) : undefined;
-  const detailed = everything
-    ? [
-        ...everything.current,
-        ...everything.upcoming.slice(0, upcomingWithDetails),
-      ].map((t) => t.id)
-    : [];
+  const everything = useMemo(() => (trips ? groupTrips(trips, today) : undefined), [trips, today]);
+  const groups = useMemo(
+    () => (shown === trips ? everything : shown ? groupTrips(shown, today) : undefined),
+    [shown, trips, everything, today],
+  );
+  const detailed = useMemo(
+    () =>
+      everything
+        ? [
+            ...everything.current,
+            ...everything.upcoming.slice(0, upcomingWithDetails),
+          ].map((t) => t.id)
+        : [],
+    [everything],
+  );
   const segmentsByTrip = useSegmentsOf(detailed);
-  const now = useNow();
+  const hasCurrent = (everything?.current.length ?? 0) > 0;
+  const now = useNow(60_000, hasCurrent);
+  const currentTrips = everything?.current;
   // A card under way reads the live status of its next flight, one listener each.
-  const flightStatuses = useFlightStatusesOf(
-    (everything?.current ?? []).flatMap((trip) => {
-      const segments = segmentsByTrip[trip.id];
-      return segments ? nextUpFlightKeys(segments, now) : [];
-    }),
+  const flightKeys = useMemo(
+    () =>
+      (currentTrips ?? []).flatMap((trip) => {
+        const segments = segmentsByTrip[trip.id];
+        return segments ? nextUpFlightKeys(segments, now) : [];
+      }),
+    [currentTrips, segmentsByTrip, now],
   );
+  const flightStatuses = useFlightStatusesOf(flightKeys);
   // The viewer's own "I've checked in" marks on the trips under way.
-  const checkedIn = useCheckedIn(
-    user.uid,
-    (everything?.current ?? []).map((trip) => trip.id),
-  );
+  const currentIds = useMemo(() => (currentTrips ?? []).map((trip) => trip.id), [currentTrips]);
+  const checkedIn = useCheckedIn(user.uid, currentIds);
   const [error, setError] = useState<string>();
   const onCheckedIn = (tripId: string, segmentId: string) => {
     setError(undefined);
@@ -248,9 +264,18 @@ function Trips({ user }: { user: User }) {
   };
   const people = usePeopleDocuments(user);
   const profile = useProfile(user.uid);
-  // The user's own trips: one they're only watching warns of no one's documents.
-  const ownTrips = useMemo(() => (trips ?? []).filter((t) => !watchedTrip(t, segmentsByTrip[t.id], travelers ?? [])), [trips, segmentsByTrip, travelers]);
+  // The user's own trips whose bookings are loaded: one they're only watching warns of no one's documents.
+  const ownTrips = useMemo(
+    () => (trips ?? []).filter((t) => segmentsByTrip[t.id] && !watchedTrip(t, segmentsByTrip[t.id], travelers ?? [])),
+    [trips, segmentsByTrip, travelers],
+  );
   const warnings = useTripWarnings(people, ownTrips, segmentsByTrip, today);
+  const gapHomes = useMemo(
+    () => (profile ? journeyGapHomes(profile.homes ?? [], profile.homeAirports ?? []) : []),
+    [profile],
+  );
+  const oneWaySet = useMemo(() => new Set(profile?.oneWayTrips ?? []), [profile]);
+  const listed = useMemo(() => (trips ? listWarnings(warnings, trips) : []), [warnings, trips]);
 
   if (!trips || !groups) return <p className="text-muted">Loading trips…</p>;
   // The bar and Add a trip's form, first on the page whether or not there
@@ -302,11 +327,7 @@ function Trips({ user }: { user: User }) {
   const missingOf = (trip: Trip) => {
     const segments = segmentsByTrip[trip.id];
     if (!segments || !profile || trip.deleting) return undefined;
-    const [gap] = journeyGaps(
-      segments,
-      journeyGapHomes(profile.homes ?? [], profile.homeAirports ?? []),
-      (profile.oneWayTrips ?? []).includes(trip.id),
-    );
+    const [gap] = journeyGaps(segments, gapHomes, oneWaySet.has(trip.id));
     return gap ? journeyGapText(gap) : undefined;
   };
   const sectionProps = {
@@ -322,7 +343,6 @@ function Trips({ user }: { user: User }) {
   };
   // Document warnings once, at the top, each for the earliest trip it bears
   // on and linking to it, rather than repeated on every card.
-  const listed = listWarnings(warnings, trips);
   return (
     <>
       {head}

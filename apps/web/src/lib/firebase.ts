@@ -10,6 +10,7 @@ import {
   terminate,
   type Firestore,
 } from "firebase/firestore";
+import { clearLiveCache } from "./liveCache";
 import { clearSegmentCache } from "./segmentCache";
 
 function requireEnv(name: string, value: string | undefined): string {
@@ -93,6 +94,7 @@ export async function forgetFirestoreCache(): Promise<void> {
 }
 
 async function clearCache(owner: string | undefined): Promise<void> {
+  clearLiveCache();
   clearSegmentCache();
   const instance = firestore();
   try {

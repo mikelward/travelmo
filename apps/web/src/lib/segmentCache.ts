@@ -65,6 +65,16 @@ export function clearSegmentCache(): void {
   }
 }
 
+// Returns a single trip's cached bookings immediately when it is already in memory
+// for this account (at its current `updatedAt` when known), avoiding a loading flash.
+export function peekTripSegments(uid: string, tripId: string, updatedAt?: string): Segment[] | undefined {
+  if (cacheUid !== uid) return undefined;
+  const hit = memoryCache.get(tripId);
+  if (!hit) return undefined;
+  if (updatedAt && hit.updatedAt !== updatedAt) return undefined;
+  return hit.segments;
+}
+
 // Returns every requested trip's bookings immediately when all of them are already in memory
 // at their current `updatedAt`, avoiding an extra loading flash on navigation.
 export function peekAllSegments(uid: string, trips: readonly Pick<Trip, "id" | "updatedAt">[]): AllSegments | undefined {

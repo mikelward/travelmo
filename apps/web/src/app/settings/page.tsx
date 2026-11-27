@@ -174,11 +174,13 @@ function PastBookings({
   children?: ReactNode;
 }) {
   // The clock a stalled reading is judged by; a minute is fine enough.
+  const active = Boolean(progress && !progress.done);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
+    if (!active) return;
     const timer = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(timer);
-  }, []);
+  }, [active]);
   const reading = isReading(progress, now);
   const paused = pausedReason(progress, reading);
   return (
@@ -527,8 +529,8 @@ function RegroupSection({ user }: { user: User }) {
   };
   // Starting over asks first, in the page, with how many trips will go, and
   // goes ahead only once DELETE is typed.
-  const own = useTrips(user)?.filter((t) => t.ownerUid === user.uid).length;
   const [confirming, setConfirming] = useState(false);
+  const own = useTrips(user, confirming)?.filter((t) => t.ownerUid === user.uid).length;
   const [typed, setTyped] = useState("");
   const startOver = async () => {
     setBusy(true);
@@ -610,17 +612,20 @@ function RegroupSection({ user }: { user: User }) {
 // and those bookings updated, on the server, batch after batch; the line
 // below follows its progress on the profile, as Import past bookings does.
 function RefreshFromEmail({ user, progress, mailboxes }: { user: User; progress: RefreshProgress | undefined; mailboxes: GmailConnection[] }) {
-  const trips = useTrips(user);
   const [busy, setBusy] = useState(false);
   const [confirmingEverything, setConfirmingEverything] = useState(false);
   const [error, setError] = useState<string>();
   // The clock a stalled refresh is judged by; a minute is fine enough.
+  const active = Boolean(progress && !progress.done);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
+    if (!active) return;
     const timer = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(timer);
-  }, []);
+  }, [active]);
   const reading = isReading(progress, now);
+  const hasFailed = Boolean(progress && !reading && failedEmailIds(progress).length > 0);
+  const trips = useTrips(user, hasFailed);
   const run = async (action: () => Promise<unknown>, what: string) => {
     setBusy(true);
     setError(undefined);

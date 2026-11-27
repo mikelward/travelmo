@@ -3,7 +3,7 @@
 import { accessBadge, allLoyalty, guessMe, loyaltyByPerson, loyaltySummary, type FoundLoyalty, type PersonDoc, type ProfileEntry, type TravelProfile } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Dialog } from "@/components/BookingMenu";
 import { SignInGate } from "@/components/SignInGate";
 import { useAuth } from "@/lib/auth";
@@ -142,9 +142,9 @@ function LoyaltyTable({ entries, ownUid, travelers }: { entries: ProfileEntry[];
   const [editing, setEditing] = useState<{ program: string; number: string }>();
   const [naming, setNaming] = useState<string>();
   const [error, setError] = useState<string>();
+  const groups = useMemo(() => loyaltyByPerson(entries), [entries]);
+  const people = useMemo(() => groups.flatMap((g) => (g.person ? [g.person] : [])), [groups]);
   if (!entries.length) return null;
-  const groups = loyaltyByPerson(entries);
-  const people = groups.flatMap((g) => (g.person ? [g.person] : []));
   const pick = async (person: string | undefined) => {
     if (!ownUid || !editing) return;
     setError(undefined);
@@ -275,7 +275,7 @@ function FoundInEmails({ uid, found }: { uid: string; found: FoundLoyalty[] }) {
 // `travelers`: the owner's people, on their own profile, so every spelling
 // of someone is one person (allLoyalty).
 function ProfileSections({ profile, ownUid, travelers }: { profile: TravelProfile; ownUid?: string; travelers?: readonly PersonDoc[] }) {
-  const loyalty = allLoyalty(profile, travelers);
+  const loyalty = useMemo(() => allLoyalty(profile, travelers), [profile, travelers]);
   return (
     <>
       <Entries title="Documents" entries={profile.documents} open={false} />

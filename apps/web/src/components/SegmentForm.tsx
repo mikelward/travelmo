@@ -25,21 +25,25 @@ import type { PickedPlace } from "@/lib/placesApi";
 import { PlaceInput } from "./PlaceInput";
 import { zoneOfCode, zonesFromCodes, type AirportZone, type CodeKey, type ZoneKey } from "@/lib/airportZones";
 
+let cachedAirportZone: { airportZone: AirportZone } | undefined;
+
 // The airport table is loaded only once a form is open; codes typed before
 // it arrives are looked up then.
 function useAirportZone(): AirportZone | undefined {
-  const [lookup, setLookup] = useState<{ airportZone: AirportZone }>();
+  const [lookup, setLookup] = useState<{ airportZone: AirportZone } | undefined>(() => cachedAirportZone);
   useEffect(() => {
+    if (lookup) return;
     let current = true;
     import("@travelmo/core/airports")
       .then((module) => {
-        if (current) setLookup({ airportZone: module.airportZone });
+        cachedAirportZone = { airportZone: module.airportZone };
+        if (current) setLookup(cachedAirportZone);
       })
       .catch((error) => console.error("Loading the airport table failed", error));
     return () => {
       current = false;
     };
-  }, []);
+  }, [lookup]);
   return lookup?.airportZone;
 }
 

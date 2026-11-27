@@ -14,6 +14,7 @@ import {
   type Trip,
 } from "@travelmo/core";
 import Link from "next/link";
+import { memo } from "react";
 import { TripLandmark } from "@/components/TripLandmark";
 
 // A trip in its section's card: its picture (TripLandmark), the title (as displayTitles shows it among the list), its
@@ -22,7 +23,7 @@ import { TripLandmark } from "@/components/TripLandmark";
 // next flight, and the flight's online check-in until the viewer says they
 // checked in, and a journey it seems to be missing (`missing`, from
 // journeyGaps). The list's top carries the document warnings.
-export function TripCard({
+export const TripCard = memo(function TripCard({
   trip,
   title = trip.title,
   shared,
@@ -175,4 +176,4 @@ export function TripCard({
       )}
     </div>
   );
-}
+});

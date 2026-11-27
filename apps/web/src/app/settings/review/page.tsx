@@ -3,7 +3,7 @@
 import { dayRange, outcomeLabel, reviewDate, toReview, withLatest, type ParsedMessage, type ReviewSearch } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SignInGate } from "@/components/SignInGate";
 import { api } from "@/lib/api";
 import { firestore } from "@/lib/firebase";
@@ -20,14 +20,31 @@ const fieldClass = "mt-1 rounded-lg border border-field bg-background px-3 py-2"
 // How many records the list shows, newest first, until a search looks
 // through them all.
 const recent = 100;
+const pageStep = 100;
 
 function ReviewList({ user }: { user: User }) {
   const [search, setSearch] = useState<ReviewSearch>({ keyword: "", from: "", to: "" });
-  const searching = Boolean(search.keyword.trim() || search.from || search.to);
+  const [debouncedKeyword, setDebouncedKeyword] = useState("");
+  const [visibleLimit, setVisibleLimit] = useState(pageStep);
+  useEffect(() => {
+    const trimmed = search.keyword.trim();
+    if (!trimmed) {
+      setDebouncedKeyword("");
+      return;
+    }
+    const timer = setTimeout(() => setDebouncedKeyword(search.keyword), 150);
+    return () => clearTimeout(timer);
+  }, [search.keyword]);
+  const searching = Boolean(debouncedKeyword.trim() || search.from || search.to);
+  const activeSearch = Boolean(search.keyword.trim() || search.from || search.to);
   const latest = useParsedMessages(user.uid, recent);
-  const all = useAllParsedMessages(user.uid, searching);
+  // Confirmed completed reads stay cached for the session in useAllParsedMessages; unsuccessful reads restart on the next search or reconnect.
+  const all = useAllParsedMessages(user.uid, activeSearch, latest, recent);
   // A search's records are read once; the live latest show any read again since.
-  const records = searching ? (all ? withLatest(all.records, latest ?? []) : undefined) : latest;
+  const records = useMemo(
+    () => (searching ? (all ? withLatest(all.records, latest ?? []) : undefined) : latest),
+    [searching, all, latest],
+  );
   const patterns = useSenderPatterns(user.uid);
   const [busy, setBusy] = useState<string>();
   const [notice, setNotice] = useState<Record<string, string>>({});
@@ -42,8 +59,18 @@ function ReviewList({ user }: { user: User }) {
       setNotice((n) => ({ ...n, [messageId]: "Couldn't copy the report" }));
     }
   };
+  const range = useMemo(() => dayRange(search.from, search.to), [search.from, search.to]);
+  const keptIds = useMemo(() => new Set(Object.keys(reports)), [reports]);
   // A row keeps its report to copy once Import anyway made a booking of it.
-  const shown = records ? toReview(records, search.keyword, dayRange(search.from, search.to), new Set(Object.keys(reports))) : [];
+  const shown = useMemo(
+    () => (records ? toReview(records, debouncedKeyword, range, keptIds) : []),
+    [records, debouncedKeyword, range, keptIds],
+  );
+  const visible = useMemo(() => shown.slice(0, visibleLimit), [shown, visibleLimit]);
+  const updateSearch = (next: ReviewSearch) => {
+    setSearch(next);
+    setVisibleLimit(pageStep);
+  };
 
   const act = async (record: ParsedMessage, action: () => Promise<string>) => {
     setBusy(record.messageId);
@@ -70,27 +97,27 @@ function ReviewList({ user }: { user: User }) {
             type="search"
             value={search.keyword}
             placeholder="Subject or sender"
-            onChange={(e) => setSearch({ ...search, keyword: e.target.value })}
+            onChange={(e) => updateSearch({ ...search, keyword: e.target.value })}
             className={fieldClass}
           />
         </label>
         <label className="flex flex-col">
           <span className="font-medium">From</span>
-          <input type="date" value={search.from} max={search.to || undefined} onChange={(e) => setSearch({ ...search, from: e.target.value })} className={fieldClass} />
+          <input type="date" value={search.from} max={search.to || undefined} onChange={(e) => updateSearch({ ...search, from: e.target.value })} className={fieldClass} />
         </label>
         <label className="flex flex-col">
           <span className="font-medium">To</span>
-          <input type="date" value={search.to} min={search.from || undefined} onChange={(e) => setSearch({ ...search, to: e.target.value })} className={fieldClass} />
+          <input type="date" value={search.to} min={search.from || undefined} onChange={(e) => updateSearch({ ...search, to: e.target.value })} className={fieldClass} />
         </label>
-        {searching && (
-          <button type="button" className={buttonClass} onClick={() => setSearch({ keyword: "", from: "", to: "" })}>
+        {activeSearch && (
+          <button type="button" className={buttonClass} onClick={() => updateSearch({ keyword: "", from: "", to: "" })}>
             Clear
           </button>
         )}
       </form>
       {records && shown.length === 0 && (!searching || all?.done) && <p className="mt-3 text-muted">{searching ? "Nothing matches." : "Nothing to review."}</p>}
       <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
-        {shown.map((record) => {
+        {visible.map((record) => {
           // Records from other sources have no sender to teach and no email
           // to read again.
           const fromMailbox = isFromMailbox(record);
@@ -159,6 +186,11 @@ function ReviewList({ user }: { user: User }) {
           );
         })}
       </ul>
+      {shown.length > visible.length && (
+        <button type="button" className={`${buttonClass} mt-3`} onClick={() => setVisibleLimit((n) => n + pageStep)}>
+          Show more ({shown.length - visible.length} left)
+        </button>
+      )}
       {!searching && latest && latest.length === recent && (
         <p className="mt-3 text-muted">Showing the {recent} most recent. Search to find older ones.</p>
       )}

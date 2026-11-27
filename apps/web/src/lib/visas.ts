@@ -10,6 +10,8 @@ export type EntryRequirementsOf = { entries: PersonEntry[]; fetched: string };
 // visa and airport tables load only once a trip has someone with a passport
 // and bookings to place; without a known country, or with every country
 // home, there is nothing to show.
+let cachedVisaTables: { visa: VisaTable; airportPlace: PlaceLookup } | undefined;
+
 export function useEntryRequirements(
   people: readonly PersonDocuments[] | undefined,
   trip: Trip | null | undefined,
@@ -21,12 +23,15 @@ export function useEntryRequirements(
     [people, trip, today],
   );
   const wanted = travelers.length > 0 && !!segments?.length;
-  const [tables, setTables] = useState<{ visa: VisaTable; airportPlace: PlaceLookup } | Error>();
+  const [tables, setTables] = useState<{ visa: VisaTable; airportPlace: PlaceLookup } | Error | undefined>(() => cachedVisaTables);
   useEffect(() => {
-    if (!wanted) return;
+    if (!wanted || tables) return;
     let current = true;
     Promise.all([import("@travelmo/core/visaRules"), import("@travelmo/core/airportPlaces")])
-      .then(([v, a]) => current && setTables({ visa: v.visaTable, airportPlace: a.airportPlace }))
+      .then(([v, a]) => {
+        cachedVisaTables = { visa: v.visaTable, airportPlace: a.airportPlace };
+        if (current) setTables(cachedVisaTables);
+      })
       .catch((error: Error) => {
         console.error("Loading the entry rules failed", error);
         if (current) setTables(error);
@@ -34,7 +39,7 @@ export function useEntryRequirements(
     return () => {
       current = false;
     };
-  }, [wanted]);
+  }, [wanted, tables]);
   return useMemo(() => {
     if (!wanted || !trip || !segments || !tables || tables instanceof Error) return undefined;
     const { countries } = tripPlaces(segments, tables.airportPlace);

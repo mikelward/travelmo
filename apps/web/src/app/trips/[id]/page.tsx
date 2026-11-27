@@ -22,14 +22,13 @@ import { DocumentWarnings } from "@/components/DocumentWarnings";
 import { JourneyGapNotice } from "@/components/JourneyGapNotice";
 import { EntryRequirements } from "@/components/EntryRequirements";
 import { useEntryRequirements } from "@/lib/visas";
-import { localToday } from "@/lib/dates";
 import { usePeopleDocuments, useTripWarnings } from "@/lib/documents";
 import { usePeople } from "@/lib/people";
 import { useTravelProfile } from "@/lib/travelProfile";
 import { BeforeYouGo } from "@/components/Checklist";
 import { useTripChecklist } from "@/lib/checklist";
 import { useReportTrip } from "@/components/ReportBug";
-import { useAddresses, useNow, useProfile, useSegments, useSenderPatterns, useTrip, useTrips, useKeepTripFlags } from "@/lib/trips";
+import { useAddresses, useLocalToday, useNow, useProfile, useSegments, useSenderPatterns, useTrip, useTrips, useKeepTripFlags } from "@/lib/trips";
 import { flightLinesFor, useFlightRefresh, useFlightStatuses } from "@/lib/flightStatus";
 import { setCheckedIn, useCheckedIn, useCheckedInFromNotification } from "@/lib/checkedIn";
 
@@ -365,29 +364,33 @@ type Editing = { kind: "add"; date?: string } | { kind: "edit"; segment: Segment
 
 function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   useSaveForOffline();
-  const trip = useTrip(tripId);
-  const segments = useSegments(tripId);
+  const trip = useTrip(tripId, user.uid);
+  const segments = useSegments(tripId, user.uid, trip?.updatedAt);
   // A bug report sent from here carries this trip's bookings.
   useReportTrip(trip, segments);
-  useKeepTripFlags(trip ? [trip] : undefined, () => segments);
-  const now = useNow();
+  const tripForFlags = useMemo(() => (trip ? [trip] : undefined), [trip]);
+  const segmentsForFlags = useCallback(() => segments, [segments]);
+  useKeepTripFlags(tripForFlags, segmentsForFlags);
+  const today = useLocalToday();
+  const upcomingOrCurrent = !trip || displayBounds(trip).end >= today;
+  const now = useNow(60_000, upcomingOrCurrent);
   const flightStatuses = useFlightStatuses(segments, now);
   useFlightRefresh(user, tripId, segments, flightStatuses, now);
-  const patterns = useSenderPatterns(user.uid);
+  const isOwner = trip?.ownerUid === user.uid;
+  const patterns = useSenderPatterns(user.uid, isOwner);
   const allTrips = useTrips(user);
   const profile = useProfile(user.uid);
   const addresses = useAddresses(user);
-  const people = usePeopleDocuments(user);
+  const people = usePeopleDocuments(user, upcomingOrCurrent);
   // Whom the user's bookings name, and so whether they're only watching this trip.
   const travelers = usePeople(user.uid);
   // Watching it, what is the user's own leaves it out: warnings, entry
   // requirements, rides, the checklist and check-in.
-  const onlyWatching = !!segments && watchedTrip({}, segments, travelers ?? []);
+  const onlyWatching = useMemo(() => !!segments && watchedTrip({}, segments, travelers ?? []), [segments, travelers]);
   // The viewer's own programs, for the number at check-in; a fellow
   // traveler's are theirs.
   const ownTravelProfile = useTravelProfile(user.uid);
   const loyalty = useMemo(() => (ownTravelProfile ? allLoyalty(ownTravelProfile, travelers) : []), [ownTravelProfile, travelers]);
-  const today = localToday();
   const tripList = useMemo(() => (trip && !onlyWatching ? [trip] : []), [trip, onlyWatching]);
   const segmentsOfTrip = useMemo(() => (segments ? { [tripId]: segments } : {}), [segments, tripId]);
   const warnings = useTripWarnings(people, tripList, segmentsOfTrip, today)[tripId] ?? [];
@@ -413,7 +416,8 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   const [editing, setEditing] = useState<Editing>();
   const [error, setError] = useState<string>();
   // The viewer's own "I've checked in" marks on this trip's flights.
-  const checkedIn = useCheckedIn(user.uid, [tripId])[tripId];
+  const checkedInIds = useMemo(() => (upcomingOrCurrent ? [tripId] : []), [upcomingOrCurrent, tripId]);
+  const checkedIn = useCheckedIn(user.uid, checkedInIds)[tripId];
   const markCheckedIn = useCallback(
     (segmentId: string, on: boolean) =>
       setCheckedIn(user.uid, tripId, segmentId, on).catch((e: unknown) => {
@@ -426,6 +430,18 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   // After "Never import this sender": what it already imported, offered for deletion.
   const [cleanup, setCleanup] = useState<{ domain: string; plan: SenderCleanup }>();
   const router = useRouter();
+  const otherTrips = useMemo(
+    () =>
+      trip
+        ? (allTrips ?? [])
+            .filter((t) => t.id !== trip.id && !t.deleting)
+            .sort((a, b) => a.start.localeCompare(b.start))
+        : [],
+    [allTrips, trip],
+  );
+  const allTitles = useMemo(() => displayTitles(allTrips ?? []), [allTrips]);
+  const days = useMemo(() => (segments ? byDay(segments) : []), [segments]);
+  const mailboxes = useMemo(() => gmailMailboxes(profile), [profile]);
   const clean = async () => {
     if (!cleanup) return;
     const { plan } = cleanup;
@@ -461,7 +477,6 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
         {cleanupOffer}
       </>
     );
-  const isOwner = trip.ownerUid === user.uid;
   const isSharee = sharedWithAny(trip.sharedWith, addresses);
   // Sharees edit bookings; only the owner renames, shares or deletes the trip.
   const canEdit = (isOwner || isSharee) && !trip.deleting;
@@ -473,11 +488,6 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   };
   const remove = (segment: Segment) =>
     deleteSegment(firestore(), trip.id, segment.id).catch((e: Error) => setError(e.message));
-  // Other trips the viewer can edit, as destinations for a booking or for the
-  // whole trip; the rules decide finally, so a sharee of only one side is told.
-  const otherTrips = (allTrips ?? [])
-    .filter((t) => t.id !== trip.id && !t.deleting)
-    .sort((a, b) => a.start.localeCompare(b.start));
   const merge = (segment: Segment, otherId: string) =>
     mergeSegments(firestore(), trip.id, segment.id, otherId).catch((e: Error) => {
       console.error("Merging bookings failed", e);
@@ -557,22 +567,28 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
       {!segments && <p className="mt-8 text-muted">Loading…</p>}
       {segments && segments.length === 0 && <p className="mt-8 text-muted">No bookings in this trip yet.</p>}
       {segments &&
-        byDay(segments).map(([day, items]) => (
+        days.map(([day, items]) => (
           <section key={day} className="mt-8">
             <h2 className="mb-3 text-lg font-medium">{formatDate(day)}</h2>
             {/* One card per day, a rule between its bookings. No overflow-hidden so a row's ⋮ menu isn't clipped. */}
             <ul className="divide-y divide-zinc-200 rounded-xl border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-              {items.map((segment) =>
-                editing?.kind === "edit" && editing.segment.id === segment.id ? (
-                  <li key={segment.id} className="px-4 py-3">
-                    <SegmentForm
-                      segment={segment}
-                      defaultDate={trip.start}
-                      onSave={save}
-                      onCancel={() => setEditing(undefined)}
-                    />
-                  </li>
-                ) : (
+              {items.map((segment) => {
+                if (editing?.kind === "edit" && editing.segment.id === segment.id) {
+                  return (
+                    <li key={segment.id} className="px-4 py-3">
+                      <SegmentForm
+                        segment={segment}
+                        defaultDate={trip.start}
+                        onSave={save}
+                        onCancel={() => setEditing(undefined)}
+                      />
+                    </li>
+                  );
+                }
+                const onLearnSender = learn(segment);
+                const onNeverSender = never(segment);
+                const checkInState = checkedIn && !onlyWatching && flightCheckInState(segment, checkedIn, now);
+                return (
                   <SegmentRow
                     key={segment.id}
                     segment={segment}
@@ -588,16 +604,13 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
                           ...(isOwner ? { onMoveToNew: () => void moveToNew(segment) } : {}),
                         }
                       : {})}
-                    {...(learn(segment) ? { onLearnSender: learn(segment) } : {})}
-                    {...(never(segment) ? { onNeverSender: never(segment) } : {})}
+                    {...(onLearnSender ? { onLearnSender } : {})}
+                    {...(onNeverSender ? { onNeverSender } : {})}
                     // Each email links for whoever imported it, from their mailbox.
-                    emailLinks={{ uid: user.uid, mailboxes: gmailMailboxes(profile), ownsTrip: isOwner }}
+                    emailLinks={{ uid: user.uid, mailboxes, ownsTrip: isOwner }}
                     programs={programsFor(segment.provider, loyalty)}
                     flightLines={flightLinesFor(segment, flightStatuses, now)}
-                    {...(() => {
-                      const state = checkedIn && !onlyWatching && flightCheckInState(segment, checkedIn, now);
-                      return state ? { checkIn: { state, onChange: (on: boolean) => void markCheckedIn(segment.id, on) } } : {};
-                    })()}
+                    {...(checkInState ? { checkIn: { state: checkInState, onChange: (on: boolean) => void markCheckedIn(segment.id, on) } } : {})}
                     {...(canEdit
                       ? {
                           onRate: (rating: number | null) => rateSegment(firestore(), trip.id, segment.id, rating).catch((e: Error) => setError(e.message)),
@@ -637,14 +650,14 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
                         />
                       ))}
                   </SegmentRow>
-                ),
-              )}
+                );
+              })}
             </ul>
           </section>
         ))}
 
       {canManage && <Sharing trip={trip} user={user} />}
-      {canManage && <MergeInto trip={trip} targets={otherTrips} titles={displayTitles(allTrips ?? [])} />}
+      {canManage && <MergeInto trip={trip} targets={otherTrips} titles={allTitles} />}
       {canManage && !trip.cancelledAt && <TripCancelled trip={trip} canManage={canManage} />}
       {canManage && <DangerZone trip={trip} />}
     </>

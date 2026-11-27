@@ -2,28 +2,31 @@
 
 import { PersonDoc, findPerson, guessMe, mergedPerson, paths, withAlias } from "@travelmo/core";
 import { collection, doc, onSnapshot, updateDoc, writeBatch, type Firestore } from "firebase/firestore";
-import { useEffect, useState } from "react";
 import { firestore } from "./firebase";
+import { useLiveSubscription } from "./liveCache";
 
 // The people the user's bookings name (SPEC "Travelers"), most often named
 // first; undefined until they load. One that doesn't parse is left out.
 export function usePeople(uid: string): PersonDoc[] | undefined {
-  const [people, setPeople] = useState<PersonDoc[]>();
-  useEffect(() => {
-    return onSnapshot(
-      collection(firestore(), paths.people(uid)),
-      (snap) => {
-        const parsed = snap.docs.flatMap((d) => {
-          const result = PersonDoc.safeParse(d.data());
-          if (!result.success) console.error(`Malformed person ${d.ref.path}`, result.error);
-          return result.success ? [result.data] : [];
-        });
-        setPeople(parsed.sort((a, b) => b.bookings - a.bookings || a.name.localeCompare(b.name)));
-      },
-      (error) => console.error("People subscription failed", error),
-    );
-  }, [uid]);
-  return people;
+  return useLiveSubscription<PersonDoc[]>(
+    `people:${uid}`,
+    (emit, fail) =>
+      onSnapshot(
+        collection(firestore(), paths.people(uid)),
+        (snap) => {
+          const parsed = snap.docs.flatMap((d) => {
+            const result = PersonDoc.safeParse(d.data());
+            if (!result.success) console.error(`Malformed person ${d.ref.path}`, result.error);
+            return result.success ? [result.data] : [];
+          });
+          emit(parsed.sort((a, b) => b.bookings - a.bookings || a.name.localeCompare(b.name)));
+        },
+        (error) => {
+          console.error("People subscription failed", error);
+          fail();
+        },
+      ),
+  );
 }
 
 // Says which person is the user: that one marked, and no other.

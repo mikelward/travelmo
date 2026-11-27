@@ -1,6 +1,6 @@
 import type { Segment } from "@travelmo/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearSegmentCache, loadAllSegments, peekAllSegments, type SegmentRead, type SegmentReader } from "./segmentCache";
+import { clearSegmentCache, loadAllSegments, peekAllSegments, peekTripSegments, type SegmentRead, type SegmentReader } from "./segmentCache";
 
 const at = "2026-01-01T00:00:00Z";
 const seg = (id: string, tripId: string): Segment => ({
@@ -217,5 +217,18 @@ describe("segmentCache", () => {
       updatedAt: "2026-01-01T00:00:00Z",
       count: 2,
     });
+  });
+
+  it("peeks a single trip's cached segments only for the matching account and version", async () => {
+    const reader: SegmentReader = {
+      fromCache: async () => undefined,
+      fromStore: async (id) => ({ segments: [seg("s1", id)], confirmed: true }),
+    };
+    await loadAllSegments("u1", [{ id: "a", updatedAt: "2026-01-01T00:00:00Z" }], reader);
+
+    expect(peekTripSegments("u1", "a", "2026-01-01T00:00:00Z")).toEqual([seg("s1", "a")]);
+    expect(peekTripSegments("u1", "a")).toEqual([seg("s1", "a")]);
+    expect(peekTripSegments("u1", "a", "2026-01-02T00:00:00Z")).toBeUndefined();
+    expect(peekTripSegments("u2", "a", "2026-01-01T00:00:00Z")).toBeUndefined();
   });
 });
