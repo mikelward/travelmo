@@ -12,8 +12,11 @@ private val aliases = mapOf(
     "uae" to "AE", "ivory coast" to "CI", "macedonia" to "MK", "burma" to "MM", "republic of ireland" to "IE",
 )
 
+private val saintPattern = Regex("""\bsaint\b""")
+private val sepPattern = Regex("""[\s-]+""")
+
 private fun normalize(name: String): String =
-    name.lowercase().replace(".", "").replace(Regex("""\bsaint\b"""), "st").replace(Regex("""[\s-]+"""), " ").trim()
+    name.lowercase().replace(".", "").replace(saintPattern, "st").replace(sepPattern, " ").trim()
 
 private val byName: Map<String, String> by lazy {
     val map = HashMap(aliases)
@@ -26,7 +29,14 @@ private val byName: Map<String, String> by lazy {
 
 /** The ISO code for a country written by name in English, or null when the text is not one. */
 fun countryCodeOf(name: String): String? {
-    val key = normalize(name)
+    val trimmed = name.trim()
+    if (trimmed.isEmpty()) return null
+    if (trimmed.length == 2) {
+        val upper = trimmed.uppercase()
+        if (upper == "UK") return "GB"
+        if (upper in knownCodes) return upper
+    }
+    val key = normalize(trimmed)
     if (key.isEmpty()) return null
     return byName[key] ?: byName[key.removePrefix("the ")]
 }

@@ -18,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -29,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.travelmo.core.HomePeriod
 import app.travelmo.core.LimitType
+import app.travelmo.core.ResidenceReport
 import app.travelmo.core.ResidenceStatus
 import app.travelmo.core.RuleKind
 import app.travelmo.core.RuleResult
@@ -41,6 +43,7 @@ import app.travelmo.core.residenceReport
 import app.travelmo.core.residenceRuleSets
 import app.travelmo.core.spanText
 import app.travelmo.shared.Res
+import app.travelmo.shared.reports_working
 import app.travelmo.shared.residence_applying_on
 import app.travelmo.shared.residence_as_of
 import app.travelmo.shared.residence_fewer
@@ -93,12 +96,24 @@ import org.jetbrains.compose.resources.stringResource
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ResidenceDays(trips: List<TripWithSegments>, homes: List<HomePeriod>, today: String, titles: Map<String, String>, onOpenTrip: (String) -> Unit, modifier: Modifier = Modifier, showTitle: Boolean = true) {
+fun ResidenceDays(
+    trips: List<TripWithSegments>,
+    homes: List<HomePeriod>,
+    today: String,
+    titles: Map<String, String>,
+    onOpenTrip: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    showTitle: Boolean = true,
+    compute: suspend (() -> ResidenceReport) -> ResidenceReport = { it() },
+) {
     var setId by rememberSaveable { mutableStateOf(residenceRuleSets.first().id) }
     val set = residenceRuleSets.firstOrNull { it.id == setId } ?: residenceRuleSets.first()
     // The day to count to: today unless the user picks another, such as the day they mean to apply.
     var date by rememberSaveable { mutableStateOf(today) }
-    val report = remember(trips, homes, set, date) { residenceReport(trips, homes, set, date) }
+    val report by produceState<ResidenceReport?>(null, trips, homes, set, date) {
+        value = null
+        value = compute { residenceReport(trips, homes, set, date) }
+    }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(modifier = modifier.fillMaxWidth()) {
         // Without, when the reports' title that opens it stands above.
@@ -123,11 +138,16 @@ fun ResidenceDays(trips: List<TripWithSegments>, homes: List<HomePeriod>, today:
             { date = it },
             Modifier.padding(top = 8.dp),
         )
-        if (!report.homeCountryKnown) {
-            Text(stringResource(Res.string.residence_no_home_country), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
+        val current = report
+        if (current == null) {
+            Text(stringResource(Res.string.reports_working), color = muted, modifier = Modifier.padding(top = 8.dp))
+        } else {
+            if (!current.homeCountryKnown) {
+                Text(stringResource(Res.string.residence_no_home_country), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
+            }
+            for (result in current.results) Result(result, titles, onOpenTrip)
+            Text(stringResource(Res.string.residence_estimate), style = MaterialTheme.typography.bodyLarge, color = muted, modifier = Modifier.padding(top = 8.dp))
         }
-        for (result in report.results) Result(result, titles, onOpenTrip)
-        Text(stringResource(Res.string.residence_estimate), style = MaterialTheme.typography.bodyLarge, color = muted, modifier = Modifier.padding(top = 8.dp))
     }
 }
 

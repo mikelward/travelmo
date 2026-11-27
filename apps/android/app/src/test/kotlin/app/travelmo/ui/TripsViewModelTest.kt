@@ -888,4 +888,110 @@ class TripsViewModelTest {
         state.titles.values shouldContain "Paris"
         state.missing.values.any { it.startsWith("No flight from") } shouldBe true
     }
+
+    @Test
+    fun `reportTrips reads each trip once per version and reuses local cache until evicted`() = runTest {
+        val tripA = Trip("a", "Paris", "2026-05-01", "2026-05-03", OWNER, updatedAt = "2026-05-01T00:00:00Z")
+        val tripB = Trip("b", "Rome", "2026-06-01", "2026-06-03", OWNER, updatedAt = "2026-06-01T00:00:00Z")
+        val segA = listOf(Segment("sa1", "a", SegmentType.LODGING, "Hotel A", "2026-05-01T15:00:00+02:00", "2026-05-03T11:00:00+02:00"))
+        val segB = listOf(
+            Segment("sb1", "b", SegmentType.LODGING, "Hotel B1", "2026-06-01T15:00:00+02:00", "2026-06-02T11:00:00+02:00"),
+            Segment("sb2", "b", SegmentType.LODGING, "Hotel B2", "2026-06-02T15:00:00+02:00", "2026-06-03T11:00:00+02:00"),
+        )
+        val base = FakeTripStore(trips = listOf(tripA, tripB), segments = mapOf("a" to segA, "b" to segB))
+        val onceCalls = mutableListOf<String>()
+        val cacheCalls = mutableListOf<String>()
+        var cacheResponses: Map<String, List<Segment>?> = mapOf("a" to segA, "b" to segB)
+        val store = object : TripStore by base {
+            override suspend fun segmentsOnce(tripId: String): app.travelmo.data.Seen<List<Segment>> {
+                onceCalls += tripId
+                return app.travelmo.data.Seen(base.segments(tripId).first(), confirmed = true)
+            }
+
+            override suspend fun cachedSegments(tripId: String): List<Segment>? {
+                cacheCalls += tripId
+                return cacheResponses[tripId]
+            }
+        }
+        val versions = app.travelmo.data.InMemorySegmentVersionsStore()
+
+        // First run: no manifest yet, reads both trips once and records (updatedAt, count).
+        val first = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, segmentVersionsStore = versions)
+        first.reportTrips.first { it != null }!!.map { it.trip.id } shouldBe listOf("a", "b")
+        onceCalls.sorted() shouldBe listOf("a", "b")
+        cacheCalls.shouldBeEmpty()
+
+        // Simulated restart with the same manifest: trip a hits cache (count matches), trip b is
+        // partially evicted (1 != 2) and falls back to segmentsOnce.
+        onceCalls.clear()
+        cacheResponses = mapOf("a" to segA, "b" to segB.take(1))
+        val second = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, segmentVersionsStore = versions)
+        val loaded = second.reportTrips.first { it != null }!!
+        loaded.first { it.trip.id == "b" }.segments.size shouldBe 2
+        cacheCalls.sorted() shouldBe listOf("a", "b")
+        onceCalls shouldBe listOf("b")
+    }
+
+    @Test
+    fun `reportTrips does not cache or persist unconfirmed offline reads and refreshes on reconnect`() = runTest {
+        val tripA = Trip("a", "Paris", "2026-05-01", "2026-05-03", OWNER, updatedAt = "2026-05-01T00:00:00Z")
+        val segA = listOf(Segment("sa1", "a", SegmentType.LODGING, "Hotel A", "2026-05-01T15:00:00+02:00", "2026-05-03T11:00:00+02:00"))
+        val base = FakeTripStore(trips = listOf(tripA), segments = mapOf("a" to segA))
+        var online = false
+        val onceCalls = mutableListOf<String>()
+        val cacheCalls = mutableListOf<String>()
+        val reconnected = kotlinx.coroutines.flow.MutableSharedFlow<Unit>()
+        val store = object : TripStore by base {
+            override suspend fun segmentsOnce(tripId: String): app.travelmo.data.Seen<List<Segment>> {
+                onceCalls += tripId
+                return if (online) app.travelmo.data.Seen(segA, confirmed = true)
+                else app.travelmo.data.Seen(emptyList(), confirmed = false)
+            }
+
+            override suspend fun cachedSegments(tripId: String): List<Segment>? {
+                cacheCalls += tripId
+                return emptyList()
+            }
+        }
+        val versions = app.travelmo.data.InMemorySegmentVersionsStore()
+
+        // First open offline while staying subscribed to reportTrips: returns local cache, does not persist.
+        val vm = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, segmentVersionsStore = versions, reconnected = reconnected)
+        val collected = mutableListOf<List<app.travelmo.core.TripWithSegments>?>()
+        val job = launch { vm.reportTrips.collect { collected += it } }
+        runCurrent()
+        collected.last()!!.first().segments.shouldBeEmpty()
+        versions.read() shouldBe null
+
+        // Connectivity returns without leaving the screen: refreshes in place and persists the confirmed version.
+        online = true
+        reconnected.emit(Unit)
+        runCurrent()
+        collected.last()!!.first().segments shouldBe segA
+        onceCalls shouldBe listOf("a", "a")
+        cacheCalls.shouldBeEmpty()
+
+        // Subsequent reconnect events once confirmed trigger no extra reads.
+        reconnected.emit(Unit)
+        runCurrent()
+        onceCalls shouldBe listOf("a", "a")
+        job.cancel()
+
+        // Simulated restart now sees the confirmed manifest and uses cachedSegments.
+        val restartedStore = object : TripStore by base {
+            override suspend fun segmentsOnce(tripId: String): app.travelmo.data.Seen<List<Segment>> {
+                onceCalls += tripId
+                return app.travelmo.data.Seen(segA, confirmed = true)
+            }
+
+            override suspend fun cachedSegments(tripId: String): List<Segment>? {
+                cacheCalls += tripId
+                return segA
+            }
+        }
+        val restarted = TripsViewModel(restartedStore, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, segmentVersionsStore = versions)
+        restarted.reportTrips.first { it != null }!!.first().segments shouldBe segA
+        cacheCalls shouldBe listOf("a")
+        onceCalls shouldBe listOf("a", "a")
+    }
 }

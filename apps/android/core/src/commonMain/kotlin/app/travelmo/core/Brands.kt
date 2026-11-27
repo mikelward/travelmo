@@ -133,7 +133,9 @@ val brands: List<Brand> = listOf(
     Brand("universal", "Universal Studios", setOf(SegmentType.ACTIVITY, SegmentType.LODGING, SegmentType.OTHER), false, null, listOf("Universal Studios", "Universal Orlando")),
 )
 
-private fun fold(text: String): String = " " + foldText(text).replace(Regex("[^a-z0-9]+"), " ").trim() + " "
+private val nonAlnum = Regex("[^a-z0-9]+")
+
+private fun fold(text: String): String = " " + foldText(text).replace(nonAlnum, " ").trim() + " "
 
 /** The brand a booking names, as brands.ts's bookingBrand: the longest alias its title or provider says, a booking site only when no other. */
 fun bookingBrand(segment: Segment): Brand? {

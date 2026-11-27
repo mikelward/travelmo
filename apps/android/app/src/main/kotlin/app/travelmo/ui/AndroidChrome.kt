@@ -53,9 +53,9 @@ class AndroidChrome(private val context: Context) : AppChrome {
         val currentOnSaved = rememberUpdatedState(onSaved)
         val launcher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(mimeType)) { uri ->
             if (uri == null) return@rememberLauncherForActivityResult
-            val body = currentText.value()
             scope.launch {
                 val saved = try {
+                    val body = withContext(Dispatchers.Default) { currentText.value() }
                     withContext(Dispatchers.IO) {
                         context.contentResolver.openOutputStream(uri)?.use { it.write(body.toByteArray()) } ?: throw IOException("No stream to write to")
                     }

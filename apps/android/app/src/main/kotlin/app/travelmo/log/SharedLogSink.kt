@@ -12,6 +12,10 @@ import com.mikelward.androidlog.sensitive
  * debug log with each value keeping its privacy marking.
  */
 object SharedLogSink : LogSink {
+    override fun debug(format: String, values: List<LogValue>) {
+        TravelmoLog.event(format, *marked(values))
+    }
+
     override fun info(format: String, values: List<LogValue>) {
         TravelmoLog.info(format, *marked(values))
     }

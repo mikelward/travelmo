@@ -1,10 +1,11 @@
 "use client";
 
-import { effectiveHomes, homeTimeline, maxHomeCorrections, paths, watchedTrip, withChosenAirports, withHomeAirports, type ChosenHomeAirports, type HomeCorrection, type HomePeriod, type PersonDoc, type Segment, type Trip } from "@travelmo/core";
+import { effectiveHomesWithAirports, maxHomeCorrections, paths, watchedTrip, type ChosenHomeAirports, type HomeCorrection, type HomePeriod, type PersonDoc, type Segment, type Trip } from "@travelmo/core";
 
 export { airportCodes, correctionText, homeLine, homeTownKey, parseAirportCodes, parseCorrection } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
+import { useMemo } from "react";
 import { firestore } from "./firebase";
 import { usePeople } from "./people";
 import { useAllSegments, useProfile, useTrips } from "./trips";
@@ -22,7 +23,7 @@ export function deriveHomes(
   chosen: readonly ChosenHomeAirports[] = [],
 ): Homes {
   const segments = Object.values(byTrip).flat();
-  const periods = withChosenAirports(withHomeAirports(effectiveHomes(homeTimeline(segments), corrections), segments), chosen);
+  const periods = effectiveHomesWithAirports(segments, corrections, chosen);
   return { periods, corrections: [...corrections], chosen: [...chosen], failed: failed.length };
 }
 
@@ -50,8 +51,8 @@ export function useHomes(user: User): Homes | undefined {
   const trips = useTrips(user);
   const profile = useProfile(user.uid);
   const people = usePeople(user.uid);
-  const own = trips?.filter((t) => t.ownerUid === user.uid).map((t) => t.id);
-  const all = useAllSegments(own);
+  const own = useMemo(() => trips?.filter((t) => t.ownerUid === user.uid), [trips, user.uid]);
+  const all = useAllSegments(own, user.uid);
   if (!trips || !all || !profile || !people) return undefined;
   return deriveHomes(ownTripSegments(trips, all.byTrip, user.uid, people), all.failed, profile.homes ?? [], profile.homeAirports ?? []);
 }

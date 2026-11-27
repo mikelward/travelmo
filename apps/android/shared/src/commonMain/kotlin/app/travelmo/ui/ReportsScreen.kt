@@ -3,6 +3,7 @@ package app.travelmo.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,6 +13,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -42,7 +45,6 @@ import app.travelmo.shared.residence_title
 import app.travelmo.shared.section_closed
 import app.travelmo.shared.section_open
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -126,9 +128,6 @@ import app.travelmo.shared.trips_up_to
 import app.travelmo.shared.uncounted_days
 import app.travelmo.shared.year
 import app.travelmo.ui.theme.TravelmoTheme
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
@@ -144,6 +143,7 @@ import org.jetbrains.compose.resources.stringResource
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpenSettings: () -> Unit, bottomBar: @Composable () -> Unit) {
+    LaunchedEffect(viewModel) { viewModel.refreshUnconfirmedSegments() }
     val all by viewModel.reportTrips.collectAsStateWithLifecycle()
     // The user's home corrections, for the trips download, which works home out when it is saved: offered only once
     // they have answered, so "outside my home country" never takes a home not yet read for none.
@@ -160,10 +160,15 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
     val snapshot by viewModel.reportSnapshot.collectAsStateWithLifecycle()
     LaunchedEffect(whole) { whole?.let(viewModel::saveReportSnapshot) }
     val tripList by viewModel.trips.collectAsStateWithLifecycle()
-    val titles = remember(input, tripList) { displayTitles(input?.map { it.trip } ?: tripList.orEmpty()) }
+    val titles by produceState<Map<String, String>>(emptyMap(), input, tripList) {
+        val list = input?.map { it.trip } ?: tripList.orEmpty()
+        value = viewModel.computed { displayTitles(list) }
+    }
+    val mapData by produceState<WorldMapData?>(null) { value = viewModel.computed { worldMap } }
     // Days in each country and residence days take a while (home over time, then every day of every year), so each
     // is worked out only once opened, and home only for them.
     var countriesOpen by rememberSaveable { mutableStateOf(false) }
+    var openCountry by rememberSaveable { mutableStateOf<String?>(null) }
     var residenceOpen by rememberSaveable { mutableStateOf(false) }
     val homesFlow = remember(countriesOpen || residenceOpen) { if (countriesOpen || residenceOpen) viewModel.reportHomes else flowOf(null) }
     val homes by homesFlow.collectAsStateWithLifecycle(null)
@@ -175,7 +180,9 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
         value = if (!countriesOpen || input == null || periods == null) false to null
         else true to viewModel.computed { countryDaysRange(input, today, year)?.let { countryDays(input, periods, it, counting = counting) } }
     }
-    val favorites = remember(input) { input?.let { trips -> favoritePlaces(trips.map { TripWithBookings(it.trip, it.segments) }) }.orEmpty() }
+    val favorites by produceState<List<FavoritePlace>>(emptyList(), input) {
+        value = input?.let { trips -> viewModel.computed { favoritePlaces(trips.map { TripWithBookings(it.trip, it.segments) }) } }.orEmpty()
+    }
     Scaffold(topBar = { AppTopBar(stringResource(Res.string.reports_title), onOpenSettings = onOpenSettings) }, bottomBar = bottomBar) { padding ->
         val whole = whole ?: snapshot
         val report = report ?: snapshot?.takeIf { year == null }
@@ -183,14 +190,18 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
             Text(stringResource(Res.string.reports_loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp))
             return@Scaffold
         }
+        val visited = remember(report) { report.countries.map { it.country }.toSet() }
         val list = rememberLazyListState()
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).scrollEdgeCue(list, scrollCueColors()), state = list, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
             // Another year is worked out from the bookings, so it can be picked only once they are read: until then the
             // saved counts stand, and picking one would leave nothing to show.
             item(key = "year") { YearPicker(whole.years.map { it.year }, year, enabled = input != null) { year = it } }
             item(key = "summary") { Summary(report) }
-            item(key = "map") {
-                WorldMap(worldMap, visited = report.countries.map { it.country }.toSet(), airports = report.airports, places = report.places, modifier = Modifier.padding(top = 16.dp))
+            val loadedMap = mapData
+            if (loadedMap != null) {
+                item(key = "map") {
+                    WorldMap(loadedMap, visited = visited, airports = report.airports, places = report.places, modifier = Modifier.padding(top = 16.dp))
+                }
             }
             item(key = "countries-title") { OnDemandTitle(stringResource(Res.string.days_in_each_country), countriesOpen) { countriesOpen = !countriesOpen } }
             if (countriesOpen) {
@@ -198,7 +209,7 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
                 when {
                     !done -> item(key = "countries") { Working() }
                     days == null -> item(key = "countries") { Working(stringResource(Res.string.no_days_to_count)) }
-                    else -> item(key = "countries") { CountryDaysSection(days, counting, viewModel::setReportCounting, today, titles, onOpenTrip) }
+                    else -> countryDaysItems(days, counting, viewModel::setReportCounting, today, titles, openCountry, { openCountry = it }, onOpenTrip)
                 }
             }
             if (favorites.isNotEmpty()) {
@@ -211,7 +222,7 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
             if (residenceOpen) {
                 val periods = homes
                 if (periods == null) item(key = "residence") { Working() }
-                else item(key = "residence") { ResidenceDays(input.orEmpty(), periods, today, titles, onOpenTrip, showTitle = false) }
+                else item(key = "residence") { ResidenceDays(input.orEmpty(), periods, today, titles, onOpenTrip, showTitle = false, compute = { viewModel.computed(it) }) }
             }
             if (whole.years.isNotEmpty()) {
                 item(key = "years") {
@@ -286,42 +297,69 @@ private fun YearPicker(years: List<String>, year: String?, enabled: Boolean, onP
 /**
  * Days in each country, home included, split into stays at each border crossing; each country
  * opens to its stays, latest first, so a surprising one can be found and fixed. Days nothing places
- * come first, to be given a place, and count nowhere until they are.
+ * come first, to be given a place, and count nowhere until they are. Emitted as individual lazy
+ * items so opening a country with many stays composes only the rows on screen.
  */
-@Composable
-private fun CountryDaysSection(report: CountryDaysReport, counting: CountryCounting, onCounting: (CountryCounting) -> Unit, today: String, titles: Map<String, String>, onOpenTrip: (String) -> Unit) {
+private fun LazyListScope.countryDaysItems(
+    report: CountryDaysReport,
+    counting: CountryCounting,
+    onCounting: (CountryCounting) -> Unit,
+    today: String,
+    titles: Map<String, String>,
+    open: String?,
+    onOpen: (String?) -> Unit,
+    onOpenTrip: (String) -> Unit,
+) {
     // Kept up while another count is picked, even with no days to show, so it can be changed back.
     if (report.countries.isEmpty() && report.unplaced.isEmpty() && report.homeCountryKnown && counting == CountryCounting.PART) return
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    var open by rememberSaveable { mutableStateOf<String?>(null) }
     val nights = counting == CountryCounting.NIGHTS
-    CountingPicker(counting, onCounting)
+    item(key = "countries-picker") { CountingPicker(counting, onCounting) }
     if (!report.homeCountryKnown) {
-        Text(stringResource(Res.string.residence_no_home_country), style = MaterialTheme.typography.bodyLarge, color = muted)
+        item(key = "countries-no-home") {
+            Text(stringResource(Res.string.residence_no_home_country), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
     if (report.unplaced.isNotEmpty()) {
         val total = report.unplaced.sumOf { it.days }
-        Text(pluralStringResource(Res.plurals.uncounted_days, total, total), style = MaterialTheme.typography.bodyLarge, color = muted)
-        for (s in report.unplaced) {
+        item(key = "countries-unplaced-header") {
+            Text(pluralStringResource(Res.plurals.uncounted_days, total, total), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        itemsIndexed(report.unplaced, key = { i, s -> "unplaced-${s.start}-${s.end}-$i" }) { _, s ->
             StayLine(formatDateRange(s.start, s.end), pluralStringResource(Res.plurals.residence_days, s.days, s.days), null, s.tripIds, titles, onOpenTrip)
         }
     }
-    Table(
-        header = listOf(stringResource(Res.string.col_country) to 2f, stringResource(if (nights) Res.string.col_nights else Res.string.col_days) to 0.7f),
-        rows = report.countries.map { listOf(countryName(it.country), it.days.toString()) },
-        onRow = { r -> report.countries[r].country.let { open = if (open == it) null else it } },
-        open = report.countries.indexOfFirst { it.country == open }.takeIf { it >= 0 },
-        under = { r ->
-            Column(modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)) {
-                for (s in report.countries[r].stays) {
+    item(key = "countries-header") {
+        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            Text(stringResource(Res.string.col_country), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Start, modifier = Modifier.weight(2f))
+            Text(stringResource(if (nights) Res.string.col_nights else Res.string.col_days), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.End, modifier = Modifier.weight(0.7f))
+        }
+    }
+    for (entry in report.countries) {
+        item(key = "country-${entry.country}") {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .clickable { onOpen(if (open == entry.country) null else entry.country) }
+                        .padding(vertical = 6.dp),
+                ) {
+                    Text(countryName(entry.country), style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Start, modifier = Modifier.weight(2f))
+                    Text(entry.days.toString(), style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.End, modifier = Modifier.weight(0.7f))
+                }
+            }
+        }
+        if (open == entry.country) {
+            itemsIndexed(entry.stays, key = { i, s -> "stay-${entry.country}-${s.start}-${s.end}-$i" }) { i, s ->
+                val bottom = if (i == entry.stays.lastIndex) 8.dp else 0.dp
+                Box(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, bottom = bottom)) {
                     // A run of nights reads as a hotel booking does, to the morning after the last (if it has come).
                     val dates = formatDateRange(s.start, if (nights && s.end < today) shiftDate(s.end, DateShift(days = 1)) else s.end)
                     val count = if (nights) pluralStringResource(Res.plurals.nights_count, s.days, s.days) else pluralStringResource(Res.plurals.residence_days, s.days, s.days)
                     StayLine(dates, count, if (s.home) stringResource(Res.string.home_stay) else null, s.tripIds, titles, onOpenTrip)
                 }
             }
-        },
-    )
+        }
+    }
 }
 
 /** "24–30 Nov 2026 · 7 days · Boston": a run of days, each trip's title opening that trip. */
@@ -434,8 +472,12 @@ fun WorldMap(data: WorldMapData, visited: Set<String>, airports: List<AirportVis
         data.countries.map { country ->
             country.code to Path().apply {
                 for (ring in country.rings) {
-                    ring.firstOrNull()?.let { moveTo(it.first, it.second) }
-                    for (p in ring.drop(1)) lineTo(p.first, p.second)
+                    if (ring.isEmpty()) continue
+                    moveTo(ring[0].first, ring[0].second)
+                    for (i in 1 until ring.size) {
+                        val p = ring[i]
+                        lineTo(p.first, p.second)
+                    }
                     close()
                 }
             }

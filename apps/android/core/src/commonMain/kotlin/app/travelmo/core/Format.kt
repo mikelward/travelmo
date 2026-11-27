@@ -49,8 +49,10 @@ fun formatDateRange(start: String, end: String): String {
  * every summer), gets each one's dates, "Debutots Camp (11–15 Aug 2025)";
  * any other title reads as it is. Keyed by trip id.
  */
+private val whitespaceRuns = Regex("\\s+")
+
 fun displayTitles(trips: List<Trip>): Map<String, String> {
-    fun key(title: String) = title.trim().replace(Regex("\\s+"), " ").lowercase()
+    fun key(title: String) = title.trim().replace(whitespaceRuns, " ").lowercase()
     val count = trips.groupingBy { key(it.title) }.eachCount()
     return trips.associate { trip ->
         trip.id to if ((count[key(trip.title)] ?: 0) > 1) "${trip.title.trim()} (${formatDateRange(trip.shownStart, trip.shownEnd)})" else trip.title

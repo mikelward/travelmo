@@ -64,12 +64,31 @@ fun countryCode(country: String): String = countryCodeOf(country) ?: country.tri
 // its own, from the web's generated cityNames.json, as home.ts reads it: a
 // station in Göteborg is in the Gothenburg its airport names.
 private val otherNames: Map<String, String> by lazy {
-    val names = HashMap<String, String>()
-    val line = Regex(""""([^"]*)":\[(.*)]""")
-    val item = Regex(""""([^"]*)"""")
-    for (match in line.findAll(cityNamesJson)) {
-        val own = match.groupValues[1]
-        for (name in item.findAll(match.groupValues[2])) names[name.groupValues[1]] = own
+    val text = cityNamesJson
+    val names = HashMap<String, String>(32_000)
+    var pos = 0
+    val len = text.length
+    while (pos < len) {
+        val nl = text.indexOf('\n', pos).let { if (it < 0) len else it }
+        val q1 = text.indexOf('"', pos)
+        if (q1 in pos until nl) {
+            val q2 = text.indexOf('"', q1 + 1)
+            val lb = if (q2 in (q1 + 1) until nl) text.indexOf('[', q2 + 1) else -1
+            val rb = if (lb in (q2 + 1) until nl) text.lastIndexOf(']', nl - 1) else -1
+            if (rb > lb && lb >= 0) {
+                val own = text.substring(q1 + 1, q2)
+                var cur = lb + 1
+                while (cur < rb) {
+                    val s1 = text.indexOf('"', cur)
+                    if (s1 !in cur until rb) break
+                    val s2 = text.indexOf('"', s1 + 1)
+                    if (s2 !in (s1 + 1) until rb) break
+                    names[text.substring(s1 + 1, s2)] = own
+                    cur = s2 + 1
+                }
+            }
+        }
+        pos = nl + 1
     }
     names
 }
@@ -93,7 +112,19 @@ fun sameCity(a: String, b: String): Boolean = ownName(a) == ownName(b)
 
 private fun sameTown(a: Town, b: HomePeriod): Boolean = sameTown(a, Town(b.city, b.country))
 
-private data class RoundTrip(val base: Town, val start: String, val from: Place, val back: Place)
+private data class ResolvedTown(val town: Town, val ownCity: String, val code: String?)
+
+private fun resolveTown(t: Town): ResolvedTown = ResolvedTown(t, ownName(t.city), t.country?.let(::countryCode))
+
+private fun sameResolvedTown(a: ResolvedTown, b: ResolvedTown): Boolean {
+    if (a.code != null && b.code != null && a.code != b.code) return false
+    if (a.ownCity == b.ownCity) return true
+    val ta = a.town
+    val tb = b.town
+    return ta.lat != null && ta.lon != null && tb.lat != null && tb.lon != null && distanceKm(ta.lat, ta.lon, tb.lat, tb.lon) <= NEAR_KM
+}
+
+private data class RoundTrip(val base: ResolvedTown, val start: String, val from: Place, val back: Place)
 
 // How long someone can be away from a town and still live there, in days: a
 // longer round trip says nothing about where home is (they lived away, or its
@@ -108,24 +139,38 @@ private const val STAY_DAYS = 60L
 // leave, by instant, since local times misorder them across the date line; a
 // journey within one town goes nowhere and says nothing.
 private fun roundTrips(segments: List<Segment>): List<RoundTrip> {
+    class TimedJourney(val seg: Segment, val startMs: Long, val from: ResolvedTown, val to: ResolvedTown)
     // A cancelled journey was never travelled, so it says nothing about home.
-    val journeys = liveSegments(segments)
-        .filter {
-            val from = town(it.origin)
-            val to = town(it.destination)
-            it.type in journeyTypes && from != null && to != null && !sameTown(from, to)
-        }
-        .sortedBy { instantMillis(it.start) }
+    val journeys = ArrayList<TimedJourney>()
+    for (s in liveSegments(segments)) {
+        if (s.type !in journeyTypes) continue
+        val fromTown = town(s.origin) ?: continue
+        val toTown = town(s.destination) ?: continue
+        val from = resolveTown(fromTown)
+        val to = resolveTown(toTown)
+        if (sameResolvedTown(from, to)) continue
+        journeys += TimedJourney(s, instantMillis(s.start), from, to)
+    }
+    journeys.sortBy { it.startMs }
+    val maxMs = STAY_DAYS * 86_400_000L
     val trips = mutableListOf<RoundTrip>()
     var i = 0
     while (i < journeys.size) {
-        val base = town(journeys[i].origin)!!
-        val back = (i until journeys.size).firstOrNull { sameTown(town(journeys[it].destination)!!, base) }
-        if (back == null || instantMillis(journeys[back].start) - instantMillis(journeys[i].start) > STAY_DAYS * 86_400_000L) {
+        val start = journeys[i]
+        val base = start.from
+        var back = -1
+        for (k in i until journeys.size) {
+            if (journeys[k].startMs - start.startMs > maxMs) break
+            if (sameResolvedTown(journeys[k].to, base)) {
+                back = k
+                break
+            }
+        }
+        if (back < 0) {
             i++
             continue
         }
-        trips += RoundTrip(base, localDate(journeys[i].start), journeys[i].origin!!, journeys[back].destination!!)
+        trips += RoundTrip(base, localDate(start.seg.start), start.seg.origin!!, journeys[back].seg.destination!!)
         i = back + 1
     }
     return trips
@@ -137,34 +182,33 @@ private fun roundTrips(segments: List<Segment>): List<RoundTrip> {
  * them. A single trip from somewhere else is not a move, and nor are trips
  * from somewhere when the next round trip after them is from home again.
  */
-fun homeTimeline(segments: List<Segment>): List<HomePeriod> = homeBases(segments).map { it.first }
+fun homeTimeline(segments: List<Segment>): List<HomePeriod> = homeBasesFrom(roundTrips(segments)).map { it.first }
 
 // homeTimeline's periods with the town each was worked out from, its point included, as home.ts's homeBases.
-private fun homeBases(segments: List<Segment>): List<Pair<HomePeriod, Town>> {
-    val trips = roundTrips(segments)
-    val periods = mutableListOf<Pair<HomePeriod, Town>>()
-    var current: Town? = null
+private fun homeBasesFrom(trips: List<RoundTrip>): List<Pair<HomePeriod, ResolvedTown>> {
+    val periods = mutableListOf<Pair<HomePeriod, ResolvedTown>>()
+    var current: ResolvedTown? = null
     var i = 0
     while (i < trips.size) {
         val trip = trips[i]
         val home = current
         if (home == null) {
             current = trip.base
-            periods += HomePeriod(trip.base.city, trip.base.country) to trip.base
+            periods += HomePeriod(trip.base.town.city, trip.base.town.country) to trip.base
             i++
             continue
         }
-        if (sameTown(trip.base, home)) {
+        if (sameResolvedTown(trip.base, home)) {
             i++
             continue
         }
         var end = i
-        while (end + 1 < trips.size && sameTown(trips[end + 1].base, trip.base)) end++
+        while (end + 1 < trips.size && sameResolvedTown(trips[end + 1].base, trip.base)) end++
         val after = trips.getOrNull(end + 1)
-        if (end > i && (after == null || !sameTown(after.base, home))) {
+        if (end > i && (after == null || !sameResolvedTown(after.base, home))) {
             val (last, lastBase) = periods.last()
             periods[periods.lastIndex] = last.copy(until = LocalDate.parse(trip.start).minus(DatePeriod(days = 1)).toString()) to lastBase
-            periods += HomePeriod(trip.base.city, trip.base.country, from = trip.start) to trip.base
+            periods += HomePeriod(trip.base.town.city, trip.base.town.country, from = trip.start) to trip.base
             current = trip.base
         }
         i = end + 1
@@ -181,6 +225,20 @@ private const val HOME_AIRPORT_TRIPS = 2
 private fun placeKey(place: Place) =
     (place.code ?: listOf(place.name, place.city.orEmpty(), place.country?.let(::countryCode).orEmpty()).joinToString("|")).trim().lowercase()
 
+private fun attachHomeAirports(periods: List<HomePeriod>, allTrips: List<RoundTrip>, bases: List<Pair<HomePeriod, ResolvedTown>>): List<HomePeriod> {
+    val trips = allTrips.filter { t -> bases.firstOrNull { it.first.covers(t.start) }?.let { sameResolvedTown(t.base, it.second) } == true }
+    return periods.map { period ->
+        val counts = LinkedHashMap<String, Pair<Place, Int>>()
+        for (trip in trips) {
+            if (!period.covers(trip.start)) continue
+            for ((key, place) in listOf(trip.from, trip.back).associateBy(::placeKey)) {
+                counts[key] = (counts[key]?.first ?: place) to ((counts[key]?.second ?: 0) + 1)
+            }
+        }
+        period.copy(airports = counts.values.filter { it.second >= HOME_AIRPORT_TRIPS }.map { it.first })
+    }
+}
+
 /**
  * Each period with the airports and stations its round trips in [segments] leave from or come back into, each at least
  * twice while it was home, as home.ts's withHomeAirports: a correction to Mountain View gets the SFO its trips start from.
@@ -189,17 +247,16 @@ fun withHomeAirports(periods: List<HomePeriod>, segments: List<Segment>): List<H
     // Only round trips from what the journeys say was home at the time: side trips on a visit whose way out was never
     // imported leave from where the visit was, not from home.
     // As homeTimeline tells them, by name or by being near (SFO and Oakland).
-    val bases = homeBases(segments)
-    val trips = roundTrips(segments).filter { t -> bases.firstOrNull { it.first.covers(t.start) }?.let { sameTown(t.base, it.second) } == true }
-    return periods.map { period ->
-        val counts = LinkedHashMap<String, Pair<Place, Int>>()
-        for (trip in trips.filter { period.covers(it.start) }) {
-            for ((key, place) in listOf(trip.from, trip.back).associateBy(::placeKey)) {
-                counts[key] = (counts[key]?.first ?: place) to ((counts[key]?.second ?: 0) + 1)
-            }
-        }
-        period.copy(airports = counts.values.filter { it.second >= HOME_AIRPORT_TRIPS }.map { it.first })
-    }
+    val trips = roundTrips(segments)
+    return attachHomeAirports(periods, trips, homeBasesFrom(trips))
+}
+
+/** Effective home periods (corrections when present, else inferred) with worked-out and chosen airports, computing round trips once. */
+fun effectiveHomesWithAirports(segments: List<Segment>, corrections: List<HomeCorrection>, chosen: List<ChosenHomeAirports> = emptyList()): List<HomePeriod> {
+    val trips = roundTrips(segments)
+    val bases = homeBasesFrom(trips)
+    val basePeriods = if (corrections.isEmpty()) bases.map { it.first } else homeCorrections(corrections)
+    return withChosenAirports(attachHomeAirports(basePeriods, trips, bases), chosen)
 }
 
 /** The airports and stations chosen for a home on Profile, by its town, as schema.ts's ChosenHomeAirports. */

@@ -101,9 +101,21 @@ function dayBefore(date: string): string {
 // is really the way back from one visit and the way out on the next.
 const stayDays = 60;
 
+type ResolvedTown = { town: Town; ownCity: string; code?: string };
+
+function resolveTown(t: Town): ResolvedTown {
+  return { town: t, ownCity: ownName(t.city), ...(t.country ? { code: countryCode(t.country) } : {}) };
+}
+
+function sameResolvedTown(a: ResolvedTown, b: ResolvedTown): boolean {
+  if (a.code && b.code && a.code !== b.code) return false;
+  if (a.ownCity === b.ownCity) return true;
+  return located(a.town) && located(b.town) && distanceKm(a.town, b.town) <= nearKm;
+}
+
 // A round trip: the town it leaves from and when, and the airport or
 // station it leaves from and the one it comes back into.
-type RoundTrip = { base: Town; start: string; from: Place; back: Place };
+type RoundTrip = { base: ResolvedTown; start: string; from: Place; back: Place };
 
 // The round trips in a run of journeys: each leaves from a town and ends
 // with the first journey back into it, however many legs lie between. A
@@ -115,23 +127,37 @@ type RoundTrip = { base: Town; start: string; from: Place; back: Place };
 // says nothing.
 function roundTrips(segments: readonly Booking[]): RoundTrip[] {
   // A cancelled journey was never travelled, so it says nothing about home.
-  const journeys = liveSegments(segments)
-    .filter((s) => {
-      const from = town(s.origin);
-      const to = town(s.destination);
-      return journeyTypes.has(s.type) && from && to && !sameTown(from, to);
-    })
-    .sort((a, b) => compareInstants(a.start, b.start));
+  const journeys: { seg: Booking; startMs: number; from: ResolvedTown; to: ResolvedTown }[] = [];
+  for (const s of liveSegments(segments)) {
+    if (!journeyTypes.has(s.type)) continue;
+    const fromTown = town(s.origin);
+    const toTown = town(s.destination);
+    if (!fromTown || !toTown) continue;
+    const from = resolveTown(fromTown);
+    const to = resolveTown(toTown);
+    if (sameResolvedTown(from, to)) continue;
+    journeys.push({ seg: s, startMs: Date.parse(s.start), from, to });
+  }
+  journeys.sort((a, b) => a.startMs - b.startMs || compareInstants(a.seg.start, b.seg.start));
+  const maxMs = stayDays * 86_400_000;
   const trips: RoundTrip[] = [];
   let i = 0;
   while (i < journeys.length) {
-    const base = town(journeys[i]!.origin)!;
-    const back = journeys.findIndex((j, k) => k >= i && sameTown(town(j.destination)!, base));
-    if (back < 0 || Date.parse(journeys[back]!.start) - Date.parse(journeys[i]!.start) > stayDays * 86_400_000) {
+    const start = journeys[i]!;
+    const base = start.from;
+    let back = -1;
+    for (let k = i; k < journeys.length; k++) {
+      if (journeys[k]!.startMs - start.startMs > maxMs) break;
+      if (sameResolvedTown(journeys[k]!.to, base)) {
+        back = k;
+        break;
+      }
+    }
+    if (back < 0) {
       i++;
       continue;
     }
-    trips.push({ base, start: localDate(journeys[i]!.start), from: journeys[i]!.origin!, back: journeys[back]!.destination! });
+    trips.push({ base, start: localDate(start.seg.start), from: start.seg.origin!, back: journeys[back]!.seg.destination! });
     i = back + 1;
   }
   return trips;
@@ -144,9 +170,15 @@ function roundTrips(segments: readonly Booking[]): RoundTrip[] {
 // somewhere home comes straight back to (side trips on a visit whose way
 // out was never imported): the next round trip after them is from home.
 export function homeTimeline(segments: readonly Booking[]): HomePeriod[] {
-  return homeBases(segments).map(({ base, from, until }) => ({
-    city: base.city,
-    ...(base.country ? { country: base.country } : {}),
+  return periodsOf(homeBasesFrom(roundTrips(segments)));
+}
+
+type HomeBase = { base: ResolvedTown; from?: string; until?: string };
+
+function periodsOf(bases: readonly HomeBase[]): HomePeriod[] {
+  return bases.map(({ base, from, until }) => ({
+    city: base.town.city,
+    ...(base.town.country ? { country: base.town.country } : {}),
     ...(from ? { from } : {}),
     ...(until ? { until } : {}),
   }));
@@ -155,10 +187,9 @@ export function homeTimeline(segments: readonly Booking[]): HomePeriod[] {
 // homeTimeline's periods with the town each was worked out from, its point
 // included, so what was found to leave from home is told as it was then
 // (withHomeAirports).
-function homeBases(segments: readonly Booking[]): { base: Town; from?: string; until?: string }[] {
-  const trips = roundTrips(segments);
-  const periods: { base: Town; from?: string; until?: string }[] = [];
-  let current: Town | undefined;
+function homeBasesFrom(trips: readonly RoundTrip[]): HomeBase[] {
+  const periods: HomeBase[] = [];
+  let current: ResolvedTown | undefined;
   for (let i = 0; i < trips.length; i++) {
     const { base, start } = trips[i]!;
     if (!current) {
@@ -166,11 +197,11 @@ function homeBases(segments: readonly Booking[]): { base: Town; from?: string; u
       periods.push({ base });
       continue;
     }
-    if (sameTown(base, current)) continue;
+    if (sameResolvedTown(base, current)) continue;
     let end = i;
-    while (end + 1 < trips.length && sameTown(trips[end + 1]!.base, base)) end++;
+    while (end + 1 < trips.length && sameResolvedTown(trips[end + 1]!.base, base)) end++;
     const after = trips[end + 1];
-    if (end === i || (after && sameTown(after.base, current))) {
+    if (end === i || (after && sameResolvedTown(after.base, current))) {
       i = end;
       continue;
     }
@@ -191,6 +222,25 @@ const homeAirportTrips = 2;
 // country, as names repeat (Washington's Union Station and Chicago's).
 const placeKey = (place: Place) => (place.code ?? [place.name, place.city ?? "", place.country ? countryCode(place.country) : ""].join("|")).trim().toLowerCase();
 
+function attachHomeAirports(periods: readonly HomePeriod[], allTrips: readonly RoundTrip[], bases: readonly HomeBase[]): HomePeriod[] {
+  const trips = allTrips.filter((t) => {
+    const home = bases.find((b) => (!b.from || b.from <= t.start) && (!b.until || t.start <= b.until));
+    return !!home && sameResolvedTown(t.base, home.base);
+  });
+  return periods.map((period) => {
+    const counts = new Map<string, { place: Place; trips: number }>();
+    for (const trip of trips) {
+      if (!covers(period, trip.start)) continue;
+      const ends = new Map([trip.from, trip.back].map((place) => [placeKey(place), place] as const));
+      for (const [key, place] of ends) counts.set(key, { place: counts.get(key)?.place ?? place, trips: (counts.get(key)?.trips ?? 0) + 1 });
+    }
+    const airports = [...counts.values()].filter((c) => c.trips >= homeAirportTrips).map((c) => c.place);
+    const rest: HomePeriod = { ...period };
+    delete rest.airports;
+    return airports.length > 0 ? { ...rest, airports } : rest;
+  });
+}
+
 // Each period with the airports and stations its round trips (in
 // `segments`) leave from or come back into, each at least homeAirportTrips
 // times while it was home. For home as worked out and as the person
@@ -201,22 +251,8 @@ export function withHomeAirports(periods: readonly HomePeriod[], segments: reado
   // (homeTimeline): side trips on a visit whose way out was never imported
   // leave from where the visit was, not from home.
   // As homeTimeline tells them, by name or by being near (SFO and Oakland).
-  const bases = homeBases(segments);
-  const trips = roundTrips(segments).filter((t) => {
-    const home = bases.find((b) => (!b.from || b.from <= t.start) && (!b.until || t.start <= b.until));
-    return !!home && sameTown(t.base, home.base);
-  });
-  return periods.map((period) => {
-    const counts = new Map<string, { place: Place; trips: number }>();
-    for (const trip of trips.filter((t) => covers(period, t.start))) {
-      const ends = new Map([trip.from, trip.back].map((place) => [placeKey(place), place] as const));
-      for (const [key, place] of ends) counts.set(key, { place: counts.get(key)?.place ?? place, trips: (counts.get(key)?.trips ?? 0) + 1 });
-    }
-    const airports = [...counts.values()].filter((c) => c.trips >= homeAirportTrips).map((c) => c.place);
-    const rest: HomePeriod = { ...period };
-    delete rest.airports;
-    return airports.length > 0 ? { ...rest, airports } : rest;
-  });
+  const trips = roundTrips(segments);
+  return attachHomeAirports(periods, trips, homeBasesFrom(trips));
 }
 
 // The airports a person chose for each home (Profile), by its town, in
@@ -243,10 +279,25 @@ export function homesWithAirports(
   corrections: readonly HomePeriod[],
   chosen: readonly ChosenHomeAirports[] = [],
 ): { periods: HomePeriod[]; overrides: HomePeriod[] } {
+  const trips = roundTrips(segments);
+  const bases = homeBasesFrom(trips);
   return {
-    periods: withChosenAirports(withHomeAirports(homeTimeline(segments), segments), chosen),
-    overrides: withChosenAirports(withHomeAirports(corrections, segments), chosen),
+    periods: withChosenAirports(attachHomeAirports(periodsOf(bases), trips, bases), chosen),
+    overrides: withChosenAirports(attachHomeAirports(corrections, trips, bases), chosen),
   };
+}
+
+// Effective home periods (corrections when present, else inferred) with
+// worked-out and chosen airports, computing round trips once.
+export function effectiveHomesWithAirports(
+  segments: readonly Booking[],
+  corrections: readonly HomeCorrection[],
+  chosen: readonly ChosenHomeAirports[] = [],
+): HomePeriod[] {
+  const trips = roundTrips(segments);
+  const bases = homeBasesFrom(trips);
+  const basePeriods = corrections.length > 0 ? homeCorrections(corrections) : periodsOf(bases);
+  return withChosenAirports(attachHomeAirports(basePeriods, trips, bases), chosen);
 }
 
 // One home town, as Profile lists its airports and as its choice is stored:

@@ -507,6 +507,7 @@ private fun Sharing(trusted: List<String>, busy: Boolean, error: String?, onSave
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HomeSection(viewModel: TripsViewModel) {
+    LaunchedEffect(viewModel) { viewModel.refreshUnconfirmedSegments() }
     val homes by viewModel.reportHomes.collectAsStateWithLifecycle()
     val settings by viewModel.rideSettings.collectAsStateWithLifecycle()
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()

@@ -39,6 +39,7 @@ import app.travelmo.logging.SharedLog
 import app.travelmo.logging.safe
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 /** What the screens read and write; Firestore in the app, a fake in tests. */
@@ -48,6 +49,12 @@ interface TripStore {
 
     /** One trip's bookings, live; empty while it loads. */
     fun segments(tripId: String): Flow<List<Segment>>
+
+    /** One trip's bookings, read once with whether the server confirmed them; defaults to the first emission of [segments] for fakes. */
+    suspend fun segmentsOnce(tripId: String): Seen<List<Segment>> = Seen(segments(tripId).first(), confirmed = true)
+
+    /** One trip's bookings from the local cache alone, or null when not cached or unreadable. */
+    suspend fun cachedSegments(tripId: String): List<Segment>? = null
 
     /** A trip's bookings as the server has them now, never the cache: for a decision that must see them all. */
     suspend fun serverSegments(tripId: String): List<Segment>
@@ -376,9 +383,11 @@ data class CalendarFeedShown(
         get() = label ?: urlHost(url) ?: url
 }
 
+private val URL_HOST = Regex("""^[A-Za-z][A-Za-z0-9+.-]*://(?:[^/?#@]*@)?([^/?#:]+)""")
+
 /** The host a link names, "calendar.example" in "https://user@calendar.example:443/x.ics"; null when it names none. */
 fun urlHost(url: String): String? =
-    Regex("""^[A-Za-z][A-Za-z0-9+.-]*://(?:[^/?#@]*@)?([^/?#:]+)""").find(url)?.groupValues?.get(1)?.takeIf { it.isNotEmpty() }
+    URL_HOST.find(url)?.groupValues?.get(1)?.takeIf { it.isNotEmpty() }
 
 /** One `users/{uid}/feeds` document as the parser writes it; null without a link. */
 fun calendarFeedOf(id: String, data: Map<String, Any?>?): CalendarFeedShown? {

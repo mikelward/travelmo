@@ -10,6 +10,7 @@ private val titles = setOf("mr", "mrs", "ms", "miss", "mstr", "master", "mx", "d
 
 /** Titles an airline's record glues onto the given name ("SMITH/JOHNMR"). */
 private val glued = Regex("(MRS|MR|MSTR|MISS)$")
+private val whitespace = Regex("\\s+")
 
 /** Titles a record may glue on, "MS" among them: a name with one matches the same name without (gluedTitle in travelers.ts). */
 private val gluedTitles = listOf("mrs", "mr", "mstr", "miss", "ms")
@@ -43,7 +44,7 @@ private fun titleCase(word: String): String {
  * name written in mixed case keeps its case.
  */
 fun canonicalName(raw: String): String? {
-    val text = raw.trim().split(Regex("\\s+")).joinToString(" ")
+    val text = raw.trim().split(whitespace).joinToString(" ")
     if (text.none { it.isLetter() }) return null
     val slash = text.indexOf('/')
     val comma = text.indexOf(',')
@@ -71,9 +72,22 @@ private const val PLAIN = "aaaaaaaaaaaaaaaaaaaaacccddeeeeeeeeeeeeeeeeiiiiiiiinnn
 
 /** A name's words as compared: lowercase, accents and punctuation gone. */
 private fun travelerWords(name: String): List<String> {
-    val folded = name.lowercase().map { c -> ACCENTED.indexOf(c).let { if (it >= 0) PLAIN[it] else c } }
-    return folded.joinToString("") { c -> if (c.isLetter() || c == ' ' || c == '-') c.toString() else "" }
-        .split(' ', '-').filter { it.isNotEmpty() }
+    val sb = StringBuilder(name.length)
+    for (c in name.lowercase()) {
+        val i = ACCENTED.indexOf(c)
+        val ch = if (i >= 0) PLAIN[i] else c
+        if (ch.isLetter() || ch == ' ' || ch == '-') sb.append(ch)
+    }
+    return sb.toString().split(' ', '-').filter { it.isNotEmpty() }
+}
+
+private fun sameWords(x: List<String>, y: List<String>): Boolean {
+    if (x.isEmpty() || y.isEmpty()) return false
+    if (x == y) return true
+    if (x.size < 2 || y.size < 2 || x.last() != y.last()) return false
+    val fx = x.first()
+    val fy = y.first()
+    return fx == fy || gluedTitle(fx, fy) || (fx.length == 1 && fy.startsWith(fx)) || (fy.length == 1 && fx.startsWith(fy)) || runTogether(x, y) || runTogether(y, x)
 }
 
 /**
@@ -81,15 +95,8 @@ private fun travelerWords(name: String): List<String> {
  * last (a middle name or not), or the same last with one first an initial of
  * the other ("J Smith" is "John Smith").
  */
-fun sameTraveler(a: String, b: String): Boolean {
-    val x = travelerWords(canonicalName(a) ?: a)
-    val y = travelerWords(canonicalName(b) ?: b)
-    if (x.isEmpty() || y.isEmpty()) return false
-    if (x == y) return true
-    if (x.size < 2 || y.size < 2 || x.last() != y.last()) return false
-    val (fx, fy) = x.first() to y.first()
-    return fx == fy || gluedTitle(fx, fy) || (fx.length == 1 && fy.startsWith(fx)) || (fy.length == 1 && fx.startsWith(fy)) || runTogether(x, y) || runTogether(y, x)
-}
+fun sameTraveler(a: String, b: String): Boolean =
+    sameWords(travelerWords(canonicalName(a) ?: a), travelerWords(canonicalName(b) ?: b))
 
 /**
  * Whether [x]'s first name is [y]'s first and middle names run together, as
@@ -129,35 +136,44 @@ fun canonicalTravelers(raw: List<String>, limit: Int = MAX_TRAVELERS): List<Stri
     return names.ifEmpty { null }
 }
 
+/** Whether two names are one person's only through an initial ("J Smith" and "John Smith"). */
+private fun throughInitialWords(x: List<String>, y: List<String>, same: Boolean): Boolean =
+    same && x.size >= 2 && y.size >= 2 && x.first() != y.first() && (x.first().length == 1 || y.first().length == 1)
+
+/** Whether two names are surely two people's: one last name, two whole first names ("John Smith" and "Jane Smith"). */
+private fun twoPeopleWords(x: List<String>, y: List<String>, same: Boolean): Boolean =
+    !same && x.size >= 2 && y.size >= 2 && x.last() == y.last() && x.first().length > 1 && y.first().length > 1
+
 /** The person a name is, among those known, by their name or any other spelling; the user first when it could be either. */
 fun findPerson(people: List<Person>, raw: String): Person? {
     val name = canonicalName(raw) ?: return null
-    val matches = people.filter { p ->
-        val spellings = listOf(p.name) + p.aliases
-        spellings.any { sameTraveler(it, name) && !throughInitial(it, name) } ||
-            (spellings.any { sameTraveler(it, name) } && spellings.none { twoPeople(it, name) })
+    val target = travelerWords(canonicalName(name) ?: name)
+    var first: Person? = null
+    for (p in people) {
+        var direct = false
+        var anySame = false
+        var anyTwo = false
+        val count = 1 + p.aliases.size
+        for (i in 0 until count) {
+            val spelling = if (i == 0) p.name else p.aliases[i - 1]
+            val words = travelerWords(canonicalName(spelling) ?: spelling)
+            val same = sameWords(words, target)
+            if (same) {
+                if (!throughInitialWords(words, target, true)) {
+                    direct = true
+                    break
+                }
+                anySame = true
+            } else if (twoPeopleWords(words, target, false)) {
+                anyTwo = true
+            }
+        }
+        if (direct || (anySame && !anyTwo)) {
+            if (p.me) return p
+            if (first == null) first = p
+        }
     }
-    return matches.firstOrNull { it.me } ?: matches.firstOrNull()
-}
-
-/** A name's first and last words as compared, when it has both. */
-private fun firstAndLast(name: String): Pair<String, String>? {
-    val words = travelerWords(canonicalName(name) ?: name)
-    return if (words.size < 2) null else words.first() to words.last()
-}
-
-/** Whether two names are one person's only through an initial ("J Smith" and "John Smith"). */
-private fun throughInitial(a: String, b: String): Boolean {
-    val x = firstAndLast(a) ?: return false
-    val y = firstAndLast(b) ?: return false
-    return sameTraveler(a, b) && x.first != y.first && (x.first.length == 1 || y.first.length == 1)
-}
-
-/** Whether two names are surely two people's: one last name, two whole first names ("John Smith" and "Jane Smith"). */
-private fun twoPeople(a: String, b: String): Boolean {
-    val x = firstAndLast(a) ?: return false
-    val y = firstAndLast(b) ?: return false
-    return x.second == y.second && x.first.length > 1 && y.first.length > 1 && !sameTraveler(a, b)
+    return first
 }
 
 /**

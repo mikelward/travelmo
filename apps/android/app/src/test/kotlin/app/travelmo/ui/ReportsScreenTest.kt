@@ -194,6 +194,7 @@ class ReportsScreenTest {
         // Bookings that never answer, and counts saved on an earlier visit.
         val store = object : TripStore by FakeTripStore() {
             override fun segments(tripId: String): Flow<List<Segment>> = flow { awaitCancellation() }
+            override suspend fun segmentsOnce(tripId: String): app.travelmo.data.Seen<List<Segment>> = awaitCancellation()
         }
         val last = TravelReport(7, 30, listOf(CountryReport("PT", 20, 5), CountryReport("FR", 8, 2)), listOf(YearReport("2026", 7, 30, 2)), emptyList(), emptyList(), 0, 0, 0)
         val snapshots = InMemoryReportSnapshotStore(encodeReportSnapshot(OWNER, last))

@@ -105,15 +105,29 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
 
     override fun segments(tripId: String): Flow<List<Segment>> =
         db.collection("trips").document(tripId).collection("segments").snapshots().orNothing("segments of $tripId").map { snapshot ->
-            snapshot?.documents.orEmpty().mapNotNull { doc ->
-                segmentFromDocument(doc.id, tripId, doc.data ?: emptyMap()).also {
-                    if (it == null) SharedLog.warning("Malformed segment %s", sensitive(doc.reference.path))
-                }
-            }
+            snapshot?.let { segmentsFrom(tripId, it) }.orEmpty()
         }
 
+    override suspend fun segmentsOnce(tripId: String): Seen<List<Segment>> {
+        val snapshot = db.collection("trips").document(tripId).collection("segments").get().await()
+        return Seen(segmentsFrom(tripId, snapshot), confirmed = !snapshot.metadata.isFromCache)
+    }
+
+    override suspend fun cachedSegments(tripId: String): List<Segment>? = try {
+        segmentsFrom(tripId, db.collection("trips").document(tripId).collection("segments").get(Source.CACHE).await())
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        // Cache miss or eviction; caller falls back to a normal read.
+        SharedLog.debug("Cached segments read missed for %s: %s", sensitive(tripId), safe(e::class.simpleName))
+        null
+    }
+
     override suspend fun serverSegments(tripId: String): List<Segment> =
-        db.collection("trips").document(tripId).collection("segments").get(Source.SERVER).await().documents.mapNotNull { doc ->
+        segmentsFrom(tripId, db.collection("trips").document(tripId).collection("segments").get(Source.SERVER).await())
+
+    private fun segmentsFrom(tripId: String, snapshot: QuerySnapshot): List<Segment> =
+        snapshot.documents.mapNotNull { doc ->
             segmentFromDocument(doc.id, tripId, doc.data ?: emptyMap()).also {
                 if (it == null) SharedLog.warning("Malformed segment %s", sensitive(doc.reference.path))
             }

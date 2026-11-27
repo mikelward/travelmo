@@ -36,13 +36,15 @@ private val ISO = Regex("^(\\d{4})-(\\d{2})(?:-(\\d{2}))?$")
 private val YEAR = Regex("^(19|20)\\d{2}$")
 private val NUMBER = Regex("^\\d{1,2}(st|nd|rd|th)?$")
 
+private val TOKEN_SPLIT = Regex("[\\s,]+")
+
 fun parseTripQuery(text: String): TripQuery {
     var year: Int? = null
     var month: Int? = null
     var day: Int? = null
     val words = ArrayList<String>()
     val numbers = ArrayList<String>()
-    for (token in text.trim().lowercase().split(Regex("[\\s,]+")).filter { it.isNotEmpty() }) {
+    for (token in text.trim().lowercase().split(TOKEN_SPLIT).filter { it.isNotEmpty() }) {
         // A month or day that cannot be is a word, not a date.
         val iso = ISO.find(token)?.takeIf { m ->
             m.groupValues[2].toInt() in 1..12 && (m.groupValues[3].isEmpty() || m.groupValues[3].toInt() in 1..31)
