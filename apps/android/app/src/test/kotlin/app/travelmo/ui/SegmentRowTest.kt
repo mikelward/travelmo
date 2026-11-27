@@ -102,6 +102,27 @@ class SegmentRowTest {
     }
 
     @Test
+    fun `Split moves every booking from one email to a new trip and opens it`() {
+        val store = FakeTripStore()
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        val opened = mutableListOf<String>()
+        composeRule.setContent {
+            TravelmoTheme {
+                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = { opened += it })
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("More options").performClick()
+        composeRule.onNodeWithText("Split…").performClick()
+        // The train's email gave only the train: one tap picks it.
+        composeRule.onNodeWithText("${fixtureTrainEmail.label} (1)").performClick()
+        composeRule.onNodeWithText("Move 1 booking to a new trip").performClick()
+        composeRule.waitForIdle()
+        store.splits shouldBe listOf(Triple("liverpool", listOf("l-train"), OWNER))
+        opened shouldBe listOf("split-trip")
+    }
+
+    @Test
     fun `every type has its own icon`() {
         val icons = SegmentType.entries.map(::segmentIcon)
         icons.toSet().size shouldBe SegmentType.entries.size

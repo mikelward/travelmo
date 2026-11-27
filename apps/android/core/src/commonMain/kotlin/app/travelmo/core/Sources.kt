@@ -124,3 +124,26 @@ internal fun encodeUriComponent(value: String): String = buildString {
 }
 
 private const val HEX_UPPER = "0123456789ABCDEF"
+
+/** A source of some of a trip's bookings, with which ones, for splitting the trip, as sources.ts's SourceGroup. */
+data class SourceGroup(val source: SourceRef, val segmentIds: List<String>)
+
+/**
+ * The sources a trip's bookings came from, for Split… on the trip page: each with the bookings it gave, the most
+ * first. Only a source that gave some of the bookings and not all can split anything off. As sources.ts's sourceGroups.
+ */
+fun sourceGroups(segments: List<Segment>): List<SourceGroup> {
+    val groups = LinkedHashMap<String, Pair<SourceRef, MutableList<String>>>()
+    for (segment in segments) {
+        val seen = HashSet<String>()
+        for (source in segment.sources.sortedBy { it.at }) {
+            val key = "${source.kind.wire}/${source.id}"
+            if (!seen.add(key)) continue
+            groups.getOrPut(key) { source to mutableListOf() }.second += segment.id
+        }
+    }
+    return groups.values
+        .filter { it.second.size < segments.size }
+        .sortedWith(compareByDescending<Pair<SourceRef, MutableList<String>>> { it.second.size }.thenBy { it.first.at })
+        .map { SourceGroup(it.first, it.second.toList()) }
+}

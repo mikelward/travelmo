@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gmailMessageUrl, gmailSearch, segmentSources, sourceSearch } from "./sources";
+import { gmailMessageUrl, gmailSearch, segmentSources, sourceGroups, sourceSearch } from "./sources";
 
 describe("segmentSources", () => {
   it("lists recorded sources and older Gmail ids once each, oldest first", () => {
@@ -54,5 +54,27 @@ describe("sourceSearch", () => {
   it("searches a forward by its subject alone, as its sender and date are the original's", () => {
     const forward = { ...confirmation, label: "Fwd: Your stay" };
     expect(sourceSearch({ ...segment, sources: [forward] }, forward)).toBe('subject:"Fwd: Your stay"');
+  });
+});
+
+describe("sourceGroups", () => {
+  const at = "2026-01-01T00:00:00Z";
+  const booking = (id: string, ...emails: string[]) => ({
+    id,
+    createdAt: at,
+    gmailMessageIds: [],
+    sources: emails.map((e, i) => ({ kind: "gmail" as const, id: e, label: `Subject ${e}`, at: `2026-01-0${i + 1}T00:00:00Z` })),
+  });
+
+  it("gives each email that some of a trip's bookings came from, with them, the most first", () => {
+    const groups = sourceGroups([booking("a", "theirs"), booking("b", "theirs"), booking("c", "mine"), booking("d", "theirs", "mine")]);
+    expect(groups.map((g) => [g.source.id, g.segmentIds])).toEqual([
+      ["theirs", ["a", "b", "d"]],
+      ["mine", ["c", "d"]],
+    ]);
+  });
+
+  it("leaves out an email every booking came from, which splits nothing off", () => {
+    expect(sourceGroups([booking("a", "all"), booking("b", "all", "one")]).map((g) => g.source.id)).toEqual(["one"]);
   });
 });

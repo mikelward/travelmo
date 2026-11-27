@@ -354,6 +354,83 @@ export async function moveSegmentToNewTrip(db: Firestore, fromTripId: string, se
   return ref.id;
 }
 
+// Most bookings one split moves: two writes each, inside Firestore's 500.
+export const maxSplitBookings = 200;
+
+// Moves some of a trip's bookings into a trip of their own (Split…): owned by
+// the viewer, named after where the first of them goes (newTripTitle), over
+// their dates, and shared as the trip they leave when the viewer owns it, all
+// in one transaction, so a split never stops half done. Both trips' dates
+// then fit what each holds. As in moveSegmentToNewTrip, the trip is made
+// first and taken away again if the move fails. Returns the new trip's id.
+export async function splitTrip(db: Firestore, fromTripId: string, segmentIds: readonly string[], uid: string): Promise<string> {
+  const ids = [...new Set(segmentIds)];
+  if (ids.length === 0) throw new Error("Pick the bookings to move");
+  if (ids.length > maxSplitBookings) throw new Error(`Pick at most ${maxSplitBookings} bookings`);
+  const fromRef = doc(db, paths.trip(fromTripId));
+  const from = await getDoc(fromRef);
+  if (!from.exists()) throw new Error("Trip no longer exists");
+  const source = Trip.parse(from.data());
+  const picked = await Promise.all(ids.map((id) => getDoc(doc(db, paths.segment(fromTripId, id)))));
+  if (picked.some((s) => !s.exists())) throw new Error("A booking is no longer in this trip");
+  const segments = picked.map((s) => Segment.parse(s.data())).sort((a, b) => a.start.localeCompare(b.start));
+  const range = bookedDateRange(segments);
+  if (!range) throw new Error("Those bookings have no dates");
+  const ref = doc(collection(db, paths.trips()));
+  const created: Trip = {
+    id: ref.id,
+    title: newTripTitle(segments[0]!),
+    start: range.start,
+    end: range.end,
+    ownerUid: uid,
+    sharedWith: source.ownerUid === uid ? source.sharedWith : [],
+    createdAt: now(),
+    updatedAt: now(),
+  };
+  try {
+    await setDoc(ref, created);
+    const timestamp = now();
+    await runTransaction(db, async (t) => {
+      const [f, to, ...current] = await Promise.all([t.get(fromRef), t.get(ref), ...ids.map((id) => t.get(doc(db, paths.segment(fromTripId, id))))]);
+      if (!f.exists() || !to.exists()) throw new Error("Trip no longer exists");
+      if (current.some((c) => !c.exists())) throw new Error("A booking is no longer in this trip");
+      const target = Trip.parse(to.data());
+      if (Trip.parse(f.data()).deleting || target.deleting) throw new Error("This trip is being deleted");
+      const read = current.map((c) => Segment.parse(c.data()));
+      const moved = read.map((segment) => inTrip({ ...segment, tripId: ref.id, updatedAt: timestamp }, target, timestamp));
+      for (const segment of moved) {
+        t.set(doc(db, paths.segment(ref.id, segment.id)), segment);
+        t.delete(doc(db, paths.segment(fromTripId, segment.id)));
+      }
+      t.update(ref, { ...widened(target, bookedDateRange(read), segmentDateRange(moved)), ...flagsUnknown(), updatedAt: timestamp });
+      t.update(fromRef, { ...flagsUnknown(), updatedAt: timestamp });
+    });
+  } catch (error) {
+    // As in moveSegmentToNewTrip: the trip goes only once a booking is known
+    // not to be in it, since a transaction can commit and still report a failure.
+    try {
+      if ((await getDocFromServer(doc(db, paths.segment(ref.id, ids[0]!)))).exists()) {
+        console.error("Splitting a trip reported a failure, but the bookings moved; keeping the new trip", error);
+      } else {
+        console.error("Splitting a trip failed; removing the empty trip", error);
+        await deleteDoc(ref);
+      }
+    } catch (cleanup) {
+      console.error("Checking or removing the new trip failed; it stays", cleanup);
+    }
+    throw error;
+  }
+  // Each trip's dates as its bookings now span; the split stands if this fails.
+  for (const tripId of [fromTripId, ref.id]) {
+    try {
+      await fitTripDates(db, tripId);
+    } catch (error) {
+      console.error("Fitting a trip's dates after a split failed; it keeps its wider dates", error);
+    }
+  }
+  return ref.id;
+}
+
 // Adds a booking with no trip in view (one an email couldn't be read for):
 // into the user's trip that takes in its first day (fittingTrip), else a
 // trip of its own, owned by the user, named for where it goes, over its

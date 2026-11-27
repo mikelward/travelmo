@@ -82,4 +82,20 @@ class SourcesTest {
         val forward = confirmation.copy(label = "Fwd: Your stay")
         sourceSearch(stay.copy(sources = listOf(forward)), forward) shouldBe "subject:\"Fwd: Your stay\""
     }
+
+    private fun booking(id: String, vararg emails: String) = Segment(
+        id, "t", SegmentType.FLIGHT, id, "2030-01-01T00:00:00Z",
+        sources = emails.mapIndexed { i, e -> SourceRef(SourceKind.GMAIL, e, label = "Subject $e", at = "2030-01-0${i + 1}T00:00:00Z") },
+    )
+
+    @Test
+    fun `gives each email that some of a trip's bookings came from with them the most first`() {
+        val groups = sourceGroups(listOf(booking("a", "theirs"), booking("b", "theirs"), booking("c", "mine"), booking("d", "theirs", "mine")))
+        groups.map { it.source.id to it.segmentIds } shouldBe listOf("theirs" to listOf("a", "b", "d"), "mine" to listOf("c", "d"))
+    }
+
+    @Test
+    fun `leaves out an email every booking came from which splits nothing off`() {
+        sourceGroups(listOf(booking("a", "all"), booking("b", "all", "one"))).map { it.source.id } shouldBe listOf("one")
+    }
 }

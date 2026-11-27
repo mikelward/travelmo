@@ -455,6 +455,29 @@ class ScreenScreenshotTest {
     @Test
     fun trip_detail_merge_dark() = tripMerge("trip_detail_merge_dark", dark = true)
 
+    // Split…: the trip's bookings to tick, the train's email picking its booking.
+    @Test
+    fun trip_detail_split() = tripSplit("trip_detail_split", dark = false)
+
+    @Test
+    fun trip_detail_split_dark() = tripSplit("trip_detail_split_dark", dark = true)
+
+    private fun tripSplit(name: String, dark: Boolean) {
+        val viewModel = viewModel()
+        val fontSize = FontSizeState(FontSizeSettings(scale = 1f), onScaleSettled = {}, onPinchEnabledChange = {})
+        composeRule.setContent {
+            TravelmoTheme(darkTheme = dark, fontSize = fontSize) {
+                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("More options").performClick()
+        composeRule.onNodeWithText("Split…").performClick()
+        composeRule.onNodeWithText("${fixtureTrainEmail.label} (1)").performClick()
+        composeRule.waitForIdle()
+        captureScreenRoboImage(filePath = "$outputDir/$name.png")
+    }
+
     private fun tripMerge(name: String, dark: Boolean) {
         val second = Segment("l-stay-2", "liverpool", SegmentType.LODGING, "Cove Liverpool apartment", "2026-12-12T16:00:00+00:00", "2026-12-13T11:00:00+00:00")
         val store = FakeTripStore(segments = fixtureSegments + ("liverpool" to fixtureSegments.getValue("liverpool") + second))

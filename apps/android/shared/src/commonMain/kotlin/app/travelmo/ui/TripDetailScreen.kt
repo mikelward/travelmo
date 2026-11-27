@@ -1,5 +1,14 @@
 package app.travelmo.ui
 
+import app.travelmo.shared.split_move
+import app.travelmo.shared.split_trip_hint
+import app.travelmo.shared.split_trip_title
+import app.travelmo.shared.split
+import app.travelmo.core.compareInstants
+import app.travelmo.core.sourceGroups
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
 import app.travelmo.shared.ic_segment_train
 import app.travelmo.shared.ic_segment_other
 import app.travelmo.shared.ic_segment_lodging
@@ -231,6 +240,7 @@ fun TripDetailScreen(
     var moving by remember { mutableStateOf<Segment?>(null) }
     var merging by remember { mutableStateOf<Segment?>(null) }
     var renaming by rememberSaveable { mutableStateOf(false) }
+    var splitting by rememberSaveable { mutableStateOf(false) }
     val current = trip
     val isOwner = current != null && current.ownerUid == uid
     val canEdit = current != null && !current.deleting && (isOwner || sharedWithAny(current.sharedWith, addresses))
@@ -251,6 +261,7 @@ fun TripDetailScreen(
             when {
                 action == "delete" || action == "sender-cleanup/leave" -> onBack()
                 action.startsWith("merge/") -> onMerged(action.removePrefix("merge/"))
+                action == "split" -> viewModel.splitTarget(token)?.let(onMerged)
             }
         }
     }
@@ -276,6 +287,9 @@ fun TripDetailScreen(
                     }
                     if (canManage) {
                         DropdownMenuItem(text = { Text(stringResource(Res.string.rename)) }, enabled = !busy, onClick = { close(); renaming = true })
+                        if (segments.size > 1) {
+                            DropdownMenuItem(text = { Text(stringResource(Res.string.split)) }, enabled = !busy, onClick = { close(); splitting = true })
+                        }
                     }
                 },
             )
@@ -285,6 +299,12 @@ fun TripDetailScreen(
             RenameDialog(current.title, onDismiss = { renaming = false }) { title ->
                 renaming = false
                 actions.rename(title)
+            }
+        }
+        if (splitting && segments.size > 1) {
+            SplitDialog(segments, onDismiss = { splitting = false }) { ids ->
+                splitting = false
+                viewModel.splitTrip("${prefix}split", tripId, ids)
             }
         }
         deleting?.let { segment ->
@@ -687,6 +707,56 @@ private fun RenameDialog(current: String, onDismiss: () -> Unit, onRename: (Stri
         title = { Text(stringResource(Res.string.rename_trip)) },
         text = { OutlinedTextField(value = title, onValueChange = { title = it }, singleLine = true, label = { Text(stringResource(Res.string.trip_name)) }) },
         confirmButton = { TextButton(onClick = { onRename(title) }) { Text(stringResource(Res.string.save)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+    )
+}
+
+/**
+ * Split…: some of the trip's bookings into a new trip of their own, picked one by one or all those from one email at
+ * once (sourceGroups), as when someone else's forwarded itinerary was filed into the user's own trip. As the web's.
+ */
+@Composable
+private fun SplitDialog(segments: List<Segment>, onDismiss: () -> Unit, onSplit: (List<String>) -> Unit) {
+    var picked by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    val groups = remember(segments) { sourceGroups(segments) }
+    val sorted = remember(segments) { segments.sortedWith { a, b -> compareInstants(a.start, b.start) } }
+    AppAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(Res.string.split_trip_title)) },
+        text = {
+            LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
+                item(key = "hint") {
+                    Text(stringResource(Res.string.split_trip_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                items(groups, key = { "source/${it.source.kind.wire}/${it.source.id}" }) { group ->
+                    val all = group.segmentIds.all { it in picked }
+                    FilterChip(
+                        selected = all,
+                        onClick = { picked = if (all) picked - group.segmentIds.toSet() else picked + group.segmentIds },
+                        label = { Text("${group.source.label ?: stringResource(sourceKindLabel(group.source.kind))} (${group.segmentIds.size})", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+                items(sorted, key = { it.id }) { segment ->
+                    val on = segment.id in picked
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().toggleable(value = on, role = Role.Checkbox) { picked = if (it) picked + segment.id else picked - segment.id }.padding(vertical = 6.dp),
+                    ) {
+                        Checkbox(checked = on, onCheckedChange = null)
+                        Column(modifier = Modifier.padding(start = 12.dp)) {
+                            Text(bookingHeading(segment).headline, style = MaterialTheme.typography.bodyLarge)
+                            Text(formatDate(localDate(segment.start)), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSplit(sorted.map { it.id }.filter { it in picked }) }, enabled = picked.isNotEmpty() && picked.size < segments.size) {
+                Text(pluralStringResource(Res.plurals.split_move, picked.size, picked.size))
+            }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
     )
 }

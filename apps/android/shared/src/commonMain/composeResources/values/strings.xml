@@ -309,6 +309,13 @@
 
     <!-- The owner's trip edits. -->
     <string name="rename">Rename</string>
+    <string name="split">Split…</string>
+    <string name="split_trip_title">Split trip</string>
+    <string name="split_trip_hint">Pick the bookings to move to a new trip.</string>
+    <plurals name="split_move">
+        <item quantity="one">Move %1$d booking to a new trip</item>
+        <item quantity="other">Move %1$d bookings to a new trip</item>
+    </plurals>
     <string name="rename_trip">Rename trip</string>
     <string name="trip_name">Name</string>
     <string name="fit_dates">Fit dates to bookings (%1$s)</string>

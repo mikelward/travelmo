@@ -314,6 +314,13 @@ interface TripStore {
     suspend fun moveSegmentToNewTrip(fromTripId: String, segmentId: String, uid: String): String
 
     /**
+     * Moves some of a trip's bookings into a trip of their own (Split…), owned by [uid], named after where the first
+     * goes, over their dates and shared as the trip they leave when [uid] owns it, in one transaction; both trips'
+     * dates then fit what each holds. Returns the new trip's id. As the web's splitTrip.
+     */
+    suspend fun splitTrip(fromTripId: String, segmentIds: List<String>, uid: String): String
+
+    /**
      * Puts right what the trip list's filters need of a trip's bookings (TripFlags), from the server's bookings and
      * not the cache's, and only if no booking changed meanwhile (the trip's `updatedAt` moved): a change then is left
      * to be read again. Not for a trip being deleted.
