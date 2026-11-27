@@ -1,6 +1,6 @@
 "use client";
 
-import { allLoyalty, bookedDateRange, flightCheckInState, displayBounds, effectiveHomes, homeTimeline, journeyGapHomes, journeyGaps, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, gmailMailboxes, localDate, normalizeEmail, paths, programsFor, namedTravelers, sharedWithAny, sourceGroups, watchedTrip, type Segment, type SenderCleanup, type Trip } from "@travelmo/core";
+import { allLoyalty, bookedDateRange, flightCheckInState, displayBounds, effectiveHomes, homeTimeline, journeyGapHomes, journeyGaps, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, gmailMailboxes, localDate, normalizeEmail, paths, programsFor, mixedTrip, namedTravelers, sharedWithAny, sourceGroups, watchedTrip, type Segment, type SenderCleanup, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { arrayRemove, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -14,13 +14,14 @@ import { api } from "@/lib/api";
 import { hideRideNeed, markOneWay } from "@/lib/rides";
 import { SignInGate } from "@/components/SignInGate";
 import { sourceKindLabels } from "@/lib/sourceLinks";
-import { cancelSegment, cancelTrip, deleteSegment, deleteTrip, favoriteSegment, fitTripDates, mergeSegments, mergeTrips, moveSegment, moveSegmentToNewTrip, splitTrip, rateSegment, renameTrip, restoreSegment, restoreTrip, saveSegment, setRemovedTravelers } from "@/lib/edits";
+import { cancelSegment, cancelTrip, deleteSegment, deleteTrip, favoriteSegment, fitTripDates, mergeSegments, mergeTrips, moveSegment, moveSegmentToNewTrip, splitTrip, rateSegment, renameTrip, restoreSegment, restoreTrip, saveSegment, setRemovedTravelers, markOneTrip } from "@/lib/edits";
 import { shareTrip } from "@/lib/access";
 import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
 import { effectiveDecision, learnSender, removeSenderBookings, senderBookings } from "@/lib/patterns";
 import { DocumentWarnings } from "@/components/DocumentWarnings";
 import { JourneyGapNotice } from "@/components/JourneyGapNotice";
+import { MixedTripNotice } from "@/components/MixedTripNotice";
 import { EntryRequirements } from "@/components/EntryRequirements";
 import { useEntryRequirements } from "@/lib/visas";
 import { usePeopleDocuments, useTripWarnings } from "@/lib/documents";
@@ -530,6 +531,9 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   // requirements, rides, the checklist and check-in.
   const removedTravelers = trip?.removedTravelers;
   const onlyWatching = useMemo(() => !!segments && watchedTrip({ removedTravelers }, segments, travelers ?? []), [segments, travelers, removedTravelers]);
+  // Bookings that look like two trips in one, unless the owner said it is one.
+  const oneTrip = trip?.oneTrip === true;
+  const mixed = useMemo(() => (segments && !oneTrip ? mixedTrip(segments, removedTravelers) : undefined), [segments, oneTrip, removedTravelers]);
   // The viewer's own programs, for the number at check-in; a fellow
   // traveler's are theirs.
   const ownTravelProfile = useTravelProfile(user.uid);
@@ -690,6 +694,22 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
         </p>
       )}
       {trip.cancelledAt && <TripCancelled trip={trip} canManage={canManage} />}
+      {mixed && (
+        <MixedTripNotice
+          mixed={mixed}
+          {...(canManage && segments && segments.length > 1 ? { onSplit: () => setSplitting(true) } : {})}
+          {...(canManage && mixed.kind === "travelers" ? { onTravelers: () => setEditingTravelers(true) } : {})}
+          {...(canManage
+            ? {
+                onOneTrip: () =>
+                  markOneTrip(firestore(), trip.id).catch((e: Error) => {
+                    console.error("Marking a trip as one trip failed", e);
+                    setError(e.message);
+                  }),
+              }
+            : {})}
+        />
+      )}
       <DocumentWarnings warnings={warnings} today={today} />
       {gaps.length > 0 && (
         <JourneyGapNotice

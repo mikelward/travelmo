@@ -25,6 +25,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.travelmo.core.Place
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentType
 import app.travelmo.core.emailLinkFor
@@ -149,6 +150,27 @@ class SegmentRowTest {
         composeRule.onNodeWithText("Save").performClick()
         composeRule.waitForIdle()
         store.removedTravelers shouldBe listOf("liverpool" to listOf("Sam Example", "Pat Example"))
+    }
+
+    @Test
+    fun `a trip with two flights in the air at once says so and the owner can say it is one trip`() {
+        val flight = Segment(
+            "l-out", "liverpool", SegmentType.FLIGHT, "XX 1 LHR to DXB", "2026-12-12T09:00:00+00:00", "2026-12-12T19:00:00+04:00",
+            origin = Place("Heathrow", code = "LHR"), destination = Place("Dubai", code = "DXB"),
+        )
+        val theirs = flight.copy(id = "l-theirs", title = "YY 9 SYD to SIN", start = "2026-12-12T14:00:00+11:00", end = "2026-12-12T21:00:00+08:00", origin = Place("Sydney", code = "SYD"), destination = Place("Singapore", code = "SIN"))
+        val store = FakeTripStore(segments = fixtureSegments + ("liverpool" to fixtureSegments.getValue("liverpool") + flight + theirs))
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent {
+            TravelmoTheme {
+                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("This may be two trips: YY 9 SYD to SIN and XX 1 LHR to DXB are in the air at the same time.").assertExists()
+        composeRule.onNodeWithText("It's one trip").performClick()
+        composeRule.waitForIdle()
+        store.oneTrips shouldBe listOf("liverpool")
     }
 
     @Test

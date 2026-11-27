@@ -150,6 +150,16 @@ describe("trips", () => {
     await assertSucceeds(updateDoc(doc(as(owner), paths.trip(trip.id)), { setting: "other" }));
     await assertFails(updateDoc(doc(as(partner), paths.trip(trip.id)), { setting: "moon" }));
     await assertFails(updateDoc(doc(as(stranger), paths.trip(trip.id)), { setting: "town" }));
+    // And whether it looks like two trips in one.
+    await assertSucceeds(updateDoc(doc(as(owner), paths.trip(trip.id)), { mixed: true }));
+    await assertSucceeds(updateDoc(doc(as(partner), paths.trip(trip.id)), { mixed: false }));
+    await assertFails(updateDoc(doc(as(partner), paths.trip(trip.id)), { mixed: "yes" }));
+  });
+
+  it("lets only the owner say a trip that looks like two is one", async () => {
+    await assertFails(updateDoc(doc(as(partner), paths.trip(trip.id)), { oneTrip: true }));
+    await assertFails(updateDoc(doc(as(owner), paths.trip(trip.id)), { oneTrip: "yes" }));
+    await assertSucceeds(updateDoc(doc(as(owner), paths.trip(trip.id)), { oneTrip: true }));
   });
 
   it("lets only the owner take names off a trip, at most a hundred", async () => {

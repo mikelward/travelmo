@@ -153,6 +153,18 @@ class TripListScreenTest {
     }
 
     @Test
+    fun `a trip that looks like two says Check until the owner says it is one`() {
+        val store = FakeTripStore(
+            trips = fixtureTrips + fixtureFlightTrip.copy(title = "Mixed trip", mixed = true) + fixtureFlightTrip.copy(id = "settled", title = "Settled trip", mixed = true, oneTrip = true),
+        )
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }
+        composeRule.waitForIdle()
+        composeRule.onNode(hasText("Mixed trip") and hasText("Check", substring = true, ignoreCase = true)).assertExists()
+        composeRule.onNode(hasText("Settled trip") and hasText("Check", substring = true, ignoreCase = true)).assertDoesNotExist()
+    }
+
+    @Test
     fun `search opens in the top bar and back closes and clears it`() {
         val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
         composeRule.setContent { TravelmoTheme { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) } }

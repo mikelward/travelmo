@@ -73,15 +73,17 @@ describe("the trip's flags", () => {
     expect(flagsUnknown({ allCancelled: false, localOnly: false })).toBe(true);
     expect(flagsUnknown({ allCancelled: false, localOnly: false, travelers: [] })).toBe(true);
     // A show alone is an event: its ticket, not its town.
-    expect(tripFlagsToWrite({}, [show])).toEqual({ allCancelled: false, localOnly: true, travelers: [], setting: "activity" });
-    const kept = { allCancelled: false, localOnly: true, travelers: [], setting: "activity" } as const;
+    expect(tripFlagsToWrite({}, [show])).toEqual({ allCancelled: false, localOnly: true, travelers: [], setting: "activity", mixed: false });
+    const kept = { allCancelled: false, localOnly: true, travelers: [], setting: "activity", mixed: false } as const;
     expect(tripFlagsToWrite(kept, [show])).toBeUndefined();
     // All cancelled, it isn't local any more, and goes by its town.
-    expect(tripFlagsToWrite(kept, [cancelled(show)])).toEqual({ allCancelled: true, localOnly: false, travelers: [], setting: "city" });
-    expect(tripFlagsToWrite(kept, [{ ...show, travelers: ["Sam Example"] }])).toEqual({ allCancelled: false, localOnly: true, travelers: ["Sam Example"], setting: "activity" });
+    expect(tripFlagsToWrite(kept, [cancelled(show)])).toEqual({ allCancelled: true, localOnly: false, travelers: [], setting: "city", mixed: false });
+    expect(tripFlagsToWrite(kept, [{ ...show, travelers: ["Sam Example"] }])).toEqual({ allCancelled: false, localOnly: true, travelers: ["Sam Example"], setting: "activity", mixed: false });
     // A trip from before its setting was kept gets it, though its filters are known.
     expect(tripFlagsToWrite({ allCancelled: false, localOnly: true, travelers: [] }, [show])).toEqual(kept);
     expect(flagsUnknown({ allCancelled: false, localOnly: true, travelers: [] })).toBe(true);
+    // And one from before `mixed` was kept, whether it looks like two trips.
+    expect(flagsUnknown({ ...kept, mixed: undefined })).toBe(true);
     expect(flagsUnknown(kept)).toBe(false);
     // A trip of local events that kept a town before events took their booking's icon is read again, once.
     expect(flagsUnknown({ ...kept, setting: "city" })).toBe(true);

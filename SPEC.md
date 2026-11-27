@@ -428,6 +428,21 @@ big group never drops the user's name; `tripTravelers`) with the list's other
 flags (see "Filtering the trip list"); a trip from before it was kept has
 its bookings read once, while the user is known, to fill it in.
 
+**Two trips in one.** A trip whose bookings look like two trips filed as
+one (`mixedTrip` in `packages/core/src/mixedTrip.ts`, mirrored in
+`MixedTrip.kt`) says so, on the web and Android: its card in the list reads
+"Check" (before "Watching" and "Shared"), and its page has a notice saying
+why, with Split… and, for travelers, Travelers… for the owner, and "It's one
+trip" (`oneTrip` on the trip, owner only), after which neither asks again.
+Going by what is still booked, it looks like two trips when two flights are
+in the air at once (unless they fly the same route: one flight booked twice);
+when a flight leaves from another country within twelve hours of the one
+before it landing (countries from the booking or its airport code); or when
+its travelers fall into groups that share no booking and no flight (a party
+booked apart on the same flight is one trip), leaving out names taken off
+with Travelers…. Whether it does is kept on the trip (`mixed`) with the
+list's other flags, so the list goes without reading bookings.
+
 **Travelers….** A printout that names the family wrongly (a relative's
 itinerary listing everyone) makes a trip the user isn't on look like theirs.
 The trip's ⋮ menu has Travelers… for the owner, on the web and Android, once

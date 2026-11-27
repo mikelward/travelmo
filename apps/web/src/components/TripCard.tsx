@@ -1,4 +1,5 @@
 import {
+  mixedTrip,
   tripCancelled,
   checkInLine,
   displayBounds,
@@ -50,9 +51,14 @@ export const TripCard = memo(function TripCard({
   // Whether the viewer is only watching it: none of its travelers is them.
   watching?: boolean;
 }) {
+  // Bookings that look like two trips in one, by the trip's flag or, before
+  // it is kept, its bookings; unless the owner said it is one.
+  const check = !trip.oneTrip && (trip.mixed ?? (segments ? mixedTrip(segments, trip.removedTravelers) !== undefined : false));
   const badge = trip.deleting
     ? "Deleting"
-    : watching
+    : check
+      ? "Check"
+      : watching
       ? "Watching"
       : shared
         ? "Shared"

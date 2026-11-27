@@ -133,12 +133,16 @@ service cloud.firestore {
     }
 
     function validTrip(trip) {
-      return trip.keys().hasOnly(['id', 'title', 'start', 'end', 'liveStart', 'liveEnd', 'ownerUid', 'sharedWith', 'deleting', 'cancelledAt', 'allCancelled', 'localOnly', 'travelers', 'setting', 'removedTravelers', 'createdAt', 'updatedAt'])
+      return trip.keys().hasOnly(['id', 'title', 'start', 'end', 'liveStart', 'liveEnd', 'ownerUid', 'sharedWith', 'deleting', 'cancelledAt', 'allCancelled', 'localOnly', 'travelers', 'setting', 'mixed', 'removedTravelers', 'oneTrip', 'createdAt', 'updatedAt'])
         && (!('deleting' in trip) || trip.deleting is bool)
         // What the list's filters need of its bookings (listFilters.ts).
         && (!('allCancelled' in trip) || trip.allCancelled is bool)
         && (!('localOnly' in trip) || trip.localOnly is bool)
         && (!('travelers' in trip) || (trip.travelers is list && trip.travelers.size() <= 100))
+        // Whether it looks like two trips in one (mixedTrip), and the owner's
+        // word that it is one all the same.
+        && (!('mixed' in trip) || trip.mixed is bool)
+        && (!('oneTrip' in trip) || trip.oneTrip is bool)
         // Names the owner took off the trip (Travelers…); a sharee may not.
         && (!('removedTravelers' in trip) || (trip.removedTravelers is list && trip.removedTravelers.size() <= 100))
         // What kind of place it goes to, for its picture (tripSetting).
@@ -173,7 +177,7 @@ service cloud.firestore {
       // list's flags follow the bookings, which a sharee may change too.
       allow update: if member()
         && isSharee(resource.data)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['start', 'end', 'liveStart', 'liveEnd', 'allCancelled', 'localOnly', 'travelers', 'setting', 'updatedAt'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['start', 'end', 'liveStart', 'liveEnd', 'allCancelled', 'localOnly', 'travelers', 'setting', 'mixed', 'updatedAt'])
         && request.resource.data.start <= resource.data.start
         && request.resource.data.end >= resource.data.end
         && validTrip(request.resource.data);
