@@ -32,7 +32,7 @@
     <string name="badge_shared">Shared</string>
     <string name="badge_deleting">Deleting</string>
     <string name="badge_watching">Watching</string>
-    <string name="badge_check">Check</string>
+    <string name="badge_problem">Problem</string>
     <string name="watching_hint">Watching: you’re not on this trip</string>
     <string name="staying_at">Staying at %1$s</string>
     <string name="settings">Settings</string>

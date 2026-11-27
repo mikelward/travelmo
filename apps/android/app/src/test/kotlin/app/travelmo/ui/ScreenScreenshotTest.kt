@@ -204,7 +204,7 @@ class ScreenScreenshotTest {
         captureScreenRoboImage(filePath = "$outputDir/trip_list_filters.png")
     }
 
-    // A trip whose bookings look like two in one: Check on its card.
+    // A trip whose bookings look like two in one: Problem on its card.
     @Test
     fun trip_list_mixed() {
         val store = FakeTripStore(trips = fixtureTrips.map { if (it.id == "liverpool") it.copy(mixed = true) else it })
