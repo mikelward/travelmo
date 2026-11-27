@@ -11,6 +11,7 @@ import { airportCodes, homeTownKey, correctionText, failedReadsText, homeLine, l
 import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
 import { mergePeople, sayWhoIs, setMe, usePeople } from "@/lib/people";
+import { useProfile } from "@/lib/trips";
 import { maxTrusted, removeFoundLoyalty, saveTrusted, setLoyaltyPerson, useSharedProfiles, useTravelProfile } from "@/lib/travelProfile";
 
 const buttonClass =
@@ -356,6 +357,10 @@ function SharingSection({ user, profile }: { user: User; profile: TravelProfile 
 // corrections: home is this town from this date.
 function HomeSection({ user }: { user: User }) {
   const homes = useHomes(user);
+  // The corrections as saved, to change while home over time waits for every trip's bookings.
+  const profile = useProfile(user.uid);
+  // A profile that has answered with no corrections has none to show, not none yet.
+  const corrections = homes?.corrections ?? (profile ? (profile.homes ?? []) : undefined);
   const [city, setCity] = useState("");
   const [country, setCountry] = useState("");
   const [from, setFrom] = useState("");
@@ -378,7 +383,7 @@ function HomeSection({ user }: { user: User }) {
   const add = async () => {
     const correction = parseCorrection(city, country, from);
     if (typeof correction === "string") return setError(correction);
-    if (await save("adding one", [...(homes?.corrections ?? []).filter((c) => c.from !== correction.from), correction])) {
+    if (await save("adding one", [...(corrections ?? []).filter((c) => c.from !== correction.from), correction])) {
       setCity("");
       setCountry("");
       setFrom("");
@@ -389,25 +394,33 @@ function HomeSection({ user }: { user: User }) {
   return (
     <section className="mt-10">
       <h2 className="text-lg font-medium">Home</h2>
-      {homes === undefined ? (
+      {corrections === undefined ? (
         <p className="mt-2 text-muted">Loading…</p>
       ) : (
         <>
-          <p className="mt-2" data-testid="home-line">
-            {line ?? "Not known yet."}
-          </p>
-          <p className="mt-1 text-zinc-600 dark:text-zinc-400">Worked out from your trips.</p>
-          {homes.failed > 0 && <p className="mt-2 text-danger">{failedReadsText(homes.failed)}</p>}
-          {homes.corrections.length > 0 && (
+          {homes === undefined ? (
+            // Home over time waits for every trip's bookings; the corrections below don't.
+            <p className="mt-2 text-muted">Loading…</p>
+          ) : homes.failed > 0 ? (
+            <p className="mt-2 text-danger">{failedReadsText(homes.failed)}</p>
+          ) : (
+            <>
+              <p className="mt-2" data-testid="home-line">
+                {line ?? "Not known yet."}
+              </p>
+              <p className="mt-1 text-zinc-600 dark:text-zinc-400">Worked out from your trips.</p>
+            </>
+          )}
+          {corrections.length > 0 && (
             <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
-              {homes.corrections.map((c) => (
+              {corrections.map((c) => (
                 <li key={c.from} className="flex items-center justify-between gap-3 py-2">
                   <span>{correctionText(c)}</span>
                   <button
                     type="button"
                     disabled={busy}
                     className={buttonClass}
-                    onClick={() => void save("removing one", homes.corrections.filter((x) => x.from !== c.from))}
+                    onClick={() => void save("removing one", corrections.filter((x) => x.from !== c.from))}
                   >
                     Remove
                   </button>
@@ -415,7 +428,7 @@ function HomeSection({ user }: { user: User }) {
               ))}
             </ul>
           )}
-          <HomeAirports user={user} homes={homes} />
+          {homes && homes.failed === 0 && <HomeAirports user={user} homes={homes} />}
           <form
             className="mt-3 flex flex-wrap items-center gap-2"
             onSubmit={(e) => {

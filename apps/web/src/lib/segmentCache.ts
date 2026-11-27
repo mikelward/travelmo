@@ -1,6 +1,12 @@
 import type { Segment, Trip } from "@travelmo/core";
 
-export type AllSegments = { byTrip: Record<string, Segment[]>; failed: string[] };
+// Each trip's bookings as read; those that couldn't be read (failed) and those
+// read only from the local cache, which can hold some or none of them
+// (unconfirmed), are named: nothing is all of a trip's bookings until both are empty.
+export type AllSegments = { byTrip: Record<string, Segment[]>; failed: string[]; unconfirmed: string[] };
+
+// Whether every trip's bookings were read and confirmed by the server.
+export const allRead = (all: AllSegments) => all.failed.length === 0 && all.unconfirmed.length === 0;
 
 export type SegmentVersion = { updatedAt: string; count: number };
 
@@ -78,7 +84,7 @@ export function peekTripSegments(uid: string, tripId: string, updatedAt?: string
 // Returns every requested trip's bookings immediately when all of them are already in memory
 // at their current `updatedAt`, avoiding an extra loading flash on navigation.
 export function peekAllSegments(uid: string, trips: readonly Pick<Trip, "id" | "updatedAt">[]): AllSegments | undefined {
-  if (trips.length === 0) return { byTrip: {}, failed: [] };
+  if (trips.length === 0) return { byTrip: {}, failed: [], unconfirmed: [] };
   if (cacheUid !== uid) return undefined;
   const byTrip: Record<string, Segment[]> = {};
   for (const trip of trips) {
@@ -86,7 +92,7 @@ export function peekAllSegments(uid: string, trips: readonly Pick<Trip, "id" | "
     if (!hit || hit.updatedAt !== trip.updatedAt) return undefined;
     byTrip[trip.id] = hit.segments;
   }
-  return { byTrip, failed: [] };
+  return { byTrip, failed: [], unconfirmed: [] };
 }
 
 // Loads every trip's bookings once per `updatedAt` with bounded concurrency, reading unchanged
@@ -103,11 +109,12 @@ export async function loadAllSegments(
     memoryCache.clear();
   }
   const generation = cacheGeneration;
-  if (trips.length === 0) return { byTrip: {}, failed: [] };
+  if (trips.length === 0) return { byTrip: {}, failed: [], unconfirmed: [] };
 
   const manifest = readManifest(uid);
   const byTrip: Record<string, Segment[]> = {};
   const failed: string[] = [];
+  const unconfirmed: string[] = [];
   const toFetch: Pick<Trip, "id" | "updatedAt">[] = [];
 
   for (const trip of trips) {
@@ -150,6 +157,7 @@ export async function loadAllSegments(
         }
         if (generation !== cacheGeneration) return;
         byTrip[trip.id] = segments;
+        if (!confirmed) unconfirmed.push(trip.id);
         if (confirmed && trip.updatedAt) {
           memoryCache.set(trip.id, { updatedAt: trip.updatedAt, segments });
           const next = { updatedAt: trip.updatedAt, count: segments.length };
@@ -167,5 +175,5 @@ export async function loadAllSegments(
   if (manifestChanged && generation === cacheGeneration && cacheUid === uid) {
     writeManifest(uid, manifest);
   }
-  return { byTrip, failed };
+  return { byTrip, failed, unconfirmed };
 }

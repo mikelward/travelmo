@@ -139,23 +139,27 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         }
         emitAll(shared)
     }
-    override fun trips(uid: String, addresses: List<String>): Flow<List<Trip>> {
+    override fun trips(uid: String, addresses: List<String>): Flow<List<Trip>> = tripsSeen(uid, addresses).map { it.value }.distinctUntilChanged()
+
+    override fun tripsSeen(uid: String, addresses: List<String>): Flow<Seen<List<Trip>>> {
         // One query failing (the rules refusing it, say) must not hold the
-        // whole list at "loading": it answers with nothing and is logged.
-        val own = db.collection("trips").whereEqualTo("ownerUid", uid).snapshots().orNothing("own trips")
+        // whole list at "loading": it answers with nothing and is logged, unconfirmed.
+        // Metadata changes too, to hear when an answer from the cache is confirmed by the server.
+        val own = db.collection("trips").whereEqualTo("ownerUid", uid).snapshots(MetadataChanges.INCLUDE).seen("own trips")
         // Any of the user's addresses, in one query.
         val asked = queryAddresses(addresses)
-        val shared = if (asked.isEmpty()) flowOf(null) else db.collection("trips").whereArrayContainsAny("sharedWith", asked).snapshots().orNothing("shared trips")
+        val shared = if (asked.isEmpty()) flowOf(Seen(null, confirmed = true))
+        else db.collection("trips").whereArrayContainsAny("sharedWith", asked).snapshots(MetadataChanges.INCLUDE).seen("shared trips")
         return combine(own, shared) { mine, theirs ->
             val byId = LinkedHashMap<String, Trip>()
-            for (snapshot in listOfNotNull(mine, theirs)) {
+            for (snapshot in listOfNotNull(mine.value, theirs.value)) {
                 for (doc in snapshot.documents) {
                     val trip = tripFromDocument(doc.id, doc.data ?: emptyMap())
                     if (trip == null) SharedLog.warning("Malformed trip %s", sensitive(doc.reference.path)) else byId[trip.id] = trip
                 }
             }
-            byId.values.toList()
-        }
+            Seen(byId.values.toList(), confirmed = mine.confirmed && theirs.confirmed)
+        }.distinctUntilChanged()
     }
 
     override fun segments(tripId: String): Flow<List<Segment>> =
@@ -1218,8 +1222,8 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     }
 
     /** Every answer the listener gets; a failure ends the flow with its error. */
-    private fun Query.snapshots(): Flow<QuerySnapshot> = callbackFlow {
-        val registration = addSnapshotListener { snapshot, error ->
+    private fun Query.snapshots(metadataChanges: MetadataChanges = MetadataChanges.EXCLUDE): Flow<QuerySnapshot> = callbackFlow {
+        val registration = addSnapshotListener(metadataChanges) { snapshot, error ->
             if (error != null) {
                 close(error)
                 return@addSnapshotListener
@@ -1228,6 +1232,13 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         }
         awaitClose { registration.remove() }
     }
+
+    // A query's answers with whether the server gave them; nothing, unconfirmed, once it fails, which is logged.
+    private fun Flow<QuerySnapshot>.seen(what: String): Flow<Seen<QuerySnapshot?>> =
+        map<QuerySnapshot, Seen<QuerySnapshot?>> { Seen(it, confirmed = !it.metadata.isFromCache) }.catch { error ->
+            SharedLog.error(error, "Reading %s failed", safe(what))
+            emit(Seen(null, confirmed = false))
+        }
 
     private fun Flow<QuerySnapshot>.orNothing(what: String): Flow<QuerySnapshot?> =
         map<QuerySnapshot, QuerySnapshot?> { it }.catch { error ->

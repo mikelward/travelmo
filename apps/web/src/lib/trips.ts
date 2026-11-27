@@ -25,6 +25,7 @@ import { localToday, msUntilNextLocalDay } from "./dates";
 import { firestore } from "./firebase";
 import { onClearCache, peekLive, peekLivePrefix, subscribeLive, useLiveSubscription } from "./liveCache";
 import { loadAllSegments, peekAllSegments, peekTripSegments, type AllSegments } from "./segmentCache";
+import { answerOf, answerTo, type Answer } from "./tripsAnswer";
 
 let parsedMessagesGeneration = 0;
 let parsedMessagesCache: { uid: string; cap: number; records: ParsedMessage[]; done: boolean } | undefined;
@@ -54,44 +55,67 @@ function parseDocs<T extends z.ZodType>(schema: T, snapshot: QuerySnapshot<Docum
 }
 
 export function useTrips(user: User, enabled = true): Trip[] | undefined {
+  return useTripsState(user, enabled)?.trips;
+}
+
+// The user's trips, own and shared with any of their addresses, with whether
+// the server has answered for all of them: until then they come from the local
+// cache, which can hold only some of them. What is worked out from every trip
+// (Reports, home over time, search) waits for that.
+export type TripsState = { trips: Trip[]; confirmed: boolean };
+
+// No address to share with: nothing shared, and nothing to wait for.
+const noneShared: Answer = { query: "", trips: [], confirmed: true };
+
+export function useTripsState(user: User, enabled = true): TripsState | undefined {
   // Shared with any of the user's addresses (SPEC "Linked email addresses"),
   // in one query; keyed by the list, so a newly linked address re-queries.
   const addresses = queryAddresses(useAddresses(user)).join("\n");
 
-  const own = useLiveSubscription<Trip[]>(
+  const own = useLiveSubscription<Answer>(
     enabled ? `trips:own:${user.uid}` : undefined,
-    (emit, fail) =>
-      onSnapshot(
+    (emit, fail) => {
+      let last: Answer | undefined;
+      return onSnapshot(
         query(collection(firestore(), paths.trips()), where("ownerUid", "==", user.uid)),
-        (s) => emit(parseDocs(Trip, s)),
+        // Metadata changes too, to hear when the cache's answer is confirmed.
+        { includeMetadataChanges: true },
+        (s) => emit((last = answerOf(last, user.uid, s, (snap) => parseDocs(Trip, snap)))),
         (error) => {
           console.error("Trips subscription failed", error);
           fail();
         },
-      ),
+      );
+    },
   );
 
-  const sharedWithMe = useLiveSubscription<Trip[]>(
+  const sharedWithMe = useLiveSubscription<Answer>(
     enabled && addresses ? `trips:shared:${user.uid}:${addresses}` : undefined,
-    (emit, fail) =>
-      onSnapshot(
+    (emit, fail) => {
+      let last: Answer | undefined;
+      return onSnapshot(
         query(collection(firestore(), paths.trips()), where("sharedWith", "array-contains-any", addresses.split("\n"))),
-        (s) => emit(parseDocs(Trip, s)),
+        { includeMetadataChanges: true },
+        (s) => emit((last = answerOf(last, addresses, s, (snap) => parseDocs(Trip, snap)))),
         (error) => {
           console.error("Shared trips subscription failed", error);
           fail();
         },
-      ),
+      );
+    },
   );
 
-  return useMemo(() => {
-    if (!enabled) return undefined;
-    const shared = addresses ? sharedWithMe : [];
-    if (!own || !shared) return undefined;
+  const ownNow = enabled ? answerTo(own, user.uid) : undefined;
+  const shared = addresses ? answerTo(sharedWithMe, addresses) : noneShared;
+  const trips = useMemo(() => {
+    if (!ownNow || !shared) return undefined;
     const byId = new Map<string, Trip>();
-    for (const trip of [...own, ...shared]) byId.set(trip.id, trip);
+    for (const trip of [...ownNow.trips, ...shared.trips]) byId.set(trip.id, trip);
     return [...byId.values()];
-  }, [enabled, own, sharedWithMe, addresses]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the answers' trips, not whether they were confirmed
+  }, [ownNow?.trips, shared?.trips]);
+  const confirmed = Boolean(ownNow?.confirmed && shared?.confirmed);
+  return useMemo(() => (trips ? { trips, confirmed } : undefined), [trips, confirmed]);
 }
 
 export function useTrip(tripId: string, uid?: string): Trip | null | undefined {
@@ -114,11 +138,11 @@ export function useTrip(tripId: string, uid?: string): Trip | null | undefined {
   );
   if (live !== undefined) return live;
   if (!uid) return undefined;
-  const cachedOwn = peekLive<Trip[]>(`trips:own:${uid}`);
-  const fromOwn = cachedOwn?.find((t) => t.id === tripId);
+  const cachedOwn = peekLive<Answer>(`trips:own:${uid}`);
+  const fromOwn = cachedOwn?.trips.find((t) => t.id === tripId);
   if (fromOwn) return fromOwn;
-  for (const shared of peekLivePrefix<Trip[]>(`trips:shared:${uid}:`)) {
-    const match = shared.find((t) => t.id === tripId);
+  for (const shared of peekLivePrefix<Answer>(`trips:shared:${uid}:`)) {
+    const match = shared.trips.find((t) => t.id === tripId);
     if (match) return match;
   }
   return undefined;
@@ -208,17 +232,27 @@ export function useSegmentsOnce(
   trips: readonly Pick<Trip, "id" | "updatedAt">[] | undefined,
   uid = "",
 ): Record<string, Segment[]> {
-  const all = useAllSegments(trips && trips.length > 0 ? trips : undefined, uid);
+  // For the list's filters and pictures, which use bookings as they come: nothing here waits on the trip list's
+  // confirmation, and the browser's reconnecting reads again what came from the cache alone.
+  const all = useAllSegments(trips && trips.length > 0 ? trips : undefined, uid, true);
   return all?.byTrip ?? emptyByTrip;
 }
 
 export type { AllSegments } from "./segmentCache";
+export { allRead } from "./segmentCache";
 
 // Every trip's segments, read once per trip version with bounded concurrency
 // rather than listened to: unchanged trips are reused from memory or
 // Firestore's local cache when the manifest count matches. Undefined until
 // every read has finished; a read that failed is named, not left out.
-export function useAllSegments(trips: readonly Pick<Trip, "id" | "updatedAt">[] | undefined, uid: string): AllSegments | undefined {
+// `serverAnswered` says the server has answered for the trip list (useTripsState):
+// it can then answer for their bookings too, so those read only from the cache
+// are read again, as when the browser reconnects.
+export function useAllSegments(
+  trips: readonly Pick<Trip, "id" | "updatedAt">[] | undefined,
+  uid: string,
+  serverAnswered: boolean,
+): AllSegments | undefined {
   const [result, setResult] = useState<{ key: string; value: AllSegments; incomplete: boolean }>();
   const [retry, setRetry] = useState(0);
   const key = trips
@@ -265,7 +299,8 @@ export function useAllSegments(trips: readonly Pick<Trip, "id" | "updatedAt">[] 
     return () => {
       current = false;
     };
-  }, [key, uid, versions, cached, retry]);
+    // Bookings already confirmed are in memory (`cached`), so a rerun reads only the rest.
+  }, [key, uid, versions, cached, retry, serverAnswered]);
 
   // Any trip read unconfirmed from offline cache or that failed stays out of the
   // version cache; retry automatically when the browser reconnects.

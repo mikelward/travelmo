@@ -47,7 +47,7 @@ import {
   useProfile,
   useSegmentsOf,
   useSegmentsOnce,
-  useTrips,
+  useTripsState,
 } from "@/lib/trips";
 
 // Trips worth a listener each: everything under way, for the "next up"
@@ -172,7 +172,8 @@ function Section({
 
 function Trips({ user }: { user: User }) {
   useSaveForOffline();
-  const trips = useTrips(user);
+  const tripsState = useTripsState(user);
+  const trips = tripsState?.trips;
   const today = useLocalToday();
   const [search, setSearch] = useState("");
   // Once searched, kept for the visit, so clearing the box and searching
@@ -186,7 +187,8 @@ function Trips({ user }: { user: User }) {
   // Whom the user's bookings name, and so which trips they're only watching.
   const travelers = usePeople(user.uid);
   // Every trip's bookings, read once a search starts (SPEC "Searching trips").
-  const all = useAllSegments(trips && searched ? trips : undefined, user.uid);
+  // Once the server answers for the trip list, bookings read from the cache alone are read again.
+  const all = useAllSegments(trips && searched ? trips : undefined, user.uid, Boolean(tripsState?.confirmed));
   // The bookings of trips that don't yet say what the filters and their
   // picture need (flagsUnknown), each read once per version of the trip,
   // whenever it turns up so (a later snapshot, an edit), and its flags kept,
@@ -372,7 +374,8 @@ function Trips({ user }: { user: User }) {
         </ul>
       )}
       {error && <p className="mb-4 text-danger">{error}</p>}
-      {searching && !all && (
+      {/* Until the server has answered for every trip's bookings: the cache's may be only some of them. */}
+      {searching && (!all || all.unconfirmed.length > 0) && (
         <p className="mb-4 text-muted">Searching bookings…</p>
       )}
       {searching && all && all.failed.length > 0 && (
@@ -381,7 +384,7 @@ function Trips({ user }: { user: User }) {
           searched by title and dates only.
         </p>
       )}
-      {searching && all && shown?.length === 0 && (
+      {searching && all && all.unconfirmed.length === 0 && shown?.length === 0 && (
         <p className="text-muted">No trips match.</p>
       )}
       {!searching && filtering && all && shown?.length === 0 && (

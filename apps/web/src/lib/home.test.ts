@@ -1,6 +1,6 @@
-import type { Segment } from "@travelmo/core";
+import type { Segment, Trip } from "@travelmo/core";
 import { describe, expect, it, vi } from "vitest";
-import { deriveHomes, failedReadsText, logged } from "./home";
+import { deriveHomes, failedReadsText, homesFrom, logged } from "./home";
 
 describe("deriveHomes", () => {
   const at = "2026-01-01T00:00:00Z";
@@ -29,10 +29,36 @@ describe("deriveHomes", () => {
   });
 });
 
+describe("homesFrom", () => {
+  const at = "2026-01-01T00:00:00Z";
+  const trip = (id: string) => ({ id, ownerUid: "u1", title: id, start: "2025-04-01", end: "2025-04-05", sharedWith: [], createdAt: at, updatedAt: at }) as unknown as Trip;
+  const flight = (id: string, start: string, from: string, to: string): Segment => ({
+    id, tripId: "t", type: "flight", title: `${from} to ${to}`, start,
+    origin: { name: from, city: from }, destination: { name: to, city: to },
+    source: "gmail", gmailMessageIds: [], createdAt: at, updatedAt: at,
+  });
+  const byTrip = { t: [flight("a", "2025-04-01T09:00:00+00:00", "London", "Rome"), flight("b", "2025-04-05T18:00:00+00:00", "Rome", "London")] };
+  const corrections = [{ city: "Paris", country: "FR", from: "2026-01-01" }];
+
+  it("works out nothing while a trip's bookings came from the cache alone", () => {
+    expect(homesFrom([trip("t")], { byTrip, failed: [], unconfirmed: ["t"] }, "u1", [], {})).toBeUndefined();
+  });
+
+  it("works out no home from the other trips while one couldn't be read, keeping the corrections", () => {
+    expect(homesFrom([trip("t"), trip("x")], { byTrip, failed: ["x"], unconfirmed: [] }, "u1", [], { homes: corrections })).toEqual({
+      periods: [], corrections, chosen: [], failed: 1,
+    });
+  });
+
+  it("works out home once every trip is read", () => {
+    expect(homesFrom([trip("t")], { byTrip, failed: [], unconfirmed: [] }, "u1", [], {})?.periods).toEqual([{ city: "London" }]);
+  });
+});
+
 describe("failedReadsText", () => {
-  it("says the timeline is missing what those trips would say", () => {
-    expect(failedReadsText(1)).toBe("1 trip couldn't be read, so it isn't counted. Reload to try again.");
-    expect(failedReadsText(3)).toBe("3 trips couldn't be read, so they aren't counted. Reload to try again.");
+  it("says home waits for those trips", () => {
+    expect(failedReadsText(1)).toBe("1 trip couldn't be read, so home can't be worked out yet. Reload to try again.");
+    expect(failedReadsText(3)).toBe("3 trips couldn't be read, so home can't be worked out yet. Reload to try again.");
   });
 });
 

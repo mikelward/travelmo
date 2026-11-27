@@ -107,6 +107,7 @@ import app.travelmo.shared.home_not_known
 import app.travelmo.shared.home_pick_from
 import app.travelmo.shared.home_worked_out
 import app.travelmo.shared.loading
+import app.travelmo.shared.trips_unreadable_home
 import app.travelmo.shared.loyalty_details
 import app.travelmo.shared.loyalty_mine
 import app.travelmo.shared.loyalty_programs
@@ -519,6 +520,7 @@ private fun Sharing(trusted: List<String>, busy: Boolean, error: String?, onSave
 private fun HomeSection(viewModel: TripsViewModel) {
     LaunchedEffect(viewModel) { viewModel.refreshUnconfirmedSegments() }
     val homes by viewModel.reportHomes.collectAsStateWithLifecycle()
+    val unreadable by viewModel.reportUnreadable.collectAsStateWithLifecycle()
     val settings by viewModel.rideSettings.collectAsStateWithLifecycle()
     val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
     val outcome = outcomes[HOME_TOKEN]
@@ -544,12 +546,19 @@ private fun HomeSection(viewModel: TripsViewModel) {
     val periods = homes
     val corrections = settings?.homes
     Column(modifier = Modifier.fillMaxWidth()) {
-        if (periods == null || corrections == null) {
+        if (corrections == null) {
             Text(stringResource(Res.string.loading), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             return@Column
         }
-        Text(homeLine(periods) ?: stringResource(Res.string.home_not_known), style = MaterialTheme.typography.bodyLarge)
-        Text(stringResource(Res.string.home_worked_out), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // Home over time waits for every trip's bookings; the corrections and adding one don't.
+        when {
+            periods != null -> {
+                Text(homeLine(periods) ?: stringResource(Res.string.home_not_known), style = MaterialTheme.typography.bodyLarge)
+                Text(stringResource(Res.string.home_worked_out), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            unreadable > 0 -> Unreadable(unreadable, viewModel::retryReports, Res.plurals.trips_unreadable_home)
+            else -> Text(stringResource(Res.string.loading), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         val sortedCorrections = remember(corrections) { corrections.sortedBy { it.from } }
         for (c in sortedCorrections) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -584,7 +593,7 @@ private fun HomeSection(viewModel: TripsViewModel) {
         (problem ?: (outcome as? Outcome.Failed)?.message)?.let {
             Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
         }
-        HomeAirports(viewModel, periods)
+        if (periods != null) HomeAirports(viewModel, periods)
     }
     if (picking) {
         // Opens on the date chosen, else today.

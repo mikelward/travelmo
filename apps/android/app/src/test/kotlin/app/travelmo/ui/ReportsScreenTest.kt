@@ -102,6 +102,28 @@ class ReportsScreenTest {
     }
 
     @Test
+    fun `a trip that can't be read holds the reports and the download back until read again`() {
+        val base = FakeTripStore()
+        var refuse = true
+        val store = object : TripStore by base {
+            override suspend fun segmentsOnce(tripId: String): app.travelmo.data.Seen<List<Segment>> {
+                if (tripId == "lisbon" && refuse) throw IllegalStateException("refused")
+                return base.segmentsOnce(tripId)
+            }
+        }
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent { TravelmoTheme { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = {}) } }
+        composeRule.onNodeWithText("1 trip couldn't be read, so these counts are from your last visit.").assertExists()
+        composeRule.onNodeWithText("Loading reports…").assertExists()
+        composeRule.onNodeWithText("Download CSV").assertDoesNotExist()
+        refuse = false
+        composeRule.onNodeWithText("Try again").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("1 trip couldn't be read", substring = true).assertDoesNotExist()
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Download CSV"))
+    }
+
+    @Test
     fun `works out days in each country only once its section is opened`() {
         val viewModel = TripsViewModel(FakeTripStore(), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
         composeRule.setContent { TravelmoTheme { ReportsScreen(viewModel = viewModel, onOpenTrip = {}, onOpenSettings = {}, bottomBar = {}) } }

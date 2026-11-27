@@ -40,11 +40,12 @@ interface AppChrome {
     /**
      * A function that asks the user where to save a file of [mimeType],
      * suggesting the name it is given, then writes [text] there; [onSaved]
-     * hears true once written, false when writing failed, and nothing when
-     * the user cancelled.
+     * hears true once written, false when writing failed or [text] had
+     * nothing to write (no file is left then), and nothing when the user
+     * cancelled.
      */
     @Composable
-    fun rememberTextSaver(mimeType: String, text: () -> String, onSaved: (Boolean) -> Unit): (suggestedName: String) -> Unit
+    fun rememberTextSaver(mimeType: String, text: () -> String?, onSaved: (Boolean) -> Unit): (suggestedName: String) -> Unit
 
     /** The app's version as Settings names it. */
     val versionName: String
@@ -81,7 +82,7 @@ object NoAppChrome : AppChrome {
     override fun copyToClipboard(label: String, text: String) {}
 
     @Composable
-    override fun rememberTextSaver(mimeType: String, text: () -> String, onSaved: (Boolean) -> Unit): (suggestedName: String) -> Unit = {}
+    override fun rememberTextSaver(mimeType: String, text: () -> String?, onSaved: (Boolean) -> Unit): (suggestedName: String) -> Unit = {}
 
     override val versionName: String = ""
 

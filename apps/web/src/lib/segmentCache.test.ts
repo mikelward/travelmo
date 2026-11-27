@@ -1,6 +1,6 @@
 import type { Segment } from "@travelmo/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearSegmentCache, loadAllSegments, peekAllSegments, peekTripSegments, type SegmentRead, type SegmentReader } from "./segmentCache";
+import { allRead, clearSegmentCache, loadAllSegments, peekAllSegments, peekTripSegments, type SegmentRead, type SegmentReader } from "./segmentCache";
 
 const at = "2026-01-01T00:00:00Z";
 const seg = (id: string, tripId: string): Segment => ({
@@ -57,15 +57,15 @@ describe("segmentCache", () => {
     ];
 
     const first = await loadAllSegments("u1", trips, reader);
-    expect(first).toEqual({ byTrip, failed: [] });
+    expect(first).toEqual({ byTrip, failed: [], unconfirmed: [] });
     expect(storeCalls).toEqual(["a", "b"]);
     expect(cacheCalls).toEqual([]);
 
     // Same versions: peek hits memory immediately and loadAllSegments reads nothing.
-    expect(peekAllSegments("u1", trips)).toEqual({ byTrip, failed: [] });
+    expect(peekAllSegments("u1", trips)).toEqual({ byTrip, failed: [], unconfirmed: [] });
     storeCalls.length = 0;
     const second = await loadAllSegments("u1", trips, reader);
-    expect(second).toEqual({ byTrip, failed: [] });
+    expect(second).toEqual({ byTrip, failed: [], unconfirmed: [] });
     expect(storeCalls).toEqual([]);
     expect(cacheCalls).toEqual([]);
 
@@ -161,7 +161,7 @@ describe("segmentCache", () => {
     expect(res.failed).toEqual(["bad"]);
     expect(Object.keys(res.byTrip)).toEqual(["ok"]);
     expect(peekAllSegments("u1", trips)).toBeUndefined();
-    expect(peekAllSegments("u1", [trips[0]!])).toEqual({ byTrip: { ok: [seg("ok1", "ok")] }, failed: [] });
+    expect(peekAllSegments("u1", [trips[0]!])).toEqual({ byTrip: { ok: [seg("ok1", "ok")] }, failed: [], unconfirmed: [] });
     // Another account cannot see u1's cached trips.
     expect(peekAllSegments("u2", [trips[0]!])).toBeUndefined();
 
@@ -204,6 +204,9 @@ describe("segmentCache", () => {
     // Offline read returns whatever cache had, but neither memory cache nor manifest persists it.
     const offline = await loadAllSegments("u1", trips, reader);
     expect(offline.byTrip.a).toEqual([]);
+    // Named as read from the cache alone, so nothing takes it for all of the trip's bookings.
+    expect(offline.unconfirmed).toEqual(["a"]);
+    expect(allRead(offline)).toBe(false);
     expect(peekAllSegments("u1", trips)).toBeUndefined();
     expect(storage.has("travelmo.segmentVersions")).toBe(false);
 
@@ -211,6 +214,7 @@ describe("segmentCache", () => {
     online = true;
     const refreshed = await loadAllSegments("u1", trips, reader);
     expect(refreshed.byTrip.a).toHaveLength(2);
+    expect(allRead(refreshed)).toBe(true);
     expect(storeCalls).toEqual(["a", "a"]);
     expect(peekAllSegments("u1", trips)?.byTrip.a).toHaveLength(2);
     expect(JSON.parse(storage.get("travelmo.segmentVersions") ?? "{}").trips.a).toEqual({
