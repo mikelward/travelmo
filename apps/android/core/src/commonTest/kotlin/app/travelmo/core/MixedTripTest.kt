@@ -24,6 +24,13 @@ class MixedTripTest {
         // Nor when the bookings don't say when it lands.
         mixedTrip(listOf(out.copy(end = null), out.copy(id = "again", title = "XX 1", end = null))) shouldBe null
         mixedTrip(emptyList()) shouldBe null
+        // One booking's through flight beside another's legs of it.
+        val through = flight("through", "XX 9 ADL to LHR", "ADL", "LHR", "2026-12-12T21:00:00+10:30", "2026-12-13T13:00:00+00:00")
+        val first = flight("first", "XX 9 ADL to DOH", "ADL", "DOH", "2026-12-12T21:00:00+10:30", "2026-12-13T05:00:00+03:00")
+        val second = flight("second", "XX 7 DOH to LHR", "DOH", "LHR", "2026-12-13T07:30:00+03:00", "2026-12-13T13:00:00+00:00")
+        mixedTrip(listOf(through, first, second)) shouldBe null
+        // So two people on it, one booked through and one by its legs, fly together.
+        mixedTrip(listOf(through.copy(travelers = listOf("Sam Example")), first.copy(travelers = listOf("Pat Example")), second.copy(travelers = listOf("Pat Example")))) shouldBe null
     }
 
     @Test
@@ -31,6 +38,13 @@ class MixedTripTest {
         // 04:00 to 13:00 UTC, while XX 1 flies 09:00 to 15:00.
         val theirs = flight("theirs", "YY 9 SYD to SIN", "SYD", "SIN", "2026-12-12T15:00:00+11:00", "2026-12-12T21:00:00+08:00")
         mixedTrip(listOf(out, theirs, back)) shouldBe MixedTrip.Overlap(theirs, out)
+        // Leaving from the same airport hours later is another flight.
+        val later = flight("later", "YY 3 LHR to CDG", "LHR", "CDG", "2026-12-12T12:00:00+00:00", "2026-12-12T14:30:00+01:00")
+        mixedTrip(listOf(out, later)) shouldBe MixedTrip.Overlap(out, later)
+        // Neither saying where it leaves from is no sign they're one journey.
+        // (10:00 to 14:00 UTC, within XX 1's 09:00 to 15:00.)
+        val inside = flight("inside", "YY 5 KUL to SIN", "KUL", "SIN", "2026-12-12T18:00:00+08:00", "2026-12-12T22:00:00+08:00").copy(origin = null)
+        mixedTrip(listOf(out.copy(origin = null), inside)) shouldBe MixedTrip.Overlap(out.copy(origin = null), inside)
         mixedTrip(listOf(out, theirs.copy(cancelledAt = "2026-11-01T00:00:00Z"))) shouldBe null
     }
 
