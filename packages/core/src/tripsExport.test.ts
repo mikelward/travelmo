@@ -53,6 +53,20 @@ describe("placeRows", () => {
   });
 });
 
+describe("towns", () => {
+  it("shows no town for a stay or a car without one, rather than the hotel's name, but a station's for a journey", () => {
+    const inn: SummaryTrip = {
+      trip: { id: "inn", title: "Inn", start: "2026-04-10", end: "2026-04-12" },
+      segments: [
+        seg({ type: "train", start: "2026-04-10T09:00:00+02:00", end: "2026-04-10T11:00:00+02:00", origin: { name: "Example Central", country: "FR" }, destination: { name: "Exampleville Gare", country: "FR" } }),
+        seg({ type: "lodging", start: "2026-04-10T15:00:00+02:00", end: "2026-04-12T11:00:00+02:00", destination: { name: "Example Inn", country: "FR" } }),
+      ],
+    };
+    expect(tripRows([inn], { periods, until })[0]).toMatchObject({ cities: ["Exampleville Gare"], countries: ["France"] });
+    expect(placeRows([inn], { periods, until }).map((r) => r.city)).toEqual(["Exampleville Gare", ""]);
+  });
+});
+
 describe("what counts", () => {
   it("leaves out trips that start after the day chosen, and trips wholly cancelled", () => {
     const later: SummaryTrip = { ...liverpool, trip: { ...liverpool.trip, id: "later", title: "Later", start: "2027-01-02", end: "2027-01-04" } };

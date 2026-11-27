@@ -52,6 +52,11 @@ function stops(segments: readonly ExtractedSegment[]): Stop[] {
 
 const cityOf = (place: Place) => (place.city ?? place.name).trim();
 
+// The town to show for a stop: its own, or for a journey the station or port
+// it arrives at; a stay or a car with no town shows none, not the hotel's or
+// the rental desk's name.
+const shownCity = (stop: Stop): string | undefined => stop.place.city?.trim() || (journeys.has(stop.type) ? stop.place.name.trim() : undefined);
+
 // A place's country, as an ISO code where it is known.
 function countryOf(stop: Stop, lookup?: PlaceLookup): string | undefined {
   const c = placeCountry(stop.place, stop.type, lookup);
@@ -104,7 +109,7 @@ export function tripRows(trips: readonly SummaryTrip[], options: ExportOptions):
         trip: options.titles?.get(trip.id) ?? trip.title,
         start,
         end,
-        cities: unique(away.map((s) => cityOf(s.place))),
+        cities: unique(away.flatMap((s) => shownCity(s) ?? [])),
         countries: unique(countries.flatMap((c) => (c ? [countryName(c)] : []))),
       }];
     })
@@ -143,7 +148,7 @@ export function placeRows(trips: readonly SummaryTrip[], options: ExportOptions)
       if (options.international && !abroad(v.country, v.start, options.periods)) return;
       const next = visits[i + 1];
       const end = next ? next.start : [v.until, tripEnd].filter((d): d is string => !!d).sort().at(-1)!;
-      rows.push({ city: cityOf(v.stop.place), country: v.country ? countryName(v.country) : "", start: v.start, end: end < v.start ? v.start : end, trip: title });
+      rows.push({ city: shownCity(v.stop) ?? "", country: v.country ? countryName(v.country) : "", start: v.start, end: end < v.start ? v.start : end, trip: title });
     });
   }
   return rows.sort((a, b) => a.start.localeCompare(b.start));
