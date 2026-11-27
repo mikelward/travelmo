@@ -12,7 +12,7 @@ import { localToday } from "@/lib/dates";
 import { useSaveForOffline } from "@/lib/offline";
 import { deriveHomes, ownTripSegments } from "@/lib/home";
 import { usePeople } from "@/lib/people";
-import { useAllSegments, useProfile, useTrips } from "@/lib/trips";
+import { allRead, useAllSegments, useProfile, useTripsState } from "@/lib/trips";
 
 type Tables = { lookup: PlaceLookup; map: WorldMapData };
 
@@ -217,6 +217,16 @@ function Countries({
   );
 }
 
+// That some trips' bookings couldn't be read, which holds the reports back: the counts shown are the last visit's.
+function Unreadable({ count }: { count: number }) {
+  if (!count) return null;
+  return (
+    <p className="mt-2 text-danger">
+      {plural(count, "trip")} couldn&apos;t be read, so these counts are from your last visit. Reload to try again.
+    </p>
+  );
+}
+
 // A summary of every trip to download, for visa and settlement forms: one
 // row per trip or per place, optionally only what was abroad.
 function DownloadTrips({ trips, homes, lookup, titles, today }: { trips: readonly SummaryTrip[]; homes: () => readonly HomePeriod[] | undefined; lookup: PlaceLookup; titles: Map<string, string>; today: string }) {
@@ -383,8 +393,13 @@ function useReportSnapshot(uid: string, fresh: TravelReport | undefined): Travel
 
 function Report({ user }: { user: User }) {
   useSaveForOffline();
-  const trips = useTrips(user);
-  const segments = useAllSegments(trips, user.uid);
+  const tripsState = useTripsState(user);
+  const trips = tripsState?.trips;
+  const segments = useAllSegments(trips, user.uid, Boolean(tripsState?.confirmed));
+  // Nothing is worked out from part of the trips: not before the server has answered for every trip and its
+  // bookings (offline, the cache can hold only some, or none), nor while one couldn't be read.
+  const ready = Boolean(tripsState?.confirmed && segments && allRead(segments));
+  const unreadable = segments?.failed.length ?? 0;
   const tables = useTables();
   const profile = useProfile(user.uid);
   // Whom the user's bookings name: a trip they're only watching isn't theirs to count.
@@ -393,13 +408,13 @@ function Report({ user }: { user: User }) {
   const today = localToday();
 
   const all = useMemo(() => {
-    if (!trips || !segments || !travelers || !tables || tables instanceof Error) return undefined;
+    if (!ready || !trips || !segments || !travelers || !tables || tables instanceof Error) return undefined;
     const withSegments = trips.flatMap((trip) => {
       const s = segments.byTrip[trip.id];
       return s && !watchedTrip(trip, s, travelers) ? [{ trip, segments: s }] : [];
     });
     return { withSegments, report: travelReport(withSegments, today, { lookup: tables.lookup }) };
-  }, [trips, segments, travelers, tables, today]);
+  }, [ready, trips, segments, travelers, tables, today]);
   const report = useMemo(
     () => (all && tables && !(tables instanceof Error) && year ? travelReport(all.withSegments, today, { year, lookup: tables.lookup }) : all?.report),
     [all, tables, year, today],
@@ -413,9 +428,9 @@ function Report({ user }: { user: User }) {
   // Home over time, for the days with no trip: from the viewer's own trips,
   // already read, with their corrections over it, as the Profile works it out.
   const homesOf = useCallback(() => {
-    if (!trips || !segments || !travelers || !profile) return undefined;
+    if (!ready || !trips || !segments || !travelers || !profile) return undefined;
     return deriveHomes(ownTripSegments(trips, segments.byTrip, user.uid, travelers), [], profile.homes ?? []).periods;
-  }, [trips, segments, travelers, profile, user.uid]);
+  }, [ready, trips, segments, travelers, profile, user.uid]);
   const homes = useMemo(() => (countriesOpen || residenceOpen ? homesOf() : undefined), [countriesOpen, residenceOpen, homesOf]);
   const titles = useMemo(() => displayTitles(trips ?? []), [trips]);
   const [counting, setCounting] = useCounting();
@@ -432,7 +447,13 @@ function Report({ user }: { user: User }) {
   const visited = useMemo(() => new Set(shown?.countries.map((c) => c.country)), [shown]);
 
   if (tables instanceof Error) return <p className="text-danger">The map couldn&apos;t be loaded: {tables.message}</p>;
-  if (!shown || !whole || !tables) return <p className="text-muted">Loading reports…</p>;
+  if (!shown || !whole || !tables)
+    return (
+      <>
+        <p className="text-muted">Loading reports…</p>
+        <Unreadable count={unreadable} />
+      </>
+    );
 
   const years = whole.years.map((y) => y.year);
   return (
@@ -456,12 +477,7 @@ function Report({ user }: { user: User }) {
           </select>
       </div>
       <Summary report={shown} />
-      {segments && segments.failed.length > 0 && (
-        <p className="mt-2 text-danger">
-          {plural(segments.failed.length, "trip")} couldn&apos;t be read, so {segments.failed.length === 1 ? "it isn't" : "they aren't"}{" "}
-          counted. Reload to try again.
-        </p>
-      )}
+      <Unreadable count={unreadable} />
       <WorldMap
         data={tables.map}
         visited={visited}
@@ -469,7 +485,7 @@ function Report({ user }: { user: User }) {
         places={shown.places}
         name={countryName}
       />
-      {!all && <Working />}
+      {!all && !unreadable && <Working />}
       {all && (
         <>
         <OnDemand id="countries-heading" title="Days in each country" open={countriesOpen} onToggle={() => setCountriesOpen(!countriesOpen)}>

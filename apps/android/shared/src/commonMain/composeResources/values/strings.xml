@@ -452,6 +452,14 @@
         <item quantity="other">%1$d days this year</item>
     </plurals>
     <string name="reports_loading">Loading reports…</string>
+    <plurals name="trips_unreadable_home">
+        <item quantity="one">%1$d trip couldn't be read, so home can't be worked out yet.</item>
+        <item quantity="other">%1$d trips couldn't be read, so home can't be worked out yet.</item>
+    </plurals>
+    <plurals name="trips_unreadable">
+        <item quantity="one">%1$d trip couldn't be read, so these counts are from your last visit.</item>
+        <item quantity="other">%1$d trips couldn't be read, so these counts are from your last visit.</item>
+    </plurals>
     <string name="reports_working">Working it out…</string>
     <string name="no_days_to_count">No trip has begun yet, so there are no days to count.</string>
     <string name="section_open">Open</string>

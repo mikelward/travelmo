@@ -16,6 +16,7 @@ import kotlin.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -128,6 +129,7 @@ class AccessViewModelTest {
                 asked++
                 return base.trips(uid, addresses)
             }
+            override fun tripsSeen(uid: String, addresses: List<String>) = trips(uid, addresses).map { app.travelmo.data.Seen(it, confirmed = true) }
         }
         val viewModel = viewModel(store)
         val watching = launch { viewModel.trips.collect {} }

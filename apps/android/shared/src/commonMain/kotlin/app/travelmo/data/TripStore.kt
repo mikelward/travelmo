@@ -47,6 +47,12 @@ interface TripStore {
     /** The user's own trips and those shared with any of their [addresses] (SPEC "Linked email addresses"), live. */
     fun trips(uid: String, addresses: List<String>): Flow<List<Trip>>
 
+    /**
+     * [trips] with whether the server has answered for every one of its queries: not while they come from the
+     * local cache alone, which can hold only some of the trips, nor after a query failed. Fakes always have.
+     */
+    fun tripsSeen(uid: String, addresses: List<String>): Flow<Seen<List<Trip>>> = trips(uid, addresses).map { Seen(it, confirmed = true) }
+
     /** One trip's bookings, live; empty while it loads. */
     fun segments(tripId: String): Flow<List<Segment>>
 

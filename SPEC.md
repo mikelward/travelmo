@@ -481,10 +481,11 @@ word ("VS 11"). Words and a date combine ("lisbon april"). The trip
 documents hold only titles and dates, so the first search reads every
 trip's bookings once per trip version via the shared bounded segment cache
 (as Reports does, on both web and Android) and keeps them for the session;
-until they answer, trips are matched by title and dates, under "Searching
-bookings…". A trip whose bookings couldn't be read is searched by title
-and dates only, and the web says so. With no match the list says "No trips
-match."
+until the server has answered for them all (offline, the local cache may
+hold only some), trips are matched by what has been read, under "Searching
+bookings…", and "No trips match" waits. A trip whose bookings couldn't be
+read is searched by title and dates only, and the web says so. With no
+match the list says "No trips match."
 
 ### Filtering the trip list
 
@@ -567,8 +568,21 @@ server-confirmed bookings stay in memory for the session, and a per-account
 manifest of `(updatedAt, count)` (`localStorage` on the web, a no-backup
 file on Android) lets unchanged trips be read from Firestore's local cache
 across restarts whenever the cached count still matches (catching cache
-eviction); unconfirmed offline reads are shown without recording a version
-so they refresh once back online. On Android, traveler filtering, favorite
+eviction); an offline read the server hasn't confirmed records no version
+and is read again once back online.
+
+Nothing on Reports, nor home over time on the Profile, is worked out from
+part of the trips: only once the server has answered for the trip list and
+every trip's bookings (`allRead` on the web, `reportTrips` on Android), as
+the local cache can hold only some trips, or a trip without its bookings.
+Until then, and while offline, the counts and map are the last visit's,
+and another year, days in each country, residence days and the trips
+download wait; the Profile's home corrections can still be changed. A trip whose bookings couldn't be read holds them back too:
+"N trips couldn't be read, so these counts are from your last visit", with
+Try again on Android and Reload on the web (on the Profile, "so home can't
+be worked out yet"). Android's download works the
+file out from the bookings as they are when it is saved, and saves nothing
+(removing the file the picker made) if they aren't all read by then. On Android, traveler filtering, favorite
 places, trip titles, residence rules and CSV exports also run off the main
 thread, and "Days in each country" emits each country and expanded stay as
 its own lazy list item.

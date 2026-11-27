@@ -533,6 +533,12 @@ Kotlin Multiplatform, sharing the Android app's Kotlin (SPEC "iOS app").
 
 ## Decisions needing review
 
+- Reports with a trip that can't be read (2026-11-27): the whole page keeps
+  the last visit's counts and holds back the download, with the error and a
+  retry, rather than counting the other trips and saying one is missing. The
+  Profile likewise holds home over time back, while its corrections stay
+  editable.
+
 - A trip's picture (2026-11-25): a kind-of-place, season or holiday word in
   its title ("Summer vacation", "Christmas") wins over the kind of place
   its bookings go to, since the person chose the title.

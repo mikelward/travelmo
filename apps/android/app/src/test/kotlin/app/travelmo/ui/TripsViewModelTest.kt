@@ -46,6 +46,7 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -90,6 +91,7 @@ class TripsViewModelTest {
             asked++
             return flowOf(if (approved) fixtureTrips else emptyList())
         }
+        override fun tripsSeen(uid: String, addresses: List<String>) = trips(uid, addresses).map { app.travelmo.data.Seen(it, confirmed = true) }
         override fun ownProfile(uid: String): Flow<OwnProfile> {
             profileAsked++
             return if (approved) flowOf(OwnProfile(fixtureProfile)) else flow { awaitCancellation() }
@@ -118,6 +120,7 @@ class TripsViewModelTest {
             asked += addresses
             return flowOf(listOf(work).filter { trip -> trip.sharedWith.any { it in addresses } })
         }
+        override fun tripsSeen(uid: String, addresses: List<String>) = trips(uid, addresses).map { app.travelmo.data.Seen(it, confirmed = true) }
     }
 
     private val draft = SegmentDraft(SegmentType.ACTIVITY, "Walk", null, null, "2026-12-12T10:00:00Z", null, null, null, null)
@@ -957,12 +960,14 @@ class TripsViewModelTest {
         }
         val versions = app.travelmo.data.InMemorySegmentVersionsStore()
 
-        // First open offline while staying subscribed to reportTrips: returns local cache, does not persist.
+        // First open offline while staying subscribed to reportTrips: the cache's answer (here nothing) is not
+        // taken for the trip's bookings, so there is nothing to report from yet, and nothing is persisted.
         val vm = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, segmentVersionsStore = versions, reconnected = reconnected)
         val collected = mutableListOf<List<app.travelmo.core.TripWithSegments>?>()
         val job = launch { vm.reportTrips.collect { collected += it } }
         runCurrent()
-        collected.last()!!.first().segments.shouldBeEmpty()
+        collected.last() shouldBe null
+        vm.tripsCsv(byPlace = false, until = "2026-12-31", international = false, titles = emptyMap()) shouldBe null
         versions.read() shouldBe null
 
         // Connectivity returns without leaving the screen: refreshes in place and persists the confirmed version.
@@ -970,6 +975,7 @@ class TripsViewModelTest {
         reconnected.emit(Unit)
         runCurrent()
         collected.last()!!.first().segments shouldBe segA
+        collected.filterNotNull().forEach { it.first().segments shouldBe segA }
         onceCalls shouldBe listOf("a", "a")
         cacheCalls.shouldBeEmpty()
 
@@ -1304,6 +1310,97 @@ class TripsViewModelTest {
         runCurrent()
         onceReads shouldBe 2
         repairCalls shouldBe 2
+        job.cancel()
+    }
+
+    @Test
+    fun `reports wait for the server's trip list, not the cache's part of it`() = runTest {
+        val tripA = Trip("a", "Paris", "2026-05-01", "2026-05-03", OWNER, updatedAt = "2026-05-01T00:00:00Z")
+        val tripB = Trip("b", "Rome", "2026-06-01", "2026-06-03", OWNER, updatedAt = "2026-06-01T00:00:00Z")
+        val segA = listOf(Segment("sa1", "a", SegmentType.LODGING, "Hotel A", "2026-05-01T15:00:00+02:00", "2026-05-03T11:00:00+02:00", destination = Place("Hotel A", city = "Paris", country = "FR")))
+        val segB = listOf(Segment("sb1", "b", SegmentType.LODGING, "Hotel B", "2026-06-01T15:00:00+02:00", "2026-06-03T11:00:00+02:00", destination = Place("Hotel B", city = "Rome", country = "IT")))
+        val base = FakeTripStore(trips = listOf(tripA, tripB), segments = mapOf("a" to segA, "b" to segB))
+        // The cache holds only one of the two trips until the server answers.
+        val seen = kotlinx.coroutines.flow.MutableStateFlow(app.travelmo.data.Seen(listOf(tripA), confirmed = false))
+        val store = object : TripStore by base {
+            override fun tripsSeen(uid: String, addresses: List<String>) = seen
+        }
+        val vm = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        val collected = mutableListOf<List<app.travelmo.core.TripWithSegments>?>()
+        val job = launch { vm.reportTrips.collect { collected += it } }
+        val settings = launch { vm.rideSettings.collect {} }
+        runCurrent()
+        collected.last() shouldBe null
+        vm.tripsCsv(byPlace = false, until = "2026-12-31", international = false, titles = emptyMap()) shouldBe null
+
+        seen.value = app.travelmo.data.Seen(listOf(tripA, tripB), confirmed = true)
+        runCurrent()
+        collected.filterNotNull().map { list -> list.map { it.trip.id } } shouldBe listOf(listOf("a", "b"))
+        val csv = vm.tripsCsv(byPlace = false, until = "2026-12-31", international = false, titles = emptyMap())!!
+        csv.lines().filter { it.isNotEmpty() }.size shouldBe 3
+        job.cancel()
+        settings.cancel()
+    }
+
+    @Test
+    fun `reports wait while a trip's bookings can't be read, and read them again when asked`() = runTest {
+        val tripA = Trip("a", "Paris", "2026-05-01", "2026-05-03", OWNER, updatedAt = "2026-05-01T00:00:00Z")
+        val tripB = Trip("b", "Rome", "2026-06-01", "2026-06-03", OWNER, updatedAt = "2026-06-01T00:00:00Z")
+        val segA = listOf(Segment("sa1", "a", SegmentType.LODGING, "Hotel A", "2026-05-01T15:00:00+02:00", "2026-05-03T11:00:00+02:00"))
+        val segB = listOf(Segment("sb1", "b", SegmentType.LODGING, "Hotel B", "2026-06-01T15:00:00+02:00", "2026-06-03T11:00:00+02:00"))
+        val base = FakeTripStore(trips = listOf(tripA, tripB), segments = mapOf("a" to segA, "b" to segB))
+        var refuse = true
+        val store = object : TripStore by base {
+            override suspend fun segmentsOnce(tripId: String): app.travelmo.data.Seen<List<Segment>> {
+                if (tripId == "b" && refuse) throw IllegalStateException("refused")
+                return app.travelmo.data.Seen(base.segments(tripId).first(), confirmed = true)
+            }
+        }
+        val vm = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        val collected = mutableListOf<List<app.travelmo.core.TripWithSegments>?>()
+        val job = launch { vm.reportTrips.collect { collected += it } }
+        val unreadable = launch { vm.reportUnreadable.collect {} }
+        runCurrent()
+        collected.filterNotNull().shouldBeEmpty()
+        vm.reportUnreadable.value shouldBe 1
+
+        refuse = false
+        vm.retryReports()
+        runCurrent()
+        vm.reportUnreadable.value shouldBe 0
+        collected.filterNotNull().map { list -> list.map { it.trip.id to it.segments } } shouldBe listOf(listOf("a" to segA, "b" to segB))
+        job.cancel()
+        unreadable.cancel()
+    }
+
+    @Test
+    fun `the server answering for the trip list reads again the bookings read from the cache alone, even mid-read`() = runTest {
+        val tripA = Trip("a", "Paris", "2026-05-01", "2026-05-03", OWNER, updatedAt = "2026-05-01T00:00:00Z")
+        val segA = listOf(Segment("sa1", "a", SegmentType.LODGING, "Hotel A", "2026-05-01T15:00:00+02:00", "2026-05-03T11:00:00+02:00"))
+        val base = FakeTripStore(trips = listOf(tripA), segments = mapOf("a" to segA))
+        val seen = kotlinx.coroutines.flow.MutableStateFlow(app.travelmo.data.Seen(listOf(tripA), confirmed = false))
+        var online = false
+        val firstRead = CompletableDeferred<Unit>()
+        val store = object : TripStore by base {
+            override fun tripsSeen(uid: String, addresses: List<String>) = seen
+            override suspend fun segmentsOnce(tripId: String): app.travelmo.data.Seen<List<Segment>> {
+                // The first read is still running when the server answers for the trip list; it then gives the cache's nothing.
+                val wasOnline = online
+                if (!wasOnline) firstRead.await()
+                return if (wasOnline) app.travelmo.data.Seen(segA, confirmed = true) else app.travelmo.data.Seen(emptyList(), confirmed = false)
+            }
+        }
+        // No reconnect event: the trip list's confirmation alone must bring the bookings in.
+        val vm = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        val collected = mutableListOf<List<app.travelmo.core.TripWithSegments>?>()
+        val job = launch { vm.reportTrips.collect { collected += it } }
+        runCurrent()
+        online = true
+        seen.value = app.travelmo.data.Seen(listOf(tripA), confirmed = true)
+        firstRead.complete(Unit)
+        runCurrent()
+        collected.last()!!.first().segments shouldBe segA
+        collected.filterNotNull().forEach { it.first().segments shouldBe segA }
         job.cancel()
     }
 }

@@ -3,6 +3,7 @@ package app.travelmo.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.provider.DocumentsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -47,7 +48,7 @@ class AndroidChrome(private val context: Context) : AppChrome {
     }
 
     @Composable
-    override fun rememberTextSaver(mimeType: String, text: () -> String, onSaved: (Boolean) -> Unit): (suggestedName: String) -> Unit {
+    override fun rememberTextSaver(mimeType: String, text: () -> String?, onSaved: (Boolean) -> Unit): (suggestedName: String) -> Unit {
         val scope = rememberCoroutineScope()
         val currentText = rememberUpdatedState(text)
         val currentOnSaved = rememberUpdatedState(onSaved)
@@ -57,10 +58,21 @@ class AndroidChrome(private val context: Context) : AppChrome {
                 val saved = try {
                     val body = withContext(Dispatchers.Default) { currentText.value() }
                     withContext(Dispatchers.IO) {
-                        context.contentResolver.openOutputStream(uri)?.use { it.write(body.toByteArray()) } ?: throw IOException("No stream to write to")
+                        if (body == null) {
+                            // Nothing to write yet: the picker already made the file, so it goes rather than stay empty.
+                            TravelmoLog.warning("Nothing to save in a %s file yet", safe(mimeType))
+                            try {
+                                if (!DocumentsContract.deleteDocument(context.contentResolver, uri)) TravelmoLog.warning("Removing an unwritten %s file failed", safe(mimeType))
+                            } catch (e: Exception) {
+                                // A provider that can't delete (or a file already gone) leaves an empty file; the user is told nothing was saved.
+                                TravelmoLog.failure(e, "Removing an unwritten %s file failed", safe(mimeType))
+                            }
+                        } else {
+                            context.contentResolver.openOutputStream(uri)?.use { it.write(body.toByteArray()) } ?: throw IOException("No stream to write to")
+                            TravelmoLog.info("Saved a %s file", safe(mimeType))
+                        }
                     }
-                    TravelmoLog.info("Saved a %s file", safe(mimeType))
-                    true
+                    body != null
                 } catch (e: IOException) {
                     TravelmoLog.failure(e, "Saving a %s file failed", safe(mimeType))
                     false

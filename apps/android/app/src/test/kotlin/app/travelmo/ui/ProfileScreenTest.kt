@@ -42,6 +42,29 @@ class ProfileScreenTest {
     }
 
     @Test
+    fun `a trip that can't be read holds back home over time, but not the corrections, until read again`() {
+        val base = FakeTripStore()
+        base.rides.value = app.travelmo.data.RideSettings(homes = listOf(app.travelmo.core.HomeCorrection("London", "GB", "2020-01-01")))
+        var refuse = true
+        val store = object : TripStore by base {
+            override suspend fun segmentsOnce(tripId: String): app.travelmo.data.Seen<List<app.travelmo.core.Segment>> {
+                if (tripId == "lisbon" && refuse) throw IllegalStateException("refused")
+                return base.segmentsOnce(tripId)
+            }
+        }
+        show(store)
+        val message = "1 trip couldn't be read, so home can't be worked out yet."
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(message))
+        // The correction and its Remove stay, to be changed while home waits.
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("London, GB", substring = true))
+        refuse = false
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Try again"))
+        composeRule.onNodeWithText("Try again").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(message).assertDoesNotExist()
+    }
+
+    @Test
     fun `people are listed with the one taken to be the user and This is me moves it`() {
         val store = FakeTripStore(
             people = listOf(

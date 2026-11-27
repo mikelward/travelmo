@@ -75,6 +75,10 @@ import app.travelmo.core.emailAddressOf
 import app.travelmo.core.isAdmin
 import app.travelmo.core.linkedEmails
 import app.travelmo.data.Seen
+import app.travelmo.core.placeRows
+import app.travelmo.core.placeRowsCsv
+import app.travelmo.core.tripRows
+import app.travelmo.core.tripRowsCsv
 import app.travelmo.data.InMemoryListFilterStore
 import app.travelmo.data.CountingStore
 import app.travelmo.data.InMemoryCountingStore
@@ -351,9 +355,16 @@ class TripsViewModel(
 
     private val todayFlow: Flow<String> get() = clockToday
 
+    /**
+     * The user's trips with whether the server has answered for all of them, which the reports wait for, so a
+     * list and its confirmation always go together; null until the first answer.
+     */
+    private val tripsSeen: StateFlow<Seen<List<Trip>>?> = combine(accessSettled, addresses) { _, addresses -> addresses }
+        .flatMapLatest { store.tripsSeen(uid, it) }.map<Seen<List<Trip>>, Seen<List<Trip>>?> { it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     /** Every trip of the user's, own and shared with any of their addresses; null until the first answer. */
-    val trips: StateFlow<List<Trip>?> = combine(accessSettled, addresses) { _, addresses -> addresses }
-        .flatMapLatest { store.trips(uid, it) }.map<List<Trip>, List<Trip>?> { it }
+    val trips: StateFlow<List<Trip>?> = tripsSeen.map { it?.value }.distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val rawTitles: StateFlow<Map<String, String>?> = trips
@@ -599,36 +610,62 @@ class TripsViewModel(
         if (hasUnconfirmedSegments.value) segmentRefresh.update { it + 1 }
     }
 
+    /**
+     * Every trip with its bookings as far as they have been read. [pending] while the server hasn't answered for
+     * the trip list and each trip's bookings: the local cache alone can hold only some of them, or none. A trip
+     * whose bookings couldn't be read is left out and counted in [failed]. [complete] is all of them.
+     */
+    private data class AllBookings(val trips: List<TripWithSegments>, val pending: Boolean, val failed: Int) {
+        val complete get() = !pending && failed == 0
+    }
+
     // Every trip's bookings, read once per trip-version with bounded concurrency rather than attaching
     // a live listener per trip: emits once when loaded and only re-reads trips whose updatedAt changed.
-    private val allSegments: Flow<List<TripWithSegments>?> = run {
-        val byTrip: Flow<Map<String, List<Segment>>?> = combine(
-            trips.map { list -> list?.map { it.id to it.updatedAt }?.sortedBy { it.first } }.distinctUntilChanged(),
+    private val allSegments: Flow<AllBookings?> = run {
+        val byTrip: Flow<SegmentsLoad?> = combine(
+            // Whether the server has answered for the trip list is part of what is read: once it has, it can answer for
+            // their bookings too, so those read from the cache alone are read again, even mid-read (the read restarts;
+            // bookings already confirmed come from memory).
+            tripsSeen.map { seen -> seen?.let { it.confirmed to it.value.map { trip -> trip.id to trip.updatedAt }.sortedBy { v -> v.first } } }.distinctUntilChanged(),
             segmentRefresh,
-        ) { versions, _ -> versions }
+        ) { seen, _ -> seen?.second }
             .flatMapLatest { versions ->
                 when {
                     versions == null -> flowOf(null)
-                    versions.isEmpty() -> flowOf(emptyMap())
+                    versions.isEmpty() -> flowOf(SegmentsLoad(emptyMap()))
                     else -> flow { emit(loadAllSegments(versions)) }
                 }
             }
         // A trip just added waits out of the list until its bookings answer.
-        combine(trips, byTrip) { list, segments ->
-            if (list == null || segments == null) null else list.mapNotNull { trip -> segments[trip.id]?.let { TripWithSegments(trip, it) } }
+        combine(tripsSeen, byTrip) { seen, load ->
+            if (seen == null || load == null) return@combine null
+            val list = seen.value.mapNotNull { trip -> load.byTrip[trip.id]?.let { TripWithSegments(trip, it) } }
+            // Every trip read, and for these versions of them: a load for an older list is never all of a newer one.
+            val pending = !seen.confirmed || load.unconfirmed.isNotEmpty() || list.size + load.failed.size != seen.value.size
+            AllBookings(list, pending, load.failed.size)
         }.shareIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
     }
 
     /**
      * Every trip the viewer sees with its bookings, for the reports: read once
      * per trip version (cached in memory and across restarts), null until the
-     * trips, each one's bookings and the user's people have answered. A trip
-     * the user is only watching (watchedTrip) isn't theirs to count: not in
-     * the reports, residence days, the download or working out home.
+     * server has answered for the trips and every one's bookings, and the
+     * user's people have answered: nothing is worked out from part of them
+     * (the cache's, offline) or with a trip that couldn't be read
+     * ([reportUnreadable]). A trip the user is only watching (watchedTrip)
+     * isn't theirs to count: not in the reports, residence days, the download
+     * or working out home.
      */
     val reportTrips: StateFlow<List<TripWithSegments>?> = combine(allSegments, rawTravelers.filterNotNull()) { all, people ->
-        all?.let { list -> computed { list.filterNot { watchedTrip(it.trip, it.segments, people) } } }
+        all?.takeIf { it.complete }?.let { done -> computed { done.trips.filterNot { watchedTrip(it.trip, it.segments, people) } } }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** How many trips' bookings couldn't be read, which holds the reports back until [retryReports] reads them. */
+    val reportUnreadable: StateFlow<Int> = allSegments.map { it?.failed ?: 0 }.distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    /** Reads again every trip whose bookings couldn't be read, or came from the cache alone. */
+    fun retryReports() = refreshUnconfirmedSegments()
 
     private val _searchText = MutableStateFlow("")
 
@@ -666,9 +703,11 @@ class TripsViewModel(
         val query = parseTripQuery(text)
         if (query.isEmpty || trips == null) return@combine null
         computed {
-            val segments = all?.associate { it.trip.id to it.segments }
+            val segments = all?.trips?.associate { it.trip.id to it.segments }
             val ids = trips.filter { tripMatches(query, it, titles[it.id] ?: it.title, segments?.get(it.id).orEmpty()) }.map { it.id }.toSet()
-            TripSearchResult(ids, bookingsSearched = segments != null)
+            // Bookings read so far are searched, but the search says it has covered them only once the server has
+            // answered for them all (one that couldn't be read is searched by title and dates).
+            TripSearchResult(ids, bookingsSearched = all != null && !all.pending)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
@@ -896,7 +935,11 @@ class TripsViewModel(
         val updatedAt: String,
         val segments: List<Segment>,
         val fresh: Boolean,
+        val failed: Boolean = false,
     )
+
+    // Each trip's bookings by trip, but for those that failed; those read from the cache alone are named too.
+    private data class SegmentsLoad(val byTrip: Map<String, List<Segment>>, val unconfirmed: Set<String> = emptySet(), val failed: Set<String> = emptySet())
 
     private suspend fun ensureSegmentVersionsLoaded() {
         if (segmentVersionsLoaded) return
@@ -924,7 +967,7 @@ class TripsViewModel(
         }
     }
 
-    private suspend fun loadAllSegments(versions: List<Pair<String, String>>): Map<String, List<Segment>> {
+    private suspend fun loadAllSegments(versions: List<Pair<String, String>>): SegmentsLoad {
         ensureSegmentVersionsLoaded()
         val cachedSnapshot = segmentCache.toMap()
         val versionsSnapshot = segmentVersions.toMap()
@@ -938,6 +981,8 @@ class TripsViewModel(
                 toFetch += id to updatedAt
             }
         }
+        val unconfirmed = mutableSetOf<String>()
+        val failed = mutableSetOf<String>()
         if (toFetch.isNotEmpty()) {
             val loaded = withContext(compute ?: EmptyCoroutineContext) {
                 val semaphore = Semaphore(SEGMENT_LOAD_CONCURRENCY)
@@ -952,8 +997,14 @@ class TripsViewModel(
                 }
             }
             for (entry in loaded) {
-                result[entry.tripId] = entry.segments
+                // A failed read is retried like one from the cache alone, but left out rather than taken for no bookings.
                 if (entry.fresh) unconfirmedTripIds.remove(entry.tripId) else unconfirmedTripIds.add(entry.tripId)
+                if (entry.failed) {
+                    failed += entry.tripId
+                    continue
+                }
+                result[entry.tripId] = entry.segments
+                if (!entry.fresh) unconfirmed += entry.tripId
                 if (entry.fresh && entry.updatedAt.isNotEmpty()) {
                     segmentCache[entry.tripId] = entry.updatedAt to entry.segments
                     val next = SegmentVersion(entry.updatedAt, entry.segments.size)
@@ -970,7 +1021,7 @@ class TripsViewModel(
         segmentCache.keys.retainAll(activeIds)
         if (segmentVersions.keys.retainAll(activeIds)) segmentVersionsDirty = true
         if (segmentVersionsDirty) persistSegmentVersions()
-        return result
+        return SegmentsLoad(result, unconfirmed, failed)
     }
 
     private suspend fun loadTripSegments(tripId: String, updatedAt: String, known: SegmentVersion?): LoadedTripSegments {
@@ -987,7 +1038,7 @@ class TripsViewModel(
             throw e
         } catch (e: Exception) {
             SharedLog.error(e, "Reading a trip's bookings failed")
-            LoadedTripSegments(tripId, updatedAt, emptyList(), fresh = false)
+            LoadedTripSegments(tripId, updatedAt, emptyList(), fresh = false, failed = true)
         }
     }
 
@@ -1315,14 +1366,27 @@ class TripsViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /**
-     * [reportHomes] worked out now, from what the reports last read, for the trips download: reuses the cached
-     * result only when [reportTrips] and [rideSettings] still match the inputs it was derived from, else recomputes.
+     * [reportHomes] worked out now, from what the reports last read: reuses the cached result only when
+     * [reportTrips] and [rideSettings] still match the inputs it was derived from, else recomputes.
      * Empty until the reports and the user document have answered.
      */
     fun reportHomesNow(): List<HomePeriod> {
         val trips = reportTrips.value ?: return emptyList()
         val settings = rideSettings.value ?: return emptyList()
         return homesCached(trips, settings.homes, settings.homeAirports)
+    }
+
+    /**
+     * The trips download as CSV (TripsExport), worked out now from every trip's bookings, with home over time
+     * from [reportHomesNow]; null while the reports' bookings or the user
+     * document haven't all answered, so a file is never made from part of them.
+     */
+    fun tripsCsv(byPlace: Boolean, until: String, international: Boolean, titles: Map<String, String>): String? {
+        val trips = reportTrips.value ?: return null
+        if (rideSettings.value == null) return null
+        val periods = reportHomesNow()
+        return if (byPlace) placeRowsCsv(placeRows(trips, periods, until, international, titles))
+        else tripRowsCsv(tripRows(trips, periods, until, international, titles))
     }
 
     private fun homesCached(

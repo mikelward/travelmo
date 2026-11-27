@@ -67,11 +67,9 @@ import app.travelmo.core.CountryCounting
 import app.travelmo.core.CountryDaysReport
 import app.travelmo.core.DateShift
 import app.travelmo.core.FavoritePlace
-import app.travelmo.core.HomePeriod
 import app.travelmo.core.PlaceVisit
 import app.travelmo.core.TravelReport
 import app.travelmo.core.TripWithBookings
-import app.travelmo.core.TripWithSegments
 import app.travelmo.core.WorldMapData
 import app.travelmo.core.countryDays
 import app.travelmo.core.countryDaysRange
@@ -80,12 +78,8 @@ import app.travelmo.core.displayTitles
 import app.travelmo.core.favoritePlaces
 import app.travelmo.core.formatDateRange
 import app.travelmo.core.formatDateWithYear
-import app.travelmo.core.placeRows
 import app.travelmo.core.shiftDate
-import app.travelmo.core.placeRowsCsv
 import app.travelmo.core.travelReport
-import app.travelmo.core.tripRows
-import app.travelmo.core.tripRowsCsv
 import app.travelmo.core.worldMap
 import app.travelmo.shared.Res
 import app.travelmo.shared.abroad_only
@@ -108,6 +102,8 @@ import app.travelmo.shared.home_stay
 import app.travelmo.shared.residence_days
 import app.travelmo.shared.residence_no_home_country
 import app.travelmo.shared.download_csv
+import app.travelmo.shared.try_again
+import app.travelmo.shared.trips_unreadable
 import app.travelmo.shared.download_trips
 import app.travelmo.shared.download_trips_hint
 import app.travelmo.shared.favorite_mark
@@ -128,6 +124,7 @@ import app.travelmo.shared.trips_up_to
 import app.travelmo.shared.uncounted_days
 import app.travelmo.shared.year
 import app.travelmo.ui.theme.TravelmoTheme
+import org.jetbrains.compose.resources.PluralStringResource
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
@@ -145,6 +142,7 @@ import org.jetbrains.compose.resources.stringResource
 fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpenSettings: () -> Unit, bottomBar: @Composable () -> Unit) {
     LaunchedEffect(viewModel) { viewModel.refreshUnconfirmedSegments() }
     val all by viewModel.reportTrips.collectAsStateWithLifecycle()
+    val unreadable by viewModel.reportUnreadable.collectAsStateWithLifecycle()
     // The user's home corrections, for the trips download, which works home out when it is saved: offered only once
     // they have answered, so "outside my home country" never takes a home not yet read for none.
     val homeSettings by viewModel.rideSettings.collectAsStateWithLifecycle()
@@ -187,7 +185,10 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
         val whole = whole ?: snapshot
         val report = report ?: snapshot?.takeIf { year == null }
         if (whole == null || report == null) {
-            Text(stringResource(Res.string.reports_loading), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(padding).padding(16.dp))
+            Column(modifier = Modifier.padding(padding).padding(16.dp)) {
+                Text(stringResource(Res.string.reports_loading), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (unreadable > 0) Unreadable(unreadable, viewModel::retryReports)
+            }
             return@Scaffold
         }
         val visited = remember(report) { report.countries.map { it.country }.toSet() }
@@ -196,6 +197,8 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
             // Another year is worked out from the bookings, so it can be picked only once they are read: until then the
             // saved counts stand, and picking one would leave nothing to show.
             item(key = "year") { YearPicker(whole.years.map { it.year }, year, enabled = input != null) { year = it } }
+            // Until every trip is read, the counts are the last visit's: nothing is worked out from part of them.
+            if (unreadable > 0 && input == null) item(key = "unreadable") { Unreadable(unreadable, viewModel::retryReports) }
             item(key = "summary") { Summary(report) }
             val loadedMap = mapData
             if (loadedMap != null) {
@@ -235,7 +238,7 @@ fun ReportsScreen(viewModel: TripsViewModel, onOpenTrip: (String) -> Unit, onOpe
                 }
             }
             // Not from the saved counts: a download is every trip's bookings, so it waits for them.
-            if (homeSettings != null && input != null) item(key = "download") { DownloadTrips(input.orEmpty(), viewModel::reportHomesNow, titles, today) }
+            if (homeSettings != null && input != null) item(key = "download") { DownloadTrips(viewModel::tripsCsv, titles, today) }
             if (whole.upcoming > 0) {
                 item(key = "upcoming") {
                     Text(pluralStringResource(Res.plurals.trips_ahead, whole.upcoming, whole.upcoming), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 24.dp))
@@ -515,13 +518,22 @@ fun WorldMap(data: WorldMapData, visited: Set<String>, airports: List<AirportVis
     }
 }
 
+/** That [count] trips' bookings couldn't be read, saying what that holds back ([what]), with a button to read them again. */
+@Composable
+internal fun Unreadable(count: Int, onRetry: () -> Unit, what: PluralStringResource = Res.plurals.trips_unreadable) {
+    Column(modifier = Modifier.padding(top = 8.dp)) {
+        Text(pluralStringResource(what, count, count), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error)
+        OutlinedButton(onClick = onRetry, modifier = Modifier.padding(top = 4.dp)) { Text(stringResource(Res.string.try_again)) }
+    }
+}
+
 /**
  * A summary of every trip to save as CSV, for visa and residence forms, as
  * on the web: one row per trip or per place, optionally only what was
  * abroad. The phone's file picker says where the file goes.
  */
 @Composable
-private fun DownloadTrips(trips: List<TripWithSegments>, homes: () -> List<HomePeriod>, titles: Map<String, String>, today: String) {
+private fun DownloadTrips(csv: (byPlace: Boolean, until: String, international: Boolean, titles: Map<String, String>) -> String?, titles: Map<String, String>, today: String) {
     var byPlace by rememberSaveable { mutableStateOf(false) }
     var international by rememberSaveable { mutableStateOf(false) }
     // The last start date to include: today unless the user picks another.
@@ -529,8 +541,9 @@ private fun DownloadTrips(trips: List<TripWithSegments>, homes: () -> List<HomeP
     var said by remember { mutableStateOf<StringResource?>(null) }
     val save = LocalAppChrome.current.rememberTextSaver(
         "text/csv",
-        // Home is worked out only now, when the file is saved.
-        text = { homes().let { periods -> if (byPlace) placeRowsCsv(placeRows(trips, periods, until, international, titles)) else tripRowsCsv(tripRows(trips, periods, until, international, titles)) } },
+        // From every trip's bookings as they are when the file is saved, with home worked out only then; none
+        // (and no file) if they aren't all read by then, as after the phone restarts the app behind the picker.
+        text = { csv(byPlace, until, international, titles) },
     ) { saved -> said = if (saved) Res.string.trips_saved else Res.string.trips_save_failed }
     SectionTitle(stringResource(Res.string.download_trips))
     Text(stringResource(Res.string.download_trips_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)

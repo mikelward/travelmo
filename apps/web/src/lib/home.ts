@@ -1,6 +1,6 @@
 "use client";
 
-import { effectiveHomesWithAirports, maxHomeCorrections, paths, watchedTrip, type ChosenHomeAirports, type HomeCorrection, type HomePeriod, type PersonDoc, type Segment, type Trip } from "@travelmo/core";
+import { effectiveHomesWithAirports, maxHomeCorrections, paths, watchedTrip, type ChosenHomeAirports, type HomeCorrection, type HomePeriod, type PersonDoc, type Segment, type Trip, type UserProfile } from "@travelmo/core";
 
 export { airportCodes, correctionText, homeLine, homeTownKey, parseAirportCodes, parseCorrection } from "@travelmo/core";
 import type { User } from "firebase/auth";
@@ -8,7 +8,8 @@ import { doc, setDoc } from "firebase/firestore";
 import { useMemo } from "react";
 import { firestore } from "./firebase";
 import { usePeople } from "./people";
-import { useAllSegments, useProfile, useTrips } from "./trips";
+import type { AllSegments } from "./segmentCache";
+import { useAllSegments, useProfile, useTripsState } from "./trips";
 
 // Where home was over time, and how many trips could not be read to work it
 // out: with any, the timeline may be missing what those trips would say.
@@ -38,25 +39,39 @@ export function ownTripSegments(
   return Object.fromEntries(trips.flatMap((t) => (t.ownerUid === uid && byTrip[t.id] && !watchedTrip(t, byTrip[t.id], people) ? [[t.id, byTrip[t.id]!]] : [])));
 }
 
-// As the reports page says it for trips it could not read.
+// As the Profile says it for trips it could not read, which hold home over time back.
 export function failedReadsText(failed: number): string {
   const trips = `${failed.toLocaleString("en-US")} ${failed === 1 ? "trip" : "trips"}`;
-  return `${trips} couldn't be read, so ${failed === 1 ? "it isn't" : "they aren't"} counted. Reload to try again.`;
+  return `${trips} couldn't be read, so home can't be worked out yet. Reload to try again.`;
 }
 
 // Where home was over time for this user: worked out from their own trips'
 // bookings, those they're only watching aside, with their corrections over
-// it. Undefined while loading.
+// it. Undefined while loading, which lasts until the server has answered for
+// every trip and its bookings: the cache's part of them could move home.
 export function useHomes(user: User): Homes | undefined {
-  const trips = useTrips(user);
+  const tripsState = useTripsState(user);
+  const trips = tripsState?.confirmed ? tripsState.trips : undefined;
   const profile = useProfile(user.uid);
   const people = usePeople(user.uid);
   const own = useMemo(() => trips?.filter((t) => t.ownerUid === user.uid), [trips, user.uid]);
-  const all = useAllSegments(own, user.uid);
-  return useMemo(() => {
-    if (!trips || !all || !profile || !people) return undefined;
-    return deriveHomes(ownTripSegments(trips, all.byTrip, user.uid, people), all.failed, profile.homes ?? [], profile.homeAirports ?? []);
-  }, [trips, all, profile, people, user.uid]);
+  const all = useAllSegments(own, user.uid, Boolean(tripsState?.confirmed));
+  return useMemo(() => (trips && all && profile && people ? homesFrom(trips, all, user.uid, people, profile) : undefined), [trips, all, profile, people, user.uid]);
+}
+
+// Home over time from every trip's bookings, as read: none while some came from
+// the cache alone, and none worked out while a trip couldn't be read (rather than
+// one from the others), only its corrections, still to change, and how many failed.
+export function homesFrom(
+  trips: readonly Trip[],
+  all: AllSegments,
+  uid: string,
+  people: readonly PersonDoc[],
+  profile: Pick<UserProfile, "homes" | "homeAirports">,
+): Homes | undefined {
+  if (all.unconfirmed.length > 0) return undefined;
+  if (all.failed.length > 0) return { periods: [], corrections: [...(profile.homes ?? [])], chosen: [...(profile.homeAirports ?? [])], failed: all.failed.length };
+  return deriveHomes(ownTripSegments(trips, all.byTrip, uid, people), all.failed, profile.homes ?? [], profile.homeAirports ?? []);
 }
 
 // Runs a change to the corrections, logging a failure by what it was doing
