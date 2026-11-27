@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   NotATripItExport,
   cleanNotes,
+  cityFromAddress,
   countryFromAddress,
   floatingNote,
   groupSkips,
@@ -122,11 +123,80 @@ describe("countryFromAddress", () => {
     expect(countryFromAddress("5 Main St, Boston, MA 02116, USA")).toBe("US");
   });
 
+  it("reads a US state as the US, not the country its code also names", () => {
+    // VA is Vatican City, CA Canada and MA Morocco, but TripIt writes countries by name.
+    expect(countryFromAddress("147 Example Lane, Sperryville, VA")).toBe("US");
+    expect(countryFromAddress("San Francisco, CA")).toBe("US");
+    expect(countryFromAddress("26 Example Street, Back Bay, Boston (massachusetts), MA, 02716")).toBe("US");
+    expect(countryFromAddress("3600 Example Blvd, Austin, TX, 78719-2339")).toBe("US");
+    expect(countryFromAddress("5 Example St, San Jose, CA 95117 US")).toBe("US");
+    expect(countryFromAddress("5 Example St, San Francisco, CA, 94102 United States of America")).toBe("US");
+    expect(countryFromAddress("5 Example Way, Los Angeles, CA, United States 90045")).toBe("US");
+    // A country's code that is no state still names it, and so does a country after a postcode.
+    expect(countryFromAddress("Piazzale Example 4, Perugia, IT 06124")).toBe("IT");
+    expect(countryFromAddress("Arrivals Dr, Melbourne Vic, XX 3045 AU")).toBe("AU");
+    expect(countryFromAddress("200 Example Street East, Toronto, Canada, M5A4R6")).toBe("CA");
+    // A time where the region would be gives no country rather than a wrong one ("PM" is a country code).
+    expect(countryFromAddress("Example Airport, Example City, UT 84122, 6:18 PM, 2025")).toBeUndefined();
+  });
+
+  it("reads no country from a street's abbreviation", () => {
+    expect(countryFromAddress("10 Downing St")).toBeUndefined();
+    expect(countryFromAddress("Hotel Example, 1 High St")).toBeUndefined();
+    expect(countryFromAddress("1 Example Pl")).toBeUndefined();
+    // Nor from a street named for a country.
+    expect(countryFromAddress("10 Rue du Luxembourg")).toBeUndefined();
+    expect(countryFromAddress("Hotel Example, 10 Rue du Luxembourg")).toBeUndefined();
+    // A country beside a postcode, after the town, still counts.
+    expect(countryFromAddress("1 Example St New Orleans LA 70112 US")).toBe("US");
+    expect(countryFromAddress("12 Example Street, Paddington, London United Kingdom W2 1HL")).toBe("GB");
+    expect(countryFromAddress("1 Example Blvd Lake Buena Vista, Florida 32830 USA")).toBe("US");
+    expect(countryFromAddress("Oude Burg 5 8000 Bruges Belgium")).toBe("BE");
+    // A code that is the whole part still names its country.
+    expect(countryFromAddress("1 Example Street, Exampleville, PL")).toBe("PL");
+  });
+
   it("gives nothing when the address stops at a city or state", () => {
     expect(countryFromAddress("5 Main St, Exampleton")).toBeUndefined();
     expect(countryFromAddress("Exampleton VIC 3000")).toBeUndefined();
     expect(countryFromAddress("")).toBeUndefined();
     expect(countryFromAddress(undefined)).toBeUndefined();
+  });
+});
+
+describe("cityFromAddress", () => {
+  it("reads the town an address names before its region", () => {
+    expect(cityFromAddress("26 Example Street, Back Bay, Boston (massachusetts), MA, 02716")).toBe("Boston");
+    expect(cityFromAddress("147 Example Lane, Sperryville, VA")).toBe("Sperryville");
+    expect(cityFromAddress("924 25th Street Northwest, Foggy Bottom, Washington, D.c. (washington, D.c.), DC, 20037")).toBe("Washington");
+    expect(cityFromAddress("1 Example Street, Philadelphia, PA 19107")).toBe("Philadelphia");
+    expect(cityFromAddress("Example 1, Lower Town, 10000 Zagreb, Croatia")).toBe("Zagreb");
+    expect(cityFromAddress("39 Example Road, Chelmsford, CM2 0DD, United Kingdom")).toBe("Chelmsford");
+    expect(cityFromAddress("22 Example Rd, Bathwick, Bath BA2 6NS, UK")).toBe("Bath");
+    expect(cityFromAddress("Largo Example, 63, Rome, RM, 00185 Italy")).toBe("Rome");
+    expect(cityFromAddress("Example 7, 1071 NR Amsterdam, Netherlands")).toBe("Amsterdam");
+    expect(cityFromAddress("8 Example Street, Melbourne, VI, 3000, Australia")).toBe("Melbourne");
+    expect(cityFromAddress("122 Example Street, Katoomba, New South Wales, 2780, Australia")).toBe("Katoomba");
+    // A saint, a mount or a fort begins a town, and is no street.
+    expect(cityFromAddress("1 Market St, St. Louis, MO")).toBe("St. Louis");
+    expect(cityFromAddress("163 Example St, St Kilda VIC 3182, Australia")).toBe("St Kilda");
+    // A province code with its postcode comes between the town and its country.
+    expect(cityFromAddress("123 King St, Toronto, ON M5V 3L9, Canada")).toBe("Toronto");
+    expect(cityFromAddress("1 Example St, Vancouver, BC V6B 1A1, Canada")).toBe("Vancouver");
+    // A town in capitals keeps its short last word; a province code after a town in mixed case goes.
+    expect(cityFromAddress("1 Example St, SANTA FE, NM")).toBe("SANTA FE");
+    expect(cityFromAddress("Via Example, 28, 10122 Torino TO, Italy")).toBe("Torino");
+  });
+
+  it("gives nothing rather than a street, a business or a nation", () => {
+    expect(cityFromAddress("1 Example St San Francisco, CA 94110")).toBeUndefined();
+    expect(cityFromAddress("Example Bar 45 Front St San Francisco, CA 94111")).toBeUndefined();
+    expect(cityFromAddress("1 Example Foot, England CV37 6YW, GB")).toBeUndefined();
+    expect(cityFromAddress("Piazzale Example 4 Perugia, 06124")).toBeUndefined();
+    expect(cityFromAddress("London")).toBeUndefined();
+    // A US house number is no postcode to strip.
+    expect(cityFromAddress("1 Infinite Loop, CA")).toBeUndefined();
+    expect(cityFromAddress("12345 Infinite Loop, CA")).toBeUndefined();
   });
 });
 
@@ -158,7 +228,7 @@ describe("parseTripItExport", () => {
       provider: "Hotel Example",
       start: "2030-05-01T15:00:00+02:00",
       end: "2030-05-08T11:00:00+02:00",
-      destination: { name: "Hotel Example", city: "Paris", country: "FR", lat: 48.8567, lon: 2.3508 },
+      destination: { name: "Hotel Example", city: "Paris", country: "FR", address: "1 Rue Exemple, Paris", lat: 48.8567, lon: 2.3508 },
       notes: "Room: Double",
     });
   });
@@ -206,7 +276,7 @@ describe("parseTripItExport", () => {
       type: "activity",
       title: "Example Theatre",
       start: "2030-03-01T19:30:00+00:00",
-      destination: { name: "Example Theatre" },
+      destination: { name: "Example Theatre", address: "1 Stage St, Exampleton" },
       notes: floatingNote,
     });
     expect(parsed.floating).toBe(0);
@@ -252,8 +322,8 @@ describe("parseTripItExport", () => {
       provider: "Example Shuttles",
       start: "2030-05-02T10:00:00+10:00",
       end: "2030-05-02T11:00:00+10:00",
-      origin: { name: "Exampleville Airport", country: "AU" },
-      destination: { name: "Hotel Example", country: "AU" },
+      origin: { name: "Exampleville Airport", city: "Exampleville", country: "AU", address: "Airport Rd, Exampleville, Australia" },
+      destination: { name: "Hotel Example", city: "Exampleville", country: "AU", address: "1 Beach Rd, Exampleville NSW 2000, Australia" },
       notes: "Vehicle: Minibus",
     });
     expect(ferry).toMatchObject({ type: "ferry", title: "Pier 1 to Island", provider: "Example Shuttles", start: "2030-05-03T09:00:00+10:00" });
@@ -267,8 +337,8 @@ describe("parseTripItExport", () => {
         provider: "Example Cruises",
         start: "2030-06-01T17:00:00+02:00",
         end: "2030-06-02T08:00:00+02:00",
-        origin: { name: "Port A", country: "IT" },
-        destination: { name: "Port B", country: "HR" },
+        origin: { name: "Port A", city: "Port A", country: "IT", address: "Port A, Italy" },
+        destination: { name: "Port B", city: "Port B", country: "HR", address: "Port B, Croatia" },
         notes: "Ship: MS Example\nCabin: Balcony",
       },
       {
@@ -277,15 +347,15 @@ describe("parseTripItExport", () => {
         provider: "Example Cruises",
         start: "2030-06-02T08:00:00+02:00",
         end: "2030-06-04T07:00:00+02:00",
-        origin: { name: "Port B", country: "HR" },
-        destination: { name: "Port C", country: "IT" },
+        origin: { name: "Port B", city: "Port B", country: "HR", address: "Port B, Croatia" },
+        destination: { name: "Port C", city: "Port C", country: "IT", address: "Port C, Italy" },
         notes: "Ship: MS Example\nCabin: Balcony",
       },
     ]);
     expect(result.trips[0]).toMatchObject({ start: "2030-05-02", end: "2030-06-04" });
     const lone = parseTripItExport({ Trips: [{ Objects: [{ ...cruiseObject, Segment: cruiseObject.Segment[0] }] }] });
     expect(lone.trips[0]!.segments).toEqual([
-      { type: "ferry", title: "Example Seas: Port A", provider: "Example Cruises", start: "2030-06-01T17:00:00+02:00", origin: { name: "Port A", country: "IT" }, notes: "Ship: MS Example\nCabin: Balcony" },
+      { type: "ferry", title: "Example Seas: Port A", provider: "Example Cruises", start: "2030-06-01T17:00:00+02:00", origin: { name: "Port A", city: "Port A", country: "IT", address: "Port A, Italy" }, notes: "Ship: MS Example\nCabin: Balcony" },
     ]);
     // A call without a usable date is reported, since the reports will not see its country.
     const undated = parseTripItExport({
@@ -325,11 +395,12 @@ describe("parseTripItExport", () => {
 
   it("gives a stay or an activity the country its address ends in", () => {
     const withCountry = parseTripItExport({ Trips: [{ Objects: [{ ...stay, Address: { address: "1 Rue Exemple, 75001 Paris, France" } }] }] });
-    expect(withCountry.trips[0]!.segments[0]!.destination).toEqual({ name: "Hotel Example", country: "FR" });
+    // The address is kept for the geocoder, with the town it names.
+    expect(withCountry.trips[0]!.segments[0]!.destination).toEqual({ name: "Hotel Example", city: "Paris", country: "FR", address: "1 Rue Exemple, 75001 Paris, France" });
     const blank = parseTripItExport({ Trips: [{ Objects: [{ ...stay, Address: { address: "1 Rue Exemple, Paris", city: "Paris", country: "FR", latitude: "0", longitude: "0" } }] }] });
-    expect(blank.trips[0]!.segments[0]!.destination).toEqual({ name: "Hotel Example", city: "Paris", country: "FR" });
+    expect(blank.trips[0]!.segments[0]!.destination).toEqual({ name: "Hotel Example", city: "Paris", country: "FR", address: "1 Rue Exemple, Paris" });
     const bad = parseTripItExport({ Trips: [{ Objects: [{ ...stay, Address: { address: "1 Rue Exemple, Paris", city: "Paris", country: "FR", latitude: "north", longitude: "2.35" } }] }] });
-    expect(bad.trips[0]!.segments[0]!.destination).toEqual({ name: "Hotel Example", city: "Paris", country: "FR" });
+    expect(bad.trips[0]!.segments[0]!.destination).toEqual({ name: "Hotel Example", city: "Paris", country: "FR", address: "1 Rue Exemple, Paris" });
   });
 
   it("keeps unfiled items apart, with their confirmation numbers", () => {
