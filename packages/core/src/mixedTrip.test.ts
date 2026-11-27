@@ -27,6 +27,10 @@ describe("mixedTrip", () => {
     const { end: _end, ...untimed } = out;
     expect(mixedTrip([untimed, { ...untimed, title: "XX 1" }])).toBeUndefined();
     expect(mixedTrip([])).toBeUndefined();
+    // One flight, one booking naming its cities and the other its airports.
+    const named: ExtractedSegment = { ...out, title: "XX London to Dubai", origin: { name: "London" }, destination: { name: "Dubai" } };
+    expect(mixedTrip([out, named])).toBeUndefined();
+    expect(mixedTrip([{ ...out, travelers: ["Sam Example"] }, { ...named, travelers: ["Pat Example"] }])).toBeUndefined();
     // One booking's through flight beside another's legs of it.
     const through = flight("XX 9 ADL to LHR", "ADL", "LHR", "2026-12-12T21:00:00+10:30", "2026-12-13T13:00:00+00:00");
     const first = flight("XX 9 ADL to DOH", "ADL", "DOH", "2026-12-12T21:00:00+10:30", "2026-12-13T05:00:00+03:00");
@@ -40,6 +44,8 @@ describe("mixedTrip", () => {
     // 04:00 to 13:00 UTC, while XX 1 flies 09:00 to 15:00.
     const theirs = flight("YY 9 SYD to SIN", "SYD", "SIN", "2026-12-12T15:00:00+11:00", "2026-12-12T21:00:00+08:00");
     expect(mixedTrip([out, theirs, back])).toMatchObject({ kind: "overlap", first: theirs, second: out });
+    // Two airports in one city are two places.
+    expect(mixedTrip([out, flight("XX 5 LGW to AUH", "LGW", "AUH", "2026-12-12T09:30:00+00:00", "2026-12-12T19:30:00+04:00")])).toMatchObject({ kind: "overlap" });
     // Leaving from the same airport hours later is another flight.
     const later = flight("YY 3 LHR to CDG", "LHR", "CDG", "2026-12-12T12:00:00+00:00", "2026-12-12T14:30:00+01:00");
     expect(mixedTrip([out, later])).toMatchObject({ kind: "overlap" });

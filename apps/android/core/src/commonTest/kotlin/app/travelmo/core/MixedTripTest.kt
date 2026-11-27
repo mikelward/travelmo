@@ -24,6 +24,10 @@ class MixedTripTest {
         // Nor when the bookings don't say when it lands.
         mixedTrip(listOf(out.copy(end = null), out.copy(id = "again", title = "XX 1", end = null))) shouldBe null
         mixedTrip(emptyList()) shouldBe null
+        // One flight, one booking naming its cities and the other its airports.
+        val named = out.copy(id = "named", title = "XX London to Dubai", origin = Place("London"), destination = Place("Dubai"))
+        mixedTrip(listOf(out, named)) shouldBe null
+        mixedTrip(listOf(out.copy(travelers = listOf("Sam Example")), named.copy(travelers = listOf("Pat Example")))) shouldBe null
         // One booking's through flight beside another's legs of it.
         val through = flight("through", "XX 9 ADL to LHR", "ADL", "LHR", "2026-12-12T21:00:00+10:30", "2026-12-13T13:00:00+00:00")
         val first = flight("first", "XX 9 ADL to DOH", "ADL", "DOH", "2026-12-12T21:00:00+10:30", "2026-12-13T05:00:00+03:00")
@@ -38,6 +42,9 @@ class MixedTripTest {
         // 04:00 to 13:00 UTC, while XX 1 flies 09:00 to 15:00.
         val theirs = flight("theirs", "YY 9 SYD to SIN", "SYD", "SIN", "2026-12-12T15:00:00+11:00", "2026-12-12T21:00:00+08:00")
         mixedTrip(listOf(out, theirs, back)) shouldBe MixedTrip.Overlap(theirs, out)
+        // Two airports in one city are two places.
+        val gatwick = flight("gatwick", "XX 5 LGW to AUH", "LGW", "AUH", "2026-12-12T09:30:00+00:00", "2026-12-12T19:30:00+04:00")
+        mixedTrip(listOf(out, gatwick)) shouldBe MixedTrip.Overlap(out, gatwick)
         // Leaving from the same airport hours later is another flight.
         val later = flight("later", "YY 3 LHR to CDG", "LHR", "CDG", "2026-12-12T12:00:00+00:00", "2026-12-12T14:30:00+01:00")
         mixedTrip(listOf(out, later)) shouldBe MixedTrip.Overlap(out, later)

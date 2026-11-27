@@ -15,12 +15,28 @@ sealed interface MixedTrip {
 const val ELSEWHERE_HOURS = 12
 
 private fun arrives(s: Segment) = s.end ?: s.start
-private fun placeKey(p: Place?) = p?.code?.uppercase() ?: p?.name?.trim()?.lowercase() ?: ""
-private fun flightKey(s: Segment) = "${placeKey(s.origin)}>${placeKey(s.destination)}@${localDate(s.start)}"
-private fun sameRoute(a: Segment, b: Segment) = placeKey(a.origin) == placeKey(b.origin) && placeKey(a.destination) == placeKey(b.destination)
+/** What a place goes by: its name, its city and, for an airport code, the city the airport serves (BOS is Boston). */
+private fun placeNames(p: Place): Set<String> =
+    listOfNotNull(p.name, p.city, p.code?.let { airportPlace(it)?.city }, p.code).map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
+
+/**
+ * One place however a booking writes it: the same airport code, or a name or city the other goes by ("Boston" beside
+ * BOS). Two codes are the same only alike, so LHR is never LGW. Two places neither booking gives match.
+ */
+private fun samePlace(a: Place?, b: Place?): Boolean {
+    if (a == null || b == null) return a == null && b == null
+    if (a.code != null && b.code != null) return a.code.trim().equals(b.code.trim(), ignoreCase = true)
+    val other = placeNames(b)
+    return placeNames(a).any { it in other }
+}
+
+private fun sameRoute(a: Segment, b: Segment) = samePlace(a.origin, b.origin) && samePlace(a.destination, b.destination)
+
+/** One flight however many bookings give it: its route and its day. */
+private fun sameFlight(a: Segment, b: Segment) = sameRoute(a, b) && localDate(a.start) == localDate(b.start)
 
 /** The same place, known on both: an airport a booking leaves out matches nothing. */
-private fun sharedPlace(a: Place?, b: Place?) = placeKey(a).isNotEmpty() && placeKey(a) == placeKey(b)
+private fun sharedPlace(a: Place?, b: Place?) = a != null && b != null && samePlace(a, b)
 
 /** How far apart two bookings may put one journey's ends: a schedule change one booking heard of and the other didn't. */
 private const val JOURNEY_SLACK_MS = 60 * 60_000L
@@ -107,7 +123,7 @@ private fun travelerGroups(live: List<Segment>, gone: Set<String>): List<List<St
         for (j in i + 1 until flown.size) {
             val (a, an) = flown[i]
             val (b, bn) = flown[j]
-            if (flightKey(a) == flightKey(b) || legOf(a, b) || legOf(b, a)) parent[find(bn)] = find(an)
+            if (sameFlight(a, b) || legOf(a, b) || legOf(b, a)) parent[find(bn)] = find(an)
         }
     }
     // One person however the bookings spell them ("John Smith", "John Andrew Smith", "J Smith"): [sameTraveler].
