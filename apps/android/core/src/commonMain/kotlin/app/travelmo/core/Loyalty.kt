@@ -177,6 +177,12 @@ fun loyaltyByPerson(entries: List<ProfileEntry>): List<LoyaltyGroup> =
         .sortedWith(compareBy<Map.Entry<String?, List<ProfileEntry>>> { it.key != null }.thenBy { it.key.orEmpty() })
         .map { LoyaltyGroup(it.key, it.value) }
 
+/** The email-extracted membership behind a unified loyalty entry, when one exists, so the UI can remove it in place. */
+fun findFoundLoyalty(found: List<FoundLoyalty>, entry: ProfileEntry): FoundLoyalty? {
+    val account = loyaltySummary(entry).account ?: return null
+    return found.firstOrNull { sameMembership(it.program, it.number, entry.title, account) }
+}
+
 // One membership: the same number in the same program.
 private fun sameMembership(programA: String, numberA: String, programB: String, numberB: String): Boolean =
     plainNumber(numberA) == plainNumber(numberB) && sameProgram(programA, programB)

@@ -53,6 +53,10 @@ data class BookingForm(val tripId: String, val segmentId: String?, val defaultDa
 @Serializable
 data class NewBooking(val defaultDate: String) : NavKey
 
+/** A section opened from the Profile hub, or a shared profile opened from Sharing. */
+@Serializable
+data class ProfileSubpage(val section: ProfileSection, val sharedUid: String? = null) : NavKey
+
 
 /**
  * Opens the Access page (SPEC "Access"), for an admin only: the signed-in
@@ -146,7 +150,12 @@ fun SignedInNavigation(user: SignedIn, viewModel: TripsViewModel, backStack: Nav
                         onOpenSettings = openSettings,
                         bottomBar = bar,
                     )
-                    HomeTab.PROFILE -> ProfileScreen(viewModel = viewModel, onOpenSettings = openSettings, bottomBar = bar)
+                    HomeTab.PROFILE -> ProfileScreen(
+                        viewModel = viewModel,
+                        onOpenSettings = openSettings,
+                        bottomBar = bar,
+                        onOpenSection = { backStack.add(ProfileSubpage(it)) },
+                    )
                     HomeTab.REPORTS -> ReportsScreen(viewModel = viewModel, onOpenTrip = { backStack.add(TripDetail(it)) }, onOpenSettings = openSettings, bottomBar = bar)
                     HomeTab.CALENDAR -> CalendarScreen(
                         viewModel = viewModel,
@@ -234,6 +243,17 @@ fun SignedInNavigation(user: SignedIn, viewModel: TripsViewModel, backStack: Nav
                 // Not offered again from its own menu.
                 CompositionLocalProvider(LocalOpenAccess provides null, LocalReportScreen provides ReportScreen("Access")) {
                     AccessScreen(viewModel = viewModel, onBack = { backStack.close(AccessPage) })
+                }
+            }
+            entry<ProfileSubpage> { key ->
+                CompositionLocalProvider(LocalReportScreen provides ReportScreen("Profile")) {
+                    ProfileSectionScreen(
+                        viewModel = viewModel,
+                        section = key.section,
+                        sharedUid = key.sharedUid,
+                        onBack = { backStack.close(key) },
+                        onOpenShared = { uid -> backStack.add(ProfileSubpage(ProfileSection.SHARING, sharedUid = uid)) },
+                    )
                 }
             }
         },

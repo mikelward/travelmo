@@ -397,7 +397,14 @@ class ScreenScreenshotTest {
         capture("trip_list_watching") { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) }
     }
 
-    // The Profile scrolled to the people the user's bookings name, one taken to be the user.
+    // The Profile's Loyalty sub-screen: unified expandable cards with person filter chips.
+    @Test
+    fun profile_loyalty() {
+        val viewModel = viewModel()
+        capture("profile_loyalty") { ProfileSectionScreen(viewModel = viewModel, section = ProfileSection.LOYALTY, onBack = {}) }
+    }
+
+    // The Profile's People sub-screen: booking travelers merged with imported details.
     @Test
     fun profile_people() {
         val store = FakeTripStore(
@@ -407,15 +414,10 @@ class ScreenScreenshotTest {
             ),
         )
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
-        composeRule.setContent {
-            TravelmoTheme { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.PROFILE) {} }) }
-        }
-        composeRule.onNode(androidx.compose.ui.test.hasScrollToNodeAction()).performScrollToNode(androidx.compose.ui.test.hasText("This is me"))
-        composeRule.waitForIdle()
-        composeRule.onRoot().captureRoboImage(filePath = "$outputDir/profile_people.png")
+        capture("profile_people") { ProfileSectionScreen(viewModel = viewModel, section = ProfileSection.PEOPLE, onBack = {}) }
     }
 
-    // The Profile scrolled to home: London since 2022 by a correction.
+    // The Profile's Home sub-screen: London since 2022 by a correction.
     @Test
     fun profile_home() = profileHome("profile_home", dark = false)
 
@@ -426,12 +428,7 @@ class ScreenScreenshotTest {
         val store = FakeTripStore()
         store.rides.value = app.travelmo.data.RideSettings(homes = listOf(app.travelmo.core.HomeCorrection("London", "GB", "2022-01-15")))
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
-        composeRule.setContent {
-            TravelmoTheme(darkTheme = dark) { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.PROFILE) {} }) }
-        }
-        composeRule.onNode(androidx.compose.ui.test.hasScrollToNodeAction()).performScrollToNode(androidx.compose.ui.test.hasText("Set"))
-        composeRule.waitForIdle()
-        composeRule.onRoot().captureRoboImage(filePath = "$outputDir/$name.png")
+        capture(name, dark = dark) { ProfileSectionScreen(viewModel = viewModel, section = ProfileSection.HOME, onBack = {}) }
     }
 
     @Test

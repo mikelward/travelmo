@@ -148,4 +148,15 @@ class LoyaltyTest {
         people(allLoyalty(profile, travelers)) shouldBe listOf("You" to listOf("1", "2", "3"), "Jessica Ward" to listOf("4", "5", "6"))
         people(allLoyalty(profile)).map { it.first } shouldBe listOf("Jessica Ward", "Jessica Wilkes", "Michael Ward", "Mikelb Ward", "Mikelbradlee Ward")
     }
+
+    @Test
+    fun `finds the email-extracted membership behind a unified loyalty entry`() {
+        val found = FoundLoyalty("Emirates Skywards", "EK00557710580", messageId = "m1", at = "2026-11-01T00:00:00Z")
+        val imported = entry("Emirates Skywards", "Account number" to "EK557710580")
+        val other = entry("Sample Hotels", "Account number" to "SH-9")
+        val noAccount = entry("Bare Program", "Status" to "Silver")
+        findFoundLoyalty(listOf(found), imported) shouldBe found
+        findFoundLoyalty(listOf(found), other) shouldBe null
+        findFoundLoyalty(listOf(found), noAccount) shouldBe null
+    }
 }

@@ -12,6 +12,7 @@ test("Profile lists the people bookings name, guesses which is the user, and tak
   await seedPerson(uid, { id: "mum", name: "Pat Example", bookings: 6, direct: 0 });
   await seedPerson(uid, { id: "me", name: "Sam Example", bookings: 4, direct: 4 });
   await page.goto("/profile");
+  await page.getByRole("navigation", { name: "Profile sections" }).getByRole("button", { name: /^People/ }).click();
   const people = page.getByRole("list", { name: "People" });
   await expect(people.getByRole("listitem")).toHaveText([/Pat Example\s*This is me/, /Sam Example\s*You/]);
 
@@ -26,6 +27,7 @@ test("Same person as… merges two people, keeping every spelling", async ({ pag
   await seedPerson(uid, { id: "before", name: "Pat Sample", aliases: ["SAMPLE/PAT MS"], bookings: 2, direct: 0 });
   await seedPerson(uid, { id: "me", name: "Sam Example", bookings: 4, direct: 4 });
   await page.goto("/profile");
+  await page.getByRole("navigation", { name: "Profile sections" }).getByRole("button", { name: /^People/ }).click();
   const people = page.getByRole("list", { name: "People" });
   await people.getByRole("listitem").filter({ hasText: "Pat Sample" }).getByRole("button", { name: "Same person as…" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Pat Example" }).click();

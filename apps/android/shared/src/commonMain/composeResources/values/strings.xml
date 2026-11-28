@@ -505,6 +505,34 @@
     <string name="col_account">Account</string>
     <string name="col_balance">Balance</string>
     <string name="col_status">Status</string>
+    <string name="profile_group_wallet">Travel wallet</string>
+    <string name="profile_group_setup">Trip setup &amp; sharing</string>
+    <string name="profile_sharing">Sharing</string>
+    <string name="profile_none_yet">None yet</string>
+    <string name="profile_no_people">No people yet.</string>
+    <string name="profile_from_imports">From imports</string>
+    <string name="profile_imported_details">Imported details</string>
+    <string name="profile_all">All</string>
+    <string name="whose_is_this">Whose is this?</string>
+    <string name="remove">Remove</string>
+    <string name="add_home">Add home</string>
+    <string name="share_with_someone">Share with someone</string>
+    <string name="home_cant_read_all">Couldn't read all trips</string>
+    <string name="profile_shared_with_count">Shared with %1$d</string>
+    <string name="profile_shared_with_you_count">%1$d shared with you</string>
+    <string name="profile_you_name">You: %1$s</string>
+    <plurals name="profile_documents_count">
+        <item quantity="one">%1$d document</item>
+        <item quantity="other">%1$d documents</item>
+    </plurals>
+    <plurals name="profile_programs_count">
+        <item quantity="one">%1$d program</item>
+        <item quantity="other">%1$d programs</item>
+    </plurals>
+    <plurals name="profile_people_count">
+        <item quantity="one">%1$d person</item>
+        <item quantity="other">%1$d people</item>
+    </plurals>
 
     <!-- Settings. -->
     <string name="signed_in_as">Signed in as %1$s</string>

@@ -53,6 +53,8 @@ class HomeCorrectionsTest {
         store.rides.value = RideSettings(homes = listOf(london))
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL)
         composeRule.setContent { TravelmoTheme { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = {}) } }
+        composeRule.onNodeWithText("Home").performClick()
+        composeRule.waitForIdle()
         return store
     }
 
@@ -70,6 +72,7 @@ class HomeCorrectionsTest {
     @Test
     fun `adds a correction from a city a country and a date`() {
         val store = show()
+        item("Add home").performClick()
         item("City").performTextInput("Elsternwick")
         item("Country").performTextInput("Australia")
         item("From…").performClick()
@@ -82,6 +85,7 @@ class HomeCorrectionsTest {
     @Test
     fun `says what is wrong with a correction`() {
         val store = show()
+        item("Add home").performClick()
         item("City").performTextInput("London")
         item("Country").performTextInput("Narnia")
         item("From…").performClick()
@@ -117,6 +121,8 @@ class HomeCorrectionsTest {
         val actions = FakeTripActions()
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, tripActions = actions)
         composeRule.setContent { TravelmoTheme { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = {}) } }
+        composeRule.onNodeWithText("Home").performClick()
+        composeRule.waitForIdle()
         item("London, 13 Feb – 20 Mar 2022 · from your stays")
         item("Not home").performClick()
         composeRule.waitForIdle()
@@ -136,6 +142,8 @@ class HomeCorrectionsTest {
         )
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, tripActions = FakeTripActions(failure = "Unavailable"))
         composeRule.setContent { TravelmoTheme { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = {}) } }
+        composeRule.onNodeWithText("Home").performClick()
+        composeRule.waitForIdle()
         item("Not home").performClick()
         composeRule.waitForIdle()
         item(NOT_HOME_REGROUP_FAILED)
