@@ -85,6 +85,16 @@ class JourneyGapTest {
     }
 
     @Test
+    fun `finds no journey missing between two that clash`() {
+        val late = flight("late", "2026-12-12T09:00:00-05:00", "2026-12-14T07:00:00+11:00", logan, sydney)
+        val clash = flight("clash", "2026-12-13T08:00:00+00:00", "2026-12-13T15:00:00+02:00", gatwick, hurghada)
+        journeyGaps(listOf(late, clash)).map { it.direction }.contains("between") shouldBe false
+        val toAuckland = flight("akl", "2026-01-13T08:00:00+11:00", "2026-01-14T06:00:00+13:00", sydney, Place("Auckland", code = "AKL", city = "Auckland", country = "NZ"))
+        val fromHonolulu = flight("hnl", "2026-01-13T23:00:00-10:00", "2026-01-14T07:00:00-08:00", Place("Honolulu", code = "HNL", city = "Honolulu", country = "US"), Place("Los Angeles", code = "LAX", city = "Los Angeles", country = "US"))
+        journeyGaps(listOf(toAuckland, fromHonolulu)).map { it.direction }.contains("between") shouldBe true
+    }
+
+    @Test
     fun `takes a car hired in one town and returned in another as the journey between them`() {
         val rdu = Place("Raleigh-Durham", code = "RDU", city = "Raleigh/Durham", country = "US")
         val sav = Place("Savannah", code = "SAV", city = "Savannah", country = "US")

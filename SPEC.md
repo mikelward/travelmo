@@ -1336,7 +1336,8 @@ given, or a flight in the middle (`journeyGaps`, in `packages/core` and
 - **Between**: one journey lands far from where the next leaves (`farApart`:
   over 300 km, or in different countries where either's point is unknown; a
   drive between them is not missing): "No flight from Adelaide to London
-  found between 10 Jan and 15 Feb".
+  found between 10 Jan and 15 Feb". One leaving before the last has landed
+  is two bookings that clash, one of them not taken, not a journey missing.
 
 None of them is missing when a car hired in the one town and returned in
 the other covers its days, going the same way: its pick-up and drop-off

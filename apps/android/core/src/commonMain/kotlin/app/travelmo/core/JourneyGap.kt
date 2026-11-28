@@ -75,7 +75,9 @@ fun journeyGaps(segments: List<Segment>, homes: List<HomePeriod> = emptyList(), 
         near(d.origin!!, from) && near(d.destination!!, to) && localDate(d.end!!) >= after && (before == null || localDate(d.start) <= before)
     }
     val between = journeys.zipWithNext()
-        .filter { (before, next) -> farApart(before.destination, next.origin) && !driven(before.destination!!, next.origin!!, landed(before), localDate(next.start)) }
+        // One leaving before the last has landed is a clash of two bookings (one of them not taken), not a journey missing
+        // between them; by the clock, not the date, as eastbound over the date line a flight leaves the day before.
+        .filter { (before, next) -> farApart(before.destination, next.origin) && instantMillis(next.start) >= instantMillis(before.end ?: before.start) && !driven(before.destination!!, next.origin!!, landed(before), localDate(next.start)) }
         .map { (before, next) -> gap("between", before.destination!!, next.origin!!, mode, landed(before), localDate(next.start)) }
     val start = first.origin!!
     val end = last.destination!!
