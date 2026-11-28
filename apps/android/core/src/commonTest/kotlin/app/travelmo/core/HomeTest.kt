@@ -499,4 +499,45 @@ class HomeTest {
         describeHomes(shown) shouldBe "Mountain View since Jan 2011"
         longStayText(shown[1]) shouldBe "London, 13 Feb – 20 Mar 2022"
     }
+
+    @Test
+    fun `counts a flight end given only as the city of a chosen airport as landing there`() {
+        val home = listOf(HomePeriod("Mountain View", "US", airports = listOf(Place("SFO", code = "SFO"))))
+        val city = Place("San Francisco", city = "San Francisco", country = "US")
+        journeyHome(city, "2021-12-01", emptyList(), home) shouldBe true
+        journeyHome(Place("San Francisco"), "2021-12-01", emptyList(), home) shouldBe true
+        journeyHome(Place("Ferry Building", city = "San Francisco", country = "US"), "2021-12-01", emptyList(), home) shouldBe false
+        journeyHome(city.copy(country = "AR"), "2021-12-01", emptyList(), home) shouldBe false
+    }
+
+    @Test
+    fun `gives a long stay the airports in its country it is left from and come back to`() {
+        val sfo = Place("San Francisco International", code = "SFO", city = "San Francisco", country = "US")
+        val syd = Place("Sydney", code = "SYD", city = "Sydney", country = "AU")
+        val lhr = Place("Heathrow", code = "LHR", city = "London", country = "GB")
+        val sunnyvale = flat("s", "2021-12-05", "2022-01-29", city = "Sunnyvale", country = "US")
+        fun fly(id: String, start: String, origin: Place, destination: Place) = Segment(id, "t", SegmentType.FLIGHT, "XX 1", start, end = start, origin = origin, destination = destination)
+        val segments = listOf(
+            sunnyvale,
+            fly("a", "2021-12-16T09:00:00+11:00", syd, sfo),
+            fly("b", "2021-12-20T09:00:00+11:00", sfo, syd),
+            fly("c", "2021-12-22T09:00:00+11:00", syd, sfo),
+            fly("d", "2022-01-14T16:10:00-08:00", sfo, lhr),
+        )
+        withLongStays(emptyList(), segments).first { it.stay }.airports.map { it.code } shouldBe listOf("SFO")
+        withLongStays(emptyList(), listOf(sunnyvale, segments[4])).first { it.stay }.airports shouldBe emptyList()
+        // Nor is a weekend away in New York from it.
+        val jfk = Place("JFK", code = "JFK", city = "New York", country = "US")
+        val weekend = listOf(sunnyvale, fly("e", "2021-12-10T08:00:00-08:00", sfo, jfk), fly("f", "2021-12-12T18:00:00-05:00", jfk, sfo))
+        withLongStays(emptyList(), weekend).first { it.stay }.airports.map { it.code } shouldBe listOf("SFO")
+        // Nor one flown to near its end and left from long after.
+        val late = listOf(sunnyvale, fly("g", "2021-12-06T08:00:00-08:00", syd, sfo), fly("h", "2022-01-25T08:00:00-08:00", sfo, jfk), fly("i", "2022-03-30T08:00:00-05:00", jfk, lhr))
+        withLongStays(emptyList(), late).first { it.stay }.airports.map { it.code } shouldBe listOf("SFO")
+        // Nor does a journey after it from elsewhere take the stay's away.
+        val after = listOf(sunnyvale, fly("j", "2021-12-06T08:00:00-08:00", syd, sfo), fly("k", "2022-03-30T08:00:00-05:00", jfk, lhr))
+        withLongStays(emptyList(), after).first { it.stay }.airports.map { it.code } shouldBe listOf("SFO")
+        // Leaving from San Francisco, as an email may give it, is leaving from SFO.
+        val bare = listOf(sunnyvale, fly("l", "2021-12-06T08:00:00-08:00", syd, sfo), fly("m", "2022-01-14T16:10:00-08:00", Place("San Francisco", city = "San Francisco", country = "US"), lhr))
+        withLongStays(emptyList(), bare).first { it.stay }.airports.map { it.code } shouldBe listOf("SFO")
+    }
 }
