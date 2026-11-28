@@ -100,7 +100,10 @@
     <string name="you">You</string>
     <string name="badge_admin">Admin</string>
     <string name="badge_invited">Invited</string>
-    <string name="this_is_me">This is me</string>
+    <string name="also_me">Also me</string>
+    <string name="also_known_as">Also: %1$s</string>
+    <string name="change">Change</string>
+    <string name="who_are_you">Who are you?</string>
     <string name="same_person_as">Same person as…</string>
     <string name="same_person_as_title">%1$s is the same person as</string>
     <string name="booking_for">For %1$s</string>

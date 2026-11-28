@@ -409,8 +409,9 @@ class ScreenScreenshotTest {
     fun profile_people() {
         val store = FakeTripStore(
             people = listOf(
-                app.travelmo.core.Person("me", "Sam Example", bookings = 4, direct = 4),
+                app.travelmo.core.Person("me", "Sam Example", aliases = listOf("S Example"), bookings = 4, direct = 4),
                 app.travelmo.core.Person("mum", "Pat Example", bookings = 6),
+                app.travelmo.core.Person("dad", "Alex Example", bookings = 3),
             ),
         )
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
