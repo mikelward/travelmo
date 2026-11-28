@@ -57,8 +57,10 @@ fetched from download.geonames.org, about 200 MB, or read from a directory
 given as its argument), `pnpm --filter @travelmo/core visas` the entry-requirements
 table from the Passport Index dataset (MIT, fetched from GitHub; rerun it now
 and then, since rules change and the trip page shows the month it was
-fetched), and `pnpm --filter @travelmo/web worldmap` the reports page's
-world map from Natural Earth (public domain) packaged in `world-atlas`; the
+fetched), `pnpm --filter @travelmo/web worldmap` the reports page's
+world map from Natural Earth (public domain) packaged in `world-atlas`, and
+`pnpm --filter @travelmo/web country-landmarks` the country map outlines in
+`packages/core/src/landmarks.json` from the same `world-atlas` data; the
 results are committed, so a normal build needs nothing.
 
 The mark is a white paper plane with a trail of three curved dashes on

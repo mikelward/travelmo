@@ -100,7 +100,7 @@ class LandmarksTest {
         assertEquals("san-jose", tripLandmark("San Jose").id)
         assertEquals("san-jose", tripLandmark("Silicon Valley").id)
         assertEquals("beach", tripLandmark("San Jose del Cabo").id)
-        assertEquals("trip", tripLandmark("San Jose, Costa Rica").id)
+        assertEquals("costa-rica", tripLandmark("San Jose, Costa Rica").id)
         assertEquals("oakland", tripLandmark("Oakland").id)
         assertEquals("leipzig", tripLandmark("Leipzig").id)
         assertEquals("lausanne", tripLandmark("Lausanne").id)
@@ -154,12 +154,12 @@ class LandmarksTest {
         assertEquals("boston", tripLandmark("Cambridge, MA").id)
         assertEquals("trip", tripLandmark("Portland, ME").id)
         assertEquals("trip", tripLandmark("Newcastle, NSW").id)
-        assertEquals("trip", tripLandmark("Victoria, Australia").id)
+        assertEquals("australia", tripLandmark("Victoria, Australia").id)
         assertEquals("trip", tripLandmark("Vancouver, Washington").id)
         assertEquals("trip", tripLandmark("Rome, New York").id)
         assertEquals("trip", tripLandmark("London, Ontario").id)
         assertEquals("trip", tripLandmark("Melbourne, FL").id)
-        assertEquals("trip", tripLandmark("Perth, Scotland").id)
+        assertEquals("united-kingdom", tripLandmark("Perth, Scotland").id)
         assertEquals("trip", tripLandmark("Manchester, NH").id)
         assertEquals("trip", tripLandmark("Athens, GA").id)
         assertEquals("santa-barbara", tripLandmark("Santa Barbara").id)
@@ -229,7 +229,7 @@ class LandmarksTest {
 
     @Test
     fun leavesOutALongerNameContainingACitys() {
-        assertEquals("trip", tripLandmark("Santiago de Cuba").id)
+        assertEquals("cuba", tripLandmark("Santiago de Cuba").id)
         assertEquals("santiago-de-compostela", tripLandmark("Santiago de Compostela").id)
         assertEquals("trip", tripLandmark("Victoria Falls").id)
         assertEquals("lake", tripLandmark("Lake Victoria").id)
@@ -244,6 +244,64 @@ class LandmarksTest {
         assertEquals("santiago", tripLandmark("Santiago").id)
         assertEquals("washington", tripLandmark("Washington, DC").id)
         assertEquals("rio-de-janeiro", tripLandmark("Rio Grande, then Rio").id)
+    }
+
+    @Test
+    fun matchesACountrysOutlineWhenNoCityIsNamedBeforeSeasonsOrThemes() {
+        assertEquals("australia", tripLandmark("Australia").id)
+        assertEquals("canada", tripLandmark("Canada").id)
+        assertEquals("japan", tripLandmark("Japan").id)
+        assertEquals("italy", tripLandmark("Italy").id)
+        assertEquals("france", tripLandmark("France").id)
+        assertEquals("united-kingdom", tripLandmark("United Kingdom").id)
+        assertEquals("united-kingdom", tripLandmark("Scotland").id)
+        assertEquals("new-zealand", tripLandmark("New Zealand").id)
+        assertEquals("new-zealand", tripLandmark("Aotearoa").id)
+        assertEquals("switzerland", tripLandmark("Switzerland").id)
+        assertEquals("switzerland", tripLandmark("Schweiz").id)
+        assertEquals("germany", tripLandmark("Deutschland").id)
+        assertEquals("spain", tripLandmark("España").id)
+        assertEquals("netherlands", tripLandmark("Holland").id)
+        assertEquals("czechia", tripLandmark("Czechia").id)
+        assertEquals("turkey", tripLandmark("Türkiye").id)
+        assertEquals("united-states", tripLandmark("United States").id)
+        assertEquals("united-states", tripLandmark("USA").id)
+        assertEquals("united-arab-emirates", tripLandmark("UAE").id)
+        assertEquals("madagascar", tripLandmark("Madagascar").id)
+        assertEquals("uzbekistan", tripLandmark("Uzbekistan").id)
+        assertEquals("panama", tripLandmark("Panama").id)
+        assertEquals("south-korea", tripLandmark("South Korea").id)
+        assertEquals("north-korea", tripLandmark("North Korea").id)
+        assertEquals("papua-new-guinea", tripLandmark("Papua New Guinea").id)
+        assertEquals("south-sudan", tripLandmark("South Sudan").id)
+        assertEquals("ireland", tripLandmark("Ireland").id)
+        assertEquals("united-kingdom", tripLandmark("Northern Ireland").id)
+        assertEquals("georgia", tripLandmark("Republic of Georgia").id)
+        // All-caps country codes match anywhere in uppercase, never as lowercase words.
+        assertEquals("united-states", tripLandmark("US West Coast").id)
+        assertEquals("united-states", tripLandmark("Trip to the US").id)
+        assertEquals("united-kingdom", tripLandmark("UK road trip").id)
+        assertEquals("new-zealand", tripLandmark("NZ South Island").id)
+        assertEquals("trip", tripLandmark("Visit us in June").id)
+        assertEquals("trip", tripLandmark("Us").id)
+        // Cities beat countries even when the country appears earlier; countries beat fallbacks.
+        assertEquals("paris", tripLandmark("Paris, France").id)
+        assertEquals("paris", tripLandmark("France: Paris & Lyon").id)
+        assertEquals("mexico-city", tripLandmark("Mexico City").id)
+        assertEquals("panama-city", tripLandmark("Panama City, Panama").id)
+        assertEquals("japan", tripLandmark("Summer in Japan").id)
+        assertEquals("australia", tripLandmark("Christmas in Australia").id)
+        assertEquals("italy", tripLandmark("Italy vacation").id)
+        // First-named country wins when multiple countries are listed.
+        assertEquals("france", tripLandmark("France and Italy").id)
+        assertEquals("italy", tripLandmark("Italy and France").id)
+        // False-match guards keep states, regions and idioms from matching countries.
+        assertEquals("road-trip", tripLandmark("New Mexico road trip").id)
+        assertEquals("autumn", tripLandmark("New England fall foliage").id)
+        assertEquals("trip", tripLandmark("New South Wales").id)
+        assertEquals("trip", tripLandmark("South America trip").id)
+        assertEquals("thanksgiving", tripLandmark("Turkey Day").id)
+        assertEquals("trip", tripLandmark("Georgia coast").id)
     }
 
     @Test
@@ -351,19 +409,26 @@ class LandmarksTest {
     fun readsEveryLandmarkTheWebHas() {
         val rawEntries = landmarksJson.lines().count { it.startsWith("{\"id\":") }
         assertEquals(rawEntries, landmarks.size)
-        assertEquals(321, landmarks.size)
+        assertEquals(490, landmarks.size)
         assertEquals(landmarks.size, landmarks.map { it.id }.toSet().size)
         val seenCities = mutableSetOf<String>()
+        val seenCountries = mutableSetOf<String>()
         val seenFallbacks = mutableSetOf<String>()
         for (landmark in landmarks) {
+            val isCountry = landmark.countries.isNotEmpty() && landmark.cities.isEmpty()
             for (city in landmark.cities) {
                 assertEquals(city, foldText(city))
                 assertEquals(true, seenCities.add(city))
             }
+            for (country in landmark.countries) {
+                assertEquals(country, foldText(country))
+                assertEquals(true, seenCountries.add(country))
+            }
             for (name in landmark.capitalized) {
                 assertEquals(name.lowercase(), foldText(name))
                 assertEquals(true, name.first().isUpperCase())
-                assertEquals(true, seenCities.add(foldText(name)))
+                val target = if (isCountry) seenCountries else seenCities
+                assertEquals(true, target.add(foldText(name)))
             }
             for (name in landmark.not) assertEquals(name, foldText(name))
             for (word in landmark.fallback) {

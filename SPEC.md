@@ -271,14 +271,19 @@ also a word counts only capitalized and not opening the title unless alone
 or before punctuation, so "Nice, France" is Nice and "Nice weekend" is not,
 and a longer name containing a city's is not that city: "Santiago de Cuba",
 "Victoria Falls", "Lake Victoria", "Rio Grande", "Washington State"), else a
-matching kind of place or trip (beach, mountains, forest, lake, farm, city,
-town, camp, countryside, desert, wine country, road trip, safari, theme
-park, celebration, castle), season, holiday or vacation word when no city is
-named ("Summer in Paris" is Paris; "Summer vacation" is a sun), else the
-kind of place the trip goes to, else a suitcase (`tripLandmark` and
-`tripPicture` in `packages/core/src/landmarks.ts`, mirrored in the Android
-app's core; the drawings are `landmarks.json`, one SVG path in a 48-unit
-square stroked 1.5 wide, which both apps draw).
+simplified map outline of the country its title names (generated from Natural
+Earth's 1:50m countries by `apps/web/scripts/countryLandmarks.mjs`; cities beat
+countries and countries beat seasons or themes, so "Paris, France" is Paris and
+"Summer in Japan" is Japan; short codes like "US", "UK" and "NZ" match only in
+uppercase, and states/regions like "New Mexico", "New England", "New South Wales"
+and "South America" are excluded), else a matching kind of place or trip (beach,
+mountains, forest, lake, farm, city, town, camp, countryside, desert, wine
+country, road trip, safari, theme park, celebration, castle), season, holiday or
+vacation word when no city or country is named ("Summer in Paris" is Paris;
+"Summer vacation" is a sun), else the kind of place the trip goes to, else a
+suitcase (`tripLandmark` and `tripPicture` in `packages/core/src/landmarks.ts`,
+mirrored in the Android app's core; the drawings are `landmarks.json`, one SVG
+path in a 48-unit square stroked 1.5 wide, which both apps draw).
 The kind of place a trip goes to is the trip's `setting` (`tripSetting`;
 for a trip that is just an event, its first booking's type):
 a city, a small town, a beach, the mountains, a lake or the countryside,
