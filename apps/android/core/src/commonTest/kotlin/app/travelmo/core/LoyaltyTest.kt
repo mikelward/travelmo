@@ -178,4 +178,103 @@ class LoyaltyTest {
             "Alex Example" to 0,
         )
     }
+
+    @Test
+    fun `deduplicates masked airline-prefixed tier-suffixed and aliased foundLoyalty entries`() {
+        val at = "2026-11-01T00:00:00Z"
+        val profile = TravelProfile(
+            "u1",
+            foundLoyalty = listOf(
+                FoundLoyalty("Qatar Airways Privilege Club", "QR-XXXXX3456/TIER", messageId = "m1", at = at),
+                FoundLoyalty("Qatar Airways", "555123456", balance = "12,000 Avios", balanceAt = at, status = "Silver", statusAt = at, messageId = "m2", at = at),
+                FoundLoyalty("United MileagePlus", "XXXXX901", messageId = "m3", at = at),
+                FoundLoyalty("United Airlines MileagePlus", "UA-*****901", messageId = "m4", at = at),
+                FoundLoyalty("AAdvantage", "AA-***7B8C", messageId = "m5", at = at),
+                FoundLoyalty("American Airlines", "12A7B8C", messageId = "m6", at = at),
+                FoundLoyalty("Airpoints", "NZ-7776665", messageId = "m7", at = at),
+                FoundLoyalty("Air New Zealand", "7776665", messageId = "m8", at = at),
+                FoundLoyalty("SkyMiles", "DL-9998887", messageId = "m9", at = at),
+                FoundLoyalty("Delta Air Lines", "9998887", messageId = "m10", at = at),
+                FoundLoyalty("Mileage Plan", "AS-3332221", messageId = "m11", at = at),
+                FoundLoyalty("Alaska Airlines", "3332221", messageId = "m12", at = at),
+                FoundLoyalty("Qantas Frequent Flyer", "QF-4445556", messageId = "m13", at = at),
+                FoundLoyalty("Qantas", "4445556", messageId = "m14", at = at),
+                FoundLoyalty("United MileagePlus", "XXXXX444", person = "Alex Example", messageId = "m15", at = at),
+                FoundLoyalty("United MileagePlus", "*****444", person = "Sam Example", messageId = "m16", at = at),
+                FoundLoyalty("Example Air", "AB12345", messageId = "m17", at = at),
+                FoundLoyalty("Example Air", "CD12345", messageId = "m18", at = at),
+            ),
+        )
+        val summaries = allLoyalty(profile).map(::loyaltySummary)
+        summaries.size shouldBe 11
+        summaries[0].title shouldBe "Qatar Airways Privilege Club"
+        summaries[0].account shouldBe "555123456"
+        summaries[0].balance shouldBe "12,000 Avios"
+        summaries[0].status shouldBe "Silver"
+        summaries[1].title shouldBe "United Airlines MileagePlus"
+        summaries[1].account shouldBe "XXXXX901"
+        summaries[2].account shouldBe "12A7B8C"
+        summaries[3].account shouldBe "7776665"
+        summaries[4].account shouldBe "9998887"
+        summaries[5].account shouldBe "3332221"
+        summaries[6].account shouldBe "4445556"
+        summaries.subList(7, 9).map { it.account } shouldBe listOf("AB12345", "CD12345")
+        summaries.drop(9).map { it.person }.sortedBy { it } shouldBe listOf("Alex Example", "Sam Example")
+
+        val mergedX = allLoyalty(
+            TravelProfile(
+                "u1",
+                foundLoyalty = listOf(
+                    FoundLoyalty("United MileagePlus", "XXXXX901", messageId = "x1", at = at),
+                    FoundLoyalty("United Airlines", "12345901", messageId = "x2", at = at),
+                ),
+            ),
+        )
+        mergedX.size shouldBe 1
+        loyaltySummary(mergedX[0]).account shouldBe "12345901"
+
+        val entries = allLoyalty(profile)
+        programsFor("Alaska Airlines", entries).map { loyaltySummary(it).account } shouldBe listOf("3332221")
+
+        val samCard = entries.first { loyaltySummary(it).person == "Sam Example" }
+        findFoundLoyalty(profile.foundLoyalty, samCard)?.person shouldBe "Sam Example"
+
+        val reassigned = withLoyaltyPerson(emptyList(), "United MileagePlus", "*****444", "Pat Example")
+        val afterOverride = allLoyalty(profile.copy(loyaltyPeople = reassigned)).map(::loyaltySummary)
+        afterOverride.first { it.account == "XXXXX444" }.person shouldBe "Alex Example"
+        afterOverride.first { it.account == "*****444" }.person shouldBe "Pat Example"
+
+        val importedSplit = allLoyalty(
+            TravelProfile(
+                "u1",
+                loyalty = listOf(entry("United MileagePlus", "Account number" to "12345444", "Belongs to" to "Alex Example")),
+                foundLoyalty = listOf(FoundLoyalty("United MileagePlus", "*****444", person = "Sam Example", balance = "5,000 miles", balanceAt = at, messageId = "s1", at = at)),
+            ),
+        ).map(::loyaltySummary)
+        importedSplit.size shouldBe 2
+        importedSplit.first { it.account == "12345444" }.person shouldBe "Alex Example"
+        importedSplit.first { it.account == "*****444" }.person shouldBe "Sam Example"
+
+        val diffAirlines = allLoyalty(
+            TravelProfile(
+                "u1",
+                loyalty = listOf(entry("BA", "Account number" to "BA-*****444")),
+                foundLoyalty = listOf(FoundLoyalty("United MileagePlus", "UA-*****444", messageId = "u1", at = at)),
+            ),
+        )
+        diffAirlines.size shouldBe 2
+
+        val mergedOverride = allLoyalty(
+            TravelProfile(
+                "u1",
+                foundLoyalty = listOf(
+                    FoundLoyalty("United MileagePlus", "XXXXX901", messageId = "o1", at = at),
+                    FoundLoyalty("United MileagePlus", "*****901", messageId = "o2", at = at),
+                ),
+                loyaltyPeople = listOf(LoyaltyPerson("United MileagePlus", "*****901", "Pat Example")),
+            ),
+        ).map(::loyaltySummary)
+        mergedOverride.size shouldBe 1
+        mergedOverride[0].person shouldBe "Pat Example"
+    }
 }

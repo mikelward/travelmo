@@ -1,5 +1,5 @@
 import { namedProgram } from "./airlinePrograms";
-import { couldBeOwner, nameWords, personName, sameMembership, sameNumber, withFoundLoyalty } from "./loyalty";
+import { couldBeOwner, mergeFoundPair, nameWords, personName, sameMembership, sameNumber, sameOverrideTarget, withFoundLoyalty } from "./loyalty";
 import { isMembershipNumber, type ExtractedMembership, type ExtractedSegment, type FoundLoyalty } from "./schema";
 
 // Loyalty numbers read from an email, as the travel profile keeps them
@@ -69,7 +69,13 @@ export function revisedFoundLoyalty(found: readonly FoundLoyalty[], owner: strin
     return { ...rest, program: namedProgram(entry, segmentsOf(entry.messageId)), ...person };
   });
   // Merged as a sighting is; one that merges with nothing is kept as it is.
-  return revised.reduce<FoundLoyalty[]>((list, entry) => (list.some((f) => sameMembership(f, entry)) ? withFoundLoyalty(list, entry) : [...list, entry]), []);
+  return revised.reduce<FoundLoyalty[]>(
+    (list, entry) =>
+      list.some((f) => sameMembership(f, entry) && (!f.person || !entry.person || f.person === entry.person))
+        ? withFoundLoyalty(list, entry)
+        : [...list, entry],
+    [],
+  );
 }
 
 // Whether only reading the email again could improve an entry: the name of
@@ -96,7 +102,7 @@ export function rereadFoundLoyalty(
   const wasRead = read.filter((r) => r.messageId === messageId);
   const kept = fresh.filter((f) => {
     const origin = earlier(wasRead, f);
-    return !origin || old.some((o) => sameMembership(o, origin));
+    return !origin || old.some((o) => sameMembership(o, origin) && (!o.person || !origin.person || o.person === origin.person));
   });
   return kept.reduce<FoundLoyalty[]>(
     (list, f) => {
@@ -104,21 +110,36 @@ export function rereadFoundLoyalty(
       // A number new to this email is added as any sighting is, refused if
       // the list is full.
       if (!before) return withFoundLoyalty(list, f);
-      const [merged] = withFoundLoyalty([{ ...before, program: f.program }], f);
-      const { person: _person, ...rest } = merged!;
+      const merged = mergeFoundPair({ ...before, program: f.program }, f);
+      const { person: _person, ...rest } = merged;
       const person = f.holder ? f.person : before.person;
       const replacement: FoundLoyalty = { ...rest, ...(person ? { person } : {}) };
       // One read before takes its old place's room, so it is kept even when
       // the list is full.
-      return list.some((e) => sameMembership(e, replacement)) ? withFoundLoyalty(list, replacement) : [...list, replacement];
+      return list.some((e) => sameMembership(e, replacement) && (!e.person || !replacement.person || e.person === replacement.person))
+        ? withFoundLoyalty(list, replacement)
+        : [...list, replacement];
     },
     [...others],
   );
 }
 
-// The entry a fresh one reads again: the same membership; failing that, the
-// only one with its number (a program the new read names better).
+// The entry a fresh one reads again: the same membership (preferring the same
+// household member and exact number when multiple masked sightings share a
+// tail); failing that, the only one with its number (a program the new read
+// names better).
 function earlier(entries: readonly FoundLoyalty[], fresh: FoundLoyalty): FoundLoyalty | undefined {
-  const sameNumbered = entries.filter((e) => sameNumber(e.number, fresh.number));
-  return entries.find((e) => sameMembership(e, fresh)) ?? (sameNumbered.length === 1 ? sameNumbered[0] : undefined);
+  const matches = entries.filter((e) => sameMembership(e, fresh));
+  if (matches.length > 0) {
+    const exactNum = (e: FoundLoyalty) => e.number.trim().toUpperCase() === fresh.number.trim().toUpperCase();
+    return (
+      matches.find((e) => e.person === fresh.person && exactNum(e)) ??
+      matches.find((e) => (!e.person || !fresh.person || e.person === fresh.person) && exactNum(e)) ??
+      matches.find((e) => e.person === fresh.person) ??
+      matches.find((e) => !e.person || !fresh.person || e.person === fresh.person) ??
+      (matches.length === 1 && sameOverrideTarget(matches[0]!, fresh) ? matches[0] : undefined)
+    );
+  }
+  const sameNumbered = entries.filter((e) => sameNumber(e.number, fresh.number, e.program, fresh.program));
+  return sameNumbered.length === 1 ? sameNumbered[0] : undefined;
 }
