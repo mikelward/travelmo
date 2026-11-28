@@ -7,12 +7,8 @@ import app.travelmo.log.TravelmoLog
 import com.google.firebase.auth.FirebaseAuth
 import com.mikelward.androidlog.safe
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withContext
 
 /**
  * `POST /account/delete` on the parser (apps/parser), with the user's
@@ -24,6 +20,9 @@ class ParserAccountDeletion(
     private val baseUrl: String,
     private val idToken: suspend () -> String? = { FirebaseAuth.getInstance().currentUser?.getIdToken(false)?.await()?.token },
 ) : AccountDeletion {
+    // Deleting years of trips takes the parser a while.
+    private val client = ParserClient(baseUrl, idToken, readTimeoutMs = READ_TIMEOUT_MS, connectTimeoutMs = CONNECT_TIMEOUT_MS)
+
     override val available: Boolean
         get() = parserEndpoint(baseUrl, ACCOUNT_DELETE_PATH) != null
 
@@ -39,7 +38,7 @@ class ParserAccountDeletion(
         } ?: throw AccountDeletionFailed(accountDeletionFailure(401))
         TravelmoLog.info("Deleting the account")
         val status = try {
-            post(endpoint, token)
+            client.postWithToken(endpoint, token).status
         } catch (e: IOException) {
             TravelmoLog.failure(e, "Deleting the account failed: the parser could not be reached")
             throw AccountDeletionFailed(accountDeletionFailure(null), e)
@@ -49,23 +48,6 @@ class ParserAccountDeletion(
             throw AccountDeletionFailed(accountDeletionFailure(status))
         }
         TravelmoLog.info("Deleted the account")
-    }
-
-    private suspend fun post(endpoint: String, token: String): Int = withContext(Dispatchers.IO) {
-        val connection = URL(endpoint).openConnection() as HttpURLConnection
-        try {
-            connection.requestMethod = "POST"
-            connection.connectTimeout = CONNECT_TIMEOUT_MS
-            // Deleting years of trips takes the parser a while.
-            connection.readTimeout = READ_TIMEOUT_MS
-            connection.doOutput = true
-            connection.setRequestProperty("Authorization", "Bearer $token")
-            connection.setRequestProperty("Content-Type", "application/json")
-            connection.outputStream.use { it.write("{}".toByteArray()) }
-            connection.responseCode
-        } finally {
-            connection.disconnect()
-        }
     }
 
     private companion object {

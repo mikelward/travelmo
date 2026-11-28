@@ -728,7 +728,14 @@ describe("regroupTrips placing bookings", () => {
     expect(store.segments.get("t-0")).toMatchObject({ origin: { country: "GB" }, destination: { country: "GB" }, updatedAt: at });
     // A hand-entered booking stays as its author wrote it.
     expect(store.segments.get("h-0")?.destination?.country).toBeUndefined();
+    let locks = 0;
+    const lock = store.withUserLock.bind(store);
+    store.withUserLock = (uid, fn) => {
+      locks += 1;
+      return lock(uid, fn);
+    };
     expect(await regroupTrips("u1", deps(store))).toEqual({ changed: 0, deleted: 0, placed: 0 });
+    expect(locks).toBe(1);
   });
 });
 

@@ -24,7 +24,7 @@ class ParserTripActions(private val client: ParserClient) : TripActions {
         get() = client.available
 
     override suspend fun regroup(): String {
-        val body = call(REGROUP_PATH, "Regrouping trips")
+        val body = call(REGROUP_PATH, "Regrouping trips", retryOnDrop = true)
         return describeRegroup(body.optInt("changed"), body.optInt("deleted"), body.optInt("placed"))
     }
 
@@ -40,11 +40,16 @@ class ParserTripActions(private val client: ParserClient) : TripActions {
             retryFailed -> JSONObject().put("retryFailed", true)
             else -> JSONObject()
         }
-        call(REFRESH_PATH, if (everything) "Refreshing everything from email" else if (retryFailed) "Trying the failed emails again" else "Refreshing from email", body.toString())
+        call(
+            REFRESH_PATH,
+            if (everything) "Refreshing everything from email" else if (retryFailed) "Trying the failed emails again" else "Refreshing from email",
+            body.toString(),
+            retryOnDrop = !restart && !retryFailed && !everything,
+        )
     }
 
     override suspend fun stopRefresh() {
-        call(REFRESH_STOP_PATH, "Stopping the refresh")
+        call(REFRESH_STOP_PATH, "Stopping the refresh", retryOnDrop = true)
     }
 
     override suspend fun lookForJourney(gap: JourneyGap, next: Int?): LookResult {
@@ -69,10 +74,10 @@ class ParserTripActions(private val client: ParserClient) : TripActions {
         )
     }
 
-    private suspend fun call(path: String, what: String, json: String = "{}"): JSONObject {
+    private suspend fun call(path: String, what: String, json: String = "{}", retryOnDrop: Boolean = false): JSONObject {
         TravelmoLog.info("%s", safe(what))
         val reply = try {
-            client.post(path, json) ?: throw TripActionFailed(tripActionFailure(401))
+            client.post(path, json, retryOnDrop = retryOnDrop) ?: throw TripActionFailed(tripActionFailure(401))
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
