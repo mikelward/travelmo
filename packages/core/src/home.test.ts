@@ -25,6 +25,8 @@ import {
   withHomeAirports,
   withChosenAirports,
   homesWithAirports,
+  longStays,
+  withLongStays,
   airportCodes,
   parseAirportCodes,
   homeTownKey,
@@ -1130,5 +1132,73 @@ describe("effectiveHomesWithAirports", () => {
     expect(effectiveHomesWithAirports(segments, corrections, chosen)).toEqual(
       withChosenAirports(withHomeAirports(effectiveHomes(homeTimeline(segments), corrections), segments), chosen),
     );
+  });
+});
+
+// Invented stays and flights, shaped like a winter spent in London flats with
+// a week in the Algarve from there, and no home history at all.
+describe("long stays", () => {
+  const flat = (start: string, end: string, extra: Partial<ExtractedSegment> = {}): ExtractedSegment => ({
+    type: "lodging",
+    title: "Example Mews Flat",
+    start: `${start}T15:00:00+00:00`,
+    end: `${end}T11:00:00+00:00`,
+    destination: { name: "Example Mews Flat", city: "London", country: "GB" },
+    ...extra,
+  });
+  // Two stays back to back: 14 nights and 21, one winter in London.
+  const winter = [flat("2022-02-13", "2022-02-27"), flat("2022-02-27", "2022-03-20")];
+
+  it("counts stays back to back in one town as living there once they reach four weeks", () => {
+    expect(longStays(winter)).toEqual([{ city: "London", country: "GB", from: "2022-02-13", until: "2022-03-20", stay: true }]);
+    // Two weeks is a visit; a cancelled stay doesn't count.
+    expect(longStays([winter[0]!])).toEqual([]);
+    expect(longStays([winter[0]!, { ...winter[1]!, cancelledAt: "2022-01-01T00:00:00Z" } as ExtractedSegment])).toEqual([]);
+    // A week booked elsewhere while the flat is still booked doesn't end the run.
+    const away = flat("2022-02-20", "2022-02-25", { destination: { name: "Villa", city: "Albufeira", country: "PT" } });
+    expect(longStays([winter[0]!, away, winter[1]!]).map((r) => [r.city, r.from, r.until])).toEqual([["London", "2022-02-13", "2022-03-20"]]);
+    // A stay in another town breaks the run.
+    expect(longStays([winter[0]!, flat("2022-02-27", "2022-03-20", { destination: { name: "Villa", city: "Albufeira", country: "PT" } })])).toEqual([]);
+  });
+
+  it("keeps a home's airports through a long stay in that town, chosen ones too", () => {
+    const lgw = { name: "London Gatwick", city: "Crawley", country: "GB", code: "LGW" };
+    const kept = withLongStays([{ city: "London", country: "GB", airports: [lgw] }], winter);
+    expect(kept.find((p) => p.stay)?.airports).toEqual([lgw]);
+    const { periods } = homesWithAirports(winter, [], [{ city: "london", country: "GB", airports: ["LGW"] }]);
+    expect(periods.find((p) => p.stay)?.airports?.map((a) => a.code)).toContain("LGW");
+  });
+
+  it("makes a long stay home for its days, cutting into what was worked out", () => {
+    const periods = withLongStays([{ city: "Mountain View", country: "US" }], winter);
+    expect(periods.map((p) => [p.city, p.from, p.until])).toEqual([
+      ["Mountain View", undefined, "2022-02-12"],
+      ["London", "2022-02-13", "2022-03-20"],
+      ["Mountain View", "2022-03-21", undefined],
+    ]);
+  });
+
+  it("keeps a week away from a London winter out of the trip of the winter's stays", () => {
+    const out: ExtractedSegment = {
+      type: "flight",
+      title: "XX 1439 STN to FAO",
+      start: "2022-03-08T09:00:00+00:00",
+      end: "2022-03-08T11:50:00+00:00",
+      origin: { name: "London Stansted", city: "London", country: "GB", code: "STN" },
+      destination: { name: "Faro", city: "Faro", country: "PT", code: "FAO" },
+    };
+    const villa = flat("2022-03-08", "2022-03-15", { title: "Example Villa", destination: { name: "Example Villa", city: "Albufeira", country: "PT" } });
+    const back: ExtractedSegment = { ...out, title: "XX 1440 FAO to STN", start: "2022-03-15T12:10:00+00:00", end: "2022-03-15T15:00:00+00:00", origin: out.destination!, destination: out.origin! };
+    const london: Trip = { id: "london", title: "London", start: "2022-02-13", end: "2022-03-20", ownerUid: "u1", sharedWith: [], createdAt: "2022-01-01T00:00:00Z", updatedAt: "2022-01-01T00:00:00Z" };
+    const of = (id: string) => (id === "london" ? winter : []);
+    const { periods } = homesWithAirports([...winter, out, villa, back], []);
+    expect(findTripForBooking([london], of, [out, villa, back], periods)).toBeUndefined();
+    // The winter's second flat joins its first; neither joins the week away.
+    const first = (id: string) => (id === "london" ? [winter[0]!] : id === "algarve" ? [out, villa, back] : []);
+    const algarve: Trip = { ...london, id: "algarve", title: "Albufeira", start: "2022-03-08", end: "2022-03-15" };
+    expect(findTripForBooking([algarve, london], first, [winter[1]!], periods)).toBe(london);
+    expect(findTripForBooking([algarve], first, [winter[1]!], periods)).toBeUndefined();
+    // Without the long stays as home, the week joined the winter's trip.
+    expect(findTripForBooking([london], of, [out, villa, back], [])).toBe(london);
   });
 });
