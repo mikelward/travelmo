@@ -838,4 +838,28 @@ describe("regrouping with a long stay", () => {
     await regroupTrips("u1", { ...deps(store), notHome: async () => [{ city: "London", country: "GB", from: "2022-02-13" }] });
     expect(summary(store).map((t) => t.segments)).toEqual([["f1", "f2", "villa"]]);
   });
+
+  it("splits a month away from the stays at home it overlaps, and names a trip by where it went before flying home", async () => {
+    const store = memoryStore();
+    store.trips.set("all", trip("all", "Boston", "2021-11-30", "2022-03-20"));
+    const city = (name: string) => ({ name, city: name, country: "US" });
+    for (const s of [
+      segment("all", "hotel", "m4", { type: "lodging", title: "Boston Hotel", start: "2021-11-30T16:00:00-05:00", end: "2021-12-01T11:00:00-05:00", destination: city("Boston") }),
+      segment("all", "out", "m5", { type: "flight", title: "Delta", start: "2021-12-01T13:00:00-05:00", end: "2021-12-01T18:56:00-08:00", origin: city("Boston"), destination: city("San Francisco") }),
+      flat("sunnyvale", "m6", "2021-12-05", "2022-01-29", "Sunnyvale", "US"),
+      flat("l1", "m7", "2022-01-15", "2022-02-13"),
+      flat("l2", "m8", "2022-02-13", "2022-03-20"),
+    ])
+      store.segments.set(s.id, s);
+    await regroupTrips("u1", {
+      ...deps(store),
+      homeOverrides: async () => homeCorrections([{ city: "Mountain View", country: "US", from: "2011-01-01" }]),
+      chosenHomeAirports: async () => [{ city: "Mountain View", country: "US", airports: ["SFO"] }],
+    });
+    expect(summary(store).map((t) => [t.title, t.segments])).toEqual([
+      ["Boston", ["hotel", "out"]],
+      ["Sunnyvale", ["sunnyvale"]],
+      ["London", ["l1", "l2"]],
+    ]);
+  });
 });

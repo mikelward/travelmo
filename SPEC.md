@@ -2220,8 +2220,13 @@ for 28 nights or more (`longStays`) are home for their days, over the
 worked-out timeline and the person's corrections alike (`withLongStays`),
 so a winter in rented flats is home and a week away from it is a trip of
 its own. It keeps the airports of the home it falls in, when in that
-town. That stay's trip takes no travel by its dates, nor joins any:
-stays lived in join only each other (`HomePeriod.stay`). Profile lists
+town, and has the one in its country the person stays longest at between
+landing and leaving again in its days, two days or more (`stayAirports`):
+a Sunnyvale flat landed at from Sydney and left from for London is lived
+in from SFO, while a weekend at JFK from it is not. That stay's trip takes no
+travel by its dates, nor joins any: stays lived in join only each other,
+in the same town (`HomePeriod.stay`), so a winter in London overlapping
+the end of a Sunnyvale stay is a trip of its own. Profile lists
 each under home, newest first, as "London, 13 Feb – 20 Mar 2022 · from
 your stays" (`longStayText`), leaving it out of the home line, which
 joins up the home it cut into (`describeHomes`). Its **Not home** says it
@@ -2245,7 +2250,11 @@ trip's last journey landed away (`homeLeftAfter`): the flight home is
 missing, but the person came home, so a trip whose flight home an import
 never found doesn't take in everything later that falls within its dates.
 A journey ends at home when it lands in the home town, or at one of
-home's airports or stations (`journeyHome`): those that two or more round
+home's airports or stations (`journeyHome`), or, where an email gives
+only a city ("Boston → San Francisco"), in the city one of them serves
+(by the airport table for a chosen code alone). Such a landing is not
+where a trip goes either (`awayPlace`): a trip to Boston that flies home
+to San Francisco is named Boston. Home's airports and stations are those that two or more round
 trips leave from or come back into while home is there
 (`withHomeAirports`), however far from the town, counting only round trips
 from where the journeys say home was then (so side trips on a visit do not

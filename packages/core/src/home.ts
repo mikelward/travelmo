@@ -343,6 +343,38 @@ export function longStays(segments: readonly Booking[]): HomePeriod[] {
   return runs.filter((r) => daysBetween(r.from, r.until) >= longStayNights).map((r) => ({ ...r, stay: true }));
 }
 
+// The airport or station in its country a long stay is lived in from, as a
+// home's are those its round trips use: where the person, landing in its
+// days, stays longest before leaving again or the stay ends, and at least
+// two days. A month in a Sunnyvale flat
+// landing at SFO from Sydney and leaving from it for London is lived in
+// from SFO; a weekend at JFK from it, or changing planes in Detroit, is not.
+function stayAirports(stay: HomePeriod, segments: readonly Booking[]): Place[] {
+  const within = (instant: string) => localDate(instant) >= stay.from! && localDate(instant) <= stay.until!;
+  const journeys = segments.filter((s) => journeyTypes.has(s.type) && !isCancelled(s)).sort((a, b) => compareInstants(a.start, b.start));
+  // In the stay's own country: changing planes in Sydney on the way back doesn't make Sydney the flat's airport.
+  const country = stay.country ? countryCode(stay.country) : undefined;
+  const local = (a: Place) => {
+    const where = a.country ? countryCode(a.country) : a.code ? airportPlace(a.code)?.country : undefined;
+    return !!country && where === country;
+  };
+  const longest = new Map<string, { place: Place; days: number }>();
+  for (const s of journeys) {
+    const landed = s.destination;
+    const arrival = s.end ?? s.start;
+    if (!landed?.code || !local(landed) || !within(arrival)) continue;
+    // The next journey in the stay's days: one after it says nothing of where it was left from.
+    const next = journeys.find((t) => compareInstants(t.start, arrival) > 0 && localDate(t.start) <= stay.until!);
+    // Left from it, or from its city where an email gives only that.
+    if (next && next.origin && placeKey(next.origin) !== placeKey(landed) && !bareCityOf(next.origin, landed)) continue;
+    const days = daysBetween(localDate(arrival), next ? localDate(next.start) : stay.until!);
+    const key = placeKey(landed);
+    if (days > (longest.get(key)?.days ?? -1)) longest.set(key, { place: landed, days });
+  }
+  const most = Math.max(2, ...[...longest.values()].map((l) => l.days));
+  return [...longest.values()].filter((l) => l.days >= most).map((l) => l.place);
+}
+
 // Home with each long stay (longStays) as home for its days, but those the
 // person said were not (`notHome`, by town and first day): a month in a
 // rented flat is living there, so a trip from it starts there and one back
@@ -351,9 +383,12 @@ export function withLongStays(periods: readonly HomePeriod[], segments: readonly
   let out: HomePeriod[] = periods.map((p) => ({ ...p }));
   for (const found of longStays(segments)) {
     if (notHome.some((n) => n.from === found.from && sameCity(n.city, found.city) && (!n.country || !found.country || n.country === found.country))) continue;
-    // A long stay in the town already home there keeps that home's airports.
+    // A long stay in the town already home there keeps that home's airports,
+    // and has those it is left from and come back to by (stayAirports).
     const covering = out.find((p) => (!p.from || p.from <= found.from!) && (!p.until || found.from! <= p.until));
-    const stay = covering?.airports && sameCity(covering.city, found.city) ? { ...found, airports: covering.airports } : found;
+    const airports = [...(covering?.airports && sameCity(covering.city, found.city) ? covering.airports : [])];
+    for (const a of stayAirports(found, segments)) if (!airports.some((b) => placeKey(b) === placeKey(a))) airports.push(a);
+    const stay = airports.length > 0 ? { ...found, airports } : found;
     out = out.flatMap((p) => {
       if ((p.until && p.until < stay.from!) || (p.from && p.from > stay.until!)) return [p];
       const before = !p.from || p.from < stay.from! ? [{ ...p, until: dayBefore(stay.from!) }] : [];
@@ -809,7 +844,21 @@ export function journeyHome(
 ): boolean {
   if (inHomeTown(place, date, periods, overrides)) return true;
   const home = homeAt(periods, date, overrides);
-  return !!place && !!home?.airports?.some((airport) => placeKey(airport) === placeKey(place));
+  return !!place && !!home?.airports?.some((airport) => placeKey(airport) === placeKey(place) || bareCityOf(place, airport));
+}
+
+// Whether `place` is only a city, as some airlines' emails give a flight's
+// ends ("Boston → San Francisco"), and `airport` is in it: landing in San
+// Francisco is landing at SFO.
+function bareCityOf(place: Place, airport: Place): boolean {
+  if (place.code || (place.city && !sameCity(place.name, place.city))) return false;
+  if (!airport.code) return false;
+  // A chosen airport is only its code: its city and country are the table's.
+  const known = airportPlace(airport.code);
+  const city = airport.city ?? known?.city;
+  const country = airport.country ?? known?.country;
+  const differ = !!place.country && !!country && countryCode(place.country) !== countryCode(country);
+  return !!city && sameCity(city, place.city ?? place.name) && !differ;
 }
 
 // Whether `next` is the onward journey of a connection at `landing`'s
@@ -961,6 +1010,7 @@ export function findTripForBooking(
       })
     );
   };
+  const liveStay = (list: readonly Grouped[]) => list.find((s) => !isCancelled(s))!.destination;
   const ours = booking.filter(isOuting);
   const ourTravel = booking.filter((s) => !isOuting(s));
   return trips.find((trip) => {
@@ -968,8 +1018,9 @@ export function findTripForBooking(
     if (homeBetween(segments, booking, periods, overrides) || homeBetween(booking, segments, periods, overrides)) return false;
     if (homeLeftAfter(segments, booking, periods, overrides) || homeLeftAfter(booking, segments, periods, overrides)) return false;
     // A long stay lived in (longStays) is its own trip: travel doesn't join it
-    // by dates, nor it travel.
+    // by dates, nor it travel, nor a long stay in another town.
     if (livedIn(booking) !== livedIn(segments)) return false;
+    if (livedIn(booking) && !sameTown(town(liveStay(booking))!, town(liveStay(segments))!)) return false;
     if (!allOutings(booking) && !allOutings(segments)) return near(trip, 2);
     if (!near(trip, 2)) return false;
     const theirs = segments.filter(isOuting);
@@ -1024,7 +1075,8 @@ export function awayPlace(
   const away = (place: Place | undefined, start: string) => {
     const where = town(place);
     const home = homeAt(periods, localDate(start), overrides);
-    return !!where && (!home || !sameTown(where, home));
+    // Nor is one of home's airports: a flight back into SFO is not a trip to San Francisco.
+    return !!where && (!home || (!sameTown(where, home) && !journeyHome(place, localDate(start), periods, overrides)));
   };
   return (
     segments.find((s) => away(s.destination, s.start))?.destination ??

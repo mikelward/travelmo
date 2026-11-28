@@ -302,6 +302,34 @@ fun longStays(segments: List<Segment>): List<HomePeriod> {
     return runs.filter { daysBetween(it.from!!, it.until!!) >= LONG_STAY_NIGHTS }
 }
 
+/**
+ * The airport or station in its country a long stay is lived in from, as a home's are those its round trips use: where
+ * the person, landing in its days, stays longest before leaving again or the stay ends, and at least two days. A month in a Sunnyvale flat landing at SFO from Sydney and leaving from it for London is lived
+ * in from SFO; a weekend at JFK from it, or changing planes in Detroit, is not.
+ */
+private fun stayAirports(stay: HomePeriod, segments: List<Segment>): List<Place> {
+    val within = { instant: String -> localDate(instant) >= stay.from!! && localDate(instant) <= stay.until!! }
+    val journeys = segments.filter { it.type in journeyTypes && !it.isCancelled }.sortedWith { a, b -> compareInstants(a.start, b.start) }
+    // In the stay's own country: changing planes in Sydney on the way back doesn't make Sydney the flat's airport.
+    val country = stay.country?.let(::countryCode)
+    val local = { a: Place -> country != null && (a.country?.let(::countryCode) ?: a.code?.let { airportPlace(it)?.country }) == country }
+    val longest = linkedMapOf<String, Pair<Place, Long>>()
+    for (s in journeys) {
+        val landed = s.destination ?: continue
+        val arrival = s.end ?: s.start
+        if (landed.code == null || !local(landed) || !within(arrival)) continue
+        // The next journey in the stay's days: one after it says nothing of where it was left from.
+        val next = journeys.firstOrNull { compareInstants(it.start, arrival) > 0 && localDate(it.start) <= stay.until!! }
+        // Left from it, or from its city where an email gives only that.
+        if (next?.origin != null && placeKey(next.origin) != placeKey(landed) && !bareCityOf(next.origin, landed)) continue
+        val days = daysBetween(localDate(arrival), next?.let { localDate(it.start) } ?: stay.until!!)
+        val key = placeKey(landed)
+        if (days > (longest[key]?.second ?: -1L)) longest[key] = landed to days
+    }
+    val most = maxOf(2L, longest.values.maxOfOrNull { it.second } ?: 0L)
+    return longest.values.filter { it.second >= most }.map { it.first }
+}
+
 /** A long stay said not to be home on Profile (Not home), by its town and first day, as schema.ts's NotHomeStay. */
 data class NotHomeStay(val city: String, val country: String? = null, val from: String)
 
@@ -316,8 +344,11 @@ fun withLongStays(periods: List<HomePeriod>, segments: List<Segment>, notHome: L
         val until = found.until!!
         if (notHome.any { it.from == from && sameCity(it.city, found.city) && (it.country == null || found.country == null || it.country == found.country) }) continue
         // A long stay in the town already home there keeps that home's airports.
+        // And has those it is left from and come back to by ([stayAirports]).
         val covering = out.find { (it.from == null || it.from <= from) && (it.until == null || from <= it.until) }
-        val stay = if (covering != null && covering.airports.isNotEmpty() && sameCity(covering.city, found.city)) found.copy(airports = covering.airports) else found
+        val airports = (if (covering != null && sameCity(covering.city, found.city)) covering.airports else emptyList()).toMutableList()
+        for (a in stayAirports(found, segments)) if (airports.none { placeKey(it) == placeKey(a) }) airports += a
+        val stay = found.copy(airports = airports)
         out = out.flatMap { p ->
             if ((p.until != null && p.until < from) || (p.from != null && p.from > until)) return@flatMap listOf(p)
             val before = if (p.from == null || p.from < from) listOf(p.copy(until = dayBefore(from))) else emptyList()
@@ -392,7 +423,19 @@ fun parseAirportCodes(text: String): ParsedAirports {
 fun journeyHome(place: Place?, date: String, periods: List<HomePeriod>, overrides: List<HomePeriod> = emptyList()): Boolean {
     if (inHomeTown(place, date, periods, overrides)) return true
     val home = homeAt(periods, date, overrides) ?: return false
-    return place != null && home.airports.any { placeKey(it) == placeKey(place) }
+    return place != null && home.airports.any { placeKey(it) == placeKey(place) || bareCityOf(place, it) }
+}
+
+/** Whether [place] is only a city, as some airlines' emails give a flight's ends ("Boston → San Francisco"), and [airport] is in it. */
+private fun bareCityOf(place: Place, airport: Place): Boolean {
+    if (place.code != null || (place.city != null && !sameCity(place.name, place.city))) return false
+    val code = airport.code ?: return false
+    // A chosen airport is only its code: its city and country are the table's.
+    val known = airportPlace(code)
+    val city = airport.city ?: known?.city ?: return false
+    val country = airport.country ?: known?.country
+    val differ = place.country != null && country != null && countryCode(place.country) != countryCode(country)
+    return sameCity(city, place.city ?: place.name) && !differ
 }
 
 private fun HomePeriod.covers(date: String) = (from == null || from <= date) && (until == null || date <= until)

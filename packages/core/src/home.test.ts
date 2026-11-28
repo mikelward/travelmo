@@ -985,6 +985,19 @@ describe("home airports", () => {
     expect(isAtHome(hotel, [], overrides)).toBe(false);
   });
 
+  it("count a flight's end given only as the city of a chosen airport as landing there", () => {
+    const home = [{ city: "Mountain View", country: "US", airports: [{ name: "SFO", code: "SFO" }] }];
+    const city = { name: "San Francisco", city: "San Francisco", country: "US" };
+    expect(journeyHome(city, "2021-12-01", [], home)).toBe(true);
+    expect(journeyHome({ name: "San Francisco" }, "2021-12-01", [], home)).toBe(true);
+    // A named place in the city, or another San Francisco, is not the airport.
+    expect(journeyHome({ name: "Ferry Building", city: "San Francisco", country: "US" }, "2021-12-01", [], home)).toBe(false);
+    expect(journeyHome({ ...city, country: "AR" }, "2021-12-01", [], home)).toBe(false);
+    // Nor is landing there a trip to San Francisco.
+    const delta: ExtractedSegment = { type: "flight", title: "Delta", start: "2021-12-01T13:00:00-05:00", origin: { name: "Boston", city: "Boston", country: "US" }, destination: city };
+    expect(awayPlace([delta], [], home)?.city).toBe("Boston");
+  });
+
   it("keep a trip two days after flying home to SFO apart from it", () => {
     const overrides = withHomeAirports(corrected, [...boston, ...seattle]);
     expect(findTripForBooking([trip("boston", "2021-11-22", "2021-12-01")], () => boston, [seattle[0]!], [], overrides)).toBeUndefined();
@@ -1201,6 +1214,41 @@ describe("long stays", () => {
       ["London", "2022-04-11", "2022-02-13"],
     ]);
     expect(withLongStays([], [...spring, ...paris], [{ city: "London", from: "2022-02-13" }]).map((p) => p.city)).toEqual(["Paris"]);
+  });
+
+  it("gives a long stay the airports in its country it is left from and come back to", () => {
+    const sfo = { name: "San Francisco International", city: "San Francisco", country: "US", code: "SFO" };
+    const syd = { name: "Sydney", city: "Sydney", country: "AU", code: "SYD" };
+    const lhr = { name: "Heathrow", city: "London", country: "GB", code: "LHR" };
+    const sunnyvale = flat("2021-12-05", "2022-01-29", { destination: { name: "Flat", city: "Sunnyvale", country: "US" } });
+    const fly = (start: string, origin: Place, destination: Place): ExtractedSegment => ({ type: "flight", title: "XX 1", start, end: start, origin, destination });
+    const segments = [sunnyvale, fly("2021-12-16T09:00:00+11:00", syd, sfo), fly("2021-12-20T09:00:00+11:00", sfo, syd), fly("2021-12-22T09:00:00+11:00", syd, sfo), fly("2022-01-14T16:10:00-08:00", sfo, lhr)];
+    expect(withLongStays([], segments).find((p) => p.stay)?.airports?.map((a) => a.code)).toEqual(["SFO"]);
+    // One way only is not the stay's.
+    expect(withLongStays([], [sunnyvale, fly("2022-01-14T16:10:00-08:00", sfo, lhr)]).find((p) => p.stay)?.airports).toBeUndefined();
+    // Nor is a weekend away in New York from it.
+    const jfk = { name: "JFK", city: "New York", country: "US", code: "JFK" };
+    const weekend = [sunnyvale, fly("2021-12-10T08:00:00-08:00", sfo, jfk), fly("2021-12-12T18:00:00-05:00", jfk, sfo)];
+    expect(withLongStays([], weekend).find((p) => p.stay)?.airports?.map((a) => a.code)).toEqual(["SFO"]);
+    // Nor one flown to near its end and left from long after.
+    const late = [sunnyvale, fly("2021-12-06T08:00:00-08:00", syd, sfo), fly("2022-01-25T08:00:00-08:00", sfo, jfk), fly("2022-03-30T08:00:00-05:00", jfk, lhr)];
+    expect(withLongStays([], late).find((p) => p.stay)?.airports?.map((a) => a.code)).toEqual(["SFO"]);
+    // Nor does a journey after it from elsewhere take the stay's away.
+    const after = [sunnyvale, fly("2021-12-06T08:00:00-08:00", syd, sfo), fly("2022-03-30T08:00:00-05:00", jfk, lhr)];
+    expect(withLongStays([], after).find((p) => p.stay)?.airports?.map((a) => a.code)).toEqual(["SFO"]);
+    // Leaving from San Francisco, as an email may give it, is leaving from SFO.
+    const bare = [sunnyvale, fly("2021-12-06T08:00:00-08:00", syd, sfo), fly("2022-01-14T16:10:00-08:00", { name: "San Francisco", city: "San Francisco", country: "US" }, lhr)];
+    expect(withLongStays([], bare).find((p) => p.stay)?.airports?.map((a) => a.code)).toEqual(["SFO"]);
+  });
+
+  it("keeps long stays in different towns apart, though their dates overlap", () => {
+    const sunnyvale = flat("2021-12-05", "2022-01-29", { destination: { name: "Flat", city: "Sunnyvale", country: "US" } });
+    const london = [flat("2022-01-15", "2022-02-13"), flat("2022-02-13", "2022-03-20")];
+    const { periods } = homesWithAirports([sunnyvale, ...london], []);
+    const there: Trip = { id: "sunnyvale", title: "Sunnyvale", start: "2021-12-05", end: "2022-01-29", ownerUid: "u1", sharedWith: [], createdAt: "2022-01-01T00:00:00Z", updatedAt: "2022-01-01T00:00:00Z" };
+    expect(findTripForBooking([there], () => [sunnyvale], [london[0]!], periods)).toBeUndefined();
+    const here = { ...there, id: "london", start: "2022-01-15", end: "2022-02-13" };
+    expect(findTripForBooking([here], () => [london[0]!], [london[1]!], periods)).toBe(here);
   });
 
   it("shows long stays in Profile over corrections, and groups by them too", () => {
