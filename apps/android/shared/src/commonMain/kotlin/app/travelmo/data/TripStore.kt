@@ -81,7 +81,7 @@ interface TripStore {
     /** Merges [from] into [into], one person: [into] becomes [merged] (mergedPerson) and [from] goes, in one batch. */
     suspend fun mergePeople(uid: String, merged: Person, from: Person)
 
-    /** Replaces a person's other spellings ("Who is this?"). */
+    /** Replaces a person's other spellings ("Same person as…" on a loyalty holder). */
     suspend fun setAliases(uid: String, personId: String, aliases: List<String>)
 
     /** The user's own travel profile, live, from its first answer on: an answer with no profile is one too. A read that fails is logged and keeps the caller waiting. */

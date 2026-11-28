@@ -85,8 +85,6 @@ import app.travelmo.shared.people_hint
 import app.travelmo.shared.same_person_as
 import app.travelmo.shared.same_person_as_title
 import app.travelmo.shared.this_is_me
-import app.travelmo.shared.who_is
-import app.travelmo.shared.who_is_this
 import app.travelmo.shared.you
 import app.travelmo.shared.a_booking_email
 import app.travelmo.shared.cancel
@@ -194,10 +192,10 @@ fun ProfileScreen(viewModel: TripsViewModel, onOpenSettings: () -> Unit, bottomB
             onDismiss = { editing = null },
         )
     }
-    // "Who is this?" on a loyalty holder's name, and "Same person as…" on a person (SPEC "Travelers").
+    // "Same person as…" on a loyalty holder's name and on a person (SPEC "Travelers").
     var naming by rememberSaveable { mutableStateOf<String?>(null) }
     naming?.let { name ->
-        PeoplePicker(stringResource(Res.string.who_is, name), travelers, except = null, onPick = { viewModel.sayWhoIs(PEOPLE_TOKEN, name, it) }, onDismiss = { naming = null })
+        PeoplePicker(stringResource(Res.string.same_person_as_title, name), travelers, except = null, onPick = { viewModel.sayWhoIs(PEOPLE_TOKEN, name, it) }, onDismiss = { naming = null })
     }
     var merging by rememberSaveable { mutableStateOf<String?>(null) }
     merging?.let { id ->
@@ -331,7 +329,7 @@ private fun LazyListScope.profileSections(
                                 modifier = Modifier.weight(1f).semantics { heading() },
                             )
                             val person = group.person
-                            if (person != null && onWhoIs != null) TextButton(onClick = { onWhoIs(person) }) { Text(stringResource(Res.string.who_is_this)) }
+                            if (person != null && onWhoIs != null) TextButton(onClick = { onWhoIs(person) }) { Text(stringResource(Res.string.same_person_as)) }
                         }
                     }
                     LoyaltyTable(group.entries, onWhose)
@@ -433,7 +431,7 @@ private fun PersonDialog(program: String, number: String, people: List<String>, 
 }
 
 /**
- * Which of the user's people someone is ("Who is this?", "Same person as…"):
+ * Which of the user's people someone is ("Same person as…", on a loyalty holder or a person):
  * the user first, then as People lists them, less [except].
  */
 @Composable

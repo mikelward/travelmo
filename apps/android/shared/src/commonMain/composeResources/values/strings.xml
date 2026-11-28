@@ -103,8 +103,6 @@
     <string name="this_is_me">This is me</string>
     <string name="same_person_as">Same person as…</string>
     <string name="same_person_as_title">%1$s is the same person as</string>
-    <string name="who_is_this">Who is this?</string>
-    <string name="who_is">Who is %1$s?</string>
     <string name="booking_for">For %1$s</string>
     <string name="pick_dates">Pick dates</string>
     <string name="edit_booking">Edit booking</string>
