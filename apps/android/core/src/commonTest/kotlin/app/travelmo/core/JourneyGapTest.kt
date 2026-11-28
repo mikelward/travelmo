@@ -85,6 +85,35 @@ class JourneyGapTest {
     }
 
     @Test
+    fun `takes a car hired in one town and returned in another as the journey between them`() {
+        val rdu = Place("Raleigh-Durham", code = "RDU", city = "Raleigh/Durham", country = "US")
+        val sav = Place("Savannah", code = "SAV", city = "Savannah", country = "US")
+        val sjc = Place("San Jose", code = "SJC", city = "San Jose", country = "US")
+        val into = flight("into", "2017-10-12T21:35:00-05:00", "2017-10-12T23:55:00-04:00", sjc, rdu)
+        val home = flight("home", "2017-10-21T09:00:00-04:00", "2017-10-21T14:00:00-07:00", sav, sjc)
+        val car = flight(
+            "car", "2017-10-12T23:45:00-04:00", "2017-10-19T15:00:00-04:00",
+            Place("Example Cars Raleigh Durham Airport", city = "Morrisville", country = "US"), Place("Example Cars", city = "Savannah", country = "US"),
+            SegmentType.CAR_RENTAL,
+        )
+        journeyGaps(listOf(into, home)).map { it.direction } shouldBe listOf("between")
+        journeyGaps(listOf(into, car, home)).shouldBeEmpty()
+        journeyGaps(listOf(into, car.copy(destination = car.origin), home)).map { it.direction } shouldBe listOf("between")
+        val elsewhere = car.copy(origin = Place("Example Cars", city = "Boston", country = "US"), destination = Place("Example Cars", city = "New York", country = "US"))
+        journeyGaps(listOf(into, elsewhere, home)).map { it.direction } shouldBe listOf("between")
+        val avis = car.copy(origin = Place("Avis", code = "RDU"), destination = Place("Avis", code = "SAV"))
+        journeyGaps(listOf(into, avis, home)).shouldBeEmpty()
+        val ontario = car.copy(origin = Place("Example Cars Toronto", city = "Toronto", country = "CA"), destination = Place("Example Cars London Downtown", city = "London ON", country = "CA"))
+        val toToronto = into.copy(destination = Place("Toronto Pearson", code = "YYZ", city = "Toronto", country = "CA"))
+        val fromLondon = home.copy(origin = heathrow)
+        journeyGaps(listOf(toToronto, ontario, fromLondon)).map { it.direction } shouldBe listOf("between")
+        val raleigh = listOf(HomePeriod("Raleigh/Durham", "US", airports = listOf(rdu)))
+        val back = flight("back", "2017-10-21T09:00:00-04:00", "2017-10-21T11:00:00-04:00", sav, rdu)
+        journeyGaps(listOf(back), raleigh).map { it.direction } shouldBe listOf("out")
+        journeyGaps(listOf(car, back), raleigh).shouldBeEmpty()
+    }
+
+    @Test
     fun `leaves out the trip's ends once it is one way not the gaps between`() {
         journeyGaps(listOf(out), oneWay = true).shouldBeEmpty()
         journeyGaps(listOf(toAdelaide, egypt), oneWay = true).map { it.direction } shouldBe listOf("between")

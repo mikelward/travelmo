@@ -1327,6 +1327,13 @@ given, or a flight in the middle (`journeyGaps`, in `packages/core` and
   drive between them is not missing): "No flight from Adelaide to London
   found between 10 Jan and 15 Feb".
 
+None of them is missing when a car hired in the one town and returned in
+the other covers its days, going the same way: its pick-up and drop-off
+each in the same town as the gap's end, near it, or named after it (a
+place no one knows the whereabouts of matches nothing else). A car from
+"Raleigh Durham Airport" dropped off in Savannah is the journey between
+landing at RDU and flying home from SAV.
+
 Each says "journey" when not every journey on the trip flies, and has Look
 for it and Add it yourself (for those who may edit, the booking form
 starting on the first day it could be). Look for it (`POST /trips/look`, the

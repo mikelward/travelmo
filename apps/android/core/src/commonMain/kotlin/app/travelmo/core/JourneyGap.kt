@@ -24,6 +24,22 @@ data class JourneyGap(
 
 private val gapJourneyTypes = setOf(SegmentType.FLIGHT, SegmentType.TRAIN, SegmentType.BUS, SegmentType.FERRY)
 
+private fun words(text: String) = " " + text.lowercase().replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim() + " "
+
+/**
+ * Whether a car hire's end is at a journey's: in the same town or near it, or named after it ("Example Cars Raleigh
+ * Durham Airport" for RDU's Raleigh/Durham). Where neither says where it is, it isn't.
+ */
+private fun near(place: Place, end: Place): Boolean {
+    if (sameArea(place, end)) return true
+    // A known country that differs rules out the name: "London Downtown" in Ontario is not London's Heathrow.
+    val a = countryOf(place)
+    val b = countryOf(end)
+    return !(a != null && b != null && a != b) && words(place.name).contains(words(end.city ?: end.name))
+}
+
+private fun countryOf(place: Place): String? = place.country?.let(::countryCode) ?: place.code?.let { airportPlace(it)?.country }
+
 private fun sameJourney(a: Segment, b: Segment) =
     instantMillis(a.start) == instantMillis(b.start) && sameArea(a.origin, b.origin) && sameArea(a.destination, b.destination)
 
@@ -48,13 +64,25 @@ fun journeyGaps(segments: List<Segment>, homes: List<HomePeriod> = emptyList(), 
     val last = journeys.last()
     val mode = if (journeys.all { it.type == SegmentType.FLIGHT }) "flight" else "journey"
     fun landed(j: Segment) = localDate(j.end ?: j.start)
-    val between = journeys.zipWithNext().filter { (before, next) -> farApart(before.destination, next.origin) }
+    // A car hired in one town and returned in another, as from Raleigh to Savannah, is the journey between them: driven, not missing.
+    val drives = liveSegments(segments).filter {
+        it.type == SegmentType.CAR_RENTAL && it.end != null && it.origin != null && it.destination != null &&
+            // Returned elsewhere: by name, or by the airports its desks are at where both are called "Avis".
+            (!sameCity(it.origin.city ?: it.origin.name, it.destination.city ?: it.destination.name) ||
+                (it.origin.code != null && it.destination.code != null && it.origin.code != it.destination.code))
+    }
+    fun driven(from: Place, to: Place, after: String, before: String? = null) = drives.any { d ->
+        near(d.origin!!, from) && near(d.destination!!, to) && localDate(d.end!!) >= after && (before == null || localDate(d.start) <= before)
+    }
+    val between = journeys.zipWithNext()
+        .filter { (before, next) -> farApart(before.destination, next.origin) && !driven(before.destination!!, next.origin!!, landed(before), localDate(next.start)) }
         .map { (before, next) -> gap("between", before.destination!!, next.origin!!, mode, landed(before), localDate(next.start)) }
     val start = first.origin!!
     val end = last.destination!!
     if (oneWay || sameArea(start, end)) return between
     val endsHome = homes.isNotEmpty() && journeyHome(end, landed(last), homes) && !journeyHome(start, localDate(first.start), homes)
-    return if (endsHome) listOf(gap("out", end, start, mode, localDate(first.start))) + between else between + gap("back", end, start, mode, landed(last))
+    if (endsHome) return if (driven(end, start, "", localDate(first.start))) between else listOf(gap("out", end, start, mode, localDate(first.start))) + between
+    return if (driven(end, start, landed(last))) between else between + gap("back", end, start, mode, landed(last))
 }
 
 /** The homes [journeyGaps] goes by: those set on Profile, each with the airports chosen for it, so landing at SFO is coming home to Mountain View. */
