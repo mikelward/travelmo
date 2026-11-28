@@ -7,29 +7,36 @@ import type { ExtractedSegment, Place, PlaceSetting, Trip, TripSetting } from ".
 import { liveSegments } from "./trips";
 
 // A trip's picture in the trip list: an outline of the best-known landmark
-// of the city its title names, or a matching place kind, season, holiday or
-// vacation drawing when no city is named, drawn in a 48-unit square as one
-// SVG path for a 1.5-unit round-capped stroke (landmarks.json, which the
-// Android app compiles in too). Anything else gets the drawing of the kind
-// of place it goes to (tripPicture), else the suitcase.
+// of the city its title names, else a simplified map outline of the country
+// it names, else a matching place kind, season, holiday or vacation drawing
+// when no city or country is named, drawn in a 48-unit square as one SVG path
+// for a 1.5-unit round-capped stroke (landmarks.json, which the Android app
+// compiles in too). Anything else gets the drawing of the kind of place it
+// goes to (tripPicture), else the suitcase.
 export interface Landmark {
   id: string;
   // What it shows, for whoever maintains the drawings.
   name: string;
   // The city names it stands for, folded (foldText).
   cities: readonly string[];
-  // Names that are also everyday words ("Nice", "Bath"), accents dropped:
-  // they count only written with a capital and not opening the title, unless
-  // the title is the name alone or punctuation follows it ("Nice, France"),
-  // so "Nice weekend" and "Bath time" are nobody.
+  // The country names it stands for, folded (foldText): matched only when
+  // the title names no place from `cities` or city `capitalized`, and before
+  // `fallback`, so "Paris, France" is Paris and "Summer in France" is France.
+  countries?: readonly string[];
+  // Names that are also everyday words ("Nice", "Bath") or case-sensitive
+  // country abbreviations ("US", "UK", "NZ"), accents dropped: title-case
+  // words count only capitalized and not opening the title unless alone or
+  // before punctuation ("Nice, France"), while all-caps abbreviations ("US",
+  // "UK", "NZ") match anywhere in exact uppercase ("US road trip", not "Visit us").
   capitalized?: readonly string[];
-  // Longer names, folded, that a match of `cities` or `fallback` is not when
-  // it is part of one: "santiago de compostela" is not Santiago, and
-  // "lake victoria" is not Victoria.
+  // Longer names, folded, that a match of `cities`, `countries` or `fallback`
+  // is not when it is part of one: "santiago de compostela" is not Santiago,
+  // "new mexico" is not Mexico, and "lake victoria" is not Victoria.
   not?: readonly string[];
   // Kind-of-place, season, holiday or vacation words, folded: matched only
-  // when the title names no place from `cities` or `capitalized`, so
-  // "Summer in Paris" is Paris and "Summer vacation" is Summer.
+  // when the title names no place from `cities`, `countries` or `capitalized`,
+  // so "Summer in Paris" is Paris, "Summer in Japan" is Japan, and
+  // "Summer vacation" is Summer.
   fallback?: readonly string[];
   d: string;
 }
@@ -43,6 +50,8 @@ type LandmarkHit = { order: number; landmark: Landmark; name: string; paddedNot:
 const LANDMARK_INDEX = (() => {
   const cities = new Map<string, LandmarkHit[]>();
   const capitalized = new Map<string, LandmarkHit[]>();
+  const countries = new Map<string, LandmarkHit[]>();
+  const countryCapitalized = new Map<string, LandmarkHit[]>();
   const fallback = new Map<string, LandmarkHit[]>();
   const add = (map: Map<string, LandmarkHit[]>, phrase: string, hit: LandmarkHit) => {
     const space = phrase.indexOf(" ");
@@ -57,11 +66,15 @@ const LANDMARK_INDEX = (() => {
   };
   LANDMARKS.forEach((landmark, order) => {
     const paddedNot = (landmark.not ?? []).map((n) => ` ${n} `);
+    const isCountry = (landmark.countries?.length ?? 0) > 0 && landmark.cities.length === 0;
     for (const city of landmark.cities) add(cities, city, { order, landmark, name: city, paddedNot });
-    for (const name of landmark.capitalized ?? []) add(capitalized, name, { order, landmark, name, paddedNot });
+    for (const country of landmark.countries ?? []) add(countries, country, { order, landmark, name: country, paddedNot });
+    for (const name of landmark.capitalized ?? []) {
+      add(isCountry ? countryCapitalized : capitalized, name, { order, landmark, name, paddedNot });
+    }
     for (const word of landmark.fallback ?? []) add(fallback, word, { order, landmark, name: word, paddedNot });
   });
-  return { cities, capitalized, fallback };
+  return { cities, capitalized, countries, countryCapitalized, fallback };
 })();
 
 const landmarkCache = new Map<string, Landmark>();
@@ -85,11 +98,15 @@ function isNotExcluded(words: string, paddedNot: readonly string[], name: string
   return true;
 }
 
+function isAllCaps(name: string): boolean {
+  return name.length >= 2 && name === name.toUpperCase() && name !== name.toLowerCase();
+}
+
 // The landmark of the city named first in `title` ("Paris and Lyon" is
-// Paris), else the first matching place kind, season, holiday or vacation
-// word (`fallback`), else the suitcase. Names match as whole words, accents
-// and case ignored, so "Lisboa" is Lisbon and "Parisian" is nobody; a
-// capitalized name keeps its case.
+// Paris), else the first named country ("Summer in Japan" is Japan), else the
+// first matching place kind, season, holiday or vacation word (`fallback`),
+// else the suitcase. Names match as whole words, accents and case ignored, so
+// "Lisboa" is Lisbon and "Parisian" is nobody; a capitalized name keeps its case.
 export function tripLandmark(title: string): Landmark {
   const cached = landmarkCache.get(title);
   if (cached) return cached;
@@ -113,29 +130,38 @@ export function tripLandmark(title: string): Landmark {
     }
   };
 
-  for (const token of lowerTokens) {
-    const hits = LANDMARK_INDEX.cities.get(token);
-    if (!hits) continue;
-    for (const hit of hits) {
-      consider(firstAt(words, hit.name, (at) => isNotExcluded(words, hit.paddedNot, hit.name, at)), hit.order, hit.landmark);
-    }
-  }
-  for (const token of keptTokens) {
-    const hits = LANDMARK_INDEX.capitalized.get(token);
-    if (!hits) continue;
-    for (const hit of hits) {
-      consider(firstAt(kept, hit.name, (at) => at > 0 || opensTitle(hit.name)), hit.order, hit.landmark);
-    }
-  }
-  if (!best) {
+  const matchLower = (map: Map<string, LandmarkHit[]>) => {
     for (const token of lowerTokens) {
-      const hits = LANDMARK_INDEX.fallback.get(token);
+      const hits = map.get(token);
       if (!hits) continue;
       for (const hit of hits) {
         consider(firstAt(words, hit.name, (at) => isNotExcluded(words, hit.paddedNot, hit.name, at)), hit.order, hit.landmark);
       }
     }
+  };
+  const matchCapitalized = (map: Map<string, LandmarkHit[]>) => {
+    for (const token of keptTokens) {
+      const hits = map.get(token);
+      if (!hits) continue;
+      for (const hit of hits) {
+        const lower = hit.name.toLowerCase();
+        const allowStart = isAllCaps(hit.name) || opensTitle(hit.name);
+        consider(
+          firstAt(kept, hit.name, (at) => (at > 0 || allowStart) && isNotExcluded(words, hit.paddedNot, lower, at)),
+          hit.order,
+          hit.landmark,
+        );
+      }
+    }
+  };
+
+  matchLower(LANDMARK_INDEX.cities);
+  matchCapitalized(LANDMARK_INDEX.capitalized);
+  if (!best) {
+    matchLower(LANDMARK_INDEX.countries);
+    matchCapitalized(LANDMARK_INDEX.countryCapitalized);
   }
+  if (!best) matchLower(LANDMARK_INDEX.fallback);
 
   const result = best ?? SUITCASE;
   if (landmarkCache.size >= MAX_LANDMARK_CACHE) landmarkCache.clear();

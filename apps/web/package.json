@@ -12,7 +12,8 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "firebase emulators:exec --only firestore --project demo-travelmo --config ../../firebase.json 'vitest run'",
     "test:e2e": "firebase emulators:exec --only auth,firestore --project demo-travelmo --config ../../firebase.json 'playwright test'",
-    "worldmap": "node scripts/worldmap.mjs"
+    "worldmap": "node scripts/worldmap.mjs",
+    "country-landmarks": "node scripts/countryLandmarks.mjs"
   },
   "dependencies": {
     "@travelmo/core": "workspace:*",
