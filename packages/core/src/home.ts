@@ -6,7 +6,7 @@ import { countryCodeOf, isCountryCode } from "./countries";
 import { formatDate } from "./format";
 import { compareInstants } from "./instant";
 import { HomeAirportCode, HomeCorrection, maxHomeAirports, maxHomeCityLength, type ChosenHomeAirports, type ExtractedSegment, type Place, type SegmentType, type Trip } from "./schema";
-import { daysBetween, findTripForRange, isUntimed, liveSegments, segmentDateRange } from "./trips";
+import { daysBetween, findTripForRange, isCancelled, isUntimed, liveSegments, segmentDateRange } from "./trips";
 
 // Where someone lives, over time. Nobody types it in: it is worked out from
 // their journeys, since a round trip leaves from home and comes back to it.
@@ -22,6 +22,9 @@ export type HomePeriod = {
   // (withHomeAirports), however far away: a journey back into one is a
   // journey home (journeyHome). Mountain View's is SFO, in another town.
   airports?: Place[];
+  // Worked out from a long stay (longStays), not from where trips start:
+  // that stay's trip takes no travel by its dates, nor joins any.
+  stay?: boolean;
 };
 
 type Town = { city: string; country?: string; lat?: number; lon?: number };
@@ -291,9 +294,68 @@ export function homesWithAirports(
   const trips = roundTrips(segments);
   const bases = homeBasesFrom(trips);
   return {
-    periods: withChosenAirports(attachHomeAirports(periodsOf(bases), trips, bases), chosen),
+    // Chosen airports last, so a long stay in a home town gets them too.
+    periods: withChosenAirports(withLongStays(attachHomeAirports(periodsOf(bases), trips, bases), segments), chosen),
     overrides: withChosenAirports(attachHomeAirports(corrections, trips, bases), chosen),
   };
+}
+
+// How many nights in one town, in stays back to back, is living there.
+export const longStayNights = 28;
+
+const dayAfter = (date: string) => {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+};
+
+// The stays a person lived in rather than visited: stays in one town back
+// to back (one checking in by the day after the last checks out, whatever
+// is booked elsewhere meanwhile) for
+// `longStayNights` or more, a run each, from the first check-in to the last
+// check-out. Cancelled stays don't count.
+export function longStays(segments: readonly Booking[]): HomePeriod[] {
+  const stays = segments
+    .filter((s): s is Booking & { end: string; destination: Place } => s.type === "lodging" && !isCancelled(s) && !!s.end && !!s.destination?.city)
+    .sort((a, b) => compareInstants(a.start, b.start));
+  const runs: { city: string; country?: string; from: string; until: string }[] = [];
+  for (const stay of stays) {
+    const city = stay.destination.city;
+    if (!city) continue;
+    const from = localDate(stay.start);
+    const until = localDate(stay.end);
+    const country = stay.destination.country ? countryCodeOf(stay.destination.country) : undefined;
+    // The latest run in this town: a stay elsewhere in between (a week away
+    // while the flat is still booked) doesn't end it.
+    const last = [...runs].reverse().find((r) => sameCity(city, r.city) && (!country || !r.country || country === r.country));
+    if (last && from <= dayAfter(last.until)) {
+      if (until > last.until) last.until = until;
+      continue;
+    }
+    runs.push({ city, ...(country ? { country } : {}), from, until });
+  }
+  return runs.filter((r) => daysBetween(r.from, r.until) >= longStayNights).map((r) => ({ ...r, stay: true }));
+}
+
+// Worked-out home with each long stay (longStays) as home for its days: a
+// month in a rented flat is living there, so a trip from it starts there
+// and one back to it ends, however little else says where home was.
+// Only the worked-out timeline: the person's own corrections stand as made.
+export function withLongStays(periods: readonly HomePeriod[], segments: readonly Booking[]): HomePeriod[] {
+  let out: HomePeriod[] = periods.map((p) => ({ ...p }));
+  for (const found of longStays(segments)) {
+    // A long stay in the town already home there keeps that home's airports.
+    const covering = out.find((p) => (!p.from || p.from <= found.from!) && (!p.until || found.from! <= p.until));
+    const stay = covering?.airports && sameCity(covering.city, found.city) ? { ...found, airports: covering.airports } : found;
+    out = out.flatMap((p) => {
+      if ((p.until && p.until < stay.from!) || (p.from && p.from > stay.until!)) return [p];
+      const before = !p.from || p.from < stay.from! ? [{ ...p, until: dayBefore(stay.from!) }] : [];
+      const after = !p.until || p.until > stay.until! ? [{ ...p, from: dayAfter(stay.until!) }] : [];
+      return [...before, ...after];
+    });
+    out.push(stay);
+  }
+  return out.sort((a, b) => (a.from ?? "").localeCompare(b.from ?? ""));
 }
 
 // Effective home periods (corrections when present, else inferred) with
@@ -874,12 +936,27 @@ export function findTripForBooking(
     const home = homeAt(periods, localDate(s.start), overrides);
     return !!where && !!home && !sameTown(where, home);
   };
+  // Stays in a town lived in for a long stay at the time (HomePeriod.stay).
+  const livedIn = (list: readonly Grouped[]) => {
+    const live = list.filter((s) => !isCancelled(s));
+    return (
+      live.length > 0 &&
+      live.every((s) => {
+        const where = town(s.destination);
+        const home = homeAt(periods, localDate(s.start), overrides);
+        return s.type === "lodging" && !!where && !!home?.stay && sameTown(where, home);
+      })
+    );
+  };
   const ours = booking.filter(isOuting);
   const ourTravel = booking.filter((s) => !isOuting(s));
   return trips.find((trip) => {
     const segments = segmentsOf(trip.id);
     if (homeBetween(segments, booking, periods, overrides) || homeBetween(booking, segments, periods, overrides)) return false;
     if (homeLeftAfter(segments, booking, periods, overrides) || homeLeftAfter(booking, segments, periods, overrides)) return false;
+    // A long stay lived in (longStays) is its own trip: travel doesn't join it
+    // by dates, nor it travel.
+    if (livedIn(booking) !== livedIn(segments)) return false;
     if (!allOutings(booking) && !allOutings(segments)) return near(trip, 2);
     if (!near(trip, 2)) return false;
     const theirs = segments.filter(isOuting);

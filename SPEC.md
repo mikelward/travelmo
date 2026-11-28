@@ -2213,6 +2213,16 @@ since Jan 2022 · Mountain View 2011–2022 · Elsternwick 2003–2011", with no
 home before 2003. Imports and regrouping read them for every booking
 filed (`ImportDeps.homeOverrides`).
 
+A long stay is living there, too: stays back to back in one town (one
+checking in by the day after the last checks out, cancelled ones aside,
+whatever is booked elsewhere meanwhile)
+for 28 nights or more (`longStays`) are home for their days in the
+worked-out timeline (`withLongStays`, not over the person's corrections),
+so a winter in rented flats is home and a week away from it is a trip of
+its own. It keeps the airports of the home it falls in, when in that
+town. That stay's trip takes no travel by its dates, nor joins any:
+stays lived in join only each other (`HomePeriod.stay`).
+
 Grouping uses it (`findTripForBooking`, also in `home.ts`). Each import
 works out home from the bookings of the trips within a year either side of
 the new one, plus the new one itself (a return ticket is a round trip on
