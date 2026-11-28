@@ -536,6 +536,10 @@ class FakeTripStore(
     override suspend fun markOneTrip(tripId: String) {
         oneTrips += tripId
     }
+    val bothTaken = mutableListOf<Pair<String, String>>()
+    override suspend fun markBothTaken(tripId: String, key: String) {
+        bothTaken += tripId to key
+    }
     val removedTravelers = mutableListOf<Pair<String, List<String>>>()
     override suspend fun setRemovedTravelers(tripId: String, removed: List<String>) {
         removedTravelers += tripId to removed

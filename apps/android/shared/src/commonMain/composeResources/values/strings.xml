@@ -320,6 +320,7 @@
     <string name="mixed_elsewhere">This may be two trips: %1$s leaves from another country hours after %2$s lands.</string>
     <string name="mixed_travelers">This may be two trips: some bookings are for %1$s, others for %2$s.</string>
     <string name="it_is_one_trip">It's one trip</string>
+    <string name="both_were_taken">Both were taken</string>
     <string name="travelers_title">Travelers</string>
     <string name="travelers_hint">Untick anyone not on this trip. A trip you're not on is left out of your reports and reminders.</string>
     <string name="split_trip_title">Split trip</string>

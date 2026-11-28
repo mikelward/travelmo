@@ -74,6 +74,7 @@ fun tripFromDocument(id: String, data: Map<String, Any?>): Trip? {
         removedTravelers = data.strings("removedTravelers"),
         mixed = data["mixed"] as? Boolean,
         oneTrip = data["oneTrip"] == true,
+        bothTaken = data.strings("bothTaken"),
         updatedAt = data.text("updatedAt") ?: "",
     )
 }

@@ -95,6 +95,8 @@ import app.travelmo.core.tripTravelers
 import app.travelmo.core.namedTravelers
 import app.travelmo.core.MixedTrip
 import app.travelmo.core.mixedTrip
+import app.travelmo.core.duplicateFlights
+import app.travelmo.core.duplicateFlightKey
 import app.travelmo.core.watching
 import androidx.lifecycle.repeatOnLifecycle
 import app.travelmo.core.MAX_TRIP_REMINDERS
@@ -381,6 +383,10 @@ fun TripDetailScreen(
         // Bookings that look like two trips in one, unless the owner said it is one.
         val oneTrip = current?.oneTrip == true
         val mixed = remember(segments, oneTrip, removedTravelers) { if (oneTrip) null else mixedTrip(segments, removedTravelers) }
+        // Flights that look booked twice, one of them likely not taken.
+        val bothTaken = current?.bothTaken.orEmpty()
+        val cancelled = current?.cancelledAt != null
+        val duplicates = remember(segments, bothTaken, cancelled) { if (cancelled) emptyList() else duplicateFlights(segments, bothTaken) }
         val warnings = remember(onlyWatching, people, current, segments, today) {
             if (onlyWatching || current == null) emptyList() else tripWarnings(people, current, segments, today)
         }
@@ -416,6 +422,13 @@ fun TripDetailScreen(
                         onSplit = if (canManage && segments.size > 1) { { splitting = true } } else null,
                         onTravelers = if (canManage && found is MixedTrip.Travelers) { { editingTravelers = true } } else null,
                         onOneTrip = if (canManage) { { viewModel.markOneTrip("${prefix}one-trip", tripId) } } else null,
+                    )
+                },
+                duplicateFlights = duplicates.map { pair ->
+                    DuplicateFlightActions(
+                        pair,
+                        onCancel = if (canEdit) { segment -> viewModel.cancelSegment("${prefix}segment/${segment.id}/cancel", tripId, segment.id) } else null,
+                        onBothTaken = if (canManage) { { viewModel.markBothTaken("${prefix}both-taken", tripId, duplicateFlightKey(pair.first, pair.second)) } } else null,
                     )
                 },
                 journeyGap = gaps.takeIf { it.isNotEmpty() }?.let { foundGaps ->
@@ -528,6 +541,8 @@ private fun TripBody(
     rides: RideSuggestions,
     /** A journey the trip seems to be missing; null when nothing is. */
     mixedTrip: MixedTripActions? = null,
+    /** Flights the trip seems to have booked twice. */
+    duplicateFlights: List<DuplicateFlightActions> = emptyList(),
     journeyGap: JourneyGapActions? = null,
     tripActions: TripActions?,
     checklist: Checklist?,
@@ -593,6 +608,9 @@ private fun TripBody(
             item(key = "warnings") { DocumentWarnings(warnings, today) }
         }
         mixedTrip?.let { actions -> item(key = "mixed-trip") { MixedTripNotice(actions, busy) } }
+        for (actions in duplicateFlights) {
+            item(key = "duplicate-${duplicateFlightKey(actions.pair.first, actions.pair.second)}") { DuplicateFlightNotice(actions, busy) }
+        }
         journeyGap?.let { actions -> item(key = "journey-gap") { JourneyGapNotice(actions, busy) } }
         if (checklist != null) {
             item(key = "before-you-go") { BeforeYouGo(checklist, today) }

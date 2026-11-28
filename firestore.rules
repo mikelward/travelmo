@@ -133,7 +133,7 @@ service cloud.firestore {
     }
 
     function validTrip(trip) {
-      return trip.keys().hasOnly(['id', 'title', 'start', 'end', 'liveStart', 'liveEnd', 'ownerUid', 'sharedWith', 'deleting', 'cancelledAt', 'allCancelled', 'localOnly', 'travelers', 'setting', 'mixed', 'removedTravelers', 'oneTrip', 'createdAt', 'updatedAt'])
+      return trip.keys().hasOnly(['id', 'title', 'start', 'end', 'liveStart', 'liveEnd', 'ownerUid', 'sharedWith', 'deleting', 'cancelledAt', 'allCancelled', 'localOnly', 'travelers', 'setting', 'mixed', 'removedTravelers', 'oneTrip', 'bothTaken', 'createdAt', 'updatedAt'])
         && (!('deleting' in trip) || trip.deleting is bool)
         // What the list's filters need of its bookings (listFilters.ts).
         && (!('allCancelled' in trip) || trip.allCancelled is bool)
@@ -143,6 +143,8 @@ service cloud.firestore {
         // word that it is one all the same.
         && (!('mixed' in trip) || trip.mixed is bool)
         && (!('oneTrip' in trip) || trip.oneTrip is bool)
+        // Flights that look booked twice the owner said were both taken.
+        && (!('bothTaken' in trip) || (trip.bothTaken is list && trip.bothTaken.size() <= 50))
         // Names the owner took off the trip (Travelers…); a sharee may not.
         && (!('removedTravelers' in trip) || (trip.removedTravelers is list && trip.removedTravelers.size() <= 100))
         // What kind of place it goes to, for its picture (tripSetting).

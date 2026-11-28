@@ -52,6 +52,7 @@ export * from "./listFilters";
 export * from "./mixedTrip";
 export * from "./travelers";
 export * from "./journeyGap";
+export * from "./duplicateFlights";
 export * from "./directions";
 export * from "./landmarks";
 export * from "./words";

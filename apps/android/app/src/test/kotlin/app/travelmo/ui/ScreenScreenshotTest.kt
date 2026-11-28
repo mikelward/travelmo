@@ -509,6 +509,26 @@ class ScreenScreenshotTest {
     }
 
     @Test
+    fun trip_detail_duplicate_flight() = tripDuplicateFlight("trip_detail_duplicate_flight", dark = false)
+
+    @Test
+    fun trip_detail_duplicate_flight_dark() = tripDuplicateFlight("trip_detail_duplicate_flight_dark", dark = true)
+
+    // One flight booked on two days: the notice, with Mark cancelled for each and Both were taken.
+    private fun tripDuplicateFlight(name: String, dark: Boolean) {
+        val taken = Segment(
+            "l-taken", "liverpool", SegmentType.FLIGHT, "XX 10 LGW to DXB", "2026-12-08T20:25:00+00:00", "2026-12-09T07:20:00+04:00",
+            origin = Place("Gatwick", code = "LGW"), destination = Place("Dubai", code = "DXB"),
+        )
+        val old = taken.copy(id = "l-old", start = "2026-12-10T21:45:00+00:00", end = "2026-12-11T07:35:00+04:00")
+        val store = FakeTripStore(segments = fixtureSegments + ("liverpool" to fixtureSegments.getValue("liverpool") + taken + old))
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) }, tripActions = FakeTripActions())
+        capture(name, dark = dark) {
+            TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
+        }
+    }
+
+    @Test
     fun trip_detail_travelers() = tripTravelers("trip_detail_travelers", dark = false)
 
     @Test
