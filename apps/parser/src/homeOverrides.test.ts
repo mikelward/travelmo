@@ -2,7 +2,7 @@ import { paths, type ExtractedSegment } from "@travelmo/core";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { describe, expect, it, vi } from "vitest";
-import { loadHomeOverrides } from "./homeOverrides";
+import { loadHomeOverrides, loadNotHome } from "./homeOverrides";
 import { fileBooking, type ImportDeps } from "./importer";
 import { memoryStore, type Memory } from "./testStore";
 
@@ -35,6 +35,21 @@ describe("loadHomeOverrides", () => {
     const log = vi.fn();
     expect(await loadHomeOverrides(db, "home-u3", log)).toEqual([]);
     expect(log).toHaveBeenCalledWith("home_overrides_malformed", expect.objectContaining({ uid: "home-u3" }));
+  });
+});
+
+describe("loadNotHome", () => {
+  it("reads the long stays the user said were not home", async () => {
+    await db.doc(paths.user("not-home-u1")).set({ notHome: [{ city: "London", country: "GB", from: "2022-02-13" }] });
+    expect(await loadNotHome(db, "not-home-u1", () => {})).toEqual([{ city: "London", country: "GB", from: "2022-02-13" }]);
+    expect(await loadNotHome(db, "not-home-nobody", () => {})).toEqual([]);
+  });
+
+  it("logs and ignores a list that does not parse", async () => {
+    await db.doc(paths.user("not-home-u2")).set({ notHome: [{ city: "London", from: "soon" }] });
+    const log = vi.fn();
+    expect(await loadNotHome(db, "not-home-u2", log)).toEqual([]);
+    expect(log).toHaveBeenCalledWith("not_home_malformed", expect.objectContaining({ uid: "not-home-u2" }));
   });
 });
 

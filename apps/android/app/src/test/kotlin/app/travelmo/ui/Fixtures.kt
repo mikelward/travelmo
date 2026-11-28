@@ -385,6 +385,9 @@ class FakeTripStore(
     override suspend fun setHomeAirports(uid: String, chosen: List<app.travelmo.core.ChosenHomeAirports>) {
         rides.value = rides.value.copy(homeAirports = chosen)
     }
+    override suspend fun setNotHome(uid: String, notHome: List<app.travelmo.core.NotHomeStay>) {
+        rides.value = rides.value.copy(notHome = notHome)
+    }
     override suspend fun addRideCompany(uid: String, company: RideCompany) {
         rides.value = rides.value.copy(companies = withRideCompany(rides.value.companies, company))
     }

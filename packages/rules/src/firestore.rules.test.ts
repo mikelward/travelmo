@@ -375,6 +375,11 @@ describe("users", () => {
     await assertSucceeds(setDoc(doc(as(owner), paths.user(owner.uid)), { homeAirports }, { merge: true }));
     await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { homeAirports: "SFO" }, { merge: true }));
     await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { homeAirports: Array.from({ length: 51 }, () => homeAirports[0]) }, { merge: true }));
+    const notHome = [{ city: "London", country: "GB", from: "2022-02-13" }];
+    await assertSucceeds(setDoc(doc(as(owner), paths.user(owner.uid)), { notHome }, { merge: true }));
+    await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { notHome: "London" }, { merge: true }));
+    await assertFails(setDoc(doc(as(owner), paths.user(owner.uid)), { notHome: Array.from({ length: 51 }, () => notHome[0]) }, { merge: true }));
+    await assertFails(setDoc(doc(as(partner), paths.user(owner.uid)), { notHome }, { merge: true }));
     await assertFails(setDoc(doc(as(partner), paths.user(owner.uid)), { homes }, { merge: true }));
     await assertFails(getDoc(doc(as(partner), paths.user(owner.uid))));
   });

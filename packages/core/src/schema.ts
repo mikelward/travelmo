@@ -434,6 +434,15 @@ export const HomeCorrection = z.object({
 });
 export type HomeCorrection = z.infer<typeof HomeCorrection>;
 
+// A long stay the person said was not home (Profile, Not home): a month's
+// holiday, say. Known by its town and the day it began (longStays).
+export const NotHomeStay = z.object({
+  city: z.string().trim().min(1).max(maxHomeCityLength),
+  country: z.string().length(2).optional(),
+  from: isoDate,
+});
+export type NotHomeStay = z.infer<typeof NotHomeStay>;
+
 // The airports and stations a person chose for a home (Profile), by its
 // town: in place of those worked out from their round trips
 // (withHomeAirports), for home as worked out or as corrected alike. At most
@@ -547,6 +556,7 @@ export const UserProfile = z.object({
   forward: ForwardAddress.optional(),
   homes: z.array(HomeCorrection).max(maxHomeCorrections).optional(),
   homeAirports: z.array(ChosenHomeAirports).max(maxHomeCorrections).optional(),
+  notHome: z.array(NotHomeStay).max(maxHomeCorrections).optional(),
   // An entry that does not parse (a link that is not https://) is left out,
   // not the whole profile.
   rideCompanies: z

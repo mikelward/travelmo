@@ -11,12 +11,19 @@ import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.travelmo.core.ChosenHomeAirports
 import app.travelmo.core.HomeCorrection
+import app.travelmo.core.NotHomeStay
+import app.travelmo.core.Place
+import app.travelmo.core.Segment
+import app.travelmo.core.SegmentType
+import app.travelmo.core.Trip
 import app.travelmo.data.RideSettings
 import app.travelmo.ui.theme.TravelmoTheme
 import io.kotest.matchers.shouldBe
@@ -96,5 +103,41 @@ class HomeCorrectionsTest {
         composeRule.waitForIdle()
         store.rides.value.homeAirports shouldBe listOf(ChosenHomeAirports("London", "GB", listOf("LHR", "LGW")))
         item("London airports: LHR, LGW")
+    }
+
+    @Test
+    fun `lists a month of stays under home and says one was not home`() {
+        val flat = { id: String, start: String, end: String ->
+            Segment(id, "winter", SegmentType.LODGING, "Example Mews Flat", "${start}T15:00:00+00:00", end = "${end}T11:00:00+00:00", destination = Place("Example Mews Flat", city = "London", country = "GB"))
+        }
+        val store = FakeTripStore(
+            trips = listOf(Trip("winter", "London", "2022-02-13", "2022-03-20", OWNER)),
+            segments = mapOf("winter" to listOf(flat("f1", "2022-02-13", "2022-02-27"), flat("f2", "2022-02-27", "2022-03-20"))),
+        )
+        val actions = FakeTripActions()
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, tripActions = actions)
+        composeRule.setContent { TravelmoTheme { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = {}) } }
+        item("London, 13 Feb – 20 Mar 2022 · from your stays")
+        item("Not home").performClick()
+        composeRule.waitForIdle()
+        store.rides.value.notHome shouldBe listOf(NotHomeStay("London", "GB", "2022-02-13"))
+        actions.calls shouldBe listOf("regroup")
+        composeRule.onAllNodesWithText("Not home").assertCountEquals(0)
+    }
+
+    @Test
+    fun `says so when the trips couldn't be regrouped after Not home`() {
+        val flat = { id: String, start: String, end: String ->
+            Segment(id, "winter", SegmentType.LODGING, "Example Mews Flat", "${start}T15:00:00+00:00", end = "${end}T11:00:00+00:00", destination = Place("Example Mews Flat", city = "London", country = "GB"))
+        }
+        val store = FakeTripStore(
+            trips = listOf(Trip("winter", "London", "2022-02-13", "2022-03-20", OWNER)),
+            segments = mapOf("winter" to listOf(flat("f1", "2022-02-13", "2022-02-27"), flat("f2", "2022-02-27", "2022-03-20"))),
+        )
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, tripActions = FakeTripActions(failure = "Unavailable"))
+        composeRule.setContent { TravelmoTheme { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = {}) } }
+        item("Not home").performClick()
+        composeRule.waitForIdle()
+        item(NOT_HOME_REGROUP_FAILED)
     }
 }

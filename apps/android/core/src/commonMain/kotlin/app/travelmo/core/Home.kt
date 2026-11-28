@@ -4,6 +4,7 @@ import kotlin.math.abs
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
+import kotlinx.datetime.plus
 
 // Mirrors packages/core/src/home.ts.
 
@@ -20,6 +21,10 @@ data class HomePeriod(
     val until: String? = null,
     /** The airports and stations travelled from while living here ([withHomeAirports]): a journey back into one is a journey home. */
     val airports: List<Place> = emptyList(),
+    /** A long stay ([longStays]) rather than a home worked out from journeys or set on Profile. */
+    val stay: Boolean = false,
+    /** That stay's own first day, kept when another long stay cuts into it, as a [NotHomeStay] knows it. */
+    val stayFrom: String? = null,
 )
 
 private data class Town(val city: String, val country: String?, val lat: Double? = null, val lon: Double? = null)
@@ -251,12 +256,91 @@ fun withHomeAirports(periods: List<HomePeriod>, segments: List<Segment>): List<H
     return attachHomeAirports(periods, trips, homeBasesFrom(trips))
 }
 
-/** Effective home periods (corrections when present, else inferred) with worked-out and chosen airports, computing round trips once. */
-fun effectiveHomesWithAirports(segments: List<Segment>, corrections: List<HomeCorrection>, chosen: List<ChosenHomeAirports> = emptyList()): List<HomePeriod> {
+/** Effective home periods (corrections when present, else inferred) with long stays and worked-out and chosen airports, computing round trips once. */
+fun effectiveHomesWithAirports(
+    segments: List<Segment>,
+    corrections: List<HomeCorrection>,
+    chosen: List<ChosenHomeAirports> = emptyList(),
+    notHome: List<NotHomeStay> = emptyList(),
+): List<HomePeriod> {
     val trips = roundTrips(segments)
     val bases = homeBasesFrom(trips)
     val basePeriods = if (corrections.isEmpty()) bases.map { it.first } else homeCorrections(corrections)
-    return withChosenAirports(attachHomeAirports(basePeriods, trips, bases), chosen)
+    return withChosenAirports(withLongStays(attachHomeAirports(basePeriods, trips, bases), segments, notHome), chosen)
+}
+
+/** How many nights back to back in one town count as living there. */
+const val LONG_STAY_NIGHTS = 28
+
+private fun dayAfter(date: String) = LocalDate.parse(date).plus(DatePeriod(days = 1)).toString()
+private fun dayBefore(date: String) = LocalDate.parse(date).minus(DatePeriod(days = 1)).toString()
+
+/**
+ * The stays a person lived in rather than visited: stays in one town back to back (one checking in by the day after
+ * the last checks out, whatever is booked elsewhere meanwhile) for [LONG_STAY_NIGHTS] or more, a run each, from the
+ * first check-in to the last check-out. Cancelled stays don't count.
+ */
+fun longStays(segments: List<Segment>): List<HomePeriod> {
+    val stays = segments
+        .filter { it.type == SegmentType.LODGING && !it.isCancelled && it.end != null && it.destination?.city != null }
+        .sortedWith { a, b -> compareInstants(a.start, b.start) }
+    val runs = mutableListOf<HomePeriod>()
+    for (stay in stays) {
+        val city = stay.destination!!.city!!
+        val from = localDate(stay.start)
+        val until = localDate(stay.end!!)
+        val country = stay.destination.country?.let(::countryCodeOf)
+        // The latest run in this town: a stay elsewhere in between (a week away while the flat is still booked) doesn't end it.
+        val i = runs.indexOfLast { sameCity(city, it.city) && (country == null || it.country == null || country == it.country) }
+        val last = runs.getOrNull(i)
+        if (last != null && from <= dayAfter(last.until!!)) {
+            if (until > last.until) runs[i] = last.copy(until = until)
+            continue
+        }
+        runs += HomePeriod(city, country, from = from, until = until, stay = true)
+    }
+    return runs.filter { daysBetween(it.from!!, it.until!!) >= LONG_STAY_NIGHTS }
+}
+
+/** A long stay said not to be home on Profile (Not home), by its town and first day, as schema.ts's NotHomeStay. */
+data class NotHomeStay(val city: String, val country: String? = null, val from: String)
+
+/**
+ * Home with each long stay ([longStays]) as home for its days, but those said not to be ([notHome]): a month in a
+ * rented flat is living there, so a trip from it starts there and one back to it ends.
+ */
+fun withLongStays(periods: List<HomePeriod>, segments: List<Segment>, notHome: List<NotHomeStay> = emptyList()): List<HomePeriod> {
+    var out = periods
+    for (found in longStays(segments)) {
+        val from = found.from!!
+        val until = found.until!!
+        if (notHome.any { it.from == from && sameCity(it.city, found.city) && (it.country == null || found.country == null || it.country == found.country) }) continue
+        // A long stay in the town already home there keeps that home's airports.
+        val covering = out.find { (it.from == null || it.from <= from) && (it.until == null || from <= it.until) }
+        val stay = if (covering != null && covering.airports.isNotEmpty() && sameCity(covering.city, found.city)) found.copy(airports = covering.airports) else found
+        out = out.flatMap { p ->
+            if ((p.until != null && p.until < from) || (p.from != null && p.from > until)) return@flatMap listOf(p)
+            val before = if (p.from == null || p.from < from) listOf(p.copy(until = dayBefore(from))) else emptyList()
+            val after = if (p.until == null || p.until > until) listOf(p.copy(from = dayAfter(until))) else emptyList()
+            before + after
+        } + stay.copy(stayFrom = from)
+    }
+    return out.sortedBy { it.from ?: "" }
+}
+
+/** A long stay as Profile lists it: "London, 13 Feb – 20 Mar 2022". */
+fun longStayText(period: HomePeriod): String =
+    if (period.from != null && period.until != null) "${period.city}, ${formatDateRange(period.from, period.until)}" else period.city
+
+// Home over time with the long stays taken out and what they split joined.
+private fun withoutStays(periods: List<HomePeriod>): List<HomePeriod> {
+    val out = mutableListOf<HomePeriod>()
+    for (p in periods) {
+        if (p.stay) continue
+        val last = out.lastOrNull()
+        if (last != null && sameCity(last.city, p.city) && last.country == p.country) out[out.lastIndex] = last.copy(until = p.until) else out += p
+    }
+    return out
 }
 
 /** The airports and stations chosen for a home on Profile, by its town, as schema.ts's ChosenHomeAirports. */
@@ -381,8 +465,11 @@ fun effectiveHomes(inferred: List<HomePeriod>, corrections: List<HomeCorrection>
 private val months = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 private fun monthYear(date: String) = "${months[date.substring(5, 7).toInt() - 1]} ${date.take(4)}"
 
-/** Home over time in a line, newest first: "London since Mar 2021 · Boston 2018–2021"; empty when unknown. */
-fun describeHomes(periods: List<HomePeriod>): String = periods.reversed().joinToString(" · ") { p ->
+/**
+ * Home over time in a line, newest first: "London since Mar 2021 · Boston 2018–2021"; empty when unknown. Long stays
+ * are left to their own rows ([longStayText]), the home they cut into joined up again.
+ */
+fun describeHomes(periods: List<HomePeriod>): String = withoutStays(periods).reversed().joinToString(" · ") { p ->
     val from = p.from
     val until = p.until
     when {

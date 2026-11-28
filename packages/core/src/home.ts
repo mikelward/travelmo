@@ -3,9 +3,9 @@ import { foldCity } from "./cityFold";
 import { wordsOf } from "./words";
 import cityNamesTable from "./cityNames.json";
 import { countryCodeOf, isCountryCode } from "./countries";
-import { formatDate } from "./format";
+import { formatDate, formatDateRange } from "./format";
 import { compareInstants } from "./instant";
-import { HomeAirportCode, HomeCorrection, maxHomeAirports, maxHomeCityLength, type ChosenHomeAirports, type ExtractedSegment, type Place, type SegmentType, type Trip } from "./schema";
+import { HomeAirportCode, HomeCorrection, maxHomeAirports, maxHomeCityLength, type ChosenHomeAirports, type ExtractedSegment, type NotHomeStay, type Place, type SegmentType, type Trip } from "./schema";
 import { daysBetween, findTripForRange, isCancelled, isUntimed, liveSegments, segmentDateRange } from "./trips";
 
 // Where someone lives, over time. Nobody types it in: it is worked out from
@@ -25,6 +25,9 @@ export type HomePeriod = {
   // Worked out from a long stay (longStays), not from where trips start:
   // that stay's trip takes no travel by its dates, nor joins any.
   stay?: boolean;
+  // That stay's own first day, kept when another long stay cuts into it, as
+  // a stay said not to be home is known by it (NotHomeStay).
+  stayFrom?: string;
 };
 
 type Town = { city: string; country?: string; lat?: number; lon?: number };
@@ -290,13 +293,16 @@ export function homesWithAirports(
   segments: readonly Booking[],
   corrections: readonly HomePeriod[],
   chosen: readonly ChosenHomeAirports[] = [],
+  notHome: readonly NotHomeStay[] = [],
 ): { periods: HomePeriod[]; overrides: HomePeriod[] } {
   const trips = roundTrips(segments);
   const bases = homeBasesFrom(trips);
+  // Long stays are home over corrections too, as Profile shows them, save
+  // those the person said were not. Chosen airports last, so a long stay
+  // in a home town gets them too.
   return {
-    // Chosen airports last, so a long stay in a home town gets them too.
-    periods: withChosenAirports(withLongStays(attachHomeAirports(periodsOf(bases), trips, bases), segments), chosen),
-    overrides: withChosenAirports(attachHomeAirports(corrections, trips, bases), chosen),
+    periods: withChosenAirports(withLongStays(attachHomeAirports(periodsOf(bases), trips, bases), segments, notHome), chosen),
+    overrides: corrections.length > 0 ? withChosenAirports(withLongStays(attachHomeAirports(corrections, trips, bases), segments, notHome), chosen) : [],
   };
 }
 
@@ -337,13 +343,14 @@ export function longStays(segments: readonly Booking[]): HomePeriod[] {
   return runs.filter((r) => daysBetween(r.from, r.until) >= longStayNights).map((r) => ({ ...r, stay: true }));
 }
 
-// Worked-out home with each long stay (longStays) as home for its days: a
-// month in a rented flat is living there, so a trip from it starts there
-// and one back to it ends, however little else says where home was.
-// Only the worked-out timeline: the person's own corrections stand as made.
-export function withLongStays(periods: readonly HomePeriod[], segments: readonly Booking[]): HomePeriod[] {
+// Home with each long stay (longStays) as home for its days, but those the
+// person said were not (`notHome`, by town and first day): a month in a
+// rented flat is living there, so a trip from it starts there and one back
+// to it ends, however little else says where home was.
+export function withLongStays(periods: readonly HomePeriod[], segments: readonly Booking[], notHome: readonly NotHomeStay[] = []): HomePeriod[] {
   let out: HomePeriod[] = periods.map((p) => ({ ...p }));
   for (const found of longStays(segments)) {
+    if (notHome.some((n) => n.from === found.from && sameCity(n.city, found.city) && (!n.country || !found.country || n.country === found.country))) continue;
     // A long stay in the town already home there keeps that home's airports.
     const covering = out.find((p) => (!p.from || p.from <= found.from!) && (!p.until || found.from! <= p.until));
     const stay = covering?.airports && sameCity(covering.city, found.city) ? { ...found, airports: covering.airports } : found;
@@ -353,7 +360,7 @@ export function withLongStays(periods: readonly HomePeriod[], segments: readonly
       const after = !p.until || p.until > stay.until! ? [{ ...p, from: dayAfter(stay.until!) }] : [];
       return [...before, ...after];
     });
-    out.push(stay);
+    out.push({ ...stay, stayFrom: stay.from! });
   }
   return out.sort((a, b) => (a.from ?? "").localeCompare(b.from ?? ""));
 }
@@ -364,11 +371,17 @@ export function effectiveHomesWithAirports(
   segments: readonly Booking[],
   corrections: readonly HomeCorrection[],
   chosen: readonly ChosenHomeAirports[] = [],
+  notHome: readonly NotHomeStay[] = [],
 ): HomePeriod[] {
   const trips = roundTrips(segments);
   const bases = homeBasesFrom(trips);
   const basePeriods = corrections.length > 0 ? homeCorrections(corrections) : periodsOf(bases);
-  return withChosenAirports(attachHomeAirports(basePeriods, trips, bases), chosen);
+  return withChosenAirports(withLongStays(attachHomeAirports(basePeriods, trips, bases), segments, notHome), chosen);
+}
+
+// A long stay as Profile lists it: "London, 13 Feb – 20 Mar 2022".
+export function longStayText(period: Pick<HomePeriod, "city" | "from" | "until">): string {
+  return period.from && period.until ? `${period.city}, ${formatDateRange(period.from, period.until)}` : period.city;
 }
 
 // One home town, as Profile lists its airports and as its choice is stored:
@@ -1049,9 +1062,10 @@ const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 const monthYear = (date: string) => `${months[Number(date.slice(5, 7)) - 1]} ${date.slice(0, 4)}`;
 
 // Home over time in a line, newest first: "London since Mar 2021 · Boston
-// 2018–2021". Empty when nothing is known.
+// 2018–2021". Empty when nothing is known. Long stays are left to their own
+// rows (longStayText), the home they cut into joined up again.
 export function describeHomes(periods: readonly HomePeriod[]): string {
-  return [...periods]
+  return withoutStays(periods)
     .reverse()
     .map((p) => {
       if (!p.from && !p.until) return p.city;
@@ -1061,6 +1075,20 @@ export function describeHomes(periods: readonly HomePeriod[]): string {
       return `${p.city} ${a === b ? a : `${a}–${b}`}`;
     })
     .join(" · ");
+}
+
+// Home over time with the long stays taken out and what they split joined.
+function withoutStays(periods: readonly HomePeriod[]): HomePeriod[] {
+  const out: HomePeriod[] = [];
+  for (const p of periods) {
+    if (p.stay) continue;
+    const last = out[out.length - 1];
+    if (last && sameCity(last.city, p.city) && last.country === p.country) {
+      const { until: _until, ...joined } = last;
+      out[out.length - 1] = p.until ? { ...joined, until: p.until } : joined;
+    } else out.push(p);
+  }
+  return out;
 }
 
 // The Profile's home line: "Home: London since Mar 2021 · Boston 2018–2021",

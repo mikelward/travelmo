@@ -7,7 +7,8 @@ import { useMemo, useState } from "react";
 import { Dialog } from "@/components/BookingMenu";
 import { SignInGate } from "@/components/SignInGate";
 import { useAuth } from "@/lib/auth";
-import { airportCodes, homeTownKey, correctionText, failedReadsText, homeLine, logged, parseAirportCodes, parseCorrection, saveCorrections, saveHomeAirports, useHomes, type Homes } from "@/lib/home";
+import { airportCodes, homeTownKey, correctionText, failedReadsText, homeLine, logged, longStayText, parseAirportCodes, parseCorrection, saveCorrections, saveHomeAirports, saveNotHome, useHomes, type Homes } from "@/lib/home";
+import { api } from "@/lib/api";
 import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
 import { mergePeople, sayWhoIs, setMe, usePeople } from "@/lib/people";
@@ -428,6 +429,7 @@ function HomeSection({ user }: { user: User }) {
               ))}
             </ul>
           )}
+          {homes && homes.failed === 0 && <LongStays user={user} homes={homes} />}
           {homes && homes.failed === 0 && <HomeAirports user={user} homes={homes} />}
           <form
             className="mt-3 flex flex-wrap items-center gap-2"
@@ -470,6 +472,54 @@ function HomeSection({ user }: { user: User }) {
   );
 }
 
+// Four weeks or more staying in one town count as living there: listed under
+// home, each with Not home for a holiday, which regroups it as a trip.
+function LongStays({ user, homes }: { user: User; homes: Homes }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const stays = homes.periods.filter((p) => p.stay && (p.stayFrom ?? p.from));
+  // Kept once the last row has gone, so a failed regroup still says so.
+  if (stays.length === 0 && !error) return null;
+  const notHome = async (stay: (typeof stays)[number]) => {
+    setBusy(true);
+    setError(undefined);
+    // Known by its own first day, though another stay cut into it.
+    const entry = { city: stay.city, ...(stay.country ? { country: stay.country } : {}), from: (stay.stayFrom ?? stay.from)! };
+    try {
+      await logged("marking a stay not home", () => saveNotHome(user.uid, [...homes.notHome.filter((n) => n.from !== entry.from || n.city !== entry.city), entry]));
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+      return;
+    }
+    try {
+      await api.regroupTrips(user);
+    } catch (e) {
+      console.error("Regrouping after a stay said not home failed", e);
+      setError("Saved, but your trips weren't regrouped. Use Regroup trips in Settings.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800" data-testid="long-stays">
+        {[...stays].reverse().map((stay) => (
+          <li key={`${stay.city} ${stay.from}`} className="flex items-center justify-between gap-3 py-2">
+            <span>
+              {longStayText(stay)} <span className="text-zinc-600 dark:text-zinc-400">· from your stays</span>
+            </span>
+            <button type="button" disabled={busy} className={buttonClass} onClick={() => void notHome(stay)}>
+              Not home
+            </button>
+          </li>
+        ))}
+      </ul>
+      {error && <p className="mt-3 text-danger">{error}</p>}
+    </>
+  );
+}
+
 // Each home's airports and stations: a journey back into one ends a trip.
 // Worked out from the trips that leave from them, unless chosen here.
 function HomeAirports({ user, homes }: { user: User; homes: Homes }) {
@@ -479,7 +529,8 @@ function HomeAirports({ user, homes }: { user: User; homes: Homes }) {
   const [error, setError] = useState<string>();
   // One row per home town, its latest period's airports.
   const towns = new Map<string, (typeof homes.periods)[number]>();
-  for (const period of homes.periods) towns.set(homeTownKey(period.city, period.country), period);
+  // A long stay takes the airports of the home it is in, else those found.
+  for (const period of homes.periods) if (!period.stay) towns.set(homeTownKey(period.city, period.country), period);
   if (towns.size === 0) return null;
   const save = async (city: string, country: string | undefined) => {
     const parsed = parseAirportCodes(codes);

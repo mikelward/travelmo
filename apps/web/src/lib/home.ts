@@ -1,8 +1,8 @@
 "use client";
 
-import { effectiveHomesWithAirports, maxHomeCorrections, paths, watchedTrip, type ChosenHomeAirports, type HomeCorrection, type HomePeriod, type PersonDoc, type Segment, type Trip, type UserProfile } from "@travelmo/core";
+import { effectiveHomesWithAirports, maxHomeCorrections, paths, watchedTrip, type ChosenHomeAirports, type HomeCorrection, type HomePeriod, type NotHomeStay, type PersonDoc, type Segment, type Trip, type UserProfile } from "@travelmo/core";
 
-export { airportCodes, correctionText, homeLine, homeTownKey, parseAirportCodes, parseCorrection } from "@travelmo/core";
+export { airportCodes, correctionText, homeLine, longStayText, homeTownKey, parseAirportCodes, parseCorrection } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { useMemo } from "react";
@@ -15,17 +15,19 @@ import { useAllSegments, useProfile, useTripsState } from "./trips";
 // out: with any, the timeline may be missing what those trips would say.
 // Each period carries its airports: those chosen for it, else those its
 // round trips leave from (withHomeAirports).
-export type Homes = { periods: HomePeriod[]; corrections: HomeCorrection[]; chosen: ChosenHomeAirports[]; failed: number };
+// Long stays (stay) count as home, but those said not to be (notHome).
+export type Homes = { periods: HomePeriod[]; corrections: HomeCorrection[]; chosen: ChosenHomeAirports[]; notHome: NotHomeStay[]; failed: number };
 
 export function deriveHomes(
   byTrip: Record<string, Segment[]>,
   failed: readonly string[],
   corrections: readonly HomeCorrection[],
   chosen: readonly ChosenHomeAirports[] = [],
+  notHome: readonly NotHomeStay[] = [],
 ): Homes {
   const segments = Object.values(byTrip).flat();
-  const periods = effectiveHomesWithAirports(segments, corrections, chosen);
-  return { periods, corrections: [...corrections], chosen: [...chosen], failed: failed.length };
+  const periods = effectiveHomesWithAirports(segments, corrections, chosen, notHome);
+  return { periods, corrections: [...corrections], chosen: [...chosen], notHome: [...notHome], failed: failed.length };
 }
 
 // The bookings home is worked out from: those of trips the user owns and
@@ -67,11 +69,11 @@ export function homesFrom(
   all: AllSegments,
   uid: string,
   people: readonly PersonDoc[],
-  profile: Pick<UserProfile, "homes" | "homeAirports">,
+  profile: Pick<UserProfile, "homes" | "homeAirports" | "notHome">,
 ): Homes | undefined {
   if (all.unconfirmed.length > 0) return undefined;
-  if (all.failed.length > 0) return { periods: [], corrections: [...(profile.homes ?? [])], chosen: [...(profile.homeAirports ?? [])], failed: all.failed.length };
-  return deriveHomes(ownTripSegments(trips, all.byTrip, uid, people), all.failed, profile.homes ?? [], profile.homeAirports ?? []);
+  if (all.failed.length > 0) return { periods: [], corrections: [...(profile.homes ?? [])], chosen: [...(profile.homeAirports ?? [])], notHome: [...(profile.notHome ?? [])], failed: all.failed.length };
+  return deriveHomes(ownTripSegments(trips, all.byTrip, uid, people), all.failed, profile.homes ?? [], profile.homeAirports ?? [], profile.notHome ?? []);
 }
 
 // Runs a change to the corrections, logging a failure by what it was doing
@@ -94,4 +96,10 @@ export async function saveCorrections(uid: string, corrections: readonly HomeCor
 export async function saveHomeAirports(uid: string, chosen: readonly ChosenHomeAirports[]): Promise<void> {
   if (chosen.length > maxHomeCorrections) throw new Error(`At most ${maxHomeCorrections} homes.`);
   await setDoc(doc(firestore(), paths.user(uid)), { homeAirports: chosen }, { merge: true });
+}
+
+// The long stays said not to be home (Profile, Not home).
+export async function saveNotHome(uid: string, notHome: readonly NotHomeStay[]): Promise<void> {
+  if (notHome.length > maxHomeCorrections) throw new Error(`At most ${maxHomeCorrections}.`);
+  await setDoc(doc(firestore(), paths.user(uid)), { notHome }, { merge: true });
 }

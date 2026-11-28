@@ -186,6 +186,8 @@
     <string name="home_not_known">Not known yet.</string>
     <string name="home_worked_out">Worked out from your trips.</string>
     <string name="remove_home">Remove %1$s</string>
+    <string name="from_your_stays">from your stays</string>
+    <string name="not_home">Not home</string>
     <string name="city">City</string>
     <string name="country">Country</string>
     <string name="home_pick_from">From…</string>

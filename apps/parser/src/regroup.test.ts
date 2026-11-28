@@ -813,3 +813,29 @@ describe("regroupTrips with home's airports", () => {
     expect(summary(store).map((t) => t.segments)).toEqual([["b-back", "b-out"], ["s-out"]]);
   });
 });
+
+// Invented flats and a week away, shaped like a winter in London.
+describe("regrouping with a long stay", () => {
+  const flat = (id: string, source: string, start: string, end: string, city = "London", country = "GB"): Segment =>
+    segment("all", id, source, { type: "lodging", title: `${city} flat`, start: `${start}T15:00:00+00:00`, end: `${end}T11:00:00+00:00`, destination: { name: `${city} flat`, city, country } });
+
+  const winter = (store: Memory) => {
+    store.trips.set("all", trip("all", "London", "2022-02-13", "2022-03-20"));
+    for (const s of [flat("f1", "m1", "2022-02-13", "2022-02-27"), flat("f2", "m2", "2022-02-27", "2022-03-20"), flat("villa", "m3", "2022-03-08", "2022-03-15", "Albufeira", "PT")])
+      store.segments.set(s.id, s);
+  };
+
+  it("keeps a week away out of a month lived in", async () => {
+    const store = memoryStore();
+    winter(store);
+    await regroupTrips("u1", deps(store));
+    expect(summary(store).map((t) => t.segments)).toEqual([["f1", "f2"], ["villa"]]);
+  });
+
+  it("treats a stay said not to be home as an ordinary trip", async () => {
+    const store = memoryStore();
+    winter(store);
+    await regroupTrips("u1", { ...deps(store), notHome: async () => [{ city: "London", country: "GB", from: "2022-02-13" }] });
+    expect(summary(store).map((t) => t.segments)).toEqual([["f1", "f2", "villa"]]);
+  });
+});

@@ -21,6 +21,7 @@ import app.travelmo.core.HomeCorrection
 import app.travelmo.core.parseAirportCodes
 import app.travelmo.core.ParsedAirports
 import app.travelmo.core.ChosenHomeAirports
+import app.travelmo.core.NotHomeStay
 import app.travelmo.core.DEFAULT_LEAD
 import app.travelmo.core.Reminder
 import app.travelmo.core.isReminderId
@@ -133,6 +134,9 @@ interface TripStore {
 
     /** Replaces the airports chosen for each home (`homeAirports` on their user document), as the web's Profile saves them. */
     suspend fun setHomeAirports(uid: String, chosen: List<ChosenHomeAirports>)
+
+    /** Replaces the long stays said not to be home (`notHome` on their user document), as the web's Profile saves them. */
+    suspend fun setNotHome(uid: String, notHome: List<NotHomeStay>)
 
     /** Adds one of the user's own car and ride companies to the list as stored now, as the web does. */
     suspend fun addRideCompany(uid: String, company: RideCompany)
@@ -433,6 +437,8 @@ data class RideSettings(
     val homeAirports: List<ChosenHomeAirports> = emptyList(),
     /** The trips the person said go one way (`oneWayTrips`): no "No flight back" on them. */
     val oneWayTrips: List<String> = emptyList(),
+    /** The long stays said not to be home on Profile (`notHome`). */
+    val notHome: List<NotHomeStay> = emptyList(),
 )
 
 private fun storedCompany(entry: Any?): RideCompany? {
@@ -482,7 +488,13 @@ fun rideSettingsOf(data: Map<String, Any?>?): RideSettings {
         ChosenHomeAirports(city, (map["country"] as? String)?.takeIf { it.length == 2 }, parsed.codes)
     }
     val oneWayTrips = (data?.get("oneWayTrips") as? List<*>).orEmpty().filterIsInstance<String>()
-    return RideSettings(companies, hidden, homes, homeAirports, oneWayTrips)
+    val notHome = (data?.get("notHome") as? List<*>).orEmpty().mapNotNull { entry ->
+        val map = entry as? Map<*, *> ?: return@mapNotNull null
+        val city = (map["city"] as? String)?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+        val from = (map["from"] as? String)?.takeIf { isCalendarDate(it) } ?: return@mapNotNull null
+        NotHomeStay(city, (map["country"] as? String)?.takeIf { it.length == 2 }, from)
+    }
+    return RideSettings(companies, hidden, homes, homeAirports, oneWayTrips, notHome)
 }
 
 private fun isCalendarDate(text: String): Boolean = try {

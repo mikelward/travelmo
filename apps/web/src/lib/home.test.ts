@@ -20,12 +20,26 @@ describe("deriveHomes", () => {
   const byTrip = { t: [flight("a", "2025-04-01T09:00:00+00:00", "London", "Rome"), flight("b", "2025-04-05T18:00:00+00:00", "Rome", "London")] };
 
   it("works out home from the trips read, with corrections over it", () => {
-    expect(deriveHomes(byTrip, [], [])).toEqual({ periods: [{ city: "London" }], corrections: [], chosen: [], failed: 0 });
+    expect(deriveHomes(byTrip, [], [])).toEqual({ periods: [{ city: "London" }], corrections: [], chosen: [], notHome: [], failed: 0 });
+  });
+
+  it("lists a month of stays as home, but one said not to be", () => {
+    const flat = (id: string, start: string, end: string): Segment => ({
+      ...flight(id, `${start}T15:00:00+00:00`, "London", "London"),
+      type: "lodging",
+      title: "Flat",
+      end: `${end}T11:00:00+00:00`,
+      origin: undefined,
+      destination: { name: "Flat", city: "Paris" },
+    });
+    const stays = { ...byTrip, s: [flat("f1", "2025-06-01", "2025-06-15"), flat("f2", "2025-06-15", "2025-07-01")] };
+    expect(deriveHomes(stays, [], []).periods.filter((p) => p.stay).map((p) => [p.city, p.from, p.until])).toEqual([["Paris", "2025-06-01", "2025-07-01"]]);
+    expect(deriveHomes(stays, [], [], [], [{ city: "Paris", from: "2025-06-01" }]).periods.some((p) => p.stay)).toBe(false);
   });
 
   it("counts the trips that could not be read", () => {
     expect(deriveHomes(byTrip, ["x", "y"], []).failed).toBe(2);
-    expect(deriveHomes({}, ["x"], [])).toEqual({ periods: [], corrections: [], chosen: [], failed: 1 });
+    expect(deriveHomes({}, ["x"], [])).toEqual({ periods: [], corrections: [], chosen: [], notHome: [], failed: 1 });
   });
 });
 
@@ -46,7 +60,7 @@ describe("homesFrom", () => {
 
   it("works out no home from the other trips while one couldn't be read, keeping the corrections", () => {
     expect(homesFrom([trip("t"), trip("x")], { byTrip, failed: ["x"], unconfirmed: [] }, "u1", [], { homes: corrections })).toEqual({
-      periods: [], corrections, chosen: [], failed: 1,
+      periods: [], corrections, chosen: [], notHome: [], failed: 1,
     });
   });
 

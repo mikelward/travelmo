@@ -445,4 +445,58 @@ class HomeTest {
         effectiveHomesWithAirports(segments, corrections, chosen) shouldBe
             withChosenAirports(withHomeAirports(effectiveHomes(homeTimeline(segments), corrections), segments), chosen)
     }
+
+    // Invented stays shaped like a winter spent in London flats, as home.test.ts.
+    private fun flat(id: String, start: String, end: String, city: String = "London", country: String = "GB") =
+        Segment(id, "t", SegmentType.LODGING, "Example Mews Flat", "${start}T15:00:00+00:00", end = "${end}T11:00:00+00:00", destination = Place("Example Mews Flat", city = city, country = country))
+    private val winter = listOf(flat("f1", "2022-02-13", "2022-02-27"), flat("f2", "2022-02-27", "2022-03-20"))
+
+    @Test
+    fun `counts stays back to back in one town as living there once they reach four weeks`() {
+        longStays(winter) shouldBe listOf(HomePeriod("London", "GB", from = "2022-02-13", until = "2022-03-20", stay = true))
+        longStays(winter.take(1)) shouldBe emptyList()
+        longStays(listOf(winter[0], winter[1].copy(cancelledAt = "2022-01-01T00:00:00Z"))) shouldBe emptyList()
+        val away = flat("away", "2022-02-20", "2022-02-25", city = "Albufeira", country = "PT")
+        longStays(listOf(winter[0], away, winter[1])).map { listOf(it.city, it.from, it.until) } shouldBe listOf(listOf("London", "2022-02-13", "2022-03-20"))
+        longStays(listOf(winter[0], flat("villa", "2022-02-27", "2022-03-20", city = "Albufeira", country = "PT"))) shouldBe emptyList()
+    }
+
+    @Test
+    fun `makes a long stay home for its days but not one said not to be`() {
+        withLongStays(listOf(HomePeriod("Mountain View", "US")), winter).map { listOf(it.city, it.from, it.until) } shouldBe listOf(
+            listOf("Mountain View", null, "2022-02-12"),
+            listOf("London", "2022-02-13", "2022-03-20"),
+            listOf("Mountain View", "2022-03-21", null),
+        )
+        val lgw = Place("London Gatwick", code = "LGW", city = "Crawley", country = "GB")
+        withLongStays(listOf(HomePeriod("London", "GB", airports = listOf(lgw))), winter).first { it.stay }.airports shouldBe listOf(lgw)
+        withLongStays(listOf(HomePeriod("Mountain View", "US")), winter, listOf(NotHomeStay("London", "GB", "2022-02-13"))) shouldBe listOf(HomePeriod("Mountain View", "US"))
+        withLongStays(emptyList(), winter, listOf(NotHomeStay("London", from = "2022-02-14"))).any { it.stay } shouldBe true
+    }
+
+    @Test
+    fun `knows a stay cut into by another by its own first day`() {
+        val london = listOf(flat("l1", "2022-02-13", "2022-03-20"), flat("l2", "2022-03-20", "2022-05-20"))
+        val paris = listOf(flat("p1", "2022-03-01", "2022-03-20", city = "Paris", country = "FR"), flat("p2", "2022-03-20", "2022-04-10", city = "Paris", country = "FR"))
+        withLongStays(emptyList(), london + paris).map { listOf(it.city, it.from, it.stayFrom) } shouldBe listOf(
+            listOf("London", "2022-02-13", "2022-02-13"),
+            listOf("Paris", "2022-03-01", "2022-03-01"),
+            listOf("London", "2022-04-11", "2022-02-13"),
+        )
+        withLongStays(emptyList(), london + paris, listOf(NotHomeStay("London", from = "2022-02-13"))).map { it.city } shouldBe listOf("Paris")
+    }
+
+    @Test
+    fun `shows long stays in Profile over corrections on their own rows`() {
+        val corrections = listOf(HomeCorrection("Mountain View", "US", "2011-01-01"))
+        val shown = effectiveHomesWithAirports(winter, corrections)
+        shown.map { listOf(it.city, it.from, it.until, it.stay) } shouldBe listOf(
+            listOf("Mountain View", "2011-01-01", "2022-02-12", false),
+            listOf("London", "2022-02-13", "2022-03-20", true),
+            listOf("Mountain View", "2022-03-21", null, false),
+        )
+        effectiveHomesWithAirports(winter, corrections, notHome = listOf(NotHomeStay("London", from = "2022-02-13"))).any { it.stay } shouldBe false
+        describeHomes(shown) shouldBe "Mountain View since Jan 2011"
+        longStayText(shown[1]) shouldBe "London, 13 Feb – 20 Mar 2022"
+    }
 }
