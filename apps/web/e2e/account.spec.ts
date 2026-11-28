@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { owner, signIn } from "./helpers";
+import { openSettingsSection, owner, signIn } from "./helpers";
 import { clearData } from "./seed";
 
 const unfinished = { status: 410, body: "Deleting your account didn't finish." };
@@ -18,6 +18,7 @@ test("deleting the account asks first, then signs out and says it is gone", asyn
   });
 
   await page.goto("/settings");
+  await openSettingsSection(page, "Account & data");
   await page.getByRole("button", { name: "Delete account" }).click();
   await expect(page.getByText("Delete your account and everything in it? This cannot be undone.")).toBeVisible();
   await page.getByRole("button", { name: "Keep" }).click();
@@ -40,6 +41,7 @@ test("a failed deletion says so and keeps the user signed in", async ({ page }) 
   await page.route("http://localhost:8080/account/delete", (route) => route.fulfill({ status: 500, body: "Internal error" }));
 
   await page.goto("/settings");
+  await openSettingsSection(page, "Account & data");
   await page.getByRole("button", { name: "Delete account" }).click();
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page.getByText(/Couldn't delete your account: .*500.* Try again\./)).toBeVisible();
@@ -58,6 +60,7 @@ test("an account whose deletion didn't finish is offered to finish it", async ({
   });
 
   await page.goto("/settings");
+  await openSettingsSection(page, "Account & data");
   await page.getByRole("button", { name: "Regroup" }).click();
   await expect(page.getByRole("heading", { name: "Deleting your account didn't finish" })).toBeVisible();
   await page.getByRole("button", { name: "Finish deleting" }).click();
@@ -82,6 +85,7 @@ test("the header leads with Trips and signing out is at the foot of Settings", a
   await expect(page.getByRole("banner").getByRole("button", { name: "Sign out" })).toHaveCount(0);
 
   await page.getByRole("link", { name: "Settings" }).click();
+  await openSettingsSection(page, "Account & data");
   const signOut = page.getByRole("button", { name: "Sign out" });
   await expect(signOut).toBeVisible();
   // Below everything else on the page, Delete account included. Both are

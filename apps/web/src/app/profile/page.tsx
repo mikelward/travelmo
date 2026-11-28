@@ -5,6 +5,7 @@ import type { User } from "firebase/auth";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Dialog } from "@/components/BookingMenu";
+import { SectionHub, type HubGroup } from "@/components/SectionHub";
 import { SignInGate } from "@/components/SignInGate";
 import { useAuth } from "@/lib/auth";
 import { airportCodes, homeTownKey, correctionText, failedReadsText, homeLine, logged, longStayText, parseAirportCodes, parseCorrection, saveCorrections, saveHomeAirports, saveNotHome, useHomes, type Homes } from "@/lib/home";
@@ -931,9 +932,8 @@ function ProfilePage({ user }: { user: User }) {
     shared.length > 0 ? `${shared.length} shared with you` : undefined,
   ].filter(Boolean);
 
-  const navGroups: { heading: string; items: { id: Section; label: string; meta: string }[] }[] = [
+  const navGroups: HubGroup<Section>[] = [
     {
-      heading: "Travel wallet",
       items: [
         { id: "documents", label: "Documents", meta: profile === undefined ? "Loading…" : docsCount > 0 ? countLabel(docsCount, "document", "documents") : "None yet" },
         {
@@ -948,11 +948,6 @@ function ProfilePage({ user }: { user: User }) {
                   : countLabel(loyalty.length, "program", "programs")
                 : "None yet",
         },
-      ],
-    },
-    {
-      heading: "Trip setup & sharing",
-      items: [
         {
           id: "people",
           label: "People",
@@ -981,69 +976,36 @@ function ProfilePage({ user }: { user: User }) {
           {badge && <span className="ml-2 text-xs font-medium uppercase tracking-wide text-muted">{badge === "admin" ? "Admin" : "Invited"}</span>}
         </p>
       )}
-      <div className="md:grid md:grid-cols-[15rem_1fr] md:items-start md:gap-6">
-        <nav aria-label="Profile sections" className={selected !== null ? "hidden md:block" : "block"}>
-          <div className="space-y-6">
-            {navGroups.map((group) => (
-              <div key={group.heading}>
-                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">{group.heading}</p>
-                <ul className="divide-y divide-zinc-200 rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-                  {group.items.map((item) => {
-                    const active = effective === item.id;
-                    return (
-                      <li key={item.id}>
-                        <button
-                          type="button"
-                          aria-current={active ? "page" : undefined}
-                          onClick={() => openSection(item.id)}
-                          className={`flex w-full items-center justify-between gap-3 px-3 py-3 text-left hover:bg-zinc-100 dark:hover:bg-zinc-900 ${
-                            active ? "md:bg-zinc-100 dark:md:bg-zinc-900" : ""
-                          }`}
-                        >
-                          <div className="min-w-0">
-                            <div>{item.label}</div>
-                            <div className="truncate text-muted">{item.meta}</div>
-                          </div>
-                          <span aria-hidden="true" className="text-muted md:hidden">
-                            ›
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </nav>
-
-        <div className={selected === null ? "hidden md:block" : "block"}>
-          {selected !== null && !viewingShared && (
-            <button type="button" onClick={() => setSelected(null)} className="mb-4 text-muted hover:underline md:hidden">
-              ← Travel profile
-            </button>
-          )}
-          {effective === "documents" && (profile === undefined ? <p className="text-muted">Loading…</p> : <DocumentsSection documents={profile?.documents ?? []} own />)}
-          {effective === "loyalty" &&
-            (profile === undefined ? (
-              <p className="text-muted">Loading…</p>
-            ) : (
-              <LoyaltySection entries={loyalty} found={profile?.foundLoyalty ?? []} ownUid={user.uid} {...(people ? { travelers: people } : {})} />
-            ))}
-          {effective === "people" && <PeopleSection user={user} people={people} imported={profile?.travelers ?? []} />}
-          {effective === "home" && <HomeSection user={user} homes={homes} />}
-          {effective === "sharing" && (
-            <SharingSection
-              user={user}
-              profile={profile}
-              shared={shared}
-              viewingShared={viewingShared}
-              onOpenShared={(uid) => setSharedUid(uid)}
-              onCloseShared={() => setSharedUid(null)}
-            />
-          )}
-        </div>
-      </div>
+      <SectionHub
+        navLabel="Profile sections"
+        backLabel="Travel profile"
+        groups={navGroups as HubGroup<Section>[]}
+        selected={selected}
+        defaultSection="documents"
+        hideBack={!!viewingShared}
+        onSelect={openSection}
+        onBack={() => setSelected(null)}
+      >
+        {effective === "documents" && (profile === undefined ? <p className="text-muted">Loading…</p> : <DocumentsSection documents={profile?.documents ?? []} own />)}
+        {effective === "loyalty" &&
+          (profile === undefined ? (
+            <p className="text-muted">Loading…</p>
+          ) : (
+            <LoyaltySection entries={loyalty} found={profile?.foundLoyalty ?? []} ownUid={user.uid} {...(people ? { travelers: people } : {})} />
+          ))}
+        {effective === "people" && <PeopleSection user={user} people={people} imported={profile?.travelers ?? []} />}
+        {effective === "home" && <HomeSection user={user} homes={homes} />}
+        {effective === "sharing" && (
+          <SharingSection
+            user={user}
+            profile={profile}
+            shared={shared}
+            viewingShared={viewingShared}
+            onOpenShared={(uid) => setSharedUid(uid)}
+            onCloseShared={() => setSharedUid(null)}
+          />
+        )}
+      </SectionHub>
     </>
   );
 }

@@ -49,7 +49,7 @@ class RefreshFailedEmailsTest {
             TravelmoTheme {
                 // Inside the theme, which provides Android's own.
                 CompositionLocalProvider(LocalAppChrome provides chrome) {
-                    SettingsScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = SignedIn(OWNER, OWNER_EMAIL), viewModel = viewModel, onBack = {}, onAddBooking = { adding += it })
+                    SettingsSectionScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = SignedIn(OWNER, OWNER_EMAIL), viewModel = viewModel, section = SettingsSection.ACCOUNT, onBack = {}, onAddBooking = { adding += it })
                 }
             }
         }

@@ -41,7 +41,7 @@ class GoogleCalendarSettingTest {
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, googleCalendarActions = actions)
         composeRule.setContent {
             TravelmoTheme {
-                SettingsScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = SignedIn(OWNER, OWNER_EMAIL), viewModel = viewModel, onBack = {})
+                SettingsSectionScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = SignedIn(OWNER, OWNER_EMAIL), viewModel = viewModel, section = SettingsSection.CALENDARS, onBack = {})
             }
         }
     }

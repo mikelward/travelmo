@@ -92,8 +92,10 @@ for (const colorScheme of ["light", "dark"] as const) {
     await expectReadable(page);
 
     await page.goto("/settings");
-    await expect(page.getByText("The feed answered 404.")).toBeVisible();
     await expect(page.getByText("Reading stopped after repeated errors", { exact: false })).toBeVisible();
+    await expectReadable(page);
+    await page.getByRole("navigation", { name: "Settings sections" }).getByRole("button", { name: /^Calendars/ }).click();
+    await expect(page.getByText("The feed answered 404.")).toBeVisible();
     await expectReadable(page);
 
     for (const [path, ready] of [

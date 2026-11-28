@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { owner, partner, signIn, signOut } from "./helpers";
+import { openSettingsSection, owner, partner, signIn, signOut } from "./helpers";
 import { clearData, readPushSubscriptions, readUser } from "./seed";
 
 test.beforeEach(async () => {
@@ -34,6 +34,7 @@ test.beforeEach(async ({ context }) => {
 test("notifications in this browser are off until asked for, keep the subscription, and go with it", async ({ page }) => {
   const ownerUid = await signIn(page, owner);
   await page.goto("/settings");
+  await openSettingsSection(page, "Reminders & rides");
   const box = page.getByRole("checkbox", { name: "Notify me in this browser" });
   await expect(box).not.toBeChecked();
   await box.check();
@@ -45,10 +46,12 @@ test("notifications in this browser are off until asked for, keep the subscripti
   await signOut(page);
   await signIn(page, partner);
   await page.goto("/settings");
+  await openSettingsSection(page, "Reminders & rides");
   await expect(page.getByRole("checkbox", { name: "Notify me in this browser" })).not.toBeChecked();
   await signOut(page);
   await signIn(page, owner);
   await page.goto("/settings");
+  await openSettingsSection(page, "Reminders & rides");
   await expect(box).toBeChecked();
   await box.uncheck();
   await expect(box).not.toBeChecked();

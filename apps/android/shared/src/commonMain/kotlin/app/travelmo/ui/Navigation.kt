@@ -57,6 +57,10 @@ data class NewBooking(val defaultDate: String) : NavKey
 @Serializable
 data class ProfileSubpage(val section: ProfileSection, val sharedUid: String? = null) : NavKey
 
+/** A section opened from the Settings hub. */
+@Serializable
+data class SettingsSubpage(val section: SettingsSection) : NavKey
+
 
 /**
  * Opens the Access page (SPEC "Access"), for an admin only: the signed-in
@@ -229,6 +233,20 @@ fun SignedInNavigation(user: SignedIn, viewModel: TripsViewModel, backStack: Nav
                         user = user,
                         viewModel = viewModel,
                         onBack = { backStack.close(Settings) },
+                        onOpenReview = { backStack.add(ImportReview) },
+                        onAddBooking = { backStack.add(NewBooking(it)) },
+                        onOpenSection = { backStack.add(SettingsSubpage(it)) },
+                    )
+                }
+            }
+            entry<SettingsSubpage> { key ->
+                CompositionLocalProvider(LocalReportScreen provides ReportScreen("Settings")) {
+                    SettingsSectionScreen(
+                        account = account,
+                        user = user,
+                        viewModel = viewModel,
+                        section = key.section,
+                        onBack = { backStack.close(key) },
                         onOpenReview = { backStack.add(ImportReview) },
                         onAddBooking = { backStack.add(NewBooking(it)) },
                     )

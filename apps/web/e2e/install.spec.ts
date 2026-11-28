@@ -54,7 +54,8 @@ test("Settings offers to install when the browser did, on any page, and opens it
     window.dispatchEvent(offer);
   });
   await page.getByRole("link", { name: "Settings" }).click();
-  await page.getByRole("button", { name: "Install" }).click();
+  await page.getByRole("navigation", { name: "Settings sections" }).getByRole("button", { name: /^App & about/ }).click();
+  await page.getByRole("button", { name: "Install", exact: true }).click();
   // Once the prompt is answered the offer is spent and the section goes.
   await expect(page.getByRole("heading", { name: "Install Travelmo" })).toHaveCount(0);
   expect(await page.evaluate(() => (window as unknown as { prompted?: boolean }).prompted)).toBe(true);

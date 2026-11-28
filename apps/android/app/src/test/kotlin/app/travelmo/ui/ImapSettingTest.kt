@@ -33,7 +33,7 @@ class ImapSettingTest {
         val viewModel = TripsViewModel(FakeTripStore(imapStatuses = mailboxes), OWNER, OWNER_EMAIL, imapActions = actions)
         composeRule.setContent {
             TravelmoTheme {
-                SettingsScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = SignedIn(OWNER, OWNER_EMAIL), viewModel = viewModel, onBack = {})
+                SettingsSectionScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = SignedIn(OWNER, OWNER_EMAIL), viewModel = viewModel, section = SettingsSection.EMAIL, onBack = {})
             }
         }
         composeRule.onNodeWithText("You can connect up to 5 mailboxes this way.", substring = true).performScrollTo()

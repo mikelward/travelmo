@@ -12,6 +12,7 @@ import { ReportDialog } from "@/components/ReportBug";
 import { SegmentForm } from "@/components/SegmentForm";
 import { addSegmentToFittingTrip } from "@/lib/edits";
 import { TripRemindersSection } from "@/components/Checklist";
+import { SectionHub, type HubGroup } from "@/components/SectionHub";
 import { SignInGate } from "@/components/SignInGate";
 import { api } from "@/lib/api";
 import { exportLinks, useCalendarExport } from "@/lib/calendarExport";
@@ -1617,46 +1618,145 @@ function SignOutSection() {
   );
 }
 
+type SettingsSection = "email" | "calendars" | "reminders" | "account" | "app";
+
+const countLabel = (n: number, singular: string, plural: string) => `${n} ${n === 1 ? singular : plural}`;
+
+// Selects the right section when returning from Gmail or Google Calendar OAuth.
+function OAuthSectionSync({ onSelect }: { onSelect: (section: SettingsSection) => void }) {
+  const params = useSearchParams();
+  const hasCalendar = params.has("calendar");
+  const hasGmail = params.has("gmail");
+  useEffect(() => {
+    if (hasCalendar) onSelect("calendars");
+    else if (hasGmail) onSelect("email");
+  }, [hasCalendar, hasGmail, onSelect]);
+  return null;
+}
+
+function SettingsHub({ user, onDeleted }: { user: User; onDeleted: () => void }) {
+  const profile = useProfile(user.uid);
+  const feeds = useFeeds(user.uid);
+  const calendarExport = useCalendarExport(user.uid);
+  const [selected, setSelected] = useState<SettingsSection | null>(null);
+
+  const gmailCount = gmailMailboxes(profile).length;
+  const imapCount = imapMailboxes(profile).length;
+  const fastmailConnected = !!profile?.fastmail;
+  const emailParts = [
+    gmailCount > 0 ? `${gmailCount} Gmail` : undefined,
+    fastmailConnected ? "Fastmail" : undefined,
+    imapCount > 0 ? `${imapCount} IMAP` : undefined,
+    profile?.forward ? "Forwarding on" : undefined,
+  ].filter(Boolean);
+
+  const feedCount = feeds?.length ?? 0;
+  const calendarParts = [
+    profile?.googleCalendar ? "Google Calendar" : undefined,
+    feedCount > 0 ? countLabel(feedCount, "feed", "feeds") : undefined,
+    calendarExport?.token ? "Export on" : undefined,
+  ].filter(Boolean);
+
+  const rideCount = profile?.rideCompanies?.length ?? 0;
+  const reminderParts = [
+    profile?.reminders?.email ? "Email on" : undefined,
+    rideCount > 0 ? countLabel(rideCount, "ride company", "ride companies") : undefined,
+  ].filter(Boolean);
+
+  const extraEmails = profile?.emails?.length ?? 0;
+  const totalEmails = extraEmails + (user.email ? 1 : 0);
+  const accountMeta = user.email
+    ? totalEmails > 1
+      ? `${user.email} · ${countLabel(totalEmails, "address", "addresses")}`
+      : user.email
+    : "Sign out, delete account";
+
+  const groups: HubGroup<SettingsSection>[] = [
+    {
+      items: [
+        { id: "email", label: "Email & imports", meta: emailParts.length > 0 ? emailParts.join(" · ") : "Connect email or upload" },
+        { id: "calendars", label: "Calendars", meta: calendarParts.length > 0 ? calendarParts.join(" · ") : "Sync, feeds, export" },
+        { id: "reminders", label: "Reminders & rides", meta: reminderParts.length > 0 ? reminderParts.join(" · ") : "Reminders, ride companies" },
+        { id: "account", label: "Account & data", meta: accountMeta },
+        { id: "app", label: "App & about", meta: "Install · Licenses" },
+      ],
+    },
+  ];
+
+  const effective: SettingsSection = selected ?? "email";
+
+  return (
+    <>
+      <Suspense fallback={null}>
+        <OAuthSectionSync onSelect={setSelected} />
+      </Suspense>
+      <h1 className="mb-6 text-2xl font-semibold">Settings</h1>
+      <SectionHub
+        navLabel="Settings sections"
+        backLabel="Settings"
+        groups={groups}
+        selected={selected}
+        defaultSection="email"
+        onSelect={setSelected}
+        onBack={() => setSelected(null)}
+      >
+        {effective === "email" && (
+          <>
+            <Suspense fallback={<p className="text-muted">Loading…</p>}>
+              <GmailSection user={user} />
+            </Suspense>
+            <FastmailSection user={user} />
+            <ImapSection user={user} />
+            {forwardDomain && <ForwardSection user={user} />}
+            <TripItSection user={user} />
+            <CalendarSection user={user} />
+            <ReviewSection />
+            <PatternsSection user={user} />
+          </>
+        )}
+        {effective === "calendars" && (
+          <>
+            <Suspense fallback={null}>
+              <GoogleCalendarSection user={user} />
+            </Suspense>
+            <FeedsSection user={user} />
+            <CalendarExportSection user={user} />
+          </>
+        )}
+        {effective === "reminders" && (
+          <>
+            <RemindersSection user={user} />
+            <TripRemindersSection uid={user.uid} />
+            <RideCompaniesSection user={user} />
+          </>
+        )}
+        {effective === "account" && (
+          <>
+            <EmailAddressesSection user={user} />
+            <RegroupSection user={user} />
+            <DeleteAccountSection user={user} onDeleted={onDeleted} />
+            <SignOutSection />
+          </>
+        )}
+        {effective === "app" && (
+          <>
+            <InstallSection />
+            {/* Credit for the bundled logos, as Arcticons' licence asks; as on Android. */}
+            <p className="text-muted">
+              Logos from Soaring Symbols, Simple Icons, SVG Logos and Arcticons (CC BY-SA 4.0). They’re trademarks of their owners.
+            </p>
+            {/* Credit for the place data, as GeoNames' and OpenFlights' licences ask; as on Android. */}
+            <p className="mt-2 text-muted">Place names from GeoNames (CC BY 4.0) and OpenFlights (ODbL).</p>
+          </>
+        )}
+      </SectionHub>
+    </>
+  );
+}
+
 export default function SettingsPage() {
   useSaveForOffline();
   const { deleted, onDeleted } = useAccountDeletion();
   if (deleted) return <AccountDeleted />;
-  return (
-    <SignInGate>
-      {(user) => (
-        <>
-          <h1 className="mb-6 text-2xl font-semibold">Settings</h1>
-          <InstallSection />
-          <Suspense fallback={<p className="text-muted">Loading…</p>}>
-            <GmailSection user={user} />
-          </Suspense>
-          <FastmailSection user={user} />
-          <ImapSection user={user} />
-          <RegroupSection user={user} />
-          <TripItSection user={user} />
-          <CalendarSection user={user} />
-          <FeedsSection user={user} />
-          {forwardDomain && <ForwardSection user={user} />}
-          <Suspense fallback={null}>
-            <GoogleCalendarSection user={user} />
-          </Suspense>
-          <CalendarExportSection user={user} />
-          <EmailAddressesSection user={user} />
-          <RemindersSection user={user} />
-          <TripRemindersSection uid={user.uid} />
-          <RideCompaniesSection user={user} />
-          <PatternsSection user={user} />
-          <ReviewSection />
-          <DeleteAccountSection user={user} onDeleted={onDeleted} />
-          <SignOutSection />
-          {/* Credit for the bundled logos, as Arcticons' licence asks; as on Android. */}
-          <p className="text-muted">
-            Logos from Soaring Symbols, Simple Icons, SVG Logos and Arcticons (CC BY-SA 4.0). They’re trademarks of their owners.
-          </p>
-          {/* Credit for the place data, as GeoNames' and OpenFlights' licences ask; as on Android. */}
-          <p className="text-muted">Place names from GeoNames (CC BY 4.0) and OpenFlights (ODbL).</p>
-        </>
-      )}
-    </SignInGate>
-  );
+  return <SignInGate>{(user) => <SettingsHub user={user} onDeleted={onDeleted} />}</SignInGate>;
 }

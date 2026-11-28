@@ -22,8 +22,13 @@ export async function signIn(page: Page, email: string, { approved = true } = {}
   return page.evaluate((address) => window.travelmoTestSignIn!(address), email);
 }
 
+export async function openSettingsSection(page: Page, name: string): Promise<void> {
+  await page.getByRole("navigation", { name: "Settings sections" }).getByRole("button", { name: new RegExp(`^${name}`) }).click();
+}
+
 export async function signOut(page: Page): Promise<void> {
   await page.getByRole("link", { name: "Settings" }).click();
+  await openSettingsSection(page, "Account & data");
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
 }

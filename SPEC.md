@@ -2707,13 +2707,14 @@ rather than an old one dropped, and the parser logs `found_loyalty_full`
 (counts only). A TripIt upload replaces its own sections and leaves these alone.
 Profile's Loyalty section and a booking's loyalty line read both (`allLoyalty`): what
 TripIt imported, then what emails showed that it did not have by number,
-each noting the email it came from. On both web and Android, Profile is
-organized as a hub (sidebar master-detail on desktop web, hub → sub-pages
-on mobile and Android) with five sections: Travel wallet (Documents, Loyalty
-programs) and Trip setup & sharing (People, Home, Sharing). Expanding a
-loyalty program reveals its full details, "Whose is this?", and—when backed
-by an email extraction (`findFoundLoyalty`)—Remove, since the extraction is
-sometimes wrong. Nothing is logged but counts.
+each noting the email it came from. On both web and Android, Profile and
+Settings each use a hub (sidebar master-detail on desktop web, a single
+bordered list drilling into sub-pages on mobile and Android): Profile has
+Documents, Loyalty programs, People, Home, and Sharing; Settings has Email
+& imports, Calendars, Reminders & rides, Account & data, and App & about.
+Expanding a loyalty program reveals its full details, "Whose is this?",
+and—when backed by an email extraction (`findFoundLoyalty`)—Remove, since
+the extraction is sometimes wrong. Nothing is logged but counts.
 
 When how numbers are read changes, those already kept are brought up to
 it once (`foundLoyaltyRevision`, run in the background as the parser
