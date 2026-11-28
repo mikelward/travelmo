@@ -8,6 +8,7 @@ import { BookingDetailsDialog } from "@/components/BookingDetails";
 import type { EmailLinks } from "@/lib/sourceLinks";
 import {
   bookingHeading,
+  headedRouteLine,
   formatDate,
   isUntimed,
   isCancelled,
@@ -30,11 +31,6 @@ const labels: Record<SegmentType, string> = {
   meal: "Meal",
   other: "Other",
 };
-
-function place(p: Segment["origin"]): string | undefined {
-  if (!p) return undefined;
-  return p.code ? `${p.code} ${p.city ?? p.name}` : p.city ?? p.name;
-}
 
 // The row sits under its start day's heading, so an end on another day
 // carries its date.
@@ -151,8 +147,7 @@ export function SegmentRow({
   const cancelled = isCancelled(segment);
   // A flight is headed by its airline, its flight number leading the route (bookingHeading).
   const heading = bookingHeading(segment);
-  const places = [place(segment.origin), place(segment.destination)].filter(Boolean).join(" → ");
-  const route = [heading.flightNumber, places].filter(Boolean).join(" · ");
+  const route = headedRouteLine(segment, heading) ?? "";
   // A tap anywhere on the row but its own controls opens the booking.
   const open = (e: MouseEvent) => {
     if ((e.target as HTMLElement).closest("button, a, input, [role=menu]")) return;

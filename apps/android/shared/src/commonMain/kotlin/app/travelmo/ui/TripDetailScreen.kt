@@ -805,8 +805,11 @@ private fun SplitDialog(segments: List<Segment>, onDismiss: () -> Unit, onSplit:
                             modifier = Modifier.fillMaxWidth().padding(start = 28.dp).toggleable(value = on, role = Role.Checkbox) { picked = if (it) picked + id else picked - id }.padding(vertical = 6.dp),
                         ) {
                             Checkbox(checked = on, onCheckedChange = null)
+                            // As its row on the trip page: its heading, then where it goes, so two flights of one airline are told apart.
+                            val heading = bookingHeading(segment)
                             Column(modifier = Modifier.padding(start = 12.dp)) {
-                                Text(bookingHeading(segment).headline, style = MaterialTheme.typography.bodyLarge)
+                                Text(heading.headline, style = MaterialTheme.typography.bodyLarge)
+                                headedRouteLine(segment, heading)?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = muted) }
                                 Text(formatDate(localDate(segment.start)), style = MaterialTheme.typography.bodyLarge, color = muted)
                             }
                         }
