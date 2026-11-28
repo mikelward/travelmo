@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { owner, signIn } from "./helpers";
+import { openSettingsSection, owner, signIn } from "./helpers";
 import { clearData, readTripChecklist, readTripReminders, seedFlight, seedTrip, seedTripReminder, seedTripTicks } from "./seed";
 
 test.beforeEach(async () => {
@@ -25,6 +25,7 @@ async function seedTrips(uid: string) {
 test("Settings keeps reminders before international trips: added, edited and removed", async ({ page }) => {
   const uid = await signIn(page, owner);
   await page.goto("/settings");
+  await openSettingsSection(page, "Reminders & rides");
   const section = page.locator("section").filter({ has: page.getByRole("heading", { name: "Before international trips" }) });
   await section.getByRole("textbox", { name: "Reminder" }).fill("Apply for a visa");
   await section.getByRole("button", { name: "Add a reminder" }).click();

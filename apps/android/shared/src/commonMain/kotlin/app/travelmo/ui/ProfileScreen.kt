@@ -120,8 +120,6 @@ import app.travelmo.shared.profile_all
 import app.travelmo.shared.profile_documents_count
 import app.travelmo.shared.profile_empty
 import app.travelmo.shared.profile_from_imports
-import app.travelmo.shared.profile_group_setup
-import app.travelmo.shared.profile_group_wallet
 import app.travelmo.shared.profile_imported_details
 import app.travelmo.shared.profile_no_people
 import app.travelmo.shared.profile_none_yet
@@ -288,65 +286,16 @@ fun ProfileScreen(
                 }
             }
 
-            item(key = "group-wallet") {
+            item(key = "hub") {
                 HubGroup(
-                    heading = stringResource(Res.string.profile_group_wallet),
                     rows = listOf(
                         HubRow(stringResource(Res.string.documents), docsMeta) { open(ProfileSection.DOCUMENTS) },
                         HubRow(stringResource(Res.string.loyalty_programs), loyaltyMeta) { open(ProfileSection.LOYALTY) },
-                    ),
-                )
-            }
-
-            item(key = "group-setup") {
-                HubGroup(
-                    heading = stringResource(Res.string.profile_group_setup),
-                    rows = listOf(
                         HubRow(stringResource(Res.string.people), peopleMeta) { open(ProfileSection.PEOPLE) },
                         HubRow(stringResource(Res.string.home), homeMeta) { open(ProfileSection.HOME) },
                         HubRow(stringResource(Res.string.profile_sharing), sharingMeta) { open(ProfileSection.SHARING) },
                     ),
                 )
-            }
-        }
-    }
-}
-
-private data class HubRow(val title: String, val meta: String, val onClick: () -> Unit)
-
-@Composable
-private fun HubGroup(heading: String, rows: List<HubRow>) {
-    val shape = RoundedCornerShape(12.dp)
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            heading.uppercase(),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.semantics { heading() },
-        )
-        Column(modifier = Modifier.fillMaxWidth().clip(shape).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)) {
-            rows.forEachIndexed { index, row ->
-                if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 56.dp)
-                        .clickable(onClick = row.onClick)
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(row.title, style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            row.meta,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    Text("›", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp))
-                }
             }
         }
     }

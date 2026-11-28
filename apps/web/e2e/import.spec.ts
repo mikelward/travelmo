@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { owner, signIn } from "./helpers";
+import { openSettingsSection, owner, signIn } from "./helpers";
 import { gmailIdPrefix, refreshBlurb } from "@travelmo/core";
 import { clearData, seedFeed, seedGmail, seedGoogleCalendar, seedImap, seedLegacyGmail, seedParsedMessage, updateUser } from "./seed";
 
@@ -99,6 +99,7 @@ test("a calendar feed is added through the parser and listed by host, with its l
     await route.fulfill({ json: { id: "f1", skipped: 0, filtered: 0, not_booking: 0, imported: 2, failed: 0, recurring: 0, cancelled: 0, remaining: 0, removed: 0 } });
   });
   await page.goto("/settings");
+  await openSettingsSection(page, "Calendars");
   await page.getByLabel("Calendar feed link").fill("webcal://feeds.example.com/ical/SECRET.ics");
   await page.getByRole("button", { name: "Add feed" }).click();
   await expect(page.getByText("2 events imported.")).toBeVisible();
@@ -367,6 +368,7 @@ test("choosing Google calendars saves the choice and shows how each was read", a
     await route.fulfill({ json: { read: 1, failed: 0 } });
   });
   await page.goto("/settings");
+  await openSettingsSection(page, "Calendars");
   await expect(page.getByText("Read 2026-11-02 · 2 imported")).toBeVisible();
   await expect(page.getByText("never shown")).toHaveCount(0);
   const save = page.getByRole("button", { name: "Save choice" });
@@ -391,6 +393,7 @@ test("Refresh from email runs on the server, shows how far it got, and stops and
     await route.fulfill({ status: 204 });
   });
   await page.goto("/settings");
+  await openSettingsSection(page, "Account & data");
   const refresh = page.getByTestId("refresh");
   await expect(refresh.getByText(refreshBlurb)).toBeVisible();
   await refresh.getByRole("button", { name: "Refresh from email" }).click();
@@ -433,6 +436,7 @@ test("a refresh lists the emails it couldn't read, with what can be done about t
     await route.fulfill({ json: { progress: { scanned: 90, imported: 2, done: false, running: true, updatedAt: new Date().toISOString() } } });
   });
   await page.goto("/settings");
+  await openSettingsSection(page, "Account & data");
   const refresh = page.getByTestId("refresh");
   await expect(refresh.getByTestId("refresh-progress")).toHaveText("Refreshed 90 emails: your bookings were already up to date. 3 emails couldn't be read, even on a second try:");
   const failed = refresh.getByTestId("refresh-failed");

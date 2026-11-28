@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { owner, signIn } from "./helpers";
+import { openSettingsSection, owner, signIn } from "./helpers";
 import { clearData, readUser, seedFlight, seedTrip, updateUser } from "./seed";
 
 test.beforeEach(async () => {
@@ -40,6 +40,7 @@ test("a company added in Settings is offered for rides to and from the airport a
   const uid = await signIn(page, owner);
   await seedBoston(uid);
   await page.goto("/settings");
+  await openSettingsSection(page, "Reminders & rides");
   await page.getByRole("textbox", { name: "Company name" }).fill("Example Cars");
   await page.getByRole("textbox", { name: "Booking page" }).fill("http://cars.example.com/book");
   await page.getByRole("button", { name: "Add", exact: true }).click();
@@ -63,6 +64,7 @@ test("a company added in Settings is offered for rides to and from the airport a
 
   // Removing keeps a company another tab added in the meantime.
   await page.goto("/settings");
+  await openSettingsSection(page, "Reminders & rides");
   const other = { name: "Example Rentals", url: "https://rentals.example.com/", near: "anywhere" as const };
   await updateUser(uid, { rideCompanies: [{ name: "Example Cars", url: "https://cars.example.com/book", near: "home" }, other] });
   await expect(mine.getByRole("link")).toHaveCount(2);
@@ -74,6 +76,7 @@ test("a company limited to some countries is offered only there", async ({ page 
   const uid = await signIn(page, owner);
   await seedBoston(uid);
   await page.goto("/settings");
+  await openSettingsSection(page, "Reminders & rides");
   await page.getByRole("textbox", { name: "Company name" }).fill("Cretan Cars");
   await page.getByRole("textbox", { name: "Booking page" }).fill("https://cretan.example/");
   await page.getByRole("combobox", { name: "Suggest for" }).selectOption("anywhere");

@@ -32,7 +32,7 @@ class SenderRulesTest {
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL)
         composeRule.setContent {
             TravelmoTheme {
-                SettingsScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = SignedIn(OWNER, OWNER_EMAIL), viewModel = viewModel, onBack = {})
+                SettingsSectionScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = SignedIn(OWNER, OWNER_EMAIL), viewModel = viewModel, section = SettingsSection.EMAIL, onBack = {})
             }
         }
         composeRule.onNodeWithText("news.example").performScrollTo()
@@ -51,7 +51,7 @@ class SenderRulesTest {
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL)
         composeRule.setContent {
             TravelmoTheme {
-                SettingsScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = SignedIn(OWNER, OWNER_EMAIL), viewModel = viewModel, onBack = {})
+                SettingsSectionScreen(account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")), user = SignedIn(OWNER, OWNER_EMAIL), viewModel = viewModel, section = SettingsSection.EMAIL, onBack = {})
             }
         }
         composeRule.onNodeWithText("Always import").performScrollTo().performTextReplacement("air.example")

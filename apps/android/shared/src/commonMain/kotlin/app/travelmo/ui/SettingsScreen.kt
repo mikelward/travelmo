@@ -237,10 +237,37 @@ import app.travelmo.shared.use_https_link
 import app.travelmo.shared.version
 import app.travelmo.shared.logo_credits
 import app.travelmo.shared.place_credits
+import app.travelmo.shared.settings_account_data
+import app.travelmo.shared.settings_addresses_count
+import app.travelmo.shared.settings_app_about
+import app.travelmo.shared.settings_calendars
+import app.travelmo.shared.settings_calendars_meta_empty
+import app.travelmo.shared.settings_email_imports
+import app.travelmo.shared.settings_email_meta_empty
+import app.travelmo.shared.settings_email_on
+import app.travelmo.shared.settings_export_on
+import app.travelmo.shared.settings_feeds_count
+import app.travelmo.shared.settings_forwarding_on
+import app.travelmo.shared.settings_gmail_count
+import app.travelmo.shared.settings_imap_count
+import app.travelmo.shared.settings_reminders_meta_empty
+import app.travelmo.shared.settings_reminders_rides
+import app.travelmo.shared.settings_rides_count
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
+
+/** The five sub-pages of Settings, matching the web's /settings. */
+@Serializable
+enum class SettingsSection {
+    EMAIL,
+    CALENDARS,
+    REMINDERS,
+    ACCOUNT,
+    APP,
+}
 
 private const val REMINDER_TOKEN = "settings/reminders/email"
 private const val SETTINGS_DELETE_ACCOUNT_TOKEN = "settings/account/delete"
@@ -269,10 +296,12 @@ private const val ADD_COMPANY_TOKEN = "settings/rides/add"
 private const val REMOVE_COMPANY_TOKEN = "settings/rides/remove"
 
 /**
- * The account, Gmail and Fastmail and reading past emails, regrouping or deleting all
- * trips, Import review, reminders by email and
- * as notifications on this phone, the reminders before international trips, the text size, the debug log, deleting
- * the account and the build; the other import settings are on the web for now.
+ * The Settings hub, mirroring the web's /settings: a single card listing the
+ * five Settings sub-pages with live summaries.
+ *
+ * When [onOpenSection] is provided, tapping a row delegates to the caller's
+ * navigation stack; otherwise local state handles drill-in so tests and
+ * previews can navigate directly.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -280,6 +309,104 @@ fun SettingsScreen(
     account: SignedInAccount,
     user: SignedIn,
     viewModel: TripsViewModel,
+    onBack: () -> Unit,
+    onOpenReview: () -> Unit = {},
+    onAddBooking: (defaultDate: String) -> Unit = {},
+    onOpenSection: ((SettingsSection) -> Unit)? = null,
+) {
+    var localSection by rememberSaveable { mutableStateOf<SettingsSection?>(null) }
+    val activeSection = if (onOpenSection == null) localSection else null
+    if (activeSection != null) {
+        SettingsSectionScreen(
+            account = account,
+            user = user,
+            viewModel = viewModel,
+            section = activeSection,
+            onBack = { localSection = null },
+            onOpenReview = onOpenReview,
+            onAddBooking = onAddBooking,
+        )
+        return
+    }
+
+    val chrome = LocalAppChrome.current
+    val gmails by viewModel.gmail.collectAsStateWithLifecycle()
+    val fastmail by viewModel.fastmail.collectAsStateWithLifecycle()
+    val imaps by viewModel.imap.collectAsStateWithLifecycle()
+    val forwarding by viewModel.forwarding.collectAsStateWithLifecycle()
+    val feeds by viewModel.feeds.collectAsStateWithLifecycle()
+    val googleCal by viewModel.googleCalendar.collectAsStateWithLifecycle()
+    val exportToken by viewModel.calendarExport.collectAsStateWithLifecycle()
+    val reminderEmail by viewModel.reminderEmail.collectAsStateWithLifecycle()
+    val rides by viewModel.rideSettings.collectAsStateWithLifecycle()
+    val holder by viewModel.addressHolder.collectAsStateWithLifecycle()
+
+    val emailParts = buildList {
+        val gCount = (gmails as? TripsViewModel.GmailState.Connected)?.mailboxes?.size ?: 0
+        if (gCount > 0) add(stringResource(Res.string.settings_gmail_count, gCount))
+        if (fastmail is TripsViewModel.FastmailState.Connected) add(stringResource(Res.string.fastmail))
+        val iCount = (imaps as? TripsViewModel.ImapState.Loaded)?.mailboxes?.size ?: 0
+        if (iCount > 0) add(stringResource(Res.string.settings_imap_count, iCount))
+        if (forwarding?.address != null) add(stringResource(Res.string.settings_forwarding_on))
+    }
+    val emailMeta = if (emailParts.isEmpty()) stringResource(Res.string.settings_email_meta_empty) else emailParts.joinToString(" · ")
+
+    val feedCount = feeds?.size ?: 0
+    val calParts = buildList {
+        if (googleCal?.connection != null) add(stringResource(Res.string.google_calendar))
+        if (feedCount > 0) add(pluralStringResource(Res.plurals.settings_feeds_count, feedCount, feedCount))
+        if (exportToken?.token != null) add(stringResource(Res.string.settings_export_on))
+    }
+    val calMeta = if (calParts.isEmpty()) stringResource(Res.string.settings_calendars_meta_empty) else calParts.joinToString(" · ")
+
+    val rideCount = rides?.companies?.size ?: 0
+    val reminderParts = buildList {
+        if (reminderEmail == true) add(stringResource(Res.string.settings_email_on))
+        if (rideCount > 0) add(pluralStringResource(Res.plurals.settings_rides_count, rideCount, rideCount))
+    }
+    val reminderMeta = if (reminderParts.isEmpty()) stringResource(Res.string.settings_reminders_meta_empty) else reminderParts.joinToString(" · ")
+
+    val totalAddresses = holder.emails.size + if (user.email != null) 1 else 0
+    val accountMeta = when {
+        user.email != null && totalAddresses > 1 ->
+            "${user.email} · ${pluralStringResource(Res.plurals.settings_addresses_count, totalAddresses, totalAddresses)}"
+        user.email != null -> user.email
+        else -> user.uid
+    }
+    val appMeta = stringResource(Res.string.version, chrome.versionName)
+
+    val open: (SettingsSection) -> Unit = { section ->
+        if (onOpenSection != null) onOpenSection(section) else localSection = section
+    }
+
+    Scaffold(
+        topBar = {
+            AppTopBar(stringResource(Res.string.settings), navigation = TopBarNavigation.Back(onBack))
+        },
+    ) { padding ->
+        val scroll = rememberScrollState()
+        Column(modifier = Modifier.fillMaxSize().padding(padding).scrollEdgeCue(scroll, scrollCueColors()).verticalScroll(scroll).padding(16.dp)) {
+            HubGroup(
+                rows = listOf(
+                    HubRow(stringResource(Res.string.settings_email_imports), emailMeta) { open(SettingsSection.EMAIL) },
+                    HubRow(stringResource(Res.string.settings_calendars), calMeta) { open(SettingsSection.CALENDARS) },
+                    HubRow(stringResource(Res.string.settings_reminders_rides), reminderMeta) { open(SettingsSection.REMINDERS) },
+                    HubRow(stringResource(Res.string.settings_account_data), accountMeta) { open(SettingsSection.ACCOUNT) },
+                    HubRow(stringResource(Res.string.settings_app_about), appMeta) { open(SettingsSection.APP) },
+                ),
+            )
+        }
+    }
+}
+
+/** A single sub-page drilled into from the Settings hub. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsSectionScreen(
+    account: SignedInAccount,
+    user: SignedIn,
+    viewModel: TripsViewModel,
+    section: SettingsSection,
     onBack: () -> Unit,
     onOpenReview: () -> Unit = {},
     onAddBooking: (defaultDate: String) -> Unit = {},
@@ -300,74 +427,97 @@ fun SettingsScreen(
         }
     }
     LaunchedEffect(stored) { if (stored == chosen) chosen = null }
+
+    val title = stringResource(
+        when (section) {
+            SettingsSection.EMAIL -> Res.string.settings_email_imports
+            SettingsSection.CALENDARS -> Res.string.settings_calendars
+            SettingsSection.REMINDERS -> Res.string.settings_reminders_rides
+            SettingsSection.ACCOUNT -> Res.string.settings_account_data
+            SettingsSection.APP -> Res.string.settings_app_about
+        },
+    )
+
     Scaffold(
         topBar = {
-            AppTopBar(stringResource(Res.string.settings), navigation = TopBarNavigation.Back(onBack))
+            AppTopBar(title, navigation = TopBarNavigation.Back(onBack))
         },
     ) { padding ->
         // Scrolls, so a short window with large text still reaches every control.
         val scroll = rememberScrollState()
         Column(modifier = Modifier.fillMaxSize().padding(padding).scrollEdgeCue(scroll, scrollCueColors()).verticalScroll(scroll).padding(16.dp)) {
-            Text(stringResource(Res.string.signed_in_as, user.email ?: user.uid), style = MaterialTheme.typography.bodyLarge)
-            OutlinedButton(onClick = { scope.launch { account.signOut() } }, modifier = Modifier.padding(top = 12.dp)) {
-                Text(stringResource(Res.string.sign_out))
+            when (section) {
+                SettingsSection.EMAIL -> {
+                    GmailSection(viewModel)
+                    FastmailSection(viewModel)
+                    ImapSection(viewModel)
+                    ForwardSection(viewModel)
+                    Text(stringResource(Res.string.import_review), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+                    Text(stringResource(Res.string.import_review_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedButton(onClick = onOpenReview, modifier = Modifier.padding(top = 8.dp)) { Text(stringResource(Res.string.open_import_review)) }
+                    SenderRulesSection(viewModel)
+                }
+                SettingsSection.CALENDARS -> {
+                    GoogleCalendarSection(viewModel)
+                    FeedsSection(viewModel)
+                    CalendarExportSection(viewModel)
+                }
+                SettingsSection.REMINDERS -> {
+                    Text(stringResource(Res.string.reminders), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 4.dp))
+                    Text(stringResource(Res.string.reminders_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                        Text(
+                            if (user.email != null) stringResource(Res.string.email_me_to, user.email) else stringResource(Res.string.email_me),
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Switch(
+                            checked = chosen ?: stored ?: false,
+                            onCheckedChange = { on ->
+                                chosen = on
+                                viewModel.setReminderEmail(REMINDER_TOKEN, on)
+                            },
+                            enabled = stored != null && outcome !is Outcome.Busy,
+                        )
+                    }
+                    (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) }
+                    chrome.PushSettings(viewModel)
+                    TripRemindersSection(viewModel)
+                    RideCompaniesSection(viewModel)
+                }
+                SettingsSection.ACCOUNT -> {
+                    Text(stringResource(Res.string.signed_in_as, user.email ?: user.uid), style = MaterialTheme.typography.bodyLarge)
+                    OutlinedButton(onClick = { scope.launch { account.signOut() } }, modifier = Modifier.padding(top = 12.dp)) {
+                        Text(stringResource(Res.string.sign_out))
+                    }
+                    EmailAddressesSection(user, viewModel)
+                    TripsSection(viewModel, onAddBooking)
+                    DeleteAccountSection(account, viewModel, SETTINGS_DELETE_ACCOUNT_TOKEN)
+                }
+                SettingsSection.APP -> {
+                    chrome.DeviceSettings()
+                    Text(
+                        stringResource(Res.string.version, chrome.versionName),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 24.dp),
+                    )
+                    // Credit for the bundled logos, as Arcticons' licence asks; as on the web.
+                    Text(
+                        stringResource(Res.string.logo_credits),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    // Credit for the place data, as GeoNames' and OpenFlights' licences ask; as on the web.
+                    Text(
+                        stringResource(Res.string.place_credits),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
             }
-            GmailSection(viewModel)
-            FastmailSection(viewModel)
-            ImapSection(viewModel)
-            TripsSection(viewModel, onAddBooking)
-            FeedsSection(viewModel)
-            GoogleCalendarSection(viewModel)
-            CalendarExportSection(viewModel)
-            Text(stringResource(Res.string.import_review), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
-            Text(stringResource(Res.string.import_review_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedButton(onClick = onOpenReview, modifier = Modifier.padding(top = 8.dp)) { Text(stringResource(Res.string.open_import_review)) }
-            SenderRulesSection(viewModel)
-            RideCompaniesSection(viewModel)
-            EmailAddressesSection(user, viewModel)
-            ForwardSection(viewModel)
-            Text(stringResource(Res.string.reminders), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
-            Text(stringResource(Res.string.reminders_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                Text(
-                    if (user.email != null) stringResource(Res.string.email_me_to, user.email) else stringResource(Res.string.email_me),
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(
-                    checked = chosen ?: stored ?: false,
-                    onCheckedChange = { on ->
-                        chosen = on
-                        viewModel.setReminderEmail(REMINDER_TOKEN, on)
-                    },
-                    enabled = stored != null && outcome !is Outcome.Busy,
-                )
-            }
-            (outcome as? Outcome.Failed)?.let { Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) }
-            chrome.PushSettings(viewModel)
-            TripRemindersSection(viewModel)
-            chrome.DeviceSettings()
-            DeleteAccountSection(account, viewModel, SETTINGS_DELETE_ACCOUNT_TOKEN)
-            Text(
-                stringResource(Res.string.version, chrome.versionName),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 24.dp),
-            )
-            // Credit for the bundled logos, as Arcticons' licence asks; as on the web.
-            Text(
-                stringResource(Res.string.logo_credits),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-            // Credit for the place data, as GeoNames' and OpenFlights' licences ask; as on the web.
-            Text(
-                stringResource(Res.string.place_credits),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp),
-            )
         }
     }
 }

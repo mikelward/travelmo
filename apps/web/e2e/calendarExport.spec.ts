@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { owner, signIn } from "./helpers";
+import { openSettingsSection, owner, signIn } from "./helpers";
 import { clearData, seedCalendarExport } from "./seed";
 
 test.beforeEach(async () => {
@@ -23,6 +23,7 @@ test("a calendar link is created, offered for Google and Apple Calendar, and tur
   });
 
   await page.goto("/settings");
+  await openSettingsSection(page, "Calendars");
   await page.getByRole("button", { name: "Create calendar link" }).click();
   const link = `http://localhost:8080/cal/${token}.ics`;
   await expect(page.getByLabel("Calendar link")).toHaveValue(link);
