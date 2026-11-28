@@ -106,6 +106,45 @@ describe("journeyGaps", () => {
     expect(journeyGaps([melbourne, { ...adelaide, origin: canberra }]).map((g) => g.direction)).toEqual(["back"]);
   });
 
+  it("takes a car hired in one town and returned in another as the journey between them", () => {
+    // Flying into Raleigh, driving a hired car to Savannah, flying home from there.
+    const rdu = { name: "Raleigh-Durham", code: "RDU", city: "Raleigh/Durham", country: "US" };
+    const sav = { name: "Savannah", code: "SAV", city: "Savannah", country: "US" };
+    const sjc = { name: "San Jose", code: "SJC", city: "San Jose", country: "US" };
+    const into: ExtractedSegment = { type: "flight", title: "XX 1", start: "2017-10-12T21:35:00-05:00", end: "2017-10-12T23:55:00-04:00", origin: sjc, destination: rdu };
+    const home: ExtractedSegment = { type: "flight", title: "XX 2", start: "2017-10-21T09:00:00-04:00", end: "2017-10-21T14:00:00-07:00", origin: sav, destination: sjc };
+    const car: ExtractedSegment = {
+      type: "car_rental",
+      title: "Example Cars",
+      start: "2017-10-12T23:45:00-04:00",
+      end: "2017-10-19T15:00:00-04:00",
+      origin: { name: "Example Cars Raleigh Durham Airport", city: "Morrisville", country: "US" },
+      destination: { name: "Example Cars", city: "Savannah", country: "US" },
+    };
+    expect(journeyGaps([into, home]).map((g) => g.direction)).toEqual(["between"]);
+    expect(journeyGaps([into, car, home])).toEqual([]);
+    // Returned where it was hired, it drove nowhere in particular.
+    expect(journeyGaps([into, { ...car, destination: car.origin! }, home]).map((g) => g.direction)).toEqual(["between"]);
+    // Nor does a car between two other towns, though no one knows how far they are.
+    const elsewhere = { ...car, origin: { name: "Example Cars", city: "Boston", country: "US" }, destination: { name: "Example Cars", city: "New York", country: "US" } };
+    expect(journeyGaps([into, elsewhere, home]).map((g) => g.direction)).toEqual(["between"]);
+    // Desks with one name at two airports are two places.
+    const avis = { ...car, origin: { name: "Avis", code: "RDU" }, destination: { name: "Avis", code: "SAV" } };
+    expect(journeyGaps([into, avis, home])).toEqual([]);
+    // Nor one named after a town of the same name in another country.
+    const lhr = { name: "Heathrow", code: "LHR", city: "London", country: "GB" };
+    const yyz = { name: "Toronto Pearson", code: "YYZ", city: "Toronto", country: "CA" };
+    const ontario = { ...car, origin: { name: "Example Cars Toronto", city: "Toronto", country: "CA" }, destination: { name: "Example Cars London Downtown", city: "London ON", country: "CA" } };
+    const toToronto: ExtractedSegment = { ...into, origin: sjc, destination: yyz };
+    const fromLondon: ExtractedSegment = { ...home, origin: lhr };
+    expect(journeyGaps([toToronto, ontario, fromLondon]).map((g) => g.direction)).toEqual(["between"]);
+    // Driven out from home, flown back: no journey out is missing.
+    const raleigh = [{ city: "Raleigh/Durham", country: "US", airports: [rdu] }];
+    const back: ExtractedSegment = { type: "flight", title: "XX 3", start: "2017-10-21T09:00:00-04:00", end: "2017-10-21T11:00:00-04:00", origin: sav, destination: rdu };
+    expect(journeyGaps([back], raleigh).map((g) => g.direction)).toEqual(["out"]);
+    expect(journeyGaps([car, back], raleigh)).toEqual([]);
+  });
+
   it("leaves out the trip's ends once it is one way, not the gaps between", () => {
     expect(journeyGaps([out], [], true)).toEqual([]);
     expect(journeyGaps([adelaide, egypt], [], true).map((g) => g.direction)).toEqual(["between"]);

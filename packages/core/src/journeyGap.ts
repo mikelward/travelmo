@@ -1,5 +1,7 @@
+import { airportPlace } from "./airportPlaces";
+import { countryCodeOf } from "./countries";
 import { formatDate } from "./format";
-import { farApart, homeCorrections, journeyHome, sameArea, withChosenAirports, type HomePeriod } from "./home";
+import { farApart, homeCorrections, journeyHome, sameArea, sameCity, withChosenAirports, type HomePeriod } from "./home";
 import { maxOneWayTrips, type ChosenHomeAirports, type ExtractedSegment, type HomeCorrection, type Place } from "./schema";
 import { liveSegments, localDate } from "./trips";
 
@@ -54,6 +56,24 @@ function gap(direction: JourneyGap["direction"], from: Place, to: Place, mode: J
   };
 }
 
+const words = (text: string) => ` ${text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
+
+// Whether a car hire's end is at a journey's: in the same town or near it,
+// or named after it ("Example Cars Raleigh Durham Airport" for RDU's
+// Raleigh/Durham). Where neither says where it is, it isn't.
+// A known country that differs rules out the name: "London Downtown" in
+// Ontario is not London's Heathrow.
+function near(place: Place, end: Place): boolean {
+  if (sameArea(place, end)) return true;
+  const [a, b] = [countryOf(place), countryOf(end)];
+  return !(a && b && a !== b) && words(place.name).includes(words(city(end)));
+}
+
+const countryOf = (place: Place) => {
+  const named = place.country ? (countryCodeOf(place.country) ?? place.country.toUpperCase()) : undefined;
+  return named ?? (place.code ? airportPlace(place.code)?.country : undefined);
+};
+
 const sameJourney = (a: Booking, b: Booking) =>
   Date.parse(a.start) === Date.parse(b.start) && sameArea(a.origin, b.origin) && sameArea(a.destination, b.destination);
 
@@ -75,15 +95,37 @@ export function journeyGaps(segments: readonly Booking[], homes: readonly HomePe
   if (!first || !last) return [];
   const mode = journeys.every((j) => j.type === "flight") ? "flight" : "journey";
   const landed = (j: Booking) => localDate(j.end ?? j.start);
+  // A car hired in one town and returned in another, as from Raleigh to
+  // Savannah, is the journey between them: driven, not missing.
+  const drives = liveSegments(segments).filter(
+    (s): s is Booking & { end: string; origin: Place; destination: Place } =>
+            // Returned elsewhere: by name, or by the airports its desks are at where both are called "Avis".
+      s.type === "car_rental" &&
+      !!s.end &&
+      !!s.origin &&
+      !!s.destination &&
+      (!sameCity(city(s.origin), city(s.destination)) || (!!s.origin.code && !!s.destination.code && s.origin.code !== s.destination.code)),
+  );
+  const driven = (from: Place, to: Place, after: string, before?: string) =>
+    drives.some(
+      (d) =>
+        near(d.origin, from) &&
+        near(d.destination, to) &&
+        localDate(d.end) >= after &&
+        (!before || localDate(d.start) <= before),
+    );
   const between = journeys.slice(1).flatMap((next, i) => {
     const before = journeys[i]!;
-    return farApart(before.destination, next.origin) ? [gap("between", before.destination!, next.origin!, mode, landed(before), localDate(next.start))] : [];
+    if (!farApart(before.destination, next.origin)) return [];
+    if (driven(before.destination!, next.origin!, landed(before), localDate(next.start))) return [];
+    return [gap("between", before.destination!, next.origin!, mode, landed(before), localDate(next.start))];
   });
   const start = first.origin!;
   const end = last.destination!;
   if (oneWay || sameArea(start, end)) return between;
   const endsHome = homes.length > 0 && journeyHome(end, landed(last), homes) && !journeyHome(start, localDate(first.start), homes);
-  return endsHome ? [gap("out", end, start, mode, localDate(first.start)), ...between] : [...between, gap("back", end, start, mode, landed(last))];
+  if (endsHome) return driven(end, start, "", localDate(first.start)) ? between : [gap("out", end, start, mode, localDate(first.start)), ...between];
+  return driven(end, start, landed(last)) ? between : [...between, gap("back", end, start, mode, landed(last))];
 }
 
 // The homes journeyGaps goes by: those the person set on Profile, each with
