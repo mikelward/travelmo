@@ -117,6 +117,10 @@ export function journeyGaps(segments: readonly Booking[], homes: readonly HomePe
   const between = journeys.slice(1).flatMap((next, i) => {
     const before = journeys[i]!;
     if (!farApart(before.destination, next.origin)) return [];
+    // One leaving before the last has landed is a clash of two bookings
+    // (one of them not taken), not a journey missing between them.
+    // By the clock, not the date: eastbound over the date line a flight leaves the day before the last landed.
+    if (Date.parse(next.start) < Date.parse(before.end ?? before.start)) return [];
     if (driven(before.destination!, next.origin!, landed(before), localDate(next.start))) return [];
     return [gap("between", before.destination!, next.origin!, mode, landed(before), localDate(next.start))];
   });

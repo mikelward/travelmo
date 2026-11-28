@@ -106,6 +106,19 @@ describe("journeyGaps", () => {
     expect(journeyGaps([melbourne, { ...adelaide, origin: canberra }]).map((g) => g.direction)).toEqual(["back"]);
   });
 
+  it("finds no journey missing between two that clash", () => {
+    // Booked twice: landing in Sydney on the 14th, and leaving London on the 13th.
+    const late: ExtractedSegment = { ...out, title: "XX 12 BOS to SYD", start: "2026-12-12T09:00:00-05:00", end: "2026-12-14T07:00:00+11:00", destination: melbourne.destination! };
+    const clash: ExtractedSegment = { ...egypt, start: "2026-12-13T08:00:00+00:00", end: "2026-12-13T15:00:00+02:00" };
+    expect(journeyGaps([late, clash]).map((g) => g.direction)).not.toContain("between");
+    // Eastbound over the date line, leaving "the day before" landing is hours later: one is missing.
+    const akl = { name: "Auckland", code: "AKL", city: "Auckland", country: "NZ" };
+    const hnl = { name: "Honolulu", code: "HNL", city: "Honolulu", country: "US" };
+    const toAuckland: ExtractedSegment = { ...late, end: "2026-01-14T06:00:00+13:00", start: "2026-01-13T08:00:00+11:00", destination: akl };
+    const fromHonolulu: ExtractedSegment = { ...clash, start: "2026-01-13T23:00:00-10:00", end: "2026-01-14T07:00:00-08:00", origin: hnl, destination: { name: "Los Angeles", code: "LAX", city: "Los Angeles", country: "US" } };
+    expect(journeyGaps([toAuckland, fromHonolulu]).map((g) => g.direction)).toContain("between");
+  });
+
   it("takes a car hired in one town and returned in another as the journey between them", () => {
     // Flying into Raleigh, driving a hired car to Savannah, flying home from there.
     const rdu = { name: "Raleigh-Durham", code: "RDU", city: "Raleigh/Durham", country: "US" };
