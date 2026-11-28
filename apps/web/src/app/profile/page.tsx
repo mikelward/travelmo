@@ -1,6 +1,6 @@
 "use client";
 
-import { accessBadge, allLoyalty, guessMe, loyaltyByPerson, loyaltySummary, type FoundLoyalty, type PersonDoc, type ProfileEntry, type TravelProfile } from "@travelmo/core";
+import { accessBadge, allLoyalty, findFoundLoyalty, findPerson, guessMe, loyaltyByPerson, loyaltySummary, type FoundLoyalty, type PersonDoc, type ProfileEntry, type TravelProfile } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -15,34 +15,46 @@ import { mergePeople, sayWhoIs, setMe, usePeople } from "@/lib/people";
 import { useProfile } from "@/lib/trips";
 import { maxTrusted, removeFoundLoyalty, saveTrusted, setLoyaltyPerson, useSharedProfiles, useTravelProfile } from "@/lib/travelProfile";
 
+type Section = "documents" | "loyalty" | "people" | "home" | "sharing";
+
 const buttonClass =
-  "rounded-lg border border-zinc-300 px-3 py-2  hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
+  "rounded-lg border border-zinc-300 px-3 py-2 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
+
+const countLabel = (n: number, singular: string, plural: string) => `${n} ${n === 1 ? singular : plural}`;
 
 // Each entry folds away; documents start folded, so a passport number is
 // not on screen until asked for.
-function Entries({ title, entries, open }: { title: string; entries: ProfileEntry[]; open: boolean }) {
-  if (!entries.length) return null;
+function FoldingList({ entries }: { entries: ProfileEntry[] }) {
   return (
-    <section className="mt-6">
-      <h3 className="text-lg font-medium">{title}</h3>
-      <ul className="mt-2 space-y-2">
-        {entries.map((entry, i) => (
-          <li key={`${entry.title}-${i}`}>
-            <details open={open} className="rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800">
-              <summary className="cursor-pointer font-medium">{entry.title}</summary>
-              <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-                {entry.fields.map((field, j) => (
-                  <div key={`${field.label}-${j}`} className="contents">
-                    <dt className="text-zinc-600 dark:text-zinc-400">{field.label}</dt>
-                    <dd className="break-words">{field.value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </details>
-          </li>
-        ))}
-      </ul>
-    </section>
+    <ul className="mt-3 space-y-2">
+      {entries.map((entry, i) => (
+        <li key={`${entry.title}-${i}`}>
+          <details className="rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800">
+            <summary className="cursor-pointer font-medium">{entry.title}</summary>
+            <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+              {entry.fields.map((field, j) => (
+                <div key={`${field.label}-${j}`} className="contents">
+                  <dt className="text-muted">{field.label}</dt>
+                  <dd className="break-words">{field.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </details>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function EmptyImportHint() {
+  return (
+    <p className="mt-3 text-muted">
+      Nothing imported yet. Upload a TripIt export in{" "}
+      <Link href="/settings" className="underline">
+        Settings
+      </Link>{" "}
+      to bring in your documents, loyalty programs and fellow travelers.
+    </p>
   );
 }
 
@@ -106,9 +118,21 @@ function PersonDialog({
   );
 }
 
-// Which of the user's people someone is: "Same person as…" on a loyalty
-// holder's name and on a person both pick from it.
-function PeoplePicker({ title, people, except, onPick, onClose }: { title: string; people: readonly PersonDoc[]; except?: string; onPick: (personId: string) => void; onClose: () => void }) {
+// Which of the user's people someone is: "Who is this?" on a loyalty
+// holder's name and "Same person as…" on a person both pick from it.
+function PeoplePicker({
+  title,
+  people,
+  except,
+  onPick,
+  onClose,
+}: {
+  title: string;
+  people: readonly PersonDoc[];
+  except?: string;
+  onPick: (personId: string) => void;
+  onClose: () => void;
+}) {
   const me = guessMe(people);
   // The user first, then as People lists them.
   const listed = [...people.filter((p) => p.id === me?.id), ...people.filter((p) => p.id !== me?.id)].filter((p) => p.id !== except);
@@ -136,17 +160,35 @@ function PeoplePicker({ title, people, except, onPick, onClose }: { title: strin
   );
 }
 
-// Every program at a glance: the number, the balance and the status, read
-// from whatever labels the import gave them, the owner's first and then
-// each other person's; the full entries fold below. On the owner's own
-// profile each says whose it is.
-function LoyaltyTable({ entries, ownUid, travelers }: { entries: ProfileEntry[]; ownUid?: string; travelers?: readonly PersonDoc[] }) {
+// Unified loyalty list: combines the at-a-glance summary, email-found removal,
+// and full entry fields into one expandable row per program.
+function LoyaltySection({
+  entries,
+  found,
+  ownUid,
+  travelers,
+}: {
+  entries: ProfileEntry[];
+  found?: readonly FoundLoyalty[];
+  ownUid?: string;
+  travelers?: readonly PersonDoc[];
+}) {
   const [editing, setEditing] = useState<{ program: string; number: string }>();
   const [naming, setNaming] = useState<string>();
+  const [filter, setFilter] = useState<string>("__all__");
   const [error, setError] = useState<string>();
   const groups = useMemo(() => loyaltyByPerson(entries), [entries]);
   const people = useMemo(() => groups.flatMap((g) => (g.person ? [g.person] : [])), [groups]);
-  if (!entries.length) return null;
+
+  if (!entries.length) {
+    return (
+      <section>
+        <h2 className="text-lg font-medium">Loyalty programs</h2>
+        {ownUid ? <EmptyImportHint /> : <p className="mt-3 text-muted">None yet.</p>}
+      </section>
+    );
+  }
+
   const pick = async (person: string | undefined) => {
     if (!ownUid || !editing) return;
     setError(undefined);
@@ -157,6 +199,7 @@ function LoyaltyTable({ entries, ownUid, travelers }: { entries: ProfileEntry[];
       setError((e as Error).message);
     }
   };
+
   const whoIs = async (name: string, personId: string) => {
     if (!ownUid || !travelers) return;
     setError(undefined);
@@ -167,18 +210,69 @@ function LoyaltyTable({ entries, ownUid, travelers }: { entries: ProfileEntry[];
       setError((e as Error).message);
     }
   };
+
+  const remove = async (f: FoundLoyalty) => {
+    if (!ownUid) return;
+    setError(undefined);
+    try {
+      await removeFoundLoyalty(ownUid, f);
+    } catch (e) {
+      console.error("Removing a loyalty number failed", e);
+      setError((e as Error).message);
+    }
+  };
+
+  const showFilter = groups.length > 1;
+  const activeFilter = showFilter && (filter === "__all__" || groups.some((g) => (g.person ?? "") === filter)) ? filter : "__all__";
+  const visibleGroups = activeFilter === "__all__" ? groups : groups.filter((g) => (g.person ?? "") === activeFilter);
+
   return (
-    <section className="mt-6">
-      <h3 className="text-lg font-medium">Loyalty programs</h3>
-      {groups.map((group) => {
+    <section>
+      <h2 className="text-lg font-medium">Loyalty programs</h2>
+      {showFilter && (
+        <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Filter loyalty programs by person">
+          <button
+            type="button"
+            aria-pressed={activeFilter === "__all__"}
+            onClick={() => setFilter("__all__")}
+            className={
+              activeFilter === "__all__"
+                ? "rounded-full border border-foreground bg-foreground px-3 py-1 text-background"
+                : "rounded-full border border-zinc-300 px-3 py-1 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+            }
+          >
+            All
+          </button>
+          {groups.map((g) => {
+            const key = g.person ?? "";
+            const label = g.person ?? (ownUid ? "You" : "Theirs");
+            const active = activeFilter === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setFilter(key)}
+                className={
+                  active
+                    ? "rounded-full border border-foreground bg-foreground px-3 py-1 text-background"
+                    : "rounded-full border border-zinc-300 px-3 py-1 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+                }
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {visibleGroups.map((group) => {
         const name = group.person ?? (ownUid ? "You" : "Theirs");
-        // Named whenever any is someone else's.
         const named = groups.length > 1 || !!group.person;
         return (
-          <div key={group.person ?? ""}>
+          <div key={group.person ?? ""} className={named ? "mt-5" : "mt-3"}>
             {named && (
-              <div className="mt-4 flex items-baseline justify-between gap-3">
-                <h4 className="text-lg font-medium">{name}</h4>
+              <div className="mb-2 flex items-baseline justify-between gap-3">
+                <h3 className="text-lg font-medium">{name}</h3>
                 {group.person && ownUid && !!travelers?.length && (
                   <button type="button" className="text-muted hover:underline" onClick={() => setNaming(group.person)}>
                     Same person as…
@@ -186,46 +280,68 @@ function LoyaltyTable({ entries, ownUid, travelers }: { entries: ProfileEntry[];
                 )}
               </div>
             )}
-            <table className="mt-2 w-full" aria-label={named ? `Loyalty programs: ${name}` : "Loyalty programs"}>
-              <thead className="text-left text-muted">
-                <tr>
-                  <th className="py-1 pr-2 font-normal">Program</th>
-                  <th className="py-1 pr-2 font-normal">Account</th>
-                  <th className="py-1 pr-2 text-right font-normal">Balance</th>
-                  {/* Apart from Balance, which is right-aligned beside it. */}
-                  <th className="py-1 pl-4 font-normal">Status</th>
-                  {ownUid && <th className="w-8 py-1 font-normal"><span className="sr-only">Whose</span></th>}
-                </tr>
-              </thead>
-              <tbody>
-                {group.entries.map(loyaltySummary).map((r, i) => (
-                  <tr key={`${r.title}-${i}`} className="border-t border-zinc-200 dark:border-zinc-800">
-                    <td className="py-1 pr-2">{r.title}</td>
-                    <td className="py-1 pr-2 break-all">{r.account ?? ""}</td>
-                    <td className="py-1 pr-2 text-right tabular-nums">{r.balance ?? ""}</td>
-                    <td className="py-1 pl-4">{r.nextStatus && r.status ? `${r.status} (next: ${r.nextStatus})` : (r.status ?? "")}</td>
-                    {ownUid && (
-                      <td className="py-1 text-right">
-                        {r.account && (
-                          <button
-                            type="button"
-                            aria-label={`Whose is ${r.title} ${r.account}?`}
-                            onClick={() => setEditing({ program: r.title, number: r.account! })}
-                            className="h-8 w-8 rounded-full text-lg leading-none text-muted hover:bg-zinc-100 dark:hover:bg-zinc-900"
-                          >
-                            ⋮
-                          </button>
+            <ul className="space-y-2" aria-label={named ? `Loyalty programs: ${name}` : "Loyalty programs"}>
+              {group.entries.map((entry, i) => {
+                const r = loyaltySummary(entry);
+                const foundMatch = ownUid && found ? findFoundLoyalty(found, entry) : undefined;
+                const statusText = r.nextStatus && r.status ? `${r.status} (next: ${r.nextStatus})` : r.status;
+                const details = entry.fields.filter((f) => f.label !== "Person");
+                return (
+                  <li key={`${r.title}-${r.account ?? i}`}>
+                    <details className="rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800">
+                      <summary className="flex cursor-pointer items-start justify-between gap-4 list-none">
+                        <div className="min-w-0">
+                          <div className="font-medium">{r.title}</div>
+                          {r.account && <div className="break-all text-muted">{r.account}</div>}
+                        </div>
+                        <div className="shrink-0 text-right">
+                          {r.balance && <div className="tabular-nums">{r.balance}</div>}
+                          {statusText && <div className="text-muted">{statusText}</div>}
+                        </div>
+                      </summary>
+                      <div className="mt-3 border-t border-zinc-200 pt-2 dark:border-zinc-800">
+                        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+                          {details.map((field, j) => (
+                            <div key={`${field.label}-${j}`} className="contents">
+                              <dt className="text-muted">{field.label}</dt>
+                              <dd className="break-words">{field.value}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                        {ownUid && (r.account || foundMatch) && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {r.account && (
+                              <button
+                                type="button"
+                                aria-label={`Whose is ${r.title} ${r.account}?`}
+                                onClick={() => setEditing({ program: r.title, number: r.account! })}
+                                className={buttonClass}
+                              >
+                                Whose is this?
+                              </button>
+                            )}
+                            {foundMatch && (
+                              <button
+                                type="button"
+                                aria-label={`Remove ${foundMatch.program}`}
+                                onClick={() => void remove(foundMatch)}
+                                className={buttonClass}
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
                         )}
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      </div>
+                    </details>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
         );
       })}
-      {error && <p className="mt-2 text-danger">{error}</p>}
+      {error && <p className="mt-3 text-danger">{error}</p>}
       {naming && travelers && (
         <PeoplePicker title={`${naming} is the same person as`} people={travelers} onPick={(id) => void whoIs(naming, id)} onClose={() => setNaming(undefined)} />
       )}
@@ -236,132 +352,128 @@ function LoyaltyTable({ entries, ownUid, travelers }: { entries: ProfileEntry[];
   );
 }
 
-// Loyalty numbers read from the owner's booking emails, each removable, as
-// the extraction is sometimes wrong (SPEC "Loyalty from emails").
-function FoundInEmails({ uid, found }: { uid: string; found: FoundLoyalty[] }) {
-  const [error, setError] = useState<string>();
-  if (!found.length) return null;
-  const remove = async (f: FoundLoyalty) => {
-    setError(undefined);
-    try {
-      await removeFoundLoyalty(uid, f);
-    } catch (e) {
-      console.error("Removing a loyalty number failed", e);
-      setError((e as Error).message);
-    }
-  };
+function DocumentsSection({ documents, own }: { documents: ProfileEntry[]; own: boolean }) {
   return (
-    <section className="mt-6">
-      <h3 className="text-lg font-medium">Found in your emails</h3>
-      <ul className="mt-2 divide-y divide-zinc-200 dark:divide-zinc-800" aria-label="Found in your emails">
-        {found.map((f) => (
-          <li key={`${f.program}|${f.number}`} className="flex items-start justify-between gap-3 py-2">
-            <div className="min-w-0">
-              <p>
-                {f.program} · <span className="break-all">{f.number}</span>
-              </p>
-              <p className="text-muted">From “{f.label ?? "a booking email"}”</p>
-            </div>
-            <button type="button" className={buttonClass} onClick={() => void remove(f)}>
-              Remove
-            </button>
-          </li>
-        ))}
-      </ul>
-      {error && <p className="mt-2 text-danger">{error}</p>}
+    <section>
+      <h2 className="text-lg font-medium">Documents</h2>
+      {documents.length > 0 ? <FoldingList entries={documents} /> : own ? <EmptyImportHint /> : <p className="mt-3 text-muted">None yet.</p>}
     </section>
   );
 }
 
-// `ownUid` is set on the viewer's own profile, where what emails showed can be removed.
-// `travelers`: the owner's people, on their own profile, so every spelling
-// of someone is one person (allLoyalty).
-function ProfileSections({ profile, ownUid, travelers }: { profile: TravelProfile; ownUid?: string; travelers?: readonly PersonDoc[] }) {
-  const loyalty = useMemo(() => allLoyalty(profile, travelers), [profile, travelers]);
-  return (
-    <>
-      <Entries title="Documents" entries={profile.documents} open={false} />
-      <LoyaltyTable entries={loyalty} {...(ownUid ? { ownUid } : {})} {...(travelers ? { travelers } : {})} />
-      {ownUid && <FoundInEmails uid={ownUid} found={profile.foundLoyalty ?? []} />}
-      <Entries title="Loyalty program details" entries={loyalty} open={false} />
-      <Entries title="Travelers" entries={profile.travelers} open={false} />
-    </>
-  );
-}
-
-const hasDetails = (p: TravelProfile) => p.documents.length + p.loyalty.length + (p.foundLoyalty?.length ?? 0) + p.travelers.length > 0;
-
-function SharingSection({ user, profile }: { user: User; profile: TravelProfile | null }) {
-  const trusted = profile?.trustedEmails ?? [];
-  const [email, setEmail] = useState("");
-  const [busy, setBusy] = useState(false);
+// Unified People section: combines booking travelers (with You / This is me /
+// Same person as…) and imported TripIt traveler details into one list.
+function PeopleSection({ user, people, imported }: { user: User; people: PersonDoc[] | undefined; imported: ProfileEntry[] }) {
   const [error, setError] = useState<string>();
+  const [merging, setMerging] = useState<PersonDoc>();
+  const list = people ?? [];
+  const me = guessMe(list);
 
-  const save = async (next: string[]) => {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await saveTrusted(user, profile !== null, next, trusted);
-      setEmail("");
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
+  // Match imported TripIt traveler cards to known booking people when possible.
+  const detailsByPerson = new Map<string, ProfileEntry[]>();
+  const unmatched: ProfileEntry[] = [];
+  for (const entry of imported) {
+    const matched = list.length > 0 ? findPerson(list, entry.title) : undefined;
+    if (matched) {
+      detailsByPerson.set(matched.id, [...(detailsByPerson.get(matched.id) ?? []), entry]);
+    } else {
+      unmatched.push(entry);
     }
-  };
+  }
 
   return (
-    <section className="mt-10">
-      <h2 className="text-lg font-medium">Shared with</h2>
-      <p className="mt-2 text-zinc-600 dark:text-zinc-400">
-        People you trust, such as a partner, can see everything on this page, documents included, when signed in with
-        that email address. They can&apos;t change it.
-      </p>
-      {trusted.length > 0 && (
-        <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
-          {trusted.map((t) => (
-            <li key={t} className="flex items-center justify-between gap-3 py-2">
-              <span className="break-all">{t}</span>
-              <button type="button" disabled={busy} className={buttonClass} onClick={() => save(trusted.filter((x) => x !== t))}>
-                Remove
-              </button>
-            </li>
-          ))}
+    <section>
+      <h2 className="text-lg font-medium">People</h2>
+      <p className="mt-1 text-muted">Who your bookings are for.</p>
+      {list.length === 0 && unmatched.length === 0 && <p className="mt-3 text-muted">No people yet.</p>}
+      {list.length > 0 && (
+        <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800" aria-label="People">
+          {list.map((person) => {
+            const extra = detailsByPerson.get(person.id) ?? [];
+            return (
+              <li key={person.id} className="py-3">
+                <div className="flex flex-wrap items-baseline justify-between gap-3">
+                  <span>
+                    {person.name}
+                    {person.id === me?.id && <span className="ml-2 text-xs font-medium uppercase tracking-wide text-muted">You</span>}
+                  </span>
+                  <span className="flex shrink-0 gap-4">
+                    {person.id !== me?.id && (
+                      <button
+                        type="button"
+                        className="text-muted hover:underline"
+                        onClick={() =>
+                          setMe(firestore(), user.uid, list, person.id).catch((e: Error) => {
+                            console.error("Saving who the user is failed", e);
+                            setError(e.message);
+                          })
+                        }
+                      >
+                        This is me
+                      </button>
+                    )}
+                    {list.length > 1 && (
+                      <button type="button" className="text-muted hover:underline" onClick={() => setMerging(person)}>
+                        Same person as…
+                      </button>
+                    )}
+                  </span>
+                </div>
+                {extra.length > 0 && (
+                  <div className="mt-2 space-y-2">
+                    {extra.map((entry, idx) => (
+                      <details key={`${entry.title}-${idx}`} className="rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800">
+                        <summary className="cursor-pointer font-medium text-muted">Imported details</summary>
+                        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+                          {entry.fields.map((field, j) => (
+                            <div key={`${field.label}-${j}`} className="contents">
+                              <dt className="text-muted">{field.label}</dt>
+                              <dd className="break-words">{field.value}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      </details>
+                    ))}
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
-      <form
-        className="mt-3 flex flex-wrap gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void save([...trusted, email]);
-        }}
-      >
-        <input
-          type="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="name@example.com"
-          aria-label="Email address to share with"
-          className="min-w-0 flex-1 rounded-lg border border-field bg-background px-3 py-2"
+      {unmatched.length > 0 && (
+        <div className={list.length > 0 ? "mt-6" : ""}>
+          {list.length > 0 && <h3 className="text-lg font-medium">From imports</h3>}
+          <FoldingList entries={unmatched} />
+        </div>
+      )}
+      {error && <p className="mt-2 text-danger">{error}</p>}
+      {merging && (
+        <PeoplePicker
+          title={`${merging.name} is the same person as`}
+          people={list}
+          except={merging.id}
+          onPick={(id) =>
+            void mergePeople(firestore(), user.uid, list, merging.id, id).catch((e: Error) => {
+              console.error("Merging two people failed", e);
+              setError(e.message);
+            })
+          }
+          onClose={() => setMerging(undefined)}
         />
-        <button type="submit" disabled={busy || !email.trim() || trusted.length >= maxTrusted} className={buttonClass}>
-          Share
-        </button>
-      </form>
-      {error && <p className="mt-3 text-danger">{error}</p>}
+      )}
     </section>
   );
 }
 
 // Where home has been, worked out from the user's trips, with their own
 // corrections: home is this town from this date.
-function HomeSection({ user }: { user: User }) {
-  const homes = useHomes(user);
+function HomeSection({ user, homes }: { user: User; homes: Homes | undefined }) {
   // The corrections as saved, to change while home over time waits for every trip's bookings.
   const profile = useProfile(user.uid);
   // A profile that has answered with no corrections has none to show, not none yet.
   const corrections = homes?.corrections ?? (profile ? (profile.homes ?? []) : undefined);
+  const [adding, setAdding] = useState(false);
   const [city, setCity] = useState("");
   const [country, setCountry] = useState("");
   const [from, setFrom] = useState("");
@@ -388,32 +500,83 @@ function HomeSection({ user }: { user: User }) {
       setCity("");
       setCountry("");
       setFrom("");
+      setAdding(false);
     }
   };
 
   const line = homes && homeLine(homes.periods);
   return (
-    <section className="mt-10">
-      <h2 className="text-lg font-medium">Home</h2>
+    <section>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-medium">Home</h2>
+        {corrections !== undefined && (
+          <button
+            type="button"
+            className={buttonClass}
+            onClick={() => {
+              setAdding((v) => !v);
+              setError(undefined);
+            }}
+          >
+            {adding ? "Cancel" : "Add home"}
+          </button>
+        )}
+      </div>
       {corrections === undefined ? (
-        <p className="mt-2 text-muted">Loading…</p>
+        <p className="mt-3 text-muted">Loading…</p>
       ) : (
         <>
           {homes === undefined ? (
             // Home over time waits for every trip's bookings; the corrections below don't.
-            <p className="mt-2 text-muted">Loading…</p>
+            <p className="mt-3 text-muted">Loading…</p>
           ) : homes.failed > 0 ? (
-            <p className="mt-2 text-danger">{failedReadsText(homes.failed)}</p>
+            <p className="mt-3 text-danger">{failedReadsText(homes.failed)}</p>
           ) : (
             <>
-              <p className="mt-2" data-testid="home-line">
+              <p className="mt-3" data-testid="home-line">
                 {line ?? "Not known yet."}
               </p>
-              <p className="mt-1 text-zinc-600 dark:text-zinc-400">Worked out from your trips.</p>
+              <p className="mt-1 text-muted">Worked out from your trips.</p>
             </>
           )}
+          {adding && (
+            <form
+              className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void add();
+              }}
+            >
+              <span>Home is</span>
+              <input
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                placeholder="City"
+                aria-label="City"
+                className="w-32 rounded-lg border border-field bg-background px-3 py-2"
+              />
+              <input
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                placeholder="GB"
+                aria-label="Country"
+                className="w-32 rounded-lg border border-field bg-background px-3 py-2"
+              />
+              <span>from</span>
+              <input
+                type="date"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+                aria-label="From"
+                className="rounded-lg border border-field bg-background px-3 py-2"
+              />
+              <button type="submit" disabled={busy || !city.trim() || !from} className={buttonClass}>
+                Set
+              </button>
+            </form>
+          )}
           {corrections.length > 0 && (
-            <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
+            <ul className="mt-4 divide-y divide-zinc-200 dark:divide-zinc-800">
               {corrections.map((c) => (
                 <li key={c.from} className="flex items-center justify-between gap-3 py-2">
                   <span>{correctionText(c)}</span>
@@ -431,40 +594,6 @@ function HomeSection({ user }: { user: User }) {
           )}
           {homes && homes.failed === 0 && <LongStays user={user} homes={homes} />}
           {homes && homes.failed === 0 && <HomeAirports user={user} homes={homes} />}
-          <form
-            className="mt-3 flex flex-wrap items-center gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void add();
-            }}
-          >
-            <span>Home is</span>
-            <input
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              placeholder="City"
-              aria-label="City"
-              className="w-32 rounded-lg border border-field bg-background px-3 py-2"
-            />
-            <input
-              value={country}
-              onChange={(e) => setCountry(e.target.value)}
-              placeholder="GB"
-              aria-label="Country"
-              className="w-32 rounded-lg border border-field bg-background px-3 py-2"
-            />
-            <span>from</span>
-            <input
-              type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              aria-label="From"
-              className="rounded-lg border border-field bg-background px-3 py-2"
-            />
-            <button type="submit" disabled={busy || !city.trim() || !from} className={buttonClass}>
-              Set
-            </button>
-          </form>
           {error && <p className="mt-3 text-danger">{error}</p>}
         </>
       )}
@@ -503,11 +632,11 @@ function LongStays({ user, homes }: { user: User; homes: Homes }) {
   };
   return (
     <>
-      <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800" data-testid="long-stays">
+      <ul className="mt-4 divide-y divide-zinc-200 dark:divide-zinc-800" data-testid="long-stays">
         {[...stays].reverse().map((stay) => (
           <li key={`${stay.city} ${stay.from}`} className="flex items-center justify-between gap-3 py-2">
             <span>
-              {longStayText(stay)} <span className="text-zinc-600 dark:text-zinc-400">· from your stays</span>
+              {longStayText(stay)} <span className="text-muted">· from your stays</span>
             </span>
             <button type="button" disabled={busy} className={buttonClass} onClick={() => void notHome(stay)}>
               Not home
@@ -548,7 +677,7 @@ function HomeAirports({ user, homes }: { user: User; homes: Homes }) {
     }
   };
   return (
-    <div className="mt-3">
+    <div className="mt-4">
       <ul aria-label="Home airports" className="divide-y divide-zinc-200 dark:divide-zinc-800">
         {[...towns].map(([key, period]) => {
           const shown = airportCodes(period);
@@ -605,79 +734,167 @@ function HomeAirports({ user, homes }: { user: User; homes: Homes }) {
   );
 }
 
-function SharedWithYou({ user }: { user: User }) {
-  const shared = useSharedProfiles(user)?.filter((p) => p.ownerUid !== user.uid);
-  if (!shared?.length) return null;
+function SharedProfileView({ profile, onBack }: { profile: TravelProfile; onBack: () => void }) {
+  const loyalty = useMemo(() => allLoyalty(profile), [profile]);
   return (
-    <section className="mt-10">
-      <h2 className="text-lg font-medium">Shared with you</h2>
-      {shared.map((p) => (
-        <div key={p.ownerUid} className="mt-4">
-          <p className="font-medium">From {p.ownerEmail ?? "someone who trusts you"}</p>
-          {hasDetails(p) ? <ProfileSections profile={p} /> : <p className="mt-2 text-muted">Nothing in it yet.</p>}
+    <section>
+      <button type="button" onClick={onBack} className="mb-3 text-muted hover:underline">
+        ← Sharing
+      </button>
+      <h2 className="text-lg font-medium">From {profile.ownerEmail ?? "someone who trusts you"}</h2>
+      {profile.documents.length === 0 && loyalty.length === 0 && profile.travelers.length === 0 ? (
+        <p className="mt-3 text-muted">Nothing in it yet.</p>
+      ) : (
+        <div className="mt-4 space-y-6">
+          {profile.documents.length > 0 && <DocumentsSection documents={profile.documents} own={false} />}
+          {loyalty.length > 0 && <LoyaltySection entries={loyalty} />}
+          {profile.travelers.length > 0 && (
+            <section>
+              <h2 className="text-lg font-medium">Travelers</h2>
+              <FoldingList entries={profile.travelers} />
+            </section>
+          )}
         </div>
-      ))}
+      )}
     </section>
   );
 }
 
-// Who the user's bookings are for (SPEC "Travelers"): each person, the one
-// taken to be the user marked, "This is me" to say otherwise, and "Same
-// person as…" to merge two who are one ("Jessica Wilkes", now "Jessica Ward").
-function PeopleSection({ user, people }: { user: User; people: PersonDoc[] | undefined }) {
+function SharingSection({
+  user,
+  profile,
+  shared,
+  viewingShared,
+  onOpenShared,
+  onCloseShared,
+}: {
+  user: User;
+  profile: TravelProfile | null | undefined;
+  shared: TravelProfile[];
+  viewingShared: TravelProfile | undefined;
+  onOpenShared: (uid: string) => void;
+  onCloseShared: () => void;
+}) {
+  const trusted = profile?.trustedEmails ?? [];
+  const [adding, setAdding] = useState(false);
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [merging, setMerging] = useState<PersonDoc>();
-  if (!people || people.length === 0) return null;
-  const me = guessMe(people);
+
+  if (viewingShared) {
+    return <SharedProfileView profile={viewingShared} onBack={onCloseShared} />;
+  }
+
+  const save = async (next: string[]) => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await saveTrusted(user, profile !== null && profile !== undefined, next, trusted);
+      setEmail("");
+      setAdding(false);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <section className="mt-10">
-      <h2 className="text-lg font-medium">People</h2>
-      <p className="mt-1 text-muted">Who your bookings are for.</p>
-      <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800" aria-label="People">
-        {people.map((person) => (
-          <li key={person.id} className="flex items-baseline justify-between gap-3 py-2">
-            <span>
-              {person.name}
-              {person.id === me?.id && <span className="ml-2 text-xs font-medium uppercase tracking-wide text-muted">You</span>}
-            </span>
-            <span className="flex shrink-0 gap-4">
-              {person.id !== me?.id && (
-                <button
-                  type="button"
-                  className="text-muted hover:underline"
-                  onClick={() =>
-                    setMe(firestore(), user.uid, people, person.id).catch((e: Error) => {
-                      console.error("Saving who the user is failed", e);
-                      setError(e.message);
-                    })
-                  }
-                >
-                  This is me
+    <section className="space-y-8">
+      <div>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-medium">Shared with</h2>
+          {profile !== undefined && trusted.length < maxTrusted && (
+            <button
+              type="button"
+              className={buttonClass}
+              onClick={() => {
+                setAdding((v) => !v);
+                setError(undefined);
+              }}
+            >
+              {adding ? "Cancel" : "Share with someone"}
+            </button>
+          )}
+        </div>
+        <p className="mt-2 text-muted">
+          People you trust, such as a partner, can see everything here, documents included, when signed in with that email address. They can&apos;t change it.
+        </p>
+        {profile === undefined ? (
+          <p className="mt-3 text-muted">Loading…</p>
+        ) : (
+          <>
+            {adding && (
+              <form
+                className="mt-3 flex flex-wrap gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void save([...trusted, email]);
+                }}
+              >
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@example.com"
+                  aria-label="Email address to share with"
+                  className="min-w-0 flex-1 rounded-lg border border-field bg-background px-3 py-2"
+                />
+                <button type="submit" disabled={busy || !email.trim() || trusted.length >= maxTrusted} className={buttonClass}>
+                  Share
                 </button>
-              )}
-              {people.length > 1 && (
-                <button type="button" className="text-muted hover:underline" onClick={() => setMerging(person)}>
-                  Same person as…
-                </button>
-              )}
-            </span>
-          </li>
-        ))}
-      </ul>
-      {error && <p className="mt-2 text-danger">{error}</p>}
-      {merging && (
-        <PeoplePicker
-          title={`${merging.name} is the same person as`}
-          people={people}
-          except={merging.id}
-          onPick={(id) =>
-            void mergePeople(firestore(), user.uid, people, merging.id, id).catch((e: Error) => {
-              console.error("Merging two people failed", e);
-              setError(e.message);
-            })
-          }
-          onClose={() => setMerging(undefined)}
-        />
+              </form>
+            )}
+            {trusted.length === 0 ? (
+              <p className="mt-3 text-muted">Only you.</p>
+            ) : (
+              <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
+                {trusted.map((t) => (
+                  <li key={t} className="flex items-center justify-between gap-3 py-2">
+                    <span className="break-all">{t}</span>
+                    <button type="button" disabled={busy} className={buttonClass} onClick={() => void save(trusted.filter((x) => x !== t))}>
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {error && <p className="mt-3 text-danger">{error}</p>}
+          </>
+        )}
+      </div>
+
+      {shared.length > 0 && (
+        <div>
+          <h2 className="text-lg font-medium">Shared with you</h2>
+          <ul className="mt-3 divide-y divide-zinc-200 rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800" aria-label="Shared with you">
+            {shared.map((p) => {
+              const pLoyalty = allLoyalty(p);
+              const parts = [
+                p.documents.length > 0 ? countLabel(p.documents.length, "document", "documents") : undefined,
+                pLoyalty.length > 0 ? countLabel(pLoyalty.length, "program", "programs") : undefined,
+              ].filter(Boolean);
+              return (
+                <li key={p.ownerUid}>
+                  <button
+                    type="button"
+                    onClick={() => onOpenShared(p.ownerUid)}
+                    className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                  >
+                    <div className="min-w-0">
+                      <div className="break-all">From {p.ownerEmail ?? "someone who trusts you"}</div>
+                      <div className="text-muted">{parts.length > 0 ? parts.join(" · ") : "Nothing in it yet."}</div>
+                    </div>
+                    <span aria-hidden="true" className="text-muted">
+                      ›
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
     </section>
   );
@@ -686,30 +903,147 @@ function PeopleSection({ user, people }: { user: User; people: PersonDoc[] | und
 function ProfilePage({ user }: { user: User }) {
   const profile = useTravelProfile(user.uid);
   const people = usePeople(user.uid);
+  const homes = useHomes(user);
+  const sharedAll = useSharedProfiles(user);
+  const shared = useMemo(() => (sharedAll ?? []).filter((p) => p.ownerUid !== user.uid), [sharedAll, user.uid]);
   const { access } = useAuth();
   const email = user.email?.toLowerCase();
   const badge = access.state === "loading" ? undefined : accessBadge(access.admin, user.emailVerified ? email : undefined, access.record);
+
+  const [selected, setSelected] = useState<Section | null>(null);
+  const [sharedUid, setSharedUid] = useState<string | null>(null);
+
+  const loyalty = useMemo(() => (profile ? allLoyalty(profile, people) : []), [profile, people]);
+  const loyaltyGroups = useMemo(() => loyaltyByPerson(loyalty), [loyalty]);
+  const me = useMemo(() => (people ? guessMe(people) : undefined), [people]);
+  const homeSummary = useMemo(() => {
+    if (!homes) return "Loading…";
+    if (homes.failed > 0) return "Couldn't read all trips";
+    return homeLine(homes.periods) ?? "Not known yet";
+  }, [homes]);
+
+  const docsCount = profile?.documents.length ?? 0;
+  const peopleCount = (people?.length ?? 0) || (profile?.travelers.length ?? 0);
+  const trustedCount = profile?.trustedEmails.length ?? 0;
+
+  const sharingMeta = [
+    trustedCount > 0 ? `Shared with ${trustedCount}` : undefined,
+    shared.length > 0 ? `${shared.length} shared with you` : undefined,
+  ].filter(Boolean);
+
+  const navGroups: { heading: string; items: { id: Section; label: string; meta: string }[] }[] = [
+    {
+      heading: "Travel wallet",
+      items: [
+        { id: "documents", label: "Documents", meta: profile === undefined ? "Loading…" : docsCount > 0 ? countLabel(docsCount, "document", "documents") : "None yet" },
+        {
+          id: "loyalty",
+          label: "Loyalty programs",
+          meta:
+            profile === undefined
+              ? "Loading…"
+              : loyalty.length > 0
+                ? loyaltyGroups.length > 1
+                  ? `${countLabel(loyalty.length, "program", "programs")} · ${countLabel(loyaltyGroups.length, "person", "people")}`
+                  : countLabel(loyalty.length, "program", "programs")
+                : "None yet",
+        },
+      ],
+    },
+    {
+      heading: "Trip setup & sharing",
+      items: [
+        {
+          id: "people",
+          label: "People",
+          meta: peopleCount > 0 ? (me ? `${countLabel(peopleCount, "person", "people")} · You: ${me.name}` : countLabel(peopleCount, "person", "people")) : "None yet",
+        },
+        { id: "home", label: "Home", meta: homeSummary },
+        { id: "sharing", label: "Sharing", meta: sharingMeta.length > 0 ? sharingMeta.join(" · ") : "Only you" },
+      ],
+    },
+  ];
+
+  const effective: Section = selected ?? "documents";
+  const viewingShared = sharedUid ? shared.find((p) => p.ownerUid === sharedUid) : undefined;
+
+  const openSection = (id: Section) => {
+    setSelected(id);
+    if (id !== "sharing") setSharedUid(null);
+  };
+
   return (
     <>
       <h1 className="mb-2 text-2xl font-semibold">Travel profile</h1>
       {email && (
-        <p className="mb-4 text-muted">
+        <p className="mb-6 text-muted">
           Signed in as {email}
           {badge && <span className="ml-2 text-xs font-medium uppercase tracking-wide text-muted">{badge === "admin" ? "Admin" : "Invited"}</span>}
         </p>
       )}
-      {profile === undefined && <p className="text-muted">Loading…</p>}
-      {profile !== undefined && (!profile || !hasDetails(profile)) && (
-        <p className="text-zinc-600 dark:text-zinc-400">
-          Nothing imported yet. Upload a TripIt export in <Link href="/settings" className="underline">Settings</Link> to
-          bring in your documents, loyalty programs and fellow travelers.
-        </p>
-      )}
-      {profile && hasDetails(profile) && <ProfileSections profile={profile} ownUid={user.uid} {...(people ? { travelers: people } : {})} />}
-      <PeopleSection user={user} people={people} />
-      <HomeSection user={user} />
-      {profile !== undefined && <SharingSection user={user} profile={profile} />}
-      <SharedWithYou user={user} />
+      <div className="md:grid md:grid-cols-[15rem_1fr] md:items-start md:gap-6">
+        <nav aria-label="Profile sections" className={selected !== null ? "hidden md:block" : "block"}>
+          <div className="space-y-6">
+            {navGroups.map((group) => (
+              <div key={group.heading}>
+                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">{group.heading}</p>
+                <ul className="divide-y divide-zinc-200 rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+                  {group.items.map((item) => {
+                    const active = effective === item.id;
+                    return (
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          aria-current={active ? "page" : undefined}
+                          onClick={() => openSection(item.id)}
+                          className={`flex w-full items-center justify-between gap-3 px-3 py-3 text-left hover:bg-zinc-100 dark:hover:bg-zinc-900 ${
+                            active ? "md:bg-zinc-100 dark:md:bg-zinc-900" : ""
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <div>{item.label}</div>
+                            <div className="truncate text-muted">{item.meta}</div>
+                          </div>
+                          <span aria-hidden="true" className="text-muted md:hidden">
+                            ›
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </nav>
+
+        <div className={selected === null ? "hidden md:block" : "block"}>
+          {selected !== null && !viewingShared && (
+            <button type="button" onClick={() => setSelected(null)} className="mb-4 text-muted hover:underline md:hidden">
+              ← Travel profile
+            </button>
+          )}
+          {effective === "documents" && (profile === undefined ? <p className="text-muted">Loading…</p> : <DocumentsSection documents={profile?.documents ?? []} own />)}
+          {effective === "loyalty" &&
+            (profile === undefined ? (
+              <p className="text-muted">Loading…</p>
+            ) : (
+              <LoyaltySection entries={loyalty} found={profile?.foundLoyalty ?? []} ownUid={user.uid} {...(people ? { travelers: people } : {})} />
+            ))}
+          {effective === "people" && <PeopleSection user={user} people={people} imported={profile?.travelers ?? []} />}
+          {effective === "home" && <HomeSection user={user} homes={homes} />}
+          {effective === "sharing" && (
+            <SharingSection
+              user={user}
+              profile={profile}
+              shared={shared}
+              viewingShared={viewingShared}
+              onOpenShared={(uid) => setSharedUid(uid)}
+              onCloseShared={() => setSharedUid(null)}
+            />
+          )}
+        </div>
+      </div>
     </>
   );
 }

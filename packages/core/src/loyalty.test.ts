@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allLoyalty, couldBeOwner, foundLoyaltyEntry, formatBalance, loyaltyByPerson, loyaltyLine, loyaltySummary, nameWords, personName, programsFor, withFoundLoyalties, withFoundLoyalty, withLoyaltyPerson } from "./loyalty";
+import { allLoyalty, couldBeOwner, findFoundLoyalty, foundLoyaltyEntry, formatBalance, loyaltyByPerson, loyaltyLine, loyaltySummary, nameWords, personName, programsFor, withFoundLoyalties, withFoundLoyalty, withLoyaltyPerson } from "./loyalty";
 import { foundLoyaltyBudgetBytes, isMembershipNumber, maxFoundLoyalty, TravelProfile, type FoundLoyalty, type ProfileEntry } from "./schema";
 
 // Invented programs and numbers.
@@ -324,5 +324,17 @@ describe("allLoyalty with the owner's people", () => {
 
   it("goes by the names emails gave without them", () => {
     expect(loyaltyByPerson(allLoyalty(profile)).map((g) => g.person)).toEqual(["Jessica Ward", "Jessica Wilkes", "Michael Ward", "Mikelb Ward", "Mikelbradlee Ward"]);
+  });
+});
+
+describe("findFoundLoyalty", () => {
+  it("finds the email-extracted membership behind a unified loyalty entry", () => {
+    const found: FoundLoyalty = { program: "Emirates Skywards", number: "EK00557710580", messageId: "m1", at: "2026-11-01T00:00:00Z" };
+    const imported: ProfileEntry = { title: "Emirates Skywards", fields: [{ label: "Account number", value: "EK557710580" }] };
+    const other: ProfileEntry = { title: "Sample Hotels", fields: [{ label: "Account number", value: "SH-9" }] };
+    const noAccount: ProfileEntry = { title: "Bare Program", fields: [{ label: "Status", value: "Silver" }] };
+    expect(findFoundLoyalty([found], imported)).toEqual(found);
+    expect(findFoundLoyalty([found], other)).toBeUndefined();
+    expect(findFoundLoyalty([found], noAccount)).toBeUndefined();
   });
 });

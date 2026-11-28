@@ -1,6 +1,9 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { openBooking, owner, partner, signIn, signOut } from "./helpers";
 import { clearData, readPerson, readTravelProfile, readUser, seedFlight, seedPerson, seedTravelProfile, seedTrip } from "./seed";
+
+const openSection = (page: Page, name: string) =>
+  page.getByRole("navigation", { name: "Profile sections" }).getByRole("button", { name: new RegExp(`^${name}`) }).click();
 
 test.beforeEach(async () => {
   await clearData();
@@ -26,24 +29,26 @@ test("the owner sees their imported profile, shares it with a partner, and the p
     travelers: [{ title: "Ann Example", fields: [{ label: "Meal preference", value: "Vegetarian" }] }],
   });
   await page.goto("/profile");
-  // Programs at a glance; the full entry folds below.
-  await expect(page.getByRole("table", { name: "Loyalty programs" }).getByRole("row")).toHaveText(["ProgramAccountBalanceStatusWhose", "Example Air MilesEA12312,000Gold⋮"]);
-  await expect(page.getByText("Elite status")).toBeHidden();
-  // Every heading stands apart from the next: Balance is right-aligned and Status left-aligned beside it.
-  const gaps = await page.getByRole("table", { name: "Loyalty programs" }).locator("thead th").evaluateAll((cells) => {
-    const textBox = (cell: Element) => {
-      const range = document.createRange();
-      range.selectNodeContents(cell);
-      return range.getBoundingClientRect();
-    };
-    return cells.slice(1).map((cell, i) => textBox(cell).left - textBox(cells[i]!).right).filter((_, i) => cells[i + 1]!.textContent);
-  });
-  for (const gap of gaps) expect(gap).toBeGreaterThanOrEqual(8);
+
   // Documents stay folded until asked for.
   await expect(page.getByText("X1234567")).toBeHidden();
   await page.getByText("Travel document: Passport").click();
   await expect(page.getByText("X1234567")).toBeVisible();
 
+  // Loyalty programs unify summary and full details in one expandable row.
+  await openSection(page, "Loyalty programs");
+  const list = page.getByRole("list", { name: "Loyalty programs" });
+  await expect(list).toContainText("Example Air Miles");
+  await expect(list).toContainText("EA123");
+  await expect(list).toContainText("12,000");
+  await expect(list).toContainText("Gold");
+  await expect(page.getByText("Elite status")).toBeHidden();
+  await list.getByText("Example Air Miles").click();
+  await expect(page.getByText("Elite status")).toBeVisible();
+
+  // Sharing tucks the email form behind "Share with someone".
+  await openSection(page, "Sharing");
+  await page.getByRole("button", { name: "Share with someone" }).click();
   await page.getByLabel("Email address to share with").fill(partner.toUpperCase());
   await page.getByRole("button", { name: "Share" }).click();
   await expect(page.getByText(partner, { exact: true })).toBeVisible();
@@ -51,8 +56,10 @@ test("the owner sees their imported profile, shares it with a partner, and the p
   await signOut(page);
   await signIn(page, partner);
   await page.goto("/profile");
+  await openSection(page, "Sharing");
+  await page.getByRole("button", { name: new RegExp(`From ${owner}`) }).click();
   await expect(page.getByText(`From ${owner}`)).toBeVisible();
-  await expect(page.getByRole("table", { name: "Loyalty programs" }).getByText("EA123")).toBeVisible();
+  await expect(page.getByRole("list", { name: "Loyalty programs" })).toContainText("EA123");
   await page.getByText("Travel document: Passport").click();
   await expect(page.getByText("X1234567")).toBeVisible();
   // The partner reads it but has nothing to change it with.
@@ -66,6 +73,7 @@ test("someone not trusted sees no profile but their own", async ({ page }) => {
   await signIn(page, partner);
   await page.goto("/profile");
   await expect(page.getByText("Nothing imported yet.", { exact: false })).toBeVisible();
+  await openSection(page, "Sharing");
   await expect(page.getByText("Shared with you")).toHaveCount(0);
 });
 
@@ -86,7 +94,7 @@ test("a booking shows the viewer's program its provider belongs to, with the num
   await expect((await openBooking(page, "Cove Liverpool")).getByTestId("segment-loyalty")).toHaveText("Example Air Miles · EA123 · Gold");
 });
 
-test("loyalty numbers found in booking emails join the table and the booking line, and the owner can remove them", async ({ page }) => {
+test("loyalty numbers found in booking emails join the list and the booking line, and the owner can remove them", async ({ page }) => {
   const ownerUid = await signIn(page, owner);
   await seedTrip(ownerUid, "e2e-loyalty", { provider: "Cove Hotels" });
   const found = { program: "Cove Club", number: "CC 4455", status: "Member", messageId: "m1", label: "Your stay at Cove", at: "2026-11-01T00:00:00Z" };
@@ -97,14 +105,15 @@ test("loyalty numbers found in booking emails join the table and the booking lin
   await expect((await openBooking(page, "Cove Liverpool")).getByTestId("segment-loyalty")).toHaveText("Cove Club · CC 4455 · Member");
 
   await page.goto("/profile");
-  await expect(page.getByRole("table", { name: "Loyalty programs" }).getByRole("row")).toHaveText([
-    "ProgramAccountBalanceStatusWhose",
-    "Cove ClubCC 4455Member⋮",
-    "Example Air ClubEA 999⋮",
-  ]);
-  const list = page.getByRole("list", { name: "Found in your emails" });
-  await expect(list).toContainText("From “Your stay at Cove”");
-  await list.getByRole("listitem").filter({ hasText: "Example Air Club" }).getByRole("button", { name: "Remove" }).click();
+  await openSection(page, "Loyalty programs");
+  const list = page.getByRole("list", { name: "Loyalty programs" });
+  await expect(list).toContainText("Cove Club");
+  await expect(list).toContainText("CC 4455");
+  await expect(list).toContainText("Example Air Club");
+  await list.getByText("Cove Club").click();
+  await expect(list).toContainText("Your stay at Cove");
+  await list.getByText("Example Air Club").click();
+  await page.getByRole("button", { name: "Remove Example Air Club" }).click();
   await expect(list.getByRole("listitem")).toHaveCount(1);
   await expect.poll(async () => (await readTravelProfile(ownerUid))?.foundLoyalty).toEqual([found]);
 });
@@ -120,21 +129,24 @@ test("each loyalty number is shown under whose it is, on the profile and on a bo
   await expect((await openBooking(page, "Cove Liverpool")).getByTestId("segment-loyalty").getByRole("listitem")).toHaveText(["Example Air Club · EA 123", "Example Air Club · EA 999 · Alex Sample"]);
 
   await page.goto("/profile");
-  await expect(page.getByRole("table", { name: "Loyalty programs: You" })).toContainText("EA 123");
-  await expect(page.getByRole("table", { name: "Loyalty programs: Alex Sample" })).toContainText("EA 999");
+  await openSection(page, "Loyalty programs");
+  await expect(page.getByRole("list", { name: "Loyalty programs: You" })).toContainText("EA 123");
+  await expect(page.getByRole("list", { name: "Loyalty programs: Alex Sample" })).toContainText("EA 999");
 
   // Mine was someone else's all along.
+  await page.getByRole("list", { name: "Loyalty programs: You" }).locator("summary", { hasText: "EA 123" }).click();
   await page.getByRole("button", { name: "Whose is Example Air Club EA 123?" }).click();
-  await page.getByRole("button", { name: "Alex Sample" }).click();
-  await expect(page.getByRole("table", { name: "Loyalty programs: Alex Sample" })).toContainText("EA 123");
+  await page.getByRole("dialog").getByRole("button", { name: "Alex Sample" }).click();
+  await expect(page.getByRole("list", { name: "Loyalty programs: Alex Sample" })).toContainText("EA 123");
   await expect(page.getByRole("heading", { name: "You", exact: true })).toHaveCount(0);
   await expect.poll(async () => (await readTravelProfile(ownerUid))?.loyaltyPeople).toEqual([{ program: "Example Air Club", number: "EA 123", person: "Alex Sample" }]);
 
   // And this one is someone new's.
+  await page.getByRole("list", { name: "Loyalty programs: Alex Sample" }).locator("summary", { hasText: "EA 999" }).click();
   await page.getByRole("button", { name: "Whose is Example Air Club EA 999?" }).click();
   await page.getByLabel("Someone else's name").fill("Sam Sample");
   await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByRole("table", { name: "Loyalty programs: Sam Sample" })).toContainText("EA 999");
+  await expect(page.getByRole("list", { name: "Loyalty programs: Sam Sample" })).toContainText("EA 999");
 });
 
 test("a loyalty holder's name that is the owner's, however written, is theirs, and Same person as… says so", async ({ page }) => {
@@ -143,21 +155,24 @@ test("a loyalty holder's name that is the owner's, however written, is theirs, a
   const found = (number: string, person: string) => ({ program: "Example Air Club", number, person, messageId: `m${number}`, label: "Your flight", at: "2026-11-01T00:00:00Z" });
   await seedTravelProfile(ownerUid, { ownerEmail: owner, trustedEmails: [], documents: [], loyalty: [], travelers: [], foundLoyalty: [found("EA 1", "Samlee Example"), found("EA 2", "Samuel Example")] });
   await page.goto("/profile");
+  await openSection(page, "Loyalty programs");
   // A first and middle name run together is the owner's.
-  await expect(page.getByRole("table", { name: "Loyalty programs: You" })).toContainText("EA 1");
+  await expect(page.getByRole("list", { name: "Loyalty programs: You" })).toContainText("EA 1");
   // A misspelling is someone else until the owner says otherwise.
-  await expect(page.getByRole("table", { name: "Loyalty programs: Samuel Example" })).toContainText("EA 2");
+  await expect(page.getByRole("list", { name: "Loyalty programs: Samuel Example" })).toContainText("EA 2");
   await page.getByRole("button", { name: "Same person as…" }).click();
   await page.getByRole("dialog").getByRole("button", { name: /Sam Example/ }).click();
   await expect.poll(async () => (await readPerson(ownerUid, "me"))?.aliases).toEqual(["Sam Lee Example", "Samuel Example"]);
   await expect(page.getByRole("heading", { name: "Samuel Example" })).toHaveCount(0);
-  await expect(page.getByRole("table", { name: "Loyalty programs" })).toContainText("EA 2");
+  await expect(page.getByRole("list", { name: "Loyalty programs" })).toContainText("EA 2");
 });
 
 test("home is set by city and a country written as a name, saved as its code", async ({ page }) => {
   const ownerUid = await signIn(page, owner);
   await seedTravelProfile(ownerUid, { ownerEmail: owner, trustedEmails: [], documents: [], loyalty: [], travelers: [] });
   await page.goto("/profile");
+  await openSection(page, "Home");
+  await page.getByRole("button", { name: "Add home" }).click();
   await page.getByLabel("City").fill("London");
   await page.getByLabel("Country").fill("United Kingdom");
   await page.locator('input[type="date"]').fill("2022-01-15");
@@ -179,6 +194,7 @@ test("home's airports are worked out from the trips that leave from them, and ca
     await seedFlight(id, { id: `${id}-back`, start: `${back}T09:00:00+04:00`, end: `${back}T14:00:00+00:00`, origin: dxb, destination: man });
   }
   await page.goto("/profile");
+  await openSection(page, "Home");
   const airports = page.getByRole("list", { name: "Home airports" });
   await expect(airports).toContainText("Manchester airports: MAN");
 
@@ -211,6 +227,7 @@ test("a month of stays is listed as home, and Not home turns it back into a trip
     await route.fulfill({ json: { changed: 1, deleted: 1 } });
   });
   await page.goto("/profile");
+  await openSection(page, "Home");
   const stays = page.getByTestId("long-stays");
   await expect(stays).toContainText("London, 13 Feb – 20 Mar 2022 · from your stays");
   await stays.getByRole("button", { name: "Not home" }).click();
@@ -231,6 +248,7 @@ test("Not home says so when the trips couldn't be regrouped", async ({ page }) =
   await seedTrip(ownerUid, "e2e-winter-2", { id: "e2e-flat-2", ...flat("2022-02-27", "2022-03-20") }, { title: "London", start: "2022-02-27", end: "2022-03-20" });
   await page.route("http://localhost:8080/trips/regroup", (route) => route.fulfill({ status: 500, json: { error: "unavailable" } }));
   await page.goto("/profile");
+  await openSection(page, "Home");
   await page.getByTestId("long-stays").getByRole("button", { name: "Not home" }).click();
   await expect(page.getByText("Saved, but your trips weren't regrouped. Use Regroup trips in Settings.")).toBeVisible();
   await expect(page.getByTestId("long-stays")).toBeHidden();

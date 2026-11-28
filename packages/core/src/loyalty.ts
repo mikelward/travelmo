@@ -347,3 +347,12 @@ export function loyaltyByPerson(entries: readonly ProfileEntry[]): { person?: st
     .sort(([a], [b]) => (a === "" ? -1 : b === "" ? 1 : a.localeCompare(b)))
     .map(([person, list]) => ({ ...(person ? { person } : {}), entries: list }));
 }
+
+// The email-extracted membership behind a unified loyalty entry, when one
+// exists, so the UI can remove it directly from the program's row.
+export function findFoundLoyalty(found: readonly FoundLoyalty[], entry: ProfileEntry): FoundLoyalty | undefined {
+  const account = loyaltySummary(entry).account;
+  if (!account) return undefined;
+  return found.find((f) => sameMembership(f, { program: entry.title, number: account }));
+}
+

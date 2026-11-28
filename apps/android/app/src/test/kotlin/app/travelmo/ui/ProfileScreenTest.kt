@@ -1,17 +1,17 @@
 package app.travelmo.ui
 
 import androidx.activity.ComponentActivity
-import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.travelmo.core.FoundLoyalty
 import app.travelmo.core.TravelProfile
@@ -23,7 +23,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 
-/** The Profile tab's loyalty numbers found in emails, and what Remove does. */
+/** The Profile hub, unified loyalty list, people, and home error recovery. */
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [36], qualifiers = "w411dp-h914dp-420dpi")
 class ProfileScreenTest {
@@ -41,6 +41,11 @@ class ProfileScreenTest {
         composeRule.setContent { TravelmoTheme { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = {}) } }
     }
 
+    private fun openSection(label: String) {
+        composeRule.onNodeWithText(label).performClick()
+        composeRule.waitForIdle()
+    }
+
     @Test
     fun `a trip that can't be read holds back home over time, but not the corrections, until read again`() {
         val base = FakeTripStore()
@@ -53,6 +58,7 @@ class ProfileScreenTest {
             }
         }
         show(store)
+        openSection("Home")
         val message = "1 trip couldn't be read, so home can't be worked out yet."
         composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(message))
         // The correction and its Remove stay, to be changed while home waits.
@@ -73,8 +79,7 @@ class ProfileScreenTest {
             ),
         )
         show(store)
-        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("This is me"))
-        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("YOU"))
+        openSection("People")
         composeRule.onNodeWithText("YOU").assertExists()
         composeRule.onNodeWithText("This is me").performClick()
         composeRule.waitForIdle()
@@ -91,6 +96,7 @@ class ProfileScreenTest {
             ),
         )
         show(store)
+        openSection("People")
         composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Pat Sample"))
         // Listed most named first: Pat Example, Sam Example, Pat Sample.
         composeRule.onAllNodesWithText("Same person as…")[2].performClick()
@@ -106,6 +112,7 @@ class ProfileScreenTest {
         val many = List(40) { app.travelmo.core.Person("p$it", "Person $it Example", bookings = 100 - it) }
         val store = FakeTripStore(people = many)
         show(store)
+        openSection("People")
         composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Person 0 Example"))
         composeRule.onAllNodesWithText("Same person as…")[0].performClick()
         composeRule.onNodeWithText("Person 39 Example").performScrollTo().performClick()
@@ -121,7 +128,7 @@ class ProfileScreenTest {
         )
         val store = FakeTripStore(profile = profile, people = listOf(app.travelmo.core.Person("me", "Sam Example", bookings = 4, direct = 4)))
         show(store)
-        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Same person as…"))
+        openSection("Loyalty programs")
         composeRule.onNodeWithText("Same person as…").performClick()
         composeRule.onNodeWithText("Samuel Example is the same person as").assertExists()
         composeRule.onAllNodesWithText("Sam Example").onLast().performClick()
@@ -134,7 +141,10 @@ class ProfileScreenTest {
     fun `removing a found number goes to the store`() {
         val store = FakeTripStore()
         show(store)
-        composeRule.onNodeWithContentDescription("Remove Cove Club").performScrollTo().performClick()
+        openSection("Loyalty programs")
+        composeRule.onNodeWithText("Cove Club").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("Remove Cove Club").performClick()
         composeRule.waitForIdle()
         store.removedFound.map { it.number } shouldBe listOf("CC 4455")
     }
@@ -142,23 +152,50 @@ class ProfileScreenTest {
     @Test
     fun `a removal that fails says so`() {
         show(FailingRemoval())
-        composeRule.onNodeWithContentDescription("Remove Cove Club").performScrollTo().performClick()
+        openSection("Loyalty programs")
+        composeRule.onNodeWithText("Cove Club").performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Couldn't reach the server").performScrollTo()
+        composeRule.onNodeWithContentDescription("Remove Cove Club").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Couldn't reach the server").assertExists()
     }
 
     @Test
     fun `numbers are grouped by whose they are, and saying whose goes to the store`() {
         val store = FakeTripStore()
         show(store)
-        composeRule.onNodeWithText("Sam Example").performScrollTo()
-        composeRule.onNodeWithContentDescription("Whose is Example Air Miles EA 7654321?").performScrollTo().performClick()
+        openSection("Loyalty programs")
+        composeRule.onNodeWithText("EA 7654321").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("Whose is Example Air Miles EA 7654321?").performClick()
         composeRule.onNodeWithText("Mine").performClick()
-        composeRule.onNodeWithContentDescription("Whose is Cove Club CC 4455?").performScrollTo().performClick()
+        composeRule.onNodeWithText("Cove Club").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("Whose is Cove Club CC 4455?").performClick()
         composeRule.onNodeWithText("Cancel").performClick()
         composeRule.waitForIdle()
         // Naming someone new is a text field in a dialog, which Robolectric
         // never idles with; FirestoreTripsTest covers what it saves.
         store.people shouldBe listOf(Triple("Example Air Miles", "EA 7654321", null))
+    }
+
+    @Test
+    fun `a failing Same person as in Loyalty shows its error in Loyalty`() {
+        val profile = TravelProfile(
+            OWNER,
+            foundLoyalty = listOf(FoundLoyalty("Example Air Club", "EA 2", messageId = "m2", at = "2026-11-01T00:00:00Z", person = "Samuel Example")),
+        )
+        val fake = FakeTripStore(profile = profile, people = listOf(app.travelmo.core.Person("me", "Sam Example", bookings = 4, direct = 4)))
+        val store = object : TripStore by fake {
+            override suspend fun setAliases(uid: String, personId: String, aliases: List<String>) {
+                throw IllegalStateException("Couldn't save alias")
+            }
+        }
+        show(store)
+        openSection("Loyalty programs")
+        composeRule.onNodeWithText("Same person as…").performClick()
+        composeRule.onAllNodesWithText("Sam Example").onLast().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Couldn't save alias").assertExists()
     }
 }
