@@ -85,7 +85,8 @@ private fun countryOf(entry: ProfileEntry, kind: DocumentKind): String? {
 }
 
 private fun kindOf(entry: ProfileEntry): DocumentKind {
-    val text = (listOf(entry.title) + entry.fields.filter { isType(it.label) }.map { it.value }).joinToString(" ").lowercase()
+    val explicit = entry.fields.filter { isType(it.label) && it.value.isNotBlank() }.map { it.value }
+    val text = (if (explicit.isNotEmpty()) explicit.joinToString(" ") else entry.title).lowercase()
     return when {
         passportKindPattern.containsMatchIn(text) -> DocumentKind.PASSPORT
         visaKindPattern.containsMatchIn(text) -> DocumentKind.VISA

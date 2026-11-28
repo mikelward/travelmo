@@ -26,8 +26,8 @@ export function Nav() {
             <Link href="/reports" className="hover:underline">
               Reports
             </Link>
-            <Link href="/profile" className="hover:underline">
-              Profile
+            <Link href="/wallet" className="hover:underline">
+              Wallet
             </Link>
             <Link href="/settings" className="hover:underline">
               Settings

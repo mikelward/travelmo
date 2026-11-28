@@ -1,4 +1,4 @@
-import { paths } from "@travelmo/core";
+import { loyaltySummary, paths, sameMembership, type LoyaltyPerson, type ProfileEntry } from "@travelmo/core";
 import { FieldValue, type DocumentSnapshot, type Firestore } from "firebase-admin/firestore";
 import type { TripStore } from "./importer";
 import { errorFields } from "./log";
@@ -140,8 +140,33 @@ export async function resetTrips(
 export async function clearImportedProfile(db: Firestore, uid: string, now: string): Promise<boolean> {
   const ref = db.doc(paths.travelProfile(uid));
   return db.runTransaction(async (t) => {
-    if (!(await t.get(ref)).exists) return false;
-    t.update(ref, { travelers: [], loyalty: [], documents: [], foundLoyalty: [], loyaltyPeople: [], importedAt: FieldValue.delete(), updatedAt: now });
+    const snap = await t.get(ref);
+    if (!snap.exists) return false;
+    const data = snap.data() as
+      | { documents?: ProfileEntry[]; loyalty?: ProfileEntry[]; loyaltyPeople?: LoyaltyPerson[] }
+      | undefined;
+    const manualDocs = Array.isArray(data?.documents) ? data.documents.filter((d) => d?.manual === true) : [];
+    const people = Array.isArray(data?.loyaltyPeople) ? data.loyaltyPeople : [];
+    const reversedPeople = [...people].reverse();
+    const manualLoyalty = (Array.isArray(data?.loyalty) ? data.loyalty.filter((l) => l?.manual === true) : []).map((entry) => {
+      const account = loyaltySummary(entry).account;
+      const said = account ? reversedPeople.find((p) => sameMembership(p, { program: entry.title, number: account })) : undefined;
+      if (!said) return entry;
+      const baseFields = entry.fields.filter((f) => f.label !== "Belongs to");
+      return {
+        ...entry,
+        fields: said.person ? [...baseFields, { label: "Belongs to", value: said.person }] : baseFields,
+      };
+    });
+    t.update(ref, {
+      travelers: [],
+      loyalty: manualLoyalty,
+      documents: manualDocs,
+      foundLoyalty: [],
+      loyaltyPeople: [],
+      importedAt: FieldValue.delete(),
+      updatedAt: now,
+    });
     return true;
   });
 }

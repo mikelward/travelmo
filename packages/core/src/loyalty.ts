@@ -268,10 +268,16 @@ export function foundLoyaltyEntry(found: FoundLoyalty): ProfileEntry {
 // that is one of theirs is shown as that person's name, so every spelling
 // of someone ("Jessica Wilkes" merged into "Jessica Ward") is one person,
 // and one of the owner's own ("Mikelbradlee Ward") is the owner's.
-export function allLoyalty(
+export type ResolvedLoyalty = {
+  entry: ProfileEntry;
+  /** Index in `profile.loyalty`, or `-1` when the row comes only from `foundLoyalty`. */
+  savedIndex: number;
+};
+
+export function allLoyaltyWithSource(
   profile: Pick<TravelProfile, "loyalty" | "foundLoyalty" | "importedAt" | "loyaltyPeople">,
   travelers: readonly (Person & { bookings: number; direct: number })[] = [],
-): ProfileEntry[] {
+): ResolvedLoyalty[] {
   const found = profile.foundLoyalty ?? [];
   // Whose it is: as the owner said, else as the email named, else theirs.
   const people = profile.loyaltyPeople ?? [];
@@ -282,16 +288,21 @@ export function allLoyalty(
   };
   const reversedPeople = [...people].reverse();
   const withPerson = (entry: ProfileEntry, number: string | undefined, fromEmail?: FoundLoyalty): ProfileEntry => {
+    const storedPerson = entry.fields.find((f) => f.label === personLabel)?.value;
+    const baseFields = entry.fields.filter((f) => f.label !== personLabel);
     const said = number ? reversedPeople.find((p) => sameMembership(p, { program: entry.title, number })) : undefined;
-    const person = known(said ? said.person : fromEmail?.person);
-    return person ? { ...entry, fields: [...entry.fields, { label: personLabel, value: person }] } : entry;
+    const person = known(said ? said.person : (fromEmail?.person ?? storedPerson));
+    return person ? { ...entry, fields: [...baseFields, { label: personLabel, value: person }] } : { ...entry, fields: baseFields };
   };
   // Precompute each imported entry's account number once so matching against found entries doesn't re-parse summaries.
-  const importedAccounts = profile.loyalty.map((entry) => ({ entry, account: loyaltySummary(entry).account }));
+  const importedAccounts = profile.loyalty.map((entry, savedIndex) => ({ entry, savedIndex, account: loyaltySummary(entry).account }));
   const matchedFound = new Set<FoundLoyalty>();
-  // Newer than the TripIt upload, so it has the last word (no upload: it has).
-  const afterUpload = (at: string | undefined) => !!at && (!profile.importedAt || at > profile.importedAt);
-  const imported = importedAccounts.map(({ entry, account }) => {
+  // Per-entry updatedAt (from a manual edit or the import that wrote this
+  // entry) wins over the document-level importedAt so an unrelated later
+  // upload does not age retained entries.
+  const cutoffFor = (entry: ProfileEntry) => entry.updatedAt ?? profile.importedAt;
+  const afterCutoff = (at: string | undefined, cutoff: string | undefined) => !!at && (!cutoff || at > cutoff);
+  const imported: ResolvedLoyalty[] = importedAccounts.map(({ entry, savedIndex, account }) => {
     let statement: FoundLoyalty | undefined;
     if (account) {
       for (const f of found) {
@@ -301,29 +312,43 @@ export function allLoyalty(
         }
       }
     }
-    const balance = statement?.balance && afterUpload(statement.balanceAt) ? statement.balance : undefined;
-    const status = statement?.status && afterUpload(statement.statusAt) ? statement.status : undefined;
-    if (!statement || (!balance && !status)) return withPerson(entry, account, statement);
+    const cutoff = cutoffFor(entry);
+    const balance = statement?.balance && afterCutoff(statement.balanceAt, cutoff) ? statement.balance : undefined;
+    const status = statement?.status && afterCutoff(statement.statusAt, cutoff) ? statement.status : undefined;
+    if (!statement || (!balance && !status)) return { entry: withPerson(entry, account, statement), savedIndex };
     // Under the labels the table reads first, so the email's win.
-    return withPerson({
-      ...entry,
-      fields: [
-        ...(balance ? [{ label: "Balance", value: balance }] : []),
-        ...(status ? [{ label: "Elite status", value: status }] : []),
-        ...entry.fields,
-        ...(balance ? [{ label: "Balance from email", value: statement.balanceLabel ?? statement.label ?? "A statement" }] : []),
-      ],
-    }, account, statement);
+    return {
+      entry: withPerson({
+        ...entry,
+        fields: [
+          ...(balance ? [{ label: "Balance", value: balance }] : []),
+          ...(status ? [{ label: "Elite status", value: status }] : []),
+          ...entry.fields,
+          ...(balance ? [{ label: "Balance from email", value: statement.balanceLabel ?? statement.label ?? "A statement" }] : []),
+        ],
+      }, account, statement),
+      savedIndex,
+    };
   });
-  const all = [...imported, ...found.filter((f) => !matchedFound.has(f)).map((f) => withPerson(foundLoyaltyEntry(f), f.number, f))];
+  const all: ResolvedLoyalty[] = [
+    ...imported,
+    ...found.filter((f) => !matchedFound.has(f)).map((f) => ({ entry: withPerson(foundLoyaltyEntry(f), f.number, f), savedIndex: -1 })),
+  ];
   // The owner's first, as a booking lists them.
-  const mine: ProfileEntry[] = [];
-  const theirs: ProfileEntry[] = [];
-  for (const e of all) {
-    if (loyaltySummary(e).person !== undefined) theirs.push(e);
-    else mine.push(e);
+  const mine: ResolvedLoyalty[] = [];
+  const theirs: ResolvedLoyalty[] = [];
+  for (const r of all) {
+    if (loyaltySummary(r.entry).person !== undefined) theirs.push(r);
+    else mine.push(r);
   }
   return [...mine, ...theirs];
+}
+
+export function allLoyalty(
+  profile: Pick<TravelProfile, "loyalty" | "foundLoyalty" | "importedAt" | "loyaltyPeople">,
+  travelers: readonly (Person & { bookings: number; direct: number })[] = [],
+): ProfileEntry[] {
+  return allLoyaltyWithSource(profile, travelers).map((r) => r.entry);
 }
 
 // The owner's word on whose a membership is, replacing any earlier word on

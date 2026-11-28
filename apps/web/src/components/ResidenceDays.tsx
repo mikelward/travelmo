@@ -113,7 +113,7 @@ function Result({ result, titles }: { result: RuleResult; titles: Map<string, st
       {result.unplaced.length > 0 && (
         <Stretches label="Days we can't place" items={result.unplaced} titles={titles}>
           <li className="text-muted">
-            Give these trips&rsquo; bookings a place, or set home on your <Link href="/profile" className="underline">Profile</Link>.
+            Give these trips&rsquo; bookings a place, or set home in <Link href="/settings?section=home" className="underline">Settings</Link>.
           </li>
         </Stretches>
       )}
@@ -174,7 +174,7 @@ export function ResidenceDays({
       </div>
       {!report.homeCountryKnown && (
         <p className="mt-2 text-danger">
-          Days with no trip count as at home, but home has no country yet. <Link href="/profile" className="underline">Add one on your Profile</Link>.
+          Days with no trip count as at home, but home has no country yet. <Link href="/settings?section=home" className="underline">Add one in Settings</Link>.
         </p>
       )}
       <ul className="mt-2 divide-y divide-zinc-200 dark:divide-zinc-800" aria-label="Residence and visa days">

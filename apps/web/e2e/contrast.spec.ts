@@ -101,7 +101,7 @@ for (const colorScheme of ["light", "dark"] as const) {
     for (const [path, ready] of [
       ["/reports", page.getByTestId("summary")],
       ["/calendar", page.getByRole("heading", { level: 1, name: "November 2026" })],
-      ["/profile", page.getByText("Travel document: Passport")],
+      ["/wallet", page.getByText("Travel document: Passport")],
       ["/privacy", page.getByRole("heading", { level: 1 })],
     ] as const) {
       await page.goto(path);

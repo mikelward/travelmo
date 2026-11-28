@@ -392,13 +392,13 @@ class ScreenScreenshotTest {
     @Test
     fun profile() {
         val viewModel = viewModel()
-        capture("profile") { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.PROFILE) {} }) }
+        capture("profile") { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.WALLET) {} }) }
     }
 
     @Test
     fun profile_dark() {
         val viewModel = viewModel()
-        capture("profile_dark", dark = true) { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.PROFILE) {} }) }
+        capture("profile_dark", dark = true) { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.WALLET) {} }) }
     }
 
     // The list with a trip the user is only watching: none of its travelers is them.
@@ -415,14 +415,7 @@ class ScreenScreenshotTest {
         capture("trip_list_watching") { TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}) }
     }
 
-    // The Profile's Loyalty sub-screen: unified expandable cards with person filter chips.
-    @Test
-    fun profile_loyalty() {
-        val viewModel = viewModel()
-        capture("profile_loyalty") { ProfileSectionScreen(viewModel = viewModel, section = ProfileSection.LOYALTY, onBack = {}) }
-    }
-
-    // The Profile's People sub-screen: booking travelers merged with imported details.
+    // The Settings People sub-screen: booking travelers merged with imported details.
     @Test
     fun profile_people() {
         val store = FakeTripStore(
@@ -433,10 +426,19 @@ class ScreenScreenshotTest {
             ),
         )
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
-        capture("profile_people") { ProfileSectionScreen(viewModel = viewModel, section = ProfileSection.PEOPLE, onBack = {}) }
+        val user = SignedIn(OWNER, OWNER_EMAIL, true)
+        capture("profile_people") {
+            SettingsSectionScreen(
+                account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")),
+                user = user,
+                viewModel = viewModel,
+                section = SettingsSection.PEOPLE,
+                onBack = {},
+            )
+        }
     }
 
-    // The Profile's Home sub-screen: London since 2022 by a correction.
+    // The Settings Home sub-screen: London since 2022 by a correction.
     @Test
     fun profile_home() = profileHome("profile_home", dark = false)
 
@@ -447,7 +449,16 @@ class ScreenScreenshotTest {
         val store = FakeTripStore()
         store.rides.value = app.travelmo.data.RideSettings(homes = listOf(app.travelmo.core.HomeCorrection("London", "GB", "2022-01-15")))
         val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
-        capture(name, dark = dark) { ProfileSectionScreen(viewModel = viewModel, section = ProfileSection.HOME, onBack = {}) }
+        val user = SignedIn(OWNER, OWNER_EMAIL, true)
+        capture(name, dark = dark) {
+            SettingsSectionScreen(
+                account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")),
+                user = user,
+                viewModel = viewModel,
+                section = SettingsSection.HOME,
+                onBack = {},
+            )
+        }
     }
 
     @Test

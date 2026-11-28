@@ -1,13 +1,14 @@
 "use client";
 
-import { RideCompany, cleanSenderList, imapMailboxes, imapRedirect, imapServerFor, maxImapMailboxes, parseCountries, describeBackfill, describeStartOver, gmailMailboxes, isReading, maxGmailMailboxes, pausedReason, describeRegroup, describeRefresh, groupSkips, refreshBlurb, refreshButton, refreshEverythingConfirm, failedEmailIds, failedEmailLine, failedEmailsReport, gmailSourceLink, moreFailedEmails, ParsedMessage, type RefreshProgress, type Trip, maxRideCompanies, paths, type BackfillProgress, type GmailConnection, type ImapConnection, type SenderPatterns, type SkipGroup } from "@travelmo/core";
+import { RideCompany, cleanSenderList, guessMe, imapMailboxes, imapRedirect, imapServerFor, maxImapMailboxes, parseCountries, describeBackfill, describeStartOver, gmailMailboxes, isReading, maxGmailMailboxes, pausedReason, describeRegroup, describeRefresh, groupSkips, refreshBlurb, refreshButton, refreshEverythingConfirm, failedEmailIds, failedEmailLine, failedEmailsReport, gmailSourceLink, moreFailedEmails, ParsedMessage, type RefreshProgress, type Trip, maxRideCompanies, paths, type BackfillProgress, type GmailConnection, type ImapConnection, type SenderPatterns, type SkipGroup } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AccountDeleted, DeleteAccountSection, useAccountDeletion } from "@/components/DeleteAccount";
 import { EmailAddressesSection } from "@/components/EmailAddresses";
+import { HomeSection, PeopleSection, WalletSharingSection } from "@/components/ProfileSettingsSections";
 import { ReportDialog } from "@/components/ReportBug";
 import { SegmentForm } from "@/components/SegmentForm";
 import { addSegmentToFittingTrip } from "@/lib/edits";
@@ -18,12 +19,15 @@ import { api } from "@/lib/api";
 import { exportLinks, useCalendarExport } from "@/lib/calendarExport";
 import { useAuth } from "@/lib/auth";
 import { firestore } from "@/lib/firebase";
+import { homeLine, useHomes } from "@/lib/home";
 import { useInstall } from "@/lib/install";
 import { useSaveForOffline } from "@/lib/offline";
+import { usePeople } from "@/lib/people";
 import { subscribePush, unsubscribePush, usePushState } from "@/lib/push";
 import { describeCalendarResult, previewIcs } from "@/lib/ics";
 import { describeTripItResult, previewTripIt } from "@/lib/tripit";
 import { isFromMailbox } from "@/lib/sourceLinks";
+import { useSharedProfiles, useTravelProfile } from "@/lib/travelProfile";
 import { useFeeds, useProfile, useSenderPatterns, useTrips } from "@/lib/trips";
 import { countryName } from "@/lib/countries";
 import { addRideCompany, removeRideCompany } from "@/lib/rides";
@@ -1618,24 +1622,33 @@ function SignOutSection() {
   );
 }
 
-type SettingsSection = "email" | "calendars" | "reminders" | "account" | "app";
+type SettingsSection = "email" | "calendars" | "reminders" | "home" | "people" | "sharing" | "account" | "app";
+
+const validSections = new Set<SettingsSection>(["email", "calendars", "reminders", "home", "people", "sharing", "account", "app"]);
 
 const countLabel = (n: number, singular: string, plural: string) => `${n} ${n === 1 ? singular : plural}`;
 
-// Selects the right section when returning from Gmail or Google Calendar OAuth.
-function OAuthSectionSync({ onSelect }: { onSelect: (section: SettingsSection) => void }) {
+// Selects the right section when returning from Gmail/Calendar OAuth or a ?section= link.
+function SectionParamSync({ onSelect }: { onSelect: (section: SettingsSection) => void }) {
   const params = useSearchParams();
   const hasCalendar = params.has("calendar");
   const hasGmail = params.has("gmail");
+  const section = params.get("section");
   useEffect(() => {
-    if (hasCalendar) onSelect("calendars");
+    if (section && validSections.has(section as SettingsSection)) onSelect(section as SettingsSection);
+    else if (hasCalendar) onSelect("calendars");
     else if (hasGmail) onSelect("email");
-  }, [hasCalendar, hasGmail, onSelect]);
+  }, [hasCalendar, hasGmail, section, onSelect]);
   return null;
 }
 
 function SettingsHub({ user, onDeleted }: { user: User; onDeleted: () => void }) {
   const profile = useProfile(user.uid);
+  const travelProfile = useTravelProfile(user.uid);
+  const people = usePeople(user.uid);
+  const homes = useHomes(user);
+  const sharedAll = useSharedProfiles(user);
+  const shared = useMemo(() => (sharedAll ?? []).filter((p) => p.ownerUid !== user.uid), [sharedAll, user.uid]);
   const feeds = useFeeds(user.uid);
   const calendarExport = useCalendarExport(user.uid);
   const [selected, setSelected] = useState<SettingsSection | null>(null);
@@ -1663,6 +1676,23 @@ function SettingsHub({ user, onDeleted }: { user: User; onDeleted: () => void })
     rideCount > 0 ? countLabel(rideCount, "ride company", "ride companies") : undefined,
   ].filter(Boolean);
 
+  const homeSummary = useMemo(() => {
+    if (!homes) return "Loading…";
+    if (homes.failed > 0) return "Couldn't read all trips";
+    return homeLine(homes.periods) ?? "Not known yet";
+  }, [homes]);
+
+  const me = useMemo(() => (people ? guessMe(people) : undefined), [people]);
+  const peopleCount = (people?.length ?? 0) || (travelProfile?.travelers.length ?? 0);
+  const peopleMeta =
+    peopleCount > 0 ? (me ? `${countLabel(peopleCount, "person", "people")} · You: ${me.name}` : countLabel(peopleCount, "person", "people")) : "None yet";
+
+  const trustedCount = travelProfile?.trustedEmails.length ?? 0;
+  const sharingParts = [
+    trustedCount > 0 ? `Shared with ${trustedCount}` : undefined,
+    shared.length > 0 ? `${shared.length} shared with you` : undefined,
+  ].filter(Boolean);
+
   const extraEmails = profile?.emails?.length ?? 0;
   const totalEmails = extraEmails + (user.email ? 1 : 0);
   const accountMeta = user.email
@@ -1677,6 +1707,9 @@ function SettingsHub({ user, onDeleted }: { user: User; onDeleted: () => void })
         { id: "email", label: "Email & imports", meta: emailParts.length > 0 ? emailParts.join(" · ") : "Connect email or upload" },
         { id: "calendars", label: "Calendars", meta: calendarParts.length > 0 ? calendarParts.join(" · ") : "Sync, feeds, export" },
         { id: "reminders", label: "Reminders & rides", meta: reminderParts.length > 0 ? reminderParts.join(" · ") : "Reminders, ride companies" },
+        { id: "home", label: "Home", meta: homeSummary },
+        { id: "people", label: "People", meta: peopleMeta },
+        { id: "sharing", label: "Wallet sharing", meta: sharingParts.length > 0 ? sharingParts.join(" · ") : "Only you" },
         { id: "account", label: "Account & data", meta: accountMeta },
         { id: "app", label: "App & about", meta: "Install · Licenses" },
       ],
@@ -1688,7 +1721,7 @@ function SettingsHub({ user, onDeleted }: { user: User; onDeleted: () => void })
   return (
     <>
       <Suspense fallback={null}>
-        <OAuthSectionSync onSelect={setSelected} />
+        <SectionParamSync onSelect={setSelected} />
       </Suspense>
       <h1 className="mb-6 text-2xl font-semibold">Settings</h1>
       <SectionHub
@@ -1730,6 +1763,9 @@ function SettingsHub({ user, onDeleted }: { user: User; onDeleted: () => void })
             <RideCompaniesSection user={user} />
           </>
         )}
+        {effective === "home" && <HomeSection user={user} homes={homes} />}
+        {effective === "people" && <PeopleSection user={user} people={people} imported={travelProfile?.travelers ?? []} />}
+        {effective === "sharing" && <WalletSharingSection user={user} profile={travelProfile} shared={shared} />}
         {effective === "account" && (
           <>
             <EmailAddressesSection user={user} />

@@ -513,18 +513,36 @@ describe("resetTrips", () => {
 });
 
 describe("startOver", () => {
-  it("empties what imports put on the travel profile, keeping who may see it", async () => {
+  it("empties what imports put on the travel profile, keeping who may see it and manual wallet entries", async () => {
     const uid = `start-over-${Date.now()}`;
     const ref = db.doc(paths.travelProfile(uid));
     const entry = { title: "Example Air", fields: [{ label: "Number", value: "EA 123" }] };
+    const manualLoyaltyToMine = {
+      title: "Manual Air",
+      fields: [
+        { label: "Number", value: "MA 999" },
+        { label: "Belongs to", value: "Sam" },
+      ],
+      manual: true,
+    };
+    const manualLoyaltyToSam = {
+      title: "Second Air",
+      fields: [{ label: "Number", value: "SA 456" }],
+      manual: true,
+    };
+    const manualDoc = { title: "Passport", fields: [{ label: "Number", value: "P123" }], manual: true };
     await ref.set({
       ownerUid: uid,
       trustedEmails: ["partner@example.com"],
       travelers: [entry],
-      loyalty: [entry],
-      documents: [entry],
+      loyalty: [entry, manualLoyaltyToMine, manualLoyaltyToSam],
+      documents: [entry, manualDoc],
       foundLoyalty: [{ program: "Example Air", number: "EA 123", messageId: "m1", foundAt: at }],
-      loyaltyPeople: [{ program: "Example Air", number: "EA 123", person: "p1" }],
+      loyaltyPeople: [
+        { program: "Example Air", number: "EA 123", person: "p1" },
+        { program: "Manual Air", number: "MA 999" },
+        { program: "Second Air", number: "SA 456", person: "Sam" },
+      ],
       importedAt: at,
     });
     await db.doc(paths.trip(`${uid}-t`)).set(trip(`${uid}-t`, uid));
@@ -533,7 +551,26 @@ describe("startOver", () => {
     expect(restarted).toBe(1);
     expect(result).toEqual({ trips: 1, mailboxes: 1 });
     const after = (await ref.get()).data();
-    expect(after).toMatchObject({ ownerUid: uid, trustedEmails: ["partner@example.com"], travelers: [], loyalty: [], documents: [], foundLoyalty: [], loyaltyPeople: [], updatedAt: "2026-11-26T12:00:00Z" });
+    expect(after).toMatchObject({
+      ownerUid: uid,
+      trustedEmails: ["partner@example.com"],
+      travelers: [],
+      loyalty: [
+        { title: "Manual Air", fields: [{ label: "Number", value: "MA 999" }], manual: true },
+        {
+          title: "Second Air",
+          fields: [
+            { label: "Number", value: "SA 456" },
+            { label: "Belongs to", value: "Sam" },
+          ],
+          manual: true,
+        },
+      ],
+      documents: [manualDoc],
+      foundLoyalty: [],
+      loyaltyPeople: [],
+      updatedAt: "2026-11-26T12:00:00Z",
+    });
     expect(after).not.toHaveProperty("importedAt");
     // A user with no travel profile has nothing to empty.
     expect(await clearImportedProfile(db, `${uid}-none`, at)).toBe(false);

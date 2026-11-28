@@ -7,7 +7,7 @@ package app.travelmo.core
 
 data class ProfileField(val label: String, val value: String)
 
-data class ProfileEntry(val title: String, val fields: List<ProfileField>)
+data class ProfileEntry(val title: String, val fields: List<ProfileField>, val updatedAt: String? = null, val manual: Boolean = false)
 
 data class TravelProfile(
     val ownerUid: String,

@@ -378,28 +378,49 @@ service cloud.firestore {
           && request.resource.data.createdAt is string;
       }
 
-      // The traveler's profile (documents, loyalty numbers): the parser writes
-      // what was imported; the owner alone chooses, by verified email, who
-      // else may read it, and nobody else writes anything.
+      // The traveler's wallet (documents, loyalty numbers): the owner may add,
+      // edit and remove their own documents and loyalty entries, choose by
+      // verified email who else may read the wallet, and manage email-found
+      // loyalty attributions. Nobody else writes anything.
       match /travelProfile/{document} {
         function trustedList(list) {
           return list is list && list.size() <= 20;
         }
+        function validDocuments(data) {
+          return !('documents' in data) || (data.documents is list && data.documents.size() <= 100);
+        }
+        function validLoyalty(data) {
+          return !('loyalty' in data) || (data.loyalty is list && data.loyalty.size() <= 200);
+        }
+        function validDocumentsUpdate(after, before) {
+          return !('documents' in after.diff(before).affectedKeys())
+            || (after.documents is list && (after.documents.size() <= 100
+              || ('documents' in before && before.documents is list && after.documents.size() < before.documents.size())));
+        }
+        function validLoyaltyUpdate(after, before) {
+          return !('loyalty' in after.diff(before).affectedKeys())
+            || (after.loyalty is list && (after.loyalty.size() <= 200
+              || ('loyalty' in before && before.loyalty is list && after.loyalty.size() < before.loyalty.size())));
+        }
         allow read: if approved() && (isSelf() || isTrusted(resource.data));
         allow create: if member() && isSelf() && document == 'main'
-          && request.resource.data.keys().hasOnly(['ownerUid', 'ownerEmail', 'trustedEmails', 'updatedAt'])
+          && request.resource.data.keys().hasOnly(['ownerUid', 'ownerEmail', 'trustedEmails', 'documents', 'loyalty', 'updatedAt'])
           && request.resource.data.ownerUid == uid
           && (!('ownerEmail' in request.resource.data) || request.resource.data.ownerEmail == request.auth.token.email.lower())
-          && trustedList(request.resource.data.trustedEmails);
+          && (!('trustedEmails' in request.resource.data) || trustedList(request.resource.data.trustedEmails))
+          && validDocuments(request.resource.data)
+          && validLoyalty(request.resource.data);
         // The owner may also remove what emails showed (`foundLoyalty`, at
         // most 2,000, packages/core's maxFoundLoyalty, a bound from the
         // 1 MiB document limit; the parser adds to it) and say whose each membership
         // is (`loyaltyPeople`, at most a hundred).
         allow update: if member() && isSelf()
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['trustedEmails', 'foundLoyalty', 'loyaltyPeople', 'updatedAt'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['trustedEmails', 'documents', 'loyalty', 'foundLoyalty', 'loyaltyPeople', 'updatedAt'])
           && (!('loyaltyPeople' in request.resource.data) || (request.resource.data.loyaltyPeople is list && request.resource.data.loyaltyPeople.size() <= 100))
           // A profile an import started may have no sharing list yet.
           && (!('trustedEmails' in request.resource.data) || trustedList(request.resource.data.trustedEmails))
+          && validDocumentsUpdate(request.resource.data, resource.data)
+          && validLoyaltyUpdate(request.resource.data, resource.data)
           && (!('foundLoyalty' in request.resource.data) || (request.resource.data.foundLoyalty is list && request.resource.data.foundLoyalty.size() <= 2000));
       }
 

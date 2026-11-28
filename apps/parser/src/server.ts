@@ -1233,13 +1233,15 @@ app.post(
     // One TripIt upload at a time per user, so its one-to-one matching holds
     // across them too (leases.ts); a second gets a 409 to try again.
     let counts;
+    let profileTruncated = profile.truncated ?? false;
     try {
       counts = await withUploadLease(db, uid, "tripit", randomBytes(12).toString("base64url"), async (lease) => {
         const imported = await importTripIt(uid, parsed, deps, { beforeEach: () => lease.assertHeld() });
         // The traveler's own details ride the same upload (travelProfile.ts).
         if (!isEmptyProfile(profile)) {
           lease.assertHeld();
-          await saveImportedProfile(db, uid, (await auth.getUser(uid)).email, profile, new Date().toISOString());
+          const saved = await saveImportedProfile(db, uid, (await auth.getUser(uid)).email, profile, new Date().toISOString());
+          if (saved.truncated) profileTruncated = true;
         }
         return imported;
       });
@@ -1253,6 +1255,7 @@ app.post(
       travelers: profile.travelers.length,
       loyaltyPrograms: profile.loyalty.length,
       documents: profile.documents.length,
+      ...(profileTruncated ? { profileTruncated: true } : {}),
     };
     // Counts only: the profile's contents never reach the logs.
     log("INFO", "tripit_import", { uid, ...result });

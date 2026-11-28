@@ -157,7 +157,7 @@ test("residence and visa days ask for home's country when nothing gives one", as
   await openSection(page, "Residence and visa days");
   const section = page.getByRole("region", { name: "Residence and visa days" });
   await expect(section.getByText("Days with no trip count as at home, but home has no country yet.")).toBeVisible();
-  await expect(section.getByRole("link", { name: "Add one on your Profile" })).toHaveAttribute("href", "/profile");
+  await expect(section.getByRole("link", { name: "Add one in Settings" })).toHaveAttribute("href", "/settings?section=home");
 });
 
 test("leaves out a trip the user is only watching", async ({ page }) => {

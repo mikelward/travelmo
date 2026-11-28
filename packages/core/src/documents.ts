@@ -69,7 +69,8 @@ function countryOf(entry: ProfileEntry, kind: DocumentKind): string | undefined 
 const isType = (label: string) => /^(document )?type$/.test(lastPart(label));
 
 function kindOf(entry: ProfileEntry): DocumentKind {
-  const text = [entry.title, ...entry.fields.filter((f) => isType(f.label)).map((f) => f.value)].join(" ").toLowerCase();
+  const explicit = entry.fields.filter((f) => isType(f.label) && f.value.trim()).map((f) => f.value);
+  const text = (explicit.length > 0 ? explicit.join(" ") : entry.title).toLowerCase();
   // As words, electronic ones too (ePassport, e-Visa), never inside a name (Visalia).
   if (/\b(e-?)?passports?\b/.test(text)) return "passport";
   if (/\b(e-?)?visas?\b/.test(text)) return "visa";

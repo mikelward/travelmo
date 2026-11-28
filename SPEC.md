@@ -104,11 +104,13 @@ viewer's zone. Trip bounds are calendar dates.
 - `users/{uid}/settings/patterns` — `allow[], deny[]` sender domains.
 - `users/{uid}/travelProfile/main` — `ownerUid, ownerEmail, trustedEmails[],
   travelers[], loyalty[], documents[], importedAt, updatedAt`: the traveler's
-  own details from a TripIt export, each entry a `{title, fields[{label,
-  value}]}`, and `foundLoyalty[]` (`program, number, holder, status,
-  messageId, label, at`), loyalty numbers read from booking emails. The
-  parser writes the sections and adds to `foundLoyalty`; the owner sets
-  `trustedEmails` and may remove from `foundLoyalty`.
+  wallet (documents and loyalty programs added manually or merged from a
+  TripIt export), each entry a `{title, fields[{label, value}]}`, and
+  `foundLoyalty[]` (`program, number, holder, status, messageId, label, at`),
+  loyalty numbers read from booking emails. The owner may add, edit and remove
+  `documents` (up to 100) and `loyalty` (up to 200), set `trustedEmails` and
+  `loyaltyPeople`, and remove from `foundLoyalty`; a TripIt import merges its
+  sections without overwriting manually added entries.
 - `users/{uid}/feeds/{feedId}` — `url, label, addedAt, lastFetchedAt,
   lastResult, lastError`: subscribed calendar feeds. The owner reads them;
   the parser alone writes them.
@@ -420,9 +422,9 @@ forwarded (no "Fwd:" or "FW:" subject, no forwarded message's header in
 its body, `forwarded`) counts toward who the user is; one forwarded to the
 import address counts neither way. Which person is the user (`guessMe`,
 mirrored in `People.kt`) is the one they said, else the one most named on
-those direct emails, then on any booking. Profile, on the web and Android,
-shows the one taken to be the user at the top as "You" with "Change" to
-switch who that is (one batch, so only one is marked), and lists everyone
+those direct emails, then on any booking. Settings (People), on the web
+and Android, shows the one taken to be the user at the top as "You" with
+"Change" to switch who that is (one batch, so only one is marked), and lists everyone
 else below, most often named first, with each person's other spellings
 ("Also: …"), "Also me" (merges that entry into "You" in one tap), and
 "Same person as…" when more than one other person is listed, which merges
@@ -2737,17 +2739,19 @@ TripIt's details (up to 700,000 bytes): 300,000 bytes
 (`foundLoyaltyBudgetBytes`) and at most 2,000 entries (`maxFoundLoyalty`,
 which the rules check), which nobody reaches; past either a new number is refused
 rather than an old one dropped, and the parser logs `found_loyalty_full`
-(counts only). A TripIt upload replaces its own sections and leaves these alone.
-Profile's Loyalty section and a booking's loyalty line read both (`allLoyalty`): what
-TripIt imported, then what emails showed that it did not have by number,
-each noting the email it came from. On both web and Android, Profile and
-Settings each use a hub (sidebar master-detail on desktop web, a single
-bordered list drilling into sub-pages on mobile and Android): Profile has
-Documents, Loyalty programs, People, Home, and Sharing; Settings has Email
-& imports, Calendars, Reminders & rides, Account & data, and App & about.
-Expanding a loyalty program reveals its full details, "Whose is this?",
-and—when backed by an email extraction (`findFoundLoyalty`)—Remove, since
-the extraction is sometimes wrong. Nothing is logged but counts.
+(counts only). A TripIt upload merges its documents and loyalty entries into
+what is already stored (`mergeProfileEntries`) and leaves `foundLoyalty` alone.
+Wallet (`/wallet`, with `/profile` redirecting to `/wallet`; the Wallet tab on
+Android) shows the person switcher when multiple household members or shared
+wallets exist, a Boarding passes card (upcoming flights within 48 hours and an
+Open Google Wallet shortcut), Documents (passports, visas, UK share codes,
+KTN, IDs, insurance, with manual Add/Edit/Remove and Copy number), and Loyalty
+programs (`allLoyalty`, combining saved and email-found memberships, with
+Copy number, "Whose is this?", and Edit/Remove). Settings uses a single
+bordered hub card (sidebar master-detail on desktop web, drilling into
+sub-pages on mobile and Android) with Email & imports, Calendars, Reminders &
+rides, Home, People, Wallet sharing, Account & data, and App & about. Nothing
+is logged but counts.
 
 When how numbers are read changes, those already kept are brought up to
 it once (`foundLoyaltyRevision`, run in the background as the parser

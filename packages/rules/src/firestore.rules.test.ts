@@ -722,16 +722,39 @@ describe("travel profiles", () => {
     await assertSucceeds(getDoc(doc(as(mixed), paths.travelProfile(owner.uid))));
   });
 
-  it("lets the owner choose who to trust, and nobody write the imported details", async () => {
-    // Before any import, the owner can already start a profile to share.
-    await assertSucceeds(setDoc(doc(as(owner), paths.travelProfile(owner.uid)), { ownerUid: owner.uid, ownerEmail: owner.email, trustedEmails: [partner.email] }));
-    await assertFails(setDoc(doc(as(owner), paths.travelProfile(owner.uid)), { ownerUid: owner.uid, trustedEmails: [], documents: [passport] }));
+  it("lets the owner manage trusted emails, documents, and loyalty, and nobody else write", async () => {
+    // Before any import, the owner can create a wallet with trusted emails, documents, or loyalty.
+    await assertSucceeds(setDoc(doc(as(owner), paths.travelProfile(owner.uid)), { ownerUid: owner.uid, ownerEmail: owner.email, trustedEmails: [partner.email], documents: [passport] }));
+    // Server-only fields like importedAt cannot be forged on create.
+    await assertFails(setDoc(doc(as(owner), paths.travelProfile(owner.uid)), { ownerUid: owner.uid, trustedEmails: [], importedAt: "2026-11-01T00:00:00Z" }));
     await seed([]);
     await assertSucceeds(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { trustedEmails: [partner.email], updatedAt: "2026-11-03T00:00:00Z" }));
-    await assertFails(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { documents: [] }));
+    await assertSucceeds(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { documents: [passport], loyalty: [{ title: "Example Air", fields: [{ label: "Account number", value: "EA1" }] }], updatedAt: "2026-11-03T00:00:00Z" }));
+    await assertFails(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { documents: Array.from({ length: 101 }, () => passport) }));
+    await assertFails(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { loyalty: Array.from({ length: 201 }, () => passport) }));
+    await assertFails(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { documents: "passport" }));
+    await assertFails(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { importedAt: "2026-11-05T00:00:00Z" }));
     await assertFails(updateDoc(doc(as(partner), paths.travelProfile(owner.uid)), { trustedEmails: [stranger.email] }));
+    await assertFails(updateDoc(doc(as(partner), paths.travelProfile(owner.uid)), { documents: [] }));
     await assertFails(setDoc(doc(as(stranger), paths.travelProfile(owner.uid)), { ownerUid: owner.uid, trustedEmails: [stranger.email] }));
     await assertFails(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { trustedEmails: Array.from({ length: 21 }, (_, i) => `p${i}@example.com`) }));
+  });
+
+  it("lets the owner unshare or shrink an oversized imported wallet without letting it grow", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), paths.travelProfile(owner.uid)), {
+        ownerUid: owner.uid,
+        ownerEmail: owner.email,
+        trustedEmails: [partner.email],
+        documents: Array.from({ length: 105 }, () => passport),
+      });
+    });
+    // Unsharing does not touch documents and must succeed.
+    await assertSucceeds(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { trustedEmails: [], updatedAt: "2026-11-04T00:00:00Z" }));
+    // Deleting one entry to reduce the oversized list must succeed.
+    await assertSucceeds(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { documents: Array.from({ length: 104 }, () => passport), updatedAt: "2026-11-04T00:00:01Z" }));
+    // Growing an oversized list is still rejected.
+    await assertFails(updateDoc(doc(as(owner), paths.travelProfile(owner.uid)), { documents: Array.from({ length: 105 }, () => passport), updatedAt: "2026-11-04T00:00:02Z" }));
   });
 
   it("lets the owner remove loyalty numbers found in emails, and nobody else touch them", async () => {

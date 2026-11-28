@@ -2,21 +2,21 @@ package app.travelmo.ui
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasAnyAncestor
-import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.hasScrollToNodeAction
-import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.travelmo.auth.GoogleAccount
+import app.travelmo.auth.SignedIn
 import app.travelmo.core.ChosenHomeAirports
 import app.travelmo.core.HomeCorrection
 import app.travelmo.core.NotHomeStay
@@ -33,7 +33,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 
-/** The Profile's home: worked out with the user's corrections over it, which are added and removed there, as on the web. */
+/** Home in Settings: worked out with the user's corrections over it, which are added and removed there, as on the web. */
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [36], qualifiers = "w411dp-h914dp-420dpi")
 class HomeCorrectionsTest {
@@ -41,20 +41,30 @@ class HomeCorrectionsTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     private val london = HomeCorrection("London", "GB", "2022-01-15")
+    private val user = SignedIn(OWNER, OWNER_EMAIL, true)
 
-    // The Profile is a lazy list: an item is there once the list has scrolled to it.
-    private fun item(text: String): SemanticsNodeInteraction {
-        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(text))
-        return composeRule.onNodeWithText(text)
+    private fun item(text: String): SemanticsNodeInteraction =
+        composeRule.onNodeWithText(text).performScrollTo()
+
+    private fun showHome(viewModel: TripsViewModel) {
+        composeRule.setContent {
+            TravelmoTheme {
+                SettingsSectionScreen(
+                    account = rememberSignedInAccount(GoogleAccount(firebaseAvailable = { true }, webClientId = "client-id")),
+                    user = user,
+                    viewModel = viewModel,
+                    section = SettingsSection.HOME,
+                    onBack = {},
+                )
+            }
+        }
+        composeRule.waitForIdle()
     }
 
     private fun show(): FakeTripStore {
         val store = FakeTripStore()
         store.rides.value = RideSettings(homes = listOf(london))
-        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL)
-        composeRule.setContent { TravelmoTheme { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = {}) } }
-        composeRule.onNodeWithText("Home").performClick()
-        composeRule.waitForIdle()
+        showHome(TripsViewModel(store, OWNER, OWNER_EMAIL))
         return store
     }
 
@@ -63,8 +73,7 @@ class HomeCorrectionsTest {
         val store = show()
         item("Home: London since Jan 2022")
         item("London, GB from 15 Jan 2022")
-        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription("Remove London, GB from 15 Jan 2022"))
-        composeRule.onNodeWithContentDescription("Remove London, GB from 15 Jan 2022").performClick()
+        composeRule.onNodeWithContentDescription("Remove London, GB from 15 Jan 2022").performScrollTo().performClick()
         composeRule.waitForIdle()
         store.rides.value.homes shouldBe emptyList()
     }
@@ -100,8 +109,7 @@ class HomeCorrectionsTest {
         val store = show()
         store.rides.value = store.rides.value.copy(homeAirports = listOf(ChosenHomeAirports("London", "GB", listOf("LHR"))))
         item("London airports: LHR")
-        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription("Edit London airports"))
-        composeRule.onNodeWithContentDescription("Edit London airports").performClick()
+        composeRule.onNodeWithContentDescription("Edit London airports").performScrollTo().performClick()
         item("London airports").performTextReplacement("LHR, lgw")
         item("Save").performClick()
         composeRule.waitForIdle()
@@ -119,10 +127,7 @@ class HomeCorrectionsTest {
             segments = mapOf("winter" to listOf(flat("f1", "2022-02-13", "2022-02-27"), flat("f2", "2022-02-27", "2022-03-20"))),
         )
         val actions = FakeTripActions()
-        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, tripActions = actions)
-        composeRule.setContent { TravelmoTheme { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = {}) } }
-        composeRule.onNodeWithText("Home").performClick()
-        composeRule.waitForIdle()
+        showHome(TripsViewModel(store, OWNER, OWNER_EMAIL, tripActions = actions))
         item("London, 13 Feb – 20 Mar 2022 · from your stays")
         item("Not home").performClick()
         composeRule.waitForIdle()
@@ -140,10 +145,7 @@ class HomeCorrectionsTest {
             trips = listOf(Trip("winter", "London", "2022-02-13", "2022-03-20", OWNER)),
             segments = mapOf("winter" to listOf(flat("f1", "2022-02-13", "2022-02-27"), flat("f2", "2022-02-27", "2022-03-20"))),
         )
-        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, tripActions = FakeTripActions(failure = "Unavailable"))
-        composeRule.setContent { TravelmoTheme { ProfileScreen(viewModel = viewModel, onOpenSettings = {}, bottomBar = {}) } }
-        composeRule.onNodeWithText("Home").performClick()
-        composeRule.waitForIdle()
+        showHome(TripsViewModel(store, OWNER, OWNER_EMAIL, tripActions = FakeTripActions(failure = "Unavailable")))
         item("Not home").performClick()
         composeRule.waitForIdle()
         item(NOT_HOME_REGROUP_FAILED)

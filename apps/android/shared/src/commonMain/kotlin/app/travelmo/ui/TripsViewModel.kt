@@ -56,6 +56,7 @@ import app.travelmo.core.Person
 import app.travelmo.core.Segment
 import app.travelmo.core.peopleInOrder
 import app.travelmo.core.SegmentDraft
+import app.travelmo.core.ProfileEntry
 import app.travelmo.core.TravelProfile
 import app.travelmo.core.peopleDocuments
 import app.travelmo.core.tripWarnings
@@ -165,7 +166,11 @@ import app.travelmo.notify.NoPushDevice
 import app.travelmo.notify.PushDevice
 import kotlin.time.Clock
 import kotlin.time.Instant
+import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.minus
+import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CancellationException
@@ -391,7 +396,17 @@ class TripsViewModel(
     // listener then rebuilt the cards under the user's finger. Shares each
     // trip's live segment stream with TripDetail/BookingDetail/BookingForm.
     private val details: Flow<Map<String, List<Segment>>> = groups
-        .map { groups -> groups?.let { it.current + it.upcoming.take(UPCOMING_WITH_DETAILS) }.orEmpty().map { it.id } }
+        .map { groups ->
+            if (groups == null) return@map emptyList()
+            // Include every upcoming or recently-ended trip that could have a
+            // flight within the boarding-pass window (-3h..+48h across timezones).
+            val todayLocal = LocalDate.parse(today())
+            val pastCutoff = todayLocal.minus(DatePeriod(days = 2)).toString()
+            val boardingCutoff = todayLocal.plus(DatePeriod(days = 3)).toString()
+            val nearPast = groups.past.filter { it.end >= pastCutoff }
+            val nearUpcoming = groups.upcoming.filter { it.start <= boardingCutoff }
+            (groups.current + groups.upcoming.take(UPCOMING_WITH_DETAILS) + nearUpcoming + nearPast).map { it.id }.distinct()
+        }
         .distinctUntilChanged()
         .flatMapLatest { wanted ->
             if (wanted.isEmpty()) {
@@ -1994,6 +2009,21 @@ class TripsViewModel(
     fun saveTrusted(token: String, emails: List<String>) = run(token, "saveTrusted") {
         val answer = ownProfileAnswer.value ?: throw IllegalStateException("The profile is still loading; try again")
         store.saveTrusted(uid, email, exists = answer.profile != null, emails = emails, before = answer.profile?.trustedEmails.orEmpty())
+    }
+
+    fun saveTravelDocuments(token: String, mutate: (List<ProfileEntry>) -> List<ProfileEntry>) = run(token, "saveTravelDocuments") {
+        store.saveTravelDocuments(uid, email, mutate)
+    }
+
+    fun saveTravelLoyalty(
+        token: String,
+        reconcilePerson: Triple<String, String, String?>? = null,
+        mutate: (List<ProfileEntry>) -> List<ProfileEntry>,
+    ) = run(token, "saveTravelLoyalty") {
+        store.saveTravelLoyalty(uid, email, mutate)
+        reconcilePerson?.let { (program, number, person) ->
+            store.setLoyaltyPerson(uid, program, number, person)
+        }
     }
 }
 
