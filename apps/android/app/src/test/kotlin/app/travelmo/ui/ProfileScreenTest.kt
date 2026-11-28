@@ -71,17 +71,28 @@ class ProfileScreenTest {
     }
 
     @Test
-    fun `people are listed with the one taken to be the user and This is me moves it`() {
+    fun `people shows You at the top, switches with Change, and merges with Also me`() {
         val store = FakeTripStore(
             people = listOf(
                 app.travelmo.core.Person("mum", "Pat Example", bookings = 6),
                 app.travelmo.core.Person("me", "Sam Example", bookings = 4, direct = 4),
+                app.travelmo.core.Person("alt", "S Example", bookings = 1),
             ),
         )
         show(store)
         openSection("People")
         composeRule.onNodeWithText("YOU").assertExists()
-        composeRule.onNodeWithText("This is me").performClick()
+        // "Also me" on S Example (second in others after Pat Example) merges into Sam Example.
+        composeRule.onAllNodesWithText("Also me")[1].performClick()
+        composeRule.waitForIdle()
+        store.peopleState.value.map { it.id } shouldBe listOf("mum", "me")
+        store.peopleState.value.single { it.id == "me" }.aliases shouldBe listOf("S Example")
+        composeRule.onNodeWithText("Also: S Example").assertExists()
+
+        // "Change" switches who You is.
+        composeRule.onNodeWithText("Change").performClick()
+        composeRule.onNodeWithText("Who are you?").assertExists()
+        composeRule.onAllNodesWithText("Pat Example").onLast().performClick()
         composeRule.waitForIdle()
         store.peopleState.value.single { it.me }.id shouldBe "mum"
     }
@@ -98,13 +109,14 @@ class ProfileScreenTest {
         show(store)
         openSection("People")
         composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Pat Sample"))
-        // Listed most named first: Pat Example, Sam Example, Pat Sample.
-        composeRule.onAllNodesWithText("Same person as…")[2].performClick()
+        // Others (excluding You = Sam Example): Pat Example, Pat Sample.
+        composeRule.onAllNodesWithText("Same person as…")[1].performClick()
         composeRule.onNodeWithText("Pat Sample is the same person as").assertExists()
         composeRule.onAllNodesWithText("Pat Example").onLast().performClick()
         composeRule.waitForIdle()
         store.peopleState.value.map { it.id } shouldBe listOf("now", "me")
         store.peopleState.value.first().aliases shouldBe listOf("P Example", "Pat Sample")
+        composeRule.onNodeWithText("Also: P Example, Pat Sample").assertExists()
     }
 
     @Test
@@ -113,11 +125,12 @@ class ProfileScreenTest {
         val store = FakeTripStore(people = many)
         show(store)
         openSection("People")
-        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Person 0 Example"))
+        // p0 is You (highest bookings); p1 is the first other person.
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Person 1 Example"))
         composeRule.onAllNodesWithText("Same person as…")[0].performClick()
         composeRule.onNodeWithText("Person 39 Example").performScrollTo().performClick()
         composeRule.waitForIdle()
-        store.peopleState.value.map { it.id } shouldBe many.map { it.id }.filter { it != "p0" }
+        store.peopleState.value.map { it.id } shouldBe many.map { it.id }.filter { it != "p1" }
     }
 
     @Test

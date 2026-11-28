@@ -410,14 +410,17 @@ its body, `forwarded`) counts toward who the user is; one forwarded to the
 import address counts neither way. Which person is the user (`guessMe`,
 mirrored in `People.kt`) is the one they said, else the one most named on
 those direct emails, then on any booking. Profile, on the web and Android,
-lists the people, most often named first, marks the one taken to be the
-user "You", and offers "This is me" on the others (one batch, so only one
-is marked) and "Same person as…" on each, which merges it into the person
-picked (`mergedPerson`, one batch: that person keeps their name and gains
-the other's name and every spelling, the newest fifty, and is the user if
-either was taken to be; the other is deleted), for someone written two
-ways, such as a maiden and a married name. The rules let the owner change
-only a person's name, other spellings and that mark, and delete one.
+shows the one taken to be the user at the top as "You" with "Change" to
+switch who that is (one batch, so only one is marked), and lists everyone
+else below, most often named first, with each person's other spellings
+("Also: …"), "Also me" (merges that entry into "You" in one tap), and
+"Same person as…" when more than one other person is listed, which merges
+it into the person picked (`mergedPerson`, one batch: that person keeps
+their name and gains the other's name and every spelling, the newest fifty,
+and is the user if either was taken to be; the other is deleted), for
+someone written two ways, such as a maiden and a married name. The rules
+let the owner change only a person's name, other spellings and that mark,
+and delete one.
 
 **Watching.** A trip whose bookings name travelers, none of them the user
 (`watching` in `listFilters.ts`, mirrored in `ListFilters.kt`: each name

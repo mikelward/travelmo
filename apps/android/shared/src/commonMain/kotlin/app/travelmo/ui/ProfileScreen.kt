@@ -87,7 +87,10 @@ import app.travelmo.shared.Res
 import app.travelmo.shared.add_home
 import app.travelmo.shared.badge_admin
 import app.travelmo.shared.badge_invited
+import app.travelmo.shared.also_known_as
+import app.travelmo.shared.also_me
 import app.travelmo.shared.cancel
+import app.travelmo.shared.change
 import app.travelmo.shared.city
 import app.travelmo.shared.country
 import app.travelmo.shared.documents
@@ -147,9 +150,9 @@ import app.travelmo.shared.someone_else
 import app.travelmo.shared.someone_else_more
 import app.travelmo.shared.someone_who_trusts_you
 import app.travelmo.shared.stop_sharing_with
-import app.travelmo.shared.this_is_me
 import app.travelmo.shared.travelers
 import app.travelmo.shared.trips_unreadable_home
+import app.travelmo.shared.who_are_you
 import app.travelmo.shared.whose_is
 import app.travelmo.shared.whose_is_this
 import app.travelmo.shared.you
@@ -361,6 +364,18 @@ fun ProfileSectionScreen(
             onDismiss = { naming = null },
         )
     }
+    var changingMe by rememberSaveable { mutableStateOf(false) }
+    if (changingMe) {
+        me?.let { currentMe ->
+            PeoplePicker(
+                stringResource(Res.string.who_are_you),
+                travelers,
+                except = currentMe.id,
+                onPick = { viewModel.setMe(PEOPLE_TOKEN, it) },
+                onDismiss = { changingMe = false },
+            )
+        }
+    }
     var merging by rememberSaveable { mutableStateOf<String?>(null) }
     merging?.let { id ->
         travelers.firstOrNull { it.id == id }?.let { person ->
@@ -426,7 +441,8 @@ fun ProfileSectionScreen(
                         me = me,
                         imported = own?.travelers.orEmpty(),
                         error = (outcomes[PEOPLE_TOKEN] as? Outcome.Failed)?.message,
-                        onSetMe = { viewModel.setMe(PEOPLE_TOKEN, it) },
+                        onChangeMe = { changingMe = true },
+                        onAlsoMe = { id -> me?.let { viewModel.mergePeople(PEOPLE_TOKEN, id, it.id) } },
                         onMerge = { merging = it },
                     )
                 }
@@ -517,7 +533,8 @@ private fun LazyListScope.peopleSectionBody(
     me: Person?,
     imported: List<ProfileEntry>,
     error: String?,
-    onSetMe: (String) -> Unit,
+    onChangeMe: () -> Unit,
+    onAlsoMe: (String) -> Unit,
     onMerge: (String) -> Unit,
 ) {
     val detailsByPerson = mutableMapOf<String, MutableList<ProfileEntry>>()
@@ -540,16 +557,60 @@ private fun LazyListScope.peopleSectionBody(
         }
         return
     }
-    items(travelers, key = { "person-${it.id}" }) { person ->
+    me?.let { currentMe ->
+        item(key = "person-you") {
+            val shape = RoundedCornerShape(12.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+                    .clip(shape)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(stringResource(Res.string.you).uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(currentMe.name, style = MaterialTheme.typography.bodyLarge)
+                        }
+                        if (currentMe.aliases.isNotEmpty()) {
+                            Text(
+                                stringResource(Res.string.also_known_as, currentMe.aliases.joinToString(", ")),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
+                        }
+                    }
+                    if (travelers.size > 1) {
+                        TextButton(onClick = onChangeMe) { Text(stringResource(Res.string.change)) }
+                    }
+                }
+                for (extra in detailsByPerson[currentMe.id].orEmpty()) {
+                    FoldingEntry(extra, titleOverride = stringResource(Res.string.profile_imported_details))
+                }
+            }
+        }
+    }
+    val others = if (me != null) travelers.filter { it.id != me.id } else travelers
+    items(others, key = { "person-${it.id}" }) { person ->
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                Text(person.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                if (person.id == me?.id) {
-                    Text(stringResource(Res.string.you).uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else {
-                    TextButton(onClick = { onSetMe(person.id) }) { Text(stringResource(Res.string.this_is_me)) }
+                Column(modifier = Modifier.weight(1f).padding(vertical = 4.dp)) {
+                    Text(person.name, style = MaterialTheme.typography.bodyLarge)
+                    if (person.aliases.isNotEmpty()) {
+                        Text(
+                            stringResource(Res.string.also_known_as, person.aliases.joinToString(", ")),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
-                if (travelers.size > 1) {
+                if (me != null) {
+                    TextButton(onClick = { onAlsoMe(person.id) }) { Text(stringResource(Res.string.also_me)) }
+                }
+                if (others.size > 1) {
                     TextButton(onClick = { onMerge(person.id) }) { Text(stringResource(Res.string.same_person_as)) }
                 }
             }
@@ -1117,7 +1178,7 @@ private fun HomeAirports(viewModel: TripsViewModel, periods: List<HomePeriod>) {
     }
 }
 
-/** The token of "This is me" and People merges. */
+/** The token of People's "Change", "Also me", and merges. */
 private const val PEOPLE_TOKEN = "profile/people/me"
 
 /** The token of Loyalty's "Same person as…" write. */

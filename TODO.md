@@ -95,8 +95,8 @@
   - [x] The parser too: no reminders, check-in alerts, calendar-feed events
         or home detection from a watched trip.
   - [ ] Travelers editable on the trip page.
-  - [ ] "This is me" from two devices at once can leave two people marked
-        until the next tap; a single selected-person field would stop it.
+  - [ ] Changing "You" from two devices at once can leave two people marked
+        until the next change; a single selected-person field would stop it.
 
 - [x] Add and edit segments by hand; delete a trip; rename a trip.
 - [x] Let sharees add, edit and delete segments.

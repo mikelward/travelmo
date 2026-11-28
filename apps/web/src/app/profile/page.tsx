@@ -362,13 +362,15 @@ function DocumentsSection({ documents, own }: { documents: ProfileEntry[]; own: 
   );
 }
 
-// Unified People section: combines booking travelers (with You / This is me /
-// Same person as…) and imported TripIt traveler details into one list.
+// Unified People section: combines booking travelers (with You / Change,
+// Also me, and Same person as…) and imported TripIt traveler details into one list.
 function PeopleSection({ user, people, imported }: { user: User; people: PersonDoc[] | undefined; imported: ProfileEntry[] }) {
   const [error, setError] = useState<string>();
+  const [changingMe, setChangingMe] = useState(false);
   const [merging, setMerging] = useState<PersonDoc>();
   const list = people ?? [];
   const me = guessMe(list);
+  const others = me ? list.filter((p) => p.id !== me.id) : list;
 
   // Match imported TripIt traveler cards to known booking people when possible.
   const detailsByPerson = new Map<string, ProfileEntry[]>();
@@ -382,64 +384,86 @@ function PeopleSection({ user, people, imported }: { user: User; people: PersonD
     }
   }
 
+  const renderDetails = (personId: string) => {
+    const extra = detailsByPerson.get(personId) ?? [];
+    if (extra.length === 0) return null;
+    return (
+      <div className="mt-2 space-y-2">
+        {extra.map((entry, idx) => (
+          <details key={`${entry.title}-${idx}`} className="rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800">
+            <summary className="cursor-pointer font-medium text-muted">Imported details</summary>
+            <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+              {entry.fields.map((field, j) => (
+                <div key={`${field.label}-${j}`} className="contents">
+                  <dt className="text-muted">{field.label}</dt>
+                  <dd className="break-words">{field.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </details>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <section>
       <h2 className="text-lg font-medium">People</h2>
       <p className="mt-1 text-muted">Who your bookings are for.</p>
       {list.length === 0 && unmatched.length === 0 && <p className="mt-3 text-muted">No people yet.</p>}
-      {list.length > 0 && (
+      {me && (
+        <div className="mt-3 rounded-lg border border-zinc-200 px-3 py-3 dark:border-zinc-800" aria-label="You">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <div>
+              <div className="flex flex-wrap items-baseline gap-2">
+                <span className="text-xs font-medium uppercase tracking-wide text-muted">You</span>
+                <span>{me.name}</span>
+              </div>
+              {me.aliases.length > 0 && <p className="mt-1 text-muted">Also: {me.aliases.join(", ")}</p>}
+            </div>
+            {list.length > 1 && (
+              <button type="button" className="shrink-0 text-muted hover:underline" onClick={() => setChangingMe(true)}>
+                Change
+              </button>
+            )}
+          </div>
+          {renderDetails(me.id)}
+        </div>
+      )}
+      {others.length > 0 && (
         <ul className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800" aria-label="People">
-          {list.map((person) => {
-            const extra = detailsByPerson.get(person.id) ?? [];
-            return (
-              <li key={person.id} className="py-3">
-                <div className="flex flex-wrap items-baseline justify-between gap-3">
-                  <span>
-                    {person.name}
-                    {person.id === me?.id && <span className="ml-2 text-xs font-medium uppercase tracking-wide text-muted">You</span>}
-                  </span>
-                  <span className="flex shrink-0 gap-4">
-                    {person.id !== me?.id && (
-                      <button
-                        type="button"
-                        className="text-muted hover:underline"
-                        onClick={() =>
-                          setMe(firestore(), user.uid, list, person.id).catch((e: Error) => {
-                            console.error("Saving who the user is failed", e);
-                            setError(e.message);
-                          })
-                        }
-                      >
-                        This is me
-                      </button>
-                    )}
-                    {list.length > 1 && (
-                      <button type="button" className="text-muted hover:underline" onClick={() => setMerging(person)}>
-                        Same person as…
-                      </button>
-                    )}
-                  </span>
+          {others.map((person) => (
+            <li key={person.id} className="py-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-3">
+                <div>
+                  <div>{person.name}</div>
+                  {person.aliases.length > 0 && <p className="mt-1 text-muted">Also: {person.aliases.join(", ")}</p>}
                 </div>
-                {extra.length > 0 && (
-                  <div className="mt-2 space-y-2">
-                    {extra.map((entry, idx) => (
-                      <details key={`${entry.title}-${idx}`} className="rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800">
-                        <summary className="cursor-pointer font-medium text-muted">Imported details</summary>
-                        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-                          {entry.fields.map((field, j) => (
-                            <div key={`${field.label}-${j}`} className="contents">
-                              <dt className="text-muted">{field.label}</dt>
-                              <dd className="break-words">{field.value}</dd>
-                            </div>
-                          ))}
-                        </dl>
-                      </details>
-                    ))}
-                  </div>
-                )}
-              </li>
-            );
-          })}
+                <span className="flex shrink-0 gap-4">
+                  {me && (
+                    <button
+                      type="button"
+                      className="text-muted hover:underline"
+                      onClick={() =>
+                        mergePeople(firestore(), user.uid, list, person.id, me.id).catch((e: Error) => {
+                          console.error("Merging two people failed", e);
+                          setError(e.message);
+                        })
+                      }
+                    >
+                      Also me
+                    </button>
+                  )}
+                  {others.length > 1 && (
+                    <button type="button" className="text-muted hover:underline" onClick={() => setMerging(person)}>
+                      Same person as…
+                    </button>
+                  )}
+                </span>
+              </div>
+              {renderDetails(person.id)}
+            </li>
+          ))}
         </ul>
       )}
       {unmatched.length > 0 && (
@@ -449,6 +473,20 @@ function PeopleSection({ user, people, imported }: { user: User; people: PersonD
         </div>
       )}
       {error && <p className="mt-2 text-danger">{error}</p>}
+      {changingMe && me && (
+        <PeoplePicker
+          title="Who are you?"
+          people={list}
+          except={me.id}
+          onPick={(id) =>
+            void setMe(firestore(), user.uid, list, id).catch((e: Error) => {
+              console.error("Saving who the user is failed", e);
+              setError(e.message);
+            })
+          }
+          onClose={() => setChangingMe(false)}
+        />
+      )}
       {merging && (
         <PeoplePicker
           title={`${merging.name} is the same person as`}
