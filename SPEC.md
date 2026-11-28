@@ -271,22 +271,30 @@ also a word counts only capitalized and not opening the title unless alone
 or before punctuation, so "Nice, France" is Nice and "Nice weekend" is not,
 and a longer name containing a city's is not that city: "Santiago de Cuba",
 "Victoria Falls", "Lake Victoria", "Rio Grande", "Washington State"), else a
+simplified map outline of the Australian or US state or territory its title
+names (generated from Natural Earth's 1:50m admin-1 states/provinces with lakes
+by `apps/web/scripts/stateLandmarks.mjs`; cities beat states and states beat
+countries and fallbacks, so "Sydney, NSW" is Sydney, "Victoria, Australia" is
+Victoria and "California road trip" is California; unambiguous uppercase
+Australian codes `NSW`, `QLD`, `VIC` and `TAS` match, while ambiguous
+two-letter codes like `WA`, `CA` and `LA` do not, and bare "New York",
+"Washington" and "Victoria" keep their city landmarks), else a
 simplified map outline of the country its title names (generated from Natural
 Earth's 1:50m countries by `apps/web/scripts/countryLandmarks.mjs`, with
 disputed or occupied territories stroked as a secondary dashed path on
-Ukraine, Israel, Syria, Morocco, India, Pakistan and Serbia; cities beat
-countries and countries beat seasons or themes, so "Paris, France" is Paris and
-"Summer in Japan" is Japan; short codes like "US", "UK" and "NZ" match only in
-uppercase, and states/regions like "New Mexico", "New England", "New South Wales"
-and "South America" are excluded), else a matching kind of place or trip (beach,
+Ukraine, Israel, Syria, Morocco, India, Pakistan and Serbia; cities and states
+beat countries and countries beat seasons or themes, so "Paris, France" is
+Paris and "Summer in Japan" is Japan; short codes like "US", "UK" and "NZ"
+match only in uppercase, and regions like "New England" and "South America"
+are excluded), else a matching kind of place or trip (beach,
 mountains, forest, lake, farm, city, town, camp, countryside, desert, wine
 country, road trip, safari, theme park, celebration, castle), season, holiday or
-vacation word when no city or country is named ("Summer in Paris" is Paris;
-"Summer vacation" is a sun), else the kind of place the trip goes to, else a
-suitcase (`tripLandmark` and `tripPicture` in `packages/core/src/landmarks.ts`,
-mirrored in the Android app's core; the drawings are `landmarks.json`, SVG
-paths in a 48-unit square stroked 1.5 wide, plus an optional `dashed` path,
-which both apps draw).
+vacation word when no city, state or country is named ("Summer in Paris" is
+Paris; "Summer vacation" is a sun), else the kind of place the trip goes to,
+else a suitcase (`tripLandmark` and `tripPicture` in
+`packages/core/src/landmarks.ts`, mirrored in the Android app's core; the
+drawings are `landmarks.json`, SVG paths in a 48-unit square stroked 1.5 wide,
+plus an optional `dashed` path, which both apps draw).
 The kind of place a trip goes to is the trip's `setting` (`tripSetting`;
 for a trip that is just an event, its first booking's type):
 a city, a small town, a beach, the mountains, a lake or the countryside,

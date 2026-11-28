@@ -7,36 +7,45 @@ import type { ExtractedSegment, Place, PlaceSetting, Trip, TripSetting } from ".
 import { liveSegments } from "./trips";
 
 // A trip's picture in the trip list: an outline of the best-known landmark
-// of the city its title names, else a simplified map outline of the country
-// it names, else a matching place kind, season, holiday or vacation drawing
-// when no city or country is named, drawn in a 48-unit square as one SVG path
-// for a 1.5-unit round-capped stroke (landmarks.json, which the Android app
-// compiles in too). Anything else gets the drawing of the kind of place it
-// goes to (tripPicture), else the suitcase.
+// of the city its title names, else a simplified map outline of the Australian
+// or US state or territory it names, else a simplified map outline of the
+// country it names, else a matching place kind, season, holiday or vacation
+// drawing when no city, state or country is named, drawn in a 48-unit square
+// as one SVG path for a 1.5-unit round-capped stroke (landmarks.json, which
+// the Android app compiles in too). Anything else gets the drawing of the kind
+// of place it goes to (tripPicture), else the suitcase.
 export interface Landmark {
   id: string;
   // What it shows, for whoever maintains the drawings.
   name: string;
   // The city names it stands for, folded (foldText).
   cities: readonly string[];
+  // The Australian or US state/territory names it stands for, folded
+  // (foldText): matched after `cities` and city `capitalized`, and before
+  // `countries` and `fallback`, so "Sydney, NSW" is Sydney, "Newcastle, NSW"
+  // is New South Wales, and "Victoria, Australia" is Victoria.
+  states?: readonly string[];
   // The country names it stands for, folded (foldText): matched only when
-  // the title names no place from `cities` or city `capitalized`, and before
-  // `fallback`, so "Paris, France" is Paris and "Summer in France" is France.
+  // the title names no place from `cities`, `states` or their `capitalized`,
+  // and before `fallback`, so "Paris, France" is Paris and "Summer in France"
+  // is France.
   countries?: readonly string[];
   // Names that are also everyday words ("Nice", "Bath") or case-sensitive
-  // country abbreviations ("US", "UK", "NZ"), accents dropped: title-case
-  // words count only capitalized and not opening the title unless alone or
-  // before punctuation ("Nice, France"), while all-caps abbreviations ("US",
-  // "UK", "NZ") match anywhere in exact uppercase ("US road trip", not "Visit us").
+  // state/country abbreviations ("NSW", "QLD", "VIC", "TAS", "US", "UK", "NZ"),
+  // accents dropped: title-case words count only capitalized and not opening
+  // the title unless alone or before punctuation ("Nice, France"), while
+  // all-caps abbreviations match anywhere in exact uppercase ("US road trip",
+  // "Newcastle, NSW", not "Visit us").
   capitalized?: readonly string[];
-  // Longer names, folded, that a match of `cities`, `countries` or `fallback`
-  // is not when it is part of one: "santiago de compostela" is not Santiago,
-  // "new mexico" is not Mexico, and "lake victoria" is not Victoria.
+  // Longer names, folded, that a match of `cities`, `states`, `countries` or
+  // `fallback` is not when it is part of one: "santiago de compostela" is not
+  // Santiago, "new mexico" is not Mexico, and "baja california" is not
+  // California.
   not?: readonly string[];
   // Kind-of-place, season, holiday or vacation words, folded: matched only
-  // when the title names no place from `cities`, `countries` or `capitalized`,
-  // so "Summer in Paris" is Paris, "Summer in Japan" is Japan, and
-  // "Summer vacation" is Summer.
+  // when the title names no place from `cities`, `states`, `countries` or
+  // `capitalized`, so "Summer in Paris" is Paris, "California road trip" is
+  // California, "Summer in Japan" is Japan, and "Summer vacation" is Summer.
   fallback?: readonly string[];
   d: string;
   // Optional secondary SVG path drawn with a dashed stroke (disputed or
@@ -53,6 +62,8 @@ type LandmarkHit = { order: number; landmark: Landmark; name: string; paddedNot:
 const LANDMARK_INDEX = (() => {
   const cities = new Map<string, LandmarkHit[]>();
   const capitalized = new Map<string, LandmarkHit[]>();
+  const states = new Map<string, LandmarkHit[]>();
+  const stateCapitalized = new Map<string, LandmarkHit[]>();
   const countries = new Map<string, LandmarkHit[]>();
   const countryCapitalized = new Map<string, LandmarkHit[]>();
   const fallback = new Map<string, LandmarkHit[]>();
@@ -69,15 +80,18 @@ const LANDMARK_INDEX = (() => {
   };
   LANDMARKS.forEach((landmark, order) => {
     const paddedNot = (landmark.not ?? []).map((n) => ` ${n} `);
-    const isCountry = (landmark.countries?.length ?? 0) > 0 && landmark.cities.length === 0;
+    const isState = (landmark.states?.length ?? 0) > 0 && landmark.cities.length === 0;
+    const isCountry = (landmark.countries?.length ?? 0) > 0 && landmark.cities.length === 0 && !isState;
     for (const city of landmark.cities) add(cities, city, { order, landmark, name: city, paddedNot });
+    for (const state of landmark.states ?? []) add(states, state, { order, landmark, name: state, paddedNot });
     for (const country of landmark.countries ?? []) add(countries, country, { order, landmark, name: country, paddedNot });
     for (const name of landmark.capitalized ?? []) {
-      add(isCountry ? countryCapitalized : capitalized, name, { order, landmark, name, paddedNot });
+      const target = isState ? stateCapitalized : isCountry ? countryCapitalized : capitalized;
+      add(target, name, { order, landmark, name, paddedNot });
     }
     for (const word of landmark.fallback ?? []) add(fallback, word, { order, landmark, name: word, paddedNot });
   });
-  return { cities, capitalized, countries, countryCapitalized, fallback };
+  return { cities, capitalized, states, stateCapitalized, countries, countryCapitalized, fallback };
 })();
 
 const landmarkCache = new Map<string, Landmark>();
@@ -106,10 +120,12 @@ function isAllCaps(name: string): boolean {
 }
 
 // The landmark of the city named first in `title` ("Paris and Lyon" is
-// Paris), else the first named country ("Summer in Japan" is Japan), else the
-// first matching place kind, season, holiday or vacation word (`fallback`),
-// else the suitcase. Names match as whole words, accents and case ignored, so
-// "Lisboa" is Lisbon and "Parisian" is nobody; a capitalized name keeps its case.
+// Paris), else the first named Australian or US state ("California road trip"
+// is California), else the first named country ("Summer in Japan" is Japan),
+// else the first matching place kind, season, holiday or vacation word
+// (`fallback`), else the suitcase. Names match as whole words, accents and
+// case ignored, so "Lisboa" is Lisbon and "Parisian" is nobody; a capitalized
+// name keeps its case.
 export function tripLandmark(title: string): Landmark {
   const cached = landmarkCache.get(title);
   if (cached) return cached;
@@ -160,6 +176,10 @@ export function tripLandmark(title: string): Landmark {
 
   matchLower(LANDMARK_INDEX.cities);
   matchCapitalized(LANDMARK_INDEX.capitalized);
+  if (!best) {
+    matchLower(LANDMARK_INDEX.states);
+    matchCapitalized(LANDMARK_INDEX.stateCapitalized);
+  }
   if (!best) {
     matchLower(LANDMARK_INDEX.countries);
     matchCapitalized(LANDMARK_INDEX.countryCapitalized);
