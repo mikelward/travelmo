@@ -26,6 +26,7 @@ import {
   withChosenAirports,
   homesWithAirports,
   longStays,
+  longStayText,
   withLongStays,
   airportCodes,
   parseAirportCodes,
@@ -1176,6 +1177,45 @@ describe("long stays", () => {
       ["London", "2022-02-13", "2022-03-20"],
       ["Mountain View", "2022-03-21", undefined],
     ]);
+  });
+
+  it("leaves out a stay the person said was not home", () => {
+    const notHome = [{ city: "London", country: "GB", from: "2022-02-13" }];
+    expect(withLongStays([{ city: "Mountain View", country: "US" }], winter, notHome)).toEqual([{ city: "Mountain View", country: "US" }]);
+    // Another stay's start, or another town, still counts.
+    expect(withLongStays([], winter, [{ city: "London", from: "2022-02-14" }]).some((p) => p.stay)).toBe(true);
+    expect(withLongStays([], winter, [{ city: "Paris", from: "2022-02-13" }]).some((p) => p.stay)).toBe(true);
+    expect(homesWithAirports(winter, [], [], notHome).periods.some((p) => p.stay)).toBe(false);
+  });
+
+  it("knows a stay cut into by another by its own first day", () => {
+    const spring = [flat("2022-02-13", "2022-03-20"), flat("2022-03-20", "2022-05-20")];
+    const paris = [
+      flat("2022-03-01", "2022-03-20", { destination: { name: "Paris Flat", city: "Paris", country: "FR" } }),
+      flat("2022-03-20", "2022-04-10", { destination: { name: "Paris Flat", city: "Paris", country: "FR" } }),
+    ];
+    const periods = withLongStays([], [...spring, ...paris]);
+    expect(periods.map((p) => [p.city, p.from, p.stayFrom])).toEqual([
+      ["London", "2022-02-13", "2022-02-13"],
+      ["Paris", "2022-03-01", "2022-03-01"],
+      ["London", "2022-04-11", "2022-02-13"],
+    ]);
+    expect(withLongStays([], [...spring, ...paris], [{ city: "London", from: "2022-02-13" }]).map((p) => p.city)).toEqual(["Paris"]);
+  });
+
+  it("shows long stays in Profile over corrections, and groups by them too", () => {
+    const corrections = [{ city: "Mountain View", country: "US", from: "2011-01-01" }];
+    const shown = effectiveHomesWithAirports(winter, corrections);
+    expect(shown.map((p) => [p.city, p.from, p.until, p.stay ?? false])).toEqual([
+      ["Mountain View", "2011-01-01", "2022-02-12", false],
+      ["London", "2022-02-13", "2022-03-20", true],
+      ["Mountain View", "2022-03-21", undefined, false],
+    ]);
+    expect(homesWithAirports(winter, corrections).overrides.some((p) => p.stay)).toBe(true);
+    expect(effectiveHomesWithAirports(winter, corrections, [], [{ city: "London", from: "2022-02-13" }]).some((p) => p.stay)).toBe(false);
+    // The home line leaves the stay to its own row, joining the home it cut into.
+    expect(describeHomes(shown)).toBe("Mountain View since Jan 2011");
+    expect(longStayText(shown[1]!)).toBe("London, 13 Feb – 20 Mar 2022");
   });
 
   it("keeps a week away from a London winter out of the trip of the winter's stays", () => {

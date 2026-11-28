@@ -429,7 +429,7 @@ function Report({ user }: { user: User }) {
   // already read, with their corrections over it, as the Profile works it out.
   const homesOf = useCallback(() => {
     if (!ready || !trips || !segments || !travelers || !profile) return undefined;
-    return deriveHomes(ownTripSegments(trips, segments.byTrip, user.uid, travelers), [], profile.homes ?? []).periods;
+    return deriveHomes(ownTripSegments(trips, segments.byTrip, user.uid, travelers), [], profile.homes ?? [], profile.homeAirports ?? [], profile.notHome ?? []).periods;
   }, [ready, trips, segments, travelers, profile, user.uid]);
   const homes = useMemo(() => (countriesOpen || residenceOpen ? homesOf() : undefined), [countriesOpen, residenceOpen, homesOf]);
   const titles = useMemo(() => displayTitles(trips ?? []), [trips]);

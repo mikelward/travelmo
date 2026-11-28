@@ -1,4 +1,4 @@
-import { ChosenHomeAirports, HomeCorrection, homeCorrections, maxHomeCorrections, paths, type HomePeriod } from "@travelmo/core";
+import { ChosenHomeAirports, HomeCorrection, homeCorrections, maxHomeCorrections, NotHomeStay, paths, type HomePeriod } from "@travelmo/core";
 import type { Firestore } from "firebase-admin/firestore";
 import { z } from "zod";
 
@@ -37,6 +37,25 @@ export async function loadChosenHomeAirports(
   const parsed = StoredAirports.safeParse(chosen);
   if (!parsed.success) {
     log("home_airports_malformed", { uid, issues: parsed.error.issues.length });
+    return [];
+  }
+  return parsed.data;
+}
+
+const StoredNotHome = z.array(NotHomeStay).max(maxHomeCorrections);
+
+// The long stays a user said were not home (Profile, Not home). A list that
+// does not parse is logged and ignored: grouping goes on with every long stay.
+export async function loadNotHome(
+  db: Firestore,
+  uid: string,
+  log: (event: string, fields: Record<string, unknown>) => void,
+): Promise<NotHomeStay[]> {
+  const stored: unknown = (await db.doc(paths.user(uid)).get()).get("notHome");
+  if (stored === undefined) return [];
+  const parsed = StoredNotHome.safeParse(stored);
+  if (!parsed.success) {
+    log("not_home_malformed", { uid, issues: parsed.error.issues.length });
     return [];
   }
   return parsed.data;

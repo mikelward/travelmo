@@ -35,6 +35,7 @@ import {
   homeBookings,
   rebookedFlights,
   type ChosenHomeAirports,
+  type NotHomeStay,
   type HomePeriod,
   icsEventText,
   isTravelCalendar,
@@ -281,6 +282,8 @@ export type ImportDeps = {
   homeOverrides?: (uid: string) => Promise<readonly HomePeriod[]>;
   // The airports the user chose for their homes (Profile), over those worked out.
   chosenHomeAirports?: (uid: string) => Promise<readonly ChosenHomeAirports[]>;
+  // The long stays the user said were not home (Profile, Not home).
+  notHome?: (uid: string) => Promise<readonly NotHomeStay[]>;
   now: () => string;
   // At INFO unless said otherwise.
   log: (event: string, fields: Record<string, unknown>, severity?: "WARNING") => void;
@@ -1114,6 +1117,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
   const timestamp = deps.now();
   const corrections = (await deps.homeOverrides?.(uid)) ?? [];
   const chosen = (await deps.chosenHomeAirports?.(uid)) ?? [];
+  const notHome = (await deps.notHome?.(uid)) ?? [];
   const result = await store.withUserLock(uid, async (lockTx) => {
     const tx = settlingTripDates(lockTx, timestamp);
     if (booking.generation !== undefined && tx.generation !== booking.generation) throw new ImportSupersededError();
@@ -1133,7 +1137,7 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     // trips they're only watching, which say nothing of where home is
     // (homeBookings), and to note the people this booking names.
     const people = await tx.listPeople(uid);
-    const homes = (segments: readonly ExtractedSegment[]) => homesWithAirports(segments, corrections, chosen);
+    const homes = (segments: readonly ExtractedSegment[]) => homesWithAirports(segments, corrections, chosen, notHome);
     let { periods, overrides } = homes([...homeBookings(nearbyBookings(), people), ...homeBookings([booking.segments], people)]);
     // Cancellations read before this booking was (the mailbox is read newest
     // first); read here, before any write, as a transaction requires.

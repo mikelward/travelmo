@@ -193,3 +193,45 @@ test("home's airports are worked out from the trips that leave from them, and ca
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByText('"Manchester" isn\'t an airport or station code.')).toBeVisible();
 });
+
+// Four weeks or more in one town count as living there (SPEC "Home").
+test("a month of stays is listed as home, and Not home turns it back into a trip", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  const flat = (start: string, end: string) => ({
+    title: "Example Mews Flat",
+    start: `${start}T15:00:00+00:00`,
+    end: `${end}T11:00:00+00:00`,
+    destination: { name: "Example Mews Flat", city: "London", country: "GB" },
+  });
+  await seedTrip(ownerUid, "e2e-winter-1", { id: "e2e-flat-1", ...flat("2022-02-13", "2022-02-27") }, { title: "London", start: "2022-02-13", end: "2022-02-27" });
+  await seedTrip(ownerUid, "e2e-winter-2", { id: "e2e-flat-2", ...flat("2022-02-27", "2022-03-20") }, { title: "London", start: "2022-02-27", end: "2022-03-20" });
+  let regrouped = 0;
+  await page.route("http://localhost:8080/trips/regroup", async (route) => {
+    regrouped += 1;
+    await route.fulfill({ json: { changed: 1, deleted: 1 } });
+  });
+  await page.goto("/profile");
+  const stays = page.getByTestId("long-stays");
+  await expect(stays).toContainText("London, 13 Feb – 20 Mar 2022 · from your stays");
+  await stays.getByRole("button", { name: "Not home" }).click();
+  await expect.poll(async () => (await readUser(ownerUid))?.notHome).toEqual([{ city: "London", country: "GB", from: "2022-02-13" }]);
+  await expect(stays).toBeHidden();
+  expect(regrouped).toBe(1);
+});
+
+test("Not home says so when the trips couldn't be regrouped", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  const flat = (start: string, end: string) => ({
+    title: "Example Mews Flat",
+    start: `${start}T15:00:00+00:00`,
+    end: `${end}T11:00:00+00:00`,
+    destination: { name: "Example Mews Flat", city: "London", country: "GB" },
+  });
+  await seedTrip(ownerUid, "e2e-winter-1", { id: "e2e-flat-1", ...flat("2022-02-13", "2022-02-27") }, { title: "London", start: "2022-02-13", end: "2022-02-27" });
+  await seedTrip(ownerUid, "e2e-winter-2", { id: "e2e-flat-2", ...flat("2022-02-27", "2022-03-20") }, { title: "London", start: "2022-02-27", end: "2022-03-20" });
+  await page.route("http://localhost:8080/trips/regroup", (route) => route.fulfill({ status: 500, json: { error: "unavailable" } }));
+  await page.goto("/profile");
+  await page.getByTestId("long-stays").getByRole("button", { name: "Not home" }).click();
+  await expect(page.getByText("Saved, but your trips weren't regrouped. Use Regroup trips in Settings.")).toBeVisible();
+  await expect(page.getByTestId("long-stays")).toBeHidden();
+});

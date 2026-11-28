@@ -106,6 +106,12 @@ import app.travelmo.shared.home_from_date
 import app.travelmo.shared.home_not_known
 import app.travelmo.shared.home_pick_from
 import app.travelmo.shared.home_worked_out
+import app.travelmo.shared.from_your_stays
+import app.travelmo.shared.not_home
+import app.travelmo.core.longStayText
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import app.travelmo.shared.loading
 import app.travelmo.shared.trips_unreadable_home
 import app.travelmo.shared.loyalty_details
@@ -593,6 +599,7 @@ private fun HomeSection(viewModel: TripsViewModel) {
         (problem ?: (outcome as? Outcome.Failed)?.message)?.let {
             Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
         }
+        if (periods != null) LongStays(viewModel, periods)
         if (periods != null) HomeAirports(viewModel, periods)
     }
     if (picking) {
@@ -681,6 +688,37 @@ private fun LoyaltyTable(entries: List<ProfileEntry>, onWhose: ((program: String
     }
 }
 
+private const val NOT_HOME_TOKEN = "profile/not-home"
+
+/**
+ * Four weeks or more staying in one town count as living there: listed under home, newest first, as the web's Profile
+ * lists them, each with Not home for a holiday, which regroups it as a trip.
+ */
+@Composable
+private fun LongStays(viewModel: TripsViewModel, periods: List<HomePeriod>) {
+    val outcomes by viewModel.outcomes.collectAsStateWithLifecycle()
+    val outcome = outcomes[NOT_HOME_TOKEN]
+    val busy = outcome is Outcome.Busy
+    LaunchedEffect(outcome) { if (outcome is Outcome.Done) viewModel.outcomeSeen(NOT_HOME_TOKEN) }
+    val stays = remember(periods) { periods.filter { it.stay && it.from != null }.reversed() }
+    for (stay in stays) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            Text(
+                buildAnnotatedString {
+                    append(longStayText(stay))
+                    withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) { append(" · " + stringResource(Res.string.from_your_stays)) }
+                },
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { viewModel.markNotHome(NOT_HOME_TOKEN, stay) }, enabled = !busy) { Text(stringResource(Res.string.not_home)) }
+        }
+    }
+    (outcome as? Outcome.Failed)?.message?.let {
+        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
+    }
+}
+
 private const val HOME_AIRPORTS_TOKEN = "profile/home-airports"
 
 /**
@@ -703,7 +741,8 @@ private fun HomeAirports(viewModel: TripsViewModel, periods: List<HomePeriod>) {
         }
     }
     // One row per home town, its latest period's airports.
-    val towns = remember(periods) { periods.associateBy { homeTownKey(it.city, it.country) } }
+    // A long stay takes the airports of the home it is in, else those found.
+    val towns = remember(periods) { periods.filterNot { it.stay }.associateBy { homeTownKey(it.city, it.country) } }
     for ((key, period) in towns) {
         val shown = airportCodes(period)
         if (editing == key) {

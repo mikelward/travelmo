@@ -13,6 +13,7 @@ import app.travelmo.core.mergedPerson
 import app.travelmo.core.warmTables
 import app.travelmo.core.homeTownKey
 import app.travelmo.core.ChosenHomeAirports
+import app.travelmo.core.NotHomeStay
 import app.travelmo.core.withAlias
 import app.travelmo.core.effectiveHomesWithAirports
 import app.travelmo.core.tripMatches
@@ -1359,6 +1360,7 @@ class TripsViewModel(
         val trips: List<TripWithSegments>,
         val homes: List<HomeCorrection>,
         val homeAirports: List<ChosenHomeAirports>,
+        val notHome: List<NotHomeStay>,
         val periods: List<HomePeriod>,
     )
 
@@ -1369,15 +1371,15 @@ class TripsViewModel(
      * Home over time for the reports' residence and visa days: worked out
      * from the user's own trips, with their corrections over it, as the
      * Profile and the web's reports page work it out; null until both answer.
-     * Narrowed to `homes` and `homeAirports` so unrelated ride/one-way edits
+     * Narrowed to `homes`, `homeAirports` and `notHome` so unrelated ride/one-way edits
      * never recompute home across every trip.
      */
     val reportHomes: StateFlow<List<HomePeriod>?> = combine(
         reportTrips,
-        rideSettings.map { it?.let { it.homes to it.homeAirports } }.distinctUntilChanged(),
+        rideSettings.map { it?.let { Triple(it.homes, it.homeAirports, it.notHome) } }.distinctUntilChanged(),
     ) { trips, homeSettings ->
         if (trips == null || homeSettings == null) null
-        else computed { homesCached(trips, homeSettings.first, homeSettings.second) }
+        else computed { homesCached(trips, homeSettings.first, homeSettings.second, homeSettings.third) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /**
@@ -1388,7 +1390,7 @@ class TripsViewModel(
     fun reportHomesNow(): List<HomePeriod> {
         val trips = reportTrips.value ?: return emptyList()
         val settings = rideSettings.value ?: return emptyList()
-        return homesCached(trips, settings.homes, settings.homeAirports)
+        return homesCached(trips, settings.homes, settings.homeAirports, settings.notHome)
     }
 
     /**
@@ -1408,20 +1410,22 @@ class TripsViewModel(
         trips: List<TripWithSegments>,
         homes: List<HomeCorrection>,
         homeAirports: List<ChosenHomeAirports>,
+        notHome: List<NotHomeStay>,
     ): List<HomePeriod> {
         val cached = cachedReportHomes
-        if (cached != null && cached.trips === trips && cached.homes == homes && cached.homeAirports == homeAirports) {
+        if (cached != null && cached.trips === trips && cached.homes == homes && cached.homeAirports == homeAirports && cached.notHome == notHome) {
             return cached.periods
         }
-        return homesOf(trips, homes, homeAirports).also {
-            cachedReportHomes = CachedReportHomes(trips, homes, homeAirports, it)
+        return homesOf(trips, homes, homeAirports, notHome).also {
+            cachedReportHomes = CachedReportHomes(trips, homes, homeAirports, notHome, it)
         }
     }
 
-    // Each with its airports: those chosen on Profile, else those its round trips leave from.
-    private fun homesOf(trips: List<TripWithSegments>, homes: List<HomeCorrection>, homeAirports: List<ChosenHomeAirports>): List<HomePeriod> {
+    // Each with its airports: those chosen on Profile, else those its round trips leave from. Long stays count, but
+    // those said not to be home.
+    private fun homesOf(trips: List<TripWithSegments>, homes: List<HomeCorrection>, homeAirports: List<ChosenHomeAirports>, notHome: List<NotHomeStay>): List<HomePeriod> {
         val segments = trips.filter { it.trip.ownerUid == uid }.flatMap { it.segments }
-        return effectiveHomesWithAirports(segments, homes, homeAirports)
+        return effectiveHomesWithAirports(segments, homes, homeAirports, notHome)
     }
 
     /**
@@ -1959,6 +1963,25 @@ class TripsViewModel(
         store.setHomeAirports(uid, now.filter { homeTownKey(it.city, it.country) != homeTownKey(city, country) } + ChosenHomeAirports(city, country, codes))
     }
 
+    /**
+     * Says the long stay [stay] was not home, as the web's Profile does, then files every booking again where a parser
+     * is behind the app so it becomes an ordinary trip; else the next import or regroup does.
+     */
+    fun markNotHome(token: String, stay: HomePeriod) = run(token, "markNotHome") {
+        val now = rideSettings.value?.notHome ?: throw IllegalStateException("Home is still loading; try again")
+        // Known by its own first day, though another stay cut into it.
+        val from = stay.stayFrom ?: stay.from ?: return@run
+        store.setNotHome(uid, now.filterNot { it.from == from && it.city == stay.city } + NotHomeStay(stay.city, stay.country, from))
+        if (!tripActions.available) return@run
+        _tripNotice.value = try {
+            tripActions.regroup()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw IllegalStateException(NOT_HOME_REGROUP_FAILED, e)
+        }
+    }
+
     fun removeHomeCorrection(token: String, from: String) = run(token, "removeHomeCorrection") {
         val now = rideSettings.value?.homes ?: throw IllegalStateException("Home is still loading; try again")
         store.setHomeCorrections(uid, now.filter { it.from != from })
@@ -1985,3 +2008,6 @@ private const val MAX_CACHED_LIVE_FLOWS = 32
 
 /** Maximum concurrent server flag-repair transactions. */
 private const val REPAIR_CONCURRENCY = 4
+
+/** Said on Profile when a stay was saved as not home but regrouping failed, as the web says it. */
+const val NOT_HOME_REGROUP_FAILED = "Saved, but your trips weren't regrouped. Use Regroup trips in Settings."

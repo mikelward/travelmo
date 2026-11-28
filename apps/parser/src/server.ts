@@ -107,7 +107,7 @@ import { importReport } from "./debugReport";
 import { lookForJourney, lookQuery, type LookMailbox } from "./findJourney";
 import { regroupTrips } from "./regroup";
 import { resetTrips, startOver } from "./tripsReset";
-import { loadChosenHomeAirports, loadHomeOverrides } from "./homeOverrides";
+import { loadChosenHomeAirports, loadHomeOverrides, loadNotHome } from "./homeOverrides";
 import { errorFields, errorKind, log } from "./log";
 import { BadPushEnvelope, parseGmailPush, processNotification, type GmailNotification } from "./pubsub";
 import { firestoreStore } from "./store";
@@ -275,6 +275,7 @@ const deps: ImportDeps = {
   geocodeRetries: firestoreRetryStore(db),
   homeOverrides: (uid) => loadHomeOverrides(db, uid, (event, fields) => log("WARNING", event, fields)),
   chosenHomeAirports: (uid) => loadChosenHomeAirports(db, uid, (event, fields) => log("WARNING", event, fields)),
+  notHome: (uid) => loadNotHome(db, uid, (event, fields) => log("WARNING", event, fields)),
   now: () => new Date().toISOString(),
   log: (event, fields, severity) => log(severity ?? "INFO", event, fields),
 };
