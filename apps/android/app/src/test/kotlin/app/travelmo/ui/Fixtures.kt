@@ -541,8 +541,10 @@ class FakeTripStore(
         bothTaken += tripId to key
     }
     val removedTravelers = mutableListOf<Pair<String, List<String>>>()
-    override suspend fun setRemovedTravelers(tripId: String, removed: List<String>) {
+    val addedTravelers = mutableListOf<Pair<String, List<String>>>()
+    override suspend fun setTripTravelers(tripId: String, removed: List<String>, added: List<String>) {
         removedTravelers += tripId to removed
+        addedTravelers += tripId to added
     }
     override suspend fun fitTripDates(tripId: String): Boolean {
         fitted += tripId

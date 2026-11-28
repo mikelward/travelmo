@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { flagsUnknown, hiddenFromList, homeBookings, localOnly, namedTravelers, noListFilters, tripFlagsToWrite, tripTravelers, watchedTrip, watching } from "./listFilters";
+import { flagsUnknown, hiddenFromList, homeBookings, localOnly, namedTravelers, noListFilters, travelerChoices, tripFlagsToWrite, tripTravelerDiff, tripTravelers, watchedTrip, watching } from "./listFilters";
 import type { ExtractedSegment } from "./schema";
 
 // Invented bookings: a show and a class in town, a hire car returned where
@@ -185,6 +185,81 @@ describe("removedTravelers", () => {
     expect(namedTravelers(printout, ["Sam Example"])).toEqual(["Sam Example", "Pat Example"]);
     expect(namedTravelers([flight], ["Sam Example"])).toEqual(["Sam Example"]);
     expect(namedTravelers([cancelled({ ...flight, travelers: ["Alex Other"] }), { ...stay, travelers: ["Sam Example"] }])).toEqual(["Sam Example", "Alex Other"]);
+  });
+});
+
+describe("addedTravelers", () => {
+  const bookedByPat = [{ ...stay, travelers: ["Pat Example"] }];
+
+  it("includes names the owner put on the trip, making a watched trip theirs", () => {
+    expect(tripTravelers(bookedByPat, [], ["Sam Example"])).toEqual(["Pat Example", "Sam Example"]);
+    expect(watchedTrip({}, bookedByPat, [sam, pat])).toBe(true);
+    expect(watchedTrip({ addedTravelers: ["Sam Example"] }, bookedByPat, [sam, pat])).toBe(false);
+    expect(tripFlagsToWrite({ addedTravelers: ["Sam Example"] }, bookedByPat)?.travelers).toEqual(["Pat Example", "Sam Example"]);
+    expect(hiddenFromList({ addedTravelers: ["Sam Example"] }, bookedByPat, { ...noListFilters, hideWatching: true }, [sam, pat])).toBe(false);
+  });
+
+  it("includes a trip the user added themselves to when working out home", () => {
+    expect(homeBookings([{ segments: bookedByPat }], [sam, pat])).toEqual([]);
+    expect(homeBookings([{ addedTravelers: ["Sam Example"], segments: bookedByPat }], [sam, pat])).toEqual(bookedByPat);
+  });
+
+  it("lists added names beside booking names and known people in the dialog", () => {
+    const alex = { id: "p3", name: "Alex Example", aliases: [], bookings: 2, direct: 0 };
+    expect(namedTravelers(bookedByPat, [], ["Sam Example"])).toEqual(["Pat Example", "Sam Example"]);
+    expect(travelerChoices(bookedByPat, [], [], [pat, alex, sam])).toEqual([
+      { name: "Pat Example", selected: true },
+      { name: "Sam Example", selected: false },
+      { name: "Alex Example", selected: false },
+    ]);
+    // A booking spelling that already matches a known person does not repeat them.
+    const patWithAlias = { ...pat, aliases: ["P Example"] };
+    expect(travelerChoices([{ ...stay, travelers: ["P Example"] }], [], [], [sam, patWithAlias])).toEqual([
+      { name: "P Example", selected: true },
+      { name: "Sam Example", selected: false },
+    ]);
+    // Already-added names start ticked; removed names start unticked.
+    expect(travelerChoices(bookedByPat, ["Pat Example"], ["Sam Example"], [sam, pat, alex])).toEqual([
+      { name: "Pat Example", selected: false },
+      { name: "Sam Example", selected: true },
+      { name: "Alex Example", selected: false },
+    ]);
+  });
+
+  it("splits ticked and unticked names into removed and added for saving", () => {
+    // Adding yourself to someone else's booking keeps nothing in removed.
+    expect(tripTravelerDiff(bookedByPat, [], ["Pat Example", "Sam Example"])).toEqual({
+      removed: [],
+      added: ["Sam Example"],
+    });
+    // Unticking a booking's traveler puts them in removed; unticking an added one just drops them.
+    expect(tripTravelerDiff(bookedByPat, [], ["Sam Example"])).toEqual({
+      removed: ["Pat Example"],
+      added: ["Sam Example"],
+    });
+    expect(tripTravelerDiff(bookedByPat, [], ["Pat Example"])).toEqual({
+      removed: [],
+      added: [],
+    });
+    // A trip with no named bookings can still take added names.
+    expect(tripTravelerDiff([stay], [], ["Sam Example", "SMITH/ALEX MR"])).toEqual({
+      removed: [],
+      added: ["Sam Example", "Alex Smith"],
+    });
+    // Someone named only on a cancelled booking alongside an active booking starts unticked and goes into added when ticked.
+    const mixedCancelled = [{ ...stay, travelers: ["Pat Example"] }, cancelled({ ...flight, travelers: ["Sam Example"] })];
+    expect(travelerChoices(mixedCancelled, [], [], [sam, pat])).toEqual([
+      { name: "Pat Example", selected: true },
+      { name: "Sam Example", selected: false },
+    ]);
+    expect(tripTravelerDiff(mixedCancelled, [], ["Pat Example", "Sam Example"])).toEqual({
+      removed: [],
+      added: ["Sam Example"],
+    });
+    expect(tripTravelerDiff(mixedCancelled, [], ["Pat Example"])).toEqual({
+      removed: [],
+      added: [],
+    });
   });
 });
 

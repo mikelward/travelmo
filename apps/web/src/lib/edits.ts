@@ -604,11 +604,21 @@ export async function createTrip(db: Firestore, uid: string, title: string, star
   return ref.id;
 }
 
-// Takes names off a trip, or puts them back (Travelers…): `removed` is
-// every name its bookings give that isn't on it. The list's flags are
-// worked out again, so whom it is for follows.
-export async function setRemovedTravelers(db: Firestore, tripId: string, removed: readonly string[]): Promise<void> {
-  await updateDoc(doc(db, paths.trip(tripId)), { removedTravelers: removed.length > 0 ? [...removed] : deleteField(), ...flagsUnknown(), updatedAt: now() });
+// Sets the names taken off or put on a trip (Travelers…): `removed` is
+// every booking name not on it, `added` is every extra name on it. The
+// list's flags are worked out again, so whom it is for follows.
+export async function setTripTravelers(
+  db: Firestore,
+  tripId: string,
+  removed: readonly string[],
+  added: readonly string[],
+): Promise<void> {
+  await updateDoc(doc(db, paths.trip(tripId)), {
+    removedTravelers: removed.length > 0 ? [...removed] : deleteField(),
+    addedTravelers: added.length > 0 ? [...added] : deleteField(),
+    ...flagsUnknown(),
+    updatedAt: now(),
+  });
 }
 
 // The owner's word that a trip that looks like two in one is one trip

@@ -167,7 +167,7 @@ test("Travelers… takes the user off a trip a printout named them on, so they'r
   await seedPerson(ownerUid, { id: "dad", name: "Pat Example", bookings: 1, direct: 0 });
   // A relative's itinerary that names the user too.
   await seedTrip(ownerUid, "e2e-dad", { travelers: ["Sam Example", "Pat Example"] }, { title: "Dad's trip" });
-  // A cancelled booking for someone else: still on the trip, so ticked.
+  // A cancelled booking for someone else: listed unticked while live bookings exist, so it can be added without landing in removed.
   await seedFlight("e2e-dad", { travelers: ["Alex Other"], cancelledAt: "2026-11-01T00:00:00Z" });
   await page.goto("/trips/e2e-dad");
   await expect(page.getByRole("heading", { name: "Before you go" })).toBeVisible();
@@ -176,7 +176,7 @@ test("Travelers… takes the user off a trip a printout named them on, so they'r
   await page.getByRole("button", { name: "Trip actions" }).click();
   await page.getByRole("menuitem", { name: "Travelers…" }).click();
   const dialog = page.getByRole("dialog", { name: "Travelers" });
-  await expect(dialog.getByRole("checkbox", { name: "Alex Other" })).toBeChecked();
+  await expect(dialog.getByRole("checkbox", { name: "Alex Other" })).not.toBeChecked();
   await dialog.getByRole("checkbox", { name: "Sam Example" }).uncheck();
   await dialog.getByRole("button", { name: "Save" }).click();
   await expect(dialog).toHaveCount(0);
@@ -197,4 +197,30 @@ test("Travelers… takes the user off a trip a printout named them on, so they'r
   await dialog.getByRole("button", { name: "Save" }).click();
   await expect(page.getByTestId("trip-watching")).toHaveCount(0);
   await expect.poll(async () => (await readTrip("e2e-dad"))?.removedTravelers).toBeUndefined();
+});
+
+test("Travelers… lets the owner add themselves and others to a trip booked in someone else's name", async ({ page }) => {
+  const ownerUid = await signIn(page, owner);
+  await seedPerson(ownerUid, { id: "me", name: "Sam Example", bookings: 4, direct: 4 });
+  await seedPerson(ownerUid, { id: "pat", name: "Pat Example", bookings: 2, direct: 0 });
+  await seedTrip(ownerUid, "e2e-airbnb", { travelers: ["Pat Example"] }, { title: "Stratford" });
+
+  await page.goto("/trips/e2e-airbnb");
+  await expect(page.getByTestId("trip-watching")).toHaveText("Watching: you're not on this trip");
+
+  await page.getByRole("button", { name: "Trip actions" }).click();
+  await page.getByRole("menuitem", { name: "Travelers…" }).click();
+  const dialog = page.getByRole("dialog", { name: "Travelers" });
+  await expect(dialog.getByRole("checkbox", { name: "Pat Example" })).toBeChecked();
+  await expect(dialog.getByRole("checkbox", { name: "Sam Example" })).not.toBeChecked();
+  await dialog.getByRole("checkbox", { name: "Sam Example" }).check();
+  await dialog.getByLabel("Add a traveler").fill("Jordan Lee");
+  await dialog.getByRole("button", { name: "Add" }).click();
+  await expect(dialog.getByRole("checkbox", { name: "Jordan Lee" })).toBeChecked();
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(dialog).toHaveCount(0);
+
+  await expect(page.getByTestId("trip-watching")).toHaveCount(0);
+  await expect.poll(async () => (await readTrip("e2e-airbnb"))?.addedTravelers).toEqual(["Sam Example", "Jordan Lee"]);
+  await expect.poll(async () => (await readTrip("e2e-airbnb"))?.removedTravelers).toBeUndefined();
 });

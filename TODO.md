@@ -94,7 +94,7 @@
         download and working out home.
   - [x] The parser too: no reminders, check-in alerts, calendar-feed events
         or home detection from a watched trip.
-  - [ ] Travelers editable on the trip page.
+  - [x] Travelers editable on the trip page.
   - [ ] Changing "You" from two devices at once can leave two people marked
         until the next change; a single selected-person field would stop it.
 

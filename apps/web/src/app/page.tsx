@@ -205,7 +205,7 @@ function Trips({ user }: { user: User }) {
   const watchingOf = (trip: Trip) => {
     const read = bookingsOf(trip.id);
     return watching(
-      trip.travelers ?? (read ? tripTravelers(read, trip.removedTravelers) : undefined),
+      trip.travelers ?? (read ? tripTravelers(read, trip.removedTravelers, trip.addedTravelers) : undefined),
       travelers ?? [],
       trip.removedTravelers,
     );

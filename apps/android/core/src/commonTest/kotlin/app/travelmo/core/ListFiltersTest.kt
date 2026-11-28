@@ -180,4 +180,58 @@ class ListFiltersTest {
         namedTravelers(listOf(flight), listOf("Sam Example")) shouldBe listOf("Sam Example")
         namedTravelers(listOf(cancelled(flight.copy(travelers = listOf("Alex Other"))), stay.copy(travelers = listOf("Sam Example")))) shouldBe listOf("Sam Example", "Alex Other")
     }
+
+    @Test
+    fun includesNamesTheOwnerPutOnTheTripMakingAWatchedTripTheirs() {
+        val bookedByPat = listOf(stay.copy(travelers = listOf("Pat Example")))
+        tripTravelers(bookedByPat, emptyList(), listOf("Sam Example")) shouldBe listOf("Pat Example", "Sam Example")
+        watchedTrip(trip, bookedByPat, listOf(sam, pat)) shouldBe true
+        watchedTrip(trip.copy(addedTravelers = listOf("Sam Example")), bookedByPat, listOf(sam, pat)) shouldBe false
+        tripFlagsToWrite(trip.copy(addedTravelers = listOf("Sam Example")), bookedByPat)?.travelers shouldBe listOf("Pat Example", "Sam Example")
+        hiddenFromList(trip.copy(addedTravelers = listOf("Sam Example")), bookedByPat, ListFilters(hideWatching = true), listOf(sam, pat)) shouldBe false
+    }
+
+    @Test
+    fun listsAddedNamesBesideBookingNamesAndKnownPeopleInTheDialog() {
+        val bookedByPat = listOf(stay.copy(travelers = listOf("Pat Example")))
+        val alex = Person("p3", "Alex Example", bookings = 2, direct = 0)
+        namedTravelers(bookedByPat, emptyList(), listOf("Sam Example")) shouldBe listOf("Pat Example", "Sam Example")
+        travelerChoices(bookedByPat, emptyList(), emptyList(), listOf(pat, alex, sam)) shouldBe listOf(
+            TravelerChoice("Pat Example", selected = true),
+            TravelerChoice("Sam Example", selected = false),
+            TravelerChoice("Alex Example", selected = false),
+        )
+        val patWithAlias = pat.copy(aliases = listOf("P Example"))
+        travelerChoices(listOf(stay.copy(travelers = listOf("P Example"))), emptyList(), emptyList(), listOf(sam, patWithAlias)) shouldBe listOf(
+            TravelerChoice("P Example", selected = true),
+            TravelerChoice("Sam Example", selected = false),
+        )
+        travelerChoices(bookedByPat, listOf("Pat Example"), listOf("Sam Example"), listOf(sam, pat, alex)) shouldBe listOf(
+            TravelerChoice("Pat Example", selected = false),
+            TravelerChoice("Sam Example", selected = true),
+            TravelerChoice("Alex Example", selected = false),
+        )
+    }
+
+    @Test
+    fun splitsTickedAndUntickedNamesIntoRemovedAndAddedForSaving() {
+        val bookedByPat = listOf(stay.copy(travelers = listOf("Pat Example")))
+        tripTravelerDiff(bookedByPat, emptyList(), listOf("Pat Example", "Sam Example")) shouldBe
+            TripTravelerDiff(removed = emptyList(), added = listOf("Sam Example"))
+        tripTravelerDiff(bookedByPat, emptyList(), listOf("Sam Example")) shouldBe
+            TripTravelerDiff(removed = listOf("Pat Example"), added = listOf("Sam Example"))
+        tripTravelerDiff(bookedByPat, emptyList(), listOf("Pat Example")) shouldBe
+            TripTravelerDiff(removed = emptyList(), added = emptyList())
+        tripTravelerDiff(listOf(stay), emptyList(), listOf("Sam Example", "SMITH/ALEX MR")) shouldBe
+            TripTravelerDiff(removed = emptyList(), added = listOf("Sam Example", "Alex Smith"))
+        val mixedCancelled = listOf(stay.copy(travelers = listOf("Pat Example")), cancelled(flight.copy(travelers = listOf("Sam Example"))))
+        travelerChoices(mixedCancelled, emptyList(), emptyList(), listOf(sam, pat)) shouldBe listOf(
+            TravelerChoice("Pat Example", selected = true),
+            TravelerChoice("Sam Example", selected = false),
+        )
+        tripTravelerDiff(mixedCancelled, emptyList(), listOf("Pat Example", "Sam Example")) shouldBe
+            TripTravelerDiff(removed = emptyList(), added = listOf("Sam Example"))
+        tripTravelerDiff(mixedCancelled, emptyList(), listOf("Pat Example")) shouldBe
+            TripTravelerDiff(removed = emptyList(), added = emptyList())
+    }
 }

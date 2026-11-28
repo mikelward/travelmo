@@ -85,7 +85,7 @@ export function planRegroup(
   notHome: readonly NotHomeStay[] = [],
 ): RegroupPlan {
   const live = trips.filter((trip) => !trip.deleting);
-  const known = homeBookings(live.map((trip) => ({ removedTravelers: trip.removedTravelers, segments: segmentsByTrip.get(trip.id) ?? [] })), people);
+  const known = homeBookings(live.map((trip) => ({ removedTravelers: trip.removedTravelers, addedTravelers: trip.addedTravelers, segments: segmentsByTrip.get(trip.id) ?? [] })), people);
   // Home as worked out and as corrected, each with its airports: those its
   // round trips leave from, unless the person chose them.
   const homes = homesWithAirports(known, overrides, chosen, notHome);

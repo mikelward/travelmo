@@ -423,7 +423,7 @@ export async function refreshEmail(
     if (unmatched.length) {
       const segments = unmatched.map((u) => u.segment);
       // Trips the user is only watching say nothing of where home is (homeBookings).
-      const { periods, overrides: homeOverrides } = homesWithAirports([...homeBookings(read.map((trip) => ({ removedTravelers: trip.removedTravelers, segments: segmentsByTrip.get(trip.id) ?? [] })), people), ...homeBookings([segments], people)], overrides, chosen, notHome);
+      const { periods, overrides: homeOverrides } = homesWithAirports([...homeBookings(read.map((trip) => ({ removedTravelers: trip.removedTravelers, addedTravelers: trip.addedTravelers, segments: segmentsByTrip.get(trip.id) ?? [] })), people), ...homeBookings([segments], people)], overrides, chosen, notHome);
       const remaining = (tripId: string) => (segmentsByTrip.get(tripId) ?? []).filter((s) => !deletes.has(segmentKey(s)));
       const filable = read.filter((trip) => !trip.id.startsWith(sourceTripPrefix));
       let tripId =

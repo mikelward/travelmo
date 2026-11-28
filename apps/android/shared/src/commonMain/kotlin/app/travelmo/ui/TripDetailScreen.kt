@@ -9,9 +9,17 @@ import app.travelmo.shared.split_move
 import app.travelmo.shared.split_trip_hint
 import app.travelmo.shared.split_trip_title
 import app.travelmo.shared.split
+import app.travelmo.shared.travelers_add
+import app.travelmo.shared.travelers_add_placeholder
+import app.travelmo.shared.travelers_add_someone
 import app.travelmo.shared.travelers_hint
 import app.travelmo.shared.travelers_menu
 import app.travelmo.shared.travelers_title
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.input.ImeAction
 import app.travelmo.core.compareInstants
 import app.travelmo.core.sourceGroups
 import androidx.compose.foundation.selection.toggleable
@@ -90,9 +98,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.travelmo.core.Person
+import app.travelmo.core.canonicalName
 import app.travelmo.core.journeyGapKey
+import app.travelmo.core.travelerChoices
+import app.travelmo.core.tripTravelerDiff
 import app.travelmo.core.tripTravelers
-import app.travelmo.core.namedTravelers
 import app.travelmo.core.MixedTrip
 import app.travelmo.core.mixedTrip
 import app.travelmo.core.duplicateFlights
@@ -303,9 +314,7 @@ fun TripDetailScreen(
                         if (segments.size > 1) {
                             DropdownMenuItem(text = { Text(stringResource(Res.string.split)) }, enabled = !busy, onClick = { close(); splitting = true })
                         }
-                        if (current != null && namedTravelers(segments, current.removedTravelers).isNotEmpty()) {
-                            DropdownMenuItem(text = { Text(stringResource(Res.string.travelers_menu)) }, enabled = !busy, onClick = { close(); editingTravelers = true })
-                        }
+                        DropdownMenuItem(text = { Text(stringResource(Res.string.travelers_menu)) }, enabled = !busy, onClick = { close(); editingTravelers = true })
                     }
                 },
             )
@@ -324,9 +333,9 @@ fun TripDetailScreen(
             }
         }
         if (editingTravelers && current != null) {
-            TravelersDialog(segments, current.removedTravelers, onDismiss = { editingTravelers = false }) { removed ->
+            TravelersDialog(segments, current.removedTravelers, current.addedTravelers, travelers, onDismiss = { editingTravelers = false }) { removed, added ->
                 editingTravelers = false
-                viewModel.setRemovedTravelers("${prefix}travelers", tripId, removed)
+                viewModel.setTripTravelers("${prefix}travelers", tripId, removed, added)
             }
         }
         deleting?.let { segment ->
@@ -379,7 +388,10 @@ fun TripDetailScreen(
         }
         val currentNow by nowFlow.collectAsStateWithLifecycle(initialValue = viewModel.now())
         val removedTravelers = current?.removedTravelers.orEmpty()
-        val onlyWatching = remember(segments, travelers, removedTravelers) { watching(tripTravelers(segments, removedTravelers), travelers, removedTravelers) }
+        val addedTravelers = current?.addedTravelers.orEmpty()
+        val onlyWatching = remember(segments, travelers, removedTravelers, addedTravelers) {
+            watching(tripTravelers(segments, removedTravelers, addedTravelers), travelers, removedTravelers)
+        }
         // Bookings that look like two trips in one, unless the owner said it is one.
         val oneTrip = current?.oneTrip == true
         val mixed = remember(segments, oneTrip, removedTravelers) { if (oneTrip) null else mixedTrip(segments, removedTravelers) }
@@ -845,37 +857,125 @@ private fun SplitDialog(segments: List<Segment>, onDismiss: () -> Unit, onSplit:
 }
 
 /**
- * Travelers…: every name the trip's bookings give, ticked unless the owner took it off. Unticking a wrongly named
- * passenger, the user among them, makes it a trip they're only watching. As the web's.
+ * Travelers…: every name the trip's bookings give, plus anyone the owner added, followed by the user's known people
+ * (user first) to tick, and "Add someone else…" to type a new name. As the web's.
  */
 @Composable
-private fun TravelersDialog(segments: List<Segment>, removed: List<String>, onDismiss: () -> Unit, onSave: (List<String>) -> Unit) {
-    val names = remember(segments, removed) { namedTravelers(segments, removed) }
-    // Unticked: only those the owner took off, as people write them; a name on nothing but a cancelled booking is
-    // still on the trip.
-    var off by rememberSaveable { mutableStateOf(namedTravelers(emptyList(), removed).toSet()) }
-    AppAlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(Res.string.travelers_title)) },
-        text = {
-            LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
-                item(key = "hint") {
+private fun TravelersDialog(
+    segments: List<Segment>,
+    removed: List<String>,
+    added: List<String>,
+    people: List<Person>,
+    onDismiss: () -> Unit,
+    onSave: (removed: List<String>, added: List<String>) -> Unit,
+) {
+    TravelersDialogScaffold(segments, removed, added, people, onDismiss, onSave) { body, confirm, dismiss ->
+        AppAlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text(stringResource(Res.string.travelers_title)) },
+            text = body,
+            confirmButton = confirm,
+            dismissButton = dismiss,
+        )
+    }
+}
+
+/** Shared state and content for [TravelersDialog], hostable in a dialog or directly in tests. */
+@Composable
+fun TravelersDialogScaffold(
+    segments: List<Segment>,
+    removed: List<String>,
+    added: List<String>,
+    people: List<Person>,
+    onDismiss: () -> Unit,
+    onSave: (removed: List<String>, added: List<String>) -> Unit,
+    host: @Composable (body: @Composable () -> Unit, confirm: @Composable () -> Unit, dismiss: @Composable () -> Unit) -> Unit,
+) {
+    val initial = remember(segments, removed, added, people) { travelerChoices(segments, removed, added, people) }
+    val initialSelected = remember(initial) { initial.filter { it.selected }.map { it.name }.toSet() }
+    var extra by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    // Track only explicit user changes so late-arriving bookings still start ticked.
+    var turnedOn by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    var turnedOff by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    var naming by rememberSaveable { mutableStateOf(false) }
+    var draft by rememberSaveable { mutableStateOf("") }
+    val names = remember(initial, extra) { (initial.map { it.name } + extra).distinct() }
+    val selected = remember(initialSelected, turnedOn, turnedOff) { (initialSelected + turnedOn) - turnedOff }
+
+    fun addDraft() {
+        val name = canonicalName(draft) ?: return
+        if (name !in names) extra = extra + name
+        turnedOn = turnedOn + name
+        turnedOff = turnedOff - name
+        draft = ""
+        naming = false
+    }
+
+    host(
+        {
+            if (naming) {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it.take(80) },
+                    label = { Text(stringResource(Res.string.travelers_add_placeholder)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { addDraft() }),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
                     Text(stringResource(Res.string.travelers_hint), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                items(names, key = { it }) { name ->
-                    val on = name !in off
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().toggleable(value = on, role = Role.Checkbox) { off = if (it) off - name else off + name }.padding(vertical = 6.dp),
+                    for (name in names) {
+                        val on = name in selected
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().toggleable(value = on, role = Role.Checkbox) { checked ->
+                                if (checked) {
+                                    turnedOn = turnedOn + name
+                                    turnedOff = turnedOff - name
+                                } else {
+                                    turnedOff = turnedOff + name
+                                    turnedOn = turnedOn - name
+                                }
+                            }.padding(vertical = 6.dp),
+                        ) {
+                            Checkbox(checked = on, onCheckedChange = null)
+                            Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 12.dp))
+                        }
+                    }
+                    TextButton(
+                        onClick = { naming = true },
+                        modifier = Modifier.offset(x = -TextButtonInset),
                     ) {
-                        Checkbox(checked = on, onCheckedChange = null)
-                        Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 12.dp))
+                        Text(stringResource(Res.string.travelers_add_someone))
                     }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(names.filter { it in off }) }) { Text(stringResource(Res.string.save)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+        {
+            if (naming) {
+                TextButton(onClick = ::addDraft, enabled = canonicalName(draft) != null) { Text(stringResource(Res.string.travelers_add)) }
+            } else {
+                TextButton(onClick = {
+                    val diff = tripTravelerDiff(segments, removed, selected.toList())
+                    onSave(diff.removed, diff.added)
+                }) { Text(stringResource(Res.string.save)) }
+            }
+        },
+        {
+            TextButton(onClick = {
+                if (naming) {
+                    draft = ""
+                    naming = false
+                } else {
+                    onDismiss()
+                }
+            }) { Text(stringResource(Res.string.cancel)) }
+        },
     )
 }
 

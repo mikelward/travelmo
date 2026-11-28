@@ -22,27 +22,94 @@ fun localOnly(segments: List<Segment>): Boolean {
 const val MAX_TRIP_TRAVELERS = 100
 
 /**
- * Whom a trip's bookings are for: every name they give, as people write it ([canonicalName]), each spelling once, going
- * by what is still booked unless nothing is. Spellings stay apart ("J Smith" beside "John Smith") until they're matched
- * to the user's people, who may tell them apart. More than [MAX_TRIP_TRAVELERS] is kept as none, so a trip is never
- * taken for one the user isn't on for want of room for their name. Names the owner took off the trip ([removed],
- * [Trip.removedTravelers]) are left out, however a booking spells them.
+ * Whom a trip's bookings are for: every name they give, plus any the owner put on it ([added], [Trip.addedTravelers]),
+ * as people write it ([canonicalName]), each spelling once, going by what is still booked unless nothing is. Spellings
+ * stay apart ("J Smith" beside "John Smith") until they're matched to the user's people, who may tell them apart. More
+ * than [MAX_TRIP_TRAVELERS] is kept as none, so a trip is never taken for one the user isn't on for want of room for
+ * their name. Names the owner took off the trip ([removed], [Trip.removedTravelers]) are left out, however a booking
+ * spells them.
  */
-fun tripTravelers(segments: List<Segment>, removed: List<String> = emptyList()): List<String> {
+fun tripTravelers(
+    segments: List<Segment>,
+    removed: List<String> = emptyList(),
+    added: List<String> = emptyList(),
+): List<String> {
     val live = liveSegments(segments)
     val gone = removed.mapNotNull(::canonicalName).toSet()
-    val names = live.ifEmpty { segments }.flatMap { it.travelers }.mapNotNull(::canonicalName).distinct().filter { it !in gone }
+    val names = (live.ifEmpty { segments }.flatMap { it.travelers } + added).mapNotNull(::canonicalName).distinct().filter { it !in gone }
     return if (names.size > MAX_TRIP_TRAVELERS) emptyList() else names
 }
 
 /**
- * Every name a trip's bookings give, those the owner took off too, as the Travelers… dialog lists them: what is still
- * booked first, then the rest (namedTravelers in listFilters.ts).
+ * Every name a trip's bookings give, those the owner added or took off too, as the Travelers… dialog lists them: what
+ * is still booked first, then the rest (namedTravelers in listFilters.ts).
  */
-fun namedTravelers(segments: List<Segment>, removed: List<String> = emptyList()): List<String> {
+fun namedTravelers(
+    segments: List<Segment>,
+    removed: List<String> = emptyList(),
+    added: List<String> = emptyList(),
+): List<String> {
     val live = liveSegments(segments)
     val all = (live + segments.filter { it !in live }).flatMap { it.travelers }
-    return (all + removed).mapNotNull(::canonicalName).distinct()
+    return (all + added + removed).mapNotNull(::canonicalName).distinct()
+}
+
+/** One row of the Travelers… dialog: a name and whether it starts ticked (TravelerChoice in listFilters.ts). */
+data class TravelerChoice(val name: String, val selected: Boolean)
+
+/** What the Travelers… dialog saves for a trip (tripTravelerDiff in listFilters.ts). */
+data class TripTravelerDiff(val removed: List<String>, val added: List<String>)
+
+/**
+ * The checkboxes the Travelers… dialog opens with: everyone named on the trip (from bookings, added or removed; ticked
+ * when on the trip's effective bookings or explicitly added, unless removed), followed by the user's known people not
+ * already represented there (the user first, so claiming a trip is one tap, then the rest in Profile order), unticked
+ * (travelerChoices in listFilters.ts).
+ */
+fun travelerChoices(
+    segments: List<Segment>,
+    removed: List<String> = emptyList(),
+    added: List<String> = emptyList(),
+    people: List<Person> = emptyList(),
+): List<TravelerChoice> {
+    val named = namedTravelers(segments, removed, added)
+    val effective = tripTravelers(segments).toSet()
+    val addedSet = added.mapNotNull(::canonicalName).toSet()
+    val gone = removed.mapNotNull(::canonicalName).toSet()
+    val choices = named.map { TravelerChoice(it, (it in effective || it in addedSet) && it !in gone) }.toMutableList()
+    val seenNames = named.toMutableSet()
+    val seenPeople = named.mapNotNull { findPerson(people, it)?.id }.toMutableSet()
+    val me = guessMe(people)
+    val ordered = if (me != null) listOf(me) + people.filter { it.id != me.id } else people
+    for (person in ordered) {
+        if (person.id in seenPeople) continue
+        val name = canonicalName(person.name) ?: continue
+        if (name in seenNames) continue
+        seenPeople += person.id
+        seenNames += name
+        choices += TravelerChoice(name, selected = false)
+    }
+    return choices
+}
+
+/**
+ * What the Travelers… dialog saves for a trip: names from effective bookings (or previously removed) that were left
+ * unticked go in [TripTravelerDiff.removed], and ticked names not already on effective bookings go in
+ * [TripTravelerDiff.added] (tripTravelerDiff in listFilters.ts).
+ */
+fun tripTravelerDiff(
+    segments: List<Segment>,
+    prevRemoved: List<String>,
+    selected: List<String>,
+): TripTravelerDiff {
+    val effective = tripTravelers(segments)
+    val effectiveSet = effective.toSet()
+    val prevRemovedCanon = prevRemoved.mapNotNull(::canonicalName)
+    val selectedCanon = selected.mapNotNull(::canonicalName).distinct()
+    val selectedSet = selectedCanon.toSet()
+    val removed = (effective + prevRemovedCanon).distinct().filter { it !in selectedSet }.take(MAX_TRIP_TRAVELERS)
+    val added = selectedCanon.filter { it !in effectiveSet }.take(MAX_TRIP_TRAVELERS)
+    return TripTravelerDiff(removed, added)
 }
 
 /**
@@ -64,7 +131,7 @@ fun watching(travelers: List<String>?, people: List<Person>, removed: List<Strin
  * working out home) leaves such a trip out (watchedTrip in listFilters.ts).
  */
 fun watchedTrip(trip: Trip, segments: List<Segment>?, people: List<Person>): Boolean =
-    watching(segments?.let { tripTravelers(it, trip.removedTravelers) } ?: trip.travelers, people, trip.removedTravelers)
+    watching(segments?.let { tripTravelers(it, trip.removedTravelers, trip.addedTravelers) } ?: trip.travelers, people, trip.removedTravelers)
 
 /**
  * What the trip list needs of a trip's bookings (for its filters, and [setting] for its picture), kept on the trip
@@ -74,12 +141,16 @@ fun watchedTrip(trip: Trip, segments: List<Segment>?, people: List<Person>): Boo
  */
 data class TripFlags(val allCancelled: Boolean, val localOnly: Boolean, val travelers: List<String>, val setting: String, val mixed: Boolean = false)
 
-fun tripFlags(segments: List<Segment>, removed: List<String> = emptyList()): TripFlags =
-    TripFlags(allCancelled(segments), localOnly(segments), tripTravelers(segments, removed), tripSetting(segments), mixedTrip(segments, removed) != null)
+fun tripFlags(
+    segments: List<Segment>,
+    removed: List<String> = emptyList(),
+    added: List<String> = emptyList(),
+): TripFlags =
+    TripFlags(allCancelled(segments), localOnly(segments), tripTravelers(segments, removed, added), tripSetting(segments), mixedTrip(segments, removed) != null)
 
 /** The flags to write on a trip whose bookings have just been read, or null when the trip already says so. */
 fun tripFlagsToWrite(trip: Trip, segments: List<Segment>): TripFlags? {
-    val flags = tripFlags(segments, trip.removedTravelers)
+    val flags = tripFlags(segments, trip.removedTravelers, trip.addedTravelers)
     val same = trip.allCancelled == flags.allCancelled && trip.localOnly == flags.localOnly && trip.travelers == flags.travelers && trip.setting == flags.setting && trip.mixed == flags.mixed
     return if (same) null else flags
 }
@@ -107,7 +178,7 @@ fun hiddenFromList(trip: Trip, segments: List<Segment>?, filters: ListFilters, p
         if (local) return true
     }
     if (filters.hideWatching) {
-        val travelers = trip.travelers ?: segments?.let { tripTravelers(it, trip.removedTravelers) }
+        val travelers = trip.travelers ?: segments?.let { tripTravelers(it, trip.removedTravelers, trip.addedTravelers) }
         if (watching(travelers, people, trip.removedTravelers)) return true
     }
     return false

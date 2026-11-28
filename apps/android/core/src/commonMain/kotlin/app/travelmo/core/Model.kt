@@ -128,6 +128,8 @@ data class Trip(
      * lists the family. Left out of whom it is for, so a trip the user was taken off is one they're only watching.
      */
     val removedTravelers: List<String> = emptyList(),
+    /** Names the owner put on the trip (Travelers…): bookings made in someone else's name, or that name nobody. */
+    val addedTravelers: List<String> = emptyList(),
     /** Its bookings look like two trips in one ([mixedTrip]), kept with the list's flags; null until worked out. */
     val mixed: Boolean? = null,
     /** The owner said it is one trip all the same: neither the list nor its page asks again. */

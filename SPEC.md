@@ -470,16 +470,21 @@ booking), and "Both were taken" for the owner, kept on the trip
 (`bothTaken`, the pair by its bookings' ids, at most fifty), after which it
 asks no more about that pair. A cancelled trip asks nothing.
 
-**Travelers….** A printout that names the family wrongly (a relative's
-itinerary listing everyone) makes a trip the user isn't on look like theirs.
-The trip's ⋮ menu has Travelers… for the owner, on the web and Android, once
-its bookings name anyone: every name they give (`namedTravelers`), each
-ticked unless taken off. Unticking keeps the name on the trip
-(`removedTravelers`, at most a hundred, owner only), not on its bookings, so
-an email read again doesn't put it back, and the list's flags are worked out
-again. Whom the trip is for leaves those names out, however a booking spells
-them, and a trip the user was taken off is one they're only watching even
-when its bookings name no one else. Merging trips keeps the target's list.
+**Travelers….** A booking made in someone else's name (an Airbnb or relative's
+booking) makes a trip the user is on look watched, and a printout that names
+the family wrongly makes a trip they aren't on look like theirs. The trip's ⋮
+menu has Travelers… for the owner, on the web and Android: every name its
+bookings give (`namedTravelers`), each ticked unless taken off, plus any names
+the owner added, followed by the user's known people from Profile not already
+represented (the user first, unticked), and a field to add someone new
+(`travelerChoices`, `tripTravelerDiff`). Unticking a booking name keeps it in
+`removedTravelers` and ticking a name not on any booking keeps it in
+`addedTravelers` (each at most a hundred, owner only), on the trip rather than
+its bookings, so an email read again doesn't undo the choice, and the list's
+flags are worked out again. Whom the trip is for includes `addedTravelers` and
+leaves `removedTravelers` out, however a booking spells them, and a trip the
+user was taken off is one they're only watching even when its bookings name no
+one else. Merging trips keeps the target's list.
 
 What is the user's own leaves a trip they're only watching out
 (`watchedTrip`: by its bookings once read, else by the trip's
@@ -496,7 +501,7 @@ read they're told, as before), no events on the calendar feed, and its
 bookings say nothing of where home is when importing, refreshing or
 regrouping (`homeBookings`).
 
-Still to come (TODO.md): travelers editable on the trip page; and renaming
+Still to come (TODO.md): editing one booking's travelers; and renaming
 and merging people.
 
 ### Adding a trip

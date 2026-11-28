@@ -1129,8 +1129,8 @@ export async function fileBooking(uid: string, incoming: BookingToFile, deps: Im
     const nearby = overlappingTrips(live, { start: shiftDate(range.start, -homeWindowDays), end: shiftDate(range.end, homeWindowDays) });
     const segmentsByTrip = new Map(await Promise.all(nearby.map(async (trip) => [trip.id, await tx.listSegments(trip.id)] as const)));
     const segmentsOf = (tripId: string) => segmentsByTrip.get(tripId) ?? [];
-    // Each nearby trip's bookings with the names its owner took off it (homeBookings).
-    const nearbyBookings = () => nearby.map((trip) => ({ removedTravelers: trip.removedTravelers, segments: segmentsOf(trip.id) }));
+    // Each nearby trip's bookings with the names its owner added or took off it (homeBookings).
+    const nearbyBookings = () => nearby.map((trip) => ({ removedTravelers: trip.removedTravelers, addedTravelers: trip.addedTravelers, segments: segmentsOf(trip.id) }));
     // Home as worked out and as corrected, each with the airports its round
     // trips leave from (withHomeAirports).
     // Whom the user's bookings name: read here, before any write, for the

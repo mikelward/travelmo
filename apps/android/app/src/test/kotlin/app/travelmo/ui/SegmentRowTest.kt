@@ -22,9 +22,11 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.travelmo.core.Person
 import app.travelmo.core.Place
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentType
@@ -150,6 +152,94 @@ class SegmentRowTest {
         composeRule.onNodeWithText("Save").performClick()
         composeRule.waitForIdle()
         store.removedTravelers shouldBe listOf("liverpool" to listOf("Sam Example", "Pat Example"))
+        store.addedTravelers shouldBe listOf("liverpool" to emptyList())
+    }
+
+    @Test
+    fun `Travelers lets the owner add known people from Profile`() {
+        val segments = fixtureSegments + ("liverpool" to fixtureSegments.getValue("liverpool").map { it.copy(travelers = listOf("Pat Example")) })
+        val people = listOf(
+            Person("me", "Sam Example", bookings = 4, direct = 4),
+            Person("pat", "Pat Example", bookings = 2, direct = 0),
+        )
+        val store = FakeTripStore(segments = segments, people = people)
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent {
+            TravelmoTheme {
+                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("More options").performClick()
+        composeRule.onNodeWithText("Travelers…").performClick()
+        composeRule.onNodeWithText("Sam Example").performClick()
+        composeRule.onNodeWithText("Save").performClick()
+        composeRule.waitForIdle()
+        store.removedTravelers shouldBe listOf("liverpool" to emptyList())
+        store.addedTravelers shouldBe listOf("liverpool" to listOf("Sam Example"))
+    }
+
+    @Test
+    fun `TravelersDialog lets the owner type a new traveler`() {
+        val segments = fixtureSegments.getValue("liverpool").map { it.copy(travelers = listOf("Pat Example")) }
+        val saved = mutableListOf<Pair<List<String>, List<String>>>()
+        composeRule.setContent {
+            TravelmoTheme {
+                TravelersDialogScaffold(
+                    segments = segments,
+                    removed = emptyList(),
+                    added = emptyList(),
+                    people = listOf(Person("me", "Sam Example", bookings = 4, direct = 4)),
+                    onDismiss = {},
+                    onSave = { removed, added -> saved += removed to added },
+                ) { body, confirm, dismiss ->
+                    androidx.compose.foundation.layout.Column {
+                        body()
+                        dismiss()
+                        confirm()
+                    }
+                }
+            }
+        }
+        composeRule.onNodeWithText("Add someone else…").performClick()
+        composeRule.onNodeWithText("Add a traveler").performTextInput("Jordan Lee")
+        composeRule.onNodeWithText("Add").performClick()
+        composeRule.onNodeWithText("Jordan Lee").assertExists()
+        composeRule.onNodeWithText("Save").performClick()
+        composeRule.waitForIdle()
+        saved shouldBe listOf(emptyList<String>() to listOf("Jordan Lee"))
+    }
+
+    @Test
+    fun `TravelersDialog keeps newly arriving booking travelers ticked without dropping user picks`() {
+        var loaded by mutableStateOf(emptyList<Segment>())
+        val saved = mutableListOf<Pair<List<String>, List<String>>>()
+        composeRule.setContent {
+            TravelmoTheme {
+                TravelersDialogScaffold(
+                    segments = loaded,
+                    removed = emptyList(),
+                    added = emptyList(),
+                    people = listOf(Person("me", "Sam Example", bookings = 4, direct = 4)),
+                    onDismiss = {},
+                    onSave = { removed, added -> saved += removed to added },
+                ) { body, confirm, dismiss ->
+                    androidx.compose.foundation.layout.Column {
+                        body()
+                        dismiss()
+                        confirm()
+                    }
+                }
+            }
+        }
+        // User ticks themselves before bookings finish loading.
+        composeRule.onNodeWithText("Sam Example").performClick()
+        // Bookings arrive naming another traveler: they must start ticked, not land in removedTravelers.
+        loaded = fixtureSegments.getValue("liverpool").map { it.copy(travelers = listOf("Pat Example")) }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Save").performClick()
+        composeRule.waitForIdle()
+        saved shouldBe listOf(emptyList<String>() to listOf("Sam Example"))
     }
 
     @Test
