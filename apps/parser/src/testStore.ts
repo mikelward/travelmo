@@ -1,4 +1,4 @@
-import { withFoundLoyalties, type FoundLoyalty, type ParsedMessage, type PendingCancellation, type PersonDoc, type Segment, type Trip } from "@travelmo/core";
+import { mergeProfileEntries, withFoundLoyalties, type FoundLoyalty, type ParsedMessage, type PendingCancellation, type PersonDoc, type ProfileEntry, type Segment, type Trip } from "@travelmo/core";
 import { changeClaimable, claimRecord, claimable, reclaimable, retryable, type TripStore, type TripTx } from "./importer";
 import { addExample, emptyExamples, type Examples } from "./similarity";
 
@@ -15,8 +15,9 @@ export type Memory = TripStore & {
   pending: Map<string, PendingCancellation>;
   // Keyed by "uid/personId".
   people: Map<string, PersonDoc>;
-  // Loyalty found in emails, and the name on each account, by uid.
+  // Loyalty and travel documents found in emails, and the name on each account, by uid.
   foundLoyalty: Map<string, FoundLoyalty[]>;
+  documents: Map<string, ProfileEntry[]>;
   ownerNames: Map<string, string>;
 };
 
@@ -28,6 +29,7 @@ export function memoryStore(): Memory {
   const pending = new Map<string, PendingCancellation>();
   const people = new Map<string, PersonDoc>();
   const foundLoyalty = new Map<string, FoundLoyalty[]>();
+  const documents = new Map<string, ProfileEntry[]>();
   const ownerNames = new Map<string, string>();
   const locks = new Map<string, Promise<unknown>>();
   const generations = new Map<string, number>();
@@ -89,6 +91,7 @@ export function memoryStore(): Memory {
   };
   return {
     foundLoyalty,
+    documents,
     senderStats,
     ownerNames,
     trips,
@@ -188,6 +191,15 @@ export function memoryStore(): Memory {
       const { found: next, refused } = withFoundLoyalties(foundLoyalty.get(uid) ?? [], found);
       foundLoyalty.set(uid, next);
       return { refused };
+    },
+    addTravelDocuments: async (uid, docs, generation) => {
+      if (generation !== undefined && (generations.get(uid) ?? 0) !== generation) return { refused: 0, superseded: true };
+      const existing = documents.get(uid) ?? [];
+      const merged = mergeProfileEntries(existing, docs);
+      const cap = Math.max(100, existing.length);
+      const next = merged.slice(0, cap);
+      documents.set(uid, next);
+      return { refused: merged.length - next.length };
     },
     newId: () => `trip${++ids}`,
   };

@@ -1,5 +1,6 @@
 import { normalizeReference, sameBooking } from "./trips";
 import { canonicalTravelers } from "./travelers";
+import { mergeBoardingPasses } from "./travelDocs";
 import { compareInstants } from "./instant";
 import type { ExtractedSegment, Segment, SourceRef } from "./schema";
 import { hasWords } from "./words";
@@ -26,6 +27,8 @@ export function mergeBookings(keep: Segment, other: Segment, timestamp: string):
   // Everyone either names, each once, as many as a booking holds.
   const travelers = canonicalTravelers([...(keep.travelers ?? []), ...(other.travelers ?? [])]);
   if (travelers) merged.travelers = travelers;
+  const passes = mergeBoardingPasses(keep.boardingPasses, other.boardingPasses, false);
+  if (passes) merged.boardingPasses = passes;
   if (keep.favorite || other.favorite) merged.favorite = true;
   const sources: SourceRef[] = [...(keep.sources ?? []), ...(other.sources ?? [])].filter((s, i, all) => all.findIndex((r) => r.kind === s.kind && r.id === s.id) === i);
   if (sources.length) merged.sources = sources;

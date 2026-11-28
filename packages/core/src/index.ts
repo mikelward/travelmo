@@ -57,3 +57,5 @@ export * from "./directions";
 export * from "./landmarks";
 export * from "./words";
 export * from "./wallet";
+export * from "./travelDocs";
+export * from "./qr";

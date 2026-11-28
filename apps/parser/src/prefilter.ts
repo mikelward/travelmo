@@ -86,6 +86,29 @@ export function isTravelStatement(message: Pick<MessageSummary, "from" | "subjec
   return [...travelLoyaltyDomains, ...patterns.allow].some((p) => domainMatches(domain, p)) && statementWords.test(message.subject);
 }
 
+// Government travel authorizations (UK share code, UK ETA, US ESTA, Canada eTA,
+// Australia ETA/eVisitor, NZeTA, EU ETIAS, eVisas).
+const documentWords =
+  /\b(immigration status|share code|e-?visa|eta|esta|nzeta|etias|evisitor|electronic travel authori[sz]ation|travel authori[sz]ation)\b/i;
+export const documentReason = "travel document";
+
+export const travelDocumentDomains = [
+  "notifications.service.gov.uk",
+  "homeoffice.gov.uk",
+  "cbp.dhs.gov",
+  "dhs.gov",
+  "cic.gc.ca",
+  "homeaffairs.gov.au",
+  "immigration.govt.nz",
+  "europa.eu",
+] as const;
+
+export function isTravelDocumentEmail(message: Pick<MessageSummary, "from" | "subject">, patterns: SenderPatterns = { allow: [], deny: [] }): boolean {
+  const domain = senderDomain(message.from);
+  if (domain === undefined || patterns.deny.some((p) => domainMatches(domain, p))) return false;
+  return [...travelDocumentDomains, ...patterns.allow].some((p) => domainMatches(domain, p)) && documentWords.test(message.subject);
+}
+
 // Domains whose transactional mail is almost always a booking. Users extend
 // this list from the UI; see SenderPatterns.allow.
 export const seedSenderDomains = [
@@ -203,7 +226,7 @@ export function travelSender(from: string | undefined, patterns: SenderPatterns)
   if (domain === undefined || patterns.deny.some((p) => domainMatches(domain, p))) return false;
   if (patterns.allow.some((p) => domainMatches(domain, p))) return true;
   const brand = brandOf(domain);
-  return [...seedSenderDomains, ...travelLoyaltyDomains].some((p) => domainMatches(domain, p) || (brand !== undefined && brandOf(p) === brand));
+  return [...seedSenderDomains, ...travelLoyaltyDomains, ...travelDocumentDomains].some((p) => domainMatches(domain, p) || (brand !== undefined && brandOf(p) === brand));
 }
 
 // A seed sender, under any of its countries' domains (Qatar Airways writes
@@ -263,6 +286,7 @@ export function prefilter(
     return { pass: false, reason: `sender ${domain} denied` };
   }
   if (isTravelStatement(message, patterns)) return { pass: true, reason: statementReason };
+  if (isTravelDocumentEmail(message, patterns)) return { pass: true, reason: documentReason };
   const allowed = domain !== undefined && (patterns.allow.some((p) => domainMatches(domain, p)) || seedSender(domain));
   const keyword = subjectKeywords.test(message.subject);
   const noise = subjectNoise.test(message.subject);

@@ -1,4 +1,4 @@
-import { ParsedMessage, PendingCancellation, PersonDoc, Segment, SenderPatterns, TravelProfile, Trip, paths, withFoundLoyalties } from "@travelmo/core";
+import { ParsedMessage, PendingCancellation, PersonDoc, Segment, SenderPatterns, TravelProfile, Trip, mergeProfileEntries, paths, withFoundLoyalties } from "@travelmo/core";
 import { FieldPath, FieldValue, type DocumentReference, type DocumentSnapshot, type Firestore, type Transaction } from "firebase-admin/firestore";
 import { AccountDeletedError, wasDeleted } from "./deleted";
 import { log } from "./log";
@@ -298,6 +298,23 @@ export function firestoreStore(db: Firestore): TripStore {
         const { found: next, refused } = withFoundLoyalties(current, found);
         const now = new Date().toISOString();
         t.set(ref, snap.exists ? { foundLoyalty: next, updatedAt: now } : { ownerUid: uid, trustedEmails: [], foundLoyalty: next, updatedAt: now }, { merge: true });
+        return { refused };
+      });
+    },
+    async addTravelDocuments(uid, docs, generation) {
+      if (docs.length === 0) return { refused: 0 };
+      const ref = db.doc(paths.travelProfile(uid));
+      return db.runTransaction(async (t) => {
+        if (await deleted(t, uid)) throw new AccountDeletedError(uid);
+        if (await resetSince(t, uid, generation)) return { refused: 0, superseded: true };
+        const snap = await t.get(ref);
+        const existing = snap.exists ? (TravelProfile.safeParse(snap.data()).data?.documents ?? []) : [];
+        const merged = mergeProfileEntries(existing, docs);
+        const cap = Math.max(100, existing.length);
+        const next = merged.slice(0, cap);
+        const refused = merged.length - next.length;
+        const now = new Date().toISOString();
+        t.set(ref, snap.exists ? { documents: next, updatedAt: now } : { ownerUid: uid, trustedEmails: [], documents: next, updatedAt: now }, { merge: true });
         return { refused };
       });
     },

@@ -169,6 +169,8 @@ export function SegmentRow({
             segment={segment}
             route={route || undefined}
             times={times}
+            flightLines={flightLines}
+            checkIn={checkIn}
             verdict={verdict}
             programs={programs}
             emailLinks={emailLinks}

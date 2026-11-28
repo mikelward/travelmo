@@ -154,3 +154,23 @@ describe("calendarPrefilter", () => {
     expect(calendarPrefilter("Dentist", true)).toEqual({ pass: true, reason: "travel calendar" });
   });
 });
+
+describe("travel documents and boarding passes", () => {
+  it("passes GOV.UK immigration status share code emails", () => {
+    const verdict = prefilter({
+      from: "Status service <status.service@notifications.service.gov.uk>",
+      subject: "SAM EXAMPLE – immigration status details",
+    });
+    expect(verdict.pass).toBe(true);
+  });
+
+  it("passes ETA, ESTA, and eVisa approval emails from government domains", () => {
+    expect(prefilter({ from: "UK Visas <noreply@homeoffice.gov.uk>", subject: "Your Electronic Travel Authorisation (ETA) is approved" }).pass).toBe(true);
+    expect(prefilter({ from: "ESTA <noreply@cbp.dhs.gov>", subject: "ESTA Authorization Approved" }).pass).toBe(true);
+  });
+
+  it("passes boarding pass emails from airlines", () => {
+    expect(prefilter({ from: "Qatar Airways <noreply@qatarairways.com>", subject: "Your boarding pass for QR 008" }).pass).toBe(true);
+    expect(prefilter({ from: "TUI Airways <noreply@tui.co.uk>", subject: "Your boarding passes are ready" }).pass).toBe(true);
+  });
+});

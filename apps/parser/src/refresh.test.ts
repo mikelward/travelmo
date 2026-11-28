@@ -1130,4 +1130,108 @@ describe("Refresh everything from email", () => {
     expect(followUp).toEqual({ updated: 0, added: 0, removed: 0, merged: 0, kept: 0 });
     expect([...w.memory.segments.keys()]).toEqual(["m1-0"]);
   });
+
+  it("populates boarding passes when refreshing a single-source flight email and stays idempotent", async () => {
+    const w = world();
+    const flightTrip = trip("t-flight", { title: "Doha", start: "2027-03-12", end: "2027-03-13" });
+    const baseFlight: ExtractedSegment = {
+      type: "flight",
+      title: "QR 22 MAN → DOH",
+      provider: "Qatar Airways",
+      confirmation: "E4K8M2",
+      start: "2027-03-12T08:40:00+00:00",
+      end: "2027-03-12T18:10:00+03:00",
+      origin: { name: "Manchester Airport", code: "MAN", city: "Manchester", country: "GB" },
+      destination: { name: "Hamad International Airport", code: "DOH", city: "Doha", country: "QA" },
+    };
+    const stored = booking("m1-0", flightTrip.id, baseFlight);
+    w.put(flightTrip, stored);
+    const withPass: ExtractedSegment = {
+      ...baseFlight,
+      boardingPasses: [{ passenger: "Sam Example", seat: "14A", gate: "B14", barcode: "M1EXAMPLE/SAM E4K8M2", barcodeFormat: "aztec" }],
+    };
+    const res = await refreshEmail(
+      uid,
+      record("m1", { tripId: flightTrip.id }),
+      email("m1"),
+      w.deps(async () => ({ isBooking: true, segments: [withPass] })),
+      { generation: 0, snapshot: [stored] },
+    );
+    expect(res).toEqual({ updated: 1, added: 0, removed: 0, merged: 0, kept: 0 });
+    const updated = w.memory.segments.get("m1-0");
+    expect(updated?.boardingPasses).toEqual([
+      { passenger: "Sam Example", seat: "14A", gate: "B14", barcode: "M1EXAMPLE/SAM E4K8M2", barcodeFormat: "aztec", messageId: "m1" },
+    ]);
+    const second = await refreshEmail(
+      uid,
+      record("m1", { tripId: flightTrip.id }),
+      email("m1"),
+      w.deps(async () => ({ isBooking: true, segments: [withPass] })),
+      { generation: 0, snapshot: [updated!] },
+    );
+    expect(second).toEqual({ updated: 0, added: 0, removed: 0, merged: 0, kept: 0 });
+  });
+
+  it("updates boarding pass fields when refreshing the boarding-pass email of a multi-source flight", async () => {
+    const w = world();
+    const flightTrip = trip("t-flight2", { title: "Doha", start: "2027-03-12", end: "2027-03-13" });
+    const baseFlight: ExtractedSegment = {
+      type: "flight",
+      title: "QR 22 MAN → DOH",
+      provider: "Qatar Airways",
+      confirmation: "E4K8M2",
+      start: "2027-03-12T08:40:00+00:00",
+      end: "2027-03-12T18:10:00+03:00",
+      origin: { name: "Manchester Airport", code: "MAN", city: "Manchester", country: "GB" },
+      destination: { name: "Hamad International Airport", code: "DOH", city: "Doha", country: "QA" },
+    };
+    const stored = booking("m1-0", flightTrip.id, baseFlight, {
+      gmailMessageIds: ["m1", "bp1"],
+      sources: [
+        { kind: "gmail", id: "m1", uid, at: filed },
+        { kind: "gmail", id: "bp1", uid, at: filed },
+      ],
+      boardingPasses: [{ passenger: "Sam Example", seat: "14A", gate: "B14", barcode: "OLD", messageId: "bp1" }],
+    });
+    w.put(flightTrip, stored);
+    const corrected: ExtractedSegment = {
+      ...baseFlight,
+      boardingPasses: [{ passenger: "Sam Example", seat: "16C", gate: "C10", barcode: "FIXED" }],
+    };
+    const res = await refreshEmail(
+      uid,
+      record("bp1", { tripId: flightTrip.id, segmentIds: ["bp1-0"] }),
+      email("bp1"),
+      w.deps(async () => ({ isBooking: true, segments: [corrected] })),
+      { generation: 0, snapshot: [stored] },
+    );
+    expect(res).toEqual({ updated: 1, added: 0, removed: 0, merged: 0, kept: 0 });
+    expect(w.memory.segments.get("m1-0")?.boardingPasses).toEqual([
+      { passenger: "Sam Example", seat: "16C", gate: "C10", barcode: "FIXED", messageId: "bp1" },
+    ]);
+  });
+
+  it("persists extracted travel documents when refreshing an imported email", async () => {
+    const w = world();
+    const t = trip("t-doc", { title: "London", start: "2027-03-12", end: "2027-03-14" });
+    const stored = booking("doc1-0", t.id, stay);
+    w.put(t, stored);
+    const savedDocs: unknown[] = [];
+    const deps = w.deps(async () => ({
+      isBooking: false,
+      segments: [],
+      documents: [{ type: "eta", title: "UK ETA", country: "United Kingdom", number: "ETA-999", expires: "2029-05-01" }],
+    }));
+    deps.store.addTravelDocuments = async (_uid, docs) => {
+      savedDocs.push(...docs);
+      return { refused: 0, superseded: false };
+    };
+    const res = await refreshEmail(uid, record("doc1", { tripId: t.id }), email("doc1"), deps, {
+      generation: 0,
+      snapshot: [stored],
+    });
+    expect(res).toEqual({ updated: 0, added: 0, removed: 0, merged: 0, kept: 0 });
+    expect(savedDocs).toHaveLength(1);
+    expect(savedDocs[0]).toMatchObject({ title: "UK ETA", updatedAt: now });
+  });
 });

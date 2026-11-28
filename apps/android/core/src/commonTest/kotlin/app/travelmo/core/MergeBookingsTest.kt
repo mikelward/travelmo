@@ -65,4 +65,42 @@ class MergeBookingsTest {
         val merged = mergedBookingDocument(reservation + ("travelers" to many("Ann", 20)), agreement + ("travelers" to many("Bob", 5)), "m2-0", AT)
         (merged["travelers"] as List<*>).size shouldBe 20
     }
+
+    @Test
+    fun `merges boarding passes from both bookings without losing kept fields`() {
+        val keep = reservation + ("boardingPasses" to listOf(mapOf("passenger" to "Sam Example", "seat" to "14A")))
+        val other = agreement + ("boardingPasses" to listOf(
+            mapOf("passenger" to "SAM EXAMPLE", "seat" to "99Z", "gate" to "B34"),
+            mapOf("passenger" to "Pat Example", "seat" to "14B"),
+        ))
+        val merged = mergedBookingDocument(keep, other, "m2-0", AT)
+        merged["boardingPasses"] shouldBe listOf(
+            mapOf("passenger" to "Sam Example", "seat" to "14A", "gate" to "B34"),
+            mapOf("passenger" to "Pat Example", "seat" to "14B"),
+        )
+    }
+
+    @Test
+    fun `keeps distinct non-Latin passenger names separate when merging boarding passes`() {
+        val keep = reservation + ("boardingPasses" to listOf(mapOf("passenger" to "张伟", "seat" to "12A")))
+        val other = agreement + ("boardingPasses" to listOf(
+            mapOf("passenger" to "张伟", "gate" to "A1"),
+            mapOf("passenger" to "李娜", "seat" to "12B", "gate" to "A1"),
+        ))
+        val merged = mergedBookingDocument(keep, other, "m2-0", AT)
+        merged["boardingPasses"] shouldBe listOf(
+            mapOf("passenger" to "张伟", "seat" to "12A", "gate" to "A1"),
+            mapOf("passenger" to "李娜", "seat" to "12B", "gate" to "A1"),
+        )
+    }
+
+    @Test
+    fun `matches airline surname-first and titled passenger names when merging boarding passes`() {
+        val keep = reservation + ("boardingPasses" to listOf(mapOf("passenger" to "SMITH/JOHN MR", "seat" to "14A")))
+        val other = agreement + ("boardingPasses" to listOf(mapOf("passenger" to "John Smith", "gate" to "C10", "barcode" to "BCBP")))
+        val merged = mergedBookingDocument(keep, other, "m2-0", AT)
+        merged["boardingPasses"] shouldBe listOf(
+            mapOf("passenger" to "SMITH/JOHN MR", "seat" to "14A", "gate" to "C10", "barcode" to "BCBP"),
+        )
+    }
 }

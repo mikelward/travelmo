@@ -70,9 +70,12 @@ import {
   untimedMatchDays,
   foundLoyaltyFrom,
   foundLoyaltyLine,
+  extractUkShareCode,
+  extractedDocumentEntry,
   type ExtractedMembership,
   type FoundLoyalty,
   type NamedBooking,
+  type ProfileEntry,
 } from "@travelmo/core";
 import { airportPlace } from "@travelmo/core/airportPlaces";
 import { cityCountry } from "@travelmo/core/cityCountries";
@@ -81,7 +84,7 @@ import { senderCounts } from "./senderStats";
 import type { RetryStore } from "./geocodeSweep";
 import { isNotFound, type Attachment, type EmailMessage } from "./gmail";
 import type { MailProvider } from "./mailSource";
-import { calendarPrefilter, isTravelStatement, prefilter, senderDomain, statementReason, type PrefilterResult, type SenderPatterns } from "./prefilter";
+import { calendarPrefilter, documentReason, isTravelStatement, prefilter, senderDomain, statementReason, type PrefilterResult, type SenderPatterns } from "./prefilter";
 import { embeddingText, similarityVerdict, type Example, type ExampleLabel, type Examples } from "./similarity";
 
 export type TripBounds = Pick<Trip, "start" | "end" | "updatedAt"> & Partial<Pick<Trip, "title">>;
@@ -253,6 +256,9 @@ export type TripStore = {
   // clears the numbers, and an import or refresh already under way must not
   // bring them back.
   addFoundLoyalty(uid: string, found: readonly FoundLoyalty[], generation?: number): Promise<{ refused: number; superseded?: boolean }>;
+  // Adds travel documents read from emails (GOV.UK share codes, ETAs, ESTAs,
+  // eVisas) to the user's travel profile, deduplicated via mergeProfileEntries.
+  addTravelDocuments?(uid: string, docs: readonly ProfileEntry[], generation?: number): Promise<{ refused: number; superseded?: boolean }>;
   // Drops the loyalty numbers last seen in email `messageId` before `since`:
   // those an email read again (Refresh everything) no longer gives. How many.
   dropUnseenFoundLoyalty(uid: string, messageId: string, since: string, generation?: number): Promise<number>;
@@ -499,6 +505,21 @@ async function importOnce(
     }
   };
 
+  // Deterministic travel document parsers (currently GOV.UK immigration status
+  // share codes) run before Gemini at zero LLM cost.
+  const fromEmail = source !== "ics";
+  const original = source === "forward" ? unwrapForwarded(message) : message;
+  if (fromEmail) {
+    const shareCode = extractUkShareCode({ from: message.from, subject: message.subject, text: message.text }, now());
+    if (shareCode) {
+      if (!(await releaseReplaced())) return "skipped";
+      await keepDocuments(uid, message.id, [shareCode], deps, generation);
+      await save(record("not_booking", { reason: documentReason, readerVersion }));
+      log("travel_document", { uid, messageId: message.id, count: 1, deterministic: true });
+      return "not_booking";
+    }
+  }
+
   const attachments = await attachmentsOf(message, (error) => log("attachments_failed", { uid, messageId: message.id, reason: error.message }));
   if (options.debug) options.debug.attachments = attachments.length;
   let booking;
@@ -513,6 +534,19 @@ async function importOnce(
     await save(replacing ?? record("failed", { reason: failure }));
     log("extract_failed", { uid, messageId: message.id, reason: failure });
     return "failed";
+  }
+
+  // Stamp the source email id on any extracted boarding passes so each pass
+  // can be traced back to its message.
+  if (fromEmail && booking.segments.some((s) => s.boardingPasses?.length)) {
+    booking = {
+      ...booking,
+      segments: booking.segments.map((s) =>
+        s.boardingPasses?.length
+          ? { ...s, boardingPasses: s.boardingPasses.map((bp) => (bp.messageId ? bp : { ...bp, messageId: message.id })) }
+          : s,
+      ),
+    };
   }
 
   // A membership, pass or voucher the model took for a dated visit is no
@@ -547,8 +581,6 @@ async function importOnce(
   // A travel statement, whether the pre-filter passed it as one or it was
   // forwarded or read again on request, which skip the pre-filter: as there,
   // by its (original) sender and subject.
-  const fromEmail = source !== "ics";
-  const original = source === "forward" ? unwrapForwarded(message) : message;
   const statement =
     fromEmail &&
     (reason === statementReason || (!!options.force && isTravelStatement(original, await store.senderPatterns(uid))));
@@ -564,6 +596,10 @@ async function importOnce(
       loyalty = !kept.saved ? { loyaltyMissed: couldNotSave } : kept.kept.length ? { loyalty: kept.kept.map(foundLoyaltyLine) } : { loyaltyMissed: noNumber };
     } else if (fromEmail && booking.memberships?.length) {
       loyalty = { loyaltyMissed: notTravel };
+    }
+    if (fromEmail && booking.documents?.length) {
+      const entries = booking.documents.map((doc) => extractedDocumentEntry(doc, message.subject, now()));
+      await keepDocuments(uid, message.id, entries, deps, generation);
     }
     await save(record("not_booking", { reason, readerVersion, ...loyalty }));
     await learn("others");
@@ -637,8 +673,34 @@ async function importOnce(
   // Only from an email that books travel: a ticket or an appointment that
   // shows a member number (a clinic's, a party's) keeps nothing.
   if (isEmail && !(await keepTravelMemberships(uid, message, booking, timestamp, deps, sent, generation)) && options.loyalty) options.loyalty.saved = false;
+  if (isEmail && booking.documents?.length) {
+    const entries = booking.documents.map((doc) => extractedDocumentEntry(doc, message.subject, timestamp));
+    await keepDocuments(uid, message.id, entries, deps, generation);
+  }
   log("imported", { uid, messageId: message.id, tripId, segments: segmentIds.length, duplicates });
   return "imported";
+}
+
+// Travel documents (GOV.UK share codes, ETAs, ESTAs, eVisas) read from emails,
+// kept on the user's travel profile. Nothing here fails the import; only counts
+// reach the logs.
+export async function keepDocuments(
+  uid: string,
+  messageId: string,
+  docs: readonly ProfileEntry[],
+  deps: ImportDeps,
+  generation: number | undefined,
+): Promise<boolean> {
+  if (!docs.length || !deps.store.addTravelDocuments) return true;
+  try {
+    const { refused, superseded } = await deps.store.addTravelDocuments(uid, docs, generation);
+    if (superseded) return true;
+    deps.log("travel_documents_saved", { uid, messageId, count: docs.length - refused, ...(refused ? { refused } : {}) });
+    return true;
+  } catch (error) {
+    deps.log("travel_documents_failed", { uid, messageId, reason: (error as Error).message });
+    return false;
+  }
 }
 
 // Loyalty numbers a booking email showed, kept on the user's travel profile

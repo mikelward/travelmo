@@ -1,12 +1,13 @@
 import { imapRecordId, imapRecordPrefix, parseImapRecordId } from "@travelmo/core";
 import { ImapFlow, type SearchObject } from "imapflow";
 import { isIP } from "node:net";
-import { backfillBatch, backfillSubjects, statementDays, statementSubjects } from "./backfill";
+import { backfillBatch, backfillSubjects, documentSubjects, statementDays, statementSubjects } from "./backfill";
 import type { EmailMessage, MessagePage } from "./gmail";
 import { offered, parseInbound } from "./inbound";
 import { errorKind, log } from "./log";
 import type { MailSource } from "./mailSource";
 import type { ChangesResult } from "./newMailPoll";
+import { travelDocumentDomains } from "./prefilter";
 import { isPublicAddress, publicOnlyLookup } from "./safefetch";
 
 // Any mailbox over IMAP (RFC 9051, RFC 3501) with an app password: iCloud,
@@ -154,6 +155,8 @@ export function backfillSearch(now: Date): SearchObject {
   return {
     or: [
       ...backfillSubjects.map((subject) => ({ subject })),
+      ...documentSubjects.map((subject) => ({ subject })),
+      ...travelDocumentDomains.map((from) => ({ from })),
       { since, or: statementSubjects.map((subject) => ({ subject })) },
     ],
   };

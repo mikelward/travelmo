@@ -2743,15 +2743,27 @@ rather than an old one dropped, and the parser logs `found_loyalty_full`
 what is already stored (`mergeProfileEntries`) and leaves `foundLoyalty` alone.
 Wallet (`/wallet`, with `/profile` redirecting to `/wallet`; the Wallet tab on
 Android) shows the person switcher when multiple household members or shared
-wallets exist, a Boarding passes card (upcoming flights within 48 hours and an
-Open Google Wallet shortcut), Documents (passports, visas, UK share codes,
-KTN, IDs, insurance, with manual Add/Edit/Remove and Copy number), and Loyalty
-programs (`allLoyalty`, combining saved and email-found memberships, with
-Copy number, "Whose is this?", and Edit/Remove). Settings uses a single
-bordered hub card (sidebar master-detail on desktop web, drilling into
-sub-pages on mobile and Android) with Email & imports, Calendars, Reminders &
-rides, Home, People, Wallet sharing, Account & data, and App & about. Nothing
-is logged but counts.
+wallets exist, a Boarding passes card (upcoming flights within 48 hours, with
+one-tap offline scannable QR modals when boarding passes were extracted from
+airline emails or PDFs, plus an Open Google Wallet shortcut), Documents
+(passports, visas, UK share codes, ETAs/ESTAs/eVisas, KTN, IDs, insurance,
+with manual Add/Edit/Remove and Copy number), and Loyalty programs
+(`allLoyalty`, combining saved and email-found memberships, with Copy number,
+"Whose is this?", and Edit/Remove). GOV.UK immigration status share code
+emails (`status.service@notifications.service.gov.uk`, direct or forwarded)
+are parsed deterministically before Gemini at zero LLM cost; ETA, ESTA, and
+eVisa approval emails/PDFs are extracted by Gemini into Wallet `documents`.
+Boarding passes extracted from airline emails or attached PDFs are stored
+offline-ready on `Segment.boardingPasses` (with raw IATA BCBP payload when
+present) and surfaced in both Wallet and the grouped Booking Details view
+(schedule hero card, boarding passes card with passenger switcher and
+Gate/Board/Group/Seat grid, bordered details card with one-tap confirmation
+copy, and collapsible Sources card). QR codes are rendered offline with a
+zero-dependency ISO/IEC 18004 encoder mirrored in `packages/core` and
+`apps/android/core`. Settings uses a single bordered hub card (sidebar
+master-detail on desktop web, drilling into sub-pages on mobile and Android)
+with Email & imports, Calendars, Reminders & rides, Home, People, Wallet
+sharing, Account & data, and App & about. Nothing is logged but counts.
 
 When how numbers are read changes, those already kept are brought up to
 it once (`foundLoyaltyRevision`, run in the background as the parser

@@ -174,6 +174,7 @@ import app.travelmo.shared.shared_badge
 import app.travelmo.shared.shared_by_readonly
 import app.travelmo.shared.shared_with
 import app.travelmo.shared.shared_with_you
+import app.travelmo.shared.show_boarding_pass
 import app.travelmo.shared.someone_else
 import app.travelmo.shared.someone_else_more
 import app.travelmo.shared.someone_who_trusts_you
@@ -480,6 +481,7 @@ fun ProfileScreen(
                 Text(stringResource(Res.string.loading), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else if (effectiveKey == "") {
                 // Boarding passes card (upcoming 48h flights + Open Google Wallet).
+                var openPassSegment by remember { mutableStateOf<app.travelmo.core.Segment?>(null) }
                 Column {
                     Text(
                         stringResource(Res.string.boarding_passes),
@@ -489,22 +491,46 @@ fun ProfileScreen(
                     val shape = RoundedCornerShape(12.dp)
                     Column(modifier = Modifier.fillMaxWidth().clip(shape).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)) {
                         upcoming.forEach { f ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onOpenTrip(f.tripId) }
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(f.segment.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                                    val detail = buildString {
-                                        append(localTime(f.segment.start))
-                                        f.segment.confirmation?.let { append(" · Ref $it") }
+                            val passes = f.segment.boardingPasses
+                            if (passes.isNotEmpty()) {
+                                val first = passes.first()
+                                val detail = listOfNotNull(
+                                    localTime(f.segment.start),
+                                    first.gate?.let { "Gate $it" },
+                                    first.seat?.let { "Seat $it" },
+                                    if (passes.size > 1) "${passes.size} passes" else null,
+                                ).joinToString(" · ")
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                                ) {
+                                    Column(modifier = Modifier.weight(1f).clickable { onOpenTrip(f.tripId) }) {
+                                        Text(f.segment.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                                        Text(detail, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
-                                    Text(detail, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    androidx.compose.material3.Button(onClick = { openPassSegment = f.segment }) {
+                                        Text(stringResource(Res.string.show_boarding_pass))
+                                    }
                                 }
-                                Text("›", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            } else {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onOpenTrip(f.tripId) }
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(f.segment.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                                        val detail = buildString {
+                                            append(localTime(f.segment.start))
+                                            f.segment.confirmation?.let { append(" · Ref $it") }
+                                        }
+                                        Text(detail, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    Text("›", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
                             }
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         }
@@ -525,6 +551,15 @@ fun ProfileScreen(
                                 Text(stringResource(Res.string.open_google_wallet))
                             }
                         }
+                    }
+                }
+                openPassSegment?.let { seg ->
+                    if (seg.boardingPasses.isNotEmpty()) {
+                        BoardingPassDialog(
+                            segment = seg,
+                            passes = seg.boardingPasses,
+                            onDismiss = { openPassSegment = null },
+                        )
                     }
                 }
 
