@@ -12,6 +12,9 @@ class TripLandmarkTest {
         for (landmark in landmarks) {
             val nodes = addPathNodes(landmark.d)
             assertTrue(nodes.isNotEmpty(), "empty path nodes for ${landmark.id}")
+            landmark.dashed?.let { dashed ->
+                assertTrue(addPathNodes(dashed).isNotEmpty(), "empty dashed path nodes for ${landmark.id}")
+            }
         }
     }
 }

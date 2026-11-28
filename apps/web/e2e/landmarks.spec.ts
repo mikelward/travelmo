@@ -19,6 +19,7 @@ test("each trip in the list shows its city's landmark, else the kind of place it
   await seedTrip(ownerUid, "e2e-liverpool");
   await seedTrip(ownerUid, "e2e-sydney", {}, { title: "Sydney", start: "2027-02-01", end: "2027-02-05" });
   await seedTrip(ownerUid, "e2e-japan", {}, { title: "Summer in Japan", start: "2027-03-01", end: "2027-03-10", ...known });
+  await seedTrip(ownerUid, "e2e-ukraine", {}, { title: "Ukraine", start: "2027-04-01", end: "2027-04-08", ...known });
   // From before trips kept their setting: the list reads its bookings and keeps it.
   await seedTrip(ownerUid, "e2e-woburn", { title: "Woburn Inn", destination: { name: "Woburn Inn", city: "Woburn", country: "US" } }, { title: "Woburn", start: "2027-01-08", end: "2027-01-10" });
   // Trips that already say what kind of place they go to: the list goes by that, not reading their bookings.
@@ -41,6 +42,9 @@ test("each trip in the list shows its city's landmark, else the kind of place it
   await expect(landmark(page, "Liverpool")).toHaveAttribute("data-landmark", "liverpool");
   await expect(landmark(page, "Sydney")).toHaveAttribute("data-landmark", "sydney");
   await expect(landmark(page, "Summer in Japan")).toHaveAttribute("data-landmark", "japan");
+  await expect(landmark(page, "Summer in Japan").locator("path[stroke-dasharray]")).toHaveCount(0);
+  await expect(landmark(page, "Ukraine")).toHaveAttribute("data-landmark", "ukraine");
+  await expect(landmark(page, "Ukraine").locator("path[stroke-dasharray]")).toHaveCount(1);
   await expect(landmark(page, "Woburn")).toHaveAttribute("data-landmark", "town");
   await expect(landmark(page, "Cornwall")).toHaveAttribute("data-landmark", "beach");
   await expect(landmark(page, "Somewhere")).toHaveAttribute("data-landmark", "trip");

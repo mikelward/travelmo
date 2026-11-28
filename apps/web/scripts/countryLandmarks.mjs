@@ -6,7 +6,7 @@
 //   pnpm --filter @travelmo/web country-landmarks
 import { readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { merge } from "topojson-client";
+import { feature, merge } from "topojson-client";
 import countriesLib from "i18n-iso-countries";
 
 const require = createRequire(import.meta.url);
@@ -274,27 +274,175 @@ for (const g of world50.objects.countries.geometries) {
   geomsByCode.get(code).push(g);
 }
 
-function buildOutline(code) {
-  const geoms = geomsByCode.get(code);
-  if (!geoms || geoms.length === 0) throw new Error(`No 50m geometry for ${code}`);
-  const merged = merge(world50, geoms);
-  const cfg = { maxRings: 2, minFrac: 0.05, eps: 1.25, smooth: true, pad: 4.5, ...SHAPE[code] };
-  let rings = merged.coordinates.map((poly) => poly[0]);
-  if (cfg.unwrapLon) {
-    rings = rings.map((r) => r.map(([lon, lat]) => [lon < 0 ? lon + 360 : lon, lat]));
+const world50ByName = new Map(world50.objects.countries.geometries.map((g) => [g.properties.name, g]));
+
+function mainRingOf(name) {
+  const g = world50ByName.get(name);
+  if (!g) throw new Error(`Missing 50m geometry: ${name}`);
+  const f = feature(world50, g);
+  const polys = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
+  return polys.map((p) => p[0]).sort((a, b) => ringArea(b) - ringArea(a))[0];
+}
+
+function nearestIndex(ring, lon, lat) {
+  const n = ring.length - 1; // last vertex repeats ring[0]
+  let best = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < n; i++) {
+    const d = Math.hypot(ring[i][0] - lon, ring[i][1] - lat);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
   }
-  const box = BOX[code];
-  if (box) {
-    rings = rings.filter((r) => {
-      const cx = r.reduce((s, p) => s + p[0], 0) / r.length;
-      const cy = r.reduce((s, p) => s + p[1], 0) / r.length;
-      return cx >= box[0] && cx <= box[1] && cy >= box[2] && cy <= box[3];
-    });
+  if (bestD > 0.25) throw new Error(`Vertex (${lon}, ${lat}) not found in ring (nearest dist ${bestD.toFixed(3)})`);
+  return best;
+}
+
+// Walks a closed ring (last point == first point) forward from `from` to `to` inclusive.
+function walkRing(ring, from, to) {
+  const n = ring.length - 1;
+  const out = [];
+  for (let i = from; ; i = (i + 1) % n) {
+    out.push(ring[i]);
+    if (i === to) break;
+  }
+  return out;
+}
+
+// Disputed or occupied territories that are large enough to read at 40px:
+// uncontested territory is stroked solid (`d`), while disputed/occupied outer
+// boundaries are stroked dashed (`dashed`) without doubling over shared seams.
+function disputedGeometry(code) {
+  if (code === "UA") {
+    const ru = world50ByName.get("Russia");
+    const crimeaPoly = feature(world50, ru).geometry.coordinates
+      .map((p) => p[0])
+      .find((r) => {
+        const cx = r.reduce((s, p) => s + p[0], 0) / r.length;
+        const cy = r.reduce((s, p) => s + p[1], 0) / r.length;
+        return cx > 33 && cx < 36 && cy > 44.5 && cy < 46;
+      });
+    if (!crimeaPoly) throw new Error("Could not locate Crimea polygon in 50m data");
+    return { solidRings: [mainRingOf("Ukraine")], dashedClosed: [crimeaPoly], dashedOpen: [] };
+  }
+  if (code === "IL") {
+    const il = mainRingOf("Israel");
+    const banias = nearestIndex(il, 35.628, 33.275);
+    const yarmouk = nearestIndex(il, 35.61, 32.683);
+    const jordanLine = [
+      [35.628, 33.275],
+      [35.63, 32.92],
+      [35.65, 32.76],
+      [35.61, 32.683],
+    ];
+    const solid = [...walkRing(il, yarmouk, banias), ...jordanLine.slice(1)];
+    const golanOuter = walkRing(il, banias, yarmouk);
+    const palPolys = feature(world50, world50ByName.get("Palestine")).geometry.coordinates.map((p) => p[0]);
+    const gaza = palPolys.find((r) => r.every((p) => p[0] < 34.7));
+    const westBank = palPolys.find((r) => r.every((p) => p[0] > 34.7));
+    if (!gaza || !westBank) throw new Error("Missing Gaza or West Bank polygons in 50m data");
+    const gazaSouth = nearestIndex(gaza, 34.245, 31.209);
+    const gazaNorth = nearestIndex(gaza, 34.476, 31.585);
+    const wbNorth = nearestIndex(westBank, 35.552, 32.396);
+    const wbSouth = nearestIndex(westBank, 35.451, 31.48);
+    return {
+      solidRings: [solid],
+      dashedClosed: [],
+      dashedOpen: [golanOuter, walkRing(westBank, wbNorth, wbSouth), walkRing(gaza, gazaSouth, gazaNorth)],
+    };
+  }
+  if (code === "SY") {
+    const sy = mainRingOf("Syria");
+    const golanOuter = [
+      [35.786, 32.735],
+      [35.736, 32.73],
+      [35.61, 32.683],
+      [35.65, 32.76],
+      [35.63, 32.92],
+      [35.628, 33.275],
+      [35.736, 33.332],
+      [35.869, 33.433],
+    ];
+    return { solidRings: [sy], dashedClosed: [], dashedOpen: [golanOuter] };
+  }
+  if (code === "MA") {
+    const merged = merge(world50, [world50ByName.get("Morocco"), world50ByName.get("W. Sahara")]).coordinates[0][0];
+    const west27 = nearestIndex(merged, -13.174, 27.655);
+    const east27 = nearestIndex(merged, -8.685, 27.657);
+    const solid = [...walkRing(merged, west27, east27), merged[west27]];
+    const wsOuter = walkRing(merged, east27, west27);
+    return { solidRings: [solid], dashedClosed: [], dashedOpen: [wsOuter] };
+  }
+  if (code === "IN") {
+    const india = mainRingOf("India");
+    const jammuSouth = nearestIndex(india, 75.304, 32.318);
+    const ladakhSouth = nearestIndex(india, 78.454, 32.301);
+    const solid = [
+      ...walkRing(india, ladakhSouth, jammuSouth),
+      [76.2, 32.5],
+      [77.4, 32.8],
+      india[ladakhSouth],
+    ];
+    const jkOuter = walkRing(india, jammuSouth, ladakhSouth);
+    return { solidRings: [solid], dashedClosed: [], dashedOpen: [jkOuter] };
+  }
+  if (code === "PK") {
+    const pk = mainRingOf("Pakistan");
+    const ajkSouth = nearestIndex(pk, 74.645, 32.608);
+    const gbWest = nearestIndex(pk, 73.41, 36.88);
+    const solid = [
+      ...walkRing(pk, ajkSouth, gbWest),
+      [73.6, 35.4],
+      [73.5, 34.4],
+      [73.7, 33.4],
+      pk[ajkSouth],
+    ];
+    const gbAjkOuter = walkRing(pk, gbWest, ajkSouth);
+    return { solidRings: [solid], dashedClosed: [], dashedOpen: [gbAjkOuter] };
+  }
+  if (code === "RS") {
+    const rs = mainRingOf("Serbia");
+    const xk = mainRingOf("Kosovo");
+    const eastTripoint = nearestIndex(xk, 21.562, 42.248);
+    const westTripoint = nearestIndex(xk, 20.346, 42.828);
+    const xkOuter = walkRing(xk, eastTripoint, westTripoint);
+    return { solidRings: [rs], dashedClosed: [], dashedOpen: [xkOuter] };
+  }
+  return null;
+}
+
+function buildOutline(code) {
+  const cfg = { maxRings: 2, minFrac: 0.05, eps: 1.25, smooth: true, pad: 4.5, ...SHAPE[code] };
+  const disputed = disputedGeometry(code);
+  let rings;
+  let dashedClosed = [];
+  let dashedOpen = [];
+  if (disputed) {
+    rings = disputed.solidRings;
+    dashedClosed = disputed.dashedClosed;
+    dashedOpen = disputed.dashedOpen;
+  } else {
+    const geoms = geomsByCode.get(code);
+    if (!geoms || geoms.length === 0) throw new Error(`No 50m geometry for ${code}`);
+    const merged = merge(world50, geoms);
+    rings = merged.coordinates.map((poly) => poly[0]);
+    if (cfg.unwrapLon) {
+      rings = rings.map((r) => r.map(([lon, lat]) => [lon < 0 ? lon + 360 : lon, lat]));
+    }
+    const box = BOX[code];
+    if (box) {
+      rings = rings.filter((r) => {
+        const cx = r.reduce((s, p) => s + p[0], 0) / r.length;
+        const cy = r.reduce((s, p) => s + p[1], 0) / r.length;
+        return cx >= box[0] && cx <= box[1] && cy >= box[2] && cy <= box[3];
+      });
+    }
   }
   if (rings.length === 0) throw new Error(`Empty geometry after box filter for ${code}`);
   let sumLat = 0;
   let cnt = 0;
-  for (const r of rings) {
+  for (const r of [...rings, ...dashedClosed, ...dashedOpen]) {
     for (const p of r) {
       sumLat += p[1];
       cnt++;
@@ -319,12 +467,14 @@ function buildOutline(code) {
     .sort((x, y) => y.a - x.a)
     .slice(0, cfg.maxRings)
     .map(({ r }) => r);
+  const projDashedClosed = dashedClosed.map((r) => r.map(projFn));
+  const projDashedOpen = dashedOpen.map((r) => r.map(projFn));
 
   let minX = Infinity;
   let maxX = -Infinity;
   let minY = Infinity;
   let maxY = -Infinity;
-  for (const r of kept) {
+  for (const r of [...kept, ...projDashedClosed, ...projDashedOpen]) {
     for (const [x, y] of r) {
       if (x < minX) minX = x;
       if (x > maxX) maxX = x;
@@ -339,25 +489,28 @@ function buildOutline(code) {
   const oy = (48 - h * scale) / 2 - minY * scale;
 
   const fmt = (n) => Math.round(n * 10) / 10;
-  const paths = [];
-  for (const r of kept) {
-    const scaled = r.map(([x, y]) => [x * scale + ox, y * scale + oy]);
+  const scalePts = (r) => r.map(([x, y]) => [x * scale + ox, y * scale + oy]);
+  const spanOf = (pts) => {
     let rxMin = Infinity;
     let rxMax = -Infinity;
     let ryMin = Infinity;
     let ryMax = -Infinity;
-    for (const [x, y] of scaled) {
+    for (const [x, y] of pts) {
       if (x < rxMin) rxMin = x;
       if (x > rxMax) rxMax = x;
       if (y < ryMin) ryMin = y;
       if (y > ryMax) ryMax = y;
     }
-    const span = Math.max(rxMax - rxMin, ryMax - ryMin);
+    return Math.max(rxMax - rxMin, ryMax - ryMin);
+  };
+  const encodeClosed = (r) => {
+    const scaled = scalePts(r);
+    const span = spanOf(scaled);
     // Secondary islands (Tasmania, Northern Ireland, Corsica) need a smaller
     // tolerance so Douglas-Peucker does not collapse them below 3 points.
     const ringEps = Math.min(cfg.eps, Math.max(0.4, span * 0.16));
     const simp = dpRing(scaled, ringEps);
-    if (simp.length < 3) continue;
+    if (simp.length < 3) return "";
     if (cfg.smooth) {
       const n = simp.length;
       const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
@@ -367,12 +520,33 @@ function buildOutline(code) {
         const m = mid(simp[i], simp[(i + 1) % n]);
         d += `Q${fmt(simp[i][0])} ${fmt(simp[i][1])} ${fmt(m[0])} ${fmt(m[1])}`;
       }
-      paths.push(`${d}Z`);
-    } else {
-      paths.push(`M${simp.map(([x, y]) => `${fmt(x)} ${fmt(y)}`).join("L")}Z`);
+      return `${d}Z`;
     }
-  }
-  return paths.join("");
+    return `M${simp.map(([x, y]) => `${fmt(x)} ${fmt(y)}`).join("L")}Z`;
+  };
+  const encodeOpen = (r) => {
+    const scaled = scalePts(r);
+    const span = spanOf(scaled);
+    const arcEps = Math.min(cfg.eps, Math.max(0.35, span * 0.14));
+    const simp = dpOpen(scaled, arcEps);
+    if (simp.length < 2) return "";
+    if (cfg.smooth && simp.length >= 3) {
+      const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      let d = `M${fmt(simp[0][0])} ${fmt(simp[0][1])}`;
+      for (let i = 1; i < simp.length - 1; i++) {
+        const m = mid(simp[i], simp[i + 1]);
+        d += `Q${fmt(simp[i][0])} ${fmt(simp[i][1])} ${fmt(m[0])} ${fmt(m[1])}`;
+      }
+      const last = simp[simp.length - 1];
+      d += `L${fmt(last[0])} ${fmt(last[1])}`;
+      return d;
+    }
+    return `M${simp.map(([x, y]) => `${fmt(x)} ${fmt(y)}`).join("L")}`;
+  };
+
+  const d = kept.map(encodeClosed).filter(Boolean).join("");
+  const dashed = [...projDashedClosed.map(encodeClosed), ...projDashedOpen.map(encodeOpen)].filter(Boolean).join("");
+  return dashed ? { d, dashed } : { d };
 }
 
 const countryEntries = [...targetCodes]
@@ -386,7 +560,9 @@ const countryEntries = [...targetCodes]
     const entry = { id, name, cities: [], countries };
     if (meta.capitalized?.length) entry.capitalized = meta.capitalized;
     if (meta.not?.length) entry.not = meta.not.map(foldText);
-    entry.d = buildOutline(code);
+    const outline = buildOutline(code);
+    entry.d = outline.d;
+    if (outline.dashed) entry.dashed = outline.dashed;
     return entry;
   })
   .sort((a, b) => a.id.localeCompare(b.id));

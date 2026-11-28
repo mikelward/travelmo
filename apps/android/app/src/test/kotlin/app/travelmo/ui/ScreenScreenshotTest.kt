@@ -336,6 +336,24 @@ class ScreenScreenshotTest {
         }
     }
 
+    // Country outlines with dashed disputed or occupied borders, rendered via Compose Canvas.
+    @Test
+    fun trip_list_disputed_borders() {
+        val trips = listOf(
+            Trip("ukraine", "Ukraine", "2027-01-05", "2027-01-10", OWNER),
+            Trip("israel", "Israel", "2027-02-05", "2027-02-10", OWNER),
+            Trip("syria", "Syria", "2027-03-05", "2027-03-10", OWNER),
+            Trip("morocco", "Morocco", "2027-04-05", "2027-04-10", OWNER),
+            Trip("india", "India", "2027-05-05", "2027-05-10", OWNER),
+            Trip("pakistan", "Pakistan", "2027-06-05", "2027-06-10", OWNER),
+            Trip("serbia", "Serbia", "2027-07-05", "2027-07-10", OWNER),
+        )
+        val viewModel = TripsViewModel(FakeTripStore(trips = trips), OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        capture("trip_list_disputed_borders") {
+            TripListScreen(viewModel = viewModel, uid = OWNER, onOpenTrip = {}, onOpenSettings = {}, bottomBar = { HomeNavigationBar(HomeTab.TRIPS) {} })
+        }
+    }
+
     // The red dot on ⋮ while Play has a newer version.
 
     @Test

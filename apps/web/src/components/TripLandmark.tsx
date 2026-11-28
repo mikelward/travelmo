@@ -31,6 +31,7 @@ export function TripLandmark({ title, setting }: { title: string; setting?: Trip
       className="shrink-0 text-muted"
     >
       <path d={picture.d} />
+      {picture.dashed && <path d={picture.dashed} strokeDasharray="2.4 2.2" strokeOpacity={0.7} />}
     </svg>
   );
 }

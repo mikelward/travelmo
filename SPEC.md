@@ -272,7 +272,9 @@ or before punctuation, so "Nice, France" is Nice and "Nice weekend" is not,
 and a longer name containing a city's is not that city: "Santiago de Cuba",
 "Victoria Falls", "Lake Victoria", "Rio Grande", "Washington State"), else a
 simplified map outline of the country its title names (generated from Natural
-Earth's 1:50m countries by `apps/web/scripts/countryLandmarks.mjs`; cities beat
+Earth's 1:50m countries by `apps/web/scripts/countryLandmarks.mjs`, with
+disputed or occupied territories stroked as a secondary dashed path on
+Ukraine, Israel, Syria, Morocco, India, Pakistan and Serbia; cities beat
 countries and countries beat seasons or themes, so "Paris, France" is Paris and
 "Summer in Japan" is Japan; short codes like "US", "UK" and "NZ" match only in
 uppercase, and states/regions like "New Mexico", "New England", "New South Wales"
@@ -282,8 +284,9 @@ country, road trip, safari, theme park, celebration, castle), season, holiday or
 vacation word when no city or country is named ("Summer in Paris" is Paris;
 "Summer vacation" is a sun), else the kind of place the trip goes to, else a
 suitcase (`tripLandmark` and `tripPicture` in `packages/core/src/landmarks.ts`,
-mirrored in the Android app's core; the drawings are `landmarks.json`, one SVG
-path in a 48-unit square stroked 1.5 wide, which both apps draw).
+mirrored in the Android app's core; the drawings are `landmarks.json`, SVG
+paths in a 48-unit square stroked 1.5 wide, plus an optional `dashed` path,
+which both apps draw).
 The kind of place a trip goes to is the trip's `setting` (`tripSetting`;
 for a trip that is just an event, its first booking's type):
 a city, a small town, a beach, the mountains, a lake or the countryside,

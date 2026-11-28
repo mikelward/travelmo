@@ -327,4 +327,18 @@ class TripListScreenTest {
         composeRule.waitForIdle()
         store.segmentListens["paris"] shouldBe listened
     }
+
+    @Test
+    fun `renders every country landmark with dashed disputed borders`() {
+        val dashed = app.travelmo.core.landmarks.filter { it.dashed != null }
+        dashed.size shouldBe 7
+        composeRule.setContent {
+            TravelmoTheme {
+                androidx.compose.foundation.layout.Column {
+                    for (landmark in dashed) TripLandmark(title = landmark.name, setting = null)
+                }
+            }
+        }
+        composeRule.waitForIdle()
+    }
 }
