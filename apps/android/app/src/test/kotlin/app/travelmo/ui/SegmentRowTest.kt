@@ -174,6 +174,30 @@ class SegmentRowTest {
     }
 
     @Test
+    fun `a flight booked on two days asks which was not taken and the owner can say both were`() {
+        val taken = Segment(
+            "l-taken", "liverpool", SegmentType.FLIGHT, "XX 10 LGW to DXB", "2026-12-08T20:25:00+00:00", "2026-12-09T07:20:00+04:00",
+            origin = Place("Gatwick", code = "LGW"), destination = Place("Dubai", code = "DXB"),
+        )
+        val old = taken.copy(id = "l-old", start = "2026-12-10T21:45:00+00:00", end = "2026-12-11T07:35:00+04:00")
+        val store = FakeTripStore(segments = fixtureSegments + ("liverpool" to fixtureSegments.getValue("liverpool") + taken + old))
+        val viewModel = TripsViewModel(store, OWNER, OWNER_EMAIL, clock = { Instant.parse(FROZEN_NOW) })
+        composeRule.setContent {
+            TravelmoTheme {
+                TripDetailScreen(viewModel = viewModel, tripId = "liverpool", uid = OWNER, onBack = {}, onAddBooking = {}, onEditBooking = {}, onMerged = {})
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("XX 10 LGW to DXB is booked on 8 Dec and 10 Dec.").assertExists()
+        composeRule.onNodeWithText("Mark 10 Dec cancelled").performClick()
+        composeRule.waitForIdle()
+        store.cancelledSegments shouldBe listOf("liverpool" to "l-old")
+        composeRule.onNodeWithText("Both were taken").performClick()
+        composeRule.waitForIdle()
+        store.bothTaken shouldBe listOf("liverpool" to "l-old|l-taken")
+    }
+
+    @Test
     fun `every type has its own icon`() {
         val icons = SegmentType.entries.map(::segmentIcon)
         icons.toSet().size shouldBe SegmentType.entries.size

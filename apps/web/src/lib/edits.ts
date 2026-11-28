@@ -617,6 +617,12 @@ export async function markOneTrip(db: Firestore, tripId: string): Promise<void> 
   await updateDoc(doc(db, paths.trip(tripId)), { oneTrip: true, updatedAt: now() });
 }
 
+// The owner's word that two flights that look booked twice
+// (duplicateFlights) were both taken: the page asks no more about them.
+export async function markBothTaken(db: Firestore, tripId: string, key: string): Promise<void> {
+  await updateDoc(doc(db, paths.trip(tripId)), { bothTaken: arrayUnion(key), updatedAt: now() });
+}
+
 export async function renameTrip(db: Firestore, tripId: string, title: string): Promise<void> {
   await updateDoc(doc(db, paths.trip(tripId)), { title: title.trim(), updatedAt: now() });
 }

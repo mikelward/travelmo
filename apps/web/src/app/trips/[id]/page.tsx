@@ -1,6 +1,6 @@
 "use client";
 
-import { allLoyalty, bookedDateRange, bookingHeading, headedRouteLine, flightCheckInState, displayBounds, effectiveHomes, homeTimeline, journeyGapHomes, journeyGaps, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, gmailMailboxes, localDate, normalizeEmail, paths, programsFor, mixedTrip, namedTravelers, sharedWithAny, sourceGroups, watchedTrip, type Segment, type SenderCleanup, type Trip } from "@travelmo/core";
+import { allLoyalty, bookedDateRange, bookingHeading, headedRouteLine, flightCheckInState, displayBounds, effectiveHomes, homeTimeline, journeyGapHomes, journeyGaps, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, gmailMailboxes, localDate, normalizeEmail, paths, programsFor, mixedTrip, duplicateFlights, duplicateFlightKey, namedTravelers, sharedWithAny, sourceGroups, watchedTrip, type Segment, type SenderCleanup, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { arrayRemove, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -14,7 +14,7 @@ import { api } from "@/lib/api";
 import { hideRideNeed, markOneWay } from "@/lib/rides";
 import { SignInGate } from "@/components/SignInGate";
 import { sourceKindLabels } from "@/lib/sourceLinks";
-import { cancelSegment, cancelTrip, deleteSegment, deleteTrip, favoriteSegment, fitTripDates, mergeSegments, mergeTrips, moveSegment, moveSegmentToNewTrip, splitTrip, rateSegment, renameTrip, restoreSegment, restoreTrip, saveSegment, setRemovedTravelers, markOneTrip } from "@/lib/edits";
+import { cancelSegment, cancelTrip, deleteSegment, deleteTrip, favoriteSegment, fitTripDates, mergeSegments, mergeTrips, moveSegment, moveSegmentToNewTrip, splitTrip, rateSegment, renameTrip, restoreSegment, restoreTrip, saveSegment, setRemovedTravelers, markOneTrip, markBothTaken } from "@/lib/edits";
 import { shareTrip } from "@/lib/access";
 import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
@@ -22,6 +22,7 @@ import { effectiveDecision, learnSender, removeSenderBookings, senderBookings } 
 import { DocumentWarnings } from "@/components/DocumentWarnings";
 import { JourneyGapNotice } from "@/components/JourneyGapNotice";
 import { MixedTripNotice } from "@/components/MixedTripNotice";
+import { DuplicateFlightNotice } from "@/components/DuplicateFlightNotice";
 import { EntryRequirements } from "@/components/EntryRequirements";
 import { useEntryRequirements } from "@/lib/visas";
 import { usePeopleDocuments, useTripWarnings } from "@/lib/documents";
@@ -554,6 +555,9 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   const onlyWatching = useMemo(() => !!segments && watchedTrip({ removedTravelers }, segments, travelers ?? []), [segments, travelers, removedTravelers]);
   // Bookings that look like two trips in one, unless the owner said it is one.
   const oneTrip = trip?.oneTrip === true;
+  const bothTaken = trip?.bothTaken;
+  // Flights that look booked twice, one of them likely not taken.
+  const duplicates = useMemo(() => (segments && !trip?.cancelledAt ? duplicateFlights(segments, bothTaken) : []), [segments, bothTaken, trip?.cancelledAt]);
   const mixed = useMemo(() => (segments && !oneTrip ? mixedTrip(segments, removedTravelers) : undefined), [segments, oneTrip, removedTravelers]);
   // The viewer's own programs, for the number at check-in; a fellow
   // traveler's are theirs.
@@ -731,6 +735,30 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
             : {})}
         />
       )}
+      {duplicates.map((pair) => (
+        <DuplicateFlightNotice
+          key={duplicateFlightKey(pair.first, pair.second)}
+          pair={pair}
+          {...(canEdit
+            ? {
+                onCancel: (segmentId: string) =>
+                  cancelSegment(firestore(), trip.id, segmentId).catch((e: Error) => {
+                    console.error("Marking a booking cancelled failed", e);
+                    setError(e.message);
+                  }),
+              }
+            : {})}
+          {...(canManage
+            ? {
+                onBothTaken: () =>
+                  markBothTaken(firestore(), trip.id, duplicateFlightKey(pair.first, pair.second)).catch((e: Error) => {
+                    console.error("Saving that both flights were taken failed", e);
+                    setError(e.message);
+                  }),
+              }
+            : {})}
+        />
+      ))}
       <DocumentWarnings warnings={warnings} today={today} />
       {gaps.length > 0 && (
         <JourneyGapNotice

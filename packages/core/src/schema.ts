@@ -235,6 +235,9 @@ export const Trip = z.object({
   // one trip all the same, so neither the list nor its page asks again.
   mixed: z.boolean().optional(),
   oneTrip: z.boolean().optional(),
+  // Flights that look booked twice (duplicateFlights) the owner said were
+  // both taken, by duplicateFlightKey: the page asks no more about them.
+  bothTaken: z.array(z.string().min(1)).max(50).optional(),
   createdAt: isoDateTime,
   updatedAt: isoDateTime,
 });

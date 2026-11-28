@@ -160,6 +160,11 @@ describe("trips", () => {
     await assertFails(updateDoc(doc(as(partner), paths.trip(trip.id)), { oneTrip: true }));
     await assertFails(updateDoc(doc(as(owner), paths.trip(trip.id)), { oneTrip: "yes" }));
     await assertSucceeds(updateDoc(doc(as(owner), paths.trip(trip.id)), { oneTrip: true }));
+    // Flights the owner said were both taken, theirs alone to say.
+    await assertSucceeds(updateDoc(doc(as(owner), paths.trip(trip.id)), { bothTaken: ["a|b"] }));
+    await assertFails(updateDoc(doc(as(owner), paths.trip(trip.id)), { bothTaken: "a|b" }));
+    await assertFails(updateDoc(doc(as(owner), paths.trip(trip.id)), { bothTaken: Array.from({ length: 51 }, (_, i) => `a|${i}`) }));
+    await assertFails(updateDoc(doc(as(partner), paths.trip(trip.id)), { bothTaken: ["a|b", "c|d"] }));
   });
 
   it("lets only the owner take names off a trip, at most a hundred", async () => {

@@ -818,6 +818,10 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         db.collection("trips").document(tripId).updateData(mapOf("oneTrip" to true, "updatedAt" to Clock.System.now().toString())).await()
     }
 
+    override suspend fun markBothTaken(tripId: String, key: String) {
+        db.collection("trips").document(tripId).updateData(mapOf("bothTaken" to FieldValue.arrayUnion(key), "updatedAt" to Clock.System.now().toString())).await()
+    }
+
     override suspend fun setRemovedTravelers(tripId: String, removed: List<String>) {
         val names: Any = if (removed.isEmpty()) FieldValue.delete() else removed
         db.collection("trips").document(tripId).updateData(mapOf("removedTravelers" to names, "updatedAt" to Clock.System.now().toString()) + FLAGS_UNKNOWN).await()

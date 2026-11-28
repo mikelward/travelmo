@@ -1273,6 +1273,8 @@ class TripsViewModel(
 
     fun markOneTrip(token: String, tripId: String) = run(token, "markOneTrip") { store.markOneTrip(tripId) }
 
+    fun markBothTaken(token: String, tripId: String, key: String) = run(token, "markBothTaken") { store.markBothTaken(tripId, key) }
+
     fun setRemovedTravelers(token: String, tripId: String, removed: List<String>) = run(token, "setRemovedTravelers") { store.setRemovedTravelers(tripId, removed) }
 
     fun fitTripDates(token: String, tripId: String) = run(token, "fitTripDates") { store.fitTripDates(tripId) }

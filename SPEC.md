@@ -457,6 +457,19 @@ booked apart on the same flight is one trip), leaving out names taken off
 with Travelers…. Whether it does is kept on the trip (`mixed`) with the
 list's other flags, so the list goes without reading bookings.
 
+**Flights booked twice.** A booking cancelled and made again with
+another agent or the airline itself leaves the old one standing when its
+cancellation never reached the mailbox. A trip whose still-booked flights
+include one flight number between the same airports on two days within a
+week of each other (`duplicateFlights` in
+`packages/core/src/duplicateFlights.ts`, mirrored in `DuplicateFlights.kt`)
+has a notice on its page, on the web and Android, one per pair: "EK 10 LGW
+to DXB is booked on 15 Dec and 17 Dec.", with "Mark 15 Dec cancelled" and
+"Mark 17 Dec cancelled" for those who may edit it (as Mark cancelled on the
+booking), and "Both were taken" for the owner, kept on the trip
+(`bothTaken`, the pair by its bookings' ids, at most fifty), after which it
+asks no more about that pair. A cancelled trip asks nothing.
+
 **Travelers….** A printout that names the family wrongly (a relative's
 itinerary listing everyone) makes a trip the user isn't on look like theirs.
 The trip's ⋮ menu has Travelers… for the owner, on the web and Android, once

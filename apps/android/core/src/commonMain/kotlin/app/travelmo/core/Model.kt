@@ -132,6 +132,8 @@ data class Trip(
     val mixed: Boolean? = null,
     /** The owner said it is one trip all the same: neither the list nor its page asks again. */
     val oneTrip: Boolean = false,
+    /** Flights that look booked twice ([duplicateFlights]) the owner said were both taken, by [duplicateFlightKey]. */
+    val bothTaken: List<String> = emptyList(),
     /** When the trip or any of its bookings last changed (ISO instant); empty when missing or in fixtures without one. */
     val updatedAt: String = "",
 )

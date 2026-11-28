@@ -290,6 +290,9 @@ interface TripStore {
     /** The owner's word that a trip that looks like two in one ([app.travelmo.core.mixedTrip]) is one trip. */
     suspend fun markOneTrip(tripId: String)
 
+    /** The owner's word that two flights that look booked twice ([app.travelmo.core.duplicateFlights]) were both taken. */
+    suspend fun markBothTaken(tripId: String, key: String)
+
     /** Sets the trip's dates to its bookings' span; false when it has none. Owner only. */
     suspend fun fitTripDates(tripId: String): Boolean
 
