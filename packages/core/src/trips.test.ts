@@ -271,6 +271,11 @@ describe("sameBooking", () => {
     expect(sameBooking(leg, trip)).toBe(true);
     // ...but the trip's arrival is London's, not the leg's.
     expect(mergeDetails(leg, trip, { newer: true })).toMatchObject({ end: leg.end, destination: leg.destination });
+    // Read the other way round, as an import reads the newest email first, the trip becomes the leg.
+    expect(mergeDetails(trip, leg)).toMatchObject({ title: leg.title, end: leg.end, destination: leg.destination });
+    expect(mergeDetails(trip, leg, { edited: true })).toMatchObject({ end: trip.end, destination: trip.destination });
+    // The second leg, from elsewhere, or another flight leaving then, is not its start.
+    expect(mergeDetails(trip, { ...leg, title: "QR 7 DOH to LHR", origin: { name: "Doha", code: "DOH" } }).destination).toEqual(trip.destination);
     // A schedule change on the same route still moves it.
     expect(mergeDetails(leg, { ...leg, end: "2026-01-11T04:30:00+03:00" }, { newer: true }).end).toBe("2026-01-11T04:30:00+03:00");
   });
