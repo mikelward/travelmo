@@ -230,6 +230,10 @@ export const Trip = z.object({
   // whom it is for, so a trip the user was taken off is one they're only
   // watching; an email read again doesn't put them back.
   removedTravelers: z.array(z.string().min(1)).max(maxRemovedTravelers).optional(),
+  // Names the owner put on the trip (Travelers…): bookings made in someone
+  // else's name, or that name nobody. Kept beside the bookings' names so an
+  // email read again doesn't lose them.
+  addedTravelers: z.array(z.string().min(1)).max(maxRemovedTravelers).optional(),
   // Its bookings look like two trips in one (mixedTrip), kept with the
   // list's flags; absent until worked out. `oneTrip`: the owner said it is
   // one trip all the same, so neither the list nor its page asks again.

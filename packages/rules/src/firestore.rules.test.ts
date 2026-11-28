@@ -167,13 +167,19 @@ describe("trips", () => {
     await assertFails(updateDoc(doc(as(partner), paths.trip(trip.id)), { bothTaken: ["a|b", "c|d"] }));
   });
 
-  it("lets only the owner take names off a trip, at most a hundred", async () => {
+  it("lets only the owner take names off or put names on a trip, at most a hundred", async () => {
     await assertSucceeds(updateDoc(doc(as(owner), paths.trip(trip.id)), { removedTravelers: ["Sam Example"] }));
     await assertSucceeds(updateDoc(doc(as(owner), paths.trip(trip.id)), { removedTravelers: [] }));
     await assertFails(updateDoc(doc(as(owner), paths.trip(trip.id)), { removedTravelers: "Sam Example" }));
     await assertFails(updateDoc(doc(as(owner), paths.trip(trip.id)), { removedTravelers: Array.from({ length: 101 }, (_, i) => `Person${i} Example`) }));
     await assertFails(updateDoc(doc(as(partner), paths.trip(trip.id)), { removedTravelers: ["Pat Example"] }));
     await assertFails(updateDoc(doc(as(stranger), paths.trip(trip.id)), { removedTravelers: ["Pat Example"] }));
+    await assertSucceeds(updateDoc(doc(as(owner), paths.trip(trip.id)), { addedTravelers: ["Sam Example"] }));
+    await assertSucceeds(updateDoc(doc(as(owner), paths.trip(trip.id)), { addedTravelers: [] }));
+    await assertFails(updateDoc(doc(as(owner), paths.trip(trip.id)), { addedTravelers: "Sam Example" }));
+    await assertFails(updateDoc(doc(as(owner), paths.trip(trip.id)), { addedTravelers: Array.from({ length: 101 }, (_, i) => `Person${i} Example`) }));
+    await assertFails(updateDoc(doc(as(partner), paths.trip(trip.id)), { addedTravelers: ["Pat Example"] }));
+    await assertFails(updateDoc(doc(as(stranger), paths.trip(trip.id)), { addedTravelers: ["Pat Example"] }));
   });
 
   it("lets only the owner mark a trip cancelled, with a time", async () => {

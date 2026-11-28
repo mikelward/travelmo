@@ -599,11 +599,13 @@ async function repairTripFlags(id: string, kept: KeptFlags): Promise<void> {
   const stored = await getDocFromServer(tripRef);
   const revision = stored.get("updatedAt") as unknown;
   if (typeof revision !== "string") return;
-  // The names the owner took off it are the trip's as stored now, which the
-  // revision check below holds to.
+  // The names the owner added or took off are the trip's as stored now,
+  // which the revision check below holds to.
   const removed = stored.get("removedTravelers") as unknown;
   const removedTravelers = Array.isArray(removed) ? removed.filter((n): n is string => typeof n === "string") : undefined;
-  const flags = tripFlagsToWrite({ ...kept, removedTravelers }, parseDocs(Segment, await getDocsFromServer(query(collection(db, paths.segments(id))))));
+  const added = stored.get("addedTravelers") as unknown;
+  const addedTravelers = Array.isArray(added) ? added.filter((n): n is string => typeof n === "string") : undefined;
+  const flags = tripFlagsToWrite({ ...kept, removedTravelers, addedTravelers }, parseDocs(Segment, await getDocsFromServer(query(collection(db, paths.segments(id))))));
   if (!flags) return;
   const written = await runTransaction(db, async (t) => {
     const now = await t.get(tripRef);

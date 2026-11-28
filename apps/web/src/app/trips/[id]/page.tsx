@@ -1,6 +1,6 @@
 "use client";
 
-import { allLoyalty, bookedDateRange, bookingHeading, headedRouteLine, flightCheckInState, displayBounds, effectiveHomes, homeTimeline, journeyGapHomes, journeyGaps, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, gmailMailboxes, localDate, normalizeEmail, paths, programsFor, mixedTrip, duplicateFlights, duplicateFlightKey, namedTravelers, sharedWithAny, sourceGroups, watchedTrip, type Segment, type SenderCleanup, type Trip } from "@travelmo/core";
+import { allLoyalty, bookedDateRange, bookingHeading, canonicalName, headedRouteLine, flightCheckInState, displayBounds, effectiveHomes, homeTimeline, journeyGapHomes, journeyGaps, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, gmailMailboxes, localDate, normalizeEmail, paths, programsFor, mixedTrip, duplicateFlights, duplicateFlightKey, sharedWithAny, sourceGroups, travelerChoices, tripTravelerDiff, watchedTrip, type PersonDoc, type Segment, type SenderCleanup, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { arrayRemove, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -14,7 +14,7 @@ import { api } from "@/lib/api";
 import { hideRideNeed, markOneWay } from "@/lib/rides";
 import { SignInGate } from "@/components/SignInGate";
 import { sourceKindLabels } from "@/lib/sourceLinks";
-import { cancelSegment, cancelTrip, deleteSegment, deleteTrip, favoriteSegment, fitTripDates, mergeSegments, mergeTrips, moveSegment, moveSegmentToNewTrip, splitTrip, rateSegment, renameTrip, restoreSegment, restoreTrip, saveSegment, setRemovedTravelers, markOneTrip, markBothTaken } from "@/lib/edits";
+import { cancelSegment, cancelTrip, deleteSegment, deleteTrip, favoriteSegment, fitTripDates, mergeSegments, mergeTrips, moveSegment, moveSegmentToNewTrip, splitTrip, rateSegment, renameTrip, restoreSegment, restoreTrip, saveSegment, setTripTravelers, markOneTrip, markBothTaken } from "@/lib/edits";
 import { shareTrip } from "@/lib/access";
 import { firestore } from "@/lib/firebase";
 import { useSaveForOffline } from "@/lib/offline";
@@ -323,21 +323,51 @@ function TriCheckbox({ checked, mixed, onChange }: { checked: boolean; mixed: bo
   return <input ref={ref} type="checkbox" checked={checked} aria-checked={mixed ? "mixed" : checked} onChange={(e) => onChange(e.target.checked)} />;
 }
 
-// Whom the trip is for: every name its bookings give, ticked unless the
-// owner took it off. Unticking a wrongly named passenger, the user among
-// them, makes it a trip they're only watching.
-function TravelersDialog({ trip, segments, onClose }: { trip: Trip; segments: Segment[]; onClose: () => void }) {
-  const names = useMemo(() => namedTravelers(segments, trip.removedTravelers), [segments, trip.removedTravelers]);
-  // Unticked: only those the owner took off, as people write them; a name
-  // on nothing but a cancelled booking is still on the trip.
-  const [off, setOff] = useState<Set<string>>(() => new Set(namedTravelers([], trip.removedTravelers)));
+// Whom the trip is for: every name its bookings give, plus anyone the owner
+// added, followed by the user's known people (user first) to tick and a field
+// to add someone new.
+function TravelersDialog({ trip, segments, people, onClose }: { trip: Trip; segments: Segment[]; people: readonly PersonDoc[]; onClose: () => void }) {
+  const initial = useMemo(
+    () => travelerChoices(segments, trip.removedTravelers, trip.addedTravelers, people),
+    [segments, trip.removedTravelers, trip.addedTravelers, people],
+  );
+  const [extra, setExtra] = useState<string[]>([]);
+  // Track only explicit user changes so live booking updates keep newly arriving travelers ticked.
+  const [turnedOn, setTurnedOn] = useState<Set<string>>(() => new Set());
+  const [turnedOff, setTurnedOff] = useState<Set<string>>(() => new Set());
+  const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const names = useMemo(() => [...new Set([...initial.map((c) => c.name), ...extra])], [initial, extra]);
+  const selected = useMemo(() => {
+    const next = new Set(initial.filter((c) => c.selected).map((c) => c.name));
+    for (const n of turnedOn) next.add(n);
+    for (const n of turnedOff) next.delete(n);
+    return next;
+  }, [initial, turnedOn, turnedOff]);
+
+  const addDraft = (e?: FormEvent) => {
+    e?.preventDefault();
+    const name = canonicalName(draft);
+    if (!name) return;
+    if (!names.includes(name)) setExtra((was) => [...was, name]);
+    setTurnedOn((was) => new Set(was).add(name));
+    setTurnedOff((was) => {
+      const next = new Set(was);
+      next.delete(name);
+      return next;
+    });
+    setDraft("");
+  };
+
   const save = async () => {
     setBusy(true);
     setError(undefined);
     try {
-      await setRemovedTravelers(firestore(), trip.id, [...off]);
+      const pending = canonicalName(draft);
+      const picked = pending ? [...new Set([...selected, pending])] : [...selected];
+      const { removed, added } = tripTravelerDiff(segments, trip.removedTravelers ?? [], picked);
+      await setTripTravelers(firestore(), trip.id, removed, added);
       onClose();
     } catch (e) {
       console.error("Saving a trip's travelers failed", e);
@@ -347,28 +377,52 @@ function TravelersDialog({ trip, segments, onClose }: { trip: Trip; segments: Se
   };
   return (
     <Dialog title="Travelers" onClose={onClose}>
-      <p className="text-zinc-600 dark:text-zinc-400">Untick anyone not on this trip. A trip you&apos;re not on is left out of your reports and reminders.</p>
-      <ul className="mt-3" aria-label="Travelers">
-        {names.map((name) => (
-          <li key={name}>
-            <label className="flex items-baseline gap-3 py-2">
-              <input
-                type="checkbox"
-                checked={!off.has(name)}
-                onChange={(e) =>
-                  setOff((was) => {
-                    const next = new Set(was);
-                    if (e.target.checked) next.delete(name);
-                    else next.add(name);
-                    return next;
-                  })
-                }
-              />
-              <span>{name}</span>
-            </label>
-          </li>
-        ))}
-      </ul>
+      <p className="text-zinc-600 dark:text-zinc-400">Choose who&apos;s on this trip. A trip you&apos;re not on is left out of your reports and reminders.</p>
+      {names.length > 0 && (
+        <ul className="mt-3" aria-label="Travelers">
+          {names.map((name) => (
+            <li key={name}>
+              <label className="flex items-baseline gap-3 py-2">
+                <input
+                  type="checkbox"
+                  checked={selected.has(name)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setTurnedOn((was) => new Set(was).add(name));
+                      setTurnedOff((was) => {
+                        const next = new Set(was);
+                        next.delete(name);
+                        return next;
+                      });
+                    } else {
+                      setTurnedOff((was) => new Set(was).add(name));
+                      setTurnedOn((was) => {
+                        const next = new Set(was);
+                        next.delete(name);
+                        return next;
+                      });
+                    }
+                  }}
+                />
+                <span>{name}</span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form onSubmit={addDraft} className="mt-3 flex gap-2">
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="Add a traveler"
+          aria-label="Add a traveler"
+          className="flex-1 rounded-lg border border-field bg-background px-3 py-2"
+        />
+        <button type="submit" disabled={!canonicalName(draft)} className={buttonClass}>
+          Add
+        </button>
+      </form>
       {error && <p className="mt-2 text-danger">{error}</p>}
       <div className="mt-3">
         <button type="button" disabled={busy} onClick={save} className={buttonClass}>
@@ -552,7 +606,8 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
   // Watching it, what is the user's own leaves it out: warnings, entry
   // requirements, rides, the checklist and check-in.
   const removedTravelers = trip?.removedTravelers;
-  const onlyWatching = useMemo(() => !!segments && watchedTrip({ removedTravelers }, segments, travelers ?? []), [segments, travelers, removedTravelers]);
+  const addedTravelers = trip?.addedTravelers;
+  const onlyWatching = useMemo(() => !!segments && watchedTrip({ removedTravelers, addedTravelers }, segments, travelers ?? []), [segments, travelers, removedTravelers, addedTravelers]);
   // Bookings that look like two trips in one, unless the owner said it is one.
   const oneTrip = trip?.oneTrip === true;
   const bothTaken = trip?.bothTaken;
@@ -703,11 +758,11 @@ function TripDetail({ tripId, user }: { tripId: string; user: User }) {
         canEdit={canManage}
         more={[
           ...(canManage && segments && segments.length > 1 ? [{ label: "Split…", onSelect: () => setSplitting(true) }] : []),
-          ...(canManage && segments && namedTravelers(segments, trip.removedTravelers).length > 0 ? [{ label: "Travelers…", onSelect: () => setEditingTravelers(true) }] : []),
+          ...(canManage && segments ? [{ label: "Travelers…", onSelect: () => setEditingTravelers(true) }] : []),
         ]}
       />
       {splitting && segments && <SplitDialog trip={trip} segments={segments} uid={user.uid} onClose={() => setSplitting(false)} />}
-      {editingTravelers && segments && <TravelersDialog trip={trip} segments={segments} onClose={() => setEditingTravelers(false)} />}
+      {editingTravelers && segments && <TravelersDialog trip={trip} segments={segments} people={travelers ?? []} onClose={() => setEditingTravelers(false)} />}
       <p className="mt-1 text-zinc-600 dark:text-zinc-400" data-testid="trip-dates">
         {formatDateRange(displayBounds(trip).start, displayBounds(trip).end)}
         {canManage && segments && <FitDates trip={trip} segments={segments} />}

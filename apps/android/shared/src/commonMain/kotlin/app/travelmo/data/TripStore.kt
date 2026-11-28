@@ -282,10 +282,10 @@ interface TripStore {
     suspend fun renameTrip(tripId: String, title: String)
 
     /**
-     * Takes names off a trip, or puts them back (Travelers…): [removed] is every name its bookings give that isn't on
-     * it. Its list flags are worked out again, so whom it is for follows. Owner only.
+     * Sets the names taken off or put on a trip (Travelers…): [removed] is every booking name not on it, [added] is
+     * every extra name on it. Its list flags are worked out again, so whom it is for follows. Owner only.
      */
-    suspend fun setRemovedTravelers(tripId: String, removed: List<String>)
+    suspend fun setTripTravelers(tripId: String, removed: List<String>, added: List<String>)
 
     /** The owner's word that a trip that looks like two in one ([app.travelmo.core.mixedTrip]) is one trip. */
     suspend fun markOneTrip(tripId: String)
