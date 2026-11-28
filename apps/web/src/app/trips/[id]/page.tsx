@@ -1,6 +1,6 @@
 "use client";
 
-import { allLoyalty, bookedDateRange, flightCheckInState, displayBounds, effectiveHomes, homeTimeline, journeyGapHomes, journeyGaps, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, gmailMailboxes, localDate, normalizeEmail, paths, programsFor, mixedTrip, namedTravelers, sharedWithAny, sourceGroups, watchedTrip, type Segment, type SenderCleanup, type Trip } from "@travelmo/core";
+import { allLoyalty, bookedDateRange, bookingHeading, headedRouteLine, flightCheckInState, displayBounds, effectiveHomes, homeTimeline, journeyGapHomes, journeyGaps, rideNeedKey, rideNeeds, displayTitles, formatDate, formatDateRange, gmailMailboxes, localDate, normalizeEmail, paths, programsFor, mixedTrip, namedTravelers, sharedWithAny, sourceGroups, watchedTrip, type Segment, type SenderCleanup, type Trip } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { arrayRemove, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
@@ -282,12 +282,16 @@ function SplitDialog({ trip, segments, uid, onClose }: { trip: Trip; segments: S
               <ul className="pl-7" aria-label={subject}>
                 {group.segmentIds.map((id) => {
                   const segment = byId.get(id)!;
+                  // As its row on the trip page: its heading, then where it goes, so two flights of one airline are told apart.
+                  const heading = bookingHeading(segment);
+                  const route = headedRouteLine(segment, heading);
                   return (
                     <li key={id}>
                       <label className="flex items-baseline gap-3 py-1">
                         <input type="checkbox" checked={picked.has(id)} onChange={(e) => toggle([id], e.target.checked)} />
                         <span className="min-w-0 flex-1">
-                          <span className="block">{segment.title}</span>
+                          <span className="block">{heading.headline}</span>
+                          {route && <span className="block text-muted">{route}</span>}
                           <span className="block text-muted">{formatDate(localDate(segment.start))}</span>
                         </span>
                       </label>

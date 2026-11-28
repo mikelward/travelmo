@@ -1,5 +1,5 @@
 import { flightDesignator } from "./flightStatus";
-import type { ExtractedSegment } from "./schema";
+import type { ExtractedSegment, Place } from "./schema";
 
 // When airlines open online check-in, by IATA airline code, and the site a
 // traveler checks in on. Mirrored in the Android app's core (Airlines.kt).
@@ -264,4 +264,24 @@ export function bookingHeading(segment: Pick<ExtractedSegment, "type" | "title" 
   if (!airline) return { headline: segment.title };
   const number = flightNumber(segment);
   return { headline: airline.name, airline: airline.code, ...(number ? { flightNumber: number } : {}) };
+}
+
+// A place as a booking's row names it: its code, then its town ("LHR
+// London"), else its own name. As the Android app's Trips.kt.
+export function placeLabel(place: Pick<Place, "name" | "city" | "code"> | undefined): string | undefined {
+  if (!place) return undefined;
+  const where = place.city ?? place.name;
+  return place.code ? `${place.code} ${where}` : where;
+}
+
+// "EUS London Euston → LIV Liverpool Lime Street", or for a stay its town;
+// undefined when it names no place.
+export function routeLine(segment: Pick<ExtractedSegment, "origin" | "destination">): string | undefined {
+  return [placeLabel(segment.origin), placeLabel(segment.destination)].filter(Boolean).join(" → ") || undefined;
+}
+
+// The route line under a booking's heading, its flight number leading
+// ("VS 11 · LHR London → BOS Boston"). As the Android app's Airlines.kt.
+export function headedRouteLine(segment: Pick<ExtractedSegment, "type" | "title" | "provider" | "origin" | "destination">, heading = bookingHeading(segment)): string | undefined {
+  return [heading.flightNumber, routeLine(segment)].filter(Boolean).join(" · ") || undefined;
 }

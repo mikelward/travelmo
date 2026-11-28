@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { airlineCheckIn, airlineCheckIns, airlineCode, airlineNamed, airlineNames, bookingHeading, checkInHoursBefore, defaultCheckInHours } from "./airlines";
+import { airlineCheckIn, airlineCheckIns, airlineCode, airlineNamed, airlineNames, bookingHeading, checkInHoursBefore, defaultCheckInHours, headedRouteLine, placeLabel, routeLine } from "./airlines";
 
 const flight = (title: string) => ({ type: "flight" as const, title });
 
@@ -58,5 +58,21 @@ describe("bookingHeading", () => {
     expect(airlineNamed("Transavia France")).toEqual({ code: "TO", name: "Transavia France" });
     expect(airlineNamed("Norwegian")).toEqual({ code: "D8", name: "Norwegian" });
     for (const code of Object.keys(airlineNames)) expect(code).toMatch(/^[A-Z0-9]{2}$/);
+  });
+});
+
+describe("headedRouteLine", () => {
+  it("leads a flight's route with its number, and names a stay's town", () => {
+    const flight = {
+      type: "flight" as const,
+      title: "Jet2.com LS1439 London Stansted to Faro",
+      provider: "Jet2.com",
+      origin: { name: "London Stansted", city: "London", code: "STN" },
+      destination: { name: "Faro", city: "Faro", code: "FAO" },
+    };
+    expect(headedRouteLine(flight)).toBe("LS 1439 · STN London → FAO Faro");
+    expect(routeLine({ destination: { name: "Salgados Palm Village", city: "Albufeira" } })).toBe("Albufeira");
+    expect(placeLabel({ name: "Salgados Palm Village" })).toBe("Salgados Palm Village");
+    expect(headedRouteLine({ type: "activity", title: "Show" })).toBeUndefined();
   });
 });
