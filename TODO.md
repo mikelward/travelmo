@@ -26,6 +26,13 @@
       bookings for different travelers, or flights that can't all be one
       person's (overlapping, or leaving from where the last didn't land),
       with a notice that points at Split… or Travelers….
+- [ ] Spot bookings that weren't taken (maintainer, 2026-11-28): when two
+      of the user's own can't both have happened, ask which wasn't, and Mark
+      cancelled it. Seen: landing in Adelaide on 13 Jan and leaving SFO on
+      14 Jan (the Adelaide flights were never flown, with no cancellation
+      email); a flight home from Faro on the day a stay there begins (the
+      return of a round trip they stayed on past). Unlike the two-trips
+      notice, the clash can span trips.
 
 - [x] A food icon (a fork and knife) for a meal booking, on its row and on
       a trip that is just that meal, rather than the calendar every "other"
