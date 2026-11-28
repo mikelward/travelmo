@@ -114,16 +114,16 @@ class ProfileScreenTest {
     }
 
     @Test
-    fun `Who is this says a loyalty holder's name is one of the user's people`() {
+    fun `Same person as says a loyalty holder's name is one of the user's people`() {
         val profile = TravelProfile(
             OWNER,
             foundLoyalty = listOf(FoundLoyalty("Example Air Club", "EA 2", messageId = "m2", at = "2026-11-01T00:00:00Z", person = "Samuel Example")),
         )
         val store = FakeTripStore(profile = profile, people = listOf(app.travelmo.core.Person("me", "Sam Example", bookings = 4, direct = 4)))
         show(store)
-        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Who is this?"))
-        composeRule.onNodeWithText("Who is this?").performClick()
-        composeRule.onNodeWithText("Who is Samuel Example?").assertExists()
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Same person as…"))
+        composeRule.onNodeWithText("Same person as…").performClick()
+        composeRule.onNodeWithText("Samuel Example is the same person as").assertExists()
         composeRule.onAllNodesWithText("Sam Example").onLast().performClick()
         composeRule.waitForIdle()
         store.peopleState.value.single().aliases shouldBe listOf("Samuel Example")

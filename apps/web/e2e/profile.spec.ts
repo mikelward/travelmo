@@ -137,7 +137,7 @@ test("each loyalty number is shown under whose it is, on the profile and on a bo
   await expect(page.getByRole("table", { name: "Loyalty programs: Sam Sample" })).toContainText("EA 999");
 });
 
-test("a loyalty holder's name that is the owner's, however written, is theirs, and Who is this? says so", async ({ page }) => {
+test("a loyalty holder's name that is the owner's, however written, is theirs, and Same person as… says so", async ({ page }) => {
   const ownerUid = await signIn(page, owner);
   await seedPerson(ownerUid, { id: "me", name: "Sam Example", aliases: ["Sam Lee Example"], bookings: 4, direct: 4 });
   const found = (number: string, person: string) => ({ program: "Example Air Club", number, person, messageId: `m${number}`, label: "Your flight", at: "2026-11-01T00:00:00Z" });
@@ -147,7 +147,7 @@ test("a loyalty holder's name that is the owner's, however written, is theirs, a
   await expect(page.getByRole("table", { name: "Loyalty programs: You" })).toContainText("EA 1");
   // A misspelling is someone else until the owner says otherwise.
   await expect(page.getByRole("table", { name: "Loyalty programs: Samuel Example" })).toContainText("EA 2");
-  await page.getByRole("button", { name: "Who is this?" }).click();
+  await page.getByRole("button", { name: "Same person as…" }).click();
   await page.getByRole("dialog").getByRole("button", { name: /Sam Example/ }).click();
   await expect.poll(async () => (await readPerson(ownerUid, "me"))?.aliases).toEqual(["Sam Lee Example", "Samuel Example"]);
   await expect(page.getByRole("heading", { name: "Samuel Example" })).toHaveCount(0);

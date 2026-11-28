@@ -106,8 +106,8 @@ function PersonDialog({
   );
 }
 
-// Which of the user's people someone is: "Who is this?" on a loyalty
-// holder's name and "Same person as…" on a person both pick from it.
+// Which of the user's people someone is: "Same person as…" on a loyalty
+// holder's name and on a person both pick from it.
 function PeoplePicker({ title, people, except, onPick, onClose }: { title: string; people: readonly PersonDoc[]; except?: string; onPick: (personId: string) => void; onClose: () => void }) {
   const me = guessMe(people);
   // The user first, then as People lists them.
@@ -181,7 +181,7 @@ function LoyaltyTable({ entries, ownUid, travelers }: { entries: ProfileEntry[];
                 <h4 className="text-lg font-medium">{name}</h4>
                 {group.person && ownUid && !!travelers?.length && (
                   <button type="button" className="text-muted hover:underline" onClick={() => setNaming(group.person)}>
-                    Who is this?
+                    Same person as…
                   </button>
                 )}
               </div>
@@ -227,7 +227,7 @@ function LoyaltyTable({ entries, ownUid, travelers }: { entries: ProfileEntry[];
       })}
       {error && <p className="mt-2 text-danger">{error}</p>}
       {naming && travelers && (
-        <PeoplePicker title={`Who is ${naming}?`} people={travelers} onPick={(id) => void whoIs(naming, id)} onClose={() => setNaming(undefined)} />
+        <PeoplePicker title={`${naming} is the same person as`} people={travelers} onPick={(id) => void whoIs(naming, id)} onClose={() => setNaming(undefined)} />
       )}
       {editing && (
         <PersonDialog program={editing.program} number={editing.number} people={people} onPick={(p) => void pick(p)} onClose={() => setEditing(undefined)} />
