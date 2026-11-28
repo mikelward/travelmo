@@ -1918,7 +1918,9 @@ number, "UA 122" being "UA122", that day within six hours; the newest
 email by when it was sent sets the journey's times, unless the user edited
 it or the email's journey runs between other airports or stations, as a
 reminder's whole trip "ADL to LHR, 1 stop" does beside its first leg ADL to
-DOH: `mergeDetails`) or the same
+DOH: `mergeDetails`; read the other way round, as an import reads the
+newest email first, that whole trip becomes the leg, QR 915 landing in
+Doha, once the leg's email is read) or the same
 dates for stays and rentals, and then evidence of identity, since
 dropping a real booking loses it: equal confirmation numbers when both have
 one (however spaced, cased or zero-padded: "ab-0123" is AB123), otherwise agreeing codes at both ends of a journey, or a distinctive

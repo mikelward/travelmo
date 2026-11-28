@@ -759,6 +759,16 @@ export function mergeDetails<S extends ExtractedSegment>(existing: S, found: Ext
     if (found.end !== undefined) merged.end = found.end;
     else if (existing.end !== undefined) merged.end = shifted(existing.end, moved);
   }
+  // A whole trip read first (a reminder's "ADL to LHR, 1 stop", as an
+  // import reads the newest email first) becomes the leg it starts with
+  // once that leg's own email is read, whichever is newer: its flight, and
+  // where and when the leg lands.
+  if (!edited && wholeTripOf(found, existing)) {
+    merged.title = found.title;
+    merged.destination = found.destination;
+    if (found.end !== undefined) merged.end = found.end;
+    else delete merged.end;
+  }
   // An event first known by its day alone takes the time it was then told.
   if (!edited && isUntimed(existing) && !isUntimed(found) && compatibleBookingTypes(existing, found) && localDate(found.start) === localDate(existing.start)) {
     merged.start = found.start;
@@ -800,6 +810,24 @@ function otherRoute(a: ExtractedSegment, b: ExtractedSegment): boolean {
   const code = (p?: Place) => p?.code?.toUpperCase();
   const differ = (x?: Place, y?: Place) => !!code(x) && !!code(y) && code(x) !== code(y);
   return differ(a.origin, b.origin) || differ(a.destination, b.destination);
+}
+
+// Whether `trip` is the whole of a journey `leg` is the first leg of: the
+// same kind of journey from the same place at the same time, to another
+// place, giving no service where the leg gives one (QR 915 ADL to DOH
+// beside Adelaide to London).
+function wholeTripOf(leg: ExtractedSegment, trip: ExtractedSegment): boolean {
+  const code = (p?: Place) => p?.code?.toUpperCase();
+  return (
+    journeyTypes.has(leg.type) &&
+    leg.type === trip.type &&
+    !!code(leg.origin) &&
+    code(leg.origin) === code(trip.origin) &&
+    leg.start.slice(0, 16) === trip.start.slice(0, 16) &&
+    otherRoute(leg, trip) &&
+    serviceNumbers(leg.title, true).size > 0 &&
+    serviceNumbers(trip.title, true).size === 0
+  );
 }
 
 // The rental agreement of a car `existing` is, or was, reserved as.
