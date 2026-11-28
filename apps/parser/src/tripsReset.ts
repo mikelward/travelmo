@@ -1,4 +1,4 @@
-import { loyaltySummary, paths, sameMembership, type LoyaltyPerson, type ProfileEntry } from "@travelmo/core";
+import { loyaltySummary, paths, sameOverrideTarget, type LoyaltyPerson, type ProfileEntry } from "@travelmo/core";
 import { FieldValue, type DocumentSnapshot, type Firestore } from "firebase-admin/firestore";
 import type { TripStore } from "./importer";
 import { errorFields } from "./log";
@@ -150,7 +150,7 @@ export async function clearImportedProfile(db: Firestore, uid: string, now: stri
     const reversedPeople = [...people].reverse();
     const manualLoyalty = (Array.isArray(data?.loyalty) ? data.loyalty.filter((l) => l?.manual === true) : []).map((entry) => {
       const account = loyaltySummary(entry).account;
-      const said = account ? reversedPeople.find((p) => sameMembership(p, { program: entry.title, number: account })) : undefined;
+      const said = account ? reversedPeople.find((p) => sameOverrideTarget(p, { program: entry.title, number: account })) : undefined;
       if (!said) return entry;
       const baseFields = entry.fields.filter((f) => f.label !== "Belongs to");
       return {

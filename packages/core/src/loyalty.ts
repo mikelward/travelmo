@@ -116,9 +116,14 @@ export function nameWords(name: string): Set<string> {
 // word with it. A provider with no distinctive word matches nothing.
 export function programsFor(provider: string | undefined, programs: readonly ProfileEntry[]): ProfileEntry[] {
   if (!provider) return [];
+  const providerCanonical = canonicalProgram(provider);
   const words = nameWords(provider);
-  if (!words.size) return [];
-  return programs.filter((p) => [...nameWords(p.title)].some((w) => words.has(w)));
+  if (providerCanonical === undefined && !words.size) return [];
+  return programs.filter(
+    (p) =>
+      (providerCanonical !== undefined && canonicalProgram(p.title) === providerCanonical) ||
+      [...nameWords(p.title)].some((w) => words.has(w)),
+  );
 }
 
 // One line for a booking: the program, the number, the status and, when
@@ -128,26 +133,158 @@ export function loyaltyLine(entry: ProfileEntry): string {
   return [s.title, s.account, s.status, s.person].filter(Boolean).join(" · ");
 }
 
-// A number as written, for telling two sightings of one membership apart:
-// spaces, dashes, case and zeros padding the digits ("EK00557710580" is
-// "EK557710580") do not count.
-const plainNumber = (n: string) =>
-  n
-    .replace(/[\s-]/g, "")
-    .toUpperCase()
-    .replace(/^([A-Z]*)0+(?=\d)/, "$1");
-// One program by its name as written (for "BA", which has no distinctive
-// word), else by a distinctive word in common. A name with no distinctive
-// word ("Privilege Club") could be any program's.
+const trailingTierRe = /\/[A-Za-z][A-Za-z0-9\s-]*$/;
+const separatedMaskedRe = /^([A-Z0-9]{2})[-\s]+([*•●·]+|X{2,})([A-Z0-9]{3,})$/;
+const unprefixedMaskRe = /^([*•●·]+|X{2,})([A-Z0-9]{3,})$/;
+const prefixedMaskRe = /^([A-Z0-9]{2})([*•●·]+|X{2,})([A-Z0-9]{3,})$/;
+const separatedPrefixRe = /^([A-Z0-9]{2})[-\s]+([A-Z0-9]{5,})$/;
+const gluedPrefixRe = /^([A-Z0-9]{2})(\d{5,})$/;
+
+type ParsedLoyaltyNumber =
+  | { masked: true; tail: string; plain: string }
+  | { masked: false; plain: string; unprefixed?: string };
+
+// Well-known airline frequent flyer program aliases so e.g. "AAdvantage" and
+// "American Airlines", "Airpoints" and "Air New Zealand", or "SkyMiles" and
+// "Delta Air Lines" recognize each other as the same program. Leading 2-char
+// tokens are the program's verified IATA airline codes.
+const programAliases: readonly (readonly string[])[] = [
+  ["aa", "american", "aadvantage"],
+  ["ac", "canada", "aeroplan"],
+  ["af", "kl", "air france", "klm", "flying blue"],
+  ["as", "alaska", "mileage plan", "atmos"],
+  ["b6", "jetblue", "trueblue"],
+  ["ba", "british", "executive"],
+  ["cx", "cathay", "asia miles"],
+  ["dl", "delta", "skymiles"],
+  ["ei", "aer lingus", "aerclub"],
+  ["ek", "emirates", "skywards"],
+  ["ib", "iberia"],
+  ["lh", "lufthansa", "miles more"],
+  ["nz", "new zealand", "airpoints"],
+  ["qf", "qantas"],
+  ["qr", "qatar"],
+  ["sq", "singapore", "krisflyer"],
+  ["ua", "united", "mileageplus"],
+  ["vs", "virgin atlantic"],
+  ["wn", "southwest", "rapid rewards"],
+];
+
+function canonicalProgram(name: string): number | undefined {
+  const norm = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  if (!norm) return undefined;
+  let found: number | undefined;
+  for (let i = 0; i < programAliases.length; i++) {
+    const tokens = programAliases[i]!;
+    const hit = tokens.some((tok) => {
+      if (tok.length <= 2) return norm === tok;
+      return ` ${norm} `.includes(` ${tok} `);
+    });
+    if (hit) {
+      if (found !== undefined) return undefined;
+      found = i;
+    }
+  }
+  return found;
+}
+
+function verifiedPrefixes(program?: string): ReadonlySet<string> {
+  if (!program) return new Set();
+  const idx = canonicalProgram(program);
+  if (idx === undefined) return new Set();
+  return new Set(programAliases[idx]!.filter((t) => t.length === 2).map((t) => t.toUpperCase()));
+}
+
+function parseLoyaltyNumber(n: string, allowedPrefixes: ReadonlySet<string> = new Set()): ParsedLoyaltyNumber {
+  const stripped = n.trim().replace(trailingTierRe, "").trim();
+  const upperStripped = stripped.toUpperCase();
+  const sepMask = separatedMaskedRe.exec(upperStripped);
+  if (sepMask) {
+    return { masked: true, tail: sepMask[3]!, plain: upperStripped.replace(/[\s-]/g, "") };
+  }
+  const raw = upperStripped.replace(/[\s-]/g, "");
+  const unprefixedMask = unprefixedMaskRe.exec(raw);
+  if (unprefixedMask) {
+    return { masked: true, tail: unprefixedMask[2]!, plain: raw };
+  }
+  const prefixedMask = prefixedMaskRe.exec(raw);
+  if (prefixedMask && allowedPrefixes.has(prefixedMask[1]!)) {
+    return { masked: true, tail: prefixedMask[3]!, plain: raw };
+  }
+  const plain = raw.replace(/^([A-Z]*)0+(?=\d)/, "$1");
+  let unprefixed: string | undefined;
+  const sepMatch = separatedPrefixRe.exec(upperStripped);
+  if (sepMatch && allowedPrefixes.has(sepMatch[1]!)) {
+    unprefixed = sepMatch[2]!.replace(/[\s-]/g, "").replace(/^0+(?=\d)/, "");
+  } else {
+    const gluedMatch = gluedPrefixRe.exec(raw);
+    if (gluedMatch && allowedPrefixes.has(gluedMatch[1]!)) {
+      unprefixed = gluedMatch[2]!.replace(/^0+(?=\d)/, "");
+    }
+  }
+  return { masked: false, plain, ...(unprefixed ? { unprefixed } : {}) };
+}
+
+// One program by its canonical airline alias, exact name, or a distinctive word
+// in common. A name with no distinctive word ("Privilege Club") could be any
+// program's.
 const sameProgram = (a: string, b: string) => {
+  const ca = canonicalProgram(a);
+  const cb = canonicalProgram(b);
+  if (ca !== undefined && cb !== undefined) return ca === cb;
   const [x, y] = [nameWords(a), nameWords(b)];
   return a.trim().toLowerCase() === b.trim().toLowerCase() || !x.size || !y.size || [...x].some((w) => y.has(w));
 };
-// One number as written two ways (plainNumber).
-export const sameNumber = (a: string, b: string) => plainNumber(a) === plainNumber(b);
+
+// One number as written two ways: ignoring spaces, dashes, leading zeros,
+// trailing /TIER suffixes, verified 2-char airline prefixes for the program,
+// and masked prefixes (****505 / XXXXX505 matching each other or an unmasked
+// number ending with the same 3+ visible characters).
+export function sameNumber(a: string, b: string, programA?: string, programB?: string): boolean {
+  const prefixes = new Set([...verifiedPrefixes(programA), ...verifiedPrefixes(programB)]);
+  const pa = parseLoyaltyNumber(a, prefixes);
+  const pb = parseLoyaltyNumber(b, prefixes);
+  if (pa.masked || pb.masked) {
+    if (pa.masked && pb.masked) return pa.tail.endsWith(pb.tail) || pb.tail.endsWith(pa.tail);
+    const masked = pa.masked ? pa : (pb as Extract<ParsedLoyaltyNumber, { masked: true }>);
+    const fullNum = pa.masked ? (pb as Extract<ParsedLoyaltyNumber, { masked: false }>) : pa;
+    return fullNum.plain.endsWith(masked.tail) || (fullNum.unprefixed !== undefined && fullNum.unprefixed.endsWith(masked.tail));
+  }
+  if (pa.plain === pb.plain) return true;
+  const da = pa.unprefixed ?? pa.plain;
+  const db = pb.unprefixed ?? pb.plain;
+  return (pa.unprefixed !== undefined || pb.unprefixed !== undefined) && da === db;
+}
+
 // One membership: the same number in the same program.
 export const sameMembership = (a: Pick<FoundLoyalty, "program" | "number">, b: Pick<FoundLoyalty, "program" | "number">) =>
-  sameNumber(a.number, b.number) && sameProgram(a.program, b.program);
+  sameProgram(a.program, b.program) && sameNumber(a.number, b.number, a.program, b.program);
+
+function preferNumber(before: string, seen: string, prefixes: ReadonlySet<string>): string {
+  const pb = parseLoyaltyNumber(before, prefixes);
+  const ps = parseLoyaltyNumber(seen, prefixes);
+  if (!pb.masked && ps.masked) return before;
+  if (pb.masked && !ps.masked) return seen;
+  if (pb.masked && ps.masked) {
+    if (ps.tail.length !== pb.tail.length) return ps.tail.length > pb.tail.length ? seen : before;
+    const bSlash = before.includes("/");
+    const sSlash = seen.includes("/");
+    if (bSlash !== sSlash) return bSlash ? seen : before;
+    return before;
+  }
+  const bSlash = before.includes("/");
+  const sSlash = seen.includes("/");
+  if (bSlash !== sSlash) return bSlash ? seen : before;
+  return seen;
+}
+
+function preferProgram(before: string, seen: string): string {
+  const bw = nameWords(before).size;
+  const sw = nameWords(seen).size;
+  if (sw !== bw) return sw > bw ? seen : before;
+  if (seen.trim().length !== before.trim().length) return seen.trim().length > before.trim().length ? seen : before;
+  return seen;
+}
 
 const encoder = new TextEncoder();
 // About what an entry takes in the stored document: its UTF-8 JSON, plus a
@@ -161,15 +298,24 @@ function full(found: readonly FoundLoyalty[], next: FoundLoyalty): boolean {
   return found.reduce((n, f) => n + entryBytes(f), entryBytes(next)) > foundLoyaltyBudgetBytes;
 }
 
-// The found list with one more sighting: one already there is refreshed
-// (moved to the end, with what the new email adds). A new one is refused
-// once the list is full (by count or by size, bounds nobody reaches); none
-// is ever dropped to make room.
-export function withFoundLoyalty(found: readonly FoundLoyalty[], seen: FoundLoyalty): FoundLoyalty[] {
-  const before = found.find((f) => sameMembership(f, seen));
-  // A balance keeps the subject of the email it came from.
-  const withSource = (f: FoundLoyalty): FoundLoyalty => (f.balance && f.label && !f.balanceLabel ? { ...f, balanceLabel: f.label } : f);
-  if (!before) return full(found, withSource(seen)) ? [...found] : [...found, withSource(seen)];
+// Matches two loyalty override targets: unmasked numbers match across formats
+// via sameMembership, while two masked numbers require the same masked string
+// so distinct household cards sharing a visible tail keep independent overrides.
+export function sameOverrideTarget(
+  a: Pick<FoundLoyalty, "program" | "number">,
+  b: Pick<FoundLoyalty, "program" | "number">,
+): boolean {
+  if (!sameProgram(a.program, b.program)) return false;
+  const prefixes = new Set([...verifiedPrefixes(a.program), ...verifiedPrefixes(b.program)]);
+  const pa = parseLoyaltyNumber(a.number, prefixes);
+  const pb = parseLoyaltyNumber(b.number, prefixes);
+  if (pa.masked && pb.masked) return pa.plain === pb.plain;
+  return sameNumber(a.number, b.number, a.program, b.program);
+}
+
+const withSource = (f: FoundLoyalty): FoundLoyalty => (f.balance && f.label && !f.balanceLabel ? { ...f, balanceLabel: f.label } : f);
+
+export function mergeFoundPair(before: FoundLoyalty, seen: FoundLoyalty): FoundLoyalty {
   // The newest balance wins, and apart from it the newest status: a
   // statement read late, or an email with neither, does not undo a newer one.
   const newerBalance = !!seen.balance && (!before.balanceAt || (!!seen.balanceAt && seen.balanceAt >= before.balanceAt));
@@ -183,12 +329,10 @@ export function withFoundLoyalty(found: readonly FoundLoyalty[], seen: FoundLoya
     ...before,
     ...seen,
   };
-  // A name that says which program ("QATAR AIRWAYS") is kept over one that
-  // could be any's ("Privilege Club"), so bookings still find it.
-  const program = nameWords(seen.program).size || !nameWords(before.program).size ? seen.program : before.program;
-  const merged: FoundLoyalty = {
+  return {
     ...rest,
-    program,
+    program: preferProgram(before.program, seen.program),
+    number: preferNumber(before.number, seen.number, new Set([...verifiedPrefixes(before.program), ...verifiedPrefixes(seen.program)])),
     ...(holder ? { holder } : {}),
     ...(person ? { person } : {}),
     ...(statusFrom.status ? { status: statusFrom.status } : {}),
@@ -197,7 +341,30 @@ export function withFoundLoyalty(found: readonly FoundLoyalty[], seen: FoundLoya
     ...(source.balance && source.balanceAt ? { balanceAt: source.balanceAt } : {}),
     ...(source.balance && source.balanceLabel ? { balanceLabel: source.balanceLabel } : {}),
   };
-  return [...found.filter((f) => f !== before), merged];
+}
+
+// The found list with one more sighting: one already there is refreshed
+// (moved to the end, with what the new email adds). A new one is refused
+// once the list is full (by count or by size, bounds nobody reaches); none
+// is ever dropped to make room.
+export function withFoundLoyalty(found: readonly FoundLoyalty[], seen: FoundLoyalty): FoundLoyalty[] {
+  const before = found.find((f) => sameMembership(f, seen) && (!f.person || !seen.person || f.person === seen.person));
+  if (!before) return full(found, withSource(seen)) ? [...found] : [...found, withSource(seen)];
+  return [...found.filter((f) => f !== before), mergeFoundPair(before, seen)];
+}
+
+type DedupedFound = { merged: FoundLoyalty; sources: FoundLoyalty[] };
+
+function dedupeFoundLoyalty(found: readonly FoundLoyalty[]): DedupedFound[] {
+  const out: DedupedFound[] = [];
+  for (const seen of found) {
+    const idx = out.findIndex((d) => sameMembership(d.merged, seen) && (!d.merged.person || !seen.person || d.merged.person === seen.person));
+    if (idx < 0) out.push({ merged: seen, sources: [seen] });
+    else {
+      out[idx] = { merged: mergeFoundPair(out[idx]!.merged, seen), sources: [...out[idx]!.sources, seen] };
+    }
+  }
+  return out;
 }
 
 // The found list with several sightings (withFoundLoyalty), and how many
@@ -278,7 +445,7 @@ export function allLoyaltyWithSource(
   profile: Pick<TravelProfile, "loyalty" | "foundLoyalty" | "importedAt" | "loyaltyPeople">,
   travelers: readonly (Person & { bookings: number; direct: number })[] = [],
 ): ResolvedLoyalty[] {
-  const found = profile.foundLoyalty ?? [];
+  const found = dedupeFoundLoyalty(profile.foundLoyalty ?? []);
   // Whose it is: as the owner said, else as the email named, else theirs.
   const people = profile.loyaltyPeople ?? [];
   const me = guessMe(travelers);
@@ -287,34 +454,57 @@ export function allLoyaltyWithSource(
     return person && person.id === me?.id ? undefined : (person?.name ?? name);
   };
   const reversedPeople = [...people].reverse();
-  const withPerson = (entry: ProfileEntry, number: string | undefined, fromEmail?: FoundLoyalty): ProfileEntry => {
+  // Precompute each imported entry's account number once so matching against found entries doesn't re-parse summaries.
+  const importedAccounts = profile.loyalty.map((entry, savedIndex) => ({
+    entry,
+    savedIndex,
+    account: loyaltySummary(entry).account,
+    person: entry.fields.find((f) => f.label === personLabel)?.value,
+  }));
+  const matchedFound = new Set<DedupedFound>();
+  const isUniqueMembership = (program: string, number: string): boolean => {
+    let count = 0;
+    for (const imp of importedAccounts) {
+      if (imp.account && sameMembership({ program: imp.entry.title, number: imp.account }, { program, number })) count += 1;
+    }
+    for (const f of found) {
+      if (!matchedFound.has(f) && sameMembership(f.merged, { program, number })) count += 1;
+    }
+    return count <= 1;
+  };
+  const withPerson = (entry: ProfileEntry, number: string | undefined, fromEmail?: DedupedFound): ProfileEntry => {
     const storedPerson = entry.fields.find((f) => f.label === personLabel)?.value;
     const baseFields = entry.fields.filter((f) => f.label !== personLabel);
-    const said = number ? reversedPeople.find((p) => sameMembership(p, { program: entry.title, number })) : undefined;
-    const person = known(said ? said.person : (fromEmail?.person ?? storedPerson));
+    const targets: Pick<FoundLoyalty, "program" | "number">[] = [
+      ...(number ? [{ program: entry.title, number }] : []),
+      ...(fromEmail?.sources ?? []),
+    ];
+    const said =
+      (targets.length ? reversedPeople.find((p) => targets.some((t) => sameOverrideTarget(p, t))) : undefined) ??
+      (number && isUniqueMembership(entry.title, number)
+        ? reversedPeople.find((p) => sameMembership(p, { program: entry.title, number }))
+        : undefined);
+    const person = known(said ? said.person : (fromEmail?.merged.person ?? storedPerson));
     return person ? { ...entry, fields: [...baseFields, { label: personLabel, value: person }] } : { ...entry, fields: baseFields };
   };
-  // Precompute each imported entry's account number once so matching against found entries doesn't re-parse summaries.
-  const importedAccounts = profile.loyalty.map((entry, savedIndex) => ({ entry, savedIndex, account: loyaltySummary(entry).account }));
-  const matchedFound = new Set<FoundLoyalty>();
   // Per-entry updatedAt (from a manual edit or the import that wrote this
   // entry) wins over the document-level importedAt so an unrelated later
   // upload does not age retained entries.
   const cutoffFor = (entry: ProfileEntry) => entry.updatedAt ?? profile.importedAt;
   const afterCutoff = (at: string | undefined, cutoff: string | undefined) => !!at && (!cutoff || at > cutoff);
-  const imported: ResolvedLoyalty[] = importedAccounts.map(({ entry, savedIndex, account }) => {
-    let statement: FoundLoyalty | undefined;
+  const imported: ResolvedLoyalty[] = importedAccounts.map(({ entry, savedIndex, account, person: entryPerson }) => {
+    let statement: DedupedFound | undefined;
     if (account) {
       for (const f of found) {
-        if (sameMembership(f, { program: entry.title, number: account })) {
+        if (sameMembership(f.merged, { program: entry.title, number: account }) && (!entryPerson || !f.merged.person || entryPerson === f.merged.person)) {
           matchedFound.add(f);
           if (!statement) statement = f;
         }
       }
     }
     const cutoff = cutoffFor(entry);
-    const balance = statement?.balance && afterCutoff(statement.balanceAt, cutoff) ? statement.balance : undefined;
-    const status = statement?.status && afterCutoff(statement.statusAt, cutoff) ? statement.status : undefined;
+    const balance = statement?.merged.balance && afterCutoff(statement.merged.balanceAt, cutoff) ? statement.merged.balance : undefined;
+    const status = statement?.merged.status && afterCutoff(statement.merged.statusAt, cutoff) ? statement.merged.status : undefined;
     if (!statement || (!balance && !status)) return { entry: withPerson(entry, account, statement), savedIndex };
     // Under the labels the table reads first, so the email's win.
     return {
@@ -324,7 +514,7 @@ export function allLoyaltyWithSource(
           ...(balance ? [{ label: "Balance", value: balance }] : []),
           ...(status ? [{ label: "Elite status", value: status }] : []),
           ...entry.fields,
-          ...(balance ? [{ label: "Balance from email", value: statement.balanceLabel ?? statement.label ?? "A statement" }] : []),
+          ...(balance ? [{ label: "Balance from email", value: statement.merged.balanceLabel ?? statement.merged.label ?? "A statement" }] : []),
         ],
       }, account, statement),
       savedIndex,
@@ -332,7 +522,7 @@ export function allLoyaltyWithSource(
   });
   const all: ResolvedLoyalty[] = [
     ...imported,
-    ...found.filter((f) => !matchedFound.has(f)).map((f) => ({ entry: withPerson(foundLoyaltyEntry(f), f.number, f), savedIndex: -1 })),
+    ...found.filter((f) => !matchedFound.has(f)).map((f) => ({ entry: withPerson(foundLoyaltyEntry(f.merged), f.merged.number, f), savedIndex: -1 })),
   ];
   // The owner's first, as a booking lists them.
   const mine: ResolvedLoyalty[] = [];
@@ -357,7 +547,7 @@ export function allLoyalty(
 export function withLoyaltyPerson(people: readonly LoyaltyPerson[], membership: { program: string; number: string }, person: string | undefined): LoyaltyPerson[] {
   const name = person?.trim();
   const said: LoyaltyPerson = { program: membership.program, number: membership.number, ...(name ? { person: name } : {}) };
-  return [...people.filter((p) => !sameMembership(p, membership)), said].slice(-maxLoyaltyPeople);
+  return [...people.filter((p) => !sameOverrideTarget(p, membership)), said].slice(-maxLoyaltyPeople);
 }
 
 // The programs grouped by whose they are: the owner's first (person
@@ -376,8 +566,14 @@ export function loyaltyByPerson(entries: readonly ProfileEntry[]): { person?: st
 // The email-extracted membership behind a unified loyalty entry, when one
 // exists, so the UI can remove it directly from the program's row.
 export function findFoundLoyalty(found: readonly FoundLoyalty[], entry: ProfileEntry): FoundLoyalty | undefined {
-  const account = loyaltySummary(entry).account;
-  if (!account) return undefined;
-  return found.find((f) => sameMembership(f, { program: entry.title, number: account }));
+  const summary = loyaltySummary(entry);
+  if (!summary.account) return undefined;
+  const matches = found.filter((f) => sameMembership(f, { program: entry.title, number: summary.account! }));
+  if (matches.length <= 1) return matches[0];
+  return (
+    matches.find((f) => (summary.person ? f.person === summary.person : !f.person)) ??
+    matches.find((f) => !f.person || !summary.person || f.person === summary.person) ??
+    matches[0]
+  );
 }
 

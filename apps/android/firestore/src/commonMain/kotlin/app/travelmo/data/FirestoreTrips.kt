@@ -23,6 +23,7 @@ import app.travelmo.core.SenderList
 import app.travelmo.core.REVIEW_SEARCH_CAP
 import app.travelmo.core.REVIEW_RECENT
 import app.travelmo.core.ParsedRecord
+import app.travelmo.core.sameMembership
 import app.travelmo.core.withLoyaltyPerson
 import app.travelmo.core.ChosenHomeAirports
 import app.travelmo.core.NotHomeStay
@@ -332,7 +333,14 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
         val ref = db.collection("users").document(uid).collection("travelProfile").document("main")
         db.runTransaction { tx ->
             val stored = (tx.get(ref).get("foundLoyalty") as? List<*>).orEmpty()
-            val kept = stored.filterNot { (it as? Map<*, *>)?.let { m -> m["program"] == found.program && m["number"] == found.number } == true }
+            val kept = stored.filterNot {
+                val m = it as? Map<*, *> ?: return@filterNot false
+                val prog = m["program"] as? String ?: return@filterNot false
+                val num = m["number"] as? String ?: return@filterNot false
+                val person = m["person"] as? String
+                val sameOwner = person == null || found.person == null || person == found.person
+                sameOwner && sameMembership(prog, num, found.program, found.number)
+            }
             tx.updateData(ref, mapOf("foundLoyalty" to kept, "updatedAt" to Clock.System.now().toString()))
         }.await()
     }

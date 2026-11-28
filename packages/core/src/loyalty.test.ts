@@ -357,4 +357,128 @@ describe("allLoyaltyWithSource", () => {
       ["Alex Example", 0],
     ]);
   });
+
+  it("deduplicates masked, airline-prefixed, tier-suffixed, and aliased foundLoyalty entries", () => {
+    const at = "2026-11-01T00:00:00Z";
+    const profile = TravelProfile.parse({
+      ownerUid: "u1",
+      trustedEmails: [],
+      loyalty: [],
+      foundLoyalty: [
+        { program: "Qatar Airways Privilege Club", number: "QR-XXXXX3456/TIER", messageId: "m1", at },
+        { program: "Qatar Airways", number: "555123456", balance: "12,000 Avios", balanceAt: at, status: "Silver", statusAt: at, messageId: "m2", at },
+        { program: "United MileagePlus", number: "XXXXX901", messageId: "m3", at },
+        { program: "United Airlines MileagePlus", number: "UA-*****901", messageId: "m4", at },
+        { program: "AAdvantage", number: "AA-***7B8C", messageId: "m5", at },
+        { program: "American Airlines", number: "12A7B8C", messageId: "m6", at },
+        { program: "Airpoints", number: "NZ-7776665", messageId: "m7", at },
+        { program: "Air New Zealand", number: "7776665", messageId: "m8", at },
+        { program: "SkyMiles", number: "DL-9998887", messageId: "m9", at },
+        { program: "Delta Air Lines", number: "9998887", messageId: "m10", at },
+        { program: "Mileage Plan", number: "AS-3332221", messageId: "m11", at },
+        { program: "Alaska Airlines", number: "3332221", messageId: "m12", at },
+        { program: "Qantas Frequent Flyer", number: "QF-4445556", messageId: "m13", at },
+        { program: "Qantas", number: "4445556", messageId: "m14", at },
+        // Distinct household members sharing a masked tail stay separate.
+        { program: "United MileagePlus", number: "XXXXX444", person: "Alex Example", messageId: "m15", at },
+        { program: "United MileagePlus", number: "*****444", person: "Sam Example", messageId: "m16", at },
+        // Distinct alphanumeric accounts with arbitrary leading letters stay separate.
+        { program: "Example Air", number: "AB12345", messageId: "m17", at },
+        { program: "Example Air", number: "CD12345", messageId: "m18", at },
+      ],
+    });
+    const summaries = allLoyalty(profile).map(loyaltySummary);
+    expect(summaries).toHaveLength(11);
+    expect(summaries[0]).toMatchObject({
+      title: "Qatar Airways Privilege Club",
+      account: "555123456",
+      balance: "12,000 Avios",
+      status: "Silver",
+    });
+    expect(summaries[1]).toMatchObject({ title: "United Airlines MileagePlus", account: "XXXXX901" });
+    expect(summaries[2]).toMatchObject({ account: "12A7B8C" });
+    expect(summaries[3]).toMatchObject({ account: "7776665" });
+    expect(summaries[4]).toMatchObject({ account: "9998887" });
+    expect(summaries[5]).toMatchObject({ account: "3332221" });
+    expect(summaries[6]).toMatchObject({ account: "4445556" });
+    expect(summaries.slice(7, 9).map((s) => s.account)).toEqual(["AB12345", "CD12345"]);
+    expect(summaries.slice(9).map((s) => s.person).sort()).toEqual(["Alex Example", "Sam Example"]);
+
+    // Unprefixed X mask merges with full unmasked account number.
+    const mergedX = allLoyalty(
+      TravelProfile.parse({
+        ownerUid: "u1",
+        trustedEmails: [],
+        loyalty: [],
+        foundLoyalty: [
+          { program: "United MileagePlus", number: "XXXXX901", messageId: "x1", at },
+          { program: "United Airlines", number: "12345901", messageId: "x2", at },
+        ],
+      }),
+    );
+    expect(mergedX).toHaveLength(1);
+    expect(loyaltySummary(mergedX[0]!).account).toBe("12345901");
+
+    // Alias-aware programsFor still discovers aliased memberships from booking providers.
+    const entries = allLoyalty(profile);
+    expect(programsFor("Alaska Airlines", entries).map((e) => loyaltySummary(e).account)).toEqual(["3332221"]);
+
+    // Person-aware findFoundLoyalty resolves the matching household member's record.
+    const samCard = entries.find((e) => loyaltySummary(e).person === "Sam Example")!;
+    expect(findFoundLoyalty(profile.foundLoyalty ?? [], samCard)?.person).toBe("Sam Example");
+
+    // Reassigning Sam's masked card does not alter Alex's card sharing the same tail.
+    const reassigned = withLoyaltyPerson([], { program: "United MileagePlus", number: "*****444" }, "Pat Example");
+    const afterOverride = allLoyalty({ ...profile, loyaltyPeople: reassigned }).map(loyaltySummary);
+    expect(afterOverride.find((s) => s.account === "XXXXX444")?.person).toBe("Alex Example");
+    expect(afterOverride.find((s) => s.account === "*****444")?.person).toBe("Pat Example");
+
+    // Imported membership owned by Alex does not consume Sam's masked email sighting with the same tail.
+    const importedSplit = allLoyalty(
+      TravelProfile.parse({
+        ownerUid: "u1",
+        trustedEmails: [],
+        loyalty: [
+          {
+            title: "United MileagePlus",
+            fields: [
+              { label: "Account number", value: "12345444" },
+              { label: "Belongs to", value: "Alex Example" },
+            ],
+          },
+        ],
+        foundLoyalty: [{ program: "United MileagePlus", number: "*****444", person: "Sam Example", balance: "5,000 miles", balanceAt: at, messageId: "s1", at }],
+      }),
+    ).map(loyaltySummary);
+    expect(importedSplit).toHaveLength(2);
+    expect(importedSplit.find((s) => s.account === "12345444")).toMatchObject({ person: "Alex Example" });
+    expect(importedSplit.find((s) => s.account === "*****444")).toMatchObject({ person: "Sam Example", balance: "5,000 miles" });
+
+    // Different known airlines using short 2-letter codes stay separate even with the same masked tail.
+    const diffAirlines = allLoyalty(
+      TravelProfile.parse({
+        ownerUid: "u1",
+        trustedEmails: [],
+        loyalty: [{ title: "BA", fields: [{ label: "Account number", value: "BA-*****444" }] }],
+        foundLoyalty: [{ program: "United MileagePlus", number: "UA-*****444", messageId: "u1", at }],
+      }),
+    );
+    expect(diffAirlines).toHaveLength(2);
+
+    // An override saved against a second masked sighting still applies after deduplication collapses it.
+    const mergedOverride = allLoyalty(
+      TravelProfile.parse({
+        ownerUid: "u1",
+        trustedEmails: [],
+        loyalty: [],
+        foundLoyalty: [
+          { program: "United MileagePlus", number: "XXXXX901", messageId: "o1", at },
+          { program: "United MileagePlus", number: "*****901", messageId: "o2", at },
+        ],
+        loyaltyPeople: [{ program: "United MileagePlus", number: "*****901", person: "Pat Example" }],
+      }),
+    ).map(loyaltySummary);
+    expect(mergedOverride).toHaveLength(1);
+    expect(mergedOverride[0]?.person).toBe("Pat Example");
+  });
 });

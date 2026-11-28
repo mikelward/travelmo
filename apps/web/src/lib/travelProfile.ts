@@ -1,6 +1,6 @@
 "use client";
 
-import { LoyaltyPerson, ProfileEntry, TravelProfile, accessInvite, normalizeEmail, paths, queryAddresses, withLoyaltyPerson, type FoundLoyalty } from "@travelmo/core";
+import { LoyaltyPerson, ProfileEntry, TravelProfile, accessInvite, normalizeEmail, paths, queryAddresses, sameMembership, withLoyaltyPerson, type FoundLoyalty } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { collectionGroup, doc, onSnapshot, query, runTransaction, where, writeBatch, type Firestore } from "firebase/firestore";
 import { firestore } from "./firebase";
@@ -99,7 +99,9 @@ export async function removeFoundLoyalty(uid: string, found: FoundLoyalty, db: F
     const current: unknown[] = Array.isArray(stored) ? stored : [];
     const next = current.filter((f) => {
       const entry = f as Partial<FoundLoyalty> | null;
-      return !(entry?.program === found.program && entry?.number === found.number);
+      if (typeof entry?.program !== "string" || typeof entry?.number !== "string") return true;
+      const sameOwner = !entry.person || !found.person || entry.person === found.person;
+      return !(sameOwner && sameMembership({ program: entry.program, number: entry.number }, found));
     });
     tx.update(ref, { foundLoyalty: next, updatedAt: new Date().toISOString() });
   });
