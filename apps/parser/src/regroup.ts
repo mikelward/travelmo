@@ -18,7 +18,7 @@ import {
   type Segment,
   type Trip,
 } from "@travelmo/core";
-import { placeBookings } from "./placeBookings";
+import { placedFromTables } from "./placeBookings";
 import { importGaveTitle, settlingTripDates, sourceTripPrefix, tripTitle, type ImportDeps, type TripTx } from "./importer";
 
 // Rebuilding a user's trips from their bookings with the grouping imports
@@ -387,40 +387,85 @@ export async function regroupTrips(
   deps: Pick<ImportDeps, "store" | "now" | "log" | "homeOverrides" | "chosenHomeAirports" | "notHome">,
   budget = writeBudget,
 ): Promise<RegroupResult> {
-  const placed = await placeBookings(uid, deps);
-  const overrides = (await deps.homeOverrides?.(uid)) ?? [];
-  const chosen = (await deps.chosenHomeAirports?.(uid)) ?? [];
-  const notHome = (await deps.notHome?.(uid)) ?? [];
+  const [overrides, chosen, notHome] = await Promise.all([
+    deps.homeOverrides?.(uid).then((v) => v ?? []) ?? Promise.resolve([]),
+    deps.chosenHomeAirports?.(uid).then((v) => v ?? []) ?? Promise.resolve([]),
+    deps.notHome?.(uid).then((v) => v ?? []) ?? Promise.resolve([]),
+  ]);
+  let placingDone = false;
+  let placePasses = 0;
+  let regroupPasses = 0;
+  let placed = 0;
   let keptEmpty: Set<string> | undefined;
   let changed: number | undefined;
   let deleted = 0;
-  for (let pass = 0; pass < 50; pass++) {
-    const { more } = await deps.store.withUserLock(uid, async (lockTx) => {
+  while (placePasses < 50 && regroupPasses < 50) {
+    const step = await deps.store.withUserLock(uid, async (lockTx) => {
       // Bookings moved between trips change when each trip's person now
       // travels (liveBounds), settled once the pass has written them.
       const tx = settlingTripDates(lockTx, deps.now());
       const trips = await tx.listTrips();
-      const segmentsByTrip = new Map(await Promise.all(trips.map(async (trip) => [trip.id, await tx.listSegments(trip.id)] as const)));
+      const [entries, people] = await Promise.all([
+        Promise.all(trips.map(async (trip) => [trip.id, await tx.listSegments(trip.id)] as const)),
+        tx.listPeople(uid),
+      ]);
+      const segmentsByTrip = new Map(entries);
+      if (!placingDone) {
+        const toPlace = trips
+          .filter((trip) => !trip.deleting)
+          .map((trip) => ({
+            trip,
+            changed: (segmentsByTrip.get(trip.id) ?? []).flatMap((s) => {
+              const filled = placedFromTables(s);
+              return filled ? [filled] : [];
+            }),
+          }))
+          .filter((p) => p.changed.length > 0);
+        if (toPlace.length > 0) {
+          let writes = 0;
+          let count = 0;
+          let morePlace = false;
+          for (const { trip, changed: segments } of toPlace) {
+            if (writes > 0 && writes + segments.length + 1 > writeBudget) {
+              morePlace = true;
+              break;
+            }
+            for (const segment of segments) lockTx.putSegment(segment);
+            lockTx.touchTrip(trip.id, deps.now());
+            writes += segments.length + 1;
+            count += segments.length;
+          }
+          return { phase: "place" as const, count, morePlace };
+        }
+      }
       // Within the transaction, so a retried first pass reads it afresh.
       const empty = keptEmpty ?? new Set(trips.filter((trip) => (segmentsByTrip.get(trip.id) ?? []).length === 0).map((trip) => trip.id));
-      const people = await tx.listPeople(uid);
       const plan = planRegroup(trips, segmentsByTrip, () => deps.store.newId(), overrides, empty, chosen, people, notHome);
       const changedTrips = plan.trips.filter((t) => t.changed).length;
       const applied =
         changedTrips === 0 && plan.deleted.length === 0 ? { deleted: [], more: false } : applyPlan(tx, uid, plan, deps.now(), budget);
       tx.settle(trips, (tripId) => segmentsByTrip.get(tripId) ?? []);
-      return { ...applied, empty, changedTrips };
-    }).then((r) => {
-      keptEmpty ??= r.empty;
-      changed ??= r.changedTrips;
-      deleted += r.deleted.length;
-      return r;
+      return { phase: "regroup" as const, ...applied, empty, changedTrips };
     });
-    if (!more) {
+    if (step.phase === "place") {
+      placePasses += 1;
+      placed += step.count;
+      if (!step.morePlace) {
+        placingDone = true;
+        deps.log("bookings_placed", { uid, placed, passes: placePasses });
+      }
+      continue;
+    }
+    placingDone = true;
+    regroupPasses += 1;
+    keptEmpty ??= step.empty;
+    changed ??= step.changedTrips;
+    deleted += step.deleted.length;
+    if (!step.more) {
       const result = { changed: changed ?? 0, deleted, placed };
-      deps.log("regrouped", { uid, passes: pass + 1, ...result });
+      deps.log("regrouped", { uid, passes: regroupPasses, ...result });
       return result;
     }
   }
-  throw new Error("regrouping did not settle in 50 passes");
+  throw new Error(placePasses >= 50 ? "placing bookings did not settle in 50 passes" : "regrouping did not settle in 50 passes");
 }

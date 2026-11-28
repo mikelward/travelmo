@@ -8,12 +8,8 @@ import app.travelmo.log.TravelmoLog
 import com.google.firebase.auth.FirebaseAuth
 import com.mikelward.androidlog.safe
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 /** `POST /emails/add` and `/emails/remove` on the parser, with the user's Firebase ID token, as the web's api.ts sends them. */
@@ -21,6 +17,8 @@ class ParserEmailLinks(
     private val baseUrl: String,
     private val idToken: suspend () -> String? = { FirebaseAuth.getInstance().currentUser?.getIdToken(false)?.await()?.token },
 ) : EmailLinks {
+    private val client = ParserClient(baseUrl, idToken, readTimeoutMs = TIMEOUT_MS, connectTimeoutMs = TIMEOUT_MS)
+
     override val available: Boolean
         get() = parserEndpoint(baseUrl, ADD_EMAIL_PATH) != null
 
@@ -39,7 +37,7 @@ class ParserEmailLinks(
             throw EmailLinkFailed(TRY_AGAIN, e)
         } ?: throw EmailLinkFailed(TRY_AGAIN)
         val (status, body) = try {
-            post(endpoint, token, JSONObject().put("email", email).toString())
+            client.postWithToken(endpoint, token, JSONObject().put("email", email).toString())
         } catch (e: IOException) {
             TravelmoLog.failure(e, "%s failed: the parser could not be reached", safe(what))
             throw EmailLinkFailed(TRY_AGAIN, e)
@@ -50,24 +48,6 @@ class ParserEmailLinks(
             throw EmailLinkFailed(refusal?.text ?: TRY_AGAIN)
         }
         TravelmoLog.info("%s done", safe(what))
-    }
-
-    private suspend fun post(endpoint: String, token: String, json: String): Pair<Int, String> = withContext(Dispatchers.IO) {
-        val connection = URL(endpoint).openConnection() as HttpURLConnection
-        try {
-            connection.requestMethod = "POST"
-            connection.connectTimeout = TIMEOUT_MS
-            connection.readTimeout = TIMEOUT_MS
-            connection.doOutput = true
-            connection.setRequestProperty("Authorization", "Bearer $token")
-            connection.setRequestProperty("Content-Type", "application/json")
-            connection.outputStream.use { it.write(json.toByteArray()) }
-            val status = connection.responseCode
-            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-            status to (stream?.bufferedReader()?.use { it.readText() } ?: "")
-        } finally {
-            connection.disconnect()
-        }
     }
 
     private companion object {

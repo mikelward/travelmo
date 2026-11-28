@@ -9,12 +9,8 @@ import app.travelmo.log.TravelmoLog
 import com.google.firebase.auth.FirebaseAuth
 import com.mikelward.androidlog.safe
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withContext
 
 /**
  * `POST /access/check` on the parser, with the user's Firebase ID token as
@@ -28,6 +24,8 @@ class ParserAccessCheck(
     private val baseUrl: String,
     private val idToken: suspend () -> String? = { FirebaseAuth.getInstance().currentUser?.getIdToken(false)?.await()?.token },
 ) : AccessCheck {
+    private val client = ParserClient(baseUrl, idToken, readTimeoutMs = TIMEOUT_MS, connectTimeoutMs = TIMEOUT_MS)
+
     override suspend fun check(): AccountAccess? {
         val endpoint = parserEndpoint(baseUrl, ACCESS_CHECK_PATH) ?: return null
         return try {
@@ -35,7 +33,7 @@ class ParserAccessCheck(
                 TravelmoLog.warning("Checking access skipped: no ID token")
                 return null
             }
-            val (status, body) = post(endpoint, token)
+            val (status, body) = client.postWithToken(endpoint, token, retryOnDrop = true)
             if (isDeletionUnfinished(status, body)) {
                 TravelmoLog.warning("Checking access found the account's deletion unfinished")
                 throw AccountDeletionUnfinished()
@@ -57,25 +55,6 @@ class ParserAccessCheck(
         } catch (e: Exception) {
             TravelmoLog.failure(e, "Checking access failed")
             null
-        }
-    }
-
-    private suspend fun post(endpoint: String, token: String): Pair<Int, String> = withContext(Dispatchers.IO) {
-        val connection = URL(endpoint).openConnection() as HttpURLConnection
-        try {
-            connection.requestMethod = "POST"
-            connection.connectTimeout = TIMEOUT_MS
-            connection.readTimeout = TIMEOUT_MS
-            connection.doOutput = true
-            connection.setRequestProperty("Authorization", "Bearer $token")
-            connection.setRequestProperty("Content-Type", "application/json")
-            connection.outputStream.use { it.write("{}".toByteArray()) }
-            val status = connection.responseCode
-            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-            val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-            status to body
-        } finally {
-            connection.disconnect()
         }
     }
 
