@@ -14,9 +14,9 @@
 // PLAY_RELEASES (GitHub's release list) since the one Play has. Then it
 // compares each language's texts and images with Play's, replaces only what
 // differs, and commits once; with nothing new it commits nothing. Play
-// limits how many edits an app may commit a day, so the play workflow runs
-// this hourly rather than on every push. On any failure the edit is deleted,
-// so Play never sees half a release.
+// limits how many edits an app may commit a day, so the play workflow triggers
+// after main CI succeeds and coalesces rapid pushes with a 45-minute cooldown.
+// On any failure the edit is deleted, so Play never sees half a release.
 import { createHash, createSign } from "node:crypto";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";

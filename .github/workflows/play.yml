@@ -1,26 +1,34 @@
 name: play
 # Puts the newest GitHub release (which ci's Publish job makes on every push
-# to main) and the store listing on Play, hourly, in one edit. Play limits
-# how many edits an app may commit a day, and committing on every push used
-# it up on busy days ("Daily save quota exceeded"), stopping every upload
-# until the next day. Hourly, with the bundle and listing together and
-# nothing committed when Play is already current, stays well inside it.
-# Run it by hand (Actions → play → Run workflow) not to wait for the hour.
+# to main) and the store listing on Play, in one edit, triggered when main CI
+# succeeds. Play limits how many edits an app may commit a day, and committing
+# on every push used it up on busy days ("Daily save quota exceeded"),
+# stopping every upload until the next day. The first push after a quiet period
+# publishes immediately; follow-up pushes within 45 minutes coalesce into one
+# edit, and nothing runs when there is no new code.
+# Run it by hand (Actions → play → Run workflow) to publish without waiting.
 on:
-  schedule:
-    - cron: "17 * * * *"
+  workflow_run:
+    workflows: ["ci"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
-# One at a time; a run that starts while another is publishing waits.
+  actions: read
+# One at a time; a run that starts while another is publishing or cooling down
+# waits (and GitHub supersedes older queued runs automatically).
 concurrency:
   group: play
   cancel-in-progress: false
 jobs:
   publish:
     name: Publish to Play
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 65
     environment: production
     env:
       HAS_PLAY_SA: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
@@ -28,24 +36,57 @@ jobs:
       - name: Say when nothing can be published yet
         if: env.HAS_PLAY_SA != 'true'
         run: echo "::warning::No Play publishing until PLAY_SERVICE_ACCOUNT_JSON is set in the production environment (README 'Release')."
+      - name: Coalesce rapid releases
+        id: cooldown
+        if: env.HAS_PLAY_SA == 'true' && github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_DONE_AT: ${{ github.event.workflow_run.updated_at }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+          COOLDOWN_SECONDS: "2700"
+        run: |
+          set -euo pipefail
+          last=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/play.yml/runs?status=success&per_page=10" \
+            --jq "[.workflow_runs[] | select(.id != ($CURRENT_RUN_ID | tonumber))] | first // empty | .updated_at")
+          if [ -z "$last" ]; then
+            echo "No previous Play run; publishing immediately."
+            exit 0
+          fi
+          ci_epoch=$(date -u -d "$CI_DONE_AT" +%s)
+          last_done_epoch=$(date -u -d "$last" +%s)
+          # If the previous Play run finished at least 2 minutes after this CI
+          # run completed, it already fetched and published this release.
+          if [ "$last_done_epoch" -ge "$((ci_epoch + 120))" ]; then
+            echo "Previous Play run ($last) already covered CI ($CI_DONE_AT); skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          now_epoch=$(date -u +%s)
+          elapsed=$((now_epoch - last_done_epoch))
+          if [ "$elapsed" -lt "$COOLDOWN_SECONDS" ]; then
+            wait_s=$((COOLDOWN_SECONDS - elapsed))
+            echo "Last Play publish was ${elapsed}s ago; coalescing for ${wait_s}s."
+            sleep "$wait_s"
+          fi
       - uses: actions/checkout@v5
-        if: env.HAS_PLAY_SA == 'true'
+        if: env.HAS_PLAY_SA == 'true' && steps.cooldown.outputs.skip != 'true'
         with:
           persist-credentials: false
       # setup-node sees the repository's packageManager and wants pnpm on the path to
       # cache with, though this job installs nothing: without it, it stops. Its cache
       # is off too, as there is nothing to cache.
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320  # v4.4.0
-        if: env.HAS_PLAY_SA == 'true'
+        if: env.HAS_PLAY_SA == 'true' && steps.cooldown.outputs.skip != 'true'
       - uses: actions/setup-node@v5
-        if: env.HAS_PLAY_SA == 'true'
+        if: env.HAS_PLAY_SA == 'true' && steps.cooldown.outputs.skip != 'true'
         with:
           node-version-file: .node-version
           package-manager-cache: false
       # The newest release whose bundle finished uploading; a release still
-      # receiving its bundle waits for the next hour.
+      # receiving its bundle is picked up by its own CI completion.
       - name: Fetch the newest release's bundle
-        if: env.HAS_PLAY_SA == 'true'
+        id: fetch
+        if: env.HAS_PLAY_SA == 'true' && steps.cooldown.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -62,10 +103,12 @@ jobs:
           fi
           read -r tag aab <<< "$newest"
           gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$aab" --dir "$dir"
-          echo "PLAY_RELEASES=$dir/releases.json" >> "$GITHUB_ENV"
-          echo "PLAY_BUNDLE=$dir/$aab" >> "$GITHUB_ENV"
+          echo "releases=$dir/releases.json" >> "$GITHUB_OUTPUT"
+          echo "bundle=$dir/$aab" >> "$GITHUB_OUTPUT"
       - name: Publish the release and the listing to Play
-        if: env.HAS_PLAY_SA == 'true'
+        if: env.HAS_PLAY_SA == 'true' && steps.cooldown.outputs.skip != 'true'
         env:
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          PLAY_RELEASES: ${{ steps.fetch.outputs.releases }}
+          PLAY_BUNDLE: ${{ steps.fetch.outputs.bundle }}
         run: node scripts/publish-play.mjs

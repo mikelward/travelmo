@@ -29,7 +29,9 @@ rules:
     # Load-bearing pull_request_target usage in the codex-review pair,
     # reasoned through in mikelward/codex-review's own docs/CONSUMER.md:
     # neither checks out or executes pull request code with the elevated
-    # token.
+    # token. play.yml uses workflow_run on ci's main push runs only, checks
+    # out main (never PR code), and downloads only releases created by ci.
     ignore:
       - codex-review.yml
       - codex-review-check.yml
+      - play.yml
