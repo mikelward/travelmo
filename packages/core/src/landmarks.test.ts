@@ -403,6 +403,7 @@ describe("tripLandmark", () => {
       expect(ids.has(landmark.id)).toBe(false);
       ids.add(landmark.id);
       expect(landmark.d.trim().length).toBeGreaterThan(0);
+      if (landmark.dashed !== undefined) expect(landmark.dashed.trim().length).toBeGreaterThan(0);
       const isCountry = (landmark.countries?.length ?? 0) > 0 && landmark.cities.length === 0;
       for (const city of landmark.cities) {
         expect(foldText(city)).toBe(city);
@@ -429,6 +430,15 @@ describe("tripLandmark", () => {
       }
     }
     expect(LANDMARKS.length).toBe(490);
+    expect(LANDMARKS.filter((l) => l.dashed).map((l) => l.id).sort()).toEqual([
+      "india",
+      "israel",
+      "morocco",
+      "pakistan",
+      "serbia",
+      "syria",
+      "ukraine",
+    ]);
   });
 });
 

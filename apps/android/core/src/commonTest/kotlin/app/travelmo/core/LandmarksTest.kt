@@ -435,7 +435,12 @@ class LandmarksTest {
                 assertEquals(word, foldText(word))
                 assertEquals(true, seenFallbacks.add(word))
             }
+            landmark.dashed?.let { assertEquals(true, it.isNotBlank()) }
         }
+        assertEquals(
+            listOf("india", "israel", "morocco", "pakistan", "serbia", "syria", "ukraine"),
+            landmarks.filter { it.dashed != null }.map { it.id }.sorted(),
+        )
     }
 
     @Test

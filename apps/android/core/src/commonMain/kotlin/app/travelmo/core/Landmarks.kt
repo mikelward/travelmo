@@ -15,6 +15,8 @@ data class Landmark(
     /** The city names it stands for, folded ([foldText]). */
     val cities: List<String>,
     val d: String,
+    /** Optional secondary SVG path drawn with a dashed stroke (disputed or occupied territory borders). */
+    val dashed: String? = null,
     /**
      * The country names it stands for, folded ([foldText]): matched only when the title names no place from
      * [cities] or city [capitalized], and before [fallback], so "Paris, France" is Paris and "Summer in France" is France.
@@ -84,7 +86,8 @@ val landmarks: List<Landmark> by lazy {
         val not = parseArrayField(line, "\"not\":[", cursor)?.also { cursor = it.second }?.first.orEmpty()
         val fallback = parseArrayField(line, "\"fallback\":[", cursor)?.also { cursor = it.second }?.first.orEmpty()
         val dHit = parseStringField(line, "\"d\":\"", cursor) ?: continue
-        out.add(Landmark(idHit.first, nameHit.first, citiesHit.first, dHit.first, countries = countries, capitalized = capitalized, not = not, fallback = fallback))
+        val dashed = parseStringField(line, "\"dashed\":\"", dHit.second)?.first
+        out.add(Landmark(idHit.first, nameHit.first, citiesHit.first, dHit.first, dashed = dashed, countries = countries, capitalized = capitalized, not = not, fallback = fallback))
     }
     out.also { check(it.any { l -> l.id == "trip" }) { "landmarks.json has no suitcase" } }
 }

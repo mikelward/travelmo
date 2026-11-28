@@ -39,6 +39,9 @@ export interface Landmark {
   // "Summer vacation" is Summer.
   fallback?: readonly string[];
   d: string;
+  // Optional secondary SVG path drawn with a dashed stroke (disputed or
+  // occupied territory borders on country map outlines).
+  dashed?: string;
 }
 
 export const LANDMARKS: readonly Landmark[] = table.landmarks;
