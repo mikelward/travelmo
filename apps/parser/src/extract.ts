@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { ExtractedBooking, stripForwardPrefix, unwrapForwarded } from "@travelmo/core";
+import { ExtractedBooking, extractBcbpStrings, stripForwardPrefix, unwrapForwarded } from "@travelmo/core";
 import { z } from "zod";
 import type { Attachment, EmailMessage } from "./gmail";
 import type { Embedder } from "./importer";
@@ -12,7 +12,7 @@ import { withInferredYears } from "./years";
 // email" then reads again the emails an older reader judged that way, from
 // travel senders (refresh.ts `readAgain`). Records from before versions were
 // kept have none, and count as older.
-export const readerVersion = 2;
+export const readerVersion = 3;
 
 export type Extractor = (message: EmailMessage, attachments?: readonly Attachment[]) => Promise<ExtractedBooking>;
 
@@ -44,11 +44,13 @@ Rules:
 - provider: airline, hotel brand, rental company or booking site.
 - rentalStage, for a car rental only: "reservation" for a booking made ahead, "agreement" for the rental agreement or receipt given when the car is picked up or returned.
 - travelers: each passenger, guest or attendee the segment is for, by name exactly as the email writes it (e.g. "SMITH/JOHN MR", "Mrs Jane Doe"); never the person a receipt or marketing greets unless the email says they travel, and never a company. Leave travelers out when the email names nobody.
+- boardingPasses: for a flight boarding pass email or attached PDF boarding pass (e.g. Qatar Airways, TUI, British Airways, etc.), list one entry per passenger on that flight leg with passenger (as written), seat (e.g. "14A"), gate (e.g. "B14"), boardingGroup (e.g. "2" or "Zone B"), boardingTime (local time as written, e.g. "08:05"), sequence (SEQ number), cabin (e.g. "Economy", "Business"), terminal, and barcode (only if a raw IATA BCBP string starting with M1..M9 is explicitly readable—never invent a barcode). Leave boardingPasses out when the email is not a boarding pass.
 - If the email cancels a booking (a cancellation confirmation, not a change or a reminder), set isBooking=false with no segments, and list each cancelled booking in cancellations with whatever the email gives: type, provider, confirmation, place (the hotel, venue or route as named), for a stay or event its city when the email gives it, for a flight, train, bus or ferry its origin and destination (the codes or names the email gives), and start/end in the same form as above (with the time the email gives, or 00:00 when it gives none).
 - memberships: each loyalty program number the email shows for a traveler (a frequent flyer, hotel rewards or rental club number): program as named (when the email gives only a generic label such as "Frequent flyer", the airline or company whose program it is, e.g. "United MileagePlus" for a number written "UA-…" or on a United booking), number exactly as written, holder (the member's name as written; when the email lists travelers one after another, each with their own details, the name of the traveler whose details the number is listed with), status (tier) and balance (the points, miles or credits as written, e.g. "12,400 points") when given. Never a booking reference, ticket number, card number or payment detail. Leave memberships out when there are none.
 - A travel loyalty program's statement, account summary or news of a new status ("Welcome to Silver Medallion Status") from an airline, hotel, car rental, rail or cruise program is not a booking: set isBooking=false with no segments, and list its membership with the number, balance and status it gives (a header such as "#9168692292 Silver Medallion 49,606 Miles" gives all three).
 - memberships are travel programs only (airline, hotel, car rental, rail, cruise): never a shop's, supermarket's, restaurant's, coffee chain's, bank's or credit card's, and never a medical, health insurance, political, union, religious, club, gym or any other membership.
-- PDFs attached to the email are part of it: a ticket or confirmation may give the journey, times, seats or booking reference only there. Read them as you read the email.
+- documents: if the email or an attached PDF is an approved government travel authorization or immigration status email—such as a UK immigration status share code, UK ETA, US ESTA, Canada eTA, Australia ETA/eVisitor, New Zealand NZeTA, EU ETIAS, or an eVisa—set isBooking=false (unless it also confirms a booking) and list each document with type ("share_code", "eta", "esta", "evisa", "visa", or "other"), title (e.g. "UK ETA", "US ESTA", "Australia eVisitor", "UK share code"), country (the destination country it admits to, e.g. "United Kingdom", "United States"), number (reference, authorization, grant, or 9-character share code), expires (ISO YYYY-MM-DD when given), issued (ISO YYYY-MM-DD when given), and holder (traveler name when given). Never extract receipts for applications that are not yet approved, and never extract unrelated government or tax mail.
+- PDFs attached to the email are part of it: a ticket, boarding pass, or travel authorization may give the journey, times, seats, gate, or reference only there. Read them as you read the email.
 - Do not invent details that are not in the email.`;
 
 export function geminiExtractor(client: GoogleGenAI, model: string): Extractor {
@@ -76,6 +78,14 @@ export function geminiExtractor(client: GoogleGenAI, model: string): Extractor {
     // A date the model put before the email in a year the email never shows
     // is the next such date (years.ts), unless a PDF it read may show it.
     const booking = parseExtraction(text, message.id);
+    const bcbps = extractBcbpStrings(message.text);
+    if (bcbps.length === 1) {
+      const flightPasses = booking.segments.flatMap((s) => (s.type === "flight" ? (s.boardingPasses ?? []) : []));
+      if (flightPasses.length === 1 && !flightPasses[0]!.barcode) {
+        flightPasses[0]!.barcode = bcbps[0]!;
+        flightPasses[0]!.barcodeFormat ??= "qr";
+      }
+    }
     return attachments.length > 0 ? booking : withInferredYears(booking, `${message.subject}\n${message.text}`, bookedOn(message));
   };
 }

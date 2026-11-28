@@ -330,4 +330,46 @@ class BookingDetailTest {
         composeRule.onNodeWithText("1 Station Road, Liverpool").assertExists()
         composeRule.onNodeWithText("2 Airport Way, Manchester").assertExists()
     }
+
+    @Test
+    fun `a flight with boarding passes shows them and opens the scannable dialog`() {
+        val flight = Segment(
+            id = "f-qr",
+            tripId = "doha",
+            type = SegmentType.FLIGHT,
+            title = "QR 008",
+            provider = "Qatar Airways",
+            confirmation = "EXPNR1",
+            start = "2026-12-01T15:05:00+00:00",
+            end = "2026-12-02T00:50:00+03:00",
+            origin = Place("London Heathrow", code = "LHR"),
+            destination = Place("Doha Hamad", code = "DOH"),
+            boardingPasses = listOf(
+                app.travelmo.core.BoardingPass(
+                    passenger = "Sam Example",
+                    seat = "14A",
+                    gate = "B34",
+                    boardingGroup = "Zone 2",
+                    boardingTime = "14:20",
+                    barcode = "M1EXAMPLE/SAM         EEXPNR1 LHRDOHQR 0008 335Y014A0042 100",
+                ),
+                app.travelmo.core.BoardingPass(
+                    passenger = "Pat Example",
+                    seat = "14B",
+                    gate = "B34",
+                    boardingGroup = "Zone 2",
+                    boardingTime = "14:20",
+                    barcode = "M1EXAMPLE/PAT         EEXPNR1 LHRDOHQR 0008 335Y014B0043 100",
+                ),
+            ),
+        )
+        composeRule.setContent { TravelmoTheme { BookingDetails(flight) } }
+        composeRule.onNodeWithText("Boarding passes").assertExists()
+        composeRule.onNodeWithText("14A").assertExists()
+        composeRule.onNodeWithText("Pat Example").performClick()
+        composeRule.onNodeWithText("14B").assertExists()
+        composeRule.onNodeWithText("Show boarding pass").performClick()
+        composeRule.onNodeWithText("Scan at security or gate").assertExists()
+        composeRule.onNodeWithText("Done").performClick()
+    }
 }

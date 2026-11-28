@@ -120,6 +120,16 @@ describe("saveSegment", () => {
     expect(await readTrip()).toMatchObject({ start: "2026-12-10", end: "2026-12-14" });
   });
 
+  it("preserves stored boardingPasses when editing a booking without boardingPasses in the form payload", async () => {
+    const passes = [{ passenger: "Sam Example", seat: "14A", gate: "B14", barcode: "M1EXAMPLE/SAM E4K8M2" }];
+    await seed(async (db) => {
+      await setDoc(doc(db, paths.segment(trip.id, imported.id)), { ...imported, type: "flight", boardingPasses: passes });
+    });
+    const saved = await saveSegment(asOwner(), trip.id, flight("2026-12-12"), { ...imported, type: "flight" });
+    expect(saved.boardingPasses).toEqual(passes);
+    expect((await getDoc(doc(asOwner(), paths.segment(trip.id, imported.id)))).data()?.boardingPasses).toEqual(passes);
+  });
+
   it("records a hand edit, and not a rating, a favorite mark or a move", async () => {
     await rateSegment(asOwner(), trip.id, imported.id, 4);
     await favoriteSegment(asOwner(), trip.id, imported.id, true);

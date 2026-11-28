@@ -1,8 +1,8 @@
-import { backfillBatch, backfillSubjects, statementDays, statementSubjects } from "./backfill";
+import { backfillBatch, backfillSubjects, documentSubjects, statementDays, statementSubjects } from "./backfill";
 import { isPdf, withinAttachmentLimits, type EmailMessage, type MessagePage } from "./gmail";
 import type { MailSource } from "./mailSource";
 import type { ChangesResult } from "./newMailPoll";
-import { travelLoyaltyDomains } from "./prefilter";
+import { travelDocumentDomains, travelLoyaltyDomains } from "./prefilter";
 import { bodyChoice } from "./text";
 
 // Fastmail over JMAP (RFC 8620, RFC 8621), with an API token the user made
@@ -165,8 +165,8 @@ export async function mailboxRoles(jmap: Jmap): Promise<{ inbox: string[]; exclu
 }
 
 // The backfill's search (backfill.ts) as a JMAP filter: booking-like
-// subjects anywhere but trash and junk, and travel programs' recent
-// statements.
+// subjects anywhere but trash and junk, travel documents (GOV.UK share codes,
+// ETAs, ESTAs, eVisas), and travel programs' recent statements.
 export function backfillFilter(excludedMailboxes: readonly string[], now: Date): Record<string, unknown> {
   const anySubject = (terms: readonly string[]) => ({ operator: "OR", conditions: terms.map((subject) => ({ subject })) });
   const since = new Date(now.getTime() - statementDays * 24 * 60 * 60 * 1000).toISOString().replace(/\.\d+Z$/, "Z");
@@ -178,7 +178,14 @@ export function backfillFilter(excludedMailboxes: readonly string[], now: Date):
       { operator: "OR", conditions: travelLoyaltyDomains.map((from) => ({ from })) },
     ],
   };
-  const booking = { operator: "OR", conditions: [...anySubject(backfillSubjects).conditions, statements] };
+  const travelDocuments = {
+    operator: "OR",
+    conditions: [
+      ...anySubject(documentSubjects).conditions,
+      ...travelDocumentDomains.map((from) => ({ from })),
+    ],
+  };
+  const booking = { operator: "OR", conditions: [...anySubject(backfillSubjects).conditions, travelDocuments, statements] };
   return excludedMailboxes.length === 0
     ? booking
     : // In none of them: `inMailboxOtherThan` would keep an email in the

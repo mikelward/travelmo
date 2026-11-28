@@ -69,6 +69,23 @@ data class Segment(
     val userCancelled: String? = null,
     /** Who it is for, as people write their names (SPEC "Travelers"); empty when its emails named nobody. */
     val travelers: List<String> = emptyList(),
+    /** Boarding passes extracted from check-in emails or attached PDFs, stored offline-ready on the flight. */
+    val boardingPasses: List<BoardingPass> = emptyList(),
+)
+
+/** One passenger's boarding pass extracted from a check-in email or attached PDF. */
+data class BoardingPass(
+    val passenger: String,
+    val seat: String? = null,
+    val gate: String? = null,
+    val boardingGroup: String? = null,
+    val boardingTime: String? = null,
+    val sequence: String? = null,
+    val cabin: String? = null,
+    val terminal: String? = null,
+    val barcode: String? = null,
+    val barcodeFormat: String? = null,
+    val messageId: String? = null,
 )
 
 val Segment.isCancelled: Boolean get() = cancelledAt != null

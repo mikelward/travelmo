@@ -707,4 +707,21 @@
     <string name="wallet_shared_with_you_hint">View shared wallets from the person switcher in Wallet.</string>
     <string name="document_expires_on">Expires %1$s</string>
     <string name="document_expired_on">Expired %1$s</string>
+    <string name="show_boarding_pass">Show boarding pass</string>
+    <string name="boarding_pass_offline">OFFLINE</string>
+    <string name="boarding_pass_saved_offline">SAVED OFFLINE</string>
+    <string name="boarding_pass_passenger">Passenger</string>
+    <string name="boarding_pass_gate">Gate</string>
+    <string name="boarding_pass_board">Board</string>
+    <string name="boarding_pass_group">Group</string>
+    <string name="boarding_pass_seat">Seat</string>
+    <string name="boarding_pass_scan_hint">Scan at security or gate</string>
+    <string name="boarding_pass_no_barcode">No barcode data was found in the email. Use your confirmation reference at the counter or open Google Wallet.</string>
+    <string name="boarding_pass_done">Done</string>
+    <string name="booking_provider_label">Provider</string>
+    <string name="booking_confirmation_label">Confirmation</string>
+    <string name="booking_travelers_label">Travelers</string>
+    <string name="booking_loyalty_label">Loyalty</string>
+    <string name="booking_notes_label">Notes</string>
+    <string name="booking_copy">Copy</string>
 </resources>

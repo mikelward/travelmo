@@ -95,9 +95,10 @@ export async function saveSegment(db: Firestore, tripId: string, extracted: Extr
       if (current.data.mergedFrom) saved.mergedFrom = current.data.mergedFrom;
       if (current.data.mergedBookings) saved.mergedBookings = current.data.mergedBookings;
       if (current.data.userCancelled) saved.userCancelled = current.data.userCancelled;
-      // Who it is for comes from its emails; the form doesn't edit it.
+      // Who it is for and its boarding passes come from its emails; the form doesn't edit them.
       if (current.data.travelers) saved.travelers = current.data.travelers;
       if (current.data.rentalStage) saved.rentalStage = current.data.rentalStage;
+      if (current.data.boardingPasses) saved.boardingPasses = current.data.boardingPasses;
     } else {
       // A booking added to a cancelled trip is cancelled with it.
       saved = inTrip(saved, trip, timestamp);

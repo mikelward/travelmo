@@ -1,7 +1,7 @@
 import type { BackfillProgress } from "@travelmo/core";
 import { GmailRateLimited, withRateLimitRetry, type MessagePage } from "./gmail";
 import { emptyCounts, type ImportCounts } from "./importer";
-import { travelLoyaltyDomains } from "./prefilter";
+import { travelDocumentDomains, travelLoyaltyDomains } from "./prefilter";
 
 // Reading a whole mailbox's history, in batches small enough for one
 // request: each batch searches on from where the last stopped (Gmail's page
@@ -9,21 +9,26 @@ import { travelLoyaltyDomains } from "./prefilter";
 // far it got. Every message is claimed once, so a batch read twice, or a
 // reading started over, costs Gmail reads but never imports twice.
 
-// Booking-like subjects over the whole mailbox, and travel programs' recent
-// statements and news of a new status ("Welcome to Silver Medallion®
-// Status"; the pre-filter reads only those under 60 days old); the
-// pre-filter and the model decide the rest.
+// Booking-like subjects over the whole mailbox, travel documents (GOV.UK share
+// codes, ETAs, ESTAs, eVisas), and travel programs' recent statements and news
+// of a new status ("Welcome to Silver Medallion® Status"; the pre-filter reads
+// only those under 60 days old); the pre-filter and the model decide the rest.
 // The same search for every provider, in its own query language.
 export const backfillSubjects = [
   "booking", "reservation", "confirmation", "confirmed", "itinerary", "ticket", "tickets", "flight", "hotel", "rental",
   "check-in", "boarding pass", "cancellation", "cancelation", "cancelled", "canceled",
 ] as const;
+export const documentSubjects = [
+  "immigration status", "share code", "electronic travel authorisation", "electronic travel authorization",
+  "travel authorization", "evisa", "e-visa",
+] as const;
 export const statementSubjects = ["statement", "estatement", "account summary", "balance", "status", "medallion", "elite"] as const;
 export const statementDays = 60;
 const gmailTerm = (term: string) => (term.includes(" ") ? `"${term}"` : term);
 const statements = `(subject:(${statementSubjects.map(gmailTerm).join(" OR ")}) newer_than:${statementDays}d from:(${travelLoyaltyDomains.join(" OR ")}))`;
+const travelDocuments = `(subject:(${documentSubjects.map(gmailTerm).join(" OR ")}) OR from:(${travelDocumentDomains.join(" OR ")}))`;
 export const backfillQuery =
-  `-in:spam -in:trash {${backfillSubjects.map((s) => `subject:${gmailTerm(s)}`).join(" ")} ${statements}}`;
+  `-in:spam -in:trash {${backfillSubjects.map((s) => `subject:${gmailTerm(s)}`).join(" ")} ${travelDocuments} ${statements}}`;
 // Messages per batch: enough to make progress, in one search call. A batch
 // that runs short of time stops early (see `timeLeftMs`), so it always ends
 // inside a request.

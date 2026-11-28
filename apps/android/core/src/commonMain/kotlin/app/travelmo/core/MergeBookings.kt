@@ -24,6 +24,8 @@ fun mergedBookingDocument(keep: Map<String, Any?>, other: Map<String, Any?>, oth
     // Everyone either names, each once, as many as a booking holds.
     val travelers = canonicalTravelers(((keep["travelers"] as? List<*>).orEmpty() + (other["travelers"] as? List<*>).orEmpty()).filterIsInstance<String>())
     if (travelers != null) merged["travelers"] = travelers
+    val passes = mergeBoardingPassDocs(keep["boardingPasses"], other["boardingPasses"])
+    if (passes.isNotEmpty()) merged["boardingPasses"] = passes
     if (keep["favorite"] == true || other["favorite"] == true) merged["favorite"] = true
     val sources = ((keep["sources"] as? List<*>).orEmpty() + (other["sources"] as? List<*>).orEmpty())
         .distinctBy { (it as? Map<*, *>)?.let { s -> s["kind"] to s["id"] } ?: it }
@@ -42,4 +44,51 @@ fun mergedBookingDocument(keep: Map<String, Any?>, other: Map<String, Any?>, oth
     merged["editedAt"] = now
     merged["updatedAt"] = now
     return merged
+}
+
+private fun normPassPassenger(name: String): String {
+    val out = StringBuilder()
+    var space = false
+    for (ch in name.trim().lowercase()) {
+        if (ch.isLetterOrDigit()) {
+            if (space && out.isNotEmpty()) out.append(' ')
+            out.append(ch)
+            space = false
+        } else {
+            space = true
+        }
+    }
+    return out.toString()
+}
+
+private fun samePassPassenger(a: String, b: String): Boolean =
+    sameTraveler(a, b) || (normPassPassenger(a).isNotEmpty() && normPassPassenger(a) == normPassPassenger(b))
+
+private fun mergeBoardingPassDocs(keepRaw: Any?, otherRaw: Any?): List<Map<String, Any?>> {
+    val keepList = (keepRaw as? List<*>).orEmpty().filterIsInstance<Map<*, *>>().mapNotNull { m ->
+        val passenger = (m["passenger"] as? String)?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+        m.entries.associate { (k, v) -> k.toString() to v } + ("passenger" to passenger)
+    }
+    val otherList = (otherRaw as? List<*>).orEmpty().filterIsInstance<Map<*, *>>().mapNotNull { m ->
+        val passenger = (m["passenger"] as? String)?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+        m.entries.associate { (k, v) -> k.toString() to v } + ("passenger" to passenger)
+    }
+    if (keepList.isEmpty() && otherList.isEmpty()) return emptyList()
+    val out = keepList.toMutableList()
+    val fields = listOf("seat", "gate", "boardingGroup", "boardingTime", "sequence", "cabin", "terminal", "barcode", "barcodeFormat", "messageId")
+    for (pass in otherList) {
+        val passenger = pass["passenger"] as String
+        val idx = out.indexOfFirst { samePassPassenger(it["passenger"] as String, passenger) }
+        if (idx >= 0) {
+            val prev = out[idx]
+            val combined = prev.toMutableMap()
+            for (f in fields) {
+                if (combined[f] == null && pass[f] != null) combined[f] = pass[f]
+            }
+            out[idx] = combined
+        } else if (out.size < 20) {
+            out += pass
+        }
+    }
+    return out
 }

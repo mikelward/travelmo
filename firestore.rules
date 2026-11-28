@@ -196,7 +196,7 @@ service cloud.firestore {
         function validSegment(segment) {
           return segment.keys().hasOnly(['id', 'tripId', 'type', 'title', 'provider', 'confirmation', 'start', 'end',
               'origin', 'destination', 'notes', 'rentalStage', 'source', 'gmailMessageIds', 'sources', 'sender', 'rating', 'favorite',
-              'cancelledAt', 'cancelledBy', 'cancelledSentAt', 'restoredFrom', 'restoredAt', 'userCancelled', 'travelers', 'editedAt', 'mergedFrom', 'mergedBookings', 'createdAt', 'updatedAt'])
+              'cancelledAt', 'cancelledBy', 'cancelledSentAt', 'restoredFrom', 'restoredAt', 'userCancelled', 'travelers', 'editedAt', 'mergedFrom', 'mergedBookings', 'boardingPasses', 'createdAt', 'updatedAt'])
             && segment.id == segmentId && segment.tripId == tripId
             && segment.type in ['flight', 'train', 'bus', 'ferry', 'lodging', 'car_rental', 'activity', 'meal', 'other']
             && segment.title is string && segment.title.size() > 0 && segment.title.size() <= 200
@@ -217,6 +217,7 @@ service cloud.firestore {
             && (!('editedAt' in segment) || isInstant(segment.editedAt))
             && (!('mergedFrom' in segment) || (segment.mergedFrom is list && segment.mergedFrom.size() <= 50))
             && (!('mergedBookings' in segment) || (segment.mergedBookings is list && segment.mergedBookings.size() <= 50))
+            && (!('boardingPasses' in segment) || (segment.boardingPasses is list && segment.boardingPasses.size() <= 20))
             && (!('rentalStage' in segment) || segment.rentalStage in ['reservation', 'agreement', 'paired'])
             && segment.createdAt is string && segment.updatedAt is string;
         }

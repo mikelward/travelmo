@@ -2864,4 +2864,127 @@ describe("fileBooking a week in Melbourne", () => {
       expect(store.segments.size).toBe(1);
     },
   );
+
+  it("extracts a GOV.UK immigration status share code deterministically without calling Gemini", async () => {
+    const store = memoryStore();
+    const extract = vi.fn();
+    const message: EmailMessage = {
+      id: "m-govuk",
+      threadId: "t-govuk",
+      from: "Status service <status.service@notifications.service.gov.uk>",
+      subject: "SAM EXAMPLE – immigration status details",
+      date: "2026-09-04T19:15:00Z",
+      listUnsubscribe: false,
+      text: [
+        "View immigration status details for SAM EXAMPLE",
+        "share code ABC 12D 3EF",
+        "This share code will expire on 3 December 2026",
+      ].join("\n"),
+    };
+    const outcome = await importMessage("u1", message, { store, extract, now: () => "2026-09-04T19:16:00Z", log: () => {} });
+    expect(outcome).toBe("not_booking");
+    expect(extract).not.toHaveBeenCalled();
+    const docs = store.documents.get("u1") ?? [];
+    expect(docs).toHaveLength(1);
+    expect(docs[0]!.title).toBe("UK share code — Sam Example");
+    expect(docs[0]!.fields).toEqual(
+      expect.arrayContaining([
+        { label: "Document type", value: "UK share code" },
+        { label: "Number", value: "ABC 12D 3EF" },
+        { label: "Expiration date", value: "2026-12-03" },
+      ]),
+    );
+  });
+
+  it("saves Gemini-extracted ETA/ESTA documents to the travel profile", async () => {
+    const store = memoryStore();
+    const extract = vi.fn().mockResolvedValue({
+      isBooking: false,
+      segments: [],
+      documents: [
+        {
+          type: "eta",
+          title: "UK Electronic Travel Authorisation",
+          country: "GB",
+          holder: "Pat Example",
+          number: "ETA-99887766",
+          expires: "2028-09-01",
+        },
+      ],
+    });
+    const message: EmailMessage = {
+      id: "m-eta",
+      threadId: "t-eta",
+      from: "UK Visas <noreply@homeoffice.gov.uk>",
+      subject: "Your Electronic Travel Authorisation (ETA) is approved",
+      date: "2026-09-01T10:00:00Z",
+      listUnsubscribe: false,
+      text: "Your UK ETA ETA-99887766 is valid until 1 September 2028.",
+    };
+    const outcome = await importMessage("u1", message, { store, extract, now: () => "2026-09-01T10:05:00Z", log: () => {} });
+    expect(outcome).toBe("not_booking");
+    const docs = store.documents.get("u1") ?? [];
+    expect(docs).toHaveLength(1);
+    expect(docs[0]!.title).toBe("UK Electronic Travel Authorisation");
+    expect(docs[0]!.fields).toEqual(
+      expect.arrayContaining([
+        { label: "Number", value: "ETA-99887766" },
+        { label: "Expiration date", value: "2028-09-01" },
+        { label: "From email", value: "Your Electronic Travel Authorisation (ETA) is approved" },
+      ]),
+    );
+  });
+
+  it("merges extracted boarding passes onto an existing flight and stamps messageId", async () => {
+    const store = memoryStore();
+    const flight: ExtractedSegment = {
+      type: "flight",
+      title: "QR 008",
+      provider: "Qatar Airways",
+      confirmation: "EXPNR1",
+      start: "2026-12-01T15:05:00+00:00",
+      end: "2026-12-02T00:50:00+03:00",
+      origin: { name: "London Heathrow", code: "LHR", city: "London", country: "GB" },
+      destination: { name: "Doha Hamad", code: "DOH", city: "Doha", country: "QA" },
+    };
+    await file(store, "booking-email", [flight]);
+    const extract = vi.fn().mockResolvedValue({
+      isBooking: true,
+      segments: [
+        {
+          ...flight,
+          boardingPasses: [
+            {
+              passenger: "Sam Example",
+              seat: "14A",
+              gate: "B34",
+              boardingGroup: "Zone 2",
+              boardingTime: "14:20",
+              barcode: "M1EXAMPLE/SAM         EEXPNR1 LHRDOHQR 0008 335Y014A0042 100",
+            },
+          ],
+        },
+      ],
+    });
+    const bpEmail: EmailMessage = {
+      id: "m-bp",
+      threadId: "t-bp",
+      from: "Qatar Airways <noreply@qatarairways.com>",
+      subject: "Your boarding pass for QR 008",
+      date: "2026-11-30T15:00:00Z",
+      listUnsubscribe: false,
+      text: "Your boarding pass is attached.",
+    };
+    const outcome = await importMessage("u1", bpEmail, { store, extract, now: () => "2026-11-30T15:05:00Z", log: () => {} });
+    expect(outcome).toBe("imported");
+    expect(store.segments.size).toBe(1);
+    const saved = [...store.segments.values()][0]!;
+    expect(saved.boardingPasses).toHaveLength(1);
+    expect(saved.boardingPasses![0]).toMatchObject({
+      passenger: "Sam Example",
+      seat: "14A",
+      gate: "B34",
+      messageId: "m-bp",
+    });
+  });
 });

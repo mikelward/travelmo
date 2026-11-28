@@ -48,6 +48,23 @@ export const Place = z.object({
 });
 export type Place = z.infer<typeof Place>;
 
+// One passenger's boarding pass extracted from a check-in email or attached PDF.
+export const BoardingPass = z.object({
+  passenger: z.string().min(1).max(120),
+  seat: z.string().min(1).max(16).optional(),
+  gate: z.string().min(1).max(16).optional(),
+  boardingGroup: z.string().min(1).max(24).optional(),
+  boardingTime: z.string().min(1).max(32).optional(),
+  sequence: z.string().min(1).max(16).optional(),
+  cabin: z.string().min(1).max(32).optional(),
+  terminal: z.string().min(1).max(24).optional(),
+  // Raw IATA BCBP barcode payload (e.g. "M1EXAMPLE/SAM ...") when extracted.
+  barcode: z.string().min(1).max(1000).optional(),
+  barcodeFormat: z.enum(["aztec", "qr", "pdf417"]).optional(),
+  messageId: z.string().optional(),
+});
+export type BoardingPass = z.infer<typeof BoardingPass>;
+
 export const ExtractedSegment = z.object({
   type: SegmentType,
   title: z.string().min(1),
@@ -65,6 +82,8 @@ export const ExtractedSegment = z.object({
   // For a car rental, what the email is: a reservation made ahead, or the
   // rental agreement or receipt given at pick-up or return (sameRental).
   rentalStage: z.enum(["reservation", "agreement", "paired"]).optional(),
+  // Boarding passes extracted from the email or its attached PDFs.
+  boardingPasses: z.array(BoardingPass).max(20).optional(),
 });
 export type ExtractedSegment = z.infer<typeof ExtractedSegment>;
 
@@ -99,6 +118,22 @@ export const ExtractedMembership = z.object({
 });
 export type ExtractedMembership = z.infer<typeof ExtractedMembership>;
 
+// A travel authorization or immigration document extracted from an email or PDF
+// (UK share code, UK ETA, US ESTA, Canada eTA, Australia ETA/eVisitor, NZeTA,
+// EU ETIAS, or eVisa).
+export const ExtractedDocument = z.object({
+  type: z.enum(["share_code", "visa", "eta", "esta", "evisa", "other"]),
+  title: z.string().min(1).max(120),
+  country: z.string().min(1).max(80).optional(),
+  number: z.string().min(1).max(80).optional(),
+  // ISO YYYY-MM-DD when known.
+  expires: z.string().min(1).max(32).optional(),
+  issued: z.string().min(1).max(32).optional(),
+  holder: z.string().min(1).max(120).optional(),
+  notes: z.string().min(1).max(240).optional(),
+});
+export type ExtractedDocument = z.infer<typeof ExtractedDocument>;
+
 export const ExtractedBooking = z.object({
   isBooking: z.boolean(),
   segments: z.array(ExtractedSegment),
@@ -106,6 +141,8 @@ export const ExtractedBooking = z.object({
   cancellations: z.array(ExtractedCancellation).optional(),
   // Loyalty numbers the email shows; absent from older extractions.
   memberships: z.array(ExtractedMembership).optional(),
+  // Travel authorizations or share codes the email shows; absent from older extractions.
+  documents: z.array(ExtractedDocument).optional(),
 });
 export type ExtractedBooking = z.infer<typeof ExtractedBooking>;
 

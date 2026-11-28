@@ -22,12 +22,14 @@ import {
   type LoyaltyInput,
   type PersonDoc,
   type ProfileEntry,
+  type Segment,
   type TravelProfile,
 } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
+import { BoardingPassModal } from "@/components/BoardingPassModal";
 import { Dialog } from "@/components/BookingMenu";
 import { PeoplePicker } from "@/components/ProfileSettingsSections";
 import { SignInGate } from "@/components/SignInGate";
@@ -516,30 +518,61 @@ function BoardingPassesSection({ user }: { user: User }) {
     return upcomingBoardingFlights(trips, byTrip, Date.parse(nowIso));
   }, [trips, segmentsByTripRecord, nowIso]);
 
+  const [openPassSegment, setOpenPassSegment] = useState<Segment>();
+
   return (
     <section aria-label="Boarding passes">
       <div className="mb-2 flex items-center justify-between gap-3">
         <h2 className="text-lg font-medium">Boarding passes</h2>
       </div>
       <div className="divide-y divide-zinc-200 rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-        {upcoming.map((f) => (
-          <Link
-            key={f.segment.id}
-            href={`/trips/${f.tripId}`}
-            className="flex items-center justify-between gap-3 px-3 py-3 hover:bg-zinc-100 dark:hover:bg-zinc-900"
-          >
-            <div className="min-w-0">
-              <div className="font-medium">{f.segment.title}</div>
-              <div className="text-muted">
-                {localTime(f.segment.start)}
-                {f.segment.confirmation ? ` · Ref ${f.segment.confirmation}` : ""}
+        {upcoming.map((f) => {
+          const passes = f.segment.boardingPasses ?? [];
+          if (passes.length > 0) {
+            const first = passes[0]!;
+            const summary = [
+              localTime(f.segment.start),
+              first.gate ? `Gate ${first.gate}` : undefined,
+              first.seat ? `Seat ${first.seat}` : undefined,
+              passes.length > 1 ? `${passes.length} passes` : undefined,
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            return (
+              <div key={f.segment.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-3">
+                <Link href={`/trips/${f.tripId}`} className="min-w-0 flex-1 hover:underline">
+                  <div className="font-medium">{f.segment.title}</div>
+                  <div className="text-muted">{summary}</div>
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setOpenPassSegment(f.segment)}
+                  className="rounded-lg border border-foreground bg-foreground px-3 py-1.5 text-background hover:opacity-90"
+                >
+                  Show boarding pass
+                </button>
               </div>
-            </div>
-            <span aria-hidden="true" className="text-muted">
-              ›
-            </span>
-          </Link>
-        ))}
+            );
+          }
+          return (
+            <Link
+              key={f.segment.id}
+              href={`/trips/${f.tripId}`}
+              className="flex items-center justify-between gap-3 px-3 py-3 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+            >
+              <div className="min-w-0">
+                <div className="font-medium">{f.segment.title}</div>
+                <div className="text-muted">
+                  {localTime(f.segment.start)}
+                  {f.segment.confirmation ? ` · Ref ${f.segment.confirmation}` : ""}
+                </div>
+              </div>
+              <span aria-hidden="true" className="text-muted">
+                ›
+              </span>
+            </Link>
+          );
+        })}
         <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-3">
           <div className="min-w-0">
             <div className="font-medium">Google Wallet</div>
@@ -552,6 +585,13 @@ function BoardingPassesSection({ user }: { user: User }) {
           </a>
         </div>
       </div>
+      {openPassSegment && openPassSegment.boardingPasses && openPassSegment.boardingPasses.length > 0 && (
+        <BoardingPassModal
+          segment={openPassSegment}
+          passes={openPassSegment.boardingPasses}
+          onClose={() => setOpenPassSegment(undefined)}
+        />
+      )}
     </section>
   );
 }

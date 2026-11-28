@@ -127,8 +127,29 @@ fun segmentFromDocument(id: String, tripId: String, data: Map<String, Any?>): Se
         cancelledBy = data.text("cancelledBy"),
         userCancelled = data.text("userCancelled")?.takeIf { it == "booking" || it == "trip" },
         travelers = data.strings("travelers"),
+        boardingPasses = boardingPassesOf(data["boardingPasses"]),
     )
 }
+
+@Suppress("UNCHECKED_CAST")
+private fun boardingPassesOf(raw: Any?): List<app.travelmo.core.BoardingPass> =
+    (raw as? List<*>).orEmpty().mapNotNull { item ->
+        val m = item as? Map<String, Any?> ?: return@mapNotNull null
+        val passenger = m.text("passenger") ?: return@mapNotNull null
+        app.travelmo.core.BoardingPass(
+            passenger = passenger,
+            seat = m.text("seat"),
+            gate = m.text("gate"),
+            boardingGroup = m.text("boardingGroup"),
+            boardingTime = m.text("boardingTime"),
+            sequence = m.text("sequence"),
+            cabin = m.text("cabin"),
+            terminal = m.text("terminal"),
+            barcode = m.text("barcode"),
+            barcodeFormat = m.text("barcodeFormat"),
+            messageId = m.text("messageId"),
+        )
+    }
 
 /** A flight's live gates and carousel (`flightStatus/{key}`), written by the parser. */
 fun flightStatusFromDocument(data: Map<String, Any?>): FlightStatus? {

@@ -1,6 +1,7 @@
 import type { Location } from "./geocode";
 import { compareInstants } from "./instant";
 import { canonicalTravelers } from "./travelers";
+import { mergeBoardingPasses } from "./travelDocs";
 import type { ExtractedCancellation, ExtractedSegment, Place, SegmentType, Trip } from "./schema";
 import { hasWords, unpadded } from "./words";
 
@@ -800,6 +801,8 @@ export function mergeDetails<S extends ExtractedSegment>(existing: S, found: Ext
   // Everyone either email names, each once.
   const travelers = canonicalTravelers([...(existing.travelers ?? []), ...(found.travelers ?? [])]);
   if (travelers) merged.travelers = travelers;
+  const passes = mergeBoardingPasses(existing.boardingPasses, found.boardingPasses, newer);
+  if (passes) merged.boardingPasses = passes;
   return merged;
 }
 

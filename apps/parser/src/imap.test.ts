@@ -25,7 +25,7 @@ import { ImapServerRefused } from "./imap";
 // with a subject and when it arrived. SEARCH understands what the adapter
 // sends (OR of SUBJECT terms, SINCE, UID ranges); anything else fails the
 // test. It records every command, so a test can tell nothing wrote.
-type FakeMessage = { uid: number; subject: string; at?: string; raw?: string };
+type FakeMessage = { uid: number; subject: string; from?: string; at?: string; raw?: string };
 
 function fakeClient(options: { uidValidity?: bigint; messages?: FakeMessage[]; authFails?: boolean } = {}) {
   const commands: string[] = [];
@@ -39,6 +39,8 @@ function fakeClient(options: { uidValidity?: bigint; messages?: FakeMessage[]; a
         if (!(value as SearchObject[]).some((sub) => matches(m, sub))) return false;
       } else if (key === "subject") {
         if (!m.subject.toLowerCase().includes(String(value).toLowerCase())) return false;
+      } else if (key === "from") {
+        if (!(m.from ?? "").toLowerCase().includes(String(value).toLowerCase())) return false;
       } else if (key === "since") {
         if (!m.at || Date.parse(m.at) < (value as Date).getTime()) return false;
       } else if (key === "uid") {
@@ -148,6 +150,13 @@ describe("the backfill's search", () => {
     const error = await source.searchPage("1700000000:7").catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ImapCursorStale);
     expect(source.isStaleCursor(error)).toBe(true);
+  });
+
+  it("includes travel document subjects and sender domains in historical search", () => {
+    const query = backfillSearch(now);
+    expect(query.or).toContainEqual({ subject: "immigration status" });
+    expect(query.or).toContainEqual({ subject: "electronic travel authorisation" });
+    expect(query.or).toContainEqual({ from: "notifications.service.gov.uk" });
   });
 });
 

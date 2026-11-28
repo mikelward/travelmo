@@ -1,6 +1,7 @@
 import {
   bookedDateRange,
   datedJourney,
+  extractedDocumentEntry,
   findTripForBooking,
   homeTimeline,
   homesWithAirports,
@@ -40,6 +41,7 @@ import { GmailRateLimited, type EmailMessage } from "./gmail";
 import {
   ImportSupersededError,
   attachmentsOf,
+  keepDocuments,
   keepTravelMemberships,
   emptyCounts,
   importMessage,
@@ -88,7 +90,7 @@ export function handEdited(segment: Pick<Segment, "editedAt" | "createdAt" | "up
 }
 
 // The fields extraction gives a booking.
-const detailKeys = ["type", "title", "provider", "confirmation", "start", "end", "origin", "destination", "notes", "travelers", "rentalStage"] as const;
+const detailKeys = ["type", "title", "provider", "confirmation", "start", "end", "origin", "destination", "notes", "travelers", "rentalStage", "boardingPasses"] as const;
 
 // A detail as filed: travelers as people write their names (canonicalTravelers),
 // so a reading that names the same people the same way changes nothing.
@@ -223,9 +225,19 @@ export async function refreshEmail(
     // Only once what it gives now is saved: a failed save leaves the numbers it gave before.
     if (await keepTravelMemberships(uid, message, booking, deps.now(), deps, originalSentAt(message, source), options.generation)) await renewLoyalty(uid, message, options.loyaltySince, options.generation, deps);
   }
+  if (booking.documents?.length) {
+    const entries = booking.documents.map((doc) => extractedDocumentEntry(doc, message.subject, deps.now()));
+    await keepDocuments(uid, record.messageId, entries, deps, options.generation);
+  }
   const dated = oneBookingPerEvent(withoutValidityEnds(booking.segments));
   const bought = notBookings(dated);
-  const found = dated.filter((segment) => !bought.includes(segment));
+  const found = dated
+    .filter((segment) => !bought.includes(segment))
+    .map((segment) =>
+      segment.boardingPasses?.length
+        ? { ...segment, boardingPasses: segment.boardingPasses.map((p) => ({ ...p, messageId: p.messageId ?? record.messageId })) }
+        : segment,
+    );
   if (!booking.isBooking || found.length === 0 || !segmentDateRange(found)) {
     deps.log("refresh_found_nothing", { uid, messageId: record.messageId }, "WARNING");
     return nothingChanged();
