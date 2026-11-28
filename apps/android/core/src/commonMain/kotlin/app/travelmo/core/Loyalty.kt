@@ -100,13 +100,17 @@ fun foundLoyaltyEntry(found: FoundLoyalty): ProfileEntry = ProfileEntry(
     },
 )
 
+data class ResolvedLoyalty(
+    val entry: ProfileEntry,
+    /** Index in `profile.loyalty`, or `-1` when the row comes only from `foundLoyalty`. */
+    val savedIndex: Int,
+)
+
 /**
- * Every program on a profile, the owner's before anyone else's: what TripIt
- * imported, then what emails showed that it did not have (by number). A statement newer than the TripIt upload
- * brings its balance and status to the imported program it matches, ahead of
- * the imported ones, which the table reads first.
+ * Every program on a profile with its exact index in `profile.loyalty` (or `-1`
+ * when it came only from `foundLoyalty`), the owner's before anyone else's.
  */
-fun allLoyalty(profile: TravelProfile, travelers: List<Person> = emptyList()): List<ProfileEntry> {
+fun allLoyaltyWithSource(profile: TravelProfile, travelers: List<Person> = emptyList()): List<ResolvedLoyalty> {
     // A name that is one of the owner's people is shown as theirs, and one of
     // the owner's own spellings is the owner's (allLoyalty in loyalty.ts).
     val me = guessMe(travelers)
@@ -116,16 +120,21 @@ fun allLoyalty(profile: TravelProfile, travelers: List<Person> = emptyList()): L
     }
     // Whose it is: as the owner said, else as the email named, else theirs.
     fun withPerson(entry: ProfileEntry, number: String?, fromEmail: FoundLoyalty?): ProfileEntry {
+        val storedPerson = entry.fields.firstOrNull { it.label == PERSON_LABEL }?.value
+        val baseFields = entry.fields.filter { it.label != PERSON_LABEL }
         val said = number?.let { n -> profile.loyaltyPeople.lastOrNull { sameMembership(it.program, it.number, entry.title, n) } }
-        val person = known(if (said != null) said.person else fromEmail?.person)
-        return if (person != null) ProfileEntry(entry.title, entry.fields + ProfileField(PERSON_LABEL, person)) else entry
+        val person = known(if (said != null) said.person else (fromEmail?.person ?: storedPerson))
+        return if (person != null) entry.copy(fields = baseFields + ProfileField(PERSON_LABEL, person)) else entry.copy(fields = baseFields)
     }
     // Precompute each imported entry's account number once so matching against found entries doesn't re-parse summaries.
-    val importedAccounts = profile.loyalty.map { entry -> entry to loyaltySummary(entry).account }
+    val importedAccounts = profile.loyalty.mapIndexed { savedIndex, entry -> Triple(entry, savedIndex, loyaltySummary(entry).account) }
     val matchedFound = HashSet<FoundLoyalty>()
-    // Newer than the TripIt upload, so it has the last word (no upload: it has).
-    fun afterUpload(at: String?) = at != null && (profile.importedAt == null || at > profile.importedAt)
-    val imported = importedAccounts.map { (entry, account) ->
+    // Per-entry updatedAt (from a manual edit or the import that wrote this
+    // entry) wins over the document-level importedAt so an unrelated later
+    // upload does not age retained entries.
+    fun cutoffFor(entry: ProfileEntry): String? = entry.updatedAt ?: profile.importedAt
+    fun afterCutoff(at: String?, cutoff: String?) = at != null && (cutoff == null || at > cutoff)
+    val imported = importedAccounts.map { (entry, savedIndex, account) ->
         var statement: FoundLoyalty? = null
         if (account != null) {
             for (found in profile.foundLoyalty) {
@@ -135,15 +144,15 @@ fun allLoyalty(profile: TravelProfile, travelers: List<Person> = emptyList()): L
                 }
             }
         }
-        val balance = statement?.balance?.takeIf { afterUpload(statement.balanceAt) }
-        val status = statement?.status?.takeIf { afterUpload(statement.statusAt) }
+        val cutoff = cutoffFor(entry)
+        val balance = statement?.balance?.takeIf { afterCutoff(statement.balanceAt, cutoff) }
+        val status = statement?.status?.takeIf { afterCutoff(statement.statusAt, cutoff) }
         val shown = if (statement == null || (balance == null && status == null)) {
             entry
         } else {
             // Under the labels the table reads first, so the email's win.
-            ProfileEntry(
-                entry.title,
-                buildList {
+            entry.copy(
+                fields = buildList {
                     balance?.let { add(ProfileField("Balance", it)) }
                     status?.let { add(ProfileField("Elite status", it)) }
                     addAll(entry.fields)
@@ -151,13 +160,24 @@ fun allLoyalty(profile: TravelProfile, travelers: List<Person> = emptyList()): L
                 },
             )
         }
-        withPerson(shown, account, statement)
+        ResolvedLoyalty(withPerson(shown, account, statement), savedIndex)
     }
-    val all = imported + profile.foundLoyalty.filter { it !in matchedFound }.map { withPerson(foundLoyaltyEntry(it), it.number, it) }
+    val all = imported + profile.foundLoyalty.filter { it !in matchedFound }.map {
+        ResolvedLoyalty(withPerson(foundLoyaltyEntry(it), it.number, it), -1)
+    }
     // The owner's first, as a booking lists them.
-    val (theirs, mine) = all.partition { loyaltySummary(it).person != null }
+    val (theirs, mine) = all.partition { loyaltySummary(it.entry).person != null }
     return mine + theirs
 }
+
+/**
+ * Every program on a profile, the owner's before anyone else's: what TripIt
+ * imported, then what emails showed that it did not have (by number). A statement newer than the TripIt upload
+ * brings its balance and status to the imported program it matches, ahead of
+ * the imported ones, which the table reads first.
+ */
+fun allLoyalty(profile: TravelProfile, travelers: List<Person> = emptyList()): List<ProfileEntry> =
+    allLoyaltyWithSource(profile, travelers).map { it.entry }
 
 /**
  * The owner's word on whose a membership is, replacing any earlier word on
@@ -184,7 +204,7 @@ fun findFoundLoyalty(found: List<FoundLoyalty>, entry: ProfileEntry): FoundLoyal
 }
 
 // One membership: the same number in the same program.
-private fun sameMembership(programA: String, numberA: String, programB: String, numberB: String): Boolean =
+fun sameMembership(programA: String, numberA: String, programB: String, numberB: String): Boolean =
     plainNumber(numberA) == plainNumber(numberB) && sameProgram(programA, programB)
 
 // One program by its name as written, else by a distinctive word in common.

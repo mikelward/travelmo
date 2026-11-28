@@ -1,6 +1,6 @@
 "use client";
 
-import { LoyaltyPerson, TravelProfile, accessInvite, normalizeEmail, paths, queryAddresses, withLoyaltyPerson, type FoundLoyalty } from "@travelmo/core";
+import { LoyaltyPerson, ProfileEntry, TravelProfile, accessInvite, normalizeEmail, paths, queryAddresses, withLoyaltyPerson, type FoundLoyalty } from "@travelmo/core";
 import type { User } from "firebase/auth";
 import { collectionGroup, doc, onSnapshot, query, runTransaction, where, writeBatch, type Firestore } from "firebase/firestore";
 import { firestore } from "./firebase";
@@ -121,5 +121,63 @@ export async function setLoyaltyPerson(
       return parsed.success ? [parsed.data] : [];
     });
     tx.update(ref, { loyaltyPeople: withLoyaltyPerson(current, membership, person), updatedAt: new Date().toISOString() });
+  });
+}
+
+function storedEntries(raw: unknown): ProfileEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ProfileEntry[] = [];
+  for (const item of raw) {
+    const parsed = ProfileEntry.safeParse(item);
+    if (parsed.success) out.push(parsed.data);
+  }
+  return out;
+}
+
+export async function saveTravelDocuments(
+  user: User,
+  mutate: (current: ProfileEntry[]) => ProfileEntry[],
+  db: Firestore = firestore(),
+): Promise<void> {
+  const ref = doc(db, paths.travelProfile(user.uid));
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    const current = storedEntries(snap.data()?.documents);
+    const next = mutate(current);
+    const now = new Date().toISOString();
+    if (snap.exists()) {
+      tx.update(ref, { documents: next, updatedAt: now });
+    } else {
+      tx.set(ref, {
+        ownerUid: user.uid,
+        ...(user.email ? { ownerEmail: user.email.toLowerCase() } : {}),
+        documents: next,
+        updatedAt: now,
+      });
+    }
+  });
+}
+
+export async function saveTravelLoyalty(
+  user: User,
+  mutate: (current: ProfileEntry[]) => ProfileEntry[],
+  db: Firestore = firestore(),
+): Promise<void> {
+  const ref = doc(db, paths.travelProfile(user.uid));
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    const current = storedEntries(snap.data()?.loyalty);
+    const next = mutate(current);
+    const now = new Date().toISOString();
+    if (snap.exists()) {
+      tx.update(ref, { loyalty: next, updatedAt: now });
+    } else {
+      tx.set(ref, {
+        ownerUid: user.uid,
+        ...(user.email ? { ownerEmail: user.email.toLowerCase() } : {}),
+        loyalty: next,
+        updatedAt: now,
+      });
+    }
   });
 }

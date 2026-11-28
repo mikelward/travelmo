@@ -38,6 +38,8 @@ import app.travelmo.core.withDone
 import app.travelmo.core.RideCompany
 import app.travelmo.core.queryAddresses
 import app.travelmo.core.Person
+import app.travelmo.core.ProfileEntry
+import app.travelmo.core.ProfileField
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentDraft
 import app.travelmo.core.localDate
@@ -654,6 +656,63 @@ class FirestoreTrips(private val db: FirebaseFirestore = FirebaseFirestore.getIn
                 if (address !in before && emailAddressOf(address) == address) batch.setData(accessRef(address), accessInvite(address, uid, now), SetOptions.merge())
             }
         }.await()
+    }
+
+    private fun serializeEntries(entries: List<ProfileEntry>): List<Map<String, Any>> =
+        entries.map { entry ->
+            buildMap {
+                put("title", entry.title)
+                put("fields", entry.fields.map { f -> mapOf("label" to f.label, "value" to f.value) })
+                entry.updatedAt?.let { put("updatedAt", it) }
+                if (entry.manual) put("manual", true)
+            }
+        }
+
+    private fun parseStoredEntries(raw: Any?): List<ProfileEntry> =
+        (raw as? List<*>).orEmpty().mapNotNull { item ->
+            val m = item as? Map<*, *> ?: return@mapNotNull null
+            val title = (m["title"] as? String)?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            val fields = (m["fields"] as? List<*>).orEmpty().mapNotNull { f ->
+                val fm = f as? Map<*, *> ?: return@mapNotNull null
+                val label = fm["label"] as? String ?: return@mapNotNull null
+                val value = fm["value"] as? String ?: return@mapNotNull null
+                ProfileField(label, value)
+            }
+            val updatedAt = (m["updatedAt"] as? String)?.trim()?.takeIf { it.isNotEmpty() }
+            ProfileEntry(title, fields, updatedAt, manual = m["manual"] == true)
+        }
+
+    private suspend fun mutateTravelEntries(
+        uid: String,
+        email: String?,
+        field: String,
+        mutate: (List<ProfileEntry>) -> List<ProfileEntry>,
+    ) {
+        val ref = db.collection("users").document(uid).collection("travelProfile").document("main")
+        db.runTransaction { tx ->
+            val snap = tx.get(ref)
+            val current = parseStoredEntries(snap.get(field))
+            val next = serializeEntries(mutate(current))
+            val now = Clock.System.now().toString()
+            if (snap.exists()) {
+                tx.updateData(ref, mapOf(field to next, "updatedAt" to now))
+            } else {
+                val doc = LinkedHashMap<String, Any>()
+                doc["ownerUid"] = uid
+                normalizeEmail(email)?.let { doc["ownerEmail"] = it }
+                doc[field] = next
+                doc["updatedAt"] = now
+                tx.setData(ref, doc)
+            }
+        }.await()
+    }
+
+    override suspend fun saveTravelDocuments(uid: String, email: String?, mutate: (List<ProfileEntry>) -> List<ProfileEntry>) {
+        mutateTravelEntries(uid, email, "documents", mutate)
+    }
+
+    override suspend fun saveTravelLoyalty(uid: String, email: String?, mutate: (List<ProfileEntry>) -> List<ProfileEntry>) {
+        mutateTravelEntries(uid, email, "loyalty", mutate)
     }
 
     override fun userDocument(uid: String): Flow<Seen<AddressHolder?>> =

@@ -159,4 +159,23 @@ class LoyaltyTest {
         findFoundLoyalty(listOf(found), other) shouldBe null
         findFoundLoyalty(listOf(found), noAccount) shouldBe null
     }
+
+    @Test
+    fun `keeps distinct savedIndex for numberless memberships with the same program name`() {
+        val profile = TravelProfile(
+            "u1",
+            loyalty = listOf(
+                entry("Example Air", "Belongs to" to "Alex Example", "Status" to "Silver"),
+                entry("Example Air", "Status" to "Gold"),
+            ),
+            foundLoyalty = listOf(FoundLoyalty("Other Air", "OA99", messageId = "m1", at = "2026-11-01T00:00:00Z")),
+        )
+        val resolved = allLoyaltyWithSource(profile)
+        // Owner's entry (originally index 1) sorts ahead of Alex's (originally index 0); found-only gets -1.
+        resolved.map { loyaltySummary(it.entry).person to it.savedIndex } shouldBe listOf(
+            null to 1,
+            null to -1,
+            "Alex Example" to 0,
+        )
+    }
 }

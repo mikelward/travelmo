@@ -13,6 +13,7 @@
     <!-- Whether Gmail is installed, to open a booking's email there (Links.kt). -->
     <queries>
         <package android:name="com.google.android.gm" />
+        <package android:name="com.google.android.apps.walletnfcrel" />
     </queries>
 
     <application

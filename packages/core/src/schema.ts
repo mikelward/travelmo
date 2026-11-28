@@ -716,7 +716,7 @@ export type CalendarFeed = z.infer<typeof CalendarFeed>;
 export const ProfileField = z.object({ label: z.string(), value: z.string() });
 export type ProfileField = z.infer<typeof ProfileField>;
 
-export const ProfileEntry = z.object({ title: z.string(), fields: z.array(ProfileField) });
+export const ProfileEntry = z.object({ title: z.string(), fields: z.array(ProfileField), updatedAt: z.string().optional(), manual: z.boolean().optional() });
 export type ProfileEntry = z.infer<typeof ProfileEntry>;
 
 // users/{uid}/travelProfile/main. The parser writes the imported sections;

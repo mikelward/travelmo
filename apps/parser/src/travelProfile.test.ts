@@ -10,14 +10,15 @@ let n = 0;
 const unique = () => `u-${Date.now()}-${++n}`;
 
 describe("saveImportedProfile", () => {
-  it("replaces the imported sections and keeps who the owner shares with", async () => {
+  it("merges imported sections with existing wallet entries and keeps who the owner shares with", async () => {
     const uid = unique();
     const ref = db.doc(paths.travelProfile(uid));
-    await ref.set({ ownerUid: uid, trustedEmails: ["partner@example.com"] });
+    const manualVisa = { title: "UK Visa", fields: [{ label: "Number", value: "V999" }] };
+    await ref.set({ ownerUid: uid, trustedEmails: ["partner@example.com"], documents: [manualVisa] });
     const passport = { title: "Passport", fields: [{ label: "Number", value: "X1234567" }] };
     await saveImportedProfile(db, uid, "Owner@Example.com", { travelers: [], loyalty: [], documents: [passport, passport] }, "2026-11-03T00:00:00Z");
     await saveImportedProfile(db, uid, "Owner@Example.com", { travelers: [], loyalty: [], documents: [passport] }, "2026-11-04T00:00:00Z");
     const saved = TravelProfile.parse((await ref.get()).data());
-    expect(saved).toMatchObject({ ownerUid: uid, ownerEmail: "owner@example.com", trustedEmails: ["partner@example.com"], documents: [passport], importedAt: "2026-11-04T00:00:00Z" });
+    expect(saved).toMatchObject({ ownerUid: uid, ownerEmail: "owner@example.com", trustedEmails: ["partner@example.com"], documents: [manualVisa, passport], importedAt: "2026-11-04T00:00:00Z" });
   });
 });

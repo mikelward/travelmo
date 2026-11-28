@@ -85,9 +85,23 @@ import app.travelmo.core.failedEmailIds
 import app.travelmo.core.failedEmailLine
 import app.travelmo.core.failedEmailsReport
 import app.travelmo.core.gmailSourceLink
+import app.travelmo.core.guessMe
+import app.travelmo.core.homeLine
 import app.travelmo.core.moreFailedEmails
 import app.travelmo.core.rideCompanyOrNull
 import app.travelmo.shared.Res
+import app.travelmo.shared.home
+import app.travelmo.shared.home_cant_read_all
+import app.travelmo.shared.home_not_known
+import app.travelmo.shared.loading
+import app.travelmo.shared.only_you
+import app.travelmo.shared.people
+import app.travelmo.shared.profile_none_yet
+import app.travelmo.shared.profile_people_count
+import app.travelmo.shared.profile_shared_with_count
+import app.travelmo.shared.profile_shared_with_you_count
+import app.travelmo.shared.profile_you_name
+import app.travelmo.shared.settings_wallet_sharing
 import app.travelmo.shared.add
 import app.travelmo.shared.add_feed
 import app.travelmo.shared.add_to_google_calendar
@@ -259,12 +273,15 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
-/** The five sub-pages of Settings, matching the web's /settings. */
+/** The eight sub-pages of Settings, matching the web's /settings. */
 @Serializable
 enum class SettingsSection {
     EMAIL,
     CALENDARS,
     REMINDERS,
+    HOME,
+    PEOPLE,
+    SHARING,
     ACCOUNT,
     APP,
 }
@@ -340,6 +357,11 @@ fun SettingsScreen(
     val reminderEmail by viewModel.reminderEmail.collectAsStateWithLifecycle()
     val rides by viewModel.rideSettings.collectAsStateWithLifecycle()
     val holder by viewModel.addressHolder.collectAsStateWithLifecycle()
+    val ownProfile by viewModel.ownProfile.collectAsStateWithLifecycle()
+    val sharedProfiles by viewModel.sharedProfiles.collectAsStateWithLifecycle()
+    val travelers by viewModel.travelers.collectAsStateWithLifecycle()
+    val homes by viewModel.reportHomes.collectAsStateWithLifecycle()
+    val unreadable by viewModel.reportUnreadable.collectAsStateWithLifecycle()
 
     val emailParts = buildList {
         val gCount = (gmails as? TripsViewModel.GmailState.Connected)?.mailboxes?.size ?: 0
@@ -366,6 +388,31 @@ fun SettingsScreen(
     }
     val reminderMeta = if (reminderParts.isEmpty()) stringResource(Res.string.settings_reminders_meta_empty) else reminderParts.joinToString(" · ")
 
+    val homeMeta = when {
+        homes != null -> homeLine(homes!!) ?: stringResource(Res.string.home_not_known)
+        unreadable > 0 -> stringResource(Res.string.home_cant_read_all)
+        else -> stringResource(Res.string.loading)
+    }
+
+    val me = remember(travelers) { guessMe(travelers) }
+    val peopleCount = if (travelers.isNotEmpty()) travelers.size else (ownProfile?.travelers?.size ?: 0)
+    val peopleMeta = when {
+        peopleCount == 0 -> stringResource(Res.string.profile_none_yet)
+        me != null ->
+            pluralStringResource(Res.plurals.profile_people_count, peopleCount, peopleCount) +
+                " · " +
+                stringResource(Res.string.profile_you_name, me.name)
+        else -> pluralStringResource(Res.plurals.profile_people_count, peopleCount, peopleCount)
+    }
+
+    val others = remember(sharedProfiles, ownProfile?.ownerUid) { sharedProfiles.filter { it.ownerUid != ownProfile?.ownerUid } }
+    val trustedCount = ownProfile?.trustedEmails?.size ?: 0
+    val sharingParts = buildList {
+        if (trustedCount > 0) add(stringResource(Res.string.profile_shared_with_count, trustedCount))
+        if (others.isNotEmpty()) add(stringResource(Res.string.profile_shared_with_you_count, others.size))
+    }
+    val sharingMeta = if (sharingParts.isEmpty()) stringResource(Res.string.only_you) else sharingParts.joinToString(" · ")
+
     val totalAddresses = holder.emails.size + if (user.email != null) 1 else 0
     val accountMeta = when {
         user.email != null && totalAddresses > 1 ->
@@ -391,6 +438,9 @@ fun SettingsScreen(
                     HubRow(stringResource(Res.string.settings_email_imports), emailMeta) { open(SettingsSection.EMAIL) },
                     HubRow(stringResource(Res.string.settings_calendars), calMeta) { open(SettingsSection.CALENDARS) },
                     HubRow(stringResource(Res.string.settings_reminders_rides), reminderMeta) { open(SettingsSection.REMINDERS) },
+                    HubRow(stringResource(Res.string.home), homeMeta) { open(SettingsSection.HOME) },
+                    HubRow(stringResource(Res.string.people), peopleMeta) { open(SettingsSection.PEOPLE) },
+                    HubRow(stringResource(Res.string.settings_wallet_sharing), sharingMeta) { open(SettingsSection.SHARING) },
                     HubRow(stringResource(Res.string.settings_account_data), accountMeta) { open(SettingsSection.ACCOUNT) },
                     HubRow(stringResource(Res.string.settings_app_about), appMeta) { open(SettingsSection.APP) },
                 ),
@@ -433,6 +483,9 @@ fun SettingsSectionScreen(
             SettingsSection.EMAIL -> Res.string.settings_email_imports
             SettingsSection.CALENDARS -> Res.string.settings_calendars
             SettingsSection.REMINDERS -> Res.string.settings_reminders_rides
+            SettingsSection.HOME -> Res.string.home
+            SettingsSection.PEOPLE -> Res.string.people
+            SettingsSection.SHARING -> Res.string.settings_wallet_sharing
             SettingsSection.ACCOUNT -> Res.string.settings_account_data
             SettingsSection.APP -> Res.string.settings_app_about
         },
@@ -485,6 +538,9 @@ fun SettingsSectionScreen(
                     TripRemindersSection(viewModel)
                     RideCompaniesSection(viewModel)
                 }
+                SettingsSection.HOME -> HomeSettingsContent(viewModel)
+                SettingsSection.PEOPLE -> PeopleSettingsContent(viewModel)
+                SettingsSection.SHARING -> WalletSharingSettingsContent(viewModel)
                 SettingsSection.ACCOUNT -> {
                     Text(stringResource(Res.string.signed_in_as, user.email ?: user.uid), style = MaterialTheme.typography.bodyLarge)
                     OutlinedButton(onClick = { scope.launch { account.signOut() } }, modifier = Modifier.padding(top = 12.dp)) {

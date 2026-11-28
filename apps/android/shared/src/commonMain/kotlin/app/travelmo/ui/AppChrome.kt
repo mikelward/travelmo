@@ -34,6 +34,9 @@ interface AppChrome {
      */
     fun openGmailSearch(search: String, url: String) = openLink(url, "a booking's email")
 
+    /** Opens Google Wallet (Android: the Wallet app if installed, else wallet.google.com). */
+    fun openGoogleWallet() = openLink("https://wallet.google.com", "Google Wallet")
+
     /** Puts [text] alone on the clipboard, labeled [label]; the platform confirms the copy itself. */
     fun copyToClipboard(label: String, text: String)
 

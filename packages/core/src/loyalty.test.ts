@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allLoyalty, couldBeOwner, findFoundLoyalty, foundLoyaltyEntry, formatBalance, loyaltyByPerson, loyaltyLine, loyaltySummary, nameWords, personName, programsFor, withFoundLoyalties, withFoundLoyalty, withLoyaltyPerson } from "./loyalty";
+import { allLoyalty, allLoyaltyWithSource, couldBeOwner, findFoundLoyalty, foundLoyaltyEntry, formatBalance, loyaltyByPerson, loyaltyLine, loyaltySummary, nameWords, personName, programsFor, withFoundLoyalties, withFoundLoyalty, withLoyaltyPerson } from "./loyalty";
 import { foundLoyaltyBudgetBytes, isMembershipNumber, maxFoundLoyalty, TravelProfile, type FoundLoyalty, type ProfileEntry } from "./schema";
 
 // Invented programs and numbers.
@@ -336,5 +336,25 @@ describe("findFoundLoyalty", () => {
     expect(findFoundLoyalty([found], imported)).toEqual(found);
     expect(findFoundLoyalty([found], other)).toBeUndefined();
     expect(findFoundLoyalty([found], noAccount)).toBeUndefined();
+  });
+});
+
+describe("allLoyaltyWithSource", () => {
+  it("keeps distinct savedIndex values for numberless memberships with the same program name", () => {
+    const profile = TravelProfile.parse({
+      ownerUid: "u1",
+      trustedEmails: [],
+      loyalty: [
+        { title: "Example Air", fields: [{ label: "Belongs to", value: "Alex Example" }, { label: "Status", value: "Silver" }] },
+        { title: "Example Air", fields: [{ label: "Status", value: "Gold" }] },
+      ],
+      foundLoyalty: [{ program: "Other Air", number: "OA99", messageId: "m1", at: "2026-11-01T00:00:00Z" }],
+    });
+    const resolved = allLoyaltyWithSource(profile);
+    expect(resolved.map((r) => [loyaltySummary(r.entry).person, r.savedIndex])).toEqual([
+      [undefined, 1],
+      [undefined, -1],
+      ["Alex Example", 0],
+    ]);
   });
 });

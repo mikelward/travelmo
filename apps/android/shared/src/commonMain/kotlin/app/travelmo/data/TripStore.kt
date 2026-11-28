@@ -32,6 +32,7 @@ import app.travelmo.core.RideCompany
 import app.travelmo.core.rideCompanyOrNull
 import app.travelmo.core.sameRideCompany
 import app.travelmo.core.Person
+import app.travelmo.core.ProfileEntry
 import app.travelmo.core.Segment
 import app.travelmo.core.SegmentDraft
 import app.travelmo.core.TravelProfile
@@ -231,6 +232,10 @@ interface TripStore {
      * [before] in the same batch (SPEC "Access", "Sharing invites").
      */
     suspend fun saveTrusted(uid: String, email: String?, exists: Boolean, emails: List<String>, before: List<String> = emptyList())
+
+    suspend fun saveTravelDocuments(uid: String, email: String?, mutate: (List<ProfileEntry>) -> List<ProfileEntry>)
+
+    suspend fun saveTravelLoyalty(uid: String, email: String?, mutate: (List<ProfileEntry>) -> List<ProfileEntry>)
 
     /**
      * Whether `users/{uid}` exists (null when it doesn't) and what it says of

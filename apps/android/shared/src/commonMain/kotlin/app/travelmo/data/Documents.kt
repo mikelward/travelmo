@@ -228,7 +228,7 @@ private fun Map<String, Any?>.entries(key: String): List<ProfileEntry> =
             val field = f as? Map<String, Any?> ?: return@mapNotNull null
             ProfileField(field["label"] as? String ?: return@mapNotNull null, field["value"] as? String ?: return@mapNotNull null)
         }
-        ProfileEntry(title, fields)
+        ProfileEntry(title, fields, updatedAt = entry.text("updatedAt"), manual = entry["manual"] == true)
     }
 
 /** The addresses `users/{uid}` names (SPEC "Linked email addresses"); anything malformed counts as absent. */

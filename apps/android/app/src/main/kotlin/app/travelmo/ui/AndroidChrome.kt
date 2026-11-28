@@ -38,6 +38,19 @@ class AndroidChrome(private val context: Context) : AppChrome {
 
     override fun openGmailSearch(search: String, url: String) = openGmailSearch(context, search, url)
 
+    override fun openGoogleWallet() {
+        val intent = context.packageManager.getLaunchIntentForPackage("com.google.android.apps.walletnfcrel")
+        if (intent != null) {
+            try {
+                context.startActivity(intent)
+                return
+            } catch (e: Exception) {
+                TravelmoLog.failure(e, "Opening Google Wallet app failed")
+            }
+        }
+        openLink("https://wallet.google.com", "Google Wallet")
+    }
+
     override fun copyToClipboard(label: String, text: String) {
         val clipboard = context.getSystemService(ClipboardManager::class.java)
         if (clipboard == null) {

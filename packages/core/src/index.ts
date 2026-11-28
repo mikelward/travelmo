@@ -56,3 +56,4 @@ export * from "./duplicateFlights";
 export * from "./directions";
 export * from "./landmarks";
 export * from "./words";
+export * from "./wallet";

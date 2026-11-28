@@ -133,9 +133,9 @@ function Countries({
       </select>
       {!report.homeCountryKnown && (
         <p className="mt-1 text-muted">
-          Days with no trip count as at home, but home has no country yet. Add one on your{" "}
-          <Link href="/profile" className="underline">
-            Profile
+          Days with no trip count as at home, but home has no country yet. Add one in{" "}
+          <Link href="/settings?section=home" className="underline">
+            Settings
           </Link>
           .
         </p>

@@ -522,6 +522,14 @@ class FakeTripStore(
         trusted += Triple(uid, exists, emails)
         trustedBefore += before
     }
+    val savedDocuments = mutableListOf<List<ProfileEntry>>()
+    override suspend fun saveTravelDocuments(uid: String, email: String?, mutate: (List<ProfileEntry>) -> List<ProfileEntry>) {
+        savedDocuments += mutate(profile?.documents.orEmpty())
+    }
+    val savedLoyalty = mutableListOf<List<ProfileEntry>>()
+    override suspend fun saveTravelLoyalty(uid: String, email: String?, mutate: (List<ProfileEntry>) -> List<ProfileEntry>) {
+        savedLoyalty += mutate(profile?.loyalty.orEmpty())
+    }
     val renamed = mutableListOf<Pair<String, String>>()
     val fitted = mutableListOf<String>()
     val sharedWith = mutableListOf<Pair<String, String>>()

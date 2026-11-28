@@ -2,8 +2,8 @@ package app.travelmo.ui
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.AccountBox
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.Icon
@@ -16,9 +16,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import app.travelmo.shared.Res
 import app.travelmo.shared.nav_calendar
-import app.travelmo.shared.nav_profile
 import app.travelmo.shared.nav_reports
 import app.travelmo.shared.nav_trips
+import app.travelmo.shared.nav_wallet
 import app.travelmo.shared.settings
 import app.travelmo.ui.theme.TravelmoTheme
 import org.jetbrains.compose.resources.stringResource
@@ -35,7 +35,7 @@ fun SettingsButton(onClick: () -> Unit) {
 }
 
 /** The destinations the navigation bar switches between, as the web's navigation has them. */
-enum class HomeTab { TRIPS, CALENDAR, REPORTS, PROFILE }
+enum class HomeTab { TRIPS, CALENDAR, REPORTS, WALLET }
 
 @Composable
 fun HomeNavigationBar(selected: HomeTab, onSelect: (HomeTab) -> Unit) {
@@ -67,10 +67,10 @@ fun HomeNavigationBar(selected: HomeTab, onSelect: (HomeTab) -> Unit) {
             colors = colors,
         )
         NavigationBarItem(
-            selected = selected == HomeTab.PROFILE,
-            onClick = { onSelect(HomeTab.PROFILE) },
-            icon = { Icon(Icons.Filled.Person, contentDescription = null) },
-            label = { Text(stringResource(Res.string.nav_profile)) },
+            selected = selected == HomeTab.WALLET,
+            onClick = { onSelect(HomeTab.WALLET) },
+            icon = { Icon(Icons.Filled.AccountBox, contentDescription = null) },
+            label = { Text(stringResource(Res.string.nav_wallet)) },
             colors = colors,
         )
     }

@@ -78,7 +78,7 @@ class ResidenceDaysTest {
         composeRule.onNodeWithText("Days we can't place").performScrollTo()
         // Listed there, and as time away.
         composeRule.onAllNodesWithText("9–11 Oct 2026 · 3 days · Weekend away").assertCountEquals(2)
-        composeRule.onNodeWithText("Give these trips' bookings a place, or set home on your Profile.").performScrollTo()
+        composeRule.onNodeWithText("Give these trips' bookings a place, or set home in Settings.").performScrollTo()
     }
 
     @Test
@@ -116,7 +116,7 @@ class ResidenceDaysTest {
 
     @Test
     fun `asks for home's country when nothing gives one`() {
-        val asked = "Days with no trip count as at home, but home has no country yet. Add one on your Profile."
+        val asked = "Days with no trip count as at home, but home has no country yet. Add one in Settings."
         show(FakeTripStore())
         // Here, and in Days in each country, each looked at on its own.
         composeRule.onNodeWithText(asked).performScrollTo()
