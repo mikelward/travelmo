@@ -194,16 +194,17 @@ publishes it as a GitHub prerelease tagged `v<versionCode>` with the
 release-worthy commit subjects since the last published release as notes
 (`scripts/publish-github-release.sh`,
 shared byte for byte with the sibling apps and tested on every pull
-request). Once a Play service account is configured, the hourly `play`
-workflow (`.github/workflows/play.yml`) puts the newest prerelease's
-bundle on the Play internal testing track, with every release's notes
-since the one Play has as "What's new", and the listing below, in one
-edit; it commits nothing when Play is already current. Play limits how
-many edits an app may commit a day, and uploading on every push used that
-up on busy days ("Daily save quota exceeded"). To publish without waiting
-for the hour: Actions → play → Run workflow. The secrets live in the repository's
-`production` environment (Settings → Environments; limit its deployment
-branches to `main`):
+request). Once a Play service account is configured, the `play`
+workflow (`.github/workflows/play.yml`) runs after main CI succeeds and
+puts the newest prerelease's bundle on the Play internal testing track,
+with every release's notes since the one Play has as "What's new", and
+the listing below, in one edit; it commits nothing when Play is already
+current. The first push after a quiet period publishes immediately, and
+follow-up pushes within 45 minutes coalesce into one edit so Play's
+daily edit quota ("Daily save quota exceeded") is not hit. To publish
+without waiting for the cooldown: Actions → play → Run workflow. The
+secrets live in the repository's `production` environment (Settings →
+Environments; limit its deployment branches to `main`):
 
 | Secret | What it is |
 |---|---|
@@ -231,7 +232,7 @@ and frames the screenshots from `apps/android/app/snapshots` (the first from
 it), removing any it no longer makes, so rerun it after re-recording those. CI checks the listing against Play's limits on
 every pull request (`node scripts/publish-play.mjs --check`), and
 once `PLAY_SERVICE_ACCOUNT_JSON` is set the `play` workflow compares it with
-Play's copy hourly and sends what differs with the newest release. Play cannot take
+Play's copy after main CI succeeds and sends what differs with the newest release. Play cannot take
 a listing before the app exists in Play Console; the content rating,
 target audience, data safety, app access and ads declarations stay in
 Play Console.

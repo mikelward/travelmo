@@ -243,9 +243,9 @@ jobs:
   # A push to main builds the signed release bundle, keeps it as a workflow
   # artifact, and publishes it as a GitHub prerelease tagged by its
   # versionCode with the release-worthy commit subjects as notes (README
-  # "Release"). The play workflow puts the newest prerelease on Play's
-  # internal track hourly: Play limits how many edits an app may commit a
-  # day, and uploading on every push used that up. The secrets live in the `production` environment,
+  # "Release"). The play workflow triggers after main CI succeeds and puts the
+  # newest prerelease on Play's internal track, coalescing rapid pushes into
+  # at most one edit every 45 minutes so Play's daily edit quota isn't hit. The secrets live in the `production` environment,
   # whose deployment branches should be limited to main. Without the
   # keystore the job warns and stops rather than fails: the app has no Play
   # listing yet, and a red main for every merge would say nothing new.
