@@ -152,10 +152,10 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Naples, FL").id).toBe("beach");
     expect(tripLandmark("Cambridge, MA").id).toBe("boston");
     expect(tripLandmark("Portland, ME").id).toBe("trip");
-    expect(tripLandmark("Newcastle, NSW").id).toBe("trip");
-    expect(tripLandmark("Victoria, Australia").id).toBe("australia");
-    expect(tripLandmark("Vancouver, Washington").id).toBe("trip");
-    expect(tripLandmark("Rome, New York").id).toBe("trip");
+    expect(tripLandmark("Newcastle, NSW").id).toBe("new-south-wales");
+    expect(tripLandmark("Victoria, Australia").id).toBe("victoria-au");
+    expect(tripLandmark("Vancouver, Washington").id).toBe("washington-state");
+    expect(tripLandmark("Rome, New York").id).toBe("new-york-state");
     expect(tripLandmark("London, Ontario").id).toBe("trip");
     expect(tripLandmark("Melbourne, FL").id).toBe("trip");
     expect(tripLandmark("Perth, Scotland").id).toBe("united-kingdom");
@@ -231,13 +231,69 @@ describe("tripLandmark", () => {
     expect(tripLandmark("Lake Victoria, then Victoria").id).toBe("victoria");
     expect(tripLandmark("Milford Sound").id).toBe("lake");
     expect(tripLandmark("Rio Grande").id).toBe("trip");
-    expect(tripLandmark("Washington State").id).toBe("trip");
-    expect(tripLandmark("Washington State road trip").id).toBe("road-trip");
-    expect(tripLandmark("Canton, Ohio").id).toBe("trip");
+    expect(tripLandmark("Washington State").id).toBe("washington-state");
+    expect(tripLandmark("Washington State road trip").id).toBe("washington-state");
+    expect(tripLandmark("Canton, Ohio").id).toBe("ohio");
     expect(tripLandmark("Santa Cruz de la Sierra").id).toBe("trip");
     expect(tripLandmark("Santiago").id).toBe("santiago");
     expect(tripLandmark("Washington, DC").id).toBe("washington");
     expect(tripLandmark("Rio Grande, then Rio").id).toBe("rio-de-janeiro");
+  });
+
+  it("matches an Australian or US state outline when no city is named, before countries or themes", () => {
+    // Australian states and territories.
+    expect(tripLandmark("New South Wales").id).toBe("new-south-wales");
+    expect(tripLandmark("NSW coast").id).toBe("new-south-wales");
+    expect(tripLandmark("Queensland").id).toBe("queensland");
+    expect(tripLandmark("QLD road trip").id).toBe("queensland");
+    expect(tripLandmark("Western Australia").id).toBe("western-australia");
+    expect(tripLandmark("South Australia").id).toBe("south-australia");
+    expect(tripLandmark("Tasmania").id).toBe("tasmania");
+    expect(tripLandmark("TAS trip").id).toBe("tasmania");
+    expect(tripLandmark("Northern Territory").id).toBe("northern-territory");
+    expect(tripLandmark("Australian Capital Territory").id).toBe("australian-capital-territory");
+    expect(tripLandmark("Victoria, Australia").id).toBe("victoria-au");
+    expect(tripLandmark("Victoria, AU").id).toBe("victoria-au");
+    expect(tripLandmark("State of Victoria").id).toBe("victoria-au");
+    expect(tripLandmark("Geelong, VIC").id).toBe("victoria-au");
+    expect(tripLandmark("Visit Vic in June").id).toBe("trip");
+    // US states.
+    expect(tripLandmark("California").id).toBe("california");
+    expect(tripLandmark("California road trip").id).toBe("california");
+    expect(tripLandmark("Texas").id).toBe("texas");
+    expect(tripLandmark("Florida").id).toBe("florida");
+    expect(tripLandmark("Hawaii").id).toBe("hawaii");
+    expect(tripLandmark("Hawai'i").id).toBe("hawaii");
+    expect(tripLandmark("Hawaiʻi").id).toBe("hawaii");
+    expect(tripLandmark("Alaska").id).toBe("alaska");
+    expect(tripLandmark("Michigan").id).toBe("michigan");
+    expect(tripLandmark("Colorado").id).toBe("colorado");
+    expect(tripLandmark("Wyoming").id).toBe("wyoming");
+    expect(tripLandmark("New York State").id).toBe("new-york-state");
+    expect(tripLandmark("Upstate New York").id).toBe("new-york-state");
+    expect(tripLandmark("West Virginia").id).toBe("west-virginia");
+    expect(tripLandmark("Virginia").id).toBe("virginia");
+    expect(tripLandmark("Athens, Georgia").id).toBe("georgia-us");
+    expect(tripLandmark("Portland, Maine").id).toBe("maine");
+    expect(tripLandmark("Melbourne, Florida").id).toBe("florida");
+    expect(tripLandmark("Paris, Texas").id).toBe("texas");
+    // Cities beat states; states beat countries and fallbacks.
+    expect(tripLandmark("Sydney, NSW").id).toBe("sydney");
+    expect(tripLandmark("Hobart, Tasmania").id).toBe("hobart");
+    expect(tripLandmark("San Francisco, California").id).toBe("san-francisco");
+    expect(tripLandmark("California, USA").id).toBe("california");
+    expect(tripLandmark("Summer in Queensland").id).toBe("queensland");
+    // First-named state wins when multiple states are listed.
+    expect(tripLandmark("Oregon and Washington State").id).toBe("oregon");
+    expect(tripLandmark("Texas to New Mexico").id).toBe("texas");
+    // Ambiguous 2-letter codes and exclusions do not falsely match states.
+    expect(tripLandmark("Baja California").id).toBe("trip");
+    expect(tripLandmark("Baja California, Mexico").id).toBe("mexico");
+    expect(tripLandmark("Trip to WA").id).toBe("trip");
+    expect(tripLandmark("Act of kindness").id).toBe("trip");
+    expect(tripLandmark("ACT exam").id).toBe("trip");
+    expect(tripLandmark("New York").id).toBe("new-york");
+    expect(tripLandmark("Victoria, BC").id).toBe("victoria");
   });
 
   it("matches a country's outline when no city is named, before seasons or themes", () => {
@@ -289,12 +345,12 @@ describe("tripLandmark", () => {
     expect(tripLandmark("France and Italy").id).toBe("france");
     expect(tripLandmark("Italy and France").id).toBe("italy");
     // False-match guards keep states, regions and idioms from matching countries.
-    expect(tripLandmark("New Mexico road trip").id).toBe("road-trip");
+    expect(tripLandmark("New Mexico road trip").id).toBe("new-mexico");
     expect(tripLandmark("New England fall foliage").id).toBe("autumn");
-    expect(tripLandmark("New South Wales").id).toBe("trip");
+    expect(tripLandmark("New South Wales").id).toBe("new-south-wales");
     expect(tripLandmark("South America trip").id).toBe("trip");
     expect(tripLandmark("Turkey Day").id).toBe("thanksgiving");
-    expect(tripLandmark("Georgia coast").id).toBe("trip");
+    expect(tripLandmark("Georgia coast").id).toBe("georgia-us");
   });
 
   it("gives places named after a real-world noun a matching drawing", () => {
@@ -394,9 +450,10 @@ describe("tripLandmark", () => {
     expect(tripLandmark("").id).toBe("trip");
   });
 
-  it("keeps every id, city, country and fallback unique, folded, and backed by a path", () => {
+  it("keeps every id, city, state, country and fallback unique, folded, and backed by a path", () => {
     const ids = new Set<string>();
     const cities = new Set<string>();
+    const states = new Set<string>();
     const countries = new Set<string>();
     const fallbacks = new Set<string>();
     for (const landmark of LANDMARKS) {
@@ -404,11 +461,17 @@ describe("tripLandmark", () => {
       ids.add(landmark.id);
       expect(landmark.d.trim().length).toBeGreaterThan(0);
       if (landmark.dashed !== undefined) expect(landmark.dashed.trim().length).toBeGreaterThan(0);
-      const isCountry = (landmark.countries?.length ?? 0) > 0 && landmark.cities.length === 0;
+      const isState = (landmark.states?.length ?? 0) > 0 && landmark.cities.length === 0;
+      const isCountry = (landmark.countries?.length ?? 0) > 0 && landmark.cities.length === 0 && !isState;
       for (const city of landmark.cities) {
         expect(foldText(city)).toBe(city);
         expect(cities.has(city)).toBe(false);
         cities.add(city);
+      }
+      for (const state of landmark.states ?? []) {
+        expect(foldText(state)).toBe(state);
+        expect(states.has(state)).toBe(false);
+        states.add(state);
       }
       for (const country of landmark.countries ?? []) {
         expect(foldText(country)).toBe(country);
@@ -418,7 +481,7 @@ describe("tripLandmark", () => {
       for (const name of landmark.capitalized ?? []) {
         expect(foldText(name)).toBe(name.toLowerCase());
         expect(name.charAt(0)).toBe(name.charAt(0).toUpperCase());
-        const target = isCountry ? countries : cities;
+        const target = isState ? states : isCountry ? countries : cities;
         expect(target.has(foldText(name))).toBe(false);
         target.add(foldText(name));
       }
@@ -429,7 +492,7 @@ describe("tripLandmark", () => {
         fallbacks.add(word);
       }
     }
-    expect(LANDMARKS.length).toBe(490);
+    expect(LANDMARKS.length).toBe(548);
     expect(LANDMARKS.filter((l) => l.dashed).map((l) => l.id).sort()).toEqual([
       "india",
       "israel",

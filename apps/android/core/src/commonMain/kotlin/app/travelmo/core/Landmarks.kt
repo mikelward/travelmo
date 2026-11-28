@@ -2,11 +2,12 @@ package app.travelmo.core
 
 // Mirrors packages/core/src/landmarks.ts: a trip's picture in the trip list,
 // an outline of the best-known landmark of the city its title names, else a
-// simplified map outline of the country it names, else a matching place kind,
-// season, holiday or vacation drawing when no city or country is named, drawn
-// in a 48-unit square as one SVG path for a 1.5-unit round-capped stroke
-// (packages/core/src/landmarks.json, compiled in). Anything else gets the
-// drawing of the kind of place it goes to ([tripPicture]), else the suitcase.
+// simplified map outline of the Australian or US state or territory it names,
+// else a simplified map outline of the country it names, else a matching place
+// kind, season, holiday or vacation drawing when no city, state or country is
+// named, drawn in a 48-unit square as one SVG path for a 1.5-unit round-capped
+// stroke (packages/core/src/landmarks.json, compiled in). Anything else gets
+// the drawing of the kind of place it goes to ([tripPicture]), else the suitcase.
 
 data class Landmark(
     val id: String,
@@ -18,22 +19,30 @@ data class Landmark(
     /** Optional secondary SVG path drawn with a dashed stroke (disputed or occupied territory borders). */
     val dashed: String? = null,
     /**
+     * The Australian or US state/territory names it stands for, folded ([foldText]): matched after [cities] and city
+     * [capitalized], and before [countries] and [fallback], so "Sydney, NSW" is Sydney, "Newcastle, NSW" is
+     * New South Wales, and "Victoria, Australia" is Victoria.
+     */
+    val states: List<String> = emptyList(),
+    /**
      * The country names it stands for, folded ([foldText]): matched only when the title names no place from
-     * [cities] or city [capitalized], and before [fallback], so "Paris, France" is Paris and "Summer in France" is France.
+     * [cities], [states] or their [capitalized], and before [fallback], so "Paris, France" is Paris and
+     * "Summer in France" is France.
      */
     val countries: List<String> = emptyList(),
     /**
-     * Names that are also everyday words ("Nice", "Bath") or case-sensitive country abbreviations ("US", "UK", "NZ"),
-     * accents dropped: title-case words count only capitalized and not opening the title unless alone or before
-     * punctuation ("Nice, France"), while all-caps abbreviations ("US", "UK", "NZ") match anywhere in exact uppercase.
+     * Names that are also everyday words ("Nice", "Bath") or case-sensitive state/country abbreviations
+     * ("NSW", "QLD", "VIC", "TAS", "US", "UK", "NZ"), accents dropped: title-case words count only capitalized and
+     * not opening the title unless alone or before punctuation ("Nice, France"), while all-caps abbreviations match
+     * anywhere in exact uppercase.
      */
     val capitalized: List<String> = emptyList(),
-    /** Longer names, folded, that a match of [cities], [countries] or [fallback] is not when it is part of one. */
+    /** Longer names, folded, that a match of [cities], [states], [countries] or [fallback] is not when it is part of one. */
     val not: List<String> = emptyList(),
     /**
      * Kind-of-place, season, holiday or vacation words, folded: matched only when the title names no place from
-     * [cities], [countries] or [capitalized], so "Summer in Paris" is Paris, "Summer in Japan" is Japan, and
-     * "Summer vacation" is Summer.
+     * [cities], [states], [countries] or [capitalized], so "Summer in Paris" is Paris, "California road trip" is
+     * California, "Summer in Japan" is Japan, and "Summer vacation" is Summer.
      */
     val fallback: List<String> = emptyList(),
 )
@@ -70,7 +79,7 @@ private fun parseArrayField(line: String, key: String, from: Int): Pair<List<Str
 }
 
 val landmarks: List<Landmark> by lazy {
-    val out = ArrayList<Landmark>(500)
+    val out = ArrayList<Landmark>(560)
     val src = landmarksJson
     var pos = 0
     while (pos < src.length) {
@@ -81,13 +90,14 @@ val landmarks: List<Landmark> by lazy {
         val nameHit = parseStringField(line, "\"name\":\"", idHit.second) ?: continue
         val citiesHit = parseArrayField(line, "\"cities\":[", nameHit.second) ?: continue
         var cursor = citiesHit.second
+        val states = parseArrayField(line, "\"states\":[", cursor)?.also { cursor = it.second }?.first.orEmpty()
         val countries = parseArrayField(line, "\"countries\":[", cursor)?.also { cursor = it.second }?.first.orEmpty()
         val capitalized = parseArrayField(line, "\"capitalized\":[", cursor)?.also { cursor = it.second }?.first.orEmpty()
         val not = parseArrayField(line, "\"not\":[", cursor)?.also { cursor = it.second }?.first.orEmpty()
         val fallback = parseArrayField(line, "\"fallback\":[", cursor)?.also { cursor = it.second }?.first.orEmpty()
         val dHit = parseStringField(line, "\"d\":\"", cursor) ?: continue
         val dashed = parseStringField(line, "\"dashed\":\"", dHit.second)?.first
-        out.add(Landmark(idHit.first, nameHit.first, citiesHit.first, dHit.first, dashed = dashed, countries = countries, capitalized = capitalized, not = not, fallback = fallback))
+        out.add(Landmark(idHit.first, nameHit.first, citiesHit.first, dHit.first, dashed = dashed, states = states, countries = countries, capitalized = capitalized, not = not, fallback = fallback))
     }
     out.also { check(it.any { l -> l.id == "trip" }) { "landmarks.json has no suitcase" } }
 }
@@ -99,6 +109,8 @@ private class LandmarkHit(val order: Int, val landmark: Landmark, val name: Stri
 private class LandmarkIndex(
     val cities: Map<String, List<LandmarkHit>>,
     val capitalized: Map<String, List<LandmarkHit>>,
+    val states: Map<String, List<LandmarkHit>>,
+    val stateCapitalized: Map<String, List<LandmarkHit>>,
     val countries: Map<String, List<LandmarkHit>>,
     val countryCapitalized: Map<String, List<LandmarkHit>>,
     val fallback: Map<String, List<LandmarkHit>>,
@@ -108,6 +120,8 @@ private class LandmarkIndex(
 private val landmarkIndex: LandmarkIndex by lazy {
     val cities = HashMap<String, MutableList<LandmarkHit>>()
     val capitalized = HashMap<String, MutableList<LandmarkHit>>()
+    val states = HashMap<String, MutableList<LandmarkHit>>()
+    val stateCapitalized = HashMap<String, MutableList<LandmarkHit>>()
     val countries = HashMap<String, MutableList<LandmarkHit>>()
     val countryCapitalized = HashMap<String, MutableList<LandmarkHit>>()
     val fallback = HashMap<String, MutableList<LandmarkHit>>()
@@ -119,15 +133,22 @@ private val landmarkIndex: LandmarkIndex by lazy {
     }
     landmarks.forEachIndexed { order, landmark ->
         val paddedNot = landmark.not.map { " $it " }
-        val isCountry = landmark.countries.isNotEmpty() && landmark.cities.isEmpty()
+        val isState = landmark.states.isNotEmpty() && landmark.cities.isEmpty()
+        val isCountry = landmark.countries.isNotEmpty() && landmark.cities.isEmpty() && !isState
         for (city in landmark.cities) add(cities, city, LandmarkHit(order, landmark, city, paddedNot))
+        for (state in landmark.states) add(states, state, LandmarkHit(order, landmark, state, paddedNot))
         for (country in landmark.countries) add(countries, country, LandmarkHit(order, landmark, country, paddedNot))
         for (name in landmark.capitalized) {
-            add(if (isCountry) countryCapitalized else capitalized, name, LandmarkHit(order, landmark, name, paddedNot))
+            val target = when {
+                isState -> stateCapitalized
+                isCountry -> countryCapitalized
+                else -> capitalized
+            }
+            add(target, name, LandmarkHit(order, landmark, name, paddedNot))
         }
         for (word in landmark.fallback) add(fallback, word, LandmarkHit(order, landmark, word, paddedNot))
     }
-    LandmarkIndex(cities, capitalized, countries, countryCapitalized, fallback, landmarksById.getValue("trip"))
+    LandmarkIndex(cities, capitalized, states, stateCapitalized, countries, countryCapitalized, fallback, landmarksById.getValue("trip"))
 }
 
 private val marks = Regex("\\p{M}+")
@@ -162,10 +183,11 @@ private fun isAllCaps(name: String): Boolean =
     name.length >= 2 && name == name.uppercase() && name != name.lowercase()
 
 /**
- * The landmark of the city named first in [title] ("Paris and Lyon" is Paris), else the first named country
- * ("Summer in Japan" is Japan), else the first matching place kind, season, holiday or vacation word
- * ([Landmark.fallback]), else the suitcase. Names match as whole words, accents and case ignored, so "Lisboa" is
- * Lisbon and "Parisian" is nobody; a capitalized name keeps its case.
+ * The landmark of the city named first in [title] ("Paris and Lyon" is Paris), else the first named Australian or US
+ * state ("California road trip" is California), else the first named country ("Summer in Japan" is Japan), else the
+ * first matching place kind, season, holiday or vacation word ([Landmark.fallback]), else the suitcase. Names match as
+ * whole words, accents and case ignored, so "Lisboa" is Lisbon and "Parisian" is nobody; a capitalized name keeps its
+ * case.
  */
 fun tripLandmark(title: String): Landmark {
     val index = landmarkIndex
@@ -215,6 +237,10 @@ fun tripLandmark(title: String): Landmark {
 
     matchLower(index.cities)
     matchCapitalized(index.capitalized)
+    if (best == null) {
+        matchLower(index.states)
+        matchCapitalized(index.stateCapitalized)
+    }
     if (best == null) {
         matchLower(index.countries)
         matchCapitalized(index.countryCapitalized)

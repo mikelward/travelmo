@@ -153,10 +153,10 @@ class LandmarksTest {
         assertEquals("beach", tripLandmark("Naples, FL").id)
         assertEquals("boston", tripLandmark("Cambridge, MA").id)
         assertEquals("trip", tripLandmark("Portland, ME").id)
-        assertEquals("trip", tripLandmark("Newcastle, NSW").id)
-        assertEquals("australia", tripLandmark("Victoria, Australia").id)
-        assertEquals("trip", tripLandmark("Vancouver, Washington").id)
-        assertEquals("trip", tripLandmark("Rome, New York").id)
+        assertEquals("new-south-wales", tripLandmark("Newcastle, NSW").id)
+        assertEquals("victoria-au", tripLandmark("Victoria, Australia").id)
+        assertEquals("washington-state", tripLandmark("Vancouver, Washington").id)
+        assertEquals("new-york-state", tripLandmark("Rome, New York").id)
         assertEquals("trip", tripLandmark("London, Ontario").id)
         assertEquals("trip", tripLandmark("Melbourne, FL").id)
         assertEquals("united-kingdom", tripLandmark("Perth, Scotland").id)
@@ -237,13 +237,70 @@ class LandmarksTest {
         assertEquals("victoria", tripLandmark("Lake Victoria, then Victoria").id)
         assertEquals("lake", tripLandmark("Milford Sound").id)
         assertEquals("trip", tripLandmark("Rio Grande").id)
-        assertEquals("trip", tripLandmark("Washington State").id)
-        assertEquals("road-trip", tripLandmark("Washington State road trip").id)
-        assertEquals("trip", tripLandmark("Canton, Ohio").id)
+        assertEquals("washington-state", tripLandmark("Washington State").id)
+        assertEquals("washington-state", tripLandmark("Washington State road trip").id)
+        assertEquals("ohio", tripLandmark("Canton, Ohio").id)
         assertEquals("trip", tripLandmark("Santa Cruz de la Sierra").id)
         assertEquals("santiago", tripLandmark("Santiago").id)
         assertEquals("washington", tripLandmark("Washington, DC").id)
         assertEquals("rio-de-janeiro", tripLandmark("Rio Grande, then Rio").id)
+    }
+
+    @Test
+    fun matchesAnAustralianOrUsStateOutlineWhenNoCityIsNamedBeforeCountriesOrThemes() {
+        // Australian states and territories.
+        assertEquals("new-south-wales", tripLandmark("New South Wales").id)
+        assertEquals("new-south-wales", tripLandmark("NSW coast").id)
+        assertEquals("queensland", tripLandmark("Queensland").id)
+        assertEquals("queensland", tripLandmark("QLD road trip").id)
+        assertEquals("western-australia", tripLandmark("Western Australia").id)
+        assertEquals("south-australia", tripLandmark("South Australia").id)
+        assertEquals("tasmania", tripLandmark("Tasmania").id)
+        assertEquals("tasmania", tripLandmark("TAS trip").id)
+        assertEquals("northern-territory", tripLandmark("Northern Territory").id)
+        assertEquals("australian-capital-territory", tripLandmark("Australian Capital Territory").id)
+        assertEquals("victoria-au", tripLandmark("Victoria, Australia").id)
+        assertEquals("victoria-au", tripLandmark("Victoria, AU").id)
+        assertEquals("victoria-au", tripLandmark("State of Victoria").id)
+        assertEquals("victoria-au", tripLandmark("Geelong, VIC").id)
+        assertEquals("trip", tripLandmark("Visit Vic in June").id)
+        // US states.
+        assertEquals("california", tripLandmark("California").id)
+        assertEquals("california", tripLandmark("California road trip").id)
+        assertEquals("texas", tripLandmark("Texas").id)
+        assertEquals("florida", tripLandmark("Florida").id)
+        assertEquals("hawaii", tripLandmark("Hawaii").id)
+        assertEquals("hawaii", tripLandmark("Hawai'i").id)
+        assertEquals("hawaii", tripLandmark("Hawaiʻi").id)
+        assertEquals("alaska", tripLandmark("Alaska").id)
+        assertEquals("michigan", tripLandmark("Michigan").id)
+        assertEquals("colorado", tripLandmark("Colorado").id)
+        assertEquals("wyoming", tripLandmark("Wyoming").id)
+        assertEquals("new-york-state", tripLandmark("New York State").id)
+        assertEquals("new-york-state", tripLandmark("Upstate New York").id)
+        assertEquals("west-virginia", tripLandmark("West Virginia").id)
+        assertEquals("virginia", tripLandmark("Virginia").id)
+        assertEquals("georgia-us", tripLandmark("Athens, Georgia").id)
+        assertEquals("maine", tripLandmark("Portland, Maine").id)
+        assertEquals("florida", tripLandmark("Melbourne, Florida").id)
+        assertEquals("texas", tripLandmark("Paris, Texas").id)
+        // Cities beat states; states beat countries and fallbacks.
+        assertEquals("sydney", tripLandmark("Sydney, NSW").id)
+        assertEquals("hobart", tripLandmark("Hobart, Tasmania").id)
+        assertEquals("san-francisco", tripLandmark("San Francisco, California").id)
+        assertEquals("california", tripLandmark("California, USA").id)
+        assertEquals("queensland", tripLandmark("Summer in Queensland").id)
+        // First-named state wins when multiple states are listed.
+        assertEquals("oregon", tripLandmark("Oregon and Washington State").id)
+        assertEquals("texas", tripLandmark("Texas to New Mexico").id)
+        // Ambiguous 2-letter codes and exclusions do not falsely match states.
+        assertEquals("trip", tripLandmark("Baja California").id)
+        assertEquals("mexico", tripLandmark("Baja California, Mexico").id)
+        assertEquals("trip", tripLandmark("Trip to WA").id)
+        assertEquals("trip", tripLandmark("Act of kindness").id)
+        assertEquals("trip", tripLandmark("ACT exam").id)
+        assertEquals("new-york", tripLandmark("New York").id)
+        assertEquals("victoria", tripLandmark("Victoria, BC").id)
     }
 
     @Test
@@ -296,12 +353,12 @@ class LandmarksTest {
         assertEquals("france", tripLandmark("France and Italy").id)
         assertEquals("italy", tripLandmark("Italy and France").id)
         // False-match guards keep states, regions and idioms from matching countries.
-        assertEquals("road-trip", tripLandmark("New Mexico road trip").id)
+        assertEquals("new-mexico", tripLandmark("New Mexico road trip").id)
         assertEquals("autumn", tripLandmark("New England fall foliage").id)
-        assertEquals("trip", tripLandmark("New South Wales").id)
+        assertEquals("new-south-wales", tripLandmark("New South Wales").id)
         assertEquals("trip", tripLandmark("South America trip").id)
         assertEquals("thanksgiving", tripLandmark("Turkey Day").id)
-        assertEquals("trip", tripLandmark("Georgia coast").id)
+        assertEquals("georgia-us", tripLandmark("Georgia coast").id)
     }
 
     @Test
@@ -409,16 +466,22 @@ class LandmarksTest {
     fun readsEveryLandmarkTheWebHas() {
         val rawEntries = landmarksJson.lines().count { it.startsWith("{\"id\":") }
         assertEquals(rawEntries, landmarks.size)
-        assertEquals(490, landmarks.size)
+        assertEquals(548, landmarks.size)
         assertEquals(landmarks.size, landmarks.map { it.id }.toSet().size)
         val seenCities = mutableSetOf<String>()
+        val seenStates = mutableSetOf<String>()
         val seenCountries = mutableSetOf<String>()
         val seenFallbacks = mutableSetOf<String>()
         for (landmark in landmarks) {
-            val isCountry = landmark.countries.isNotEmpty() && landmark.cities.isEmpty()
+            val isState = landmark.states.isNotEmpty() && landmark.cities.isEmpty()
+            val isCountry = landmark.countries.isNotEmpty() && landmark.cities.isEmpty() && !isState
             for (city in landmark.cities) {
                 assertEquals(city, foldText(city))
                 assertEquals(true, seenCities.add(city))
+            }
+            for (state in landmark.states) {
+                assertEquals(state, foldText(state))
+                assertEquals(true, seenStates.add(state))
             }
             for (country in landmark.countries) {
                 assertEquals(country, foldText(country))
@@ -427,7 +490,11 @@ class LandmarksTest {
             for (name in landmark.capitalized) {
                 assertEquals(name.lowercase(), foldText(name))
                 assertEquals(true, name.first().isUpperCase())
-                val target = if (isCountry) seenCountries else seenCities
+                val target = when {
+                    isState -> seenStates
+                    isCountry -> seenCountries
+                    else -> seenCities
+                }
                 assertEquals(true, target.add(foldText(name)))
             }
             for (name in landmark.not) assertEquals(name, foldText(name))

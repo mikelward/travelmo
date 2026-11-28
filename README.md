@@ -58,10 +58,14 @@ given as its argument), `pnpm --filter @travelmo/core visas` the entry-requireme
 table from the Passport Index dataset (MIT, fetched from GitHub; rerun it now
 and then, since rules change and the trip page shows the month it was
 fetched), `pnpm --filter @travelmo/web worldmap` the reports page's
-world map from Natural Earth (public domain) packaged in `world-atlas`, and
+world map from Natural Earth (public domain) packaged in `world-atlas`,
 `pnpm --filter @travelmo/web country-landmarks` the country map outlines in
-`packages/core/src/landmarks.json` from the same `world-atlas` data; the
-results are committed, so a normal build needs nothing.
+`packages/core/src/landmarks.json` from the same `world-atlas` data, and
+`pnpm --filter @travelmo/web state-landmarks` the Australian and US state map
+outlines in `packages/core/src/landmarks.json` from Natural Earth's 1:50m
+admin-1 states/provinces with lakes (public domain, fetched from GitHub or read
+from a file path argument); the results are committed, so a normal build needs
+nothing.
 
 The mark is a white paper plane with a trail of three curved dashes on
 orange (`#F26B1D`), on the web, the launcher and the 512 px Play icon
